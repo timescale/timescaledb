@@ -5,11 +5,11 @@
  */
 #include <postgres.h>
 #include <access/xact.h>
+#include <catalog/pg_collation.h>
+#include <commands/extension.h>
 #include <fmgr.h>
 #include <miscadmin.h>
-#include <commands/extension.h>
 #include <storage/ipc.h>
-#include <catalog/pg_collation.h>
 #include <utils/builtins.h>
 #include <utils/json.h>
 #include <utils/jsonb.h>
@@ -17,22 +17,22 @@
 #include <utils/snapmgr.h>
 
 #include "compat/compat.h"
+#include "bgw_policy/policy.h"
 #include "config.h"
-#include "version.h"
-#include "guc.h"
-#include "telemetry.h"
-#include "ts_catalog/metadata.h"
-#include "telemetry_metadata.h"
-#include "hypertable.h"
 #include "extension.h"
-#include "net/http.h"
+#include "functions.h"
+#include "guc.h"
+#include "hypertable.h"
 #include "jsonb_utils.h"
 #include "license_guc.h"
-#include "bgw_policy/policy.h"
-#include "ts_catalog/compression_chunk_size.h"
-#include "stats.h"
-#include "functions.h"
+#include "net/http.h"
 #include "replication.h"
+#include "stats.h"
+#include "telemetry.h"
+#include "telemetry_metadata.h"
+#include "ts_catalog/compression_chunk_size.h"
+#include "ts_catalog/metadata.h"
+#include "version.h"
 
 #include "cross_module_fn.h"
 
@@ -360,9 +360,8 @@ add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 		elog(ERROR, "could not connect to SPI");
 
 	/* Lock down search_path */
-	res = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
-	if (res < 0)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
 
 	command = makeStringInfo();
 
@@ -397,6 +396,9 @@ add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 										  sqlerrs_jsonb);
 		MemoryContextSwitchTo(spi_context);
 	}
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
 
 	res = SPI_finish();
 
@@ -438,8 +440,8 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 		"SELECT ("
 		"	CASE "
 		"		WHEN j.proc_schema = \'_timescaledb_functions\' AND j.proc_name ~ "
-		"\'^policy_(retention|compression|reorder|refresh_continuous_aggregate|telemetry|job_error_"
-		"retention)$\' "
+		"\'^policy_(retention|compression|reorder|refresh_continuous_aggregate|telemetry|job_stat_"
+		"history_retention)$\' "
 		"		THEN j.proc_name::TEXT "
 		"		ELSE \'user_defined_action\' "
 		"	END"
@@ -455,16 +457,15 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 		"FROM "
 		"	_timescaledb_internal.bgw_job_stat s "
 		"	JOIN _timescaledb_config.bgw_job j on j.id = s.job_id "
-		"GROUP BY "
-		"job_type";
+		"GROUP BY job_type "
+		"ORDER BY job_type";
 
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI");
 
 	/* Lock down search_path */
-	res = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
-	if (res < 0)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
 
 	command = makeStringInfo();
 
@@ -524,6 +525,10 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 		add_job_stats_internal(parse_state, TextDatumGetCString(jobtype_datum), &stats);
 		MemoryContextSwitchTo(spi_context);
 	}
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
+
 	res = SPI_finish();
 	Assert(res == SPI_OK_FINISH);
 }
@@ -795,8 +800,8 @@ add_query_result_dict(JsonbParseState *state, const char *query)
 		elog(ERROR, "could not connect to SPI");
 
 	/* Lock down search_path */
-	res = SPI_execute("SET LOCAL search_path TO pg_catalog, pg_temp", false, 0);
-	Ensure(res >= 0, "could not set search path");
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
 
 	res = SPI_execute(query, true, 0);
 	Ensure(res >= 0, "could not execute query");
@@ -833,6 +838,10 @@ add_query_result_dict(JsonbParseState *state, const char *query)
 		}
 		pushJsonbValue(&state, WJB_END_OBJECT, NULL);
 	}
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
+
 	MemoryContextSwitchTo(spi_context);
 	res = SPI_finish();
 	Assert(res == SPI_OK_FINISH);

@@ -41,14 +41,14 @@
 
 #include "chunk.h"
 
+#include "compat/compat.h"
 #include "bgw_policy/chunk_stats.h"
 #include "cache.h"
 #include "chunk_index.h"
 #include "chunk_scan.h"
-#include "compat/compat.h"
 #include "cross_module_fn.h"
-#include "debug_point.h"
 #include "debug_assert.h"
+#include "debug_point.h"
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
@@ -66,6 +66,7 @@
 #include "time_utils.h"
 #include "trigger.h"
 #include "ts_catalog/catalog.h"
+#include "ts_catalog/chunk_column_stats.h"
 #include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
@@ -1040,7 +1041,6 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 									   const char *schema_name, const char *table_name,
 									   const char *prefix)
 {
-#if PG14_GE
 	chunk_insert_check_hook_type osm_chunk_insert_hook = ts_get_osm_chunk_insert_hook();
 
 	if (osm_chunk_insert_hook)
@@ -1080,7 +1080,6 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 						 "Hypertable has tiered data with time range that overlaps the insert")));
 		}
 	}
-#endif
 	/* Insert any new dimension slices into metadata */
 	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
 
@@ -1090,6 +1089,9 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 													  table_name,
 													  prefix,
 													  get_next_chunk_id());
+
+	/* Insert any new chunk column stats entries into the catalog */
+	ts_chunk_column_stats_insert(ht, chunk);
 
 	chunk_add_constraints(chunk);
 	chunk_insert_into_metadata_after_lock(chunk);
@@ -1120,11 +1122,7 @@ chunk_add_inheritance(Chunk *chunk, const Hypertable *ht)
 		.type = T_AlterTableStmt,
 		.cmds = list_make1(&altercmd),
 		.missing_ok = false,
-#if PG14_GE
 		.objtype = OBJECT_TABLE,
-#else
-		.relkind = OBJECT_TABLE,
-#endif
 		.relation = makeRangeVar((char *) NameStr(chunk->fd.schema_name),
 								 (char *) NameStr(chunk->fd.table_name),
 								 0),
@@ -1392,6 +1390,29 @@ ts_chunk_create_for_point(const Hypertable *ht, const Point *p, bool *found, con
 	return chunk;
 }
 
+static void
+scan_add_chunk_context(ChunkScanCtx *ctx, int32 chunk_id, List *dimension_vecs, List **l_chunk_ids)
+{
+	bool found = false;
+	ChunkScanEntry *entry = hash_search(ctx->htab, &chunk_id, HASH_ENTER, &found);
+	if (!found)
+	{
+		entry->stub = NULL;
+		entry->num_dimension_constraints = 0;
+	}
+
+	entry->num_dimension_constraints++;
+
+	/*
+	 * A chunk is complete when we've found slices for all required dimensions,
+	 * i.e., a complete subspace.
+	 */
+	if (entry->num_dimension_constraints == list_length(dimension_vecs))
+	{
+		*l_chunk_ids = lappend_int(*l_chunk_ids, entry->chunk_id);
+	}
+}
+
 /*
  * Find the chunks that belong to the subspace identified by the given dimension
  * vectors. We might be restricting only some dimensions, so this subspace is
@@ -1412,6 +1433,30 @@ ts_chunk_id_find_in_subspace(Hypertable *ht, List *dimension_vecs)
 	foreach (lc, dimension_vecs)
 	{
 		const DimensionVec *vec = lfirst(lc);
+
+		/*
+		 * If it's an entry of type DIMENSION_TYPE_STATS then we need to get
+		 * the chunks using the _timescaledb_catalog.chunk_column_stats catalog.
+		 */
+		Assert(vec->dri != NULL);
+		if (vec->dri->dimension->type == DIMENSION_TYPE_STATS)
+		{
+			ListCell *lc;
+			List *range_chunk_ids;
+
+			Assert(vec->num_slices == 0);
+			range_chunk_ids = ts_chunk_column_stats_get_chunk_ids_by_scan(vec->dri);
+
+			/* add these chunks to the context appropriately. */
+			foreach (lc, range_chunk_ids)
+			{
+				int32 chunk_id = lfirst_int(lc);
+
+				scan_add_chunk_context(&ctx, chunk_id, dimension_vecs, &chunk_ids);
+			}
+			continue;
+		}
+
 		/*
 		 * We shouldn't see a dimension with zero matching dimension slices.
 		 * That would mean that no chunks match at all, this should have been
@@ -1434,31 +1479,13 @@ ts_chunk_id_find_in_subspace(Hypertable *ht, List *dimension_vecs)
 				int32 current_chunk_id = DatumGetInt32(datum);
 				Assert(current_chunk_id != INVALID_CHUNK_ID);
 
-				bool found = false;
-				ChunkScanEntry *entry =
-					hash_search(ctx.htab, &current_chunk_id, HASH_ENTER, &found);
-				if (!found)
-				{
-					entry->stub = NULL;
-					entry->num_dimension_constraints = 0;
-				}
-
 				/*
 				 * We have only the dimension constraints here, because we're searching
 				 * by dimension slice id.
 				 */
 				Assert(!slot_attisnull(ts_scan_iterator_slot(&iterator),
 									   Anum_chunk_constraint_dimension_slice_id));
-				entry->num_dimension_constraints++;
-
-				/*
-				 * A chunk is complete when we've found slices for all required dimensions,
-				 * i.e., a complete subspace.
-				 */
-				if (entry->num_dimension_constraints == list_length(dimension_vecs))
-				{
-					chunk_ids = lappend_int(chunk_ids, entry->chunk_id);
-				}
+				scan_add_chunk_context(&ctx, current_chunk_id, dimension_vecs, &chunk_ids);
 			}
 		}
 	}
@@ -2040,6 +2067,17 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 		Assert(ht != NULL);
 		time_dim = hyperspace_get_open_dimension(ht->space, 0);
 
+		if (!time_dim)
+			time_dim = hyperspace_get_closed_dimension(ht->space, 0);
+
+		if (time_dim && IS_CLOSED_DIMENSION(time_dim) && (!PG_ARGISNULL(1) || !PG_ARGISNULL(2)))
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot specify \"older_than\" or \"newer_than\" for "
+							"\"closed\"-like partitioning types"),
+					 errhint("Use \"created_before\" and/or \"created_after\" which rely on the "
+							 "chunk creation time values.")));
+
 		if (time_dim)
 			time_type = ts_dimension_get_partition_type(time_dim);
 		else
@@ -2183,6 +2221,14 @@ get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than, Mem
 	start_strategy = (newer_than == PG_INT64_MIN) ? InvalidStrategy : BTGreaterEqualStrategyNumber;
 	end_strategy = (older_than == PG_INT64_MAX) ? InvalidStrategy : BTLessStrategyNumber;
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
+
+	if (time_dim == NULL)
+		time_dim = hyperspace_get_closed_dimension(ht->space, 0);
+
+	Ensure(time_dim != NULL,
+		   "partitioning dimension not found for hypertable \"%s\".\"%s\"",
+		   NameStr(ht->fd.schema_name),
+		   NameStr(ht->fd.table_name));
 
 	oldcontext = MemoryContextSwitchTo(mctx);
 	chunks_find_all_in_range_limit(ht,
@@ -2540,36 +2586,6 @@ ts_chunk_get_by_id(int32 id, bool fail_if_not_found)
 }
 
 /*
- * Number of chunks created after given chunk.
- * If chunk2.id > chunk1.id then chunk2 is created after chunk1
- */
-int
-ts_chunk_num_of_chunks_created_after(const Chunk *chunk)
-{
-	ScanKeyData scankey[1];
-
-	/*
-	 * Try to find chunks with a greater Id then a given chunk
-	 */
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_idx_id,
-				BTGreaterStrategyNumber,
-				F_INT4GT,
-				Int32GetDatum(chunk->fd.id));
-
-	return chunk_scan_internal(CHUNK_ID_INDEX,
-							   scankey,
-							   1,
-							   NULL,
-							   NULL,
-							   NULL,
-							   0,
-							   ForwardScanDirection,
-							   AccessShareLock,
-							   CurrentMemoryContext);
-}
-
-/*
  * Simple scans provide lightweight ways to access chunk information without the
  * overhead of getting a full chunk (i.e., no extra metadata, like constraints,
  * are joined in). This function forms the basis of a number of lookup functions
@@ -2630,8 +2646,8 @@ chunk_simple_scan_by_name(const char *schema, const char *table, FormData_chunk 
 	return chunk_simple_scan(&iterator, form, missing_ok, displaykey);
 }
 
-static bool
-chunk_simple_scan_by_reloid(Oid reloid, FormData_chunk *form, bool missing_ok)
+bool
+ts_chunk_simple_scan_by_reloid(Oid reloid, FormData_chunk *form, bool missing_ok)
 {
 	bool found = false;
 
@@ -2684,7 +2700,7 @@ ts_chunk_id_from_relid(PG_FUNCTION_ARGS)
 	if (last_relid == relid)
 		return last_id;
 
-	chunk_simple_scan_by_reloid(relid, &form, false);
+	ts_chunk_simple_scan_by_reloid(relid, &form, false);
 
 	last_relid = relid;
 	last_id = form.id;
@@ -2697,7 +2713,7 @@ ts_chunk_exists_relid(Oid relid)
 {
 	FormData_chunk form;
 
-	return chunk_simple_scan_by_reloid(relid, &form, true);
+	return ts_chunk_simple_scan_by_reloid(relid, &form, true);
 }
 
 /*
@@ -2708,25 +2724,12 @@ ts_chunk_get_hypertable_id_by_reloid(Oid reloid)
 {
 	FormData_chunk form;
 
-	if (chunk_simple_scan_by_reloid(reloid, &form, /* missing_ok = */ true))
+	if (ts_chunk_simple_scan_by_reloid(reloid, &form, /* missing_ok = */ true))
 	{
 		return form.hypertable_id;
 	}
 
 	return 0;
-}
-
-/*
- * Returns the compressed chunk id. The original chunk must exist.
- */
-int32
-ts_chunk_get_compressed_chunk_id(int32 chunk_id)
-{
-	FormData_chunk form;
-	PG_USED_FOR_ASSERTS_ONLY bool result =
-		chunk_simple_scan_by_id(chunk_id, &form, /* missing_ok = */ false);
-	Assert(result);
-	return form.compressed_chunk_id;
 }
 
 FormData_chunk
@@ -2909,6 +2912,9 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 
 	/* Delete any row in bgw_policy_chunk-stats corresponding to this chunk */
 	ts_bgw_policy_chunk_stats_delete_by_chunk_id(form.id);
+
+	/* Delete any rows in _timescaledb_catalog.chunk_column_stats corresponding to this chunk */
+	ts_chunk_column_stats_delete_by_chunk_id(form.id);
 
 	if (form.compressed_chunk_id != INVALID_CHUNK_ID)
 	{
@@ -3374,8 +3380,19 @@ ts_chunk_set_unordered(Chunk *chunk)
 bool
 ts_chunk_set_partial(Chunk *chunk)
 {
+	bool set_status;
+
 	Assert(ts_chunk_is_compressed(chunk));
-	return ts_chunk_add_status(chunk, CHUNK_STATUS_COMPRESSED_PARTIAL);
+	set_status = ts_chunk_add_status(chunk, CHUNK_STATUS_COMPRESSED_PARTIAL);
+
+	/*
+	 * If the status was set then convert the corresponding
+	 * _timescaledb_catalog.chunk_column_stats entries "INVALID".
+	 */
+	if (set_status)
+		ts_chunk_column_stats_set_invalid(chunk->fd.hypertable_id, chunk->fd.id);
+
+	return set_status;
 }
 
 /* No inserts, updates, and deletes are permitted on a frozen chunk.
@@ -3385,34 +3402,19 @@ ts_chunk_set_partial(Chunk *chunk)
 bool
 ts_chunk_set_frozen(Chunk *chunk)
 {
-#if PG14_GE
 	return ts_chunk_add_status(chunk, CHUNK_STATUS_FROZEN);
-#else
-	elog(ERROR, "freeze chunk supported only for PG14 or greater");
-	return false;
-#endif
 }
 
 bool
 ts_chunk_unset_frozen(Chunk *chunk)
 {
-#if PG14_GE
 	return ts_chunk_clear_status(chunk, CHUNK_STATUS_FROZEN);
-#else
-	elog(ERROR, "freeze chunk supported only for PG14 or greater");
-	return false;
-#endif
 }
 
 bool
 ts_chunk_is_frozen(Chunk *chunk)
 {
-#if PG14_GE
 	return ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FROZEN);
-#else
-	elog(ERROR, "freeze chunk supported only for PG14 or greater");
-	return false;
-#endif
 }
 
 /* only caller used to be ts_chunk_unset_frozen. This code was in PG14 block as we run into
@@ -3456,6 +3458,7 @@ ts_chunk_clear_status(Chunk *chunk, int32 status)
 static bool
 ts_chunk_add_status(Chunk *chunk, int32 status)
 {
+	bool status_set = false;
 	if (ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FROZEN))
 	{
 		/* chunk in frozen state cannot be modified */
@@ -3494,9 +3497,12 @@ ts_chunk_add_status(Chunk *chunk, int32 status)
 
 	/* Row-level locks are released at transaction end or during savepoint rollback */
 	if (old_status != form.status)
+	{
 		chunk_update_catalog_tuple(&tid, &form);
+		status_set = true;
+	}
 
-	return true;
+	return status_set;
 }
 
 /*Assume permissions are already checked */
@@ -3952,8 +3958,6 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 			ts_chunk_drop(chunks + i, DROP_RESTRICT, log_level);
 	}
 	// if we have tiered chunks cascade drop to tiering layer as well
-#if PG14_GE
-
 	if (osm_chunk_id != INVALID_CHUNK_ID)
 	{
 		hypertable_drop_chunks_hook_type osm_drop_chunks_hook =
@@ -3977,7 +3981,6 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 			}
 		}
 	}
-#endif
 
 	/* When dropping chunks for a given CAgg then force set the watermark */
 	if (is_materialization_hypertable)

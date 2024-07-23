@@ -1091,8 +1091,8 @@ SELECT show_chunks AS chunk_to_drop
 FROM show_chunks('conditions');
               chunk_to_drop              
 -----------------------------------------
- _timescaledb_internal._hyper_1_34_chunk
- _timescaledb_internal._hyper_1_40_chunk
+ _timescaledb_internal._hyper_1_35_chunk
+ _timescaledb_internal._hyper_1_41_chunk
 (2 rows)
 
 -- Pick the first one to drop

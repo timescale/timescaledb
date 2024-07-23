@@ -30,7 +30,7 @@ get_input_offset(DecompressChunkState *decompress_state, Var *var, int *input_of
 	for (int i = 0; i < dcontext->num_data_columns; i++)
 	{
 		CompressionColumnDescription *current_column = &dcontext->compressed_chunk_columns[i];
-		if (current_column->output_attno == var->varattno)
+		if (current_column->uncompressed_chunk_attno == var->varattno)
 		{
 			value_column_description = current_column;
 			break;

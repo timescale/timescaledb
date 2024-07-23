@@ -5,8 +5,8 @@
  */
 #pragma once
 
-#include "ts_catalog/catalog.h"
 #include "job.h"
+#include "ts_catalog/catalog.h"
 
 #define JOB_STAT_FLAGS_DEFAULT 0
 #define LAST_CRASH_REPORTED 1

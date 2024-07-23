@@ -5,16 +5,16 @@
  */
 #include <postgres.h>
 #include <access/htup_details.h>
+#include <fmgr.h>
+#include <funcapi.h>
 #include <utils/builtins.h>
 #include <utils/jsonb.h>
-#include <funcapi.h>
-#include <fmgr.h>
 
-#include "telemetry/telemetry.h"
-#include "net/http.h"
+#include "compat/compat.h"
 #include "config.h"
 #include "export.h"
-#include "compat/compat.h"
+#include "net/http.h"
+#include "telemetry/telemetry.h"
 
 #ifdef TS_DEBUG
 #include "net/conn_mock.h"

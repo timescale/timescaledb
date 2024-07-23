@@ -4,17 +4,17 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <utils/guc.h>
-#include <utils/varlena.h>
-#include <utils/regproc.h>
-#include <parser/parse_func.h>
 #include <miscadmin.h>
+#include <parser/parse_func.h>
+#include <utils/guc.h>
+#include <utils/regproc.h>
+#include <utils/varlena.h>
 
-#include "guc.h"
-#include "extension.h"
-#include "license_guc.h"
 #include "config.h"
+#include "extension.h"
+#include "guc.h"
 #include "hypertable_cache.h"
+#include "license_guc.h"
 #ifdef USE_TELEMETRY
 #include "telemetry/telemetry.h"
 #endif
@@ -69,9 +69,10 @@ TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify = true;
 TSDLLEXPORT int ts_guc_cagg_max_individual_materializations = 10;
 bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
+TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering = true;
 TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml = 100000;
 TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
-TSDLLEXPORT bool ts_guc_enable_decompression_logrep_markers = false;
+TSDLLEXPORT bool ts_guc_enable_compression_wal_markers = false;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
 bool ts_guc_enable_chunkwise_aggregation = true;
 bool ts_guc_enable_vectorized_aggregation = true;
@@ -84,6 +85,7 @@ static char *ts_guc_default_segmentby_fn = NULL;
 static char *ts_guc_default_orderby_fn = NULL;
 TSDLLEXPORT bool ts_guc_enable_job_execution_logging = false;
 bool ts_guc_enable_tss_callbacks = true;
+TSDLLEXPORT bool ts_guc_enable_delete_after_compression = false;
 
 /* default value of ts_guc_max_open_chunks_per_insert and ts_guc_max_cached_chunks_per_hypertable
  * will be set as their respective boot-value when the GUC mechanism starts up */
@@ -449,6 +451,18 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_dml_decompression_tuple_filtering"),
+							 "Enable DML decompression tuple filtering",
+							 "Recheck tuples during DML decompression to only decompress batches "
+							 "with matching tuples",
+							 &ts_guc_enable_dml_decompression_tuple_filtering,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomIntVariable(MAKE_EXTOPTION("max_tuples_decompressed_per_dml_transaction"),
 							"The max number of tuples that can be decompressed during an "
 							"INSERT, UPDATE, or DELETE.",
@@ -488,13 +502,12 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_decompression_logrep_markers"),
-							 "Enable logical replication markers for decompression ops",
-							 "Enable the generation of logical replication markers in the "
-							 "WAL stream to mark the start and end of decompressions (for insert, "
-							 "update, and delete operations)",
-							 &ts_guc_enable_decompression_logrep_markers,
-							 false,
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compression_wal_markers"),
+							 "Enable WAL markers for compression ops",
+							 "Enable the generation of markers in the WAL stream which mark the "
+							 "start and end of compression operations",
+							 &ts_guc_enable_compression_wal_markers,
+							 true,
 							 PGC_SIGHUP,
 							 0,
 							 NULL,
@@ -668,7 +681,7 @@ _guc_init(void)
 							 "Retain job run status in logging table",
 							 &ts_guc_enable_job_execution_logging,
 							 false,
-							 PGC_USERSET,
+							 PGC_SIGHUP,
 							 0,
 							 NULL,
 							 NULL,
@@ -680,6 +693,17 @@ _guc_init(void)
 							 &ts_guc_enable_tss_callbacks,
 							 true,
 							 PGC_SUSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_delete_after_compression"),
+							 "Delete all rows after compression instead of truncate",
+							 "Delete all rows after compression instead of truncate",
+							 &ts_guc_enable_delete_after_compression,
+							 false,
+							 PGC_USERSET,
 							 0,
 							 NULL,
 							 NULL,

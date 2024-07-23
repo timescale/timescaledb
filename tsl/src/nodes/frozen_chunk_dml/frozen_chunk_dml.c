@@ -11,8 +11,8 @@
 
 #include "compat/compat.h"
 #include "chunk.h"
-#include "hypertable.h"
 #include "frozen_chunk_dml.h"
+#include "hypertable.h"
 #include "utils.h"
 
 /*

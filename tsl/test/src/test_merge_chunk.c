@@ -10,8 +10,8 @@
 #include <fmgr.h>
 #include <utils/builtins.h>
 
-#include "export.h"
 #include "chunk.h"
+#include "export.h"
 
 TS_FUNCTION_INFO_V1(ts_test_merge_chunks_on_dimension);
 

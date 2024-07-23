@@ -5,14 +5,14 @@
  */
 #include <postgres.h>
 #include <fmgr.h>
-#include <utils/timestamp.h>
 #include <utils/lsyscache.h>
+#include <utils/timestamp.h>
 
-#include "export.h"
+#include "bgw/job.h"
 #include "cross_module_fn.h"
+#include "export.h"
 #include "guc.h"
 #include "license_guc.h"
-#include "bgw/job.h"
 
 #define CROSSMODULE_WRAPPER(func)                                                                  \
 	TS_FUNCTION_INFO_V1(ts_##func);                                                                \
@@ -83,6 +83,8 @@ CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
 CROSSMODULE_WRAPPER(continuous_agg_refresh);
 CROSSMODULE_WRAPPER(continuous_agg_validate_query);
 CROSSMODULE_WRAPPER(continuous_agg_get_bucket_function);
+CROSSMODULE_WRAPPER(continuous_agg_get_bucket_function_info);
+CROSSMODULE_WRAPPER(continuous_agg_migrate_to_time_bucket);
 CROSSMODULE_WRAPPER(cagg_try_repair);
 
 CROSSMODULE_WRAPPER(chunk_freeze_chunk);
@@ -334,6 +336,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_update_options = continuous_agg_update_options_default,
 	.continuous_agg_validate_query = error_no_default_fn_pg_community,
 	.continuous_agg_get_bucket_function = error_no_default_fn_pg_community,
+	.continuous_agg_get_bucket_function_info = error_no_default_fn_pg_community,
+	.continuous_agg_migrate_to_time_bucket = error_no_default_fn_pg_community,
 	.cagg_try_repair = process_cagg_try_repair,
 
 	/* compression */

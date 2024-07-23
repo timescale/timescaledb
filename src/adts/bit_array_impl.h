@@ -10,8 +10,8 @@
 #include <lib/stringinfo.h>
 #include <libpq/pqformat.h>
 
-#include "adts/uint64_vec.h"
 #include "compat/compat.h"
+#include "adts/uint64_vec.h"
 
 #define BITS_PER_BUCKET 64
 

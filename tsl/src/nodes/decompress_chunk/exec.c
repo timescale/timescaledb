@@ -5,9 +5,9 @@
  */
 
 #include <postgres.h>
-#include <miscadmin.h>
 #include <access/sysattr.h>
 #include <executor/executor.h>
+#include <miscadmin.h>
 #include <nodes/bitmapset.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
@@ -21,15 +21,14 @@
 #include <tcop/tcopprot.h>
 
 #include "compat/compat.h"
-#include "compression/array.h"
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
 #include "guc.h"
 #include "import/ts_explain.h"
 #include "nodes/decompress_chunk/batch_array.h"
 #include "nodes/decompress_chunk/batch_queue.h"
-#include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
+#include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
 
@@ -82,6 +81,7 @@ decompress_chunk_state_create(CustomScan *cscan)
 		list_nth_int(settings, DCS_BatchSortedMerge);
 	chunk_state->decompress_context.enable_bulk_decompression =
 		list_nth_int(settings, DCS_EnableBulkDecompression);
+	chunk_state->has_row_marks = list_nth_int(settings, DCS_HasRowMarks);
 
 	Assert(IsA(cscan->custom_exprs, List));
 	Assert(list_length(cscan->custom_exprs) == 1);
@@ -260,10 +260,11 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	dcontext->num_columns_with_metadata = num_columns_with_metadata;
 	dcontext->compressed_chunk_columns =
 		palloc0(sizeof(CompressionColumnDescription) * num_columns_with_metadata);
-	dcontext->decompressed_slot = node->ss.ss_ScanTupleSlot;
+	dcontext->custom_scan_slot = node->ss.ss_ScanTupleSlot;
+	dcontext->uncompressed_chunk_tdesc = RelationGetDescr(node->ss.ss_currentRelation);
 	dcontext->ps = &node->ss.ps;
 
-	TupleDesc desc = dcontext->decompressed_slot->tts_tupleDescriptor;
+	TupleDesc desc = dcontext->custom_scan_slot->tts_tupleDescriptor;
 
 	/*
 	 * Compressed columns go in front, and the rest go to the back, so we have
@@ -276,22 +277,22 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	{
 		CompressionColumnDescription column = {
 			.compressed_scan_attno = AttrOffsetGetAttrNumber(compressed_index),
-			.output_attno = list_nth_int(chunk_state->decompression_map, compressed_index),
+			.custom_scan_attno = list_nth_int(chunk_state->decompression_map, compressed_index),
 			.bulk_decompression_supported =
 				list_nth_int(chunk_state->bulk_decompression_column, compressed_index)
 		};
 
-		if (column.output_attno == 0)
+		if (column.custom_scan_attno == 0)
 		{
 			/* We are asked not to decompress this column, skip it. */
 			continue;
 		}
 
-		if (column.output_attno > 0)
+		if (column.custom_scan_attno > 0)
 		{
 			/* normal column that is also present in decompressed chunk */
 			Form_pg_attribute attribute =
-				TupleDescAttr(desc, AttrNumberGetAttrOffset(column.output_attno));
+				TupleDescAttr(desc, AttrNumberGetAttrOffset(column.custom_scan_attno));
 
 			column.typid = attribute->atttypid;
 			get_typlenbyval(column.typid, &column.value_bytes, &column.by_value);
@@ -300,11 +301,26 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 				column.type = SEGMENTBY_COLUMN;
 			else
 				column.type = COMPRESSED_COLUMN;
+
+			if (cscan->custom_scan_tlist == NIL)
+			{
+				column.uncompressed_chunk_attno = column.custom_scan_attno;
+			}
+			else
+			{
+				Var *var =
+					castNode(Var,
+							 castNode(TargetEntry,
+									  list_nth(cscan->custom_scan_tlist,
+											   AttrNumberGetAttrOffset(column.custom_scan_attno)))
+								 ->expr);
+				column.uncompressed_chunk_attno = var->varattno;
+			}
 		}
 		else
 		{
 			/* metadata columns */
-			switch (column.output_attno)
+			switch (column.custom_scan_attno)
 			{
 				case DECOMPRESS_CHUNK_COUNT_ID:
 					column.type = COUNT_COLUMN;
@@ -313,15 +329,15 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 					column.type = SEQUENCE_NUM_COLUMN;
 					break;
 				default:
-					elog(ERROR, "Invalid column attno \"%d\"", column.output_attno);
+					elog(ERROR, "Invalid column attno \"%d\"", column.custom_scan_attno);
 					break;
 			}
 		}
 
-		if (column.output_attno > 0)
+		if (column.custom_scan_attno > 0)
 		{
 			/* Data column. */
-			Assert(current_compressed < num_columns_with_metadata);
+			Assert(current_compressed < num_data_columns);
 			dcontext->compressed_chunk_columns[current_compressed++] = column;
 		}
 		else
@@ -344,7 +360,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 		chunk_state->batch_queue =
 			batch_queue_heap_create(num_data_columns,
 									chunk_state->sortinfo,
-									dcontext->decompressed_slot->tts_tupleDescriptor,
+									dcontext->custom_scan_slot->tts_tupleDescriptor,
 									&BatchQueueFunctionsHeap);
 		chunk_state->exec_methods.ExecCustomScan = decompress_chunk_exec_heap;
 	}
@@ -411,6 +427,13 @@ decompress_chunk_exec_impl(DecompressChunkState *chunk_state, const BatchQueueFu
 	if (TupIsNull(result_slot))
 	{
 		return NULL;
+	}
+
+	if (chunk_state->has_row_marks)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("locking compressed tuples is not supported")));
 	}
 
 	if (chunk_state->csstate.ss.ps.ps_ProjInfo)

@@ -54,6 +54,40 @@ DROP INDEX new_index;
 ALTER TABLE test1 SET (fillfactor=100);
 ALTER TABLE test1 RESET (fillfactor);
 ALTER TABLE test1 ALTER COLUMN b SET STATISTICS 10;
+-- ensure that REPLICA IDENTITY works
+SELECT relreplident, count(*) FROM show_chunks('test1') ch INNER JOIN pg_class c ON (ch = c.oid) GROUP BY 1 ORDER BY 1;
+ relreplident | count 
+--------------+-------
+ d            |    27
+(1 row)
+
+SELECT relreplident FROM pg_class c WHERE c.relname = 'test1';
+ relreplident 
+--------------
+ d
+(1 row)
+
+ALTER TABLE test1 REPLICA IDENTITY FULL;
+SELECT relname, relreplident FROM pg_class WHERE relname = 'test1' ORDER BY relname;
+ relname | relreplident 
+---------+--------------
+ test1   | f
+(1 row)
+
+-- the chunk's setting should also change to FULL
+SELECT relreplident, count(*) FROM show_chunks('test1') ch INNER JOIN pg_class c ON (ch = c.oid) GROUP BY 1 ORDER BY 1;
+ relreplident | count 
+--------------+-------
+ f            |    27
+(1 row)
+
+SELECT relreplident FROM pg_class c WHERE c.relname = 'test1';
+ relreplident 
+--------------
+ f
+(1 row)
+
+ALTER TABLE test1 REPLICA IDENTITY DEFAULT;
 -- make sure we cannot create constraints or unique indexes on compressed hypertables
 \set ON_ERROR_STOP 0
 ALTER TABLE test1 ADD CONSTRAINT c1 UNIQUE(time,i);
@@ -2276,10 +2310,8 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
                      ->  Seq Scan on compress_hyper_36_141_chunk
          ->  Sort
                Sort Key: _hyper_35_138_chunk."time"
-               ->  Sort
-                     Sort Key: _hyper_35_138_chunk."time"
-                     ->  Seq Scan on _hyper_35_138_chunk
-(25 rows)
+               ->  Seq Scan on _hyper_35_138_chunk
+(23 rows)
 
 -- make other one partial too
 INSERT INTO space_part VALUES
@@ -2305,19 +2337,15 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
                      ->  Seq Scan on compress_hyper_36_140_chunk
          ->  Sort
                Sort Key: _hyper_35_137_chunk."time"
-               ->  Sort
-                     Sort Key: _hyper_35_137_chunk."time"
-                     ->  Seq Scan on _hyper_35_137_chunk
+               ->  Seq Scan on _hyper_35_137_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_35_138_chunk
                ->  Sort
                      Sort Key: compress_hyper_36_141_chunk._ts_meta_sequence_num DESC
                      ->  Seq Scan on compress_hyper_36_141_chunk
          ->  Sort
                Sort Key: _hyper_35_138_chunk."time"
-               ->  Sort
-                     Sort Key: _hyper_35_138_chunk."time"
-                     ->  Seq Scan on _hyper_35_138_chunk
-(30 rows)
+               ->  Seq Scan on _hyper_35_138_chunk
+(26 rows)
 
 -- test creation of unique expression index does not interfere with enabling compression
 -- github issue 6205

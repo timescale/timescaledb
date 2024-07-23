@@ -4,24 +4,24 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <catalog/pg_namespace.h>
-#include <catalog/namespace.h>
-#include <catalog/indexing.h>
-#include <utils/lsyscache.h>
-#include <utils/builtins.h>
-#include <utils/regproc.h>
-#include <utils/syscache.h>
-#include <utils/inval.h>
-#include <access/xact.h>
 #include <access/htup_details.h>
-#include <miscadmin.h>
+#include <access/xact.h>
+#include <catalog/indexing.h>
+#include <catalog/namespace.h>
+#include <catalog/pg_namespace.h>
 #include <commands/dbcommands.h>
 #include <commands/sequence.h>
+#include <miscadmin.h>
+#include <utils/builtins.h>
+#include <utils/inval.h>
+#include <utils/lsyscache.h>
+#include <utils/regproc.h>
+#include <utils/syscache.h>
 
 #include "compat/compat.h"
-#include "ts_catalog/catalog.h"
-#include "extension.h"
 #include "cache_invalidate.h"
+#include "extension.h"
+#include "ts_catalog/catalog.h"
 #include "utils.h"
 
 static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
@@ -109,6 +109,10 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = TELEMETRY_EVENT_TABLE_NAME,
 	},
+	[CHUNK_COLUMN_STATS] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = CHUNK_COLUMN_STATS_TABLE_NAME,
+	},
 	[_MAX_CATALOG_TABLES] = {
 		.schema_name = "invalid schema",
 		.table_name = "invalid table",
@@ -135,6 +139,13 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.names = (char *[]) {
 			[DIMENSION_SLICE_ID_IDX] = "dimension_slice_pkey",
 			[DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX] = "dimension_slice_dimension_id_range_start_range_end_key",
+		},
+	},
+	[CHUNK_COLUMN_STATS] = {
+		.length = _MAX_CHUNK_COLUMN_STATS_INDEX,
+		.names = (char *[]) {
+			[CHUNK_COLUMN_STATS_ID_IDX] = "chunk_column_stats_pkey",
+			[CHUNK_COLUMN_STATS_HT_ID_CHUNK_ID_COLUMN_NAME_IDX] = "chunk_column_stats_ht_id_chunk_id_colname_key",
 		},
 	},
 	[CHUNK] = {
@@ -269,6 +280,7 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG] = NULL,
 	[COMPRESSION_SETTINGS] = NULL,
 	[COMPRESSION_CHUNK_SIZE] = NULL,
+	[CHUNK_COLUMN_STATS] = CATALOG_SCHEMA_NAME ".chunk_column_stats_id_seq",
 };
 
 typedef struct InternalFunctionDef
@@ -475,9 +487,7 @@ ts_catalog_get(void)
 								  def.args,
 								  NULL,
 								  false,
-#if PG14_GE
 								  false, /* include_out_arguments */
-#endif
 								  false,
 								  false);
 
@@ -726,6 +736,7 @@ ts_catalog_invalidate_cache(Oid catalog_relid, CmdType operation)
 		case HYPERTABLE:
 		case DIMENSION:
 		case CONTINUOUS_AGG:
+		case CHUNK_COLUMN_STATS:
 			relid = ts_catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE);
 			CacheInvalidateRelcacheByRelid(relid);
 			break;
@@ -898,9 +909,7 @@ ts_catalog_index_insert(ResultRelInfo *indstate, HeapTuple heapTuple)
 					 &(heapTuple->t_self), /* tid of heap tuple */
 					 heapRelation,
 					 index->rd_index->indisunique ? UNIQUE_CHECK_YES : UNIQUE_CHECK_NO,
-#if PG14_GE
 					 false,
-#endif
 					 indexInfo);
 	}
 

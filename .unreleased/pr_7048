@@ -1,0 +1,1 @@
+Implements: #7048: Add an index scan for INSERT DML decompression.

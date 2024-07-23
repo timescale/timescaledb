@@ -4,20 +4,25 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <access/xact.h>
 #include <access/transam.h>
-#include <commands/event_trigger.h>
+#include <access/xact.h>
 #include <catalog/namespace.h>
 #include <catalog/objectaccess.h>
-#include <utils/lsyscache.h>
-#include <utils/inval.h>
+#include <commands/event_trigger.h>
 #include <fmgr.h>
+#include <utils/inval.h>
+#include <utils/lsyscache.h>
 
-#include "compat/compat-msvc-enter.h" /* To label externs in extension.h and
-								 * miscadmin.h correctly */
+#if PG_VERSION_NUM < 150000
+/*
+ * Some externs are mislabeled when building on Windows so we try to fix them
+ * with this hack. This is only needed for versions < 15.
+ */
+#include "compat/compat-msvc-enter.h"
 #include <commands/extension.h>
 #include <miscadmin.h>
 #include "compat/compat-msvc-exit.h"
+#endif
 
 #include <access/relscan.h>
 #include <catalog/indexing.h>
@@ -25,11 +30,11 @@
 #include <utils/builtins.h>
 #include <utils/fmgroids.h>
 
-#include "ts_catalog/catalog.h"
-#include "extension.h"
-#include "guc.h"
-#include "extension_utils.c"
 #include "compat/compat.h"
+#include "extension.h"
+#include "extension_utils.c"
+#include "guc.h"
+#include "ts_catalog/catalog.h"
 
 #define TS_UPDATE_SCRIPT_CONFIG_VAR MAKE_EXTOPTION("update_script_stage")
 #define POST_UPDATE "post"

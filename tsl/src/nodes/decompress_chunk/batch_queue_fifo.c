@@ -4,8 +4,8 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-#include "batch_array.h"
 #include "batch_queue_fifo.h"
+#include "batch_array.h"
 
 /*
  * Create a FIFO batch queue.

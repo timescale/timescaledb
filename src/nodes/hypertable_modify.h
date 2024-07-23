@@ -6,8 +6,8 @@
 #pragma once
 
 #include <postgres.h>
-#include <nodes/execnodes.h>
 #include <foreign/fdwapi.h>
+#include <nodes/execnodes.h>
 
 #include "hypertable.h"
 #include "import/ht_hypertable_modify.h"
@@ -15,12 +15,14 @@
 typedef struct HypertableModifyPath
 {
 	CustomPath cpath;
-	/* A bitmapset to remember which subpaths are using data node dispatching. */
-	Bitmapset *distributed_insert_plans;
-	/* List of server oids for the hypertable's data nodes */
-	List *serveroids;
 } HypertableModifyPath;
 
+/*
+ * State for the hypertable_modify custom scan node.
+ *
+ * This struct definition is also used in ts_stat_statements, so any new fields
+ * should only be added at the end of the struct.
+ */
 typedef struct HypertableModifyState
 {
 	CustomScanState cscan_state;
@@ -29,6 +31,7 @@ typedef struct HypertableModifyState
 	Snapshot snapshot;
 	int64 tuples_decompressed;
 	int64 batches_decompressed;
+	int64 batches_filtered;
 } HypertableModifyState;
 
 extern void ts_hypertable_modify_fixup_tlist(Plan *plan);
@@ -36,7 +39,5 @@ extern Path *ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath
 											  Hypertable *ht, RelOptInfo *input_rel);
 extern List *ts_replace_rowid_vars(PlannerInfo *root, List *tlist, int varno);
 
-#if PG14_GE
 extern TupleTableSlot *ExecInsert(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 								  TupleTableSlot *slot, bool canSetTag);
-#endif

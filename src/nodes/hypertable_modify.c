@@ -22,14 +22,13 @@
 #include <utils/rel.h>
 #include <utils/snapmgr.h>
 
-#include "nodes/chunk_dispatch/chunk_dispatch.h"
 #include "cross_module_fn.h"
 #include "guc.h"
 #include "hypertable_cache.h"
 #include "hypertable_modify.h"
 #include "nodes/chunk_append/chunk_append.h"
+#include "nodes/chunk_dispatch/chunk_dispatch.h"
 
-#if PG14_GE
 static void fireASTriggers(ModifyTableState *node);
 static void fireBSTriggers(ModifyTableState *node);
 static TupleTableSlot *ExecModifyTable(CustomScanState *cs_node, PlanState *pstate);
@@ -55,7 +54,6 @@ static bool ExecOnConflictUpdate(ModifyTableContext *context, ResultRelInfo *res
 static void ExecCheckTupleVisible(EState *estate, Relation rel, TupleTableSlot *slot);
 static void ExecCheckTIDVisible(EState *estate, ResultRelInfo *relinfo, ItemPointer tid,
 								TupleTableSlot *tempSlot);
-#endif
 
 static List *
 get_chunk_dispatch_states(PlanState *substate)
@@ -141,18 +139,13 @@ hypertable_modify_begin(CustomScanState *node, EState *estate, int eflags)
 	if (estate->es_auxmodifytables && linitial(estate->es_auxmodifytables) == mtstate)
 		linitial(estate->es_auxmodifytables) = node;
 
-		/*
-		 * Find all ChunkDispatchState subnodes and set their parent
-		 * ModifyTableState node
-		 * We assert we only have 1 ModifyTable subpath when we create
-		 * the HypertableInsert path so this should not have changed here.
-		 */
-#if PG14_LT
-	Assert(mtstate->mt_nplans == 1);
-	PlanState *subplan = mtstate->mt_plans[0];
-#else
+	/*
+	 * Find all ChunkDispatchState subnodes and set their parent
+	 * ModifyTableState node
+	 * We assert we only have 1 ModifyTable subpath when we create
+	 * the HypertableInsert path so this should not have changed here.
+	 */
 	PlanState *subplan = outerPlanState(mtstate);
-#endif
 
 	if (mtstate->operation == CMD_INSERT
 #if PG15_GE
@@ -174,12 +167,8 @@ hypertable_modify_begin(CustomScanState *node, EState *estate, int eflags)
 static TupleTableSlot *
 hypertable_modify_exec(CustomScanState *node)
 {
-#if PG14_LT
-	return ExecProcNode(linitial(node->custom_ps));
-#else
 	ModifyTableState *mtstate = linitial_node(ModifyTableState, node->custom_ps);
 	return ExecModifyTable(node, &mtstate->ps);
-#endif
 }
 
 static void
@@ -200,7 +189,6 @@ hypertable_modify_explain(CustomScanState *node, List *ancestors, ExplainState *
 	HypertableModifyState *state = (HypertableModifyState *) node;
 	ModifyTableState *mtstate = linitial_node(ModifyTableState, node->custom_ps);
 
-#if PG14_GE
 	/*
 	 * The targetlist for this node will have references that cannot be resolved by
 	 * EXPLAIN. So for EXPLAIN VERBOSE we clear the targetlist so that EXPLAIN does not
@@ -234,7 +222,6 @@ hypertable_modify_explain(CustomScanState *node, List *ancestors, ExplainState *
 		node->ss.ps.instrument->nfiltered1 = mtstate->ps.instrument->nfiltered1;
 	}
 	mtstate->ps.instrument = node->ss.ps.instrument;
-#endif
 
 	/*
 	 * For INSERT we have to read the number of decompressed batches and
@@ -253,10 +240,13 @@ hypertable_modify_explain(CustomScanState *node, List *ancestors, ExplainState *
 		foreach (lc, chunk_dispatch_states)
 		{
 			ChunkDispatchState *cds = (ChunkDispatchState *) lfirst(lc);
+			state->batches_filtered += cds->batches_filtered;
 			state->batches_decompressed += cds->batches_decompressed;
 			state->tuples_decompressed += cds->tuples_decompressed;
 		}
 	}
+	if (state->batches_filtered > 0)
+		ExplainPropertyInteger("Batches filtered", NULL, state->batches_filtered, es);
 	if (state->batches_decompressed > 0)
 		ExplainPropertyInteger("Batches decompressed", NULL, state->batches_decompressed, es);
 	if (state->tuples_decompressed > 0)
@@ -328,58 +318,6 @@ make_var_targetlist(const List *tlist)
 }
 
 /*
- * Plan the private FDW data for a remote hypertable. Note that the private data
- * for a result relation is a list, so we return a list of lists, one for each
- * result relation.  In case of no remote modify, we still need to return a list
- * of empty lists.
- */
-static void
-plan_remote_modify(PlannerInfo *root, HypertableModifyPath *hmpath, ModifyTable *mt,
-				   FdwRoutine *fdwroutine)
-{
-	List *fdw_private_list = NIL;
-	/* Keep any existing direct modify plans */
-	Bitmapset *direct_modify_plans = mt->fdwDirectModifyPlans;
-	ListCell *lc;
-	int i = 0;
-
-	/* Iterate all subplans / result relations to check which ones are inserts
-	 * into hypertables. In case we find a remote hypertable insert, we either
-	 * have to plan it using the FDW or, in case of data node dispatching, we
-	 * just need to mark the plan as "direct" to let ModifyTable know it
-	 * should not invoke the regular FDW modify API. */
-	foreach (lc, mt->resultRelations)
-	{
-		Index rti = lfirst_int(lc);
-		RangeTblEntry *rte = planner_rt_fetch(rti, root);
-		List *fdwprivate = NIL;
-		bool is_distributed_insert = bms_is_member(i, hmpath->distributed_insert_plans);
-
-		/* If data node batching is supported, we won't actually use the FDW
-		 * direct modify API (everything is done in DataNodeDispatch), but we
-		 * need to trick ModifyTable to believe we're doing direct modify so
-		 * that it doesn't invoke the non-direct FDW API for inserts. Instead,
-		 * it should handle only returning projections as if it was a direct
-		 * modify. We do this by adding the result relation's plan to
-		 * fdwDirectModifyPlans. See ExecModifyTable for more details. */
-		if (is_distributed_insert)
-			direct_modify_plans = bms_add_member(direct_modify_plans, i);
-
-		if (!is_distributed_insert && NULL != fdwroutine && fdwroutine->PlanForeignModify != NULL &&
-			ts_is_hypertable(rte->relid))
-			fdwprivate = fdwroutine->PlanForeignModify(root, mt, rti, i);
-		else
-			fdwprivate = NIL;
-
-		i++;
-		fdw_private_list = lappend(fdw_private_list, fdwprivate);
-	}
-
-	mt->fdwDirectModifyPlans = direct_modify_plans;
-	mt->fdwPrivLists = fdw_private_list;
-}
-
-/*
  * Construct the HypertableInsert's target list based on the ModifyTable's
  * target list, which now exists after having been created by
  * set_plan_references().
@@ -412,8 +350,6 @@ ts_hypertable_modify_fixup_tlist(Plan *plan)
 	}
 }
 
-/* ROWID_VAR only exists in PG14+ */
-#if PG14_GE
 List *
 ts_replace_rowid_vars(PlannerInfo *root, List *tlist, int varno)
 {
@@ -439,16 +375,13 @@ ts_replace_rowid_vars(PlannerInfo *root, List *tlist, int varno)
 	}
 	return tlist;
 }
-#endif
 
 static Plan *
 hypertable_modify_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_path,
 							  List *tlist, List *clauses, List *custom_plans)
 {
-	HypertableModifyPath *hmpath = (HypertableModifyPath *) best_path;
 	CustomScan *cscan = makeNode(CustomScan);
 	ModifyTable *mt = linitial_node(ModifyTable, custom_plans);
-	FdwRoutine *fdwroutine = NULL;
 
 	cscan->methods = &hypertable_modify_plan_methods;
 	cscan->custom_plans = custom_plans;
@@ -459,27 +392,6 @@ hypertable_modify_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 	cscan->scan.plan.total_cost = mt->plan.total_cost;
 	cscan->scan.plan.plan_rows = mt->plan.plan_rows;
 	cscan->scan.plan.plan_width = mt->plan.plan_width;
-
-	if (NIL != hmpath->serveroids)
-	{
-		/* Get the foreign data wrapper routines for the first data node. Should be
-		 * the same for all data nodes. */
-		Oid serverid = linitial_oid(hmpath->serveroids);
-
-		fdwroutine = GetFdwRoutineByServerId(serverid);
-	}
-
-	/*
-	 * A remote hypertable is not a foreign table since it cannot have indexes
-	 * in that case. But we run the FDW planning for the hypertable here as if
-	 * it was a foreign table. This is because when we do an FDW insert of a
-	 * foreign table chunk, we actually would like to do that as if the INSERT
-	 * happened on the root table. Thus we need the plan state from the root
-	 * table, which we can reuse on every chunk. This plan state includes,
-	 * e.g., a deparsed INSERT statement that references the hypertable
-	 * instead of a chunk.
-	 */
-	plan_remote_modify(root, hmpath, mt, fdwroutine);
 
 	/* The tlist is always NIL since the ModifyTable subplan doesn't have its
 	 * targetlist set until set_plan_references (setrefs.c) is run */
@@ -524,7 +436,6 @@ hypertable_modify_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 	 * need to remove those because set_customscan_references will bail
 	 * if it sees ROWID_VAR entries in the targetlist.
 	 */
-#if PG14_GE
 	if (mt->operation == CMD_UPDATE || mt->operation == CMD_DELETE
 #if PG15_GE
 		|| mt->operation == CMD_MERGE
@@ -540,12 +451,6 @@ hypertable_modify_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 				ts_replace_rowid_vars(root, mt->plan.lefttree->targetlist, mt->nominalRelation);
 		}
 	}
-#else
-	/*
-	 * For postgres versions < PG14 we only route INSERT through our custom node.
-	 */
-	Assert(mt->operation == CMD_INSERT);
-#endif
 	cscan->custom_scan_tlist = cscan->scan.plan.targetlist;
 
 	/*
@@ -553,10 +458,8 @@ hypertable_modify_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 	 * because we modify that list during execution and
 	 * we still need the original list in case that plan
 	 * gets reused.
-	 *
-	 * We also pass on the data nodes to insert on.
 	 */
-	cscan->custom_private = list_make2(mt->arbiterIndexes, hmpath->serveroids);
+	cscan->custom_private = list_make1(mt->arbiterIndexes);
 
 	return &cscan->scan.plan;
 }
@@ -573,22 +476,9 @@ ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hyp
 	Path *path = &mtpath->path;
 	Path *subpath = NULL;
 	Cache *hcache = ts_hypertable_cache_pin();
-	Bitmapset *distributed_insert_plans = NULL;
 	HypertableModifyPath *hmpath;
 	int i = 0;
 
-#if PG14_LT
-	/* Since it's theoretically possible for ModifyTablePath to have multiple subpaths
-	 * in PG < 14 we assert that we only get 1 subpath here. */
-	Assert(list_length(mtpath->subpaths) == list_length(mtpath->resultRelations));
-	if (list_length(mtpath->subpaths) > 1)
-		/* This should never happen but if it ever does it's safer to
-		 * error here as the rest of the code assumes there is only 1 subpath.
-		 */
-		elog(ERROR, "multiple top-level subpaths found during INSERT");
-#endif
-
-#if PG14_GE
 	/* PG14 only copies child rows and width if returningLists is not
 	 * empty. Since we do not know target chunks during planning we
 	 * do not have that information when postgres creates the path.
@@ -598,7 +488,6 @@ ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hyp
 		mtpath->path.rows = mtpath->subpath->rows;
 		mtpath->path.pathtarget->width = mtpath->subpath->pathtarget->width;
 	}
-#endif
 
 	Index rti = mtpath->nominalRelation;
 
@@ -619,15 +508,9 @@ ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hyp
 	hmpath->cpath.path.pathtype = T_CustomScan;
 	hmpath->cpath.custom_paths = list_make1(mtpath);
 	hmpath->cpath.methods = &hypertable_modify_path_methods;
-	hmpath->distributed_insert_plans = distributed_insert_plans;
-	hmpath->serveroids = NIL;
 	path = &hmpath->cpath.path;
-#if PG14_LT
-	mtpath->subpaths = list_make1(subpath);
-#else
 	if (subpath)
 		mtpath->subpath = subpath;
-#endif
 
 	ts_cache_release(hcache);
 
@@ -637,7 +520,6 @@ ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hyp
 /*
  * Callback for ModifyTableState->GetUpdateNewTuple for use by regular UPDATE.
  */
-#if PG14_GE
 static TupleTableSlot *
 internalGetUpdateNewTuple(ResultRelInfo *relinfo, TupleTableSlot *planSlot, TupleTableSlot *oldSlot,
 #if PG15_GE
@@ -747,18 +629,22 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	 */
 	if ((operation == CMD_DELETE || operation == CMD_UPDATE) && !ht_state->comp_chunks_processed)
 	{
-		if (ts_cm_functions->decompress_target_segments)
+		/* Modify snapshot only if something got decompressed */
+		if (ts_cm_functions->decompress_target_segments &&
+			ts_cm_functions->decompress_target_segments(ht_state))
 		{
-			ts_cm_functions->decompress_target_segments(ht_state);
 			ht_state->comp_chunks_processed = true;
 			/*
 			 * save snapshot set during ExecutorStart(), since this is the same
 			 * snapshot used to SeqScan of uncompressed chunks
 			 */
 			ht_state->snapshot = estate->es_snapshot;
-			/* use current transaction snapshot */
-			estate->es_snapshot = GetTransactionSnapshot();
+
 			CommandCounterIncrement();
+			/* use a static copy of current transaction snapshot
+			 * this needs to be a copy so we don't read trigger updates
+			 */
+			estate->es_snapshot = RegisterSnapshot(GetTransactionSnapshot());
 			/* mark rows visible */
 			estate->es_output_cid = GetCurrentCommandId(true);
 
@@ -804,12 +690,29 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 
 		context.planSlot = ExecProcNode(subplanstate);
 
+		if (cds && cds->rri && operation == CMD_INSERT && cds->skip_current_tuple)
+		{
+			cds->skip_current_tuple = false;
+			if (node->ps.instrument)
+				node->ps.instrument->ntuples2++;
+			return NULL;
+		}
+
 		/* No more tuples to process? */
 		if (TupIsNull(context.planSlot))
 			break;
 
-#if PG15_GE
-		/* copy INSERT merge action list to result relation info of corresponding chunk */
+			/*
+			 * copy INSERT merge action list to result relation info of corresponding chunk
+			 *
+			 * XXX do we need an additional support of NOT MATCHED BY SOURCE
+			 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
+			 */
+#if PG17_GE
+		if (cds && cds->rri && operation == CMD_MERGE)
+			cds->rri->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET] =
+				resultRelInfo->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
+#elif PG15_GE
 		if (cds && cds->rri && operation == CMD_MERGE)
 			cds->rri->ri_notMatchedMergeAction = resultRelInfo->ri_notMatchedMergeAction;
 #endif
@@ -990,11 +893,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 					if (!table_tuple_fetch_row_version(relation, tupleid, SnapshotAny, oldSlot))
 						elog(ERROR, "failed to fetch tuple being updated");
 				}
-#if PG14_LT
-				slot = ExecGetUpdateNewTuple(resultRelInfo, planSlot, oldSlot);
-#else
 				slot = internalGetUpdateNewTuple(resultRelInfo, context.planSlot, oldSlot, NULL);
-#endif
 #if PG15_GE
 				context.GetUpdateNewTuple = internalGetUpdateNewTuple;
 				context.relaction = NULL;
@@ -1039,6 +938,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 
 	if (ht_state->comp_chunks_processed)
 	{
+		UnregisterSnapshot(estate->es_snapshot);
 		estate->es_snapshot = ht_state->snapshot;
 		ht_state->comp_chunks_processed = false;
 	}
@@ -2801,5 +2701,3 @@ ExecDelete(ModifyTableContext *context, ResultRelInfo *resultRelInfo, ItemPointe
 
 	return NULL;
 }
-
-#endif

@@ -7,10 +7,10 @@
 #include <access/heapam.h>
 #include <access/xact.h>
 #include <catalog/dependency.h>
+#include <catalog/heap.h>
 #include <catalog/indexing.h>
 #include <catalog/objectaddress.h>
 #include <catalog/pg_constraint.h>
-#include <catalog/heap.h>
 #include <commands/tablecmds.h>
 #include <funcapi.h>
 #include <nodes/makefuncs.h>
@@ -19,26 +19,27 @@
 #include <utils/hsearch.h>
 #include <utils/lsyscache.h>
 #include <utils/palloc.h>
-#include <utils/relcache.h>
 #include <utils/rel.h>
+#include <utils/relcache.h>
 #include <utils/syscache.h>
 
 #include "compat/compat.h"
-#include "export.h"
-#include "scanner.h"
-#include "scan_iterator.h"
+#include "chunk.h"
 #include "chunk_constraint.h"
 #include "chunk_index.h"
 #include "constraint.h"
 #include "debug_assert.h"
-#include "dimension_vector.h"
 #include "dimension_slice.h"
-#include "hypercube.h"
-#include "chunk.h"
-#include "hypertable.h"
+#include "dimension_vector.h"
 #include "errors.h"
-#include "process_utility.h"
+#include "export.h"
+#include "foreign_key.h"
+#include "hypercube.h"
+#include "hypertable.h"
 #include "partitioning.h"
+#include "process_utility.h"
+#include "scan_iterator.h"
+#include "scanner.h"
 
 #define DEFAULT_EXTRA_CONSTRAINTS_SIZE 4
 
@@ -299,12 +300,7 @@ create_dimension_check_constraint(const Dimension *dim, const DimensionSlice *sl
 		PartitioningInfo *partinfo = dim->partitioning;
 		List *funcname = list_make2(makeString(NameStr(partinfo->partfunc.schema)),
 									makeString(NameStr(partinfo->partfunc.name)));
-		dimdef = (Node *) makeFuncCall(funcname,
-									   list_make1(colref),
-#if PG14_GE
-									   COERCE_EXPLICIT_CALL,
-#endif
-									   -1);
+		dimdef = (Node *) makeFuncCall(funcname, list_make1(colref), COERCE_EXPLICIT_CALL, -1);
 
 		if (IS_OPEN_DIMENSION(dim))
 		{
@@ -517,6 +513,9 @@ ts_chunk_constraints_create(const Hypertable *ht, const Chunk *chunk)
 		Assert(list_length(cookedconstrs) == list_length(newconstrs));
 		CommandCounterIncrement();
 	}
+
+	/* Copy FK triggers to this chunk */
+	ts_chunk_copy_referencing_fk(ht, chunk);
 }
 
 ScanIterator
@@ -730,7 +729,7 @@ ts_chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_id, ChunkCo
 }
 
 static bool
-chunk_constraint_need_on_chunk(const char chunk_relkind, Form_pg_constraint conform)
+chunk_constraint_need_on_chunk(Form_pg_constraint conform)
 {
 	if (conform->contype == CONSTRAINT_CHECK)
 	{
@@ -754,24 +753,7 @@ chunk_constraint_need_on_chunk(const char chunk_relkind, Form_pg_constraint conf
 	if (conform->contype == CONSTRAINT_FOREIGN && OidIsValid(conform->conparentid))
 		return false;
 
-	/* Foreign tables do not support non-check constraints, so skip them */
-	if (chunk_relkind == RELKIND_FOREIGN_TABLE)
-		return false;
-
 	return true;
-}
-
-static bool
-chunk_constraint_is_check(const char chunk_relkind, Form_pg_constraint conform)
-{
-	if (conform->contype == CONSTRAINT_CHECK)
-	{
-		/*
-		 * check constraints supported on foreign tables (like OSM chunks)
-		 */
-		return true;
-	}
-	return false;
 }
 
 int
@@ -800,7 +782,7 @@ chunk_constraint_add(HeapTuple constraint_tuple, void *arg)
 	ConstraintContext *cc = arg;
 	Form_pg_constraint constraint = (Form_pg_constraint) GETSTRUCT(constraint_tuple);
 
-	if (chunk_constraint_need_on_chunk(cc->chunk_relkind, constraint))
+	if (cc->chunk_relkind != RELKIND_FOREIGN_TABLE && chunk_constraint_need_on_chunk(constraint))
 	{
 		ts_chunk_constraints_add(cc->ccs, cc->chunk_id, 0, NULL, NameStr(constraint->conname));
 		return CONSTR_PROCESSED;
@@ -829,7 +811,7 @@ chunk_constraint_add_check(HeapTuple constraint_tuple, void *arg)
 	ConstraintContext *cc = arg;
 	Form_pg_constraint constraint = (Form_pg_constraint) GETSTRUCT(constraint_tuple);
 
-	if (chunk_constraint_is_check(cc->chunk_relkind, constraint))
+	if (constraint->contype == CONSTRAINT_CHECK)
 	{
 		ts_chunk_constraints_add(cc->ccs,
 								 cc->chunk_id,
@@ -868,7 +850,7 @@ ts_chunk_constraint_create_on_chunk(const Hypertable *ht, const Chunk *chunk, Oi
 
 	con = (Form_pg_constraint) GETSTRUCT(tuple);
 
-	if (chunk_constraint_need_on_chunk(chunk->relkind, con))
+	if (chunk->relkind != RELKIND_FOREIGN_TABLE && chunk_constraint_need_on_chunk(con))
 	{
 		ChunkConstraint *cc = ts_chunk_constraints_add(chunk->constraints,
 													   chunk->fd.id,

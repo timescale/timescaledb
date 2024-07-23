@@ -5,8 +5,8 @@
  */
 #include <postgres.h>
 
-#include "http.h"
 #include "conn.h"
+#include "http.h"
 
 static const char *http_error_strings[] = {
 	[HTTP_ERROR_NONE] = "no HTTP error",

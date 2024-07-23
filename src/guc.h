@@ -6,8 +6,8 @@
 #pragma once
 
 #include <postgres.h>
-#include "export.h"
 #include "config.h"
+#include "export.h"
 
 #ifdef USE_TELEMETRY
 extern bool ts_telemetry_on(void);
@@ -29,9 +29,10 @@ extern bool ts_guc_enable_now_constify;
 extern TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify;
 extern bool ts_guc_enable_osm_reads;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression;
+extern TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering;
 extern TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml;
 extern TSDLLEXPORT bool ts_guc_enable_transparent_decompression;
-extern TSDLLEXPORT bool ts_guc_enable_decompression_logrep_markers;
+extern TSDLLEXPORT bool ts_guc_enable_compression_wal_markers;
 extern TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge;
 extern TSDLLEXPORT bool ts_guc_enable_skip_scan;
 extern TSDLLEXPORT bool ts_guc_enable_chunkwise_aggregation;
@@ -41,6 +42,7 @@ extern int ts_guc_max_open_chunks_per_insert;
 extern int ts_guc_max_cached_chunks_per_hypertable;
 extern TSDLLEXPORT bool ts_guc_enable_job_execution_logging;
 extern bool ts_guc_enable_tss_callbacks;
+extern TSDLLEXPORT bool ts_guc_enable_delete_after_compression;
 
 #ifdef USE_TELEMETRY
 typedef enum TelemetryLevel

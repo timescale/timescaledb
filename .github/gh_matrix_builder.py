@@ -26,8 +26,6 @@ import json
 import os
 import subprocess
 from ci_settings import (
-    PG13_EARLIEST,
-    PG13_LATEST,
     PG14_EARLIEST,
     PG14_LATEST,
     PG15_EARLIEST,
@@ -43,6 +41,14 @@ pull_request = event_type == "pull_request"
 
 m = {
     "include": [],
+}
+
+# Ignored tests that are known to be flaky or have known issues.
+default_ignored_tests = {
+    "bgw_db_scheduler",
+    "bgw_db_scheduler_fixed",
+    "telemetry",
+    "memoize",
 }
 
 
@@ -67,14 +73,11 @@ def build_debug_config(overrides):
             "coverage": True,
             "cxx": "g++",
             "extra_packages": "clang-14 llvm-14 llvm-14-dev llvm-14-tools",
-            "ignored_tests": {
-                "bgw_db_scheduler",
-                "bgw_db_scheduler_fixed",
-                "telemetry",
-            },
+            "ignored_tests": default_ignored_tests,
             "name": "Debug",
             "os": "ubuntu-22.04",
             "pg_extra_args": "--enable-debug --enable-cassert --with-llvm LLVM_CONFIG=llvm-config-14",
+            "pg_extensions": "postgres_fdw test_decoding",
             "pginstallcheck": True,
             "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DREQUIRE_ALL_TESTS=ON",
         }
@@ -131,6 +134,11 @@ def build_apache_config(overrides):
 
 
 def macos_config(overrides):
+    macos_ignored_tests = {
+        "bgw_launcher",
+        "pg_dump",
+        "compressed_collation",
+    }
     base_config = dict(
         {
             "cc": "clang",
@@ -138,16 +146,10 @@ def macos_config(overrides):
             "coverage": False,
             "cxx": "clang++",
             "extra_packages": "",
-            "ignored_tests": {
-                "bgw_db_scheduler",
-                "bgw_db_scheduler_fixed",
-                "bgw_launcher",
-                "pg_dump",
-                "remote_connection",
-                "compressed_collation",
-            },
+            "ignored_tests": default_ignored_tests.union(macos_ignored_tests),
             "os": "macos-13",
             "pg_extra_args": "--with-libraries=/usr/local/opt/openssl@3/lib --with-includes=/usr/local/opt/openssl@3/include --without-icu",
+            "pg_extensions": "postgres_fdw test_decoding",
             "pginstallcheck": True,
             "tsdb_build_args": "-DASSERTIONS=ON -DREQUIRE_ALL_TESTS=ON -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl@3",
         }
@@ -156,38 +158,15 @@ def macos_config(overrides):
     return base_config
 
 
-# common ignored tests for all scheduled pg15 tests
-ignored_tests = {}
-
-# common ignored tests for all non-scheduled pg15 tests (e.g. PRs)
-if pull_request:
-    ignored_tests = {
-        "telemetry",
-    }
-
 # always test debug build on latest of all supported pg versions
-m["include"].append(
-    build_debug_config({"pg": PG13_LATEST, "ignored_tests": ignored_tests})
-)
+m["include"].append(build_debug_config({"pg": PG14_LATEST}))
 
-m["include"].append(
-    build_debug_config({"pg": PG14_LATEST, "ignored_tests": ignored_tests})
-)
+m["include"].append(build_debug_config({"pg": PG15_LATEST}))
 
-m["include"].append(
-    build_debug_config({"pg": PG15_LATEST, "ignored_tests": ignored_tests})
-)
-
-m["include"].append(
-    build_debug_config({"pg": PG16_LATEST, "ignored_tests": ignored_tests})
-)
+m["include"].append(build_debug_config({"pg": PG16_LATEST}))
 
 # test timescaledb with release config on latest postgres release in MacOS
-m["include"].append(
-    build_release_config(
-        macos_config({"pg": PG16_LATEST, "ignored_tests": ignored_tests})
-    )
-)
+m["include"].append(build_release_config(macos_config({"pg": PG16_LATEST})))
 
 # Test latest postgres release without telemetry. Also run clang-tidy on it
 # because it's the fastest one.
@@ -197,8 +176,18 @@ m["include"].append(
             "pg": PG16_LATEST,
             "cc": "clang-14",
             "cxx": "clang++-14",
-            "ignored_tests": ignored_tests,
             "tsdb_build_args": "-DLINTER=ON -DWARNINGS_AS_ERRORS=ON",
+        }
+    )
+)
+
+m["include"].append(
+    build_debug_config(
+        {
+            "pg": "17",
+            "snapshot": "snapshot",
+            "tsdb_build_args": "-DEXPERIMENTAL=ON",
+            "skipped_tests": "merge_compress merge_dml merge size_utils ts_merge-17",
         }
     )
 )
@@ -207,63 +196,31 @@ m["include"].append(
 # to a specific branch like prerelease_test we add additional
 # entries to the matrix
 if not pull_request:
-    # add debug test for first supported PG13 version
-    pg13_debug_earliest = {
-        "pg": PG13_EARLIEST,
-        # The early releases don't build with llvm 14.
-        "pg_extra_args": "--enable-debug --enable-cassert --without-llvm",
-        "skipped_tests": {"001_extension"},
-        "ignored_tests": {
-            "transparent_decompress_chunk-13",
-        },
-        "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DASSERTIONS=ON -DPG_ISOLATION_REGRESS=OFF",
-    }
-    m["include"].append(build_debug_config(pg13_debug_earliest))
-
-    # add debug test for first supported PG14 version
     m["include"].append(
         build_debug_config(
             {
                 "pg": PG14_EARLIEST,
                 # The early releases don't build with llvm 14.
                 "pg_extra_args": "--enable-debug --enable-cassert --without-llvm",
-                "ignored_tests": {"memoize"},
             }
         )
     )
 
     # add debug test for first supported PG15 version
-    m["include"].append(
-        build_debug_config({"pg": PG15_EARLIEST, "ignored_tests": ignored_tests})
-    )
+    m["include"].append(build_debug_config({"pg": PG15_EARLIEST}))
 
     # add debug test for first supported PG16 version
-    m["include"].append(
-        build_debug_config({"pg": PG16_EARLIEST, "ignored_tests": ignored_tests})
-    )
+    m["include"].append(build_debug_config({"pg": PG16_EARLIEST}))
 
     # add debug tests for timescaledb on latest postgres release in MacOS
-    m["include"].append(
-        build_debug_config(
-            macos_config({"pg": PG15_LATEST, "ignored_tests": ignored_tests})
-        )
-    )
+    m["include"].append(build_debug_config(macos_config({"pg": PG15_LATEST})))
 
-    m["include"].append(
-        build_debug_config(
-            macos_config({"pg": PG16_LATEST, "ignored_tests": ignored_tests})
-        )
-    )
+    m["include"].append(build_debug_config(macos_config({"pg": PG16_LATEST})))
 
     # add release test for latest pg releases
-    m["include"].append(build_release_config({"pg": PG13_LATEST}))
     m["include"].append(build_release_config({"pg": PG14_LATEST}))
-    m["include"].append(
-        build_release_config({"pg": PG15_LATEST, "ignored_tests": ignored_tests})
-    )
-    m["include"].append(
-        build_release_config({"pg": PG16_LATEST, "ignored_tests": ignored_tests})
-    )
+    m["include"].append(build_release_config({"pg": PG15_LATEST}))
+    m["include"].append(build_release_config({"pg": PG16_LATEST}))
 
     # add apache only test for latest pg versions
     for PG_LATEST_VER in PG_LATEST:
@@ -271,11 +228,9 @@ if not pull_request:
 
     # to discover issues with upcoming releases we run CI against
     # the stable branches of supported PG releases
-    m["include"].append(build_debug_config({"pg": 13, "snapshot": "snapshot"}))
     m["include"].append(
         build_debug_config(
             {
-                "ignored_tests": {"memoize"},
                 "pg": 14,
                 "snapshot": "snapshot",
             }
@@ -286,7 +241,6 @@ if not pull_request:
             {
                 "pg": 15,
                 "snapshot": "snapshot",
-                "ignored_tests": ignored_tests,
             }
         )
     )
@@ -295,7 +249,6 @@ if not pull_request:
             {
                 "pg": 16,
                 "snapshot": "snapshot",
-                "ignored_tests": ignored_tests,
             }
         )
     )

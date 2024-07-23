@@ -138,16 +138,25 @@ BEGIN
   LOOP
     _removed := _removed + 1;
     RAISE INFO 'Removing metadata of chunk % from hypertable %', _chunk_id, _hypertable_id;
+
     WITH _dimension_slice_remove AS (
         DELETE FROM _timescaledb_catalog.dimension_slice
         USING _timescaledb_catalog.chunk_constraint
         WHERE dimension_slice.id = chunk_constraint.dimension_slice_id
         AND chunk_constraint.chunk_id = _chunk_id
+        AND NOT EXISTS (
+            SELECT FROM _timescaledb_catalog.chunk_constraint cc
+            WHERE cc.chunk_id <> _chunk_id
+            AND cc.dimension_slice_id = dimension_slice.id
+        )
         RETURNING _timescaledb_catalog.dimension_slice.id
     )
     DELETE FROM _timescaledb_catalog.chunk_constraint
     USING _dimension_slice_remove
     WHERE chunk_constraint.dimension_slice_id = _dimension_slice_remove.id;
+
+    DELETE FROM _timescaledb_catalog.chunk_constraint
+    WHERE chunk_constraint.chunk_id = _chunk_id;
 
     DELETE FROM _timescaledb_internal.bgw_policy_chunk_stats
     WHERE bgw_policy_chunk_stats.chunk_id = _chunk_id;

@@ -359,6 +359,10 @@ INSERT INTO table_smallint VALUES(1,2);
 INSERT INTO table_int VALUES(1,2);
 INSERT INTO table_bigint VALUES(1,2);
 
+CREATE VIEW caggs_info AS
+SELECT user_view_schema, user_view_name, bucket_func, bucket_width, bucket_origin, bucket_offset, bucket_timezone, bucket_fixed_width
+FROM _timescaledb_catalog.continuous_aggs_bucket_function NATURAL JOIN _timescaledb_catalog.continuous_agg;
+
 ---
 -- Tests with CAgg creation
 ---
@@ -367,7 +371,7 @@ CREATE MATERIALIZED VIEW cagg_4_hours
   SELECT time_bucket('4 hour', time), max(value)
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours';
 DROP MATERIALIZED VIEW cagg_4_hours;
 
 CREATE MATERIALIZED VIEW cagg_4_hours_offset
@@ -375,7 +379,7 @@ CREATE MATERIALIZED VIEW cagg_4_hours_offset
   SELECT time_bucket('4 hour', time, '30m'::interval), max(value)
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_offset';
 DROP MATERIALIZED VIEW cagg_4_hours_offset;
 
 CREATE MATERIALIZED VIEW cagg_4_hours_offset2
@@ -383,25 +387,24 @@ CREATE MATERIALIZED VIEW cagg_4_hours_offset2
   SELECT time_bucket('4 hour', time, "offset"=>'30m'::interval), max(value)
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_offset2';
 DROP MATERIALIZED VIEW cagg_4_hours_offset2;
 
--- Variable buckets (timezone is provided) with offset are not supported at the moment
-\set ON_ERROR_STOP 0
+-- Variable buckets (timezone is provided) with offset
 CREATE MATERIALIZED VIEW cagg_4_hours_offset_ts
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
   SELECT time_bucket('4 hour', time, "offset"=>'30m'::interval, timezone=>'UTC'), max(value)
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
-\set ON_ERROR_STOP 1
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_offset_ts';
+DROP MATERIALIZED VIEW cagg_4_hours_offset_ts;
 
 CREATE MATERIALIZED VIEW cagg_4_hours_origin
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
   SELECT time_bucket('4 hour', time, '2000-01-01 01:00:00 PST'::timestamptz), max(value)
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_origin';
 DROP MATERIALIZED VIEW cagg_4_hours_origin;
 
 -- Using named parameter
@@ -410,17 +413,17 @@ CREATE MATERIALIZED VIEW cagg_4_hours_origin2
   SELECT time_bucket('4 hour', time, origin=>'2000-01-01 01:00:00 PST'::timestamptz), max(value)
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_origin2';
 DROP MATERIALIZED VIEW cagg_4_hours_origin2;
 
--- Variable buckets (timezone is provided) with origin are not supported at the moment
-\set ON_ERROR_STOP 0
+-- Variable buckets (timezone is provided) with origin
 CREATE MATERIALIZED VIEW cagg_4_hours_origin_ts
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
   SELECT time_bucket('4 hour', time, origin=>'2000-01-01 01:00:00 PST'::timestamptz, timezone=>'UTC'), max(value)
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_origin_ts';
+DROP MATERIALIZED VIEW cagg_4_hours_origin_ts;
 
 -- Without named parameter
 CREATE MATERIALIZED VIEW cagg_4_hours_origin_ts2
@@ -428,8 +431,8 @@ CREATE MATERIALIZED VIEW cagg_4_hours_origin_ts2
   SELECT time_bucket('4 hour', time, 'UTC', '2000-01-01 01:00:00 PST'::timestamptz), max(value)
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
-\set ON_ERROR_STOP 1
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_origin_ts2';
+DROP MATERIALIZED VIEW cagg_4_hours_origin_ts2;
 
 -- Timestamp based CAggs
 CREATE MATERIALIZED VIEW cagg_4_hours_wo_tz
@@ -437,33 +440,33 @@ CREATE MATERIALIZED VIEW cagg_4_hours_wo_tz
   SELECT time_bucket('4 hour', time), max(value)
     FROM temperature_wo_tz
     GROUP BY 1 ORDER BY 1;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_wo_tz';
 
 CREATE MATERIALIZED VIEW cagg_4_hours_origin_ts_wo_tz
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
   SELECT time_bucket('4 hour', time, '2000-01-01 01:00:00'::timestamp), max(value)
     FROM temperature_wo_tz
     GROUP BY 1 ORDER BY 1;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_origin_ts_wo_tz';
 DROP MATERIALIZED VIEW cagg_4_hours_origin_ts_wo_tz;
 
--- Variable buckets (timezone is provided) with origin are not supported at the moment
-\set ON_ERROR_STOP 0
+-- Variable buckets (timezone is provided) with origin
 CREATE MATERIALIZED VIEW cagg_4_hours_origin_ts_wo_tz2
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
   SELECT time_bucket('4 hour', time, origin=>'2000-01-01 01:00:00'::timestamp), max(value)
     FROM temperature_wo_tz
     GROUP BY 1 ORDER BY 1;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
-\set ON_ERROR_STOP 1
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_origin_ts_wo_tz2';
+DROP MATERIALIZED VIEW cagg_4_hours_origin_ts_wo_tz2;
 
 CREATE MATERIALIZED VIEW cagg_4_hours_offset_wo_tz
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
   SELECT time_bucket('4 hour', time, "offset"=>'30m'::interval), max(value)
     FROM temperature_wo_tz
     GROUP BY 1 ORDER BY 1;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_offset_wo_tz';
 DROP MATERIALIZED VIEW cagg_4_hours_offset_wo_tz;
+DROP MATERIALIZED VIEW cagg_4_hours_wo_tz;
 
 -- Date based CAggs
 CREATE MATERIALIZED VIEW cagg_4_hours_date
@@ -471,7 +474,7 @@ CREATE MATERIALIZED VIEW cagg_4_hours_date
   SELECT time_bucket('4 days', time), max(value)
     FROM temperature_date
     GROUP BY 1 ORDER BY 1;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_date';
 DROP MATERIALIZED VIEW cagg_4_hours_date;
 
 CREATE MATERIALIZED VIEW cagg_4_hours_date_origin
@@ -479,7 +482,7 @@ CREATE MATERIALIZED VIEW cagg_4_hours_date_origin
   SELECT time_bucket('4 days', time, '2000-01-01'::date), max(value)
     FROM temperature_date
     GROUP BY 1 ORDER BY 1;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_date_origin';
 DROP MATERIALIZED VIEW cagg_4_hours_date_origin;
 
 CREATE MATERIALIZED VIEW cagg_4_hours_date_origin2
@@ -487,7 +490,7 @@ CREATE MATERIALIZED VIEW cagg_4_hours_date_origin2
   SELECT time_bucket('4 days', time, origin=>'2000-01-01'::date), max(value)
     FROM temperature_date
     GROUP BY 1 ORDER BY 1;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_date_origin2';
 DROP MATERIALIZED VIEW cagg_4_hours_date_origin2;
 
 CREATE MATERIALIZED VIEW cagg_4_hours_date_offset
@@ -495,7 +498,7 @@ CREATE MATERIALIZED VIEW cagg_4_hours_date_offset
   SELECT time_bucket('4 days', time, "offset"=>'30m'::interval), max(value)
     FROM temperature_date
     GROUP BY 1 ORDER BY 1;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_date_offset';
 DROP MATERIALIZED VIEW cagg_4_hours_date_offset;
 
 -- Integer based CAggs
@@ -504,7 +507,7 @@ CREATE MATERIALIZED VIEW cagg_smallint
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM table_smallint
         GROUP BY 1;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_smallint';
 DROP MATERIALIZED VIEW cagg_smallint;
 
 CREATE MATERIALIZED VIEW cagg_smallint_offset
@@ -512,7 +515,7 @@ CREATE MATERIALIZED VIEW cagg_smallint_offset
     AS SELECT time_bucket('2', time, "offset"=>1::smallint), SUM(data) as value
         FROM table_smallint
         GROUP BY 1;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_smallint_offset';
 DROP MATERIALIZED VIEW cagg_smallint_offset;
 
 CREATE MATERIALIZED VIEW cagg_int
@@ -520,7 +523,7 @@ CREATE MATERIALIZED VIEW cagg_int
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM table_int
         GROUP BY 1;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_int';
 DROP MATERIALIZED VIEW cagg_int;
 
 CREATE MATERIALIZED VIEW cagg_int_offset
@@ -528,7 +531,7 @@ CREATE MATERIALIZED VIEW cagg_int_offset
     AS SELECT time_bucket('2', time, "offset"=>1::int), SUM(data) as value
         FROM table_int
         GROUP BY 1;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_int_offset';
 DROP MATERIALIZED VIEW cagg_int_offset;
 
 CREATE MATERIALIZED VIEW cagg_bigint
@@ -536,7 +539,7 @@ CREATE MATERIALIZED VIEW cagg_bigint
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM table_bigint
         GROUP BY 1 WITH NO DATA;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_bigint';
 DROP MATERIALIZED VIEW cagg_bigint;
 
 CREATE MATERIALIZED VIEW cagg_bigint_offset
@@ -544,7 +547,7 @@ CREATE MATERIALIZED VIEW cagg_bigint_offset
     AS SELECT time_bucket('2', time, "offset"=>1::bigint), SUM(data) as value
         FROM table_bigint
         GROUP BY 1 WITH NO DATA;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_bigint_offset';
 DROP MATERIALIZED VIEW cagg_bigint_offset;
 
 -- Without named parameter
@@ -553,7 +556,19 @@ CREATE MATERIALIZED VIEW cagg_bigint_offset2
     AS SELECT time_bucket('2', time, 1::bigint), SUM(data) as value
         FROM table_bigint
         GROUP BY 1 WITH NO DATA;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_bigint_offset2';
+
+-- mess with the bucket_func signature to make sure it will raise an exception
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\set ON_ERROR_STOP 0
+BEGIN;
+UPDATE _timescaledb_catalog.continuous_aggs_bucket_function SET bucket_func = 'func_does_not_exist()';
+-- should error because function does not exist
+CALL refresh_continuous_aggregate('cagg_bigint_offset2', NULL, NULL);
+ROLLBACK;
+\set ON_ERROR_STOP 1
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
 DROP MATERIALIZED VIEW cagg_bigint_offset2;
 
 -- Test invalid bucket definitions
@@ -644,10 +659,11 @@ ALTER MATERIALIZED VIEW cagg_4_hours_offset SET (timescaledb.materialized_only=f
 ALTER MATERIALIZED VIEW cagg_4_hours_origin SET (timescaledb.materialized_only=false);
 
 -- Check watermarks
-SELECT continuous_aggs_watermark.*, _timescaledb_functions.to_timestamp(watermark)
+SELECT continuous_agg.user_view_name, continuous_aggs_watermark.watermark, _timescaledb_functions.to_timestamp(watermark)
   FROM _timescaledb_catalog.continuous_aggs_watermark
   JOIN _timescaledb_catalog.continuous_agg USING (mat_hypertable_id)
-WHERE user_view_name LIKE 'cagg_4_hours%' ORDER BY mat_hypertable_id, watermark;
+WHERE user_view_name LIKE 'cagg_4_hours%'
+ORDER BY mat_hypertable_id, watermark;
 
 -- Insert new data
 INSERT INTO temperature values('2020-01-02 00:10:00 PST', 2222);
@@ -812,20 +828,14 @@ RESET client_min_messages;
 SELECT * FROM cagg_int_offset;
 SELECT time_bucket('10', time, "offset"=>5), SUM(data) FROM table_int GROUP BY 1 ORDER BY 1;
 
----
--- Test with blocking a few broken configurations
----
-\set ON_ERROR_STOP 0
-
--- Unfortunately '\set VERBOSITY verbose' cannot be used here to check the error details
--- since it also prints the line number of the location, which is depended on the build
-
--- Variable sized buckets with origin are known to work incorrect. So, block usage for now.
+-- Variable sized buckets with origin
 CREATE MATERIALIZED VIEW cagg_1_hour_variable_bucket_fixed_origin
   WITH (timescaledb.continuous) AS
   SELECT time_bucket('1 year', time, origin=>'2000-01-01 01:05:00 UTC'::timestamptz, timezone=>'UTC') AS hour_bucket, max(value) AS max_value
     FROM temperature
     GROUP BY 1 ORDER BY 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_1_hour_variable_bucket_fixed_origin';
+DROP MATERIALIZED VIEW cagg_1_hour_variable_bucket_fixed_origin;
 
 -- Variable due to the used timezone
 CREATE MATERIALIZED VIEW cagg_1_hour_variable_bucket_fixed_origin2
@@ -833,6 +843,8 @@ CREATE MATERIALIZED VIEW cagg_1_hour_variable_bucket_fixed_origin2
   SELECT time_bucket('1 hour', time, origin=>'2000-01-01 01:05:00 UTC'::timestamptz, timezone=>'UTC') AS hour_bucket, max(value) AS max_value
     FROM temperature
     GROUP BY 1 ORDER BY 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_1_hour_variable_bucket_fixed_origin2';
+DROP MATERIALIZED VIEW cagg_1_hour_variable_bucket_fixed_origin2;
 
 -- Variable with offset
 CREATE MATERIALIZED VIEW cagg_1_hour_variable_bucket_fixed_origin3
@@ -840,7 +852,16 @@ CREATE MATERIALIZED VIEW cagg_1_hour_variable_bucket_fixed_origin3
   SELECT time_bucket('1 year', time, "offset"=>'5 minutes'::interval) AS hour_bucket, max(value) AS max_value
     FROM temperature
     GROUP BY 1 ORDER BY 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_1_hour_variable_bucket_fixed_origin3';
+DROP MATERIALIZED VIEW cagg_1_hour_variable_bucket_fixed_origin3;
 
+---
+-- Test with blocking a few broken configurations
+---
+\set ON_ERROR_STOP 0
+
+-- Unfortunately '\set VERBOSITY verbose' cannot be used here to check the error details
+-- since it also prints the line number of the location, which is depended on the build
 
 -- Different time origin
 CREATE MATERIALIZED VIEW cagg_1_hour_origin
@@ -895,12 +916,14 @@ CREATE MATERIALIZED VIEW cagg_1_hour_offset
   SELECT time_bucket('1 hour', time, origin=>'2000-01-02 01:00:00 PST'::timestamptz) AS hour_bucket, max(value) AS max_value
     FROM temperature
     GROUP BY 1 ORDER BY 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_1_hour_offset';
 
 CREATE MATERIALIZED VIEW cagg_1_week_offset
   WITH (timescaledb.continuous) AS
   SELECT time_bucket('1 week', hour_bucket, origin=>'2000-01-02 01:00:00 PST'::timestamptz) AS week_bucket, max(max_value) AS max_value
     FROM cagg_1_hour_offset
     GROUP BY 1 ORDER BY 1;
+SELECT * FROM caggs_info WHERE user_view_name = 'cagg_1_week_offset';
 
 -- Compare output
 SELECT * FROM cagg_1_week_offset;
@@ -931,3 +954,5 @@ TRUNCATE temperature;
 
 SELECT * FROM cagg_1_week_offset;
 SELECT time_bucket('1 week', time, origin=>'2000-01-02 01:00:00 PST'::timestamptz), max(value) FROM temperature GROUP BY 1 ORDER BY 1;
+
+DROP VIEW caggs_info;

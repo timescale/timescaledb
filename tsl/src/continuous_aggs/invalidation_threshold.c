@@ -4,27 +4,27 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-#include <access/htup_details.h>
 #include <access/htup.h>
+#include <access/htup_details.h>
 #include <access/xact.h>
 #include <nodes/memnodes.h>
-#include <storage/lockdefs.h>
 #include <storage/lmgr.h>
+#include <storage/lockdefs.h>
 #include <utils/builtins.h>
 #include <utils/memutils.h>
 #include <utils/snapmgr.h>
 
-#include "ts_catalog/catalog.h"
-#include <scanner.h>
-#include <scan_iterator.h>
 #include <compat/compat.h>
-#include <time_utils.h>
+#include "ts_catalog/catalog.h"
+#include <scan_iterator.h>
+#include <scanner.h>
 #include <time_bucket.h>
+#include <time_utils.h>
 
-#include "debug_point.h"
-#include "ts_catalog/continuous_agg.h"
 #include "continuous_aggs/materialize.h"
+#include "debug_point.h"
 #include "invalidation_threshold.h"
+#include "ts_catalog/continuous_agg.h"
 
 /*
  * Invalidation threshold.

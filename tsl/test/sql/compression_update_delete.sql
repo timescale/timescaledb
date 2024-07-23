@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+\set EXPLAIN 'EXPLAIN (costs off, timing off, summary off, analyze)'
+
 CREATE OR REPLACE VIEW compressed_chunk_info_view AS
 SELECT
    h.schema_name AS hypertable_schema,
@@ -1493,3 +1495,105 @@ SELECT compress_chunk(show_chunks('test_meta_filters'));
 
 EXPLAIN (analyze, timing off, costs off, summary off) DELETE FROM test_meta_filters WHERE device = 'd1' AND metric = 'm1' AND v1 < 100;
 
+-- test expression pushdown in compressed dml constraints
+CREATE TABLE test_pushdown(time timestamptz NOT NULL, device text);
+SELECT table_name FROM create_hypertable('test_pushdown', 'time');
+INSERT INTO test_pushdown SELECT '2020-01-01', 'a';
+INSERT INTO test_pushdown SELECT '2020-01-01', 'b';
+INSERT INTO test_pushdown SELECT '2020-01-01 05:00', 'c';
+
+CREATE TABLE devices(device text);
+INSERT INTO devices VALUES ('a'), ('b'), ('c');
+
+ALTER TABLE test_pushdown SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+SELECT compress_chunk(show_chunks('test_pushdown'));
+
+-- 3 batch decompressions means pushdown is not working so we expect less than 3 for all these queries
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'a' = device; ROLLBACK;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device < 'c' ; ROLLBACK;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'c' > device; ROLLBACK;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'c' >= device; ROLLBACK;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device > 'b'; ROLLBACK;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = CURRENT_USER; ROLLBACK;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'b' < device; ROLLBACK;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'b' <= device; ROLLBACK;
+
+-- cant pushdown OR atm
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = 'a' OR device = 'b'; ROLLBACK;
+
+-- test stable function
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time = timestamptz('2020-01-01 05:00'); ROLLBACK;
+-- test sqlvaluefunction
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = substring(CURRENT_USER,length(CURRENT_USER)+1) || 'c'; ROLLBACK;
+-- no filtering in decompression
+BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices d WHERE p.device=d.device; ROLLBACK;
+-- can filter in decompression even before executing join
+BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices d WHERE p.device=d.device AND d.device ='b' ; ROLLBACK;
+-- test prepared statement
+PREPARE q1(text) AS DELETE FROM test_pushdown WHERE device = $1;
+BEGIN; :EXPLAIN EXECUTE q1('a'); ROLLBACK;
+
+-- test arrayop pushdown less than 3 decompressions are expected for successful pushdown
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device IN ('a','d'); ROLLBACK;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = ANY('{a,d}'); ROLLBACK;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device IN ('a',CURRENT_USER); ROLLBACK;
+-- arroyop pushdown only works for segmentby columns atm so 3 decompressions are expected for now
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time IN ('2020-01-01','2020-01-02'); ROLLBACK;
+
+-- no pushdown for volatile functions
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = current_query(); ROLLBACK;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device IN ('a',current_query()); ROLLBACK;
+
+-- github issue #6858
+-- check update triggers work correctly both on uncompressed and compressed chunks
+CREATE TABLE update_trigger_test (
+    "entity_id" "uuid" NOT NULL,
+    "effective_date_time" timestamp with time zone NOT NULL,
+    "measurement" numeric NOT NULL,
+    "modified_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+SELECT create_hypertable('update_trigger_test', 'effective_date_time');
+
+CREATE OR REPLACE FUNCTION update_modified_at_test()
+RETURNS TRIGGER
+LANGUAGE PLPGSQL AS $$
+BEGIN
+    NEW.modified_at = NOW();
+    RETURN NEW;
+END; $$;
+
+CREATE TRIGGER update_trigger_test__before_update_sync_modified_at
+BEFORE UPDATE ON update_trigger_test
+FOR EACH ROW
+EXECUTE PROCEDURE update_modified_at_test();
+
+INSERT INTO update_trigger_test
+SELECT 'f2ca7073-1395-5770-8378-7d0339804580', '2024-04-16 04:50:00+02',
+1100.00, '2024-04-23 11:56:38.494095+02' FROM generate_series(1,2500,1) c;
+
+VACUUM FULL update_trigger_test;
+
+BEGIN;
+UPDATE update_trigger_test SET measurement = measurement + 2
+WHERE update_trigger_test.effective_date_time >= '2020-01-01T00:00:00'::timestamp AT TIME ZONE 'UTC';
+ROLLBACK;
+
+-- try with default compression
+ALTER TABLE update_trigger_test SET (timescaledb.compress);
+SELECT compress_chunk(show_chunks('update_trigger_test'));
+
+BEGIN;
+UPDATE update_trigger_test SET measurement = measurement + 2
+WHERE update_trigger_test.effective_date_time >= '2020-01-01T00:00:00'::timestamp AT TIME ZONE 'UTC';
+ROLLBACK;
+
+-- lets try with segmentby
+SELECT decompress_chunk(show_chunks('update_trigger_test'));
+ALTER TABLE update_trigger_test SET (timescaledb.compress, timescaledb.compress_segmentby='entity_id');
+SELECT compress_chunk(show_chunks('update_trigger_test'));
+
+BEGIN;
+UPDATE update_trigger_test SET measurement = measurement + 2
+WHERE update_trigger_test.effective_date_time >= '2020-01-01T00:00:00'::timestamp AT TIME ZONE 'UTC';
+ROLLBACK;

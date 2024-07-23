@@ -5,12 +5,12 @@
  */
 
 #include <postgres.h>
-#include <port.h>
-#include <pgtime.h>
-#include <datatype/timestamp.h>
-#include <utils/timestamp.h>
-#include <access/xact.h>
 #include "timezones.h"
+#include <access/xact.h>
+#include <datatype/timestamp.h>
+#include <pgtime.h>
+#include <port.h>
+#include <utils/timestamp.h>
 
 /* Checks if the given TZ name is valid. */
 bool

@@ -7,14 +7,14 @@
 #include <postgres.h>
 #include <access/sysattr.h>
 #include <nodes/extensible.h>
-#include <nodes/nodeFuncs.h>
 #include <nodes/makefuncs.h>
+#include <nodes/nodeFuncs.h>
 #include <nodes/pathnodes.h>
 #include <optimizer/clauses.h>
 #include <optimizer/cost.h>
 #include <optimizer/optimizer.h>
-#include <optimizer/paths.h>
 #include <optimizer/pathnode.h>
+#include <optimizer/paths.h>
 #include <optimizer/planmain.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
@@ -24,12 +24,12 @@
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
-#include <import/planner.h>
-#include "guc.h"
-#include "nodes/skip_scan/skip_scan.h"
-#include "nodes/constraint_aware_append/constraint_aware_append.h"
-#include "nodes/chunk_append/chunk_append.h"
 #include "compat/compat.h"
+#include "guc.h"
+#include "nodes/chunk_append/chunk_append.h"
+#include "nodes/constraint_aware_append/constraint_aware_append.h"
+#include "nodes/skip_scan/skip_scan.h"
+#include <import/planner.h>
 
 #include <math.h>
 
@@ -269,12 +269,11 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 			if (!new_paths)
 				continue;
 
-			subpath = (Path *) create_merge_append_path_compat(root,
-															   merge_path->path.parent,
-															   new_paths,
-															   merge_path->path.pathkeys,
-															   NULL,
-															   merge_path->partitioned_rels);
+			subpath = (Path *) create_merge_append_path(root,
+														merge_path->path.parent,
+														new_paths,
+														merge_path->path.pathkeys,
+														NULL);
 			subpath->pathtarget = copy_pathtarget(merge_path->path.pathtarget);
 		}
 		else if (ts_is_chunk_append_path(subpath))
@@ -598,7 +597,7 @@ build_skip_qual(PlannerInfo *root, SkipScanPath *skip_scan_path, IndexPath *inde
 										  info->indexcollations[idx_key] /*inputcollid*/);
 	set_opfuncid(castNode(OpExpr, comparison_expr));
 
-	skip_scan_path->skip_clause = make_simple_restrictinfo_compat(root, comparison_expr);
+	skip_scan_path->skip_clause = make_simple_restrictinfo(root, comparison_expr);
 
 	return true;
 }

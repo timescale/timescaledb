@@ -7,9 +7,9 @@
 
 #include <postgres.h>
 
-#include <nodes/extensible.h>
 #include "batch_queue.h"
 #include "decompress_context.h"
+#include <nodes/extensible.h>
 
 #define DECOMPRESS_CHUNK_COUNT_ID -9
 #define DECOMPRESS_CHUNK_SEQUENCE_NUM_ID -10
@@ -21,6 +21,7 @@ typedef struct DecompressChunkState
 	List *is_segmentby_column;
 	List *bulk_decompression_column;
 	List *custom_scan_tlist;
+	bool has_row_marks;
 
 	DecompressContext decompress_context;
 

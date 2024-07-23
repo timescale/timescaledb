@@ -12,8 +12,8 @@
 #include <catalog/indexing.h>
 #include <catalog/objectaccess.h>
 #include <catalog/pg_am_d.h>
-#include <catalog/pg_constraint_d.h>
 #include <catalog/pg_constraint.h>
+#include <catalog/pg_constraint_d.h>
 #include <catalog/pg_type.h>
 #include <catalog/toasting.h>
 #include <commands/alter.h>
@@ -28,27 +28,28 @@
 #include <tcop/utility.h>
 #include <utils/array.h>
 #include <utils/builtins.h>
-#include <utils/rel.h>
 #include <utils/datum.h>
+#include <utils/guc.h>
+#include <utils/rel.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
 #include "compat/compat.h"
-#include "ts_catalog/catalog.h"
-#include "create.h"
 #include "chunk.h"
 #include "chunk_index.h"
-#include "ts_catalog/array_utils.h"
-#include "ts_catalog/compression_settings.h"
-#include "ts_catalog/continuous_agg.h"
-#include "compression_with_clause.h"
 #include "compression.h"
 #include "compression/compression_storage.h"
-#include "hypertable_cache.h"
+#include "compression_with_clause.h"
+#include "create.h"
 #include "custom_type_cache.h"
-#include "trigger.h"
-#include "utils.h"
 #include "guc.h"
+#include "hypertable_cache.h"
+#include "trigger.h"
+#include "ts_catalog/array_utils.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/compression_settings.h"
+#include "ts_catalog/continuous_agg.h"
+#include "utils.h"
 #include <executor/spi.h>
 
 static const char *sparse_index_types[] = { "min", "max" };
@@ -487,6 +488,9 @@ add_time_to_order_by_if_not_included(OrderBySettings obs, ArrayType *segmentby, 
 	bool found = false;
 
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
+	if (!time_dim)
+		return obs;
+
 	time_col_name = get_attname(ht->main_table_relid, time_dim->column_attno, false);
 
 	if (ts_array_is_member(obs.orderby, time_col_name))
@@ -508,14 +512,13 @@ add_time_to_order_by_if_not_included(OrderBySettings obs, ArrayType *segmentby, 
 /* returns list of constraints that need to be cloned on the compressed hypertable
  * This is limited to foreign key constraints now
  */
-static List *
+static void
 validate_existing_constraints(Hypertable *ht, CompressionSettings *settings)
 {
 	Relation pg_constr;
 	SysScanDesc scan;
 	ScanKeyData scankey;
 	HeapTuple tuple;
-	List *conlist = NIL;
 
 	ArrayType *arr;
 
@@ -533,11 +536,17 @@ validate_existing_constraints(Hypertable *ht, CompressionSettings *settings)
 		Form_pg_constraint form = (Form_pg_constraint) GETSTRUCT(tuple);
 
 		/*
-		 * We check primary, unique, and exclusion constraints.  Move foreign
-		 * key constraints over to compression table ignore triggers
+		 * We check primary, unique, and exclusion constraints.
 		 */
-		if (form->contype == CONSTRAINT_CHECK || form->contype == CONSTRAINT_TRIGGER)
+		if (form->contype == CONSTRAINT_CHECK || form->contype == CONSTRAINT_TRIGGER
+#if PG17_GE
+			|| form->contype == CONSTRAINT_NOTNULL
+		/* CONSTRAINT_NOTNULL introduced in PG17, see b0e96f311985 */
+#endif
+		)
+		{
 			continue;
+		}
 		else if (form->contype == CONSTRAINT_EXCLUSION)
 		{
 			ereport(ERROR,
@@ -569,46 +578,23 @@ validate_existing_constraints(Hypertable *ht, CompressionSettings *settings)
 
 			arr = DatumGetArrayTypeP(adatum); /* ensure not toasted */
 			numkeys = ts_array_length(arr);
-			if (ARR_NDIM(arr) != 1 || numkeys < 0 || ARR_HASNULL(arr) ||
-				ARR_ELEMTYPE(arr) != INT2OID)
-				elog(ERROR, "conkey is not a 1-D smallint array");
 			attnums = (int16 *) ARR_DATA_PTR(arr);
 			for (j = 0; j < numkeys; j++)
 			{
 				const char *attname = get_attname(settings->fd.relid, attnums[j], false);
 
-				if (form->contype == CONSTRAINT_FOREIGN)
-				{
-					/* is this a segment-by column */
-					if (!ts_array_is_member(settings->fd.segmentby, attname))
-						ereport(ERROR,
-								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("column \"%s\" must be used for segmenting", attname),
-								 errdetail("The foreign key constraint \"%s\" cannot be"
-										   " enforced with the given compression configuration.",
-										   NameStr(form->conname))));
-				}
 				/* is colno a segment-by or order_by column */
-				else if (!form->conindid && !ts_array_is_member(settings->fd.segmentby, attname) &&
-						 !ts_array_is_member(settings->fd.orderby, attname))
+				if (!form->conindid && !ts_array_is_member(settings->fd.segmentby, attname) &&
+					!ts_array_is_member(settings->fd.orderby, attname))
 					ereport(WARNING,
 							(errmsg("column \"%s\" should be used for segmenting or ordering",
 									attname)));
-			}
-
-			if (form->contype == CONSTRAINT_FOREIGN)
-			{
-				Name conname = palloc0(NAMEDATALEN);
-				namestrcpy(conname, NameStr(form->conname));
-				conlist = lappend(conlist, conname);
 			}
 		}
 	}
 
 	systable_endscan(scan);
 	table_close(pg_constr, AccessShareLock);
-
-	return conlist;
 }
 
 /*
@@ -750,6 +736,9 @@ static bool
 update_compress_chunk_time_interval(Hypertable *ht, WithClauseResult *with_clause_options)
 {
 	const Dimension *time_dim = hyperspace_get_open_dimension(ht->space, 0);
+	if (!time_dim)
+		return false;
+
 	Interval *compress_interval =
 		ts_compress_hypertable_parse_chunk_time_interval(with_clause_options, ht);
 	if (!compress_interval)
@@ -902,7 +891,6 @@ compression_setting_segmentby_get_default(const Hypertable *ht)
 	ArrayType *column_res = NULL;
 	Datum datum;
 	text *message;
-	char *original_search_path = pstrdup(GetConfigOption("search_path", false, true));
 	bool isnull;
 	MemoryContext upper = CurrentMemoryContext;
 	MemoryContext old;
@@ -916,6 +904,10 @@ compression_setting_segmentby_get_default(const Hypertable *ht)
 			 get_rel_name(ht->main_table_relid));
 		return NULL;
 	}
+
+	/* Lock down search_path */
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
 
 	initStringInfo(&command);
 	appendStringInfo(&command,
@@ -931,11 +923,6 @@ compression_setting_segmentby_get_default(const Hypertable *ht)
 
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI");
-
-	/* Lock down search_path */
-	res = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
-	if (res < 0)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
 
 	res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 
@@ -967,15 +954,10 @@ compression_setting_segmentby_get_default(const Hypertable *ht)
 		confidence = DatumGetInt32(datum);
 	}
 
-	/* Reset search path since this can be executed as part of a larger transaction */
-	resetStringInfo(&command);
-	appendStringInfo(&command, "SET LOCAL search_path TO %s", original_search_path);
-	res = SPI_exec(command.data, 0);
-	if (res < 0)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not reset search_path"))));
-	pfree(original_search_path);
-
 	pfree(command.data);
+
+	/* Reset search path since this can be executed as part of a larger transaction */
+	AtEOXact_GUC(false, save_nestlevel);
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
@@ -1014,7 +996,6 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 	MemoryContext upper = CurrentMemoryContext;
 	MemoryContext old;
 	char *orderby;
-	char *original_search_path = pstrdup(GetConfigOption("search_path", false, true));
 	int32 confidence = -1;
 
 	Oid types[] = { TEXTARRAYOID };
@@ -1033,6 +1014,10 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 		return obs;
 	}
 
+	/* Lock down search_path */
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
+
 	initStringInfo(&command);
 	appendStringInfo(&command,
 					 "SELECT "
@@ -1048,11 +1033,6 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI");
-
-	/* Lock down search_path */
-	res = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
-	if (res < 0)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
 
 	res = SPI_execute_with_args(command.data,
 								1,
@@ -1090,12 +1070,8 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 	}
 
 	/* Reset search path since this can be executed as part of a larger transaction */
-	resetStringInfo(&command);
-	appendStringInfo(&command, "SET LOCAL search_path TO %s", original_search_path);
-	res = SPI_exec(command.data, 0);
-	if (res < 0)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not reset search_path"))));
-	pfree(original_search_path);
+	AtEOXact_GUC(false, save_nestlevel);
+
 	pfree(command.data);
 
 	res = SPI_finish();

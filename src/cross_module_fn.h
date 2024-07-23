@@ -6,20 +6,20 @@
 #pragma once
 
 #include <postgres.h>
-#include <fmgr.h>
 #include <commands/event_trigger.h>
+#include <fmgr.h>
 #include <optimizer/planner.h>
-#include <utils/timestamp.h>
-#include <utils/jsonb.h>
 #include <utils/array.h>
+#include <utils/jsonb.h>
+#include <utils/timestamp.h>
 
-#include "export.h"
 #include "compat/compat.h"
 #include "bgw/job.h"
-#include "process_utility.h"
-#include "with_clause_parser.h"
-#include "ts_catalog/continuous_agg.h"
+#include "export.h"
 #include "planner/planner.h"
+#include "process_utility.h"
+#include "ts_catalog/continuous_agg.h"
+#include "with_clause_parser.h"
 
 /*
  * To define a cross-module function add it to this struct, add a default
@@ -110,6 +110,8 @@ typedef struct CrossModuleFunctions
 										  WithClauseResult *with_clause_options);
 	PGFunction continuous_agg_validate_query;
 	PGFunction continuous_agg_get_bucket_function;
+	PGFunction continuous_agg_get_bucket_function_info;
+	PGFunction continuous_agg_migrate_to_time_bucket;
 	PGFunction cagg_try_repair;
 
 	PGFunction compressed_data_send;

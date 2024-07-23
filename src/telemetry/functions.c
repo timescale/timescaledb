@@ -18,8 +18,8 @@
 #include <nodes/nodeFuncs.h>
 #include <port/atomics.h>
 #include <storage/lwlock.h>
-#include <utils/hsearch.h>
 #include <utils/fmgroids.h>
+#include <utils/hsearch.h>
 
 #include <utils/regproc.h>
 

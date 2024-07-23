@@ -7,24 +7,24 @@
 #include <postgres.h>
 #include <access/xact.h>
 #include <miscadmin.h>
+#include <parser/parse_coerce.h>
 #include <utils/builtins.h>
 #include <utils/float.h>
-#include <parser/parse_coerce.h>
 
+#include "compat/compat.h"
+#include "bgw/job.h"
+#include "bgw_policy/continuous_aggregate_api.h"
+#include "bgw_policy/job.h"
+#include "bgw_policy/policies_v2.h"
 #include "compression_api.h"
 #include "errors.h"
+#include "funcapi.h"
+#include "guc.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
+#include "jsonb_utils.h"
 #include "policy_utils.h"
 #include "utils.h"
-#include "guc.h"
-#include "jsonb_utils.h"
-#include "bgw/job.h"
-#include "bgw_policy/job.h"
-#include "bgw_policy/continuous_aggregate_api.h"
-#include "bgw_policy/policies_v2.h"
-#include "funcapi.h"
-#include "compat/compat.h"
 #if PG16_GE
 #include "nodes/miscnodes.h"
 #endif
@@ -90,7 +90,7 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 {
 	int refresh_job_id = 0, compression_job_id = 0, retention_job_id = 0;
 	int64 refresh_interval = 0, compress_after = 0, drop_after = 0, drop_after_HT = 0;
-	int64 start_offset = 0, end_offset = 0, refresh_window_size = 0, refresh_total_interval = 0;
+	int64 start_offset = 0, end_offset = 0, refresh_total_interval = 0;
 	List *jobs = NIL;
 	BgwJob *orig_ht_reten_job = NULL;
 
@@ -157,14 +157,21 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 	/* Per policy checks */
 	if (all_policies.refresh && !IS_INTEGER_TYPE(all_policies.partition_type))
 	{
-		/* Check if there are any gaps in the refresh policy */
-		refresh_window_size = (start_offset == ts_time_get_max(all_policies.partition_type) ||
-							   end_offset == ts_time_get_min(all_policies.partition_type)) ?
-								  start_offset :
-								  start_offset - end_offset;
+		/*
+		 * Check if there are any gaps in the refresh policy. The below code is
+		 * a little suspect. But since we are planning to do away with the
+		 * add_policies/remove_policies APIs there's no need to spend a lot
+		 * of time on fixing it below.
+		 */
+		int64 refresh_window_size;
+		if (start_offset == ts_time_get_max(all_policies.partition_type) ||
+			end_offset == ts_time_get_min(all_policies.partition_type) ||
+			end_offset > start_offset ||
+			pg_sub_s64_overflow(start_offset, end_offset, &refresh_window_size))
+			refresh_window_size = start_offset;
 
 		/* if refresh_interval is greater than half of refresh_window_size, then there are gaps */
-		if (refresh_interval > refresh_window_size / 2)
+		if (refresh_interval > (refresh_window_size / 2))
 			emit_error(err_gap_refresh);
 
 		/* Disallow refreshed data to be deleted */

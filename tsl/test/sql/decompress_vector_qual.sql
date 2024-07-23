@@ -27,6 +27,12 @@ select count(compress_chunk(x, true)) from show_chunks('vectorqual') x;
 
 select * from vectorqual order by vectorqual;
 
+-- single chunk
+select * from vectorqual where ts between '2019-02-02' and '2020-02-02' order by vectorqual;
+select * from vectorqual where ts between '2020-02-02' and '2021-02-02' order by vectorqual;
+select * from vectorqual where ts between '2021-02-02' and '2022-02-02' order by vectorqual;
+select * from vectorqual where ts between '2022-02-02' and '2023-02-02' order by vectorqual;
+
 set timescaledb.debug_require_vector_qual to 'only' /* all following quals must be vectorized */;
 select count(*) from vectorqual where ts > '1999-01-01 00:00:00';
 select count(*) from vectorqual where metric2 = 22;

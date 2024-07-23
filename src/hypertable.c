@@ -4,6 +4,7 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+
 #include <access/heapam.h>
 #include <access/htup_details.h>
 #include <access/relscan.h>
@@ -28,6 +29,7 @@
 #include <nodes/memnodes.h>
 #include <nodes/parsenodes.h>
 #include <nodes/value.h>
+#include <parser/parse_coerce.h>
 #include <parser/parse_func.h>
 #include <storage/lmgr.h>
 #include <utils/acl.h>
@@ -36,36 +38,37 @@
 #include <utils/memutils.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
-#include <parser/parse_coerce.h>
 
 #include "hypertable.h"
-#include "ts_catalog/compression_settings.h"
-#include "ts_catalog/catalog.h"
-#include "ts_catalog/metadata.h"
-#include "hypercube.h"
-#include "dimension.h"
+
+#include "compat/compat.h"
+#include "bgw_policy/policy.h"
 #include "chunk.h"
 #include "chunk_adaptive.h"
-#include "subspace_store.h"
-#include "hypertable_cache.h"
-#include "trigger.h"
-#include "scanner.h"
+#include "copy.h"
+#include "cross_module_fn.h"
+#include "debug_assert.h"
+#include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
-#include "indexing.h"
-#include "guc.h"
-#include "errors.h"
-#include "copy.h"
-#include "utils.h"
-#include "bgw_policy/policy.h"
-#include "ts_catalog/continuous_agg.h"
-#include "license_guc.h"
-#include "cross_module_fn.h"
-#include "scan_iterator.h"
-#include "debug_assert.h"
-#include "osm_callbacks.h"
 #include "error_utils.h"
-#include "compat/compat.h"
+#include "errors.h"
+#include "guc.h"
+#include "hypercube.h"
+#include "hypertable_cache.h"
+#include "indexing.h"
+#include "license_guc.h"
+#include "osm_callbacks.h"
+#include "scan_iterator.h"
+#include "scanner.h"
+#include "subspace_store.h"
+#include "trigger.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/chunk_column_stats.h"
+#include "ts_catalog/compression_settings.h"
+#include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/metadata.h"
+#include "utils.h"
 
 Oid
 ts_rel_get_owner(Oid relid)
@@ -245,6 +248,9 @@ ts_hypertable_from_tupleinfo(const TupleInfo *ti)
 	h->chunk_cache =
 		ts_subspace_store_init(h->space, ti->mctx, ts_guc_max_cached_chunks_per_hypertable);
 	h->chunk_sizing_func = get_chunk_sizing_func_oid(&h->fd);
+
+	h->range_space =
+		ts_chunk_column_stats_range_space_scan(h->fd.id, h->main_table_relid, ti->mctx);
 
 	return h;
 }
@@ -643,6 +649,11 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 	/* Also remove any policy argument / job that uses this hypertable */
 	ts_bgw_policy_delete_by_hypertable_id(hypertable_id);
 
+	/* Also remove any rows in _timescaledb_catalog.chunk_column_stats corresponding to this
+	 * hypertable
+	 */
+	ts_chunk_column_stats_delete_by_hypertable_id(hypertable_id);
+
 	/* Remove any dependent continuous aggs */
 	ts_continuous_agg_drop_hypertable_callback(hypertable_id);
 
@@ -654,7 +665,6 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 			ts_hypertable_drop(compressed_hypertable, DROP_RESTRICT);
 	}
 
-#if PG14_GE
 	hypertable_drop_hook_type osm_htdrop_hook = ts_get_osm_hypertable_drop_hook();
 	/* Invoke the OSM callback if set */
 	if (osm_htdrop_hook)
@@ -665,7 +675,6 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 
 		osm_htdrop_hook(NameStr(*schema_name), NameStr(*table_name));
 	}
-#endif
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
@@ -929,29 +938,6 @@ ts_hypertable_get_by_name(const char *schema, const char *name)
 	hypertable_scan(schema, name, hypertable_tuple_found, &ht, AccessShareLock);
 
 	return ht;
-}
-
-void
-ts_hypertable_scan_by_name(ScanIterator *iterator, const char *schema, const char *name)
-{
-	iterator->ctx.index = catalog_get_index(ts_catalog_get(), HYPERTABLE, HYPERTABLE_NAME_INDEX);
-
-	/* both cannot be NULL inputs */
-	Assert(name != NULL || schema != NULL);
-
-	if (name)
-		ts_scan_iterator_scan_key_init(iterator,
-									   Anum_hypertable_name_idx_table,
-									   BTEqualStrategyNumber,
-									   F_NAMEEQ,
-									   CStringGetDatum(name));
-
-	if (schema)
-		ts_scan_iterator_scan_key_init(iterator,
-									   Anum_hypertable_name_idx_schema,
-									   BTEqualStrategyNumber,
-									   F_NAMEEQ,
-									   CStringGetDatum(schema));
 }
 
 Hypertable *
@@ -1299,6 +1285,15 @@ hypertable_validate_constraints(Oid relid)
 	{
 		Form_pg_constraint form = (Form_pg_constraint) GETSTRUCT(tuple);
 
+		if (form->contype == CONSTRAINT_FOREIGN)
+		{
+			if (ts_hypertable_relid_to_id(form->confrelid) != -1)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("hypertables cannot be used as foreign key references of "
+								"hypertables")));
+		}
+
 		if (form->contype == CONSTRAINT_CHECK && form->connoinherit)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
@@ -1445,43 +1440,6 @@ insert_blocker_trigger_add(Oid relid)
 	return objaddr.objectId;
 }
 
-TS_FUNCTION_INFO_V1(ts_hypertable_insert_blocker_trigger_add);
-
-/*
- * This function is exposed to drop the old blocking trigger on legacy hypertables.
- * We can't do it from SQL code, because internal triggers cannot be dropped from SQL.
- * After the legacy internal trigger is dropped, we add the new, visible trigger.
- *
- * In case the hypertable's root table has data in it, we bail out with an
- * error instructing the user to fix the issue first.
- */
-Datum
-ts_hypertable_insert_blocker_trigger_add(PG_FUNCTION_ARGS)
-{
-	Oid relid = PG_GETARG_OID(0);
-
-	ts_hypertable_permissions_check(relid, GetUserId());
-
-	if (ts_table_has_tuples(relid, AccessShareLock))
-		ereport(ERROR,
-				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("hypertable \"%s\" has data in the root table", get_rel_name(relid)),
-				 errdetail("Migrate the data from the root table to chunks before running the "
-						   "UPDATE again."),
-				 errhint("Data can be migrated as follows:\n"
-						 "> BEGIN;\n"
-						 "> SET timescaledb.restoring = 'off';\n"
-						 "> INSERT INTO \"%1$s\" SELECT * FROM ONLY \"%1$s\";\n"
-						 "> SET timescaledb.restoring = 'on';\n"
-						 "> TRUNCATE ONLY \"%1$s\";\n"
-						 "> SET timescaledb.restoring = 'off';\n"
-						 "> COMMIT;",
-						 get_rel_name(relid))));
-
-	/* Add the new trigger */
-	PG_RETURN_OID(insert_blocker_trigger_add(relid));
-}
-
 static Datum
 create_hypertable_datum(FunctionCallInfo fcinfo, const Hypertable *ht, bool created,
 						bool is_generic)
@@ -1526,7 +1484,6 @@ create_hypertable_datum(FunctionCallInfo fcinfo, const Hypertable *ht, bool crea
 }
 
 TS_FUNCTION_INFO_V1(ts_hypertable_create);
-TS_FUNCTION_INFO_V1(ts_hypertable_distributed_create);
 TS_FUNCTION_INFO_V1(ts_hypertable_create_general);
 
 /*
@@ -1705,23 +1662,6 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	return ts_hypertable_create_time_prev(fcinfo, false);
 }
 
-Datum
-ts_hypertable_distributed_create(PG_FUNCTION_ARGS)
-{
-#if PG16_GE
-	ereport(ERROR,
-			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("distributed hypertable is not supported"),
-			 errdetail("Multi-node is not supported anymore on PostgreSQL >= 16.")));
-#else
-	ereport(WARNING,
-			(errcode(ERRCODE_WARNING_DEPRECATED_FEATURE),
-			 errmsg("distributed hypertable is deprecated"),
-			 errdetail("Multi-node is deprecated and will be removed in future releases.")));
-#endif
-	return ts_hypertable_create_time_prev(fcinfo, true);
-}
-
 static Oid
 get_sizing_func_oid()
 {
@@ -1754,6 +1694,16 @@ ts_hypertable_create_general(PG_FUNCTION_ARGS)
 	bool create_default_indexes = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
 	bool if_not_exists = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
 	bool migrate_data = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
+
+	/*
+	 * We do not support closed (hash) dimensions for the main partitioning
+	 * column. Check that first. The behavior then becomes consistent with the
+	 * earlier "ts_hypertable_create_time_prev" implementation.
+	 */
+	if (IS_CLOSED_DIMENSION(dim_info))
+		ereport(ERROR,
+				(errmsg("cannot partition using a closed dimension on primary column"),
+				 errhint("Use range partitioning on the primary column.")));
 
 	/*
 	 * Current implementation requires to provide a valid chunk sizing function
@@ -2529,14 +2479,25 @@ ts_chunk_get_osm_slice_and_lock(int32 osm_chunk_id, int32 time_dim_id, LockTuple
 				.lockmode = tuplockmode,
 				.waitpolicy = LockWaitBlock,
 			};
+			/*
+			 * We cannot acquire a tuple lock when running in recovery mode
+			 * since that prevents scans on tiered hypertables from running
+			 * on a read-only secondary. Acquiring a tuple lock requires
+			 * assigning a transaction id for the current transaction state
+			 * which is not possible in recovery mode. So we only acquire the
+			 * lock if we are not in recovery mode.
+			 */
+			ScanTupLock *const tuplock_ptr = RecoveryInProgress() ? NULL : &tuplock;
+
 			if (!IsolationUsesXactSnapshot())
 			{
 				/* in read committed mode, we follow all updates to this tuple */
 				tuplock.lockflags |= TUPLE_LOCK_FLAG_FIND_LAST_VERSION;
 			}
+
 			DimensionSlice *dimslice =
 				ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id,
-													   &tuplock,
+													   tuplock_ptr,
 													   CurrentMemoryContext,
 													   tablelockmode);
 			if (dimslice->fd.dimension_id == time_dim_id)
@@ -2566,6 +2527,18 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 
 	Oid time_type; /* required for resolving the argument types, should match the hypertable
 					  partitioning column type */
+
+	/*
+	 * This function is not meant to be run on a read-only secondary. It is
+	 * only used by OSM to update chunk's range in timescaledb catalog when
+	 * tiering configuration changes (a new chunk is created, a chunk drop
+	 * etc); OSM would already be holding a lock on a dimension slice tuple
+	 * by this moment (which is not possible on read-only instance).
+	 * Technically this function can be executed from SQL (e.g. from psql) when
+	 * in recovery mode; in that instance an ERROR would be thrown when trying
+	 * to update the dimension slice tuple, no harm will be done.
+	 */
+	Assert(!RecoveryInProgress());
 
 	hcache = ts_hypertable_cache_pin();
 	ht = ts_resolve_hypertable_from_table_or_cagg(hcache, relid, true);
@@ -2676,7 +2649,7 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 
 	slice->fd.range_start = range_start_internal;
 	slice->fd.range_end = range_end_internal;
-	ts_dimension_slice_update_by_id(dimension_slice_id, &slice->fd);
+	ts_dimension_slice_range_update(slice);
 
 	PG_RETURN_BOOL(overlap);
 }

@@ -307,4 +307,3 @@ BEGIN;
   -- should be rolled up
   SELECT hypertable_name, range_start, range_end FROM timescaledb_information.chunks WHERE hypertable_name = 'test9' ORDER BY 2;
 ROLLBACK;
-

@@ -31,12 +31,18 @@ typedef struct CompressionColumnDescription
 	bool by_value;
 
 	/*
-	 * Attno of the decompressed column in the output of DecompressChunk node.
+	 * Attno of the decompressed column in the scan tuple of DecompressChunk node.
 	 * Negative values are special columns that do not have a representation in
-	 * the decompressed chunk, but are still used for decompression. They should
-	 * have the respective `type` field.
+	 * the decompressed chunk, but are still used for decompression. The `type`
+	 * field is set accordingly for these columns.
 	 */
-	AttrNumber output_attno;
+	AttrNumber custom_scan_attno;
+
+	/*
+	 * Attno of this column in the uncompressed chunks. We use it to fetch the
+	 * default value from the uncompressed chunk tuple descriptor.
+	 */
+	AttrNumber uncompressed_chunk_attno;
 
 	/*
 	 * Attno of the compressed column in the input compressed chunk scan.
@@ -76,7 +82,15 @@ typedef struct DecompressContext
 	 */
 	MemoryContext bulk_decompression_context;
 
-	TupleTableSlot *decompressed_slot;
+	TupleTableSlot *custom_scan_slot;
+
+	/*
+	 * The scan tuple descriptor might be different from the uncompressed chunk
+	 * one, and it doesn't have the default column values in that case, so we
+	 * have to fetch the default values from the uncompressed chunk tuple
+	 * descriptor which we store here.
+	 */
+	TupleDesc uncompressed_chunk_tdesc;
 
 	PlanState *ps; /* Set for filtering and instrumentation */
 

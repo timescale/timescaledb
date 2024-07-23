@@ -131,6 +131,7 @@ CREATE FUNCTION @extschema@.create_hypertable(
 ) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_create' LANGUAGE C VOLATILE;
 
 -- change replication_factor to NULL by default
+-- create stub to not introduce shared library dependency
 CREATE FUNCTION @extschema@.create_distributed_hypertable(
     relation                REGCLASS,
     time_column_name        NAME,
@@ -148,4 +149,4 @@ CREATE FUNCTION @extschema@.create_distributed_hypertable(
     time_partitioning_func  REGPROC = NULL,
     replication_factor      INTEGER = NULL,
     data_nodes              NAME[] = NULL
-) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_distributed_create' LANGUAGE C VOLATILE;
+) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS $$ SELECT NULL::int,NULL::name,NULL::name,NULL::bool; $$ LANGUAGE SQL VOLATILE;

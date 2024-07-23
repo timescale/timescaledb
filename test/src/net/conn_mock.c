@@ -3,13 +3,13 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
+#include <unistd.h>
+#include <postgres.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include <unistd.h>
-#include <postgres.h>
 
 #include "conn_internal.h"
 #include "conn_mock.h"

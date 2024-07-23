@@ -3,26 +3,27 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+#include <compat/compat.h>
 #include <postgres.h>
+#include <executor/spi.h>
 #include <fmgr.h>
+#include <lib/stringinfo.h>
 #include <scan_iterator.h>
 #include <scanner.h>
 #include <time_utils.h>
-#include <compat/compat.h>
-#include <executor/spi.h>
-#include <lib/stringinfo.h>
 #include <utils/builtins.h>
 #include <utils/date.h>
+#include <utils/guc.h>
 #include <utils/palloc.h>
 #include <utils/rel.h>
 #include <utils/relcache.h>
 #include <utils/snapmgr.h>
 #include <utils/timestamp.h>
 
-#include "ts_catalog/continuous_agg.h"
-#include "ts_catalog/continuous_aggs_watermark.h"
 #include "debug_assert.h"
 #include "materialize.h"
+#include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_watermark.h"
 
 #define CHUNKIDFROMRELID "chunk_id_from_relid"
 #define CONTINUOUS_AGG_CHUNK_ID_COL_NAME "chunk_id"
@@ -64,12 +65,10 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 {
 	InternalTimeRange combined_materialization_range = new_materialization_range;
 	bool materialize_invalidations_separately = range_length(invalidation_range) > 0;
-	int res;
 
 	/* Lock down search_path */
-	res = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
-	if (res < 0)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
 
 	/* pin the start of new_materialization to the end of new_materialization,
 	 * we are not allowed to materialize beyond that point
@@ -131,6 +130,9 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 									internal_time_range_to_time_range(new_materialization_range),
 									chunk_id);
 	}
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
 }
 
 static bool

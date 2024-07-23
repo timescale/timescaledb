@@ -207,6 +207,46 @@ CREATE INDEX chunk_index_hypertable_id_hypertable_index_name_idx ON _timescaledb
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_index', '');
 
+-- Track statistics for columns of chunks from a hypertable.
+-- Currently, we track the min/max range for a given column across chunks.
+-- More statistics (like bloom filters) can be added in the future.
+--
+-- A "special" entry for a column with invalid chunk_id, PG_INT64_MAX,
+-- PG_INT64_MIN indicates that min/max ranges could be computed for this column
+-- for chunks.
+--
+-- The ranges can overlap across chunks. The values could be out-of-date if
+-- modifications/changes occur in the corresponding chunk and such entries
+-- should be marked as "invalid" to ensure that the chunk is in
+-- appropriate state to be able to use these values. Thus these entries
+-- are different from dimension_slice which is used for tracking partitioning
+-- column ranges which have different characteristics.
+--
+-- Currently this catalog supports datatypes like INT, SERIAL, BIGSERIAL,
+-- DATE, TIMESTAMP etc. by storing the ranges in bigint columns. In the
+-- future, we could support additional datatypes (which support btree style
+-- >, <, = comparators) by storing their textual representation.
+--
+CREATE TABLE _timescaledb_catalog.chunk_column_stats (
+  id serial NOT NULL,
+  hypertable_id integer NOT NULL,
+  chunk_id integer NOT NULL,
+  column_name name NOT NULL,
+  range_start bigint NOT NULL,
+  range_end bigint NOT NULL,
+  valid boolean NOT NULL,
+  -- table constraints
+  CONSTRAINT chunk_column_stats_pkey PRIMARY KEY (id),
+  CONSTRAINT chunk_column_stats_ht_id_chunk_id_colname_key UNIQUE (hypertable_id, chunk_id, column_name),
+  CONSTRAINT chunk_column_stats_range_check CHECK (range_start <= range_end),
+  CONSTRAINT chunk_column_stats_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id),
+  CONSTRAINT chunk_column_stats_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id)
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_column_stats', '');
+
+SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.chunk_column_stats', 'id'), '');
+
 -- Default jobs are given the id space [1,1000). User-installed jobs and any jobs created inside tests
 -- are given the id space [1000, INT_MAX). That way, we do not pg_dump jobs that are always default-installed
 -- inside other .sql scripts. This avoids insertion conflicts during pg_restore.
@@ -351,7 +391,7 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg'
 CREATE TABLE _timescaledb_catalog.continuous_aggs_bucket_function (
   mat_hypertable_id integer NOT NULL,
   -- The bucket function
-  bucket_func regprocedure NOT NULL,
+  bucket_func text NOT NULL,
   -- `bucket_width` argument of the function, e.g. "1 month"
   bucket_width text NOT NULL,
   -- optional `origin` argument of the function provided by the user
@@ -364,7 +404,8 @@ CREATE TABLE _timescaledb_catalog.continuous_aggs_bucket_function (
   bucket_fixed_width bool NOT NULL,
   -- table constraints
   CONSTRAINT continuous_aggs_bucket_function_pkey PRIMARY KEY (mat_hypertable_id),
-  CONSTRAINT continuous_aggs_bucket_function_mat_hypertable_id_fkey FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
+  CONSTRAINT continuous_aggs_bucket_function_mat_hypertable_id_fkey FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
+  CONSTRAINT continuous_aggs_bucket_function_func_check CHECK (pg_catalog.to_regprocedure(bucket_func) IS DISTINCT FROM 0)
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_bucket_function', '');

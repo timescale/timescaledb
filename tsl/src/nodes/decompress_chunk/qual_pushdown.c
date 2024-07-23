@@ -8,17 +8,17 @@
 #include <nodes/nodeFuncs.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/restrictinfo.h>
-#include <parser/parsetree.h>
 #include <parser/parse_func.h>
+#include <parser/parsetree.h>
 #include <utils/builtins.h>
 #include <utils/typcache.h>
 
+#include "compression/create.h"
+#include "compression/segment_meta.h"
+#include "custom_type_cache.h"
 #include "decompress_chunk.h"
 #include "qual_pushdown.h"
 #include "ts_catalog/array_utils.h"
-#include "compression/create.h"
-#include "custom_type_cache.h"
-#include "compression/segment_meta.h"
 
 typedef struct QualPushdownContext
 {
@@ -62,8 +62,18 @@ pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chu
 		context.can_pushdown = true;
 		context.needs_recheck = false;
 		expr = (Expr *) modify_expression((Node *) ri->clause, &context);
+
 		if (context.can_pushdown)
 		{
+			/*
+			 * We have to call eval_const_expressions after pushing down
+			 * the quals, to normalize the bool expressions. Namely, we might add an
+			 * AND boolexpr on minmax metadata columns, but the normal form is not
+			 * allowed to have nested AND boolexprs. They break some functions like
+			 * generate_bitmap_or_paths().
+			 */
+			expr = (Expr *) eval_const_expressions(root, (Node *) expr);
+
 			if (IsA(expr, BoolExpr) && ((BoolExpr *) expr)->boolop == AND_EXPR)
 			{
 				/* have to separate out and expr into different restrict infos */
@@ -73,13 +83,12 @@ pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chu
 				{
 					compressed_rel->baserestrictinfo =
 						lappend(compressed_rel->baserestrictinfo,
-								make_simple_restrictinfo_compat(root, lfirst(lc_and)));
+								make_simple_restrictinfo(root, lfirst(lc_and)));
 				}
 			}
 			else
 				compressed_rel->baserestrictinfo =
-					lappend(compressed_rel->baserestrictinfo,
-							make_simple_restrictinfo_compat(root, expr));
+					lappend(compressed_rel->baserestrictinfo, make_simple_restrictinfo(root, expr));
 		}
 		/* We need to check the restriction clause on the decompress node if the clause can't be
 		 * pushed down or needs re-checking */
@@ -328,6 +337,7 @@ modify_expression(Node *node, QualPushdownContext *context)
 			/* opexpr will still be checked for segment by columns */
 			break;
 		}
+		case T_BoolExpr:
 		case T_CoerceViaIO:
 		case T_RelabelType:
 		case T_ScalarArrayOpExpr:

@@ -65,46 +65,48 @@ INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 02:00:00-00', 2,
 INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 03:00:00-00', 1, 2, 4, 4, 0);
 
 SELECT compress_chunk(i) FROM show_chunks('test1') i;
-ANALYZE test1;
 
 -- make all the chunks partially compressed
 INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 02:01:00-00', 10, 20, 30, 40 ,50);
+
+ANALYZE test1;
 
 -- tests that require resorting (pushdown below decompressChunk node cannot happen)
 
 -- requires resorting, no pushdown can happen
 :PREFIX
-SELECT * FROM test1 ORDER BY time DESC;
-:PREFIX
 SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
 
 -- requires resorting
 :PREFIX
-SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST;
+SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST LIMIT 10;
 
 -- all these require resorting, no pushdown can happen
 :PREFIX
-SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 ASC NULLS LAST;
+SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 ASC NULLS LAST LIMIT 10;
 
 :PREFIX
-SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 DESC NULLS FIRST;
+SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 DESC NULLS FIRST LIMIT 10;
 
 :PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST LIMIT 10;
 
 :PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST;
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST LIMIT 10;
 
 :PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST, x4 DESC NULLS FIRST;
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST, x4 DESC NULLS FIRST LIMIT 10;
 
 :PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS FIRST, x3 DESC NULLS LAST, x4 ASC;
+SELECT * FROM test1 ORDER BY time ASC NULLS FIRST, x3 DESC NULLS LAST, x4 ASC LIMIT 10;
 
 set max_parallel_workers_per_gather = 0; -- parallel plan different on Windows
 set enable_hashagg to off; -- different on PG13
+
 :PREFIX
-SELECT x1, x2, max(time) FROM test1 GROUP BY x1, x2, time ORDER BY time limit 10;
+SELECT x1, x2, max(time) FROM (SELECT * FROM test1 ORDER BY time, x1, x2 LIMIT 10) t
+GROUP BY x1, x2, time ORDER BY time limit 10;
+
 reset max_parallel_workers_per_gather;
 reset enable_hashagg;
 
@@ -135,6 +137,19 @@ SELECT * FROM test1 ORDER BY x1, x2, x5, time ASC, x3 DESC, x4 DESC LIMIT 10; --
 
 :PREFIX
 SELECT * FROM test1 ORDER BY x1, x2, x5, time, x3 DESC LIMIT 10;
+
+-- test append with join column in orderby
+-- #6975
+
+CREATE TABLE join_table (
+	x1 integer,
+	y1 float);
+
+INSERT INTO join_table VALUES (1, 1.0), (2,2.0);
+
+:PREFIX
+SELECT * FROM test1 t1 JOIN join_table jt ON t1.x1 = jt.x1
+ORDER BY t1.x1, jt.y1;
 
 ---------------------------------------------------------------------------
 -- test queries without ordered append, but still eligible for sort pushdown
@@ -167,20 +182,22 @@ SELECT compress_chunk(i) FROM show_chunks('test2') i;
 INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-01 00:02:01-00', 1, 2, 1, 1, 0);
 INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-10 00:02:01-00', 1, 2, 1, 1, 0);
 
+ANALYZE test2;
+
 set enable_indexscan = off;
 -- queries where sort is pushed down
-:PREFIX SELECT * FROM test2 ORDER BY x1, x2, x5, x3;
-SELECT * FROM test2 ORDER BY x1, x2, x5, x3;
-:PREFIX SELECT * FROM test2 ORDER BY x1, x2, x5, x3, x4;
-SELECT * FROM test2 ORDER BY x1, x2, x5, x3, x4;
+:PREFIX SELECT * FROM test2 ORDER BY x1, x2, x5, x3 LIMIT 10;
+SELECT * FROM test2 ORDER BY x1, x2, x5, x3 LIMIT 10;
+:PREFIX SELECT * FROM test2 ORDER BY x1, x2, x5, x3, x4 LIMIT 10;
+SELECT * FROM test2 ORDER BY x1, x2, x5, x3, x4 LIMIT 10;
 
 -- queries where sort is not pushed down
-:PREFIX SELECT * FROM test2 ORDER BY x1, x2, x3;
-SELECT * FROM test2 ORDER BY x1, x2, x3;
-:PREFIX SELECT * FROM test2 ORDER BY x1, x2, x5, x4;
-SELECT * FROM test2 ORDER BY x1, x2, x5, x4;
-:PREFIX SELECT * FROM test2 ORDER BY x1, x2, x5, time;
-SELECT * FROM test2 ORDER BY x1, x2, x5, time;
+:PREFIX SELECT * FROM test2 ORDER BY x1, x2, x3 LIMIT 10;
+SELECT * FROM test2 ORDER BY x1, x2, x3 LIMIT 10;
+:PREFIX SELECT * FROM test2 ORDER BY x1, x2, x5, x4 LIMIT 10;
+SELECT * FROM test2 ORDER BY x1, x2, x5, x4 LIMIT 10;
+:PREFIX SELECT * FROM test2 ORDER BY x1, x2, x5, time LIMIT 10;
+SELECT * FROM test2 ORDER BY x1, x2, x5, time LIMIT 10;
 
 -----------------------------
 -- tests with space partitioning
@@ -213,18 +230,20 @@ SELECT compress_chunk(i) FROM show_chunks('test3') i;
 INSERT INTO test3 (time, x1, x2, x3, x4, x5) values('2000-01-01 00:02:01-00', 1, 2, 1, 1, 0);
 INSERT INTO test3 (time, x1, x2, x3, x4, x5) values('2000-01-10 00:02:01-00', 1, 2, 1, 1, 0);
 
+ANALYZE test3;
+
 set enable_indexscan = off;
 -- queries where sort is pushed down
-:PREFIX SELECT * FROM test3 ORDER BY x1, x2, x5, x3;
-SELECT * FROM test3 ORDER BY x1, x2, x5, x3;
-:PREFIX SELECT * FROM test3 ORDER BY x1, x2, x5, x3, x4;
-SELECT * FROM test3 ORDER BY x1, x2, x5, x3, x4;
+:PREFIX SELECT * FROM test3 ORDER BY x1, x2, x5, x3 LIMIT 10;
+SELECT * FROM test3 ORDER BY x1, x2, x5, x3 LIMIT 10;
+:PREFIX SELECT * FROM test3 ORDER BY x1, x2, x5, x3, x4 LIMIT 10;
+SELECT * FROM test3 ORDER BY x1, x2, x5, x3, x4 LIMIT 10;
 
 -- queries where sort is not pushed down
-:PREFIX SELECT * FROM test3 ORDER BY x1, x2, x3;
-SELECT * FROM test3 ORDER BY x1, x2, x3;
-:PREFIX SELECT * FROM test3 ORDER BY x1, x2, x5, x4;
-SELECT * FROM test3 ORDER BY x1, x2, x5, x4;
-:PREFIX SELECT * FROM test3 ORDER BY x1, x2, x5, time;
-SELECT * FROM test3 ORDER BY x1, x2, x5, time;
+:PREFIX SELECT * FROM test3 ORDER BY x1, x2, x3 LIMIT 10;
+SELECT * FROM test3 ORDER BY x1, x2, x3 LIMIT 10;
+:PREFIX SELECT * FROM test3 ORDER BY x1, x2, x5, x4 LIMIT 10;
+SELECT * FROM test3 ORDER BY x1, x2, x5, x4 LIMIT 10;
+:PREFIX SELECT * FROM test3 ORDER BY x1, x2, x5, time LIMIT 10;
+SELECT * FROM test3 ORDER BY x1, x2, x5, time LIMIT 10;
 

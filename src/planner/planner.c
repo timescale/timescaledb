@@ -11,17 +11,19 @@
 #include <executor/nodeAgg.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
+#include <nodes/nodeFuncs.h>
 #include <nodes/plannodes.h>
 #include <optimizer/appendinfo.h>
 #include <optimizer/clauses.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
+#include <optimizer/plancat.h>
 #include <optimizer/planner.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
-#include <parser/parsetree.h>
 #include <parser/parse_relation.h>
+#include <parser/parsetree.h>
 #include <utils/elog.h>
 #include <utils/fmgroids.h>
 #include <utils/guc.h>
@@ -29,16 +31,6 @@
 #include <utils/memutils.h>
 #include <utils/selfuncs.h>
 #include <utils/timestamp.h>
-
-#include "compat/compat-msvc-enter.h"
-#include <catalog/pg_constraint.h>
-#include <nodes/nodeFuncs.h>
-#include <optimizer/cost.h>
-#include <optimizer/plancat.h>
-#include <parser/analyze.h>
-#include <tcop/tcopprot.h>
-#include <utils/fmgrprotos.h>
-#include "compat/compat-msvc-exit.h"
 
 #include <math.h>
 
@@ -61,8 +53,8 @@
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
 #include "nodes/hypertable_modify.h"
 #include "partitioning.h"
-#include "planner/planner.h"
 #include "planner/partialize.h"
+#include "planner/planner.h"
 #include "utils.h"
 
 #include "compat/compat.h"
@@ -390,6 +382,114 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 		ListCell *lc;
 		Index rti = 1;
 		bool ret;
+
+		/*
+		 * Detect FOREIGN KEY lookup queries and mark the RTE for expansion.
+		 * Unfortunately postgres will create lookup queries for foreign keys
+		 * with `ONLY` preventing hypertable expansion. Only for declarative
+		 * partitioned tables the queries will be created without `ONLY`.
+		 * We try to detect these queries here and undo the `ONLY` flag for
+		 * these specific queries.
+		 *
+		 * The implementation of this on the postgres side can be found in
+		 * src/backend/utils/adt/ri_triggers.c
+		 */
+
+		/*
+		 * RI_FKey_cascade_del
+		 *
+		 * DELETE FROM [ONLY] <fktable> WHERE $1 = fkatt1 [AND ...]
+		 */
+		if (query->commandType == CMD_DELETE && list_length(query->rtable) == 1 &&
+			context->root->glob->boundParams && query->jointree->quals &&
+			IsA(query->jointree->quals, OpExpr))
+		{
+			RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
+			if (!rte->inh && rte->rtekind == RTE_RELATION)
+			{
+				Hypertable *ht =
+					ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
+				if (ht)
+				{
+					rte->inh = true;
+				}
+			}
+		}
+
+		/*
+		 * RI_FKey_cascade_upd
+		 *
+		 *  UPDATE [ONLY] <fktable> SET fkatt1 = $1 [, ...]
+		 *      WHERE $n = fkatt1 [AND ...]
+		 */
+		if (query->commandType == CMD_UPDATE && list_length(query->rtable) == 1 &&
+			context->root->glob->boundParams && query->jointree->quals &&
+			IsA(query->jointree->quals, OpExpr))
+		{
+			RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
+			if (!rte->inh && rte->rtekind == RTE_RELATION)
+			{
+				Hypertable *ht =
+					ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
+				if (ht)
+				{
+					rte->inh = true;
+				}
+			}
+		}
+
+		/*
+		 * RI_FKey_check
+		 *
+		 * The RI_FKey_check query string built is
+		 *  SELECT 1 FROM [ONLY] <pktable> x WHERE pkatt1 = $1 [AND ...]
+		 *       FOR KEY SHARE OF x
+		 */
+		if (query->commandType == CMD_SELECT && query->hasForUpdate &&
+			list_length(query->rtable) == 1 && context->root->glob->boundParams)
+		{
+			RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
+			if (!rte->inh && rte->rtekind == RTE_RELATION && rte->rellockmode == RowShareLock &&
+				list_length(query->jointree->fromlist) == 1 && query->jointree->quals &&
+				strcmp(rte->eref->aliasname, "x") == 0)
+			{
+				Hypertable *ht =
+					ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
+				if (ht)
+				{
+					rte->inh = true;
+					if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+						query->rowMarks = NIL;
+				}
+			}
+		}
+		/*
+		 * RI_Initial_Check query
+		 *
+		 * The RI_Initial_Check query string built is:
+		 *  SELECT fk.keycols FROM [ONLY] relname fk
+		 *   LEFT OUTER JOIN [ONLY] pkrelname pk
+		 *   ON (pk.pkkeycol1=fk.keycol1 [AND ...])
+		 *   WHERE pk.pkkeycol1 IS NULL AND
+		 * For MATCH SIMPLE:
+		 *   (fk.keycol1 IS NOT NULL [AND ...])
+		 * For MATCH FULL:
+		 *   (fk.keycol1 IS NOT NULL [OR ...])
+		 */
+		if (query->commandType == CMD_SELECT && list_length(query->rtable) == 3)
+		{
+			RangeTblEntry *rte1 = linitial_node(RangeTblEntry, query->rtable);
+			RangeTblEntry *rte2 = lsecond_node(RangeTblEntry, query->rtable);
+			if (!rte1->inh && !rte2->inh && rte1->rtekind == RTE_RELATION &&
+				rte2->rtekind == RTE_RELATION && strcmp(rte1->eref->aliasname, "fk") == 0 &&
+				strcmp(rte2->eref->aliasname, "pk") == 0)
+			{
+				if (ts_hypertable_cache_get_entry(hcache, rte1->relid, CACHE_FLAG_MISSING_OK))
+					rte1->inh = true;
+				if (ts_hypertable_cache_get_entry(hcache, rte2->relid, CACHE_FLAG_MISSING_OK))
+					rte2->inh = true;
+			}
+		}
 
 		foreach (lc, query->rtable)
 		{
@@ -820,15 +920,11 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 					int order_attno)
 {
 	if (
-#if PG14_LT
-		root->parse->commandType != CMD_SELECT ||
-#else
 		/*
 		 * We only support chunk exclusion on UPDATE/DELETE when no JOIN is involved on PG14+.
 		 */
 		((root->parse->commandType == CMD_DELETE || root->parse->commandType == CMD_UPDATE) &&
 		 bms_num_members(root->all_baserels) > 1) ||
-#endif
 		!ts_guc_enable_chunk_append)
 		return false;
 
@@ -1078,17 +1174,8 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 	}
 
 	if (reltype == TS_REL_HYPERTABLE &&
-#if PG14_GE
 		(root->parse->commandType == CMD_SELECT || root->parse->commandType == CMD_DELETE ||
-		 root->parse->commandType == CMD_UPDATE)
-#else
-		/*
-		 * For PG < 14 commandType will be CMD_SELECT even when planning DELETE so we
-		 * check resultRelation instead.
-		 */
-		root->parse->resultRelation == 0
-#endif
-	)
+		 root->parse->commandType == CMD_UPDATE))
 	{
 		TimescaleDBPrivate *private = ts_get_private_reloptinfo(rel);
 		bool ordered = private->appends_ordered;
@@ -1440,11 +1527,9 @@ replace_hypertable_modify_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 			RangeTblEntry *rte = planner_rt_fetch(mt->nominalRelation, root);
 			Hypertable *ht = ts_planner_get_hypertable(rte->relid, CACHE_FLAG_CHECK);
 			if (
-#if PG14_GE
 				/* We only route UPDATE/DELETE through our CustomNode for PG 14+ because
 				 * the codepath for earlier versions is different. */
 				mt->operation == CMD_UPDATE || mt->operation == CMD_DELETE ||
-#endif
 				mt->operation == CMD_INSERT)
 			{
 				if (ht)

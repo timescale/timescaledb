@@ -21,16 +21,12 @@ extern TSDLLEXPORT void ts_jsonb_add_int32(JsonbParseState *state, const char *k
 										   const int32 value);
 extern TSDLLEXPORT void ts_jsonb_add_int64(JsonbParseState *state, const char *key,
 										   const int64 value);
-extern TSDLLEXPORT void ts_jsonb_add_numeric(JsonbParseState *state, const char *key,
-											 const Numeric value);
 extern TSDLLEXPORT void ts_jsonb_set_value_by_type(JsonbValue *value, Oid typeid, Datum datum);
 
 extern void ts_jsonb_add_value(JsonbParseState *state, const char *key, JsonbValue *value);
 
 extern TSDLLEXPORT char *ts_jsonb_get_str_field(const Jsonb *jsonb, const char *key);
 extern TSDLLEXPORT Interval *ts_jsonb_get_interval_field(const Jsonb *jsonb, const char *key);
-extern TSDLLEXPORT TimestampTz ts_jsonb_get_time_field(const Jsonb *jsonb, const char *key,
-													   bool *field_found);
 extern TSDLLEXPORT bool ts_jsonb_get_bool_field(const Jsonb *json, const char *key,
 												bool *field_found);
 extern TSDLLEXPORT int32 ts_jsonb_get_int32_field(const Jsonb *json, const char *key,

@@ -44,12 +44,12 @@ step "Bc"   { COMMIT; }
 
 permutation "Bc" "I1" "Ic" "R1" "Rc"
 permutation "Bc" "I1" "R1" "Ic" "Rc"
-permutation "Bc" "I1" "R1" "Rc" "Ic"
+permutation "Bc" "I1" "R1"(*) "Rc" "Ic"
 
 permutation "Bc" "R1" "Rc" "I1" "Ic"
 permutation "Bc" "R1" "I1" "Rc" "Ic"
 permutation "Bc" "R1" "I1" "Ic" "Rc"
 
-permutation "R1" "I1" "Ic" "Bc" "Rc"
+permutation "R1" "I1"(R1) "Ic" "Bc" "Rc"
 permutation "R1" "I1" "Bc" "Rc" "Ic"
 permutation "I1" "R1" "Bc" "Rc" "Ic"

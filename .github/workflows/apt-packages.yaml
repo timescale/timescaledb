@@ -4,6 +4,8 @@ name: APT packages
   schedule:
     # run daily 0:00 on main branch
     - cron: '0 0 * * *'
+  pull_request:
+    paths: .github/workflows/apt-packages.yaml
   push:
     tags:
     - '*'
@@ -21,8 +23,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [ "debian:10-slim", "debian:11-slim", "debian:12-slim", "ubuntu:20.04", "ubuntu:22.04", "ubuntu:23.04" ]
-        pg: [ 13, 14, 15, 16 ]
+        image: [ "debian:10-slim", "debian:11-slim", "debian:12-slim", "ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04" ]
+        pg: [ 14, 15, 16 ]
         license: [ "TSL", "Apache"]
         include:
           - license: Apache
@@ -82,6 +84,7 @@ jobs:
         fi
 
     - name: Test Downgrade
+      if: matrix.image != 'ubuntu:24.04'
       run: |
         # Since this runs nightly on main we have to get the previous version
         # from the last released version and not current branch.

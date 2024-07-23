@@ -5,26 +5,26 @@
  */
 #include <postgres.h>
 #include <access/xact.h>
-#include <nodes/nodes.h>
+#include <catalog/pg_type.h>
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <nodes/nodes.h>
 #include <parser/parsetree.h>
 #include <storage/lmgr.h>
 #include <storage/lockdefs.h>
 #include <utils/rel.h>
 #include <utils/syscache.h>
-#include <catalog/pg_type.h>
 
 #include "compat/compat.h"
 #include "chunk_dispatch.h"
 #include "chunk_insert_state.h"
-#include "errors.h"
-#include "subspace_store.h"
 #include "dimension.h"
+#include "errors.h"
 #include "guc.h"
-#include "nodes/hypertable_modify.h"
 #include "hypercube.h"
+#include "nodes/hypertable_modify.h"
+#include "subspace_store.h"
 
 static Node *chunk_dispatch_state_create(CustomScan *cscan);
 
@@ -63,7 +63,6 @@ destroy_chunk_insert_state(void *cis)
  */
 extern ChunkInsertState *
 ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
-										 TupleTableSlot *slot,
 										 const on_chunk_changed_func on_chunk_changed, void *data)
 {
 	ChunkInsertState *cis;
@@ -97,16 +96,13 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 		 * locking the hypertable. This serves as a fast path for the usual case
 		 * where the chunk already exists.
 		 */
-		Assert(slot);
 		chunk = ts_hypertable_find_chunk_for_point(dispatch->hypertable, point);
 
-#if PG14_GE
 		/*
 		 * Frozen chunks require at least PG14.
 		 */
 		if (chunk && ts_chunk_is_frozen(chunk))
 			elog(ERROR, "cannot INSERT into frozen chunk \"%s\"", get_rel_name(chunk->table_id));
-#endif
 		if (chunk && IS_OSM_CHUNK(chunk))
 		{
 			const Dimension *time_dim =
@@ -151,36 +147,6 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 		cis_changed = false;
 	}
 
-	if (found)
-	{
-		if (cis->chunk_compressed)
-		{
-			/*
-			 * If this is an INSERT into a compressed chunk with UNIQUE or
-			 * PRIMARY KEY constraints we need to make sure any batches that could
-			 * potentially lead to a conflict are in the decompressed chunk so
-			 * postgres can do proper constraint checking.
-			 */
-			if (ts_cm_functions->decompress_batches_for_insert)
-			{
-				ts_cm_functions->decompress_batches_for_insert(cis, slot);
-				OnConflictAction onconflict_action =
-					chunk_dispatch_get_on_conflict_action(dispatch);
-				/* mark rows visible */
-				if (onconflict_action == ONCONFLICT_UPDATE)
-					dispatch->estate->es_output_cid = GetCurrentCommandId(true);
-			}
-			else
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("functionality not supported under the current \"%s\" license. "
-								"Learn more at https://timescale.com/.",
-								ts_guc_license),
-						 errhint("To access all features and the best time-series "
-								 "experience, try out Timescale Cloud")));
-		}
-	}
-
 	MemoryContextSwitchTo(old_context);
 
 	if (cis_changed && on_chunk_changed)
@@ -190,6 +156,54 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 	dispatch->prev_cis = cis;
 	dispatch->prev_cis_oid = cis->rel->rd_id;
 	return cis;
+}
+
+extern void
+ts_chunk_dispatch_decompress_batches_for_insert(ChunkDispatch *dispatch, ChunkInsertState *cis,
+												TupleTableSlot *slot)
+{
+	if (cis->chunk_compressed)
+	{
+		/*
+		 * If this is an INSERT into a compressed chunk with UNIQUE or
+		 * PRIMARY KEY constraints we need to make sure any batches that could
+		 * potentially lead to a conflict are in the decompressed chunk so
+		 * postgres can do proper constraint checking.
+		 */
+		if (ts_cm_functions->decompress_batches_for_insert)
+		{
+			ts_cm_functions->decompress_batches_for_insert(cis, slot);
+			OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
+			/* mark rows visible */
+			if (onconflict_action == ONCONFLICT_UPDATE)
+				dispatch->estate->es_output_cid = GetCurrentCommandId(true);
+
+			if (ts_guc_max_tuples_decompressed_per_dml > 0)
+			{
+				if (cis->cds->tuples_decompressed > ts_guc_max_tuples_decompressed_per_dml)
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
+							 errmsg("tuple decompression limit exceeded by operation"),
+							 errdetail("current limit: %d, tuples decompressed: %lld",
+									   ts_guc_max_tuples_decompressed_per_dml,
+									   (long long int) cis->cds->tuples_decompressed),
+							 errhint(
+								 "Consider increasing "
+								 "timescaledb.max_tuples_decompressed_per_dml_transaction or set "
+								 "to 0 (unlimited).")));
+				}
+			}
+		}
+		else
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("functionality not supported under the current \"%s\" license. "
+							"Learn more at https://timescale.com/.",
+							ts_guc_license),
+					 errhint("To access all features and the best time-series "
+							 "experience, try out Timescale Cloud")));
+	}
 }
 
 static CustomScanMethods chunk_dispatch_plan_methods = {
@@ -238,7 +252,10 @@ chunk_dispatch_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *be
 	cscan->custom_scan_tlist = tlist;
 	cscan->scan.plan.targetlist = tlist;
 
-#if PG15_GE
+	/*
+	 * XXX mergeUseOuterJoin is gone in PG17, see 0294df2f1f84
+	 */
+#if ((PG15_GE) && (PG17_LT))
 	if (root->parse->mergeUseOuterJoin)
 	{
 		/* replace expressions of ROWID_VAR */
@@ -260,11 +277,7 @@ ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Index 
 							  int subpath_index)
 {
 	ChunkDispatchPath *path = (ChunkDispatchPath *) palloc0(sizeof(ChunkDispatchPath));
-#if PG14_LT
-	Path *subpath = list_nth(mtpath->subpaths, subpath_index);
-#else
 	Path *subpath = mtpath->subpath;
-#endif
 	RangeTblEntry *rte = planner_rt_fetch(hypertable_rti, root);
 
 	memcpy(&path->cpath.path, subpath, sizeof(Path));
@@ -307,13 +320,6 @@ static void
 on_chunk_insert_state_changed(ChunkInsertState *cis, void *data)
 {
 	ChunkDispatchState *state = data;
-#if PG14_LT
-	ModifyTableState *mtstate = state->mtstate;
-
-	/* PG < 14 expects the current target slot to match the result relation. Thus
-	 * we need to make sure it is up-to-date with the current chunk here. */
-	mtstate->mt_scans[mtstate->mt_whichplan] = cis->slot;
-#endif
 	state->rri = cis->result_relation_info;
 }
 
@@ -372,8 +378,17 @@ chunk_dispatch_exec(CustomScanState *node)
 		}
 		for (int i = 0; i < ht->space->num_dimensions; i++)
 		{
+			/*
+			 * XXX do we need an additional support of NOT MATCHED BY SOURCE
+			 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
+			 */
+#if PG17_GE
+			List *actionStates = dispatch->dispatch_state->mtstate->resultRelInfo
+									 ->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
+#else
 			List *actionStates =
 				dispatch->dispatch_state->mtstate->resultRelInfo->ri_notMatchedMergeAction;
+#endif
 			ListCell *l;
 			foreach (l, actionStates)
 			{
@@ -401,48 +416,16 @@ chunk_dispatch_exec(CustomScanState *node)
 	/* Save the main table's (hypertable's) ResultRelInfo */
 	if (!dispatch->hypertable_result_rel_info)
 	{
-#if PG14_LT
-		Assert(RelationGetRelid(estate->es_result_relation_info->ri_RelationDesc) ==
-			   state->hypertable_relid);
-		dispatch->hypertable_result_rel_info = estate->es_result_relation_info;
-#else
 		dispatch->hypertable_result_rel_info = dispatch->dispatch_state->mtstate->resultRelInfo;
-#endif
 	}
 
 	/* Find or create the insert state matching the point */
 	cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch,
 												   point,
-												   slot,
 												   on_chunk_insert_state_changed,
 												   state);
 
-	if (ts_guc_max_tuples_decompressed_per_dml > 0)
-	{
-		if (cis->cds->tuples_decompressed > ts_guc_max_tuples_decompressed_per_dml)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
-					 errmsg("tuple decompression limit exceeded by operation"),
-					 errdetail("current limit: %d, tuples decompressed: %lld",
-							   ts_guc_max_tuples_decompressed_per_dml,
-							   (long long int) cis->cds->tuples_decompressed),
-					 errhint("Consider increasing "
-							 "timescaledb.max_tuples_decompressed_per_dml_transaction or set "
-							 "to 0 (unlimited).")));
-		}
-	}
-
-	/*
-	 * Set the result relation in the executor state to the target chunk.
-	 * This makes sure that the tuple gets inserted into the correct
-	 * chunk. Note that since in PG < 14 the ModifyTable executor saves and restores
-	 * the es_result_relation_info this has to be updated every time, not
-	 * just when the chunk changes.
-	 */
-#if PG14_LT
-	estate->es_result_relation_info = cis->result_relation_info;
-#endif
+	ts_chunk_dispatch_decompress_batches_for_insert(dispatch, cis, slot);
 
 	MemoryContextSwitchTo(old);
 
@@ -528,9 +511,6 @@ ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *
 	ModifyTable *mt_plan = castNode(ModifyTable, mtstate->ps.plan);
 
 	/* Inserts on hypertables should always have one subplan */
-#if PG14_LT
-	Assert(mtstate->mt_nplans == 1);
-#endif
 	state->mtstate = mtstate;
 	state->arbiter_indexes = mt_plan->arbiterIndexes;
 }

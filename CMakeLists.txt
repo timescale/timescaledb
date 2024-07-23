@@ -301,13 +301,13 @@ if(WIN32)
   find_path(
     PG_PATH postgres.exe
     PATHS "C:/PostgreSQL" "C:/Program Files/PostgreSQL"
-    PATH_SUFFIXES bin 13/bin 14/bin 15/bin
+    PATH_SUFFIXES bin 14/bin 15/bin 16/bin
     DOC "The path to a PostgreSQL installation")
 elseif(UNIX)
   find_path(
     PG_PATH postgres
     PATHS $ENV{HOME} /opt/local/pgsql /usr/local/pgsql /usr/lib/postgresql
-    PATH_SUFFIXES bin 13/bin 14/bin 15/bin
+    PATH_SUFFIXES bin 14/bin 15/bin 16/bin
     DOC "The path to a PostgreSQL installation")
 endif()
 
@@ -349,10 +349,10 @@ message(
 
 # Ensure that PostgreSQL version is supported and consistent with src/compat.h
 # version check
-if((${PG_VERSION_MAJOR} LESS "13")
+if((${PG_VERSION_MAJOR} LESS "14")
    OR (${PG_VERSION_MAJOR} GREATER "16")
    AND NOT (${EXPERIMENTAL}))
-  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 13, 14, 15 and 16")
+  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 14, 15 and 16")
 endif()
 
 # Get PostgreSQL configuration from pg_config
@@ -596,7 +596,10 @@ if(USE_OPENSSL AND (NOT PG_USE_OPENSSL))
   )
 endif(USE_OPENSSL AND (NOT PG_USE_OPENSSL))
 
-if(USE_OPENSSL)
+# While we dont link directly against OpenSSL on non-Windows, doing this on
+# Windows causes linker errors. So on Windows we link directly against the
+# OpenSSL libraries.
+if(USE_OPENSSL AND MSVC)
   # Try to find a local OpenSSL installation
   find_package(OpenSSL)
 
@@ -635,7 +638,7 @@ if(USE_OPENSSL)
     message(STATUS "OpenSSL libraries: ${_path}")
   endforeach()
   message(STATUS "Using OpenSSL version ${OPENSSL_VERSION}")
-endif(USE_OPENSSL)
+endif(USE_OPENSSL AND MSVC)
 
 if(CODECOVERAGE)
   message(STATUS "Code coverage is enabled.")

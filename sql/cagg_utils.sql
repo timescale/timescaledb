@@ -11,3 +11,19 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.cagg_validate_query(
     OUT error_detail TEXT,
     OUT error_hint TEXT
 ) RETURNS RECORD AS '@MODULE_PATHNAME@', 'ts_continuous_agg_validate_query' LANGUAGE C STRICT VOLATILE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.cagg_get_bucket_function_info(
+    mat_hypertable_id INTEGER,
+    -- The bucket function
+    OUT bucket_func REGPROCEDURE,
+    -- `bucket_width` argument of the function, e.g. "1 month"
+    OUT bucket_width TEXT,
+    -- optional `origin` argument of the function provided by the user
+    OUT bucket_origin TEXT,
+    -- optional `offset` argument of the function provided by the user
+    OUT bucket_offset TEXT,
+    -- optional `timezone` argument of the function provided by the user
+    OUT bucket_timezone TEXT,
+    -- fixed or variable sized bucket
+    OUT bucket_fixed_width BOOLEAN
+) RETURNS RECORD AS '@MODULE_PATHNAME@', 'ts_continuous_agg_get_bucket_function_info' LANGUAGE C STRICT VOLATILE;

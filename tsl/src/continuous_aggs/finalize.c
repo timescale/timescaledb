@@ -12,8 +12,8 @@
 
 #include <parser/parse_relation.h>
 
-#include "create.h"
 #include "common.h"
+#include "create.h"
 #include <partialize_finalize.h>
 
 /* Static function prototypes */
@@ -181,9 +181,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 				rte->joinleftcols = jrte->joinleftcols;
 				rte->joinrightcols = jrte->joinrightcols;
 				rte->joinmergedcols = jrte->joinmergedcols;
-#if PG14_GE
 				rte->join_using_alias = jrte->join_using_alias;
-#endif
 #if PG16_LT
 				rte->selectedCols = jrte->selectedCols;
 #else

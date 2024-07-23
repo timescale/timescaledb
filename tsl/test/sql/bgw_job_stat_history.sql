@@ -35,8 +35,6 @@ SELECT test.wait_for_job_to_run(:job_id_2, 1);
 SELECT count(*), succeeded FROM timescaledb_information.job_history WHERE job_id >= 1000 GROUP BY 2 ORDER BY 2;
 SELECT proc_schema, proc_name, sqlerrcode, err_message FROM timescaledb_information.job_history WHERE job_id >= 1000 AND succeeded IS FALSE;
 
-SELECT _timescaledb_functions.stop_background_workers();
-
 -- Check current jobs status
 SELECT job_id, job_status, total_runs, total_successes, total_failures
 FROM timescaledb_information.job_stats
@@ -46,10 +44,6 @@ ORDER BY job_id;
 -- Log all executions
 ALTER SYSTEM SET timescaledb.enable_job_execution_logging TO ON;
 SELECT pg_reload_conf();
-
-\c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT _timescaledb_functions.start_background_workers();
-SELECT pg_sleep(6);
 
 SELECT scheduled FROM alter_job(:job_id_1, next_start => now());
 SELECT scheduled FROM alter_job(:job_id_2, next_start => now());
@@ -163,4 +157,14 @@ ALTER SYSTEM RESET timescaledb.enable_job_execution_logging;
 SELECT pg_reload_conf();
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+
+-- The GUC is PGC_SIGHUP context so only ALTER SYSTEM is allowed
+\set ON_ERROR_STOP 0
+SHOW timescaledb.enable_job_execution_logging;
+SET timescaledb.enable_job_execution_logging TO OFF;
+SHOW timescaledb.enable_job_execution_logging;
+ALTER DATABASE :TEST_DBNAME SET timescaledb.enable_job_execution_logging TO ON;
+SHOW timescaledb.enable_job_execution_logging;
+\set ON_ERROR_STOP 1
+
 SELECT _timescaledb_functions.stop_background_workers();

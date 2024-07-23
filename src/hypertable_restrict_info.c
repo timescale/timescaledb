@@ -8,6 +8,7 @@
 #include <catalog/pg_inherits.h>
 #include <optimizer/optimizer.h>
 #include <parser/parsetree.h>
+#include <tcop/tcopprot.h>
 #include <utils/array.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
@@ -20,35 +21,13 @@
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
+#include "expression_utils.h"
 #include "guc.h"
 #include "hypercube.h"
 #include "partitioning.h"
 #include "scan_iterator.h"
+#include "ts_catalog/chunk_column_stats.h"
 #include "utils.h"
-
-#include <inttypes.h>
-#include <tcop/tcopprot.h>
-
-typedef struct DimensionRestrictInfo
-{
-	const Dimension *dimension;
-} DimensionRestrictInfo;
-
-typedef struct DimensionRestrictInfoOpen
-{
-	DimensionRestrictInfo base;
-	int64 lower_bound; /* internal time representation */
-	StrategyNumber lower_strategy;
-	int64 upper_bound; /* internal time representation */
-	StrategyNumber upper_strategy;
-} DimensionRestrictInfoOpen;
-
-typedef struct DimensionRestrictInfoClosed
-{
-	DimensionRestrictInfo base;
-	List *partitions;		 /* hash values */
-	StrategyNumber strategy; /* either Invalid or equal */
-} DimensionRestrictInfoClosed;
 
 typedef struct DimensionValues
 {
@@ -95,6 +74,28 @@ dimension_restrict_info_create(const Dimension *d)
 }
 
 /*
+ * Given a column from a hypertable, create a DimensionRestrictInfo entry
+ * representing it. This gets used by the usual hypertable restrict info
+ * machinery to identify if the query clauses are using expressions involving
+ * this column. Note that this column is NOT a partitioning column but we are
+ * tracking ranges for this column in the _timescaledb_catalog.chunk_column_stats
+ * catalog table.
+ *
+ * The idea is to do chunk exclusion when queries have WHERE clauses using this
+ * column. The logic at the "Dimension" entry level are the same, so we reuse the
+ * same representation to benefit from it.
+ */
+static DimensionRestrictInfo *
+chunk_column_stats_restrict_info_create(const Hypertable *ht, const Form_chunk_column_stats d)
+{
+	/* create a dummy dimension structure for this range entry */
+	Dimension *dim = ts_chunk_column_stats_fill_dummy_dimension(d, ht->main_table_relid);
+
+	/* similar to open dimensions */
+	return &dimension_restrict_info_open_create(dim)->base;
+}
+
+/*
  * Check if the restriction on this dimension is trivial, that is, the entire
  * range of the dimension matches.
  */
@@ -104,6 +105,7 @@ dimension_restrict_info_is_trivial(const DimensionRestrictInfo *dri)
 	switch (dri->dimension->type)
 	{
 		case DIMENSION_TYPE_OPEN:
+		case DIMENSION_TYPE_STATS:
 		{
 			DimensionRestrictInfoOpen *open = (DimensionRestrictInfoOpen *) dri;
 			return open->lower_strategy == InvalidStrategy &&
@@ -136,7 +138,7 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 												   PointerGetDatum(lfirst(item)),
 												   dimvalues->type,
 												   &restype);
-		int64 value = ts_time_value_to_internal_or_infinite(datum, restype, NULL);
+		int64 value = ts_time_value_to_internal_or_infinite(datum, restype);
 
 		switch (strategy)
 		{
@@ -163,6 +165,81 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 				dri->upper_bound = value;
 				dri->lower_strategy = BTGreaterEqualStrategyNumber;
 				dri->upper_strategy = BTLessEqualStrategyNumber;
+				restriction_added = true;
+				break;
+			default:
+				/* unsupported strategy */
+				break;
+		}
+	}
+	return restriction_added;
+}
+
+/*
+ * for DIMENSION_TYPE_STATS entries, we need to use regular bounded strategies.
+ * We can have multiple entries satisfying the inputs. It basically becomes a
+ * problem of:
+ *
+ * "given an input value, find all ranges which encompass that value"
+ *
+ * For "column >= constant" (e.g id >= 9), the check has to be:
+ *
+ * start_range >= 9 OR end_range >= 9 (second check covers +INF)
+ *
+ * For "column <= constant" (e.g id <= 90), the check has to be:
+ *
+ * start_range <= 90 OR end_range <= 90 (first check covers -INF)
+ *
+ * For "column == constant" (e.g id = 9)
+ *
+ * start_range <= 9 OR end_range >= 9 (covers +INF to -INF)
+ */
+static bool
+dimension_restrict_info_range_add(DimensionRestrictInfoOpen *dri, StrategyNumber strategy,
+								  Oid collation, DimensionValues *dimvalues)
+{
+	ListCell *item;
+	bool restriction_added = false;
+
+	/* can't handle IN/ANY with multiple values */
+	if (dimvalues->use_or && list_length(dimvalues->values) > 1)
+		return false;
+
+	foreach (item, dimvalues->values)
+	{
+		Oid restype;
+		Datum datum = ts_dimension_transform_value(dri->base.dimension,
+												   collation,
+												   PointerGetDatum(lfirst(item)),
+												   dimvalues->type,
+												   &restype);
+		int64 value = ts_time_value_to_internal_or_infinite(datum, restype);
+
+		switch (strategy)
+		{
+			case BTLessEqualStrategyNumber:
+			case BTLessStrategyNumber: /* e.g: id <= 90 */
+				if (dri->upper_strategy == InvalidStrategy || value < dri->upper_bound)
+				{
+					dri->upper_strategy = strategy;
+					dri->upper_bound = value;
+					restriction_added = true;
+				}
+				break;
+			case BTGreaterEqualStrategyNumber:
+			case BTGreaterStrategyNumber: /* e.g: id >= 9 */
+				if (dri->lower_strategy == InvalidStrategy || value > dri->lower_bound)
+				{
+					dri->lower_strategy = strategy;
+					dri->lower_bound = value;
+					restriction_added = true;
+				}
+				break;
+			case BTEqualStrategyNumber: /* e.g: id = 9 */
+				dri->lower_bound = value;
+				dri->upper_bound = value;
+				dri->lower_strategy = BTEqualStrategyNumber;
+				dri->upper_strategy = BTEqualStrategyNumber;
 				restriction_added = true;
 				break;
 			default:
@@ -251,6 +328,12 @@ dimension_restrict_info_add(DimensionRestrictInfo *dri, int strategy, Oid collat
 													strategy,
 													collation,
 													values);
+		case DIMENSION_TYPE_STATS:
+			/* we reuse the DimensionRestrictInfoOpen structure for these */
+			return dimension_restrict_info_range_add((DimensionRestrictInfoOpen *) dri,
+													 strategy,
+													 collation,
+													 values);
 		case DIMENSION_TYPE_CLOSED:
 			return dimension_restrict_info_closed_add((DimensionRestrictInfoClosed *) dri,
 													  strategy,
@@ -275,18 +358,33 @@ typedef struct HypertableRestrictInfo
 HypertableRestrictInfo *
 ts_hypertable_restrict_info_create(RelOptInfo *rel, Hypertable *ht)
 {
-	int num_dimensions = ht->space->num_dimensions;
+	int num_dimensions =
+		ht->space->num_dimensions + (ht->range_space ? ht->range_space->num_range_cols : 0);
 	HypertableRestrictInfo *res =
 		palloc0(sizeof(HypertableRestrictInfo) + sizeof(DimensionRestrictInfo *) * num_dimensions);
 	int i;
+	int range_index = 0;
 
 	res->num_dimensions = num_dimensions;
 
-	for (i = 0; i < num_dimensions; i++)
+	for (i = 0; i < ht->space->num_dimensions; i++)
 	{
 		DimensionRestrictInfo *dri = dimension_restrict_info_create(&ht->space->dimensions[i]);
 
 		res->dimension_restriction[i] = dri;
+		range_index++;
+	}
+
+	/*
+	 * We convert the range_space entries into dummy "DimensionRestrictInfo" entries. This allows
+	 * the hypertable restrict info machinery to consider these as well.
+	 */
+	for (i = 0; ht->range_space != NULL && i < ht->range_space->num_range_cols; i++)
+	{
+		DimensionRestrictInfo *dri =
+			chunk_column_stats_restrict_info_create(ht, &ht->range_space->range_cols[i]);
+
+		res->dimension_restriction[range_index++] = dri;
 	}
 
 	return res;
@@ -307,13 +405,12 @@ hypertable_restrict_info_get(HypertableRestrictInfo *hri, AttrNumber attno)
 
 typedef DimensionValues *(*get_dimension_values)(Const *c, bool use_or);
 
-static bool
-hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root, List *expr_args,
-								  Oid op_oid, get_dimension_values func_get_dim_values, bool use_or)
+static void
+hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root, Var *v,
+								  Expr *expr, Oid op_oid, get_dimension_values func_get_dim_values,
+								  bool use_or)
 {
-	Expr *leftop, *rightop, *expr;
 	DimensionRestrictInfo *dri;
-	Var *v;
 	Const *c;
 	RangeTblEntry *rte;
 	Oid columntype;
@@ -322,46 +419,21 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 	Oid lefttype, righttype;
 	DimensionValues *dimvalues;
 
-	if (list_length(expr_args) != 2)
-		return false;
-
-	leftop = linitial(expr_args);
-	rightop = lsecond(expr_args);
-
-	if (IsA(leftop, RelabelType))
-		leftop = ((RelabelType *) leftop)->arg;
-	if (IsA(rightop, RelabelType))
-		rightop = ((RelabelType *) rightop)->arg;
-
-	if (IsA(leftop, Var))
-	{
-		v = (Var *) leftop;
-		expr = rightop;
-	}
-	else if (IsA(rightop, Var))
-	{
-		v = (Var *) rightop;
-		expr = leftop;
-		op_oid = get_commutator(op_oid);
-	}
-	else
-		return false;
-
 	dri = hypertable_restrict_info_get(hri, v->varattno);
 	/* the attribute is not a dimension */
 	if (dri == NULL)
-		return false;
+		return;
 
 	expr = (Expr *) eval_const_expressions(root, (Node *) expr);
 
 	if (!IsA(expr, Const) || !OidIsValid(op_oid) || !op_strict(op_oid))
-		return false;
+		return;
 
 	c = (Const *) expr;
 
 	/* quick check for a NULL constant */
 	if (c->constisnull)
-		return false;
+		return;
 
 	rte = rt_fetch(v->varno, root->parse->rtable);
 
@@ -369,11 +441,14 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 	tce = lookup_type_cache(columntype, TYPECACHE_BTREE_OPFAMILY);
 
 	if (!op_in_opfamily(op_oid, tce->btree_opf))
-		return false;
+		return;
 
 	get_op_opfamily_properties(op_oid, tce->btree_opf, false, &strategy, &lefttype, &righttype);
 	dimvalues = func_get_dim_values(c, use_or);
-	return dimension_restrict_info_add(dri, strategy, c->constcollid, dimvalues);
+	if (dimension_restrict_info_add(dri, strategy, c->constcollid, dimvalues))
+	{
+		hri->num_base_restrictions++;
+	}
 }
 
 static DimensionValues *
@@ -426,7 +501,9 @@ static void
 hypertable_restrict_info_add_restrict_info(HypertableRestrictInfo *hri, PlannerInfo *root,
 										   RestrictInfo *ri)
 {
-	bool added = false;
+	Oid opno;
+	Var *var;
+	Expr *arg_value;
 
 	Expr *e = ri->clause;
 
@@ -434,40 +511,31 @@ hypertable_restrict_info_add_restrict_info(HypertableRestrictInfo *hri, PlannerI
 	if (contain_mutable_functions((Node *) e))
 		return;
 
-	switch (nodeTag(e))
+	if (ts_extract_expr_args(e, &var, &arg_value, &opno, NULL))
 	{
-		case T_OpExpr:
+		get_dimension_values value_func;
+		bool use_or;
+
+		switch (nodeTag(e))
 		{
-			OpExpr *op_expr = (OpExpr *) e;
-
-			added = hypertable_restrict_info_add_expr(hri,
-													  root,
-													  op_expr->args,
-													  op_expr->opno,
-													  dimension_values_create_from_single_element,
-													  false);
-			break;
+			case T_OpExpr:
+			{
+				value_func = dimension_values_create_from_single_element;
+				use_or = false;
+				break;
+			}
+			case T_ScalarArrayOpExpr:
+			{
+				value_func = dimension_values_create_from_array;
+				use_or = castNode(ScalarArrayOpExpr, e)->useOr;
+				break;
+			}
+			default:
+				/* we don't support other node types */
+				return;
 		}
-
-		case T_ScalarArrayOpExpr:
-		{
-			ScalarArrayOpExpr *scalar_expr = (ScalarArrayOpExpr *) e;
-
-			added = hypertable_restrict_info_add_expr(hri,
-													  root,
-													  scalar_expr->args,
-													  scalar_expr->opno,
-													  dimension_values_create_from_array,
-													  scalar_expr->useOr);
-			break;
-		}
-		default:
-			/* we don't support other node types */
-			break;
+		hypertable_restrict_info_add_expr(hri, root, var, arg_value, opno, value_func, use_or);
 	}
-
-	if (added)
-		hri->num_base_restrictions++;
 }
 
 void
@@ -532,10 +600,14 @@ gather_restriction_dimension_vectors(const HypertableRestrictInfo *hri)
 
 	for (i = 0; i < hri->num_dimensions; i++)
 	{
-		const DimensionRestrictInfo *dri = hri->dimension_restriction[i];
-		DimensionVec *dv = ts_dimension_vec_create(DIMENSION_VEC_DEFAULT_SIZE);
+		DimensionRestrictInfo *dri = hri->dimension_restriction[i];
+		DimensionVec *dv;
 
 		Assert(NULL != dri);
+		/* dimension ranges don't need dimension slices */
+		dv = ts_dimension_vec_create(
+			dri->dimension->type == DIMENSION_TYPE_STATS ? 1 : DIMENSION_VEC_DEFAULT_SIZE);
+		dv->dri = dri;
 
 		switch (dri->dimension->type)
 		{
@@ -601,6 +673,11 @@ gather_restriction_dimension_vectors(const HypertableRestrictInfo *hri)
 				}
 				break;
 			}
+			case DIMENSION_TYPE_STATS:
+			{
+				/* an empty dv will be appended for this as a placeholder */
+				break;
+			}
 			default:
 				elog(ERROR, "unknown dimension type");
 				return NULL;
@@ -610,11 +687,16 @@ gather_restriction_dimension_vectors(const HypertableRestrictInfo *hri)
 
 		/*
 		 * If there is a dimension where no slices match, the result will be
-		 * empty.
+		 * empty. But only do so if it's not a DIMENSION_TYPE_STATS entry.
+		 *
+		 * For DIMENSION_TYPE_STATS entries, we get the list of chunks
+		 * directly later on from "chunk_column_stats" catalog. They do not
+		 * have dimension slices.
 		 */
-		if (dv->num_slices == 0)
+		if (dv->num_slices == 0 && dri->dimension->type != DIMENSION_TYPE_STATS)
 		{
 			ts_scan_iterator_close(&it);
+
 			return NIL;
 		}
 
@@ -688,7 +770,7 @@ ts_hypertable_restrict_info_get_chunks(HypertableRestrictInfo *hri, Hypertable *
 		}
 		else
 		{
-			/* Find the chunks matching these dimension slices. */
+			/* Find the chunks matching these dimension ranges/slices. */
 			chunk_ids = ts_chunk_id_find_in_subspace(ht, dimension_vectors);
 		}
 
@@ -735,7 +817,7 @@ ts_hypertable_restrict_info_get_chunks(HypertableRestrictInfo *hri, Hypertable *
 	 * We don't care about the locking order here, because this code uses
 	 * AccessShareLock that doesn't conflict with itself.
 	 */
-	list_sort(chunk_ids, list_int_cmp_compat);
+	list_sort(chunk_ids, list_int_cmp);
 
 	return ts_chunk_scan_by_chunk_ids(ht->space, chunk_ids, num_chunks);
 }

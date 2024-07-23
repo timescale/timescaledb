@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+\set ANALYZE 'EXPLAIN (analyze, costs off, timing off, summary off)'
+
 -- test constraint exclusion with prepared statements and generic plans
 CREATE TABLE i3719 (time timestamptz NOT NULL,data text);
 SELECT table_name FROM create_hypertable('i3719', 'time');
@@ -76,7 +78,7 @@ SELECT chunk_schema || '.' || chunk_name as "chunk_table"
        WHERE hypertable_name = 'mytab' ORDER BY range_start limit 1 \gset
 
 -- compress only the first chunk
-SELECT compress_chunk(:'chunk_table');
+SELECT count(compress_chunk(:'chunk_table'));
 
 -- insert a row into first compressed chunk
 INSERT INTO mytab SELECT '2022-10-07 05:30:10+05:30'::timestamp with time zone, 3, 3;
@@ -105,7 +107,7 @@ generate_series('1990-01-01'::timestamptz, '1990-01-10'::timestamptz, INTERVAL '
 generate_series(1, 3, 1 ) AS g2(source_id),
 generate_series(1, 3, 1 ) AS g3(label);
 
-SELECT compress_chunk(c) FROM show_chunks('comp_seg_varchar') c;
+SELECT count(compress_chunk(c)) FROM show_chunks('comp_seg_varchar') c;
 
 
 -- all tuples should come from compressed chunks
@@ -124,3 +126,65 @@ ON CONFLICT (source_id, label, time) DO UPDATE SET data = '{"update": true}';
 EXPLAIN (analyze,costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
 
 DROP TABLE comp_seg_varchar;
+
+-- test row locks for compressed tuples are blocked
+CREATE TABLE row_locks(time timestamptz NOT NULL);
+SELECT table_name FROM create_hypertable('row_locks', 'time');
+ALTER TABLE row_locks SET (timescaledb.compress);
+INSERT INTO row_locks VALUES('2021-01-01 00:00:00');
+SELECT count(compress_chunk(c)) FROM show_chunks('row_locks') c;
+
+-- should succeed cause no compressed tuples are returned
+SELECT FROM row_locks WHERE time < '2021-01-01 00:00:00' FOR UPDATE;
+-- should be blocked
+\set ON_ERROR_STOP 0
+SELECT FROM row_locks FOR UPDATE;
+SELECT FROM row_locks FOR NO KEY UPDATE;
+SELECT FROM row_locks FOR SHARE;
+SELECT FROM row_locks FOR KEY SHARE;
+\set ON_ERROR_STOP 1
+
+DROP TABLE row_locks;
+
+CREATE TABLE lazy_decompress(time timestamptz not null, device text, value float, primary key (device,time));
+SELECT table_name FROM create_hypertable('lazy_decompress', 'time');
+ALTER TABLE lazy_decompress SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+
+INSERT INTO lazy_decompress SELECT '2024-01-01'::timestamptz + format('%s',i)::interval, 'd1', i FROM generate_series(1,6000) g(i);
+
+SELECT count(compress_chunk(c)) FROM show_chunks('lazy_decompress') c;
+
+-- no decompression cause no match in batch
+BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:00.5','d1',random() ON CONFLICT DO NOTHING; ROLLBACK;
+BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:00.5','d1',random() ON CONFLICT(time,device) DO UPDATE SET value=EXCLUDED.value; ROLLBACK;
+-- should decompress 1 batch cause there is match
+BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:01','d1',random() ON CONFLICT DO NOTHING; ROLLBACK;
+
+-- no decompression cause no match in batch
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0; ROLLBACK;
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0 AND device='d1'; ROLLBACK;
+-- 1 batch decompression
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 2300; ROLLBACK;
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value > 3100 AND value < 3200; ROLLBACK;
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value BETWEEN 3100 AND 3200; ROLLBACK;
+
+-- check GUC is working, should be 6 batches and 6000 tuples decompresed
+SET timescaledb.enable_dml_decompression_tuple_filtering TO off;
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0 AND device='d1'; ROLLBACK;
+RESET timescaledb.enable_dml_decompression_tuple_filtering;
+
+-- no decompression cause no match in batch
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0; ROLLBACK;
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0 AND device='d1'; ROLLBACK;
+-- 1 batch decompression
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 2300; ROLLBACK;
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value > 3100 AND value < 3200; ROLLBACK;
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value BETWEEN 3100 AND 3200; ROLLBACK;
+
+-- check GUC is working, should be 6 batches and 6000 tuples decompresed
+SET timescaledb.enable_dml_decompression_tuple_filtering TO off;
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0 AND device='d1'; ROLLBACK;
+RESET timescaledb.enable_dml_decompression_tuple_filtering;
+
+DROP TABLE lazy_decompress;
+

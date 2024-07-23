@@ -1,0 +1,369 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+-- Run test as non-superuser
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+-- Prepare a hypertable with date values
+CREATE TABLE temperaturedate (
+  time date NOT NULL,
+  sensor int,
+  value float
+);
+
+SELECT create_hypertable('temperaturedate', 'time');
+
+INSERT INTO temperaturedate
+  SELECT time, sensor_id, sensor_id * sensor_id + 100
+    FROM generate_series('2010-01-01 0:00:00+00'::timestamptz, '2010-01-01 23:59:59+00','1m') g1(time),
+    generate_series(1, 2, 1) AS g2(sensor_id);
+
+-- Prepare a hypertable with timestamp values
+CREATE TABLE temperature (
+  time timestamp NOT NULL,
+  sensor int,
+  value float
+);
+
+SELECT create_hypertable('temperature', 'time');
+
+INSERT INTO temperature
+  SELECT time, sensor_id, sensor_id * sensor_id + 100
+    FROM generate_series('2010-01-01 0:00:00+00'::timestamptz, '2010-01-01 23:59:59+00','1m') g1(time),
+    generate_series(1, 2, 1) AS g2(sensor_id);
+
+-- Prepare a hypertable with timestamptz values
+CREATE TABLE temperaturetz (
+  time timestamptz NOT NULL,
+  sensor int,
+  value float
+);
+
+SELECT create_hypertable('temperaturetz', 'time');
+
+INSERT INTO temperaturetz
+  SELECT time, sensor_id, sensor_id * sensor_id + 100
+    FROM generate_series('2010-01-01 0:00:00+0'::timestamptz, '2010-01-01 23:59:59+0','1m') g1(time),
+    generate_series(1, 2, 1) AS g2(sensor_id);
+
+SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
+
+--- Tests with date
+--
+-- Tested function signatures
+--
+-- timescaledb_experimental | time_bucket_ng | date                        | bucket_width interval, ts date
+-- timescaledb_experimental | time_bucket_ng | date                        | bucket_width interval, ts date, origin date
+---
+CREATE MATERIALIZED VIEW cagg_tempdate_ng
+  WITH  (timescaledb.continuous) AS
+  SELECT timescaledb_experimental.time_bucket_ng('7 days', time) as time, sensor, avg(value) AS avg
+    FROM temperaturedate
+    GROUP BY 1,2
+    WITH NO DATA;
+
+-- Run the migration
+\set CAGG_NAME 'cagg_tempdate_ng'
+\ir include/cagg_run_timebucket_migration.sql
+
+CREATE MATERIALIZED VIEW cagg_tempdate_ng_origin
+  WITH  (timescaledb.continuous) AS
+  SELECT timescaledb_experimental.time_bucket_ng('7 days', time, '2020-01-04') as time, sensor, avg(value) AS avg
+    FROM temperaturedate
+    GROUP BY 1,2
+    WITH NO DATA;
+
+-- Run the migration
+\set CAGG_NAME 'cagg_tempdate_ng_origin'
+\ir include/cagg_run_timebucket_migration.sql
+
+--- Tests with timestamp
+--
+-- Tested function signatures
+-- timescaledb_experimental | time_bucket_ng | timestamp without time zone | bucket_width interval, ts timestamp without time zone
+-- timescaledb_experimental | time_bucket_ng | timestamp without time zone | bucket_width interval, ts timestamp without time zone, origin timestamp without time zone
+---
+CREATE MATERIALIZED VIEW cagg_temp_ng
+  WITH  (timescaledb.continuous) AS
+  SELECT timescaledb_experimental.time_bucket_ng('5 minutes', time) as time, sensor, avg(value) AS avg
+    FROM temperature
+    GROUP BY 1,2
+    WITH NO DATA;
+
+-- Run the migration
+\set CAGG_NAME 'cagg_temp_ng'
+\ir include/cagg_run_timebucket_migration.sql
+
+CREATE MATERIALIZED VIEW cagg_temp_ng_origin
+  WITH  (timescaledb.continuous) AS
+  SELECT timescaledb_experimental.time_bucket_ng('5 minutes', time, '2020-01-01 04:00:00') as time, sensor, avg(value) AS avg
+    FROM temperature
+    GROUP BY 1,2
+    WITH NO DATA;
+
+-- Run the migration
+\set CAGG_NAME 'cagg_temp_ng_origin'
+\ir include/cagg_run_timebucket_migration.sql
+
+--- Tests with timestamptz
+--
+-- Not tested signatures since they are not supported by CAggs
+-- timescaledb_experimental | time_bucket_ng | timestamp with time zone    | bucket_width interval, ts timestamp with time zone
+-- timescaledb_experimental | time_bucket_ng | timestamp with time zone    | bucket_width interval, ts timestamp with time zone, origin timestamp with time zone
+--
+-- Tested function signatures
+-- timescaledb_experimental | time_bucket_ng | timestamp with time zone    | bucket_width interval, ts timestamp with time zone, origin timestamp with time zone, timezone text
+-- timescaledb_experimental | time_bucket_ng | timestamp with time zone    | bucket_width interval, ts timestamp with time zone, timezone text
+---
+
+-- Create a CAgg using time_bucket_ng
+CREATE MATERIALIZED VIEW cagg_temptz_ng
+  WITH  (timescaledb.continuous) AS
+  SELECT timescaledb_experimental.time_bucket_ng('5 minutes', time, 'Europe/Berlin') as time, sensor, avg(value) AS avg
+    FROM temperaturetz
+    GROUP BY 1,2
+    WITH NO DATA;
+
+-- Run the migration
+\set CAGG_NAME 'cagg_temptz_ng'
+\ir include/cagg_run_timebucket_migration.sql
+
+CREATE MATERIALIZED VIEW cagg_temptz_ng_origin
+  WITH  (timescaledb.continuous) AS
+  SELECT timescaledb_experimental.time_bucket_ng('5 minutes', time, '2020-04-01'::timestamptz, 'Europe/Berlin') as time, sensor, avg(value) AS avg
+    FROM temperaturetz
+    GROUP BY 1,2
+    WITH NO DATA;
+
+-- Run the migration - special case, order of origin and timezone needs to be swapped
+\set CAGG_NAME 'cagg_temptz_ng_origin'
+\ir include/cagg_run_timebucket_migration.sql
+
+
+-- Test real-time CAggs as well
+
+-- Create a real-time CAgg using time_bucket_ng
+CREATE MATERIALIZED VIEW cagg_temptz_ng_rt
+  WITH  (timescaledb.continuous, timescaledb.materialized_only=false) AS
+  SELECT timescaledb_experimental.time_bucket_ng('5 minutes', time, 'Europe/Berlin') as time, sensor, avg(value) AS avg
+    FROM temperaturetz
+    GROUP BY 1,2
+    WITH NO DATA;
+
+\set CAGG_NAME 'cagg_temptz_ng_rt'
+\ir include/cagg_run_timebucket_migration.sql
+
+----
+-- Check bucket conversion -- timestamptz without custom origin
+----
+CREATE MATERIALIZED VIEW cagg_temp_ng_1week
+  WITH  (timescaledb.continuous) AS
+  SELECT timescaledb_experimental.time_bucket_ng('1 week', time, 'Europe/Berlin') as time, sensor, avg(value) AS avg
+    FROM temperaturetz
+    GROUP BY 1,2
+    WITH NO DATA;
+
+CALL refresh_continuous_aggregate('cagg_temp_ng_1week', NULL, NULL);
+
+-- Ensure time_bucket and time_bucket_ng create buckets with a different origin
+SELECT time_bucket('1 week', time, 'Europe/Berlin'), sensor, avg(value)
+    FROM temperaturetz
+    GROUP BY 1, 2
+    ORDER BY 1, 2;
+
+SELECT timescaledb_experimental.time_bucket_ng('1 week', time, 'Europe/Berlin'), sensor, avg(value)
+    FROM temperaturetz
+    GROUP BY 1, 2
+    ORDER BY 1, 2;
+
+-- Test what the CAgg returns
+SELECT * FROM cagg_temp_ng_1week;
+
+-- Insert new data into the hypertable. 10 years after the data that was used during the CAgg refresh
+INSERT INTO temperaturetz
+  SELECT time, sensor_id, sensor_id * sensor_id + 100
+    FROM generate_series('2020-01-01 0:00:00+0'::timestamptz, '2020-01-01 23:59:59+0','1m') g1(time),
+    generate_series(1, 2, 1) AS g2(sensor_id);
+
+-- Migrate and update CAgg
+CALL _timescaledb_functions.cagg_migrate_to_time_bucket('cagg_temp_ng_1week');
+CALL refresh_continuous_aggregate('cagg_temp_ng_1week', NULL, NULL);
+
+-- Get output of the time_bucket_ng
+SELECT timescaledb_experimental.time_bucket_ng('1 week', time, 'Europe/Berlin'), sensor, avg(value)
+    FROM temperaturetz
+    GROUP BY 1, 2
+    ORDER BY 1, 2;
+
+-- Ensure time function with added origin during migration produces the same results
+SELECT time_bucket('1 week', time, origin=>'2000-01-01 00:00:00+01'), sensor, avg(value)
+    FROM temperaturetz
+    GROUP BY 1, 2
+    ORDER BY 1, 2;
+
+-- Even the CAgg now uses time_bucket, we should see buckets of the same alignment
+SELECT * FROM cagg_temp_ng_1week ORDER BY time, sensor;
+
+
+----
+-- Check bucket conversion -- timestamptz with custom origin
+----
+TRUNCATE temperaturetz;
+
+INSERT INTO temperaturetz
+  SELECT time, sensor_id, sensor_id * sensor_id + 100
+    FROM generate_series('2010-01-01 0:00:00+0'::timestamptz, '2010-01-01 23:59:59+0','1m') g1(time),
+    generate_series(1, 2, 1) AS g2(sensor_id);
+
+CREATE MATERIALIZED VIEW cagg_temp_ng_1week_corgin
+  WITH  (timescaledb.continuous) AS
+  SELECT timescaledb_experimental.time_bucket_ng('1 week', time, '2005-01-01 15:00:00'::timestamptz, 'Europe/Berlin') as time, sensor, avg(value) AS avg
+    FROM temperaturetz
+    GROUP BY 1,2
+    WITH NO DATA;
+
+CALL refresh_continuous_aggregate('cagg_temp_ng_1week_corgin', NULL, NULL);
+
+SELECT * FROM cagg_temp_ng_1week_corgin;
+
+-- Insert new data into the hypertable. 10 years after the data that was used during the CAgg refresh
+INSERT INTO temperaturetz
+  SELECT time, sensor_id, sensor_id * sensor_id + 100
+    FROM generate_series('2020-01-01 0:00:00+0'::timestamptz, '2020-01-01 23:59:59+0','1m') g1(time),
+    generate_series(1, 2, 1) AS g2(sensor_id);
+
+-- Migrate and update CAgg
+CALL _timescaledb_functions.cagg_migrate_to_time_bucket('cagg_temp_ng_1week_corgin');
+CALL refresh_continuous_aggregate('cagg_temp_ng_1week_corgin', NULL, NULL);
+
+-- Get output of the time_bucket_ng
+SELECT timescaledb_experimental.time_bucket_ng('1 week', time, '2005-01-01 15:00:00'::timestamptz, 'Europe/Berlin'), sensor, avg(value)
+    FROM temperaturetz
+    GROUP BY 1, 2
+    ORDER BY 1, 2;
+
+-- Even the CAgg now uses time_bucket, we should see buckets of the same alignment
+SELECT * FROM cagg_temp_ng_1week_corgin ORDER BY time, sensor;
+
+----
+-- Check bucket conversion -- timestamp without custom origin
+----
+CREATE MATERIALIZED VIEW cagg_temp_ng_1week_timestamp
+  WITH  (timescaledb.continuous) AS
+  SELECT timescaledb_experimental.time_bucket_ng('1 week', time) as time, sensor, avg(value) AS avg
+    FROM temperature
+    GROUP BY 1,2
+    WITH NO DATA;
+
+CALL refresh_continuous_aggregate('cagg_temp_ng_1week_timestamp', NULL, NULL);
+
+-- Ensure time_bucket and time_bucket_ng create buckets with a different origin
+SELECT time_bucket('1 week', time), sensor, avg(value)
+    FROM temperature
+    GROUP BY 1, 2
+    ORDER BY 1, 2;
+
+SELECT timescaledb_experimental.time_bucket_ng('1 week', time), sensor, avg(value)
+    FROM temperature
+    GROUP BY 1, 2
+    ORDER BY 1, 2;
+
+-- Test what the CAgg returns
+SELECT * FROM cagg_temp_ng_1week_timestamp;
+
+-- Insert new data into the hypertable. 10 years after the data that was used during the CAgg refresh
+INSERT INTO temperature
+  SELECT time, sensor_id, sensor_id * sensor_id + 100
+    FROM generate_series('2020-01-01 0:00:00+0'::timestamptz, '2020-01-01 23:59:59+0','1m') g1(time),
+    generate_series(1, 2, 1) AS g2(sensor_id);
+
+-- Migrate and update CAgg
+CALL _timescaledb_functions.cagg_migrate_to_time_bucket('cagg_temp_ng_1week_timestamp');
+CALL refresh_continuous_aggregate('cagg_temp_ng_1week_timestamp', NULL, NULL);
+
+-- Get output of the time_bucket_ng
+SELECT timescaledb_experimental.time_bucket_ng('1 week', time), sensor, avg(value)
+    FROM temperature
+    GROUP BY 1, 2
+    ORDER BY 1, 2;
+
+-- Ensure time function with added origin during migration produces the same results
+SELECT time_bucket('1 week', time, origin=>'2000-01-01 00:00:00'), sensor, avg(value)
+    FROM temperature
+    GROUP BY 1, 2
+    ORDER BY 1, 2;
+
+-- Even the CAgg now uses time_bucket, we should see buckets of the same alignment
+SELECT * FROM cagg_temp_ng_1week_timestamp ORDER BY time, sensor;
+
+----
+-- Check bucket conversion -- date without custom origin
+----
+CREATE MATERIALIZED VIEW cagg_temp_ng_1week_date
+  WITH  (timescaledb.continuous) AS
+  SELECT timescaledb_experimental.time_bucket_ng('1 week', time) as time, sensor, avg(value) AS avg
+    FROM temperaturedate
+    GROUP BY 1,2
+    WITH NO DATA;
+
+CALL refresh_continuous_aggregate('cagg_temp_ng_1week_date', NULL, NULL);
+
+-- Ensure time_bucket and time_bucket_ng create buckets with a different origin
+SELECT time_bucket('1 week', time), sensor, avg(value)
+    FROM temperaturedate
+    GROUP BY 1, 2
+    ORDER BY 1, 2;
+
+SELECT timescaledb_experimental.time_bucket_ng('1 week', time), sensor, avg(value)
+    FROM temperaturedate
+    GROUP BY 1, 2
+    ORDER BY 1, 2;
+
+-- Test what the CAgg returns
+SELECT * FROM cagg_temp_ng_1week_date;
+
+-- Insert new data into the hypertable. 10 years after the data that was used during the CAgg refresh
+INSERT INTO temperaturedate
+  SELECT time, sensor_id, sensor_id * sensor_id + 100
+    FROM generate_series('2020-01-01 0:00:00+0'::timestamptz, '2020-01-01 23:59:59+0','1m') g1(time),
+    generate_series(1, 2, 1) AS g2(sensor_id);
+
+-- Migrate and update CAgg
+CALL _timescaledb_functions.cagg_migrate_to_time_bucket('cagg_temp_ng_1week_date');
+CALL refresh_continuous_aggregate('cagg_temp_ng_1week_date', NULL, NULL);
+
+-- Get output of the time_bucket_ng
+SELECT timescaledb_experimental.time_bucket_ng('1 week', time), sensor, avg(value)
+    FROM temperaturedate
+    GROUP BY 1, 2
+    ORDER BY 1, 2;
+
+-- Ensure time function with added origin during migration produces the same results
+SELECT time_bucket('1 week', time, origin=>'2000-01-01 01:00:00+00'), sensor, avg(value)
+    FROM temperaturedate
+    GROUP BY 1, 2
+    ORDER BY 1, 2;
+
+-- Even the CAgg now uses time_bucket, we should see buckets of the same alignment
+SELECT * FROM cagg_temp_ng_1week_date ORDER BY time, sensor;
+
+-- Ensure we error out when the CAgg does not use a deprecated function
+\set ON_ERROR_STOP 0
+CALL _timescaledb_functions.cagg_migrate_to_time_bucket('cagg_temp_ng_1week_date');
+\set ON_ERROR_STOP 1
+
+----
+-- Test migration as non-owner (should fail)
+----
+CREATE MATERIALIZED VIEW cagg_tempdate_ng_acl
+  WITH  (timescaledb.continuous) AS
+  SELECT timescaledb_experimental.time_bucket_ng('7 days', time) as time, sensor, avg(value) AS avg
+    FROM temperaturedate
+    GROUP BY 1,2
+    WITH NO DATA;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
+CALL _timescaledb_functions.cagg_migrate_to_time_bucket('cagg_tempdate_ng_acl');
+\set ON_ERROR_STOP 1

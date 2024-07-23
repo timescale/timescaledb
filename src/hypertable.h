@@ -9,13 +9,13 @@
 #include <nodes/primnodes.h>
 #include <utils/array.h>
 
-#include "ts_catalog/catalog.h"
 #include "chunk_adaptive.h"
 #include "dimension.h"
 #include "export.h"
 #include "hypertable_cache.h"
-#include "scanner.h"
 #include "scan_iterator.h"
+#include "scanner.h"
+#include "ts_catalog/catalog.h"
 #include "ts_catalog/tablespace.h"
 
 #define OLD_INSERT_BLOCKER_NAME "insert_blocker"
@@ -26,6 +26,7 @@
 typedef struct SubspaceStore SubspaceStore;
 typedef struct Chunk Chunk;
 typedef struct Hypercube Hypercube;
+typedef struct ChunkRangeSpace ChunkRangeSpace;
 
 /* For the distributed node case, we would have compression enabled
  * but don't have a corresponding internal table on the access
@@ -52,10 +53,7 @@ typedef struct Hypertable
 	Oid chunk_sizing_func;
 	Hyperspace *space;
 	SubspaceStore *chunk_cache;
-	/*
-	 * Allows restricting the data nodes to use for the hypertable. Default is to
-	 * use all available data nodes.
-	 */
+	ChunkRangeSpace *range_space;
 } Hypertable;
 
 /* create_hypertable record attribute numbers */
@@ -151,8 +149,6 @@ extern TSDLLEXPORT int64 ts_hypertable_get_open_dim_max_value(const Hypertable *
 
 extern TSDLLEXPORT bool ts_hypertable_has_compression_table(const Hypertable *ht);
 extern TSDLLEXPORT void ts_hypertable_formdata_fill(FormData_hypertable *fd, const TupleInfo *ti);
-extern TSDLLEXPORT void ts_hypertable_scan_by_name(ScanIterator *iterator, const char *schema,
-												   const char *name);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode)                                \
 	ts_hypertable_scan_with_memory_context(schema,                                                 \

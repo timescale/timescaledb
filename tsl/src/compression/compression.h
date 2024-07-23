@@ -9,14 +9,14 @@
 #include <executor/tuptable.h>
 #include <fmgr.h>
 #include <lib/stringinfo.h>
-#include <utils/relcache.h>
 #include <nodes/execnodes.h>
+#include <utils/relcache.h>
 
 typedef struct BulkInsertStateData *BulkInsertState;
 
 #include "compat/compat.h"
-#include "nodes/decompress_chunk/detoaster.h"
 #include "hypertable.h"
+#include "nodes/decompress_chunk/detoaster.h"
 #include "segment_meta.h"
 #include "ts_catalog/compression_settings.h"
 
@@ -149,6 +149,7 @@ typedef struct RowDecompressor
 	int64 tuples_decompressed;
 
 	TupleTableSlot **decompressed_slots;
+	int unprocessed_tuples;
 
 	Detoaster detoaster;
 } RowDecompressor;
@@ -286,6 +287,7 @@ typedef struct BatchFilter
 	/* IS NULL or IS NOT NULL */
 	bool is_null_check;
 	bool is_null;
+	bool is_array_op;
 } BatchFilter;
 
 extern Datum tsl_compressed_data_decompress_forward(PG_FUNCTION_ARGS);
@@ -333,10 +335,8 @@ extern DecompressAllFunction tsl_get_decompress_all_function(CompressionAlgorith
 typedef struct Chunk Chunk;
 typedef struct ChunkInsertState ChunkInsertState;
 extern void decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot);
-#if PG14_GE
 typedef struct HypertableModifyState HypertableModifyState;
 extern bool decompress_target_segments(HypertableModifyState *ht_state);
-#endif
 /* CompressSingleRowState methods */
 struct CompressSingleRowState;
 typedef struct CompressSingleRowState CompressSingleRowState;
@@ -347,7 +347,7 @@ extern bool segment_info_datum_is_in_group(SegmentInfo *segment_info, Datum datu
 extern TupleTableSlot *compress_row_exec(CompressSingleRowState *cr, TupleTableSlot *slot);
 extern void compress_row_end(CompressSingleRowState *cr);
 extern void compress_row_destroy(CompressSingleRowState *cr);
-extern void row_decompressor_decompress_row_to_table(RowDecompressor *row_decompressor);
+extern int row_decompressor_decompress_row_to_table(RowDecompressor *row_decompressor);
 extern void row_decompressor_decompress_row_to_tuplesort(RowDecompressor *row_decompressor,
 														 Tuplesortstate *tuplesortstate);
 extern void compress_chunk_populate_sort_info_for_column(CompressionSettings *settings, Oid table,
@@ -369,8 +369,10 @@ extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_nu
 
 extern RowDecompressor build_decompressor(Relation in_rel, Relation out_rel);
 
+extern void row_decompressor_reset(RowDecompressor *decompressor);
 extern void row_decompressor_close(RowDecompressor *decompressor);
 extern enum CompressionAlgorithms compress_get_default_algorithm(Oid typeoid);
+extern int decompress_batch(RowDecompressor *decompressor);
 /*
  * A convenience macro to throw an error about the corrupted compressed data, if
  * the argument is false. When fuzzing is enabled, we don't show the message not
@@ -405,3 +407,10 @@ consumeCompressedData(StringInfo si, int bytes)
 #define GLOBAL_MAX_ROWS_PER_COMPRESSION INT16_MAX
 
 const CompressionAlgorithmDefinition *algorithm_definition(CompressionAlgorithm algo);
+
+struct decompress_batches_stats
+{
+	int64 batches_filtered;
+	int64 batches_decompressed;
+	int64 tuples_decompressed;
+};

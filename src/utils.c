@@ -6,8 +6,8 @@
 #include <postgres.h>
 #include <access/genam.h>
 #include <access/heapam.h>
-#include <access/htup_details.h>
 #include <access/htup.h>
+#include <access/htup_details.h>
 #include <access/reloptions.h>
 #include <access/xact.h>
 #include <catalog/indexing.h>
@@ -40,8 +40,8 @@
 #include "debug_point.h"
 #include "guc.h"
 #include "hypertable_cache.h"
-#include "utils.h"
 #include "time_utils.h"
+#include "utils.h"
 
 typedef struct
 {
@@ -234,8 +234,7 @@ ts_integer_to_internal(Datum time_val, Oid type_oid)
 }
 
 int64
-ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid,
-									  TimevalInfinity *is_infinite_out)
+ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid)
 {
 	switch (type_oid)
 	{
@@ -246,14 +245,10 @@ ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid,
 			{
 				if (TIMESTAMP_IS_NOBEGIN(ts))
 				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalNegInfinity;
 					return PG_INT64_MIN;
 				}
 				else
 				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalPosInfinity;
 					return PG_INT64_MAX;
 				}
 			}
@@ -267,14 +262,10 @@ ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid,
 			{
 				if (TIMESTAMP_IS_NOBEGIN(ts))
 				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalNegInfinity;
 					return PG_INT64_MIN;
 				}
 				else
 				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalPosInfinity;
 					return PG_INT64_MAX;
 				}
 			}
@@ -288,14 +279,10 @@ ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid,
 			{
 				if (DATE_IS_NOBEGIN(d))
 				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalNegInfinity;
 					return PG_INT64_MIN;
 				}
 				else
 				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalPosInfinity;
 					return PG_INT64_MAX;
 				}
 			}
@@ -618,9 +605,7 @@ ts_get_function_oid(const char *funcname, const char *schema_name, int nargs, Oi
 											nargs,
 											NIL,
 											false,
-#if PG14_GE
 											false, /* include_out_arguments */
-#endif
 											false,
 											false);
 	while (func_candidates != NULL)
@@ -1044,10 +1029,7 @@ ts_try_relation_cached_size(Relation rel, bool verbose)
 	/* Get heap size, including FSM and VM */
 	for (forkNum = 0; forkNum <= MAX_FORKNUM; forkNum++)
 	{
-#if PG14_GE
-		/* PG13 does not have smgr_cached_nblocks */
 		result = RelationGetSmgr(rel)->smgr_cached_nblocks[forkNum];
-#endif
 
 		if (result != InvalidBlockNumber)
 		{

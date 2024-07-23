@@ -1,7 +1,6 @@
 name: Check for unsafe catalog updates
 "on":
   pull_request:
-    types: [opened, synchronize, reopened, edited]
 jobs:
   check_catalog_correctly_updated:
     name: Check updates to latest-dev and reverse-dev are properly handled by PR
@@ -10,24 +9,22 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
       - name: Install pglast
         run: |
           python -m pip install pglast
-      - name: Check latest-dev contents
-        shell: bash {0}
-        id: check_latestdev
+
+      - name: Check sql file contents
         run: |
-          if ! python scripts/check_updates_ast.py "sql/updates/latest-dev.sql"; then
-            exit 1
-          fi
-          exit 0
+          find sql -name '*.sql' -not -path 'sql/updates/*' -not -path 'sql/compat.sql' | xargs -IFILE python scripts/check_updates_ast.py FILE
+
+      - name: Check latest-dev contents
+        run: |
+          python scripts/check_updates_ast.py --latest "sql/updates/latest-dev.sql"
+
+      # To allow fixing previous mistakes we run the check against reverse-dev but don't
+      # fail it on errors.
       - name: Check reverse-dev contents
         if: always()
-        shell: bash {0}
         run: |
-          if ! python scripts/check_updates_ast.py "sql/updates/reverse-dev.sql"; then
-            exit 1
-          fi
-          exit 0
+          python scripts/check_updates_ast.py "sql/updates/reverse-dev.sql" || true

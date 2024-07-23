@@ -72,18 +72,7 @@ typedef struct CAggTimebucketInfo
 	int64 htpartcol_interval_len;	/* interval length setting for primary partitioning column */
 
 	/* General bucket information */
-	FuncExpr *bucket_func; /* function call expr of the bucketing function */
-	Oid bucket_width_type; /* type of bucket_width */
-
-	/* Time based buckets */
-	Interval *bucket_time_width;	  /* stores the interval, NULL if not specified */
-	const char *bucket_time_timezone; /* the name of the timezone, NULL if not specified */
-	Interval *bucket_time_offset;	  /* the offset of set, NULL if not specified */
-	TimestampTz bucket_time_origin;	  /* origin as UTC timestamp. infinity if not specified */
-
-	/* Integer based buckets */
-	int64 bucket_integer_width;	 /* bucket_width of time_bucket */
-	int64 bucket_integer_offset; /* bucket offset of the time_bucket */
+	ContinuousAggsBucketFunction *bf;
 } CAggTimebucketInfo;
 
 typedef enum CaggRefreshCallContext
@@ -93,7 +82,8 @@ typedef enum CaggRefreshCallContext
 	CAGG_REFRESH_POLICY,
 } CaggRefreshCallContext;
 
-#define IS_TIME_BUCKET_INFO_TIME_BASED(bucket_info) (bucket_info->bucket_width_type == INTERVALOID)
+#define IS_TIME_BUCKET_INFO_TIME_BASED(bucket_function)                                            \
+	(bucket_function->bucket_width_type == INTERVALOID)
 
 #define CAGG_MAKEQUERY(selquery, srcquery)                                                         \
 	do                                                                                             \
@@ -114,7 +104,6 @@ extern CAggTimebucketInfo cagg_validate_query(const Query *query, const bool fin
 											  const char *cagg_schema, const char *cagg_name,
 											  const bool is_cagg_create);
 extern Query *destroy_union_query(Query *q);
-extern Oid relation_oid(Name schema, Name name);
 extern void RemoveRangeTableEntries(Query *query);
 extern Query *build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query *q2,
 								int materialize_htid);
@@ -123,7 +112,7 @@ extern bool function_allowed_in_cagg_definition(Oid funcid);
 extern Oid get_watermark_function_oid(void);
 extern Oid cagg_get_boundary_converter_funcoid(Oid typoid);
 
-extern bool time_bucket_info_has_fixed_width(const CAggTimebucketInfo *tbinfo);
+extern ContinuousAgg *cagg_get_by_relid_or_fail(const Oid cagg_relid);
 
 static inline int64
 cagg_get_time_min(const ContinuousAgg *cagg)
@@ -149,3 +138,5 @@ cagg_get_time_min(const ContinuousAgg *cagg)
 	/* For fixed-sized buckets return min (start of time) */
 	return ts_time_get_min(cagg->partition_type);
 }
+
+ContinuousAggsBucketFunction *ts_cagg_get_bucket_function_info(Oid view_oid);

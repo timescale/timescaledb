@@ -6,17 +6,17 @@
 #pragma once
 
 #include <postgres.h>
+#include <executor/tuptable.h>
+#include <nodes/execnodes.h>
 #include <nodes/extensible.h>
 #include <nodes/parsenodes.h>
 #include <nodes/plannodes.h>
-#include <nodes/execnodes.h>
-#include <executor/tuptable.h>
 
-#include "hypertable_cache.h"
 #include "cache.h"
-#include "export.h"
-#include "subspace_store.h"
 #include "chunk_insert_state.h"
+#include "export.h"
+#include "hypertable_cache.h"
+#include "subspace_store.h"
 
 /*
  * ChunkDispatch keeps cached state needed to dispatch tuples to chunks. It is
@@ -74,8 +74,12 @@ typedef struct ChunkDispatchState
 	ResultRelInfo *rri;
 	/* flag to represent dropped attributes */
 	bool is_dropped_attr_exists;
+	int64 batches_filtered;
 	int64 batches_decompressed;
 	int64 tuples_decompressed;
+
+	/* Should this INSERT be skipped due to ON CONFLICT DO NOTHING */
+	bool skip_current_tuple;
 } ChunkDispatchState;
 
 extern TSDLLEXPORT bool ts_is_chunk_dispatch_state(PlanState *state);
@@ -88,8 +92,11 @@ typedef void (*on_chunk_changed_func)(ChunkInsertState *state, void *data);
 extern ChunkDispatch *ts_chunk_dispatch_create(Hypertable *ht, EState *estate, int eflags);
 extern void ts_chunk_dispatch_destroy(ChunkDispatch *chunk_dispatch);
 extern ChunkInsertState *
-ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p, TupleTableSlot *slot,
+ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p,
 										 const on_chunk_changed_func on_chunk_changed, void *data);
+extern void ts_chunk_dispatch_decompress_batches_for_insert(ChunkDispatch *dispatch,
+															ChunkInsertState *cis,
+															TupleTableSlot *slot);
 
 extern TSDLLEXPORT Path *ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath,
 													   Index hypertable_rti, int subpath_index);

@@ -13,8 +13,8 @@
 
 /* see postgres commit ab5e9caa4a3ec4765348a0482e88edcf3f6aab4a */
 
-#include "utils.h"
 #include <postgres.h>
+#include "utils.h"
 #include <access/amapi.h>
 #include <access/multixact.h>
 #include <access/relscan.h>
@@ -22,7 +22,6 @@
 #include <access/transam.h>
 #include <access/xact.h>
 #include <access/xlog.h>
-#include <catalog/pg_authid.h>
 #include <catalog/catalog.h>
 #include <catalog/dependency.h>
 #include <catalog/heap.h>
@@ -30,12 +29,14 @@
 #include <catalog/namespace.h>
 #include <catalog/objectaccess.h>
 #include <catalog/pg_am.h>
+#include <catalog/pg_authid.h>
 #include <catalog/pg_tablespace_d.h>
 #include <catalog/toasting.h>
 #include <commands/cluster.h>
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
 #include <commands/vacuum.h>
+#include <executor/spi.h>
 #include <miscadmin.h>
 #include <nodes/pg_list.h>
 #include <optimizer/planner.h>
@@ -56,7 +57,6 @@
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
 #include <utils/tuplesort.h>
-#include <executor/spi.h>
 
 #include "compat/compat.h"
 #include <access/toast_internals.h>
@@ -64,10 +64,10 @@
 #include "annotations.h"
 #include "chunk.h"
 #include "chunk_index.h"
+#include "debug_assert.h"
 #include "hypertable_cache.h"
 #include "indexing.h"
 #include "reorder.h"
-#include "debug_assert.h"
 
 static void reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id,
 						Oid destination_tablespace, Oid index_tablespace);
@@ -1139,6 +1139,10 @@ swap_relation_files(Oid r1, Oid r2, bool swap_toast_by_content, bool is_internal
 	 * itself, the smgr close on pg_class must happen after all accesses in
 	 * this function.
 	 */
+
+#if PG17_LT
+	/* Not needed as of 21d9c3ee4ef7 in the upstream */
 	RelationCloseSmgrByOid(r1);
 	RelationCloseSmgrByOid(r2);
+#endif
 }

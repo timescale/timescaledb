@@ -11,6 +11,7 @@
 #include <postgres.h>
 #include <access/genam.h>
 #include <access/relscan.h>
+#include <access/table.h>
 #include <access/xact.h>
 #include <catalog/indexing.h>
 #include <catalog/namespace.h>

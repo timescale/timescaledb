@@ -6,10 +6,10 @@
 #pragma once
 
 #include <postgres.h>
+#include <access/heapam.h>
+#include <nodes/nodes.h>
 #include <utils/jsonb.h>
 #include <utils/rel.h>
-#include <nodes/nodes.h>
-#include <access/heapam.h>
 
 #include "export.h"
 #include "extension_constants.h"
@@ -53,6 +53,7 @@ typedef enum CatalogTable
 	CONTINUOUS_AGGS_BUCKET_FUNCTION,
 	CONTINUOUS_AGGS_WATERMARK,
 	TELEMETRY_EVENT,
+	CHUNK_COLUMN_STATS,
 	/* Don't forget updating catalog.c when adding new tables! */
 	_MAX_CATALOG_TABLES,
 } CatalogTable;
@@ -288,6 +289,69 @@ enum
 	DIMENSION_SLICE_ID_IDX = 0,
 	DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
 	_MAX_DIMENSION_SLICE_INDEX,
+};
+
+/******************************
+ *
+ * Dimension range table definitions
+ *
+ ******************************/
+
+#define CHUNK_COLUMN_STATS_TABLE_NAME "chunk_column_stats"
+
+enum Anum_chunk_column_stats
+{
+	Anum_chunk_column_stats_id = 1,
+	Anum_chunk_column_stats_hypertable_id,
+	Anum_chunk_column_stats_chunk_id,
+	Anum_chunk_column_stats_column_name,
+	Anum_chunk_column_stats_range_start,
+	Anum_chunk_column_stats_range_end,
+	Anum_chunk_column_stats_valid,
+	_Anum_chunk_column_stats_max,
+};
+
+#define Natts_chunk_column_stats (_Anum_chunk_column_stats_max - 1)
+
+typedef struct FormData_chunk_column_stats
+{
+	int32 id;
+	int32 hypertable_id;
+	int32 chunk_id;
+	NameData column_name;
+	int64 range_start;
+	int64 range_end;
+	bool valid;
+} FormData_chunk_column_stats;
+
+typedef FormData_chunk_column_stats *Form_chunk_column_stats;
+
+enum Anum_chunk_column_stats_id_idx
+{
+	Anum_chunk_column_stats_id_idx_id = 1,
+	_Anum_chunk_column_stats_id_idx_max,
+};
+
+#define Natts_chunk_column_stats_id_idx (_Anum_chunk_column_stats_id_idx_max - 1)
+
+enum Anum_chunk_column_stats_ht_id_chunk_id_column_name_range_start_range_end_idx
+{
+	Anum_chunk_column_stats_ht_id_chunk_id_column_name_range_start_range_end_idx_hypertable_id = 1,
+	Anum_chunk_column_stats_ht_id_chunk_id_column_name_range_start_range_end_idx_chunk_id,
+	Anum_chunk_column_stats_ht_id_chunk_id_column_name_range_start_range_end_idx_column_name,
+	Anum_chunk_column_stats_ht_id_chunk_id_column_name_range_start_range_end_idx_range_start,
+	Anum_chunk_column_stats_ht_id_chunk_id_column_name_range_start_range_end_idx_range_end,
+	_Anum_chunk_column_stats_ht_id_chunk_id_column_name_range_start_range_end_idx_max,
+};
+
+#define Natts_chunk_column_stats_ht_id_chunk_id_column_name_range_start_range_end_idx              \
+	(_Anum_chunk_column_stats_ht_id_chunk_id_column_name_range_start_range_end_idx_max - 1)
+
+enum
+{
+	CHUNK_COLUMN_STATS_ID_IDX = 0,
+	CHUNK_COLUMN_STATS_HT_ID_CHUNK_ID_COLUMN_NAME_IDX,
+	_MAX_CHUNK_COLUMN_STATS_INDEX,
 };
 
 /*************************

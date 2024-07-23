@@ -3,11 +3,11 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <postgres.h>
 #include <fmgr.h>
+#include <stdlib.h>
+#include <time.h>
 
 #include "export.h"
 #include "net/http.h"

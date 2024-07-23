@@ -6,11 +6,11 @@
 #pragma once
 
 #include <postgres.h>
-#include <fmgr.h>
 #include "continuous_aggs/materialize.h"
+#include <fmgr.h>
 
-#include "materialize.h"
 #include "invalidation.h"
+#include "materialize.h"
 
 extern Datum continuous_agg_refresh(PG_FUNCTION_ARGS);
 extern void continuous_agg_calculate_merged_refresh_window(
