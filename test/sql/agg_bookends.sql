@@ -58,9 +58,9 @@ from unnest(array['first(time, quantity), last(time, quantity)',
         'last(longvalue, quantity)', 'last(quantity, longvalue)',
         'last(quantity, time)', 'last(time, longvalue)']) function,
     unnest(array['true', 'time < ''2021-01-01''', 'quantity is null',
-        'quantity is not null']) condition,
+        'quantity is not null', 'quantity > 3']) condition,
     unnest(array['777::text' /* dummy grouping column */, 'longvalue',
-        'quantity', 'time_bucket(''3 year'', time)',
+        'quantity', 'time_bucket(''1 year'', time)',
         'time_bucket(''3 year'', time)']) grouping
 \gexec
 
