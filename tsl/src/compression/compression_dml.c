@@ -666,7 +666,7 @@ batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scan
 
 								 ));
 				}
-				if (constraints->on_conflict == ONCONFLICT_NOTHING)
+				if (constraints->on_conflict == ONCONFLICT_NOTHING && skip_current_tuple)
 				{
 					*skip_current_tuple = true;
 				}

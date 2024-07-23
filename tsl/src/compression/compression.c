@@ -161,6 +161,46 @@ truncate_relation(Oid table_oid)
 	table_close(rel, NoLock);
 }
 
+/* Handle the all rows deletion of a given relation */
+static void
+RelationDeleteAllRows(Relation rel, Snapshot snap)
+{
+	TupleTableSlot *slot = table_slot_create(rel, NULL);
+	TableScanDesc scan = table_beginscan(rel, snap, 0, (ScanKey) NULL);
+
+	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
+	{
+		simple_table_tuple_delete(rel, &(slot->tts_tid), snap);
+	}
+	table_endscan(scan);
+	ExecDropSingleTupleTableSlot(slot);
+}
+
+/*
+ * Delete the relation WITHOUT applying triggers. This will be used when
+ * `enable_delete_after_compression = true` instead of truncating the relation.
+ * Also don't restart sequences.
+ */
+static void
+delete_relation_rows(Oid table_oid)
+{
+	Relation rel = table_open(table_oid, RowExclusiveLock);
+	Snapshot snap = GetLatestSnapshot();
+
+	/* Delete the rows in the table */
+	RelationDeleteAllRows(rel, snap);
+
+	/* Delete the rows in the toast table */
+	if (OidIsValid(rel->rd_rel->reltoastrelid))
+	{
+		Relation toast_rel = table_open(rel->rd_rel->reltoastrelid, RowExclusiveLock);
+		RelationDeleteAllRows(toast_rel, snap);
+		table_close(toast_rel, NoLock);
+	}
+
+	table_close(rel, NoLock);
+}
+
 /*
  * Use reltuples as an estimate for the number of rows that will get compressed. This value
  * might be way off the mark in case analyze hasn't happened in quite a while on this input
@@ -191,7 +231,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 {
 	int n_keys;
 	ListCell *lc;
-	int indexscan_direction = NoMovementScanDirection;
+	ScanDirection indexscan_direction = NoMovementScanDirection;
 	Relation matched_index_rel = NULL;
 	TupleTableSlot *slot;
 	IndexScanDesc index_scan;
@@ -456,8 +496,17 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	}
 
 	row_compressor_close(&row_compressor);
-	DEBUG_WAITPOINT("compression_done_before_truncate_uncompressed");
-	truncate_relation(in_table);
+	if (!ts_guc_enable_delete_after_compression)
+	{
+		DEBUG_WAITPOINT("compression_done_before_truncate_uncompressed");
+		truncate_relation(in_table);
+		DEBUG_WAITPOINT("compression_done_after_truncate_uncompressed");
+	}
+	else
+	{
+		delete_relation_rows(in_table);
+		DEBUG_WAITPOINT("compression_done_after_delete_uncompressed");
+	}
 
 	table_close(out_rel, NoLock);
 	table_close(in_rel, NoLock);

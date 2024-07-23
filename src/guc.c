@@ -85,6 +85,7 @@ static char *ts_guc_default_segmentby_fn = NULL;
 static char *ts_guc_default_orderby_fn = NULL;
 TSDLLEXPORT bool ts_guc_enable_job_execution_logging = false;
 bool ts_guc_enable_tss_callbacks = true;
+TSDLLEXPORT bool ts_guc_enable_delete_after_compression = false;
 
 /* default value of ts_guc_max_open_chunks_per_insert and ts_guc_max_cached_chunks_per_hypertable
  * will be set as their respective boot-value when the GUC mechanism starts up */
@@ -668,7 +669,7 @@ _guc_init(void)
 							 "Retain job run status in logging table",
 							 &ts_guc_enable_job_execution_logging,
 							 false,
-							 PGC_USERSET,
+							 PGC_SIGHUP,
 							 0,
 							 NULL,
 							 NULL,
@@ -680,6 +681,17 @@ _guc_init(void)
 							 &ts_guc_enable_tss_callbacks,
 							 true,
 							 PGC_SUSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_delete_after_compression"),
+							 "Delete all rows after compression instead of truncate",
+							 "Delete all rows after compression instead of truncate",
+							 &ts_guc_enable_delete_after_compression,
+							 false,
+							 PGC_USERSET,
 							 0,
 							 NULL,
 							 NULL,

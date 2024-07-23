@@ -512,14 +512,13 @@ add_time_to_order_by_if_not_included(OrderBySettings obs, ArrayType *segmentby, 
 /* returns list of constraints that need to be cloned on the compressed hypertable
  * This is limited to foreign key constraints now
  */
-static List *
+static void
 validate_existing_constraints(Hypertable *ht, CompressionSettings *settings)
 {
 	Relation pg_constr;
 	SysScanDesc scan;
 	ScanKeyData scankey;
 	HeapTuple tuple;
-	List *conlist = NIL;
 
 	ArrayType *arr;
 
@@ -537,11 +536,17 @@ validate_existing_constraints(Hypertable *ht, CompressionSettings *settings)
 		Form_pg_constraint form = (Form_pg_constraint) GETSTRUCT(tuple);
 
 		/*
-		 * We check primary, unique, and exclusion constraints.  Move foreign
-		 * key constraints over to compression table ignore triggers
+		 * We check primary, unique, and exclusion constraints.
 		 */
-		if (form->contype == CONSTRAINT_CHECK || form->contype == CONSTRAINT_TRIGGER)
+		if (form->contype == CONSTRAINT_CHECK || form->contype == CONSTRAINT_TRIGGER
+#if PG17_GE
+			|| form->contype == CONSTRAINT_NOTNULL
+		/* CONSTRAINT_NOTNULL introduced in PG17, see b0e96f311985 */
+#endif
+		)
+		{
 			continue;
+		}
 		else if (form->contype == CONSTRAINT_EXCLUSION)
 		{
 			ereport(ERROR,
@@ -573,53 +578,23 @@ validate_existing_constraints(Hypertable *ht, CompressionSettings *settings)
 
 			arr = DatumGetArrayTypeP(adatum); /* ensure not toasted */
 			numkeys = ts_array_length(arr);
-			if (ARR_NDIM(arr) != 1 || numkeys < 0 || ARR_HASNULL(arr) ||
-				ARR_ELEMTYPE(arr) != INT2OID)
-				elog(ERROR, "conkey is not a 1-D smallint array");
 			attnums = (int16 *) ARR_DATA_PTR(arr);
 			for (j = 0; j < numkeys; j++)
 			{
 				const char *attname = get_attname(settings->fd.relid, attnums[j], false);
 
-				if (form->contype == CONSTRAINT_FOREIGN)
-				{
-					/* is this a segment-by column */
-					if (!ts_array_is_member(settings->fd.segmentby, attname))
-						ereport(ERROR,
-								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("column \"%s\" must be used for segmenting", attname),
-								 errdetail("The foreign key constraint \"%s\" cannot be"
-										   " enforced with the given compression configuration.",
-										   NameStr(form->conname))));
-				}
-#if PG17_GE
-				else if (form->contype == CONSTRAINT_NOTNULL)
-				{
-					/* CONSTRAINT_NOTNULL introduced in PG17, see b0e96f311985 */
-					continue;
-				}
-#endif
 				/* is colno a segment-by or order_by column */
-				else if (!form->conindid && !ts_array_is_member(settings->fd.segmentby, attname) &&
-						 !ts_array_is_member(settings->fd.orderby, attname))
+				if (!form->conindid && !ts_array_is_member(settings->fd.segmentby, attname) &&
+					!ts_array_is_member(settings->fd.orderby, attname))
 					ereport(WARNING,
 							(errmsg("column \"%s\" should be used for segmenting or ordering",
 									attname)));
-			}
-
-			if (form->contype == CONSTRAINT_FOREIGN)
-			{
-				Name conname = palloc0(NAMEDATALEN);
-				namestrcpy(conname, NameStr(form->conname));
-				conlist = lappend(conlist, conname);
 			}
 		}
 	}
 
 	systable_endscan(scan);
 	table_close(pg_constr, AccessShareLock);
-
-	return conlist;
 }
 
 /*

@@ -8,7 +8,7 @@ CREATE FUNCTION @extschema@.enable_column_stats(
     column_name             NAME,
     if_not_exists           BOOLEAN = FALSE
 ) RETURNS TABLE(column_stats_id INT, enabled BOOL)
-AS '@MODULE_PATHNAME@', 'ts_chunk_column_stats_enable' LANGUAGE C VOLATILE;
+AS 'SELECT NULL,NULL' LANGUAGE SQL VOLATILE SET search_path = pg_catalog, pg_temp;
 
 -- Disable tracking of statistics on a column of a hypertable.
 --
@@ -21,7 +21,7 @@ CREATE FUNCTION @extschema@.disable_column_stats(
     column_name             NAME,
     if_not_exists           BOOLEAN = FALSE
 ) RETURNS TABLE(hypertable_id INT, column_name NAME, disabled BOOL)
-AS '@MODULE_PATHNAME@', 'ts_chunk_column_stats_disable' LANGUAGE C VOLATILE;
+AS 'SELECT NULL,NULL,NULL' LANGUAGE SQL VOLATILE SET search_path = pg_catalog, pg_temp;
 
 -- Track statistics for columns of chunks from a hypertable.
 -- Currently, we track the min/max range for a given column across chunks.
@@ -65,3 +65,22 @@ SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_
 
 GRANT SELECT ON _timescaledb_catalog.chunk_column_stats TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.chunk_column_stats_id_seq TO PUBLIC;
+
+-- Remove foreign key constraints from compressed chunks
+DO $$
+DECLARE
+  conrelid regclass;
+  conname name;
+BEGIN
+  FOR conrelid, conname IN
+  SELECT
+    con.conrelid::regclass,
+    con.conname
+  FROM _timescaledb_catalog.chunk ch
+  JOIN pg_constraint con ON con.conrelid = format('%I.%I',schema_name,table_name)::regclass AND con.contype='f'
+  WHERE NOT ch.dropped AND EXISTS(SELECT FROM _timescaledb_catalog.chunk ch2 WHERE NOT ch2.dropped AND ch2.compressed_chunk_id=ch.id)
+  LOOP
+    EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', conrelid, conname);
+  END LOOP;
+END $$;
+
