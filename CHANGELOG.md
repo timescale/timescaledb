@@ -11,40 +11,71 @@ This release contains performance improvements and bug fixes since
 the 2.15.3 release. We recommend that you upgrade at the next
 available opportunity.
 
-With this release we introduce a lot of performance focused optimizations for DML over compressed chunks.
-We also speed up those tricky queries that end up accessing more chunks than needed, by extending chunk exclusion on compressed hypertables to take into account filters on additional, non partitioning columns.
-We also introduce new options for Timescale users that like their Foreign Keys, allowing for FKs from regular tables towards hypertables, but also removing some really annoying locks in the reverse direction that blocked access to referenced tables while compression was running.
-Finally, big updates on the Continuous Aggregates front - more types of joins supported, additional equality operators on join clauses and support for joining with multiple regular tables.
+In TimescaleDB v2.16.0 we:
+
+* Introduce a lot of performance focused optimizations for data manipulation operations (DML) over compressed chunks.
+
+* Speed up those tricky queries that access more chunks than needed.
+
+  TimescaleDB v2.16.0 extends chunk exclusion on compressed hypertables and is able to take into account
+  filters on additional, non-partitioning columns.
+
+* Offer new options for Timescale users who like their foreign keys.
+
+  You can now add foreign keys from regular tables towards hypertables. We have also removed
+  some really annoying locks in the reverse direction that blocked access to referenced tables
+  while compression was running.
+
+* Have big updates on the Continuous Aggregates front.
+
+  More types of joins are supported, additional equality operators on join clauses, and support for joins
+  between multiple regular tables.
 
 **Highlighted features in this release**
 
-* Improved query performance through chunk exclusion on compressed hypertables by using additional columns:
-You can now define sparse indexes on compressed chunks for any column with
-an integer data type (smallint, int, bigint, serial, bigserial, date, timestamp, timestamptz).
-After enabling this feature for a column using the `enable_column_stats` command, Timescale will track min/max
-values for that column and use that information to exclude chunks for queries that filter by that column and would
-not find any data on those chunks.
+* Improved query performance through chunk exclusion on compressed hypertables.
 
-* Improved upsert performance by using index scans to verify constraints during inserts on compressed chunks.
-This improvement can speed up some ON CONFLICT clauses by more than 100x.
+  You can now define sparse indexes on compressed chunks for any column with one of the following
+  integer data types: `smallint`, `int`, `bigint`, `serial`, `bigserial`, `date`, `timestamp`, `timestamptz`.
 
-* Improved performance of updates and deletes on all types of compressed chunks, as well as inserts into compressed
-chunks with unique constraints by filtering data while accessing the compressed data and before decompressing.
-This improvement can speedup significantly a lot of types of DML commands by signaling constraint violations without decompressing or decompressing only when matching records are found in the case of updates, deletes and upserts.
+  After you call `enable_column_stats` on a column, TimescaleDB tracks the min and max values for
+  that column. TimescaleDB uses that information to exclude chunks for queries that filter on that
+  column, and would not find any data in those chunks.
 
-* New ability to add Foreign Keys from regular (non hyper) tables to hypertables, with all types of cascading options supported.
-Really useful for hypertables that partition using sequential IDs, but also for some time series use cases.
+* Improved upsert performance on compressed hypertables.
 
-* Advanced handling of Foreign Keys on compressed chunks to eliminate locking of referenced tables when new chunks are compressed.
-No more DML getting blocked on referenced tables while compression runs on a hypertable.
+  By using index scans to verify constraints during inserts on compressed chunks, TimescaleDB speeds
+  up some ON CONFLICT clauses by more than 100x.
 
-* Improved support for queries on Continuous Aggregates - more types of joins supported (INNER/LEFT and LATERAL joins),
-more than one equality operator on join clauses allowed and support for joining with multiple regular tables.
+* Improved performance of updates, deletes, and inserts on compressed hypertables.
+
+  By filtering data while accessing the compressed data and before decompressing, TimescaleDB has
+  improved performance for updates and deletes on all types of compressed chunks, as well as inserts
+  into compressed chunks with unique constraints.
+
+  By signaling constraint violations without decompressing, or decompressing only when matching
+  records are found in the case of updates, deletes and upserts, TimescaleDB v2.16.0 speeds
+  up those operations more than 1000x in some update/delete scenarios, and 10x for upserts.
+
+* You can add foreign keys from regular tables to hypertables, with support for all types of cascading options.
+  This is useful for hypertables that partition using sequential IDs, and need to reference those IDs from other tables.
+
+* Lower locking requirements during compression for hypertables with foreign keys
+
+  Advanced foreign key handling removes the need for locking referenced tables when new chunks are compressed.
+  DML is no longer blocked on referenced tables while compression runs on a hypertable.
+
+* Improved support for queries on Continuous Aggregates
+
+  `INNER/LEFT` and `LATERAL` joins are now supported. Plus, you can now join with multiple regular tables,
+  and you can have more than one equality operator on join clauses.
 
 **PostgreSQL 13 support removal announcement**
-Following the deprecation announcement for PostgreSQL 13 in TimescaleDB 2.13,
-PostgreSQL 13 is not supported starting with TimescaleDB 2.16.
-Currently supported PostgreSQL major versions are 14, 15 and 16.
+
+Following the deprecation announcement for PostgreSQL 13 in TimescaleDB v2.13,
+PostgreSQL 13 is no longer supported in TimescaleDB v2.16.
+
+The Currently supported PostgreSQL major versions are 14, 15 and 16.
 
 **Features**
 * #6880: Add support for the array operators used for compressed DML batch filtering.
