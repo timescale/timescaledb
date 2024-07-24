@@ -62,6 +62,9 @@ select s, sum(t), count(*) from svagg where f in (0, 1)    group by s order by s
 select s, sum(t), count(*) from svagg where f in (0, 1, 3) group by s order by s;
 select s, sum(t), count(*) from svagg where f > 10         group by s order by s;
 
+select s, sum(t), count(*) from svagg group by s order by s;
+select sum(t) from svagg group by s order by 1;
+
 
 -- this should be vectorized as well but isn't because of the projection.
 set timescaledb.debug_require_vector_agg to 'forbid';

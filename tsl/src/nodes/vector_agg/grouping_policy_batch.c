@@ -22,14 +22,15 @@ typedef struct
 	List *output_grouping_columns;
 	Datum *output_grouping_values;
 	bool *output_grouping_isnull;
-} GroupingPolicySegmentby;
+	bool partial_per_batch;
+} GroupingPolicyBatch;
 
-static const GroupingPolicy grouping_policy_segmentby_functions;
+static const GroupingPolicy grouping_policy_batch_functions;
 
 static void
-gp_segmentby_reset(GroupingPolicy *obj)
+gp_batch_reset(GroupingPolicy *obj)
 {
-	GroupingPolicySegmentby *policy = (GroupingPolicySegmentby *) obj;
+	GroupingPolicyBatch *policy = (GroupingPolicyBatch *) obj;
 	const int naggs = list_length(policy->agg_defs);
 	for (int i = 0; i < naggs; i++)
 	{
@@ -47,10 +48,11 @@ gp_segmentby_reset(GroupingPolicy *obj)
 }
 
 GroupingPolicy *
-create_grouping_policy_segmentby(List *agg_defs, List *output_grouping_columns)
+create_grouping_policy_batch(List *agg_defs, List *output_grouping_columns, bool partial_per_batch)
 {
-	GroupingPolicySegmentby *policy = palloc0(sizeof(GroupingPolicySegmentby));
-	policy->funcs = grouping_policy_segmentby_functions;
+	GroupingPolicyBatch *policy = palloc0(sizeof(GroupingPolicyBatch));
+	policy->partial_per_batch = partial_per_batch;
+	policy->funcs = grouping_policy_batch_functions;
 	policy->output_grouping_columns = output_grouping_columns;
 	policy->agg_defs = agg_defs;
 	ListCell *lc;
@@ -65,7 +67,7 @@ create_grouping_policy_segmentby(List *agg_defs, List *output_grouping_columns)
 	policy->output_grouping_isnull =
 		(bool *) ((char *) policy->output_grouping_values +
 				  MAXALIGN(list_length(output_grouping_columns) * sizeof(Datum)));
-	gp_segmentby_reset(&policy->funcs);
+	gp_batch_reset(&policy->funcs);
 	return &policy->funcs;
 }
 
@@ -111,9 +113,9 @@ compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_de
 }
 
 static void
-gp_segmentby_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
+gp_batch_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 {
-	GroupingPolicySegmentby *policy = (GroupingPolicySegmentby *) gp;
+	GroupingPolicyBatch *policy = (GroupingPolicyBatch *) gp;
 	const int naggs = list_length(policy->agg_defs);
 	for (int i = 0; i < naggs; i++)
 	{
@@ -139,15 +141,15 @@ gp_segmentby_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 }
 
 static bool
-gp_segmentby_should_emit(GroupingPolicy *gp)
+gp_batch_should_emit(GroupingPolicy *gp)
 {
-	return true;
+	return ((GroupingPolicyBatch *) gp)->partial_per_batch;
 }
 
 static void
-gp_segmentby_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
+gp_batch_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 {
-	GroupingPolicySegmentby *policy = (GroupingPolicySegmentby *) gp;
+	GroupingPolicyBatch *policy = (GroupingPolicyBatch *) gp;
 	const int naggs = list_length(policy->agg_defs);
 	for (int i = 0; i < naggs; i++)
 	{
@@ -169,12 +171,12 @@ gp_segmentby_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 		aggregated_slot->tts_isnull[col->output_offset] = policy->output_grouping_isnull[i];
 	}
 
-	gp_segmentby_reset(gp);
+	gp_batch_reset(gp);
 }
 
-static const GroupingPolicy grouping_policy_segmentby_functions = {
-	.gp_reset = gp_segmentby_reset,
-	.gp_add_batch = gp_segmentby_add_batch,
-	.gp_should_emit = gp_segmentby_should_emit,
-	.gp_do_emit = gp_segmentby_do_emit,
+static const GroupingPolicy grouping_policy_batch_functions = {
+	.gp_reset = gp_batch_reset,
+	.gp_add_batch = gp_batch_add_batch,
+	.gp_should_emit = gp_batch_should_emit,
+	.gp_do_emit = gp_batch_do_emit,
 };

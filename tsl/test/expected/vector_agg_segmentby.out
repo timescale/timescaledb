@@ -131,6 +131,36 @@ select s, sum(t), count(*) from svagg where f > 10         group by s order by s
 ---+-----+-------
 (0 rows)
 
+select s, sum(t), count(*) from svagg group by s order by s;
+ s |    sum     | count 
+---+------------+-------
+ 0 |  200010000 | 20000
+ 1 |  400010000 | 20000
+ 2 |  600010000 | 20000
+ 3 |  800010000 | 20000
+ 4 | 1000010000 | 20000
+ 5 | 1200010000 | 20000
+ 6 | 1400010000 | 20000
+ 7 | 1600010000 | 20000
+ 8 | 1800010000 | 20000
+ 9 | 2000010000 | 20000
+(10 rows)
+
+select sum(t) from svagg group by s order by 1;
+    sum     
+------------
+  200010000
+  400010000
+  600010000
+  800010000
+ 1000010000
+ 1200010000
+ 1400010000
+ 1600010000
+ 1800010000
+ 2000010000
+(10 rows)
+
 -- this should be vectorized as well but isn't because of the projection.
 set timescaledb.debug_require_vector_agg to 'forbid';
 explain (costs off)

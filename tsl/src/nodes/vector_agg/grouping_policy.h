@@ -18,6 +18,5 @@ typedef struct GroupingPolicy
 	void (*gp_destroy)(GroupingPolicy *gp);
 } GroupingPolicy;
 
-extern GroupingPolicy *create_grouping_policy_all(List *agg_defs);
-
-extern GroupingPolicy *create_grouping_policy_segmentby(List *agg_defs, List *grouping_columns);
+extern GroupingPolicy *create_grouping_policy_batch(List *agg_defs, List *grouping_columns,
+													bool partial_per_batch);

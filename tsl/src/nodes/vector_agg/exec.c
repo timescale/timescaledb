@@ -121,16 +121,10 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 
 	List *grouping_column_offsets = linitial(cscan->custom_private);
-	if (grouping_column_offsets == NIL)
-	{
-		vector_agg_state->grouping = create_grouping_policy_all(vector_agg_state->agg_defs);
-	}
-	else
-	{
-		vector_agg_state->grouping =
-			create_grouping_policy_segmentby(vector_agg_state->agg_defs,
-											 vector_agg_state->output_grouping_columns);
-	}
+	vector_agg_state->grouping =
+		create_grouping_policy_batch(vector_agg_state->agg_defs,
+									 vector_agg_state->output_grouping_columns,
+									 /* partial_per_batch = */ grouping_column_offsets != NIL);
 }
 
 static void
