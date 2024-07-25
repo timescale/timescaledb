@@ -3,7 +3,7 @@
 -- hypertable - OID of the table to which the column belongs to
 -- column_name - The column to track statistics for
 -- if_not_exists - If set, and the entry already exists, generate a notice instead of an error
-CREATE FUNCTION @extschema@.enable_column_stats(
+CREATE FUNCTION @extschema@.enable_chunk_skipping(
     hypertable              REGCLASS,
     column_name             NAME,
     if_not_exists           BOOLEAN = FALSE
@@ -16,7 +16,7 @@ AS 'SELECT NULL,NULL' LANGUAGE SQL VOLATILE SET search_path = pg_catalog, pg_tem
 -- column_name - NAME of the column on which the stats are tracked
 -- if_not_exists - If set, and the entry does not exist,
 -- generate a notice instead of an error
-CREATE FUNCTION @extschema@.disable_column_stats(
+CREATE FUNCTION @extschema@.disable_chunk_skipping(
     hypertable              REGCLASS,
     column_name             NAME,
     if_not_exists           BOOLEAN = FALSE
