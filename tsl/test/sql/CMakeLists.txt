@@ -30,7 +30,6 @@ set(TEST_FILES
     compression_settings.sql
     compression_sorted_merge_distinct.sql
     compression_sorted_merge_columns.sql
-    chunk_column_stats.sql
     decompress_index.sql
     foreign_keys.sql
     move.sql
@@ -139,13 +138,14 @@ set(SOLO_TESTS
     telemetry_stats)
 
 set(TEST_TEMPLATES
-    cagg_watermark.sql.in
-    compression_sorted_merge.sql.in
     cagg_union_view.sql.in
+    cagg_watermark.sql.in
+    chunk_column_stats.sql.in
+    compression_sorted_merge.sql.in
+    merge_append_partially_compressed.sql.in
     plan_skip_scan.sql.in
-    transparent_decompression.sql.in
     transparent_decompression_ordered_index.sql.in
-    merge_append_partially_compressed.sql.in)
+    transparent_decompression.sql.in)
 
 # This test runs only with PG version >= 14
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
