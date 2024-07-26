@@ -7,29 +7,31 @@ accidentally triggering the load of a previous DB version.**
 
 ## 2.16.0 (2024-07-25)
 
-This release contains performance improvements and bug fixes since
-the 2.15.3 release. We recommend that you upgrade at the next
-available opportunity.
+This release contains significant performance improvements when working with compressed data, extended join
+support in continuous aggregates, and the ability to define foreign keys from regular tables towards hypertables.
+We recommend that you upgrade at the next available opportunity.
 
 In TimescaleDB v2.16.0 we:
 
-* Introduce a lot of performance focused optimizations for data manipulation operations (DML) over compressed chunks.
+* Introduce multiple performance focused optimizations for data manipulation operations (DML) over compressed chunks.
 
-* Speed up those tricky queries that access more chunks than needed.
+  Improved upsert performance by more than 100x in some cases and more than 1000x in some update/delete scenarios.
 
-  TimescaleDB v2.16.0 extends chunk exclusion on compressed hypertables and is able to take into account
-  filters on additional, non-partitioning columns.
+* Add the ability to define sparse indexes on non-partitioning columns of compressed hypertables
 
-* Offer new options for Timescale users who like their foreign keys.
+  TimescaleDB v2.16.0 extends chunk exclusion to use those sparse indexes when queries filter on the relevant columns,
+  and prune chunks that do not include any relevant data for calculating the query response.
+
+* Offer new options for use cases that require foreign keys defined.
 
   You can now add foreign keys from regular tables towards hypertables. We have also removed
   some really annoying locks in the reverse direction that blocked access to referenced tables
   while compression was running.
 
-* Have big updates on the Continuous Aggregates front.
+* Extend Continuous Aggregates to support more types of analytical queries.
 
-  More types of joins are supported, additional equality operators on join clauses, and support for joins
-  between multiple regular tables.
+  More types of joins are supported, additional equality operators on join clauses, and
+  support for joins between multiple regular tables.
 
 **Highlighted features in this release**
 
