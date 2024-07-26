@@ -28,6 +28,7 @@ select * from test_chartab order by mac_id , ts limit 2;
 
 -- test constraintawareappend sort node handling
 SET enable_hashagg TO false;
+SET timescaledb.enable_chunkwise_aggregation TO false;
 
 CREATE TABLE public.merge_sort (time timestamp NOT NULL, measure_id integer NOT NULL, device_id integer NOT NULL, value float);
 SELECT create_hypertable('merge_sort', 'time');
@@ -35,10 +36,10 @@ ALTER TABLE merge_sort SET (timescaledb.compress = true, timescaledb.compress_or
 
 INSERT INTO merge_sort SELECT time, 1, 1, extract(epoch from time) * 0.001 FROM generate_series('2000-01-01'::timestamp,'2000-02-01'::timestamp,'1h'::interval) g1(time);
 
-ANALYZE merge_sort;
-
 --compress first chunk
 SELECT compress_chunk(ch) FROM show_chunks('merge_sort') ch LIMIT 1;
+
+VACUUM ANALYZE merge_sort;
 
 -- this should have a MergeAppend with children wrapped in Sort nodes
 EXPLAIN (analyze,costs off,timing off,summary off) SELECT
@@ -61,6 +62,7 @@ WHERE time > '2000-01-10'::text::timestamp
 GROUP BY 2, 3;
 
 RESET enable_hashagg;
+RESET timescaledb.enable_chunkwise_aggregation;
 
 -- test if volatile function quals are applied to compressed chunks
 CREATE FUNCTION check_equal_228( intval INTEGER) RETURNS BOOL
@@ -133,7 +135,7 @@ ALTER TABLE options_data SET (timescaledb.compress,
 
 SELECT compress_chunk(ch) FROM show_chunks('options_data', older_than=> '2023-12-05') ch;
 
-ANALYZE options_data;
+VACUUM ANALYZE options_data;
 
 SELECT max(date) AS date FROM options_data WHERE contract_code='CONTRACT2023-12-03 04:00:00+01';
 

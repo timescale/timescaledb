@@ -467,16 +467,21 @@ INSERT INTO chunks VALUES ('1910-08-01 01:01:01+01', 1, 2);
  Append (actual rows=2 loops=1)
    ->  Index Scan using _hyper_8_17_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_17_chunk (actual rows=1 loops=1)
          Index Cond: (bucket < 'Wed Jul 31 17:00:00 1901 PST'::timestamp with time zone)
-   ->  HashAggregate (actual rows=1 loops=1)
-         Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_16_chunk."time"), _hyper_7_16_chunk.device
+   ->  Finalize HashAggregate (actual rows=1 loops=1)
+         Group Key: (time_bucket('@ 1 hour'::interval, _hyper_7_16_chunk."time")), _hyper_7_16_chunk.device
          Batches: 1 
-         ->  Result (actual rows=1 loops=1)
-               ->  Append (actual rows=1 loops=1)
+         ->  Append (actual rows=1 loops=1)
+               ->  Partial HashAggregate (actual rows=0 loops=1)
+                     Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_16_chunk."time"), _hyper_7_16_chunk.device
+                     Batches: 1 
                      ->  Index Scan using _hyper_7_16_chunk_chunks_time_idx on _hyper_7_16_chunk (actual rows=0 loops=1)
                            Index Cond: ("time" >= 'Wed Jul 31 17:00:00 1901 PST'::timestamp with time zone)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_18_chunk."time"), _hyper_7_18_chunk.device
+                     Batches: 1 
                      ->  Index Scan using _hyper_7_18_chunk_chunks_time_idx on _hyper_7_18_chunk (actual rows=1 loops=1)
                            Index Cond: ("time" >= 'Wed Jul 31 17:00:00 1901 PST'::timestamp with time zone)
-(12 rows)
+(17 rows)
 
 :EXPLAIN_ANALYZE SELECT * FROM chunks_1h;
                                                          QUERY PLAN                                                          
@@ -484,16 +489,21 @@ INSERT INTO chunks VALUES ('1910-08-01 01:01:01+01', 1, 2);
  Append (actual rows=2 loops=1)
    ->  Index Scan using _hyper_8_17_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_17_chunk (actual rows=1 loops=1)
          Index Cond: (bucket < 'Wed Jul 31 17:00:00 1901 PST'::timestamp with time zone)
-   ->  HashAggregate (actual rows=1 loops=1)
-         Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_16_chunk."time"), _hyper_7_16_chunk.device
+   ->  Finalize HashAggregate (actual rows=1 loops=1)
+         Group Key: (time_bucket('@ 1 hour'::interval, _hyper_7_16_chunk."time")), _hyper_7_16_chunk.device
          Batches: 1 
-         ->  Result (actual rows=1 loops=1)
-               ->  Append (actual rows=1 loops=1)
+         ->  Append (actual rows=1 loops=1)
+               ->  Partial HashAggregate (actual rows=0 loops=1)
+                     Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_16_chunk."time"), _hyper_7_16_chunk.device
+                     Batches: 1 
                      ->  Index Scan using _hyper_7_16_chunk_chunks_time_idx on _hyper_7_16_chunk (actual rows=0 loops=1)
                            Index Cond: ("time" >= 'Wed Jul 31 17:00:00 1901 PST'::timestamp with time zone)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_18_chunk."time"), _hyper_7_18_chunk.device
+                     Batches: 1 
                      ->  Index Scan using _hyper_7_18_chunk_chunks_time_idx on _hyper_7_18_chunk (actual rows=1 loops=1)
                            Index Cond: ("time" >= 'Wed Jul 31 17:00:00 1901 PST'::timestamp with time zone)
-(12 rows)
+(17 rows)
 
 INSERT INTO chunks VALUES ('1911-08-01 01:01:01+01', 1, 2);
 :EXPLAIN_ANALYZE EXECUTE cagg_scan_1h;
@@ -502,18 +512,26 @@ INSERT INTO chunks VALUES ('1911-08-01 01:01:01+01', 1, 2);
  Append (actual rows=3 loops=1)
    ->  Index Scan using _hyper_8_17_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_17_chunk (actual rows=1 loops=1)
          Index Cond: (bucket < 'Wed Jul 31 17:00:00 1901 PST'::timestamp with time zone)
-   ->  HashAggregate (actual rows=2 loops=1)
-         Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_16_chunk."time"), _hyper_7_16_chunk.device
+   ->  Finalize HashAggregate (actual rows=2 loops=1)
+         Group Key: (time_bucket('@ 1 hour'::interval, _hyper_7_16_chunk."time")), _hyper_7_16_chunk.device
          Batches: 1 
-         ->  Result (actual rows=2 loops=1)
-               ->  Append (actual rows=2 loops=1)
+         ->  Append (actual rows=2 loops=1)
+               ->  Partial HashAggregate (actual rows=0 loops=1)
+                     Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_16_chunk."time"), _hyper_7_16_chunk.device
+                     Batches: 1 
                      ->  Index Scan using _hyper_7_16_chunk_chunks_time_idx on _hyper_7_16_chunk (actual rows=0 loops=1)
                            Index Cond: ("time" >= 'Wed Jul 31 17:00:00 1901 PST'::timestamp with time zone)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_18_chunk."time"), _hyper_7_18_chunk.device
+                     Batches: 1 
                      ->  Index Scan using _hyper_7_18_chunk_chunks_time_idx on _hyper_7_18_chunk (actual rows=1 loops=1)
                            Index Cond: ("time" >= 'Wed Jul 31 17:00:00 1901 PST'::timestamp with time zone)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_19_chunk."time"), _hyper_7_19_chunk.device
+                     Batches: 1 
                      ->  Index Scan using _hyper_7_19_chunk_chunks_time_idx on _hyper_7_19_chunk (actual rows=1 loops=1)
                            Index Cond: ("time" >= 'Wed Jul 31 17:00:00 1901 PST'::timestamp with time zone)
-(14 rows)
+(22 rows)
 
 :EXPLAIN_ANALYZE SELECT * FROM chunks_1h;
                                                          QUERY PLAN                                                          
@@ -521,18 +539,26 @@ INSERT INTO chunks VALUES ('1911-08-01 01:01:01+01', 1, 2);
  Append (actual rows=3 loops=1)
    ->  Index Scan using _hyper_8_17_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_17_chunk (actual rows=1 loops=1)
          Index Cond: (bucket < 'Wed Jul 31 17:00:00 1901 PST'::timestamp with time zone)
-   ->  HashAggregate (actual rows=2 loops=1)
-         Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_16_chunk."time"), _hyper_7_16_chunk.device
+   ->  Finalize HashAggregate (actual rows=2 loops=1)
+         Group Key: (time_bucket('@ 1 hour'::interval, _hyper_7_16_chunk."time")), _hyper_7_16_chunk.device
          Batches: 1 
-         ->  Result (actual rows=2 loops=1)
-               ->  Append (actual rows=2 loops=1)
+         ->  Append (actual rows=2 loops=1)
+               ->  Partial HashAggregate (actual rows=0 loops=1)
+                     Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_16_chunk."time"), _hyper_7_16_chunk.device
+                     Batches: 1 
                      ->  Index Scan using _hyper_7_16_chunk_chunks_time_idx on _hyper_7_16_chunk (actual rows=0 loops=1)
                            Index Cond: ("time" >= 'Wed Jul 31 17:00:00 1901 PST'::timestamp with time zone)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_18_chunk."time"), _hyper_7_18_chunk.device
+                     Batches: 1 
                      ->  Index Scan using _hyper_7_18_chunk_chunks_time_idx on _hyper_7_18_chunk (actual rows=1 loops=1)
                            Index Cond: ("time" >= 'Wed Jul 31 17:00:00 1901 PST'::timestamp with time zone)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_19_chunk."time"), _hyper_7_19_chunk.device
+                     Batches: 1 
                      ->  Index Scan using _hyper_7_19_chunk_chunks_time_idx on _hyper_7_19_chunk (actual rows=1 loops=1)
                            Index Cond: ("time" >= 'Wed Jul 31 17:00:00 1901 PST'::timestamp with time zone)
-(14 rows)
+(22 rows)
 
 -- Materialize CAgg and check for plan time chunk exclusion
 CALL refresh_continuous_aggregate('chunks_1h', '1900-01-01', '2021-06-01');
@@ -1150,8 +1176,8 @@ SET timescaledb.enable_cagg_watermark_constify = OFF;
 INSERT INTO chunks VALUES ('2014-01-01 01:01:01+01', 1, 2);
 CALL refresh_continuous_aggregate('chunks_1h', '1900-01-01', '2021-06-01');
 :EXPLAIN_ANALYZE EXECUTE ht_scan_realtime_1h;
-                                                                                 QUERY PLAN                                                                                 
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                    QUERY PLAN                                                                                    
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append (actual rows=2 loops=1)
    ->  Custom Scan (ChunkAppend) on _materialized_hypertable_8 (actual rows=2 loops=1)
          Chunks excluded during startup: 0
@@ -1187,14 +1213,17 @@ CALL refresh_continuous_aggregate('chunks_1h', '1900-01-01', '2021-06-01');
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
          ->  Index Scan using _hyper_8_50_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_50_chunk (actual rows=1 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-   ->  HashAggregate (actual rows=0 loops=1)
-         Group Key: time_bucket('@ 1 hour'::interval, chunks."time"), chunks.device
+   ->  Finalize HashAggregate (actual rows=0 loops=1)
+         Group Key: (time_bucket('@ 1 hour'::interval, chunks."time")), chunks.device
          Batches: 1 
          ->  Custom Scan (ChunkAppend) on chunks (actual rows=0 loops=1)
                Chunks excluded during startup: 1
-               ->  Index Scan using _hyper_7_49_chunk_chunks_time_idx on _hyper_7_49_chunk (actual rows=0 loops=1)
-                     Index Cond: ("time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-(42 rows)
+               ->  Partial HashAggregate (actual rows=0 loops=1)
+                     Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_49_chunk."time"), _hyper_7_49_chunk.device
+                     Batches: 1 
+                     ->  Index Scan using _hyper_7_49_chunk_chunks_time_idx on _hyper_7_49_chunk (actual rows=0 loops=1)
+                           Index Cond: ("time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
+(45 rows)
 
 RESET timescaledb.enable_cagg_watermark_constify;
 -- Select with projection
@@ -1264,8 +1293,8 @@ CREATE TABLE continuous_agg_test(time int, data int);
 
 -- Query without COALESCE - should not be optimized
 :EXPLAIN_ANALYZE (SELECT * FROM chunks_1h AS t1) UNION ALL (SELECT * from chunks_1h AS t2 WHERE _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:MAT_HT_ID_1H)) IS NOT NULL);
-                                                                                       QUERY PLAN                                                                                       
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                          QUERY PLAN                                                                                          
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append (actual rows=6 loops=1)
    ->  Custom Scan (ChunkAppend) on _materialized_hypertable_8 (actual rows=3 loops=1)
          Chunks excluded during startup: 0
@@ -1303,13 +1332,16 @@ CREATE TABLE continuous_agg_test(time int, data int);
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
          ->  Index Scan using _hyper_8_52_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_52_chunk (actual rows=1 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-   ->  HashAggregate (actual rows=0 loops=1)
-         Group Key: time_bucket('@ 1 hour'::interval, chunks."time"), chunks.device
+   ->  Finalize HashAggregate (actual rows=0 loops=1)
+         Group Key: (time_bucket('@ 1 hour'::interval, chunks."time")), chunks.device
          Batches: 1 
          ->  Custom Scan (ChunkAppend) on chunks (actual rows=0 loops=1)
                Chunks excluded during startup: 2
-               ->  Index Scan using _hyper_7_51_chunk_chunks_time_idx on _hyper_7_51_chunk (actual rows=0 loops=1)
-                     Index Cond: ("time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
+               ->  Partial HashAggregate (actual rows=0 loops=1)
+                     Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_51_chunk."time"), _hyper_7_51_chunk.device
+                     Batches: 1 
+                     ->  Index Scan using _hyper_7_51_chunk_chunks_time_idx on _hyper_7_51_chunk (actual rows=0 loops=1)
+                           Index Cond: ("time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
    ->  Append (actual rows=3 loops=1)
          ->  Result (actual rows=3 loops=1)
                One-Time Filter: (_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)) IS NOT NULL)
@@ -1351,14 +1383,17 @@ CREATE TABLE continuous_agg_test(time int, data int);
                            Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
          ->  Result (actual rows=0 loops=1)
                One-Time Filter: (_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)) IS NOT NULL)
-               ->  HashAggregate (actual rows=0 loops=1)
-                     Group Key: time_bucket('@ 1 hour'::interval, chunks_1."time"), chunks_1.device
+               ->  Finalize HashAggregate (actual rows=0 loops=1)
+                     Group Key: (time_bucket('@ 1 hour'::interval, chunks_1."time")), chunks_1.device
                      Batches: 1 
                      ->  Custom Scan (ChunkAppend) on chunks chunks_1 (actual rows=0 loops=1)
                            Chunks excluded during startup: 2
-                           ->  Index Scan using _hyper_7_51_chunk_chunks_time_idx on _hyper_7_51_chunk _hyper_7_51_chunk_1 (actual rows=0 loops=1)
-                                 Index Cond: ("time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-(92 rows)
+                           ->  Partial HashAggregate (actual rows=0 loops=1)
+                                 Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_51_chunk_1."time"), _hyper_7_51_chunk_1.device
+                                 Batches: 1 
+                                 ->  Index Scan using _hyper_7_51_chunk_chunks_time_idx on _hyper_7_51_chunk _hyper_7_51_chunk_1 (actual rows=0 loops=1)
+                                       Index Cond: ("time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
+(98 rows)
 
 -- Aggregation query over CAgg should be constified
 :EXPLAIN_ANALYZE SELECT max(device) from chunks_1h;
@@ -1573,29 +1608,39 @@ UNION ALL
    FROM small_integer_ht
   WHERE small_integer_ht."time" < COALESCE(_timescaledb_functions.cagg_watermark(:MAT_HT_ID_SMALL_INTEGER)::integer, _timescaledb_functions.cagg_watermark(:MAT_HT_ID_SMALL_INTEGER)::integer)
   GROUP BY (time_bucket(5, small_integer_ht."time"));
-                                                                           QUERY PLAN                                                                            
------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                 QUERY PLAN                                                                                  
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append (actual rows=6 loops=1)
-   ->  HashAggregate (actual rows=0 loops=1)
-         Group Key: time_bucket('5'::bigint, small_integer_ht."time")
-         Batches: 1 
-         ->  Custom Scan (ChunkAppend) on small_integer_ht (actual rows=0 loops=1)
-               Chunks excluded during startup: 3
-   ->  HashAggregate (actual rows=6 loops=1)
-         Group Key: time_bucket('5'::bigint, small_integer_ht_1."time")
-         Batches: 1 
-         ->  Custom Scan (ChunkAppend) on small_integer_ht small_integer_ht_1 (actual rows=26 loops=1)
-               Chunks excluded during startup: 0
-               ->  Index Only Scan Backward using _hyper_14_61_chunk_small_integer_ht_time_idx on _hyper_14_61_chunk (actual rows=10 loops=1)
-                     Index Cond: ("time" < COALESCE((_timescaledb_functions.cagg_watermark(15))::integer, (_timescaledb_functions.cagg_watermark(15))::integer))
-                     Heap Fetches: 10
-               ->  Index Only Scan Backward using _hyper_14_62_chunk_small_integer_ht_time_idx on _hyper_14_62_chunk (actual rows=10 loops=1)
-                     Index Cond: ("time" < COALESCE((_timescaledb_functions.cagg_watermark(15))::integer, (_timescaledb_functions.cagg_watermark(15))::integer))
-                     Heap Fetches: 10
-               ->  Index Only Scan Backward using _hyper_14_63_chunk_small_integer_ht_time_idx on _hyper_14_63_chunk (actual rows=6 loops=1)
-                     Index Cond: ("time" < COALESCE((_timescaledb_functions.cagg_watermark(15))::integer, (_timescaledb_functions.cagg_watermark(15))::integer))
-                     Heap Fetches: 6
-(20 rows)
+   ->  Finalize GroupAggregate (actual rows=0 loops=1)
+         Group Key: (time_bucket('5'::bigint, small_integer_ht."time"))
+         ->  Sort (actual rows=0 loops=1)
+               Sort Key: (time_bucket('5'::bigint, small_integer_ht."time"))
+               Sort Method: quicksort 
+               ->  Custom Scan (ChunkAppend) on small_integer_ht (actual rows=0 loops=1)
+                     Chunks excluded during startup: 3
+   ->  Finalize GroupAggregate (actual rows=6 loops=1)
+         Group Key: (time_bucket('5'::bigint, small_integer_ht_1."time"))
+         ->  Sort (actual rows=6 loops=1)
+               Sort Key: (time_bucket('5'::bigint, small_integer_ht_1."time"))
+               Sort Method: quicksort 
+               ->  Custom Scan (ChunkAppend) on small_integer_ht small_integer_ht_1 (actual rows=6 loops=1)
+                     Chunks excluded during startup: 0
+                     ->  Partial GroupAggregate (actual rows=2 loops=1)
+                           Group Key: time_bucket('5'::bigint, _hyper_14_61_chunk."time")
+                           ->  Index Only Scan Backward using _hyper_14_61_chunk_small_integer_ht_time_idx on _hyper_14_61_chunk (actual rows=10 loops=1)
+                                 Index Cond: ("time" < COALESCE((_timescaledb_functions.cagg_watermark(15))::integer, (_timescaledb_functions.cagg_watermark(15))::integer))
+                                 Heap Fetches: 10
+                     ->  Partial GroupAggregate (actual rows=2 loops=1)
+                           Group Key: time_bucket('5'::bigint, _hyper_14_62_chunk."time")
+                           ->  Index Only Scan Backward using _hyper_14_62_chunk_small_integer_ht_time_idx on _hyper_14_62_chunk (actual rows=10 loops=1)
+                                 Index Cond: ("time" < COALESCE((_timescaledb_functions.cagg_watermark(15))::integer, (_timescaledb_functions.cagg_watermark(15))::integer))
+                                 Heap Fetches: 10
+                     ->  Partial GroupAggregate (actual rows=2 loops=1)
+                           Group Key: time_bucket('5'::bigint, _hyper_14_63_chunk."time")
+                           ->  Index Only Scan Backward using _hyper_14_63_chunk_small_integer_ht_time_idx on _hyper_14_63_chunk (actual rows=6 loops=1)
+                                 Index Cond: ("time" < COALESCE((_timescaledb_functions.cagg_watermark(15))::integer, (_timescaledb_functions.cagg_watermark(15))::integer))
+                                 Heap Fetches: 6
+(30 rows)
 
 -- test with non constant value of the watermark function (should not be constified)
 :EXPLAIN_ANALYZE  SELECT bucket, device, max
@@ -1656,15 +1701,18 @@ UNION ALL
                            Chunks excluded during startup: 16
                            ->  Index Scan using _hyper_8_52_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_52_chunk _hyper_8_52_chunk_1 (actual rows=0 loops=1)
                                  Index Cond: ((bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone)) AND (bucket >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone)))
-                     ->  HashAggregate (actual rows=0 loops=1)
-                           Group Key: time_bucket('@ 1 hour'::interval, chunks."time"), chunks.device
+                     ->  Finalize HashAggregate (actual rows=0 loops=1)
+                           Group Key: (time_bucket('@ 1 hour'::interval, chunks."time")), chunks.device
                            Batches: 1 
                            ->  Custom Scan (ChunkAppend) on chunks (actual rows=0 loops=1)
                                  Chunks excluded during startup: 2
-                                 ->  Index Scan using _hyper_7_51_chunk_chunks_time_idx on _hyper_7_51_chunk (actual rows=0 loops=1)
-                                       Index Cond: ("time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-                                       Filter: (time_bucket('@ 1 hour'::interval, "time") >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-(54 rows)
+                                 ->  Partial HashAggregate (actual rows=0 loops=1)
+                                       Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_51_chunk."time"), _hyper_7_51_chunk.device
+                                       Batches: 1 
+                                       ->  Index Scan using _hyper_7_51_chunk_chunks_time_idx on _hyper_7_51_chunk (actual rows=0 loops=1)
+                                             Index Cond: ("time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
+                                             Filter: (time_bucket('@ 1 hour'::interval, "time") >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
+(57 rows)
 
 -- test with NULL constant value of the watermark function (should not be constified)
 :EXPLAIN_ANALYZE  SELECT bucket, device, max
@@ -1725,15 +1773,18 @@ UNION ALL
                            Chunks excluded during startup: 16
                            ->  Index Scan using _hyper_8_52_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_52_chunk _hyper_8_52_chunk_1 (actual rows=0 loops=1)
                                  Index Cond: ((bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone)) AND (bucket >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone)))
-                     ->  HashAggregate (actual rows=0 loops=1)
-                           Group Key: time_bucket('@ 1 hour'::interval, chunks."time"), chunks.device
+                     ->  Finalize HashAggregate (actual rows=0 loops=1)
+                           Group Key: (time_bucket('@ 1 hour'::interval, chunks."time")), chunks.device
                            Batches: 1 
                            ->  Custom Scan (ChunkAppend) on chunks (actual rows=0 loops=1)
                                  Chunks excluded during startup: 2
-                                 ->  Index Scan using _hyper_7_51_chunk_chunks_time_idx on _hyper_7_51_chunk (actual rows=0 loops=1)
-                                       Index Cond: ("time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-                                       Filter: (time_bucket('@ 1 hour'::interval, "time") >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-(54 rows)
+                                 ->  Partial HashAggregate (actual rows=0 loops=1)
+                                       Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_51_chunk."time"), _hyper_7_51_chunk.device
+                                       Batches: 1 
+                                       ->  Index Scan using _hyper_7_51_chunk_chunks_time_idx on _hyper_7_51_chunk (actual rows=0 loops=1)
+                                             Index Cond: ("time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
+                                             Filter: (time_bucket('@ 1 hour'::interval, "time") >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
+(57 rows)
 
 -- test with double COALESCE function (should be constified)
 :EXPLAIN_ANALYZE  SELECT bucket, device, max

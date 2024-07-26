@@ -14,6 +14,7 @@ set(TEST_FILES
     cagg_query.sql
     cagg_refresh.sql
     cagg_utils.sql
+    cagg_watermark.sql
     compress_auto_sparse_index.sql
     compress_default.sql
     compress_dml_copy.sql
@@ -41,8 +42,7 @@ set(TEST_FILES
     skip_scan.sql
     transparent_decompression_join_index.sql
     vector_agg_default.sql
-    vector_agg_param.sql
-    vectorized_aggregation.sql)
+    vector_agg_param.sql)
 
 if(USE_TELEMETRY)
   list(APPEND TEST_FILES bgw_telemetry.sql)
@@ -139,7 +139,6 @@ set(SOLO_TESTS
     telemetry_stats)
 
 set(TEST_TEMPLATES
-    cagg_watermark.sql.in
     compression_sorted_merge.sql.in
     cagg_union_view.sql.in
     plan_skip_scan.sql.in
@@ -150,6 +149,12 @@ set(TEST_TEMPLATES
 # This test runs only with PG version >= 14
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   set(TEST_FILES_ON_VERSION_GE_14 modify_exclusion.sql.in)
+endif()
+
+if((${PG_VERSION_MAJOR} GREATER "14"))
+  # This is a test for a prototype feature that has different outputs on PG14,
+  # so we disable it on v14 not to have to work with multiple references.
+  list(APPEND TEST_FILES vectorized_aggregation.sql)
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)

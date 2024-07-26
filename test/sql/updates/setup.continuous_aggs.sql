@@ -11,6 +11,12 @@
 -- on timescaledb 1.7.x
 CALL _timescaledb_testing.stop_workers();
 
+-- disable chunkwise aggregation and hash aggregation, because it might lead to
+-- different order of chunk creation in the cagg table, based on the underlying
+-- aggregation plan.
+SET timescaledb.enable_chunkwise_aggregation TO OFF;
+SET enable_hashagg TO OFF;
+
 CREATE TYPE custom_type AS (high int, low int);
 
 CREATE TABLE conditions_before (
@@ -292,3 +298,6 @@ SELECT add_continuous_aggregate_policy('mat_drop', '7 days', '-30 days'::interva
 CALL refresh_continuous_aggregate('mat_drop',NULL,NULL);
 
 SELECT drop_chunks('drop_test', NOW() - INTERVAL '7 days');
+
+RESET timescaledb.enable_chunkwise_aggregation;
+RESET enable_hashagg;
