@@ -24,6 +24,7 @@
 #include "nodes/skip_scan/skip_scan.h"
 #include "nodes/vector_agg/plan.h"
 #include "planner.h"
+#include "planner/partialize.h"
 
 #include <math.h>
 
@@ -51,7 +52,14 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 	{
 		case UPPERREL_GROUP_AGG:
 			if (input_reltype != TS_REL_HYPERTABLE_CHILD)
+			{
 				plan_add_gapfill(root, output_rel);
+			}
+
+			if (ts_guc_enable_chunkwise_aggregation)
+			{
+				ts_pushdown_partial_agg(root, ht, input_rel, output_rel, extra);
+			}
 			break;
 		case UPPERREL_WINDOW:
 			if (IsA(linitial(input_rel->pathlist), CustomPath))
