@@ -43,6 +43,34 @@ is_osm_present()
 	return osm_present;
 }
 
+static bool
+join_involves_hypertable(const PlannerInfo *root, const RelOptInfo *rel)
+{
+	int relid = -1;
+
+	while ((relid = bms_next_member(rel->relids, relid)) >= 0)
+	{
+		const RangeTblEntry *rte = planner_rt_fetch(relid, root);
+
+		if (rte != NULL)
+			/* This might give a false positive for chunks in case of PostgreSQL
+			 * expansion since the ctename is copied from the parent hypertable
+			 * to the chunk */
+			return ts_rte_is_marked_for_expansion(rte);
+	}
+	return false;
+}
+
+static bool
+involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
+{
+	if (rel->reloptkind == RELOPT_JOINREL)
+		return join_involves_hypertable(root, rel);
+
+	Hypertable *ht;
+	return ts_classify_relation(root, rel, &ht) == TS_REL_HYPERTABLE;
+}
+
 void
 tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel,
 							RelOptInfo *output_rel, TsRelType input_reltype, Hypertable *ht,
@@ -56,7 +84,9 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 				plan_add_gapfill(root, output_rel);
 			}
 
-			if (ts_guc_enable_chunkwise_aggregation)
+			if (ts_guc_enable_chunkwise_aggregation && input_rel != NULL &&
+				!IS_DUMMY_REL(input_rel) && output_rel != NULL &&
+				involves_hypertable(root, input_rel))
 			{
 				ts_pushdown_partial_agg(root, ht, input_rel, output_rel, extra);
 			}
