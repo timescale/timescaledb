@@ -99,6 +99,10 @@ transform_time_op_const_interval(OpExpr *op)
 			(left == TIMESTAMPTZOID && right == INTERVALOID) ||
 			(left == DATEOID && right == INTERVALOID))
 		{
+			Interval *interval = DatumGetIntervalP((lsecond_node(Const, op->args))->constvalue);
+			if (interval->month != 0 || interval->day != 0)
+				return (Expr *) op;
+
 			char *name = get_opname(op->opno);
 
 			if (strncmp(name, "-", NAMEDATALEN) == 0 || strncmp(name, "+", NAMEDATALEN) == 0)
