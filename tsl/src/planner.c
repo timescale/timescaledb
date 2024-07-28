@@ -44,14 +44,15 @@ is_osm_present()
 }
 
 static bool
-involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
+involves_hypertable(PlannerInfo *root, RelOptInfo *parent)
 {
-	for (int relid = bms_next_member(rel->relids, -1); relid > 0;
-		 relid = bms_next_member(rel->relids, relid))
+	my_print(root);
+	for (int relid = bms_next_member(parent->relids, -1); relid > 0;
+		 relid = bms_next_member(parent->relids, relid))
 	{
 		Hypertable *ht;
-		RelOptInfo *rel = root->simple_rel_array[relid];
-		if (ts_classify_relation(root, rel, &ht) == TS_REL_HYPERTABLE)
+		RelOptInfo *child = root->simple_rel_array[relid];
+		if (child != NULL && ts_classify_relation(root, child, &ht) == TS_REL_HYPERTABLE)
 		{
 			return true;
 		}
