@@ -1,0 +1,2 @@
+Implements: #7161 Fix `mergejoin input data is out of order`
+Thanks: @jledentu For reporting a problem with mergejoin input order
