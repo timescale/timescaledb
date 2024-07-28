@@ -44,31 +44,19 @@ is_osm_present()
 }
 
 static bool
-join_involves_hypertable(const PlannerInfo *root, const RelOptInfo *rel)
-{
-	int relid = -1;
-
-	while ((relid = bms_next_member(rel->relids, relid)) >= 0)
-	{
-		const RangeTblEntry *rte = planner_rt_fetch(relid, root);
-
-		if (rte != NULL)
-			/* This might give a false positive for chunks in case of PostgreSQL
-			 * expansion since the ctename is copied from the parent hypertable
-			 * to the chunk */
-			return ts_rte_is_marked_for_expansion(rte);
-	}
-	return false;
-}
-
-static bool
 involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
 {
-	if (rel->reloptkind == RELOPT_JOINREL)
-		return join_involves_hypertable(root, rel);
-
-	Hypertable *ht;
-	return ts_classify_relation(root, rel, &ht) == TS_REL_HYPERTABLE;
+	for (int relid = bms_next_member(rel->relids, -1); relid > 0;
+		 relid = bms_next_member(rel->relids, relid))
+	{
+		Hypertable *ht;
+		RelOptInfo *rel = root->simple_rel_array[relid];
+		if (ts_classify_relation(root, rel, &ht) == TS_REL_HYPERTABLE)
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 void
