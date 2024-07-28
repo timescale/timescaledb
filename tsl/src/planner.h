@@ -19,5 +19,6 @@ void tsl_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTb
 void tsl_preprocess_query(Query *parse);
 void tsl_postprocess_plan(PlannedStmt *stmt);
 
-void TSDLLEXPORT ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel,
-										 RelOptInfo *output_rel, void *extra);
+extern TSDLLEXPORT void ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht,
+												RelOptInfo *input_rel, RelOptInfo *output_rel,
+												void *extra);
