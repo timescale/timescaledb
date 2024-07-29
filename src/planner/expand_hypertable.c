@@ -1007,7 +1007,8 @@ ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel)
 /* Inspired by expand_inherited_rtentry but expands
  * a hypertable chunks into an append relation. */
 void
-ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel)
+ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel,
+								 bool include_osm)
 {
 	RangeTblEntry *rte = rt_fetch(rel->relid, root->parse->rtable);
 	Oid parent_oid = rte->relid;
@@ -1017,7 +1018,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	Query *parse = root->parse;
 	Index rti = rel->relid;
 	List *appinfos = NIL;
-	PlanRowMark *oldrc;
 	CollectQualCtx ctx = {
 		.root = root,
 		.rel = rel,
@@ -1031,11 +1031,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 
 	/* double check our permissions are valid */
 	Assert(rti != (Index) parse->resultRelation);
-
-	oldrc = get_plan_rowmark(root->rowMarks, rti);
-
-	if (oldrc && RowMarkRequiresRowShareLock(oldrc->markType))
-		elog(ERROR, "unexpected permissions requested");
 
 	/* Walk the tree and find restrictions */
 	collect_quals_walker((Node *) root->parse->jointree, &ctx);
@@ -1053,7 +1048,8 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 
 	for (unsigned int i = 0; i < num_chunks; i++)
 	{
-		inh_oids = lappend_oid(inh_oids, chunks[i]->table_id);
+		if (!chunks[i]->fd.osm_chunk || include_osm)
+			inh_oids = lappend_oid(inh_oids, chunks[i]->table_id);
 
 		/*
 		 * Add the information about chunks to the baserel info cache for

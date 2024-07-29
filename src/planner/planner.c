@@ -119,6 +119,7 @@ static void cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, Index rtno, Lis
  * is turned off with a GUC.
  */
 static const char *TS_CTE_EXPAND = "ts_expand";
+static const char *TS_FK_EXPAND = "ts_fk_expand";
 
 /*
  * A simplehash hash table that records the chunks and their corresponding
@@ -159,8 +160,9 @@ static void
 rte_mark_for_expansion(RangeTblEntry *rte)
 {
 	Assert(rte->rtekind == RTE_RELATION);
-	Assert(rte->ctename == NULL);
-	rte->ctename = (char *) TS_CTE_EXPAND;
+	Assert(rte->ctename == NULL || rte->ctename == TS_FK_EXPAND);
+	if (rte->ctename != TS_FK_EXPAND)
+		rte->ctename = (char *) TS_CTE_EXPAND;
 	rte->inh = false;
 }
 
@@ -170,7 +172,7 @@ ts_rte_is_marked_for_expansion(const RangeTblEntry *rte)
 	if (NULL == rte->ctename)
 		return false;
 
-	if (rte->ctename == TS_CTE_EXPAND)
+	if (rte->ctename == TS_CTE_EXPAND || rte->ctename == TS_FK_EXPAND)
 		return true;
 
 	return strcmp(rte->ctename, TS_CTE_EXPAND) == 0;
@@ -395,99 +397,109 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 		 * src/backend/utils/adt/ri_triggers.c
 		 */
 
-		/*
-		 * RI_FKey_cascade_del
-		 *
-		 * DELETE FROM [ONLY] <fktable> WHERE $1 = fkatt1 [AND ...]
-		 */
-		if (query->commandType == CMD_DELETE && list_length(query->rtable) == 1 &&
-			context->root->glob->boundParams && query->jointree->quals &&
-			IsA(query->jointree->quals, OpExpr))
+		if (ts_guc_enable_foreign_key_propagation)
 		{
-			RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
-			if (!rte->inh && rte->rtekind == RTE_RELATION)
+			/*
+			 * RI_FKey_cascade_del
+			 *
+			 * DELETE FROM [ONLY] <fktable> WHERE $1 = fkatt1 [AND ...]
+			 */
+			if (query->commandType == CMD_DELETE && list_length(query->rtable) == 1 &&
+				context->root->glob->boundParams && query->jointree->quals &&
+				IsA(query->jointree->quals, OpExpr))
 			{
-				Hypertable *ht =
-					ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
-				if (ht)
+				RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
+				if (!rte->inh && rte->rtekind == RTE_RELATION)
 				{
-					rte->inh = true;
+					Hypertable *ht =
+						ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
+					if (ht)
+					{
+						rte->inh = true;
+					}
 				}
 			}
-		}
 
-		/*
-		 * RI_FKey_cascade_upd
-		 *
-		 *  UPDATE [ONLY] <fktable> SET fkatt1 = $1 [, ...]
-		 *      WHERE $n = fkatt1 [AND ...]
-		 */
-		if (query->commandType == CMD_UPDATE && list_length(query->rtable) == 1 &&
-			context->root->glob->boundParams && query->jointree->quals &&
-			IsA(query->jointree->quals, OpExpr))
-		{
-			RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
-			if (!rte->inh && rte->rtekind == RTE_RELATION)
+			/*
+			 * RI_FKey_cascade_upd
+			 *
+			 *  UPDATE [ONLY] <fktable> SET fkatt1 = $1 [, ...]
+			 *      WHERE $n = fkatt1 [AND ...]
+			 */
+			if (query->commandType == CMD_UPDATE && list_length(query->rtable) == 1 &&
+				context->root->glob->boundParams && query->jointree->quals &&
+				IsA(query->jointree->quals, OpExpr))
 			{
-				Hypertable *ht =
-					ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
-				if (ht)
+				RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
+				if (!rte->inh && rte->rtekind == RTE_RELATION)
 				{
-					rte->inh = true;
+					Hypertable *ht =
+						ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
+					if (ht)
+					{
+						rte->inh = true;
+					}
 				}
 			}
-		}
 
-		/*
-		 * RI_FKey_check
-		 *
-		 * The RI_FKey_check query string built is
-		 *  SELECT 1 FROM [ONLY] <pktable> x WHERE pkatt1 = $1 [AND ...]
-		 *       FOR KEY SHARE OF x
-		 */
-		if (query->commandType == CMD_SELECT && query->hasForUpdate &&
-			list_length(query->rtable) == 1 && context->root->glob->boundParams)
-		{
-			RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
-			if (!rte->inh && rte->rtekind == RTE_RELATION && rte->rellockmode == RowShareLock &&
-				list_length(query->jointree->fromlist) == 1 && query->jointree->quals &&
-				strcmp(rte->eref->aliasname, "x") == 0)
+			/*
+			 * RI_FKey_check
+			 *
+			 * The RI_FKey_check query string built is
+			 *  SELECT 1 FROM [ONLY] <pktable> x WHERE pkatt1 = $1 [AND ...]
+			 *       FOR KEY SHARE OF x
+			 */
+			if (query->commandType == CMD_SELECT && query->hasForUpdate &&
+				list_length(query->rtable) == 1 && context->root->glob->boundParams)
 			{
-				Hypertable *ht =
-					ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
-				if (ht)
+				RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
+				if (!rte->inh && rte->rtekind == RTE_RELATION && rte->rellockmode == RowShareLock &&
+					list_length(query->jointree->fromlist) == 1 && query->jointree->quals &&
+					strcmp(rte->eref->aliasname, "x") == 0)
 				{
-					rte->inh = true;
-					if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
-						query->rowMarks = NIL;
+					Hypertable *ht =
+						ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
+					if (ht)
+					{
+						rte->ctename = (char *) TS_FK_EXPAND;
+						rte->inh = true;
+						if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+							query->rowMarks = NIL;
+					}
 				}
 			}
-		}
-		/*
-		 * RI_Initial_Check query
-		 *
-		 * The RI_Initial_Check query string built is:
-		 *  SELECT fk.keycols FROM [ONLY] relname fk
-		 *   LEFT OUTER JOIN [ONLY] pkrelname pk
-		 *   ON (pk.pkkeycol1=fk.keycol1 [AND ...])
-		 *   WHERE pk.pkkeycol1 IS NULL AND
-		 * For MATCH SIMPLE:
-		 *   (fk.keycol1 IS NOT NULL [AND ...])
-		 * For MATCH FULL:
-		 *   (fk.keycol1 IS NOT NULL [OR ...])
-		 */
-		if (query->commandType == CMD_SELECT && list_length(query->rtable) == 3)
-		{
-			RangeTblEntry *rte1 = linitial_node(RangeTblEntry, query->rtable);
-			RangeTblEntry *rte2 = lsecond_node(RangeTblEntry, query->rtable);
-			if (!rte1->inh && !rte2->inh && rte1->rtekind == RTE_RELATION &&
-				rte2->rtekind == RTE_RELATION && strcmp(rte1->eref->aliasname, "fk") == 0 &&
-				strcmp(rte2->eref->aliasname, "pk") == 0)
+			/*
+			 * RI_Initial_Check query
+			 *
+			 * The RI_Initial_Check query string built is:
+			 *  SELECT fk.keycols FROM [ONLY] relname fk
+			 *   LEFT OUTER JOIN [ONLY] pkrelname pk
+			 *   ON (pk.pkkeycol1=fk.keycol1 [AND ...])
+			 *   WHERE pk.pkkeycol1 IS NULL AND
+			 * For MATCH SIMPLE:
+			 *   (fk.keycol1 IS NOT NULL [AND ...])
+			 * For MATCH FULL:
+			 *   (fk.keycol1 IS NOT NULL [OR ...])
+			 */
+			if (query->commandType == CMD_SELECT && list_length(query->rtable) == 3)
 			{
-				if (ts_hypertable_cache_get_entry(hcache, rte1->relid, CACHE_FLAG_MISSING_OK))
-					rte1->inh = true;
-				if (ts_hypertable_cache_get_entry(hcache, rte2->relid, CACHE_FLAG_MISSING_OK))
-					rte2->inh = true;
+				RangeTblEntry *rte1 = linitial_node(RangeTblEntry, query->rtable);
+				RangeTblEntry *rte2 = lsecond_node(RangeTblEntry, query->rtable);
+				if (!rte1->inh && !rte2->inh && rte1->rtekind == RTE_RELATION &&
+					rte2->rtekind == RTE_RELATION && strcmp(rte1->eref->aliasname, "fk") == 0 &&
+					strcmp(rte2->eref->aliasname, "pk") == 0)
+				{
+					if (ts_hypertable_cache_get_entry(hcache, rte1->relid, CACHE_FLAG_MISSING_OK))
+					{
+						rte1->ctename = (char *) TS_FK_EXPAND;
+						rte1->inh = true;
+					}
+					if (ts_hypertable_cache_get_entry(hcache, rte2->relid, CACHE_FLAG_MISSING_OK))
+					{
+						rte2->ctename = (char *) TS_FK_EXPAND;
+						rte2->inh = true;
+					}
+				}
 			}
 		}
 
@@ -1067,7 +1079,7 @@ rte_should_expand(const RangeTblEntry *rte)
 }
 
 static void
-reenable_inheritance(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
+expand_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
 {
 	bool set_pathlist_for_current_rel = false;
 	double total_pages;
@@ -1083,7 +1095,7 @@ reenable_inheritance(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 			Hypertable *ht = ts_planner_get_hypertable(in_rte->relid, CACHE_FLAG_NOCREATE);
 
 			Assert(ht != NULL && in_rel != NULL);
-			ts_plan_expand_hypertable_chunks(ht, root, in_rel);
+			ts_plan_expand_hypertable_chunks(ht, root, in_rel, in_rte->ctename != TS_FK_EXPAND);
 
 			in_rte->inh = true;
 			reenabled_inheritance = true;
@@ -1263,7 +1275,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 
 	/* Check for unexpanded hypertable */
 	if (!rte->inh && ts_rte_is_marked_for_expansion(rte))
-		reenable_inheritance(root, rel, rti, rte);
+		expand_hypertables(root, rel, rti, rte);
 
 	if (ts_guc_enable_optimizations)
 		ts_planner_constraint_cleanup(root, rel);

@@ -65,6 +65,7 @@ bool ts_guc_enable_constraint_exclusion = true;
 bool ts_guc_enable_qual_propagation = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 bool ts_guc_enable_now_constify = true;
+bool ts_guc_enable_foreign_key_propagation = true;
 TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify = true;
 TSDLLEXPORT int ts_guc_cagg_max_individual_materializations = 10;
 bool ts_guc_enable_osm_reads = true;
@@ -410,6 +411,17 @@ _guc_init(void)
 							 "Enable constraint exclusion",
 							 "Enable planner constraint exclusion",
 							 &ts_guc_enable_constraint_exclusion,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_foreign_key_propagation"),
+							 "Enable foreign key propagation",
+							 "Adjust foreign key lookup queries to target whole hypertable",
+							 &ts_guc_enable_foreign_key_propagation,
 							 true,
 							 PGC_USERSET,
 							 0,
