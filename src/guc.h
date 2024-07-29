@@ -26,6 +26,7 @@ extern bool ts_guc_enable_constraint_exclusion;
 extern bool ts_guc_enable_cagg_reorder_groupby;
 extern TSDLLEXPORT int ts_guc_cagg_max_individual_materializations;
 extern bool ts_guc_enable_now_constify;
+extern bool ts_guc_enable_foreign_key_propagation;
 extern TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify;
 extern bool ts_guc_enable_osm_reads;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression;
