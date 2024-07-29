@@ -46,12 +46,15 @@ is_osm_present()
 static bool
 involves_hypertable(PlannerInfo *root, RelOptInfo *parent)
 {
-	my_print(root);
 	for (int relid = bms_next_member(parent->relids, -1); relid > 0;
 		 relid = bms_next_member(parent->relids, relid))
 	{
 		Hypertable *ht;
 		RelOptInfo *child = root->simple_rel_array[relid];
+		/*
+		 * RelOptInfo can be null here for join RTEs on PG >= 16. This doesn't
+		 * matter because we'll have all the baserels in relids bitmap as well.
+		 */
 		if (child != NULL && ts_classify_relation(root, child, &ht) == TS_REL_HYPERTABLE)
 		{
 			return true;
