@@ -13,7 +13,9 @@
 #include <parser/parsetree.h>
 
 #include "compat/compat.h"
+
 #include "chunk.h"
+#include "chunkwise_agg.h"
 #include "continuous_aggs/planner.h"
 #include "guc.h"
 #include "hypertable.h"

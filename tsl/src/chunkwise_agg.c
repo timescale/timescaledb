@@ -12,6 +12,8 @@
 #include <optimizer/prep.h>
 #include <optimizer/tlist.h>
 
+#include "chunkwise_agg.h"
+
 #include "gapfill.h"
 #include "guc.h"
 #include "import/planner.h"
