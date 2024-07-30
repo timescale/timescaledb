@@ -21,6 +21,7 @@
 #include <utils/timestamp.h>
 
 #include "debug_assert.h"
+#include "guc.h"
 #include "materialize.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
@@ -335,7 +336,8 @@ spi_update_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 {
 	/* MERGE statement is available starting on PG15 and we'll support it only in the new format of
 	 * CAggs */
-	if (PG_VERSION_NUM >= 150000 && ContinuousAggIsFinalized(cagg))
+	if (ts_guc_enable_merge_on_cagg_refresh && PG_VERSION_NUM >= 150000 &&
+		ContinuousAggIsFinalized(cagg))
 	{
 		spi_merge_materializations(mat_ht,
 								   cagg,
