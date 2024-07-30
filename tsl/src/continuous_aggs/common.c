@@ -91,6 +91,20 @@ caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id, Oid hypert
 }
 
 /*
+ * Initialize MatTableColumnInfo.
+ */
+void
+mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *grouplist)
+{
+	matcolinfo->matcollist = NIL;
+	matcolinfo->partial_seltlist = NIL;
+	matcolinfo->partial_grouplist = grouplist;
+	matcolinfo->mat_groupcolname_list = NIL;
+	matcolinfo->matpartcolno = -1;
+	matcolinfo->matpartcolname = NULL;
+}
+
+/*
  * Check if the supplied OID belongs to a valid bucket function
  * for continuous aggregates.
  */
