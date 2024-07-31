@@ -12,6 +12,5 @@
 #include "export.h"
 #include "hypertable.h"
 
-extern TSDLLEXPORT void ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht,
-												RelOptInfo *input_rel, RelOptInfo *output_rel,
-												void *extra);
+void tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel,
+							  RelOptInfo *output_rel, void *extra);

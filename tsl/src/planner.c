@@ -82,7 +82,7 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 				!IS_DUMMY_REL(input_rel) && output_rel != NULL &&
 				involves_hypertable(root, input_rel))
 			{
-				ts_pushdown_partial_agg(root, ht, input_rel, output_rel, extra);
+				tsl_pushdown_partial_agg(root, ht, input_rel, output_rel, extra);
 			}
 			break;
 		case UPPERREL_WINDOW:

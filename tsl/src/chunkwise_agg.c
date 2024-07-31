@@ -561,8 +561,8 @@ contains_path_plain_or_sorted_agg(Path *path)
  *        - Chunk N
  */
 void
-ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel,
-						RelOptInfo *output_rel, void *extra)
+tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel,
+						 RelOptInfo *output_rel, void *extra)
 {
 	Query *parse = root->parse;
 
