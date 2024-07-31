@@ -160,10 +160,22 @@ static void
 rte_mark_for_expansion(RangeTblEntry *rte)
 {
 	Assert(rte->rtekind == RTE_RELATION);
-	Assert(rte->ctename == NULL || rte->ctename == TS_FK_EXPAND);
-	if (rte->ctename != TS_FK_EXPAND)
-		rte->ctename = (char *) TS_CTE_EXPAND;
+	Assert(rte->ctename == NULL);
+	rte->ctename = (char *) TS_CTE_EXPAND;
 	rte->inh = false;
+}
+
+static void
+rte_mark_for_fk_expansion(RangeTblEntry *rte)
+{
+	Assert(rte->rtekind == RTE_RELATION);
+	Assert(rte->ctename == NULL);
+	rte->ctename = (char *) TS_FK_EXPAND;
+	/*
+	 * If this is for an FK lookup query inherit should be false
+	 * initially for hypertables.
+	 */
+	Assert(!rte->inh);
 }
 
 bool
@@ -461,8 +473,7 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 						ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
 					if (ht)
 					{
-						rte->ctename = (char *) TS_FK_EXPAND;
-						rte->inh = true;
+						rte_mark_for_fk_expansion(rte);
 						if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 							query->rowMarks = NIL;
 					}
@@ -491,13 +502,11 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 				{
 					if (ts_hypertable_cache_get_entry(hcache, rte1->relid, CACHE_FLAG_MISSING_OK))
 					{
-						rte1->ctename = (char *) TS_FK_EXPAND;
-						rte1->inh = true;
+						rte_mark_for_fk_expansion(rte1);
 					}
 					if (ts_hypertable_cache_get_entry(hcache, rte2->relid, CACHE_FLAG_MISSING_OK))
 					{
-						rte2->ctename = (char *) TS_FK_EXPAND;
-						rte2->inh = true;
+						rte_mark_for_fk_expansion(rte2);
 					}
 				}
 			}
