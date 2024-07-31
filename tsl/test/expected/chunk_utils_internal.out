@@ -1138,6 +1138,13 @@ SELECT indexname, tablename FROM pg_indexes WHERE indexname = 'hyper_constr_mid_
 (1 row)
 
 DROP INDEX hyper_constr_mid_idx;
+\i include/chunk_utils_internal_orderedappend.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- TESTS for hypertable_osm_range_update_function
+--           orderedappend (needs hypertable_osm_range_update to update catalog range)
+--                         (so that ordered append will work with OSM chunks)
 -- TEST for hypertable_osm_range_update function
 -- test range of dimension slice for osm chunk for different datatypes
 CREATE TABLE osm_int2(time int2 NOT NULL);
@@ -1171,7 +1178,7 @@ SELECT table_name FROM create_hypertable('osm_date','time');
 (1 row)
 
 SELECT table_name FROM create_hypertable('osm_ts','time');
-WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+psql:include/chunk_utils_internal_orderedappend.sql:21: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
  table_name 
 ------------
  osm_ts
@@ -1252,9 +1259,9 @@ WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_sl
 \set ON_ERROR_STOP 0
 -- both range_start and range_end must be NULL, or non-NULL
 SELECT _timescaledb_functions.hypertable_osm_range_update('test_multicon', NULL, '2020-01-04 01:00'::timestamptz);
-ERROR:  range_start and range_end parameters must be both NULL or both non-NULL
+psql:include/chunk_utils_internal_orderedappend.sql:58: ERROR:  range_start and range_end parameters must be both NULL or both non-NULL
 SELECT _timescaledb_functions.hypertable_osm_range_update('test_multicon', NULL, NULL);
-ERROR:  could not determine polymorphic type because input has type unknown
+psql:include/chunk_utils_internal_orderedappend.sql:59: ERROR:  could not determine polymorphic type because input has type unknown
 SELECT _timescaledb_functions.hypertable_osm_range_update('test_multicon');
  hypertable_osm_range_update 
 -----------------------------
@@ -1306,7 +1313,7 @@ WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_sl
 -- attempt to update overlapping range, should fail
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_functions.hypertable_osm_range_update('test_chunkapp', '2020-01-02 01:00'::timestamptz, '2020-01-04 01:00');
-ERROR:  attempting to set overlapping range for tiered chunk of public.test_chunkapp
+psql:include/chunk_utils_internal_orderedappend.sql:86: ERROR:  attempting to set overlapping range for tiered chunk of public.test_chunkapp
 \set ON_ERROR_STOP 1
 -- update actual range of OSM chunk, should work
 SELECT _timescaledb_functions.hypertable_osm_range_update('test_chunkapp', '2020-01-03 00:00'::timestamptz, '2020-01-04 00:00');
@@ -1354,7 +1361,7 @@ SELECT ts_setup_osm_hook();
 
 \set ON_ERROR_STOP 0
 INSERT INTO test_chunkapp VALUES ('2020-01-03 02:00'::timestamptz, 3);
-ERROR:  Cannot insert into tiered chunk range of public.test_chunkapp - attempt to create new chunk with range  [Fri Jan 03 00:00:00 2020 PST Sat Jan 04 00:00:00 2020 PST] failed
+psql:include/chunk_utils_internal_orderedappend.sql:100: ERROR:  Cannot insert into tiered chunk range of public.test_chunkapp - attempt to create new chunk with range  [Fri Jan 03 00:00:00 2020 PST Sat Jan 04 00:00:00 2020 PST] failed
 \set ON_ERROR_STOP 1
 SELECT ts_undo_osm_hook();
  ts_undo_osm_hook 
@@ -1468,9 +1475,9 @@ SELECT * FROM test_chunkapp WHERE time < '2023-01-01' ORDER BY 1;
 \set ON_ERROR_STOP 0
 -- test adding constraint directly on OSM chunk is blocked
 ALTER TABLE test_chunkapp_fdw_child ADD CHECK (a > 0); -- non-dimensional
-ERROR:  operation not supported on OSM chunk tables
+psql:include/chunk_utils_internal_orderedappend.sql:127: ERROR:  operation not supported on OSM chunk tables
 ALTER TABLE test_chunkapp_fdw_child ADD CHECK (time > '1600-01-01'::timestamptz); -- dimensional
-ERROR:  operation not supported on OSM chunk tables
+psql:include/chunk_utils_internal_orderedappend.sql:128: ERROR:  operation not supported on OSM chunk tables
 -- but on hypertable, it is allowed
 ALTER TABLE test_chunkapp ADD CHECK (a > 0);
 \d+ test_chunkapp_fdw_child
@@ -1496,9 +1503,9 @@ SELECT create_hypertable('test2', 'time');
 
 INSERT INTO test2 VALUES ('2020-01-01'::timestamptz, 1);
 ALTER TABLE test2 SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "test2" is set to ""
-NOTICE:  default order by for hypertable "test2" is set to ""time" DESC"
+psql:include/chunk_utils_internal_orderedappend.sql:138: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/chunk_utils_internal_orderedappend.sql:138: NOTICE:  default segment by for hypertable "test2" is set to ""
+psql:include/chunk_utils_internal_orderedappend.sql:138: NOTICE:  default order by for hypertable "test2" is set to ""time" DESC"
 SELECT compress_chunk(show_chunks('test2'));
               compress_chunk              
 ------------------------------------------
@@ -1511,13 +1518,13 @@ FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.hypertable cht
 WHERE ht.table_name = 'test2' and cht.id = ht.compressed_hypertable_id \gset
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_functions.hypertable_osm_range_update(:'COMPRESSION_TBLNM'::regclass, '2020-01-01'::timestamptz);
-ERROR:  could not find time dimension for hypertable _timescaledb_internal._compressed_hypertable_18
+psql:include/chunk_utils_internal_orderedappend.sql:145: ERROR:  could not find time dimension for hypertable _timescaledb_internal._compressed_hypertable_18
 \set ON_ERROR_STOP 1
 -- test wrong/incompatible data types with hypertable time dimension
 -- update range of int2 with int4
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_functions.hypertable_osm_range_update('osm_int2', range_start => 65540::int4, range_end => 100000::int4);
-ERROR:  invalid time argument type "integer"
+psql:include/chunk_utils_internal_orderedappend.sql:151: ERROR:  invalid time argument type "integer"
 -- update range of int8 with int4
 SELECT _timescaledb_functions.hypertable_osm_range_update('osm_int8', 120, 150);
  hypertable_osm_range_update 
@@ -1534,7 +1541,7 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('osm_tstz', '2020-01-0
 
 -- udpate range of timestamp with bigint
 SELECT _timescaledb_functions.hypertable_osm_range_update('osm_tstz', 9223372036854771806, 9223372036854775406);
-ERROR:  invalid time argument type "bigint"
+psql:include/chunk_utils_internal_orderedappend.sql:157: ERROR:  invalid time argument type "bigint"
 \set ON_ERROR_STOP 1
 -- test dimension slice tuple visibility
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -1557,9 +1564,9 @@ ROLLBACK;
 -- should show 0 10 as range
 \set ON_ERROR_STOP 0
 INSERT INTO osm_slice_update VALUES (1);
-ERROR:  Cannot insert into tiered chunk range of public.osm_slice_update - attempt to create new chunk with range  [0 10] failed
+psql:include/chunk_utils_internal_orderedappend.sql:178: ERROR:  Cannot insert into tiered chunk range of public.osm_slice_update - attempt to create new chunk with range  [0 10] failed
 INSERT INTO osm_slice_update VALUES (1);
-ERROR:  Cannot insert into tiered chunk range of public.osm_slice_update - attempt to create new chunk with range  [0 10] failed
+psql:include/chunk_utils_internal_orderedappend.sql:179: ERROR:  Cannot insert into tiered chunk range of public.osm_slice_update - attempt to create new chunk with range  [0 10] failed
 \set ON_ERROR_STOP 1
 -- clean up databases created
 \c :TEST_DBNAME :ROLE_SUPERUSER
