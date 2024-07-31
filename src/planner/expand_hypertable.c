@@ -1068,7 +1068,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		ts_add_baserel_cache_entry_for_chunk(chunks[i]->table_id, ht);
 	}
 
-	/* nothing to do here if we have no chunks and no data nodes */
+	/* nothing to do here if we have no chunks */
 	if (list_length(inh_oids) == 0)
 		return;
 
@@ -1092,10 +1092,8 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 
 		/* Open rel if needed */
 
-		if (child_oid != parent_oid)
-			newrelation = table_open(child_oid, chunk_lock);
-		else
-			newrelation = oldrelation;
+		Assert(child_oid != parent_oid);
+		newrelation = table_open(child_oid, chunk_lock);
 
 		/* chunks cannot be temp tables */
 		Assert(!RELATION_IS_OTHER_TEMP(newrelation));
@@ -1165,15 +1163,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		Index child_rtindex = first_chunk_index + i;
 		/* build_simple_rel will add the child to the relarray */
 		RelOptInfo *child_rel = build_simple_rel(root, child_rtindex, rel);
-
-		/* if we're performing partitionwise aggregation, we must populate part_rels */
-		if (rel->part_rels != NULL)
-		{
-			rel->part_rels[i] = child_rel;
-#if PG15_GE
-			rel->live_parts = bms_add_member(rel->live_parts, i);
-#endif
-		}
 
 		/*
 		 * Can't touch fdw_private for OSM chunks, it might be managed by the
