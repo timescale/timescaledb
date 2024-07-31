@@ -473,6 +473,7 @@ ORDER BY table_name;
 \c :TEST_DBNAME :ROLE_4
 CREATE TABLE measure( id integer PRIMARY KEY, mname varchar(10));
 INSERT INTO measure VALUES( 1, 'temp');
+INSERT INTO measure VALUES( 2, 'osmtemp');
 
 CREATE TABLE hyper_constr  ( id integer, time bigint, temp float, mid integer
                              ,PRIMARY KEY (id, time)
@@ -485,7 +486,7 @@ INSERT INTO hyper_constr VALUES( 10, 200, 22, 1);
 
 \c postgres_fdw_db :ROLE_4
 CREATE TABLE fdw_hyper_constr(id integer, time bigint, temp float, mid integer);
-INSERT INTO fdw_hyper_constr VALUES( 10, 100, 33, 1);
+INSERT INTO fdw_hyper_constr VALUES( 10, 100, 33, 2);
 
 \c :TEST_DBNAME :ROLE_4
 -- this is a stand-in for the OSM table
@@ -509,6 +510,19 @@ SELECT * FROM hyper_constr order by time;
 --verify the check constraint exists on the OSM chunk
 SELECT conname FROM pg_constraint
 where conrelid = 'child_hyper_constr'::regclass ORDER BY 1;
+
+-- TEST foreign key trigger: deleting data from foreign table measure
+-- does not error out due to data in osm chunk
+\set ON_ERROR_STOP 0
+BEGIN;
+DELETE FROM measure where id = 1;
+ROLLBACK;
+
+--this touches osm chunk. should succeed silently without deleteing any data
+BEGIN;
+DELETE FROM measure where id = 2;
+ROLLBACK;
+\set ON_ERROR_STOP 1
 
 --TEST retention policy is applied on OSM chunk by calling registered callback
 CREATE OR REPLACE FUNCTION dummy_now_smallint() RETURNS BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 500::bigint' ;
@@ -611,6 +625,7 @@ CREATE INDEX hyper_constr_mid_idx ON hyper_constr(mid, time) WITH (timescaledb.t
 SELECT indexname, tablename FROM pg_indexes WHERE indexname = 'hyper_constr_mid_idx';
 DROP INDEX hyper_constr_mid_idx;
 
+-- TEST for hypertable_osm_range_update function
 -- test range of dimension slice for osm chunk for different datatypes
 CREATE TABLE osm_int2(time int2 NOT NULL);
 CREATE TABLE osm_int4(time int4 NOT NULL);
@@ -669,6 +684,7 @@ SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, 
 FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
 WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id ORDER BY cc.chunk_id;
 
+-- TEST for orderedappend that depends on hypertable_osm_range_update functionality
 -- test further with ordered append
 \c postgres_fdw_db :ROLE_4;
 CREATE TABLE test_chunkapp_fdw (time timestamptz NOT NULL, a int);

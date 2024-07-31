@@ -866,6 +866,7 @@ ORDER BY table_name;
 \c :TEST_DBNAME :ROLE_4
 CREATE TABLE measure( id integer PRIMARY KEY, mname varchar(10));
 INSERT INTO measure VALUES( 1, 'temp');
+INSERT INTO measure VALUES( 2, 'osmtemp');
 CREATE TABLE hyper_constr  ( id integer, time bigint, temp float, mid integer
                              ,PRIMARY KEY (id, time)
                              ,FOREIGN KEY ( mid) REFERENCES measure(id)
@@ -880,7 +881,7 @@ SELECT create_hypertable('hyper_constr', 'time', chunk_time_interval => 10);
 INSERT INTO hyper_constr VALUES( 10, 200, 22, 1);
 \c postgres_fdw_db :ROLE_4
 CREATE TABLE fdw_hyper_constr(id integer, time bigint, temp float, mid integer);
-INSERT INTO fdw_hyper_constr VALUES( 10, 100, 33, 1);
+INSERT INTO fdw_hyper_constr VALUES( 10, 100, 33, 2);
 \c :TEST_DBNAME :ROLE_4
 -- this is a stand-in for the OSM table
 CREATE FOREIGN TABLE child_hyper_constr
@@ -914,7 +915,7 @@ ORDER BY table_name;
 SELECT * FROM hyper_constr order by time;
  id | time | temp | mid 
 ----+------+------+-----
- 10 |  100 |   33 |   1
+ 10 |  100 |   33 |   2
  10 |  200 |   22 |   1
 (2 rows)
 
@@ -926,6 +927,18 @@ where conrelid = 'child_hyper_constr'::regclass ORDER BY 1;
  hyper_constr_temp_check
 (1 row)
 
+-- TEST foreign key trigger: deleting data from foreign table measure
+-- does not error out due to data in osm chunk
+\set ON_ERROR_STOP 0
+BEGIN;
+DELETE FROM measure where id = 1;
+ERROR:  update or delete on table "measure" violates foreign key constraint "hyper_constr_mid_fkey" on table "hyper_constr"
+ROLLBACK;
+--this touches osm chunk. should succeed silently without deleteing any data
+BEGIN;
+DELETE FROM measure where id = 2;
+ROLLBACK;
+\set ON_ERROR_STOP 1
 --TEST retention policy is applied on OSM chunk by calling registered callback
 CREATE OR REPLACE FUNCTION dummy_now_smallint() RETURNS BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 500::bigint' ;
 SELECT set_integer_now_func('hyper_constr', 'dummy_now_smallint');
@@ -1090,6 +1103,7 @@ SELECT indexname, tablename FROM pg_indexes WHERE indexname = 'hyper_constr_mid_
 (1 row)
 
 DROP INDEX hyper_constr_mid_idx;
+-- TEST for hypertable_osm_range_update function
 -- test range of dimension slice for osm chunk for different datatypes
 CREATE TABLE osm_int2(time int2 NOT NULL);
 CREATE TABLE osm_int4(time int4 NOT NULL);
@@ -1227,6 +1241,7 @@ WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_sl
        25 | _hyper_15_25_chunk |      0 | t         |                 22 | 9223372036854775806 | 9223372036854775807
 (1 row)
 
+-- TEST for orderedappend that depends on hypertable_osm_range_update functionality
 -- test further with ordered append
 \c postgres_fdw_db :ROLE_4;
 CREATE TABLE test_chunkapp_fdw (time timestamptz NOT NULL, a int);

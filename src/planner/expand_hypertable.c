@@ -1046,11 +1046,21 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	/* Can have zero chunks. */
 	Assert(num_chunks == 0 || chunks != NULL);
 
+	/*
+	 * We need to mark the RowMark for the hypertable as parent
+	 * to trigger inclusion of tableoid to allow for correctly
+	 * identifying tuples from individual chunks.
+	 */
+	PlanRowMark *oldrc = get_plan_rowmark(root->rowMarks, rti);
+	if (oldrc)
+	{
+		oldrc->isParent = true;
+	}
+
 	for (unsigned int i = 0; i < num_chunks; i++)
 	{
 		if (!chunks[i]->fd.osm_chunk || include_osm)
 			inh_oids = lappend_oid(inh_oids, chunks[i]->table_id);
-
 		/*
 		 * Add the information about chunks to the baserel info cache for
 		 * classify_relation().
