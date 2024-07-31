@@ -475,23 +475,36 @@ CREATE TABLE measure( id integer PRIMARY KEY, mname varchar(10));
 INSERT INTO measure VALUES( 1, 'temp');
 INSERT INTO measure VALUES( 2, 'osmtemp');
 
+CREATE TABLE devices( id integer PRIMARY KEY, devname varchar(10) );
+INSERT INTO devices VALUES( 111, 'dev1');
+INSERT INTO devices VALUES( 222, 'osmdev');
+
+CREATE TABLE devicesref( id integer PRIMARY KEY, devname varchar(10) );
+INSERT INTO devicesref VALUES( 44, 'devref');
+INSERT INTO devicesref VALUES( 55, 'osmdevref');
+
 CREATE TABLE hyper_constr  ( id integer, time bigint, temp float, mid integer
+                             ,dev integer
+                             ,devref integer
                              ,PRIMARY KEY (id, time)
                              ,FOREIGN KEY ( mid) REFERENCES measure(id)
+                             ,FOREIGN KEY ( dev ) REFERENCES devices(id) ON DELETE CASCADE
+                             ,FOREIGN KEY ( devref ) REFERENCES devicesref(id) ON DELETE
+RESTRICT
                              ,CHECK ( temp > 10)
                            );
 
 SELECT create_hypertable('hyper_constr', 'time', chunk_time_interval => 10);
-INSERT INTO hyper_constr VALUES( 10, 200, 22, 1);
+INSERT INTO hyper_constr VALUES( 10, 200, 22, 1, 111, 44);
 
 \c postgres_fdw_db :ROLE_4
-CREATE TABLE fdw_hyper_constr(id integer, time bigint, temp float, mid integer);
-INSERT INTO fdw_hyper_constr VALUES( 10, 100, 33, 2);
+CREATE TABLE fdw_hyper_constr(id integer, time bigint, temp float, mid integer, dev integer, devref integer);
+INSERT INTO fdw_hyper_constr VALUES( 10, 100, 33, 2, 222, 55);
 
 \c :TEST_DBNAME :ROLE_4
 -- this is a stand-in for the OSM table
 CREATE FOREIGN TABLE child_hyper_constr
-( id integer NOT NULL, time bigint NOT NULL, temp float, mid integer)
+( id integer NOT NULL, time bigint NOT NULL, temp float, mid integer, dev integer, devref integer)
  SERVER s3_server OPTIONS ( schema_name 'public', table_name 'fdw_hyper_constr');
 
 --check constraints are automatically added for the foreign table
@@ -517,12 +530,23 @@ where conrelid = 'child_hyper_constr'::regclass ORDER BY 1;
 BEGIN;
 DELETE FROM measure where id = 1;
 ROLLBACK;
+\set ON_ERROR_STOP 1
 
---this touches osm chunk. should succeed silently without deleteing any data
+--this touches osm chunk. should succeed silently without deleting any data
 BEGIN;
 DELETE FROM measure where id = 2;
+SELECT * FROM measure order by id;
 ROLLBACK;
-\set ON_ERROR_STOP 1
+
+BEGIN;
+DELETE FROM devices where id = 222;
+SELECT * FROM devices order by id;
+ROLLBACK;
+
+BEGIN;
+DELETE FROM devicesref where id = 55;
+SELECT * FROM devicesref order by id;
+ROLLBACK;
 
 --TEST retention policy is applied on OSM chunk by calling registered callback
 CREATE OR REPLACE FUNCTION dummy_now_smallint() RETURNS BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 500::bigint' ;
