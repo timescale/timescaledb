@@ -4,7 +4,8 @@
 
 -- create constraint on newly created chunk based on hypertable constraint
 CREATE OR REPLACE FUNCTION _timescaledb_functions.chunk_constraint_add_table_constraint(
-    chunk_constraint_row  _timescaledb_catalog.chunk_constraint
+    chunk_constraint_row  _timescaledb_catalog.chunk_constraint,
+    using_index BOOLEAN
 )
     RETURNS VOID LANGUAGE PLPGSQL AS
 $BODY$
@@ -17,6 +18,8 @@ DECLARE
     def TEXT;
     indx_tablespace NAME;
     tablespace_def TEXT;
+    chunk_constraint_index_name NAME;
+    row_record RECORD;
 BEGIN
     SELECT * INTO STRICT chunk_row FROM _timescaledb_catalog.chunk c WHERE c.id = chunk_constraint_row.chunk_id;
     SELECT * INTO STRICT hypertable_row FROM _timescaledb_catalog.hypertable h WHERE h.id = chunk_row.hypertable_id;
@@ -30,15 +33,39 @@ BEGIN
               conrelid = format('%I.%I', hypertable_row.schema_name, hypertable_row.table_name)::regclass::oid;
 
         IF constraint_type IN ('p','u') THEN
-          -- since primary keys and unique constraints are backed by an index
-          -- they might have an index tablespace assigned
-          -- the tablspace is not part of the constraint definition so
-          -- we have to append it explicitly to preserve it
-          SELECT T.spcname INTO indx_tablespace
-          FROM pg_constraint C, pg_class I, pg_tablespace T
-          WHERE C.oid = constraint_oid AND C.contype IN ('p', 'u') AND I.oid = C.conindid AND I.reltablespace = T.oid;
+          IF using_index THEN
+            -- indexes created for constraints are named after the constraint
+            -- so we can find the index name by looking up the constraint name.
+            SELECT index_name INTO STRICT chunk_constraint_index_name FROM _timescaledb_catalog.chunk_index
+            WHERE chunk_id = chunk_row.id AND hypertable_index_name = chunk_constraint_row.hypertable_constraint_name;
 
-          def := pg_get_constraintdef(constraint_oid);
+            IF chunk_constraint_index_name IS NULL THEN
+              RAISE 'index not found for constraint %', chunk_constraint_row;
+            END IF;
+
+            CASE constraint_type
+              WHEN 'p' THEN
+                def := pg_catalog.format(
+                    $$ PRIMARY KEY USING INDEX %I $$,
+                    chunk_constraint_index_name
+                );
+              WHEN 'u' THEN
+                def := pg_catalog.format(
+                    $$ UNIQUE USING INDEX %I $$,
+                    chunk_constraint_index_name
+                );
+            END CASE;
+          ELSE
+            -- since primary keys and unique constraints are backed by an index
+            -- they might have an index tablespace assigned
+            -- the tablspace is not part of the constraint definition so
+            -- we have to append it explicitly to preserve it
+            SELECT T.spcname INTO indx_tablespace
+            FROM pg_constraint C, pg_class I, pg_tablespace T
+            WHERE C.oid = constraint_oid AND C.contype IN ('p', 'u') AND I.oid = C.conindid AND I.reltablespace = T.oid;
+
+            def := pg_get_constraintdef(constraint_oid);
+          END IF;
 
         ELSIF constraint_type = 't' THEN
           -- constraint triggers are copied separately with normal triggers
