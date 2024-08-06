@@ -1,0 +1,1 @@
+Fixes: #7182 Fix untier_chunk for hypertables with foreign keys
