@@ -868,7 +868,8 @@ chunk_cmp_chunk_reloid(const void *c1, const void *c2)
 }
 
 static Chunk **
-find_children_chunks(HypertableRestrictInfo *hri, Hypertable *ht, unsigned int *num_chunks)
+find_children_chunks(HypertableRestrictInfo *hri, Hypertable *ht, bool include_osm,
+					 unsigned int *num_chunks)
 {
 	/*
 	 * Unlike find_all_inheritors we do not include parent because if there
@@ -876,7 +877,7 @@ find_children_chunks(HypertableRestrictInfo *hri, Hypertable *ht, unsigned int *
 	 * have a trigger blocking inserts on the parent table it cannot contain
 	 * any rows.
 	 */
-	Chunk **chunks = ts_hypertable_restrict_info_get_chunks(hri, ht, num_chunks);
+	Chunk **chunks = ts_hypertable_restrict_info_get_chunks(hri, ht, include_osm, num_chunks);
 
 	/*
 	 * Sort the chunks by oid ascending to roughly match the order provided
@@ -918,7 +919,7 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, List *jo
  */
 static Chunk **
 get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
-		   unsigned int *num_chunks)
+		   bool include_osm, unsigned int *num_chunks)
 {
 	bool reverse;
 	int order_attno;
@@ -956,13 +957,14 @@ get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *
 
 		return ts_hypertable_restrict_info_get_chunks_ordered(hri,
 															  ht,
+															  include_osm,
 															  NULL,
 															  reverse,
 															  nested_oids,
 															  num_chunks);
 	}
 
-	return find_children_chunks(hri, ht, num_chunks);
+	return find_children_chunks(hri, ht, include_osm, num_chunks);
 }
 
 static bool
@@ -1012,8 +1014,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 {
 	RangeTblEntry *rte = rt_fetch(rel->relid, root->parse->rtable);
 	Oid parent_oid = rte->relid;
-	List *inh_oids = NIL;
-	ListCell *l;
 	Relation oldrelation;
 	Query *parse = root->parse;
 	Index rti = rel->relid;
@@ -1042,9 +1042,13 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 
 	Chunk **chunks = NULL;
 	unsigned int num_chunks = 0;
-	chunks = get_chunks(&ctx, root, rel, ht, &num_chunks);
+	chunks = get_chunks(&ctx, root, rel, ht, include_osm, &num_chunks);
 	/* Can have zero chunks. */
 	Assert(num_chunks == 0 || chunks != NULL);
+
+	/* nothing to do here if we have no chunks */
+	if (!num_chunks)
+		return;
 
 	/*
 	 * We need to mark the RowMark for the hypertable as parent
@@ -1059,18 +1063,12 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 
 	for (unsigned int i = 0; i < num_chunks; i++)
 	{
-		if (!chunks[i]->fd.osm_chunk || include_osm)
-			inh_oids = lappend_oid(inh_oids, chunks[i]->table_id);
 		/*
 		 * Add the information about chunks to the baserel info cache for
 		 * classify_relation().
 		 */
 		ts_add_baserel_cache_entry_for_chunk(chunks[i]->table_id, ht);
 	}
-
-	/* nothing to do here if we have no chunks */
-	if (list_length(inh_oids) == 0)
-		return;
 
 	oldrelation = table_open(parent_oid, NoLock);
 
@@ -1079,11 +1077,12 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	 * children to them. We include potential data node rels we might need to
 	 * create in case of a distributed hypertable.
 	 */
-	expand_planner_arrays(root, list_length(inh_oids));
+	expand_planner_arrays(root, num_chunks);
 
-	foreach (l, inh_oids)
+	for (unsigned int i = 0; i < num_chunks; i++)
 	{
-		Oid child_oid = lfirst_oid(l);
+		Chunk *chunk = chunks[i];
+		Oid child_oid = chunk->table_id;
 		Relation newrelation;
 		RangeTblEntry *childrte;
 		Index child_rtindex;
@@ -1158,7 +1157,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	 * build_simple_rel will look things up in the append_rel_array, so we can
 	 * only use it after that array has been set up.
 	 */
-	for (int i = 0; i < list_length(inh_oids); i++)
+	for (unsigned int i = 0; i < num_chunks; i++)
 	{
 		Index child_rtindex = first_chunk_index + i;
 		/* build_simple_rel will add the child to the relarray */
@@ -1168,12 +1167,12 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		 * Can't touch fdw_private for OSM chunks, it might be managed by the
 		 * OSM extension, or, in the tests, by postgres_fdw.
 		 */
-		if (!IS_OSM_CHUNK(chunks[i]))
+		Chunk *chunk = chunks[i];
+		if (!IS_OSM_CHUNK(chunk))
 		{
-			ts_get_private_reloptinfo(child_rel)->cached_chunk_struct = chunks[i];
+			Assert(chunk->table_id == root->simple_rte_array[child_rtindex]->relid);
+			ts_get_private_reloptinfo(child_rel)->cached_chunk_struct = chunk;
 		}
-
-		Assert(chunks[i]->table_id == root->simple_rte_array[child_rtindex]->relid);
 	}
 }
 
