@@ -67,6 +67,20 @@ emit_error(const char *err)
 	ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("%s", err)));
 }
 
+static Oid
+adjust_unknown_policy_argytpe(Oid argtype, Oid partition_type)
+{
+	Oid expected_type = argtype;
+	if (argtype != UNKNOWNOID)
+		return expected_type;
+
+	if (IS_INTEGER_TYPE(partition_type))
+		expected_type = partition_type;
+	else
+		expected_type = INTERVALOID;
+	return expected_type;
+}
+
 static int64
 offset_to_int64(NullableDatum arg, Oid argtype, Oid partition_type, bool is_start)
 {
@@ -78,8 +92,13 @@ offset_to_int64(NullableDatum arg, Oid argtype, Oid partition_type, bool is_star
 			return ts_time_get_min(partition_type);
 	}
 	else
-		return interval_to_int64(arg.value, argtype);
+	{
+		Oid adjusted_argtype = adjust_unknown_policy_argytpe(argtype, partition_type);
+		/* now that we verified infinity or not, we can adjust the argtype */
+		return interval_to_int64(arg.value, adjusted_argtype);
+	}
 }
+
 /*
  * Check different conditions if the requested policy parameters
  * are compatible with each other and then create/update the
@@ -128,13 +147,19 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 			refresh_total_interval != ts_time_get_max(all_policies.partition_type))
 			refresh_total_interval += refresh_interval;
 	}
-
+	/* compress_after, drop_after interval types might be unknown, adjust according to Cagg time
+	 * type */
 	if (all_policies.compress)
-		compress_after = interval_to_int64(all_policies.compress->compress_after,
-										   all_policies.compress->compress_after_type);
+		compress_after =
+			interval_to_int64(all_policies.compress->compress_after,
+							  adjust_unknown_policy_argytpe(all_policies.compress
+																->compress_after_type,
+															all_policies.partition_type));
 	if (all_policies.retention)
-		drop_after = interval_to_int64(all_policies.retention->drop_after,
-									   all_policies.retention->drop_after_type);
+		drop_after =
+			interval_to_int64(all_policies.retention->drop_after,
+							  adjust_unknown_policy_argytpe(all_policies.retention->drop_after_type,
+															all_policies.partition_type));
 
 	if (orig_ht_reten_job)
 	{
