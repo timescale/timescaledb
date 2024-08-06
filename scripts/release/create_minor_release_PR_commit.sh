@@ -118,10 +118,11 @@ tail -n "$CHANGELOG_ENTRIES" CHANGELOG.md.tmp >> CHANGELOG.md
 rm CHANGELOG.md.tmp
 
 
-echo "---- Deleting fix_* & pr_* files ----"
+echo "---- Deleting all unreleased pr_* , fix_* , ... style files, except template ones ----"
 
-rm -f .unreleased/fix_*
-rm -f .unreleased/pr_*
+cd .unreleased
+ls |grep -vi 'template' |grep -vi 'release_notes'|xargs git rm
+cd ..
 
 git diff HEAD --name-only
 
