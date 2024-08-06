@@ -4,6 +4,14 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.16.1 (2024-08-06)
+
+This release contains bug fixes since the 2.16.0 release. We recommend
+that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* #7182 Fix untier_chunk for hypertables with foreign keys
+
 ## 2.16.0 (2024-07-31)
 
 This release contains significant performance improvements when working with compressed data, extended join
