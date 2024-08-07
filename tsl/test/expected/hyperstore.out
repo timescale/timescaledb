@@ -1,13 +1,22 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+show timescaledb.hyperstore_indexam_whitelist;
+ timescaledb.hyperstore_indexam_whitelist 
+------------------------------------------
+ btree,hash
+(1 row)
+
+set role :ROLE_DEFAULT_PERM_USER;
 SET timescaledb.arrow_cache_maxsize = 4;
 CREATE TABLE readings(
        time timestamptz UNIQUE,
        location int,
        device int,
        temp numeric(4,1),
-       humidity float
+       humidity float,
+       jdata jsonb
 );
 SELECT create_hypertable('readings', by_range('time', '1d'::interval));
 NOTICE:  adding not-null constraint to column "time"
@@ -24,8 +33,8 @@ SELECT setseed(1);
  
 (1 row)
 
-INSERT INTO readings (time, location, device, temp, humidity)
-SELECT t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
+INSERT INTO readings (time, location, device, temp, humidity, jdata)
+SELECT t, ceil(random()*10), ceil(random()*30), random()*40, random()*100, '{"a":1,"b":2}'::jsonb
 FROM generate_series('2022-06-01'::timestamptz, '2022-07-01'::timestamptz, '5m') t;
 ALTER TABLE readings SET (
 	  timescaledb.compress,
@@ -128,6 +137,15 @@ WHERE time = '2022-06-01'::timestamptz;
 
 -- Create a new index on a compressed column
 CREATE INDEX ON readings (location);
+-- Check that we error out on unsupported index types
+\set ON_ERROR_STOP 0
+create index on readings using brin (device);
+ERROR:  index access method "brin" not supported
+create index on readings using gin (jdata);
+ERROR:  index access method "gin" not supported
+create index on readings using magicam (device);
+ERROR:  access method "magicam" does not exist
+\set ON_ERROR_STOP 1
 -- Index added on location
 SELECT * FROM test.show_indexes(:'chunk');
                             Index                             |  Columns   | Expr | Unique | Primary | Exclusion | Tablespace 
@@ -173,13 +191,13 @@ SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
 (5 rows)
 
 SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
-             time             | location | device | temp |     humidity     
-------------------------------+----------+--------+------+------------------
- Wed Jun 01 00:55:00 2022 PDT |        1 |      1 | 18.1 | 93.2399098726618
- Wed Jun 01 02:50:00 2022 PDT |        6 |      2 |  3.4 | 79.4169433908854
- Wed Jun 01 03:15:00 2022 PDT |        2 |      2 | 32.4 | 43.4716481956856
- Wed Jun 01 03:35:00 2022 PDT |        9 |      3 | 37.1 | 29.4121735958255
- Wed Jun 01 05:05:00 2022 PDT |        2 |      1 | 23.9 | 29.1861844182151
+             time             | location | device | temp |     humidity     |      jdata       
+------------------------------+----------+--------+------+------------------+------------------
+ Wed Jun 01 00:55:00 2022 PDT |        1 |      1 | 18.1 | 93.2399098726618 | {"a": 1, "b": 2}
+ Wed Jun 01 02:50:00 2022 PDT |        6 |      2 |  3.4 | 79.4169433908854 | {"a": 1, "b": 2}
+ Wed Jun 01 03:15:00 2022 PDT |        2 |      2 | 32.4 | 43.4716481956856 | {"a": 1, "b": 2}
+ Wed Jun 01 03:35:00 2022 PDT |        9 |      3 | 37.1 | 29.4121735958255 | {"a": 1, "b": 2}
+ Wed Jun 01 05:05:00 2022 PDT |        2 |      1 | 23.9 | 29.1861844182151 | {"a": 1, "b": 2}
 (5 rows)
 
 -- Show with indexscan
@@ -198,13 +216,13 @@ SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
 (5 rows)
 
 SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
-             time             | location | device | temp |     humidity     
-------------------------------+----------+--------+------+------------------
- Wed Jun 01 00:55:00 2022 PDT |        1 |      1 | 18.1 | 93.2399098726618
- Wed Jun 01 02:50:00 2022 PDT |        6 |      2 |  3.4 | 79.4169433908854
- Wed Jun 01 03:15:00 2022 PDT |        2 |      2 | 32.4 | 43.4716481956856
- Wed Jun 01 03:35:00 2022 PDT |        9 |      3 | 37.1 | 29.4121735958255
- Wed Jun 01 05:05:00 2022 PDT |        2 |      1 | 23.9 | 29.1861844182151
+             time             | location | device | temp |     humidity     |      jdata       
+------------------------------+----------+--------+------+------------------+------------------
+ Wed Jun 01 00:55:00 2022 PDT |        1 |      1 | 18.1 | 93.2399098726618 | {"a": 1, "b": 2}
+ Wed Jun 01 02:50:00 2022 PDT |        6 |      2 |  3.4 | 79.4169433908854 | {"a": 1, "b": 2}
+ Wed Jun 01 03:15:00 2022 PDT |        2 |      2 | 32.4 | 43.4716481956856 | {"a": 1, "b": 2}
+ Wed Jun 01 03:35:00 2022 PDT |        9 |      3 | 37.1 | 29.4121735958255 | {"a": 1, "b": 2}
+ Wed Jun 01 05:05:00 2022 PDT |        2 |      1 | 23.9 | 29.1861844182151 | {"a": 1, "b": 2}
 (5 rows)
 
 SET enable_indexscan = false;
@@ -226,13 +244,13 @@ SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
 (8 rows)
 
 SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
-             time             | location | device | temp |     humidity     
-------------------------------+----------+--------+------+------------------
- Wed Jun 01 00:55:00 2022 PDT |        1 |      1 | 18.1 | 93.2399098726618
- Wed Jun 01 02:50:00 2022 PDT |        6 |      2 |  3.4 | 79.4169433908854
- Wed Jun 01 03:15:00 2022 PDT |        2 |      2 | 32.4 | 43.4716481956856
- Wed Jun 01 03:35:00 2022 PDT |        9 |      3 | 37.1 | 29.4121735958255
- Wed Jun 01 05:05:00 2022 PDT |        2 |      1 | 23.9 | 29.1861844182151
+             time             | location | device | temp |     humidity     |      jdata       
+------------------------------+----------+--------+------+------------------+------------------
+ Wed Jun 01 00:55:00 2022 PDT |        1 |      1 | 18.1 | 93.2399098726618 | {"a": 1, "b": 2}
+ Wed Jun 01 02:50:00 2022 PDT |        6 |      2 |  3.4 | 79.4169433908854 | {"a": 1, "b": 2}
+ Wed Jun 01 03:15:00 2022 PDT |        2 |      2 | 32.4 | 43.4716481956856 | {"a": 1, "b": 2}
+ Wed Jun 01 03:35:00 2022 PDT |        9 |      3 | 37.1 | 29.4121735958255 | {"a": 1, "b": 2}
+ Wed Jun 01 05:05:00 2022 PDT |        2 |      1 | 23.9 | 29.1861844182151 | {"a": 1, "b": 2}
 (5 rows)
 
 SET timescaledb.enable_transparent_decompression TO false;
@@ -250,13 +268,13 @@ SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
 (5 rows)
 
 SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
-             time             | location | device | temp |     humidity     
-------------------------------+----------+--------+------+------------------
- Wed Jun 01 00:25:00 2022 PDT |        3 |      5 | 23.5 |  76.360064629636
- Wed Jun 01 00:30:00 2022 PDT |        3 |     19 |  8.3 | 10.2100470173341
- Wed Jun 01 00:55:00 2022 PDT |        1 |      1 | 18.1 | 93.2399098726618
- Wed Jun 01 01:05:00 2022 PDT |        3 |      7 |  1.4 | 13.8143608776025
- Wed Jun 01 01:20:00 2022 PDT |        2 |     16 | 10.2 | 32.6534412097854
+             time             | location | device | temp |     humidity     |      jdata       
+------------------------------+----------+--------+------+------------------+------------------
+ Wed Jun 01 00:25:00 2022 PDT |        3 |      5 | 23.5 |  76.360064629636 | {"a": 1, "b": 2}
+ Wed Jun 01 00:30:00 2022 PDT |        3 |     19 |  8.3 | 10.2100470173341 | {"a": 1, "b": 2}
+ Wed Jun 01 00:55:00 2022 PDT |        1 |      1 | 18.1 | 93.2399098726618 | {"a": 1, "b": 2}
+ Wed Jun 01 01:05:00 2022 PDT |        3 |      7 |  1.4 | 13.8143608776025 | {"a": 1, "b": 2}
+ Wed Jun 01 01:20:00 2022 PDT |        2 |     16 | 10.2 | 32.6534412097854 | {"a": 1, "b": 2}
 (5 rows)
 
 -- With index scan
@@ -274,13 +292,13 @@ SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
 (5 rows)
 
 SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
-             time             | location | device | temp |     humidity     
-------------------------------+----------+--------+------+------------------
- Wed Jun 01 00:25:00 2022 PDT |        3 |      5 | 23.5 |  76.360064629636
- Wed Jun 01 00:30:00 2022 PDT |        3 |     19 |  8.3 | 10.2100470173341
- Wed Jun 01 00:55:00 2022 PDT |        1 |      1 | 18.1 | 93.2399098726618
- Wed Jun 01 01:05:00 2022 PDT |        3 |      7 |  1.4 | 13.8143608776025
- Wed Jun 01 01:20:00 2022 PDT |        2 |     16 | 10.2 | 32.6534412097854
+             time             | location | device | temp |     humidity     |      jdata       
+------------------------------+----------+--------+------+------------------+------------------
+ Wed Jun 01 00:25:00 2022 PDT |        3 |      5 | 23.5 |  76.360064629636 | {"a": 1, "b": 2}
+ Wed Jun 01 00:30:00 2022 PDT |        3 |     19 |  8.3 | 10.2100470173341 | {"a": 1, "b": 2}
+ Wed Jun 01 00:55:00 2022 PDT |        1 |      1 | 18.1 | 93.2399098726618 | {"a": 1, "b": 2}
+ Wed Jun 01 01:05:00 2022 PDT |        3 |      7 |  1.4 | 13.8143608776025 | {"a": 1, "b": 2}
+ Wed Jun 01 01:20:00 2022 PDT |        2 |     16 | 10.2 | 32.6534412097854 | {"a": 1, "b": 2}
 (5 rows)
 
 SET enable_indexscan = false;
@@ -289,13 +307,13 @@ SET timescaledb.enable_columnarscan = true;
 -- With transparent decompression
 SET timescaledb.enable_transparent_decompression TO 'hyperstore';
 SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
-             time             | location | device | temp |     humidity     
-------------------------------+----------+--------+------+------------------
- Wed Jun 01 00:25:00 2022 PDT |        3 |      5 | 23.5 |  76.360064629636
- Wed Jun 01 00:30:00 2022 PDT |        3 |     19 |  8.3 | 10.2100470173341
- Wed Jun 01 00:55:00 2022 PDT |        1 |      1 | 18.1 | 93.2399098726618
- Wed Jun 01 01:05:00 2022 PDT |        3 |      7 |  1.4 | 13.8143608776025
- Wed Jun 01 01:20:00 2022 PDT |        2 |     16 | 10.2 | 32.6534412097854
+             time             | location | device | temp |     humidity     |      jdata       
+------------------------------+----------+--------+------+------------------+------------------
+ Wed Jun 01 00:25:00 2022 PDT |        3 |      5 | 23.5 |  76.360064629636 | {"a": 1, "b": 2}
+ Wed Jun 01 00:30:00 2022 PDT |        3 |     19 |  8.3 | 10.2100470173341 | {"a": 1, "b": 2}
+ Wed Jun 01 00:55:00 2022 PDT |        1 |      1 | 18.1 | 93.2399098726618 | {"a": 1, "b": 2}
+ Wed Jun 01 01:05:00 2022 PDT |        3 |      7 |  1.4 | 13.8143608776025 | {"a": 1, "b": 2}
+ Wed Jun 01 01:20:00 2022 PDT |        2 |     16 | 10.2 | 32.6534412097854 | {"a": 1, "b": 2}
 (5 rows)
 
 SET timescaledb.enable_transparent_decompression TO false;
@@ -310,25 +328,25 @@ SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
 (2 rows)
 
 SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
-             time             | location | device | temp |     humidity     
-------------------------------+----------+--------+------+------------------
- Wed Jun 01 00:55:00 2022 PDT |        1 |      1 | 18.1 | 93.2399098726618
- Wed Jun 01 12:45:00 2022 PDT |        1 |      1 | 13.2 | 86.7500491115748
- Wed Jun 01 13:40:00 2022 PDT |        1 |      4 | 12.8 | 37.4106484592863
- Wed Jun 01 09:45:00 2022 PDT |        1 |      5 | 18.1 |  68.209387888428
- Wed Jun 01 12:50:00 2022 PDT |        1 |      5 | 25.2 | 62.5889874488792
+             time             | location | device | temp |     humidity     |      jdata       
+------------------------------+----------+--------+------+------------------+------------------
+ Wed Jun 01 00:55:00 2022 PDT |        1 |      1 | 18.1 | 93.2399098726618 | {"a": 1, "b": 2}
+ Wed Jun 01 12:45:00 2022 PDT |        1 |      1 | 13.2 | 86.7500491115748 | {"a": 1, "b": 2}
+ Wed Jun 01 13:40:00 2022 PDT |        1 |      4 | 12.8 | 37.4106484592863 | {"a": 1, "b": 2}
+ Wed Jun 01 09:45:00 2022 PDT |        1 |      5 | 18.1 |  68.209387888428 | {"a": 1, "b": 2}
+ Wed Jun 01 12:50:00 2022 PDT |        1 |      5 | 25.2 | 62.5889874488792 | {"a": 1, "b": 2}
 (5 rows)
 
 -- Show with transparent decompression
 SET timescaledb.enable_transparent_decompression TO 'hyperstore';
 SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
-             time             | location | device | temp |     humidity     
-------------------------------+----------+--------+------+------------------
- Wed Jun 01 13:40:00 2022 PDT |        1 |      4 | 12.8 | 37.4106484592863
- Wed Jun 01 09:45:00 2022 PDT |        1 |      5 | 18.1 |  68.209387888428
- Wed Jun 01 00:55:00 2022 PDT |        1 |      1 | 18.1 | 93.2399098726618
- Wed Jun 01 12:45:00 2022 PDT |        1 |      1 | 13.2 | 86.7500491115748
- Wed Jun 01 12:50:00 2022 PDT |        1 |      5 | 25.2 | 62.5889874488792
+             time             | location | device | temp |     humidity     |      jdata       
+------------------------------+----------+--------+------+------------------+------------------
+ Wed Jun 01 13:40:00 2022 PDT |        1 |      4 | 12.8 | 37.4106484592863 | {"a": 1, "b": 2}
+ Wed Jun 01 09:45:00 2022 PDT |        1 |      5 | 18.1 |  68.209387888428 | {"a": 1, "b": 2}
+ Wed Jun 01 00:55:00 2022 PDT |        1 |      1 | 18.1 | 93.2399098726618 | {"a": 1, "b": 2}
+ Wed Jun 01 12:45:00 2022 PDT |        1 |      1 | 13.2 | 86.7500491115748 | {"a": 1, "b": 2}
+ Wed Jun 01 12:50:00 2022 PDT |        1 |      5 | 25.2 | 62.5889874488792 | {"a": 1, "b": 2}
 (5 rows)
 
 SET timescaledb.enable_transparent_decompression TO false;
@@ -399,13 +417,13 @@ ON (c1.compressed_chunk_id = c2.id);
 
 -- Show same output as first query above but for heap
 SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
-             time             | location | device | temp |     humidity     
-------------------------------+----------+--------+------+------------------
- Wed Jun 01 00:55:00 2022 PDT |        1 |      1 | 18.1 | 93.2399098726618
- Wed Jun 01 02:50:00 2022 PDT |        6 |      2 |  3.4 | 79.4169433908854
- Wed Jun 01 03:15:00 2022 PDT |        2 |      2 | 32.4 | 43.4716481956856
- Wed Jun 01 03:35:00 2022 PDT |        9 |      3 | 37.1 | 29.4121735958255
- Wed Jun 01 05:05:00 2022 PDT |        2 |      1 | 23.9 | 29.1861844182151
+             time             | location | device | temp |     humidity     |      jdata       
+------------------------------+----------+--------+------+------------------+------------------
+ Wed Jun 01 00:55:00 2022 PDT |        1 |      1 | 18.1 | 93.2399098726618 | {"a": 1, "b": 2}
+ Wed Jun 01 02:50:00 2022 PDT |        6 |      2 |  3.4 | 79.4169433908854 | {"a": 1, "b": 2}
+ Wed Jun 01 03:15:00 2022 PDT |        2 |      2 | 32.4 | 43.4716481956856 | {"a": 1, "b": 2}
+ Wed Jun 01 03:35:00 2022 PDT |        9 |      3 | 37.1 | 29.4121735958255 | {"a": 1, "b": 2}
+ Wed Jun 01 05:05:00 2022 PDT |        2 |      1 | 23.9 | 29.1861844182151 | {"a": 1, "b": 2}
 (5 rows)
 
 -- Show access method used on chunk
@@ -478,9 +496,9 @@ SELECT t, ceil(random()*10), ceil(random()*30), random()*40, random()*100, rando
 FROM generate_series('2022-06-01 00:06:15'::timestamptz, '2022-06-01 17:00', '5m') t;
 -- Check that new data is returned
 SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
-             time             | location | device | temp |     humidity     |     pressure     
-------------------------------+----------+--------+------+------------------+------------------
- Wed Jun 01 00:06:15 2022 PDT |        2 |     24 | 36.7 | 74.3169985385593 | 7.30696097227121
+             time             | location | device | temp |     humidity     | jdata |     pressure     
+------------------------------+----------+--------+------+------------------+-------+------------------
+ Wed Jun 01 00:06:15 2022 PDT |        2 |     24 | 36.7 | 74.3169985385593 |       | 7.30696097227121
 (1 row)
 
 -- Want to check that index scans work after recompression, so the
@@ -490,7 +508,7 @@ SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
                                              QUERY PLAN                                             
 ----------------------------------------------------------------------------------------------------
  Index Scan using "1_1_readings_time_key" on _timescaledb_internal._hyper_1_1_chunk
-   Output: "time", location, device, temp, humidity, pressure
+   Output: "time", location, device, temp, humidity, jdata, pressure
    Index Cond: (_hyper_1_1_chunk."time" = 'Wed Jun 01 00:06:15 2022 PDT'::timestamp with time zone)
 (3 rows)
 
@@ -510,14 +528,14 @@ SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
                                              QUERY PLAN                                             
 ----------------------------------------------------------------------------------------------------
  Index Scan using "1_1_readings_time_key" on _timescaledb_internal._hyper_1_1_chunk
-   Output: "time", location, device, temp, humidity, pressure
+   Output: "time", location, device, temp, humidity, jdata, pressure
    Index Cond: (_hyper_1_1_chunk."time" = 'Wed Jun 01 00:06:15 2022 PDT'::timestamp with time zone)
 (3 rows)
 
 SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
-             time             | location | device | temp |     humidity     |     pressure     
-------------------------------+----------+--------+------+------------------+------------------
- Wed Jun 01 00:06:15 2022 PDT |        2 |     24 | 36.7 | 74.3169985385593 | 7.30696097227121
+             time             | location | device | temp |     humidity     | jdata |     pressure     
+------------------------------+----------+--------+------+------------------+-------+------------------
+ Wed Jun 01 00:06:15 2022 PDT |        2 |     24 | 36.7 | 74.3169985385593 |       | 7.30696097227121
 (1 row)
 
 -- Drop column and add again
@@ -527,14 +545,14 @@ SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
                                              QUERY PLAN                                             
 ----------------------------------------------------------------------------------------------------
  Index Scan using "1_1_readings_time_key" on _timescaledb_internal._hyper_1_1_chunk
-   Output: "time", location, device, temp, humidity
+   Output: "time", location, device, temp, humidity, jdata
    Index Cond: (_hyper_1_1_chunk."time" = 'Wed Jun 01 00:06:15 2022 PDT'::timestamp with time zone)
 (3 rows)
 
 SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
-             time             | location | device | temp |     humidity     
-------------------------------+----------+--------+------+------------------
- Wed Jun 01 00:06:15 2022 PDT |        2 |     24 | 36.7 | 74.3169985385593
+             time             | location | device | temp |     humidity     | jdata 
+------------------------------+----------+--------+------+------------------+-------
+ Wed Jun 01 00:06:15 2022 PDT |        2 |     24 | 36.7 | 74.3169985385593 | 
 (1 row)
 
 ALTER TABLE readings ADD COLUMN pressure float;
@@ -543,14 +561,14 @@ SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
                                              QUERY PLAN                                             
 ----------------------------------------------------------------------------------------------------
  Index Scan using "1_1_readings_time_key" on _timescaledb_internal._hyper_1_1_chunk
-   Output: "time", location, device, temp, humidity, pressure
+   Output: "time", location, device, temp, humidity, jdata, pressure
    Index Cond: (_hyper_1_1_chunk."time" = 'Wed Jun 01 00:06:15 2022 PDT'::timestamp with time zone)
 (3 rows)
 
 SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
-             time             | location | device | temp |     humidity     | pressure 
-------------------------------+----------+--------+------+------------------+----------
- Wed Jun 01 00:06:15 2022 PDT |        2 |     24 | 36.7 | 74.3169985385593 |         
+             time             | location | device | temp |     humidity     | jdata | pressure 
+------------------------------+----------+--------+------+------------------+-------+----------
+ Wed Jun 01 00:06:15 2022 PDT |        2 |     24 | 36.7 | 74.3169985385593 |       |         
 (1 row)
 
 \set ON_ERROR_STOP 0
