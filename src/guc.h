@@ -96,6 +96,7 @@ extern TSDLLEXPORT bool ts_guc_debug_compression_path_info;
 extern TSDLLEXPORT bool ts_guc_debug_require_batch_sorted_merge;
 
 extern TSDLLEXPORT bool ts_guc_debug_allow_cagg_with_deprecated_funcs;
+extern TSDLLEXPORT char *ts_guc_hyperstore_indexam_whitelist;
 
 void _guc_init(void);
 
@@ -110,3 +111,4 @@ typedef enum
 extern TSDLLEXPORT void ts_feature_flag_check(FeatureFlagType);
 extern TSDLLEXPORT Oid ts_guc_default_segmentby_fn_oid(void);
 extern TSDLLEXPORT Oid ts_guc_default_orderby_fn_oid(void);
+extern TSDLLEXPORT bool ts_is_whitelisted_indexam(const char *amname);
