@@ -10,6 +10,7 @@
 #include <catalog/index.h>
 #include <catalog/namespace.h>
 #include <catalog/objectaddress.h>
+#include <catalog/pg_am.h>
 #include <catalog/pg_authid.h>
 #include <catalog/pg_class_d.h>
 #include <catalog/pg_constraint.h>
@@ -2526,6 +2527,23 @@ process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	chunk_rel = table_open(chunk_relid, ShareLock);
 	hypertable_index_rel = index_open(info->obj.objectId, AccessShareLock);
 	indexinfo = BuildIndexInfo(hypertable_index_rel);
+
+	/* Hyperstore does not support arbitrary index, so abort if a non-approved
+	 * index type is used.
+	 *
+	 * We are using a whitelist rather than a blacklist because supporting
+	 * indexes on Hyperstore requires special considerations given its
+	 * dual-heap implementation. */
+	if (ts_is_hypercore_am(chunk->amoid))
+	{
+		Assert(OidIsValid(hypertable_index_rel->rd_rel->relam));
+		const char *amname = get_am_name(hypertable_index_rel->rd_rel->relam);
+		if (!ts_is_whitelisted_indexam(amname))
+			ereport(ERROR,
+					errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					errmsg("index access method \"%s\" not supported", amname),
+					errdetail("Available candidates: %s", ts_guc_hyperstore_indexam_whitelist));
+	}
 
 	if (chunk_index_columns_changed(info->extended_options.n_ht_atts, RelationGetDescr(chunk_rel)))
 		ts_adjust_indexinfo_attnos(indexinfo, info->main_table_relid, chunk_rel);

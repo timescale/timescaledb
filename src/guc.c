@@ -37,6 +37,34 @@ ts_function_telemetry_on()
 	return ts_guc_telemetry_level > TELEMETRY_NO_FUNCTIONS;
 }
 
+bool
+ts_is_whitelisted_indexam(const char *amname)
+{
+	ListCell *cell;
+	char *rawname = pstrdup(ts_guc_hyperstore_indexam_whitelist);
+
+	List *namelist;
+	if (!SplitIdentifierString(rawname, ',', &namelist))
+	{
+		pfree(rawname);
+		list_free(namelist);
+		elog(ERROR, "List syntax is invalid");
+	}
+	foreach (cell, namelist)
+	{
+		const char *curname = (char *) lfirst(cell);
+		if (strcmp(curname, amname) == 0)
+		{
+			pfree(rawname);
+			list_free(namelist);
+			return true;
+		}
+	}
+	pfree(rawname);
+	list_free(namelist);
+	return false;
+}
+
 static const struct config_enum_entry telemetry_level_options[] = {
 	{ "off", TELEMETRY_OFF, false },
 	{ "no_functions", TELEMETRY_NO_FUNCTIONS, false },
@@ -95,9 +123,11 @@ TSDLLEXPORT bool ts_guc_enable_job_execution_logging = false;
 bool ts_guc_enable_tss_callbacks = true;
 TSDLLEXPORT bool ts_guc_enable_delete_after_compression = false;
 TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh = false;
+TSDLLEXPORT char *ts_guc_hyperstore_indexam_whitelist;
 
-/* default value of ts_guc_max_open_chunks_per_insert and ts_guc_max_cached_chunks_per_hypertable
- * will be set as their respective boot-value when the GUC mechanism starts up */
+/* default value of ts_guc_max_open_chunks_per_insert and
+ * ts_guc_max_cached_chunks_per_hypertable will be set as their respective boot-value when the
+ * GUC mechanism starts up */
 int ts_guc_max_open_chunks_per_insert;
 int ts_guc_max_cached_chunks_per_hypertable;
 #ifdef USE_TELEMETRY
@@ -258,6 +288,34 @@ get_segmentby_func(char *input_name)
 #endif
 	Oid argtyp[] = { REGCLASSOID };
 	return LookupFuncName(namelist, lengthof(argtyp), argtyp, true);
+}
+
+static bool
+check_indexam_whitelist(char **newval, void **extra, GucSource source)
+{
+	char *rawname;
+	List *namelist;
+
+	/* Need a modifiable copy of string */
+	rawname = pstrdup(*newval);
+
+	/* Parse string into list of identifiers */
+	if (!SplitIdentifierString(rawname, ',', &namelist))
+	{
+		/* syntax error in name list */
+		GUC_check_errdetail("List syntax is invalid.");
+		pfree(rawname);
+		list_free(namelist);
+		return false;
+	}
+
+	/* We might not be in a transaction when setting this so cannot consult
+	 * the systems catalog. We just require the list of index access methods
+	 * to be syntactically correct. */
+
+	pfree(rawname);
+	list_free(namelist);
+	return true;
 }
 
 static bool
@@ -874,6 +932,19 @@ _guc_init(void)
 							   /* assign_hook= */ NULL,
 							   /* show_hook= */ NULL);
 #endif
+
+	DefineCustomStringVariable(MAKE_EXTOPTION("hyperstore_indexam_whitelist"),
+							   gettext_noop(
+								   "Whitelist for index access methods supported by hyperstore."),
+							   gettext_noop(
+								   "List of index access method names supported by hyperstore."),
+							   /* valueAddr= */ &ts_guc_hyperstore_indexam_whitelist,
+							   /* Value= */ "btree,hash",
+							   /* context= */ PGC_SIGHUP,
+							   /* flags= */ GUC_LIST_INPUT | GUC_SUPERUSER_ONLY,
+							   /* check_hook= */ check_indexam_whitelist,
+							   /* assign_hook= */ NULL,
+							   /* show_hook= */ NULL);
 
 #ifdef TS_DEBUG
 	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("shutdown_bgw_scheduler"),

@@ -2,6 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+\c :TEST_DBNAME :ROLE_SUPERUSER
+show timescaledb.hyperstore_indexam_whitelist;
+set role :ROLE_DEFAULT_PERM_USER;
+
 SET timescaledb.arrow_cache_maxsize = 4;
 
 CREATE TABLE readings(
@@ -9,7 +13,8 @@ CREATE TABLE readings(
        location int,
        device int,
        temp numeric(4,1),
-       humidity float
+       humidity float,
+       jdata jsonb
 );
 
 SELECT create_hypertable('readings', by_range('time', '1d'::interval));
@@ -17,8 +22,8 @@ SELECT create_hypertable('readings', by_range('time', '1d'::interval));
 SET enable_incremental_sort = false;
 SELECT setseed(1);
 
-INSERT INTO readings (time, location, device, temp, humidity)
-SELECT t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
+INSERT INTO readings (time, location, device, temp, humidity, jdata)
+SELECT t, ceil(random()*10), ceil(random()*30), random()*40, random()*100, '{"a":1,"b":2}'::jsonb
 FROM generate_series('2022-06-01'::timestamptz, '2022-07-01'::timestamptz, '5m') t;
 
 ALTER TABLE readings SET (
@@ -86,6 +91,13 @@ WHERE time = '2022-06-01'::timestamptz;
 
 -- Create a new index on a compressed column
 CREATE INDEX ON readings (location);
+
+-- Check that we error out on unsupported index types
+\set ON_ERROR_STOP 0
+create index on readings using brin (device);
+create index on readings using gin (jdata);
+create index on readings using magicam (device);
+\set ON_ERROR_STOP 1
 
 -- Index added on location
 SELECT * FROM test.show_indexes(:'chunk');
