@@ -29,6 +29,7 @@ typedef struct
 	Datum *output_grouping_values;
 	bool *output_grouping_isnull;
 	bool partial_per_batch;
+	bool have_results;
 } GroupingPolicyBatch;
 
 static const GroupingPolicy grouping_policy_batch_functions;
@@ -51,6 +52,8 @@ gp_batch_reset(GroupingPolicy *obj)
 		policy->output_grouping_values[i] = 0;
 		policy->output_grouping_isnull[i] = true;
 	}
+
+	policy->have_results = false;
 }
 
 GroupingPolicy *
@@ -144,18 +147,27 @@ gp_batch_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 		policy->output_grouping_values[i] = *values->output_value;
 		policy->output_grouping_isnull[i] = *values->output_isnull;
 	}
+
+	policy->have_results = true;
 }
 
 static bool
 gp_batch_should_emit(GroupingPolicy *gp)
 {
-	return ((GroupingPolicyBatch *) gp)->partial_per_batch;
+	GroupingPolicyBatch *policy = (GroupingPolicyBatch *) gp;
+	return policy->partial_per_batch && policy->have_results;
 }
 
-static void
+static bool
 gp_batch_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 {
 	GroupingPolicyBatch *policy = (GroupingPolicyBatch *) gp;
+
+	if (!policy->have_results)
+	{
+		return false;
+	}
+
 	const int naggs = list_length(policy->agg_defs);
 	for (int i = 0; i < naggs; i++)
 	{
@@ -178,6 +190,8 @@ gp_batch_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 	}
 
 	gp_batch_reset(gp);
+
+	return true;
 }
 
 static const GroupingPolicy grouping_policy_batch_functions = {

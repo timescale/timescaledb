@@ -150,12 +150,24 @@ vector_agg_rescan(CustomScanState *node)
 static TupleTableSlot *
 vector_agg_exec(CustomScanState *node)
 {
-	/*
-	 * Early exit if the input has ended.
-	 */
 	VectorAggState *vector_agg_state = (VectorAggState *) node;
+
+	TupleTableSlot *aggregated_slot = vector_agg_state->custom.ss.ps.ps_ResultTupleSlot;
+	ExecClearTuple(aggregated_slot);
+
+	GroupingPolicy *grouping = vector_agg_state->grouping;
+	if (grouping->gp_do_emit(grouping, aggregated_slot))
+	{
+		/* The grouping policy produced a partial aggregation result. */
+		return ExecStoreVirtualTuple(aggregated_slot);
+	}
+
 	if (vector_agg_state->input_ended)
 	{
+		/*
+		 * The partial aggregation results have ended, and the input has ended,
+		 * so we're done.
+		 */
 		return NULL;
 	}
 
@@ -167,62 +179,57 @@ vector_agg_exec(CustomScanState *node)
 	BatchQueue *batch_queue = decompress_state->batch_queue;
 	DecompressBatchState *batch_state = batch_array_get_at(&batch_queue->batch_array, 0);
 
-	/* Get a reference the the output TupleTableSlot */
-	TupleTableSlot *aggregated_slot = vector_agg_state->custom.ss.ps.ps_ResultTupleSlot;
-	ExecClearTuple(aggregated_slot);
-
-	GroupingPolicy *grouping = vector_agg_state->grouping;
-
-	bool have_tuples_this_loop = false;
-	for (;;)
+	/*
+	 * Now we loop through the input compressed tuples, until they end or until
+	 * the grouping policy asks us to emit partials.
+	 */
+	while (!grouping->gp_should_emit(grouping))
 	{
-		/*
-		 * Have to skip the batches that are fully filtered out. This condition also
-		 * handles the batch that was consumed on the previous step.
-		 */
-		while (batch_state->next_batch_row >= batch_state->total_batch_rows)
+		TupleTableSlot *compressed_slot =
+			ExecProcNode(linitial(decompress_state->csstate.custom_ps));
+
+		if (TupIsNull(compressed_slot))
 		{
-			TupleTableSlot *compressed_slot =
-				ExecProcNode(linitial(decompress_state->csstate.custom_ps));
-
-			if (TupIsNull(compressed_slot))
-			{
-				/* All values are processed. */
-				vector_agg_state->input_ended = true;
-				break;
-			}
-
-			compressed_batch_set_compressed_tuple(dcontext, batch_state, compressed_slot);
-		}
-
-		if (vector_agg_state->input_ended)
-		{
+			/* The input has ended. */
+			vector_agg_state->input_ended = true;
 			break;
 		}
 
-		have_tuples_this_loop = true;
+		compressed_batch_set_compressed_tuple(dcontext, batch_state, compressed_slot);
+
+		if (batch_state->next_batch_row >= batch_state->total_batch_rows)
+		{
+			/* This batch was fully filtered out. */
+			continue;
+		}
 
 		grouping->gp_add_batch(grouping, batch_state);
 
 		compressed_batch_discard_tuples(batch_state);
-
-		if (grouping->gp_should_emit(grouping))
-		{
-			break;
-		}
 	}
 
-	if (!have_tuples_this_loop)
+	if (grouping->gp_do_emit(grouping, aggregated_slot))
 	{
-		Assert(vector_agg_state->input_ended);
+		/* Have partial aggregation results. */
+		return ExecStoreVirtualTuple(aggregated_slot);
+	}
+
+	if (vector_agg_state->input_ended)
+	{
+		/*
+		 * Have no partial aggregation results and the input has ended, so we're
+		 * done. We can get here only if we had no input at all, otherwise the
+		 * grouping policy would have produced some partials above.
+		 */
 		return NULL;
 	}
 
-	grouping->gp_do_emit(grouping, aggregated_slot);
-
-	ExecStoreVirtualTuple(aggregated_slot);
-
-	return aggregated_slot;
+	/*
+	 * We cannot get here. This would mean we still have input, and the
+	 * grouping policy asked us to stop but couldn't produce any partials.
+	 */
+	Assert(false);
+	return NULL;
 }
 
 static void
