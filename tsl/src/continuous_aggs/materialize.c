@@ -238,9 +238,11 @@ cagg_find_aggref_and_var_cols(ContinuousAgg *cagg, Hypertable *mat_ht)
 
 	foreach (lc, cagg_view_query->targetList)
 	{
-		TargetEntry *tle = (TargetEntry *) lfirst(lc);
+		TargetEntry *tle = castNode(TargetEntry, lfirst(lc));
 
-		if (!tle->resjunk && tle->ressortgroupref == 0)
+		if (!tle->resjunk && (tle->ressortgroupref == 0 ||
+							  get_sortgroupref_clause_noerr(tle->ressortgroupref,
+															cagg_view_query->groupClause) == NULL))
 			retlist = lappend(retlist, get_attname(mat_ht->main_table_relid, tle->resno, false));
 	}
 
@@ -335,9 +337,9 @@ spi_update_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 							const int32 chunk_id)
 {
 	/* MERGE statement is available starting on PG15 and we'll support it only in the new format of
-	 * CAggs */
+	 * CAggs and for non-compressed hypertables */
 	if (ts_guc_enable_merge_on_cagg_refresh && PG_VERSION_NUM >= 150000 &&
-		ContinuousAggIsFinalized(cagg))
+		ContinuousAggIsFinalized(cagg) && !TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(mat_ht))
 	{
 		spi_merge_materializations(mat_ht,
 								   cagg,
@@ -429,6 +431,22 @@ spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 	List *agg_colnames = cagg_find_aggref_and_var_cols((ContinuousAgg *) cagg, mat_ht);
 	List *all_columns = NIL;
 	uint64 rows_processed = 0;
+
+	// ListCell *lc;
+	// bool found_time_column = false;
+	// foreach (lc, grp_colnames)
+	// {
+	// 	char *col = (char *) lfirst(lc);
+	// 	if (strncmp(col, NameStr(*time_column_name), NAMEDATALEN) == 0)
+	// 	{
+	// 		found_time_column = true;
+	// 		break;
+	// 	}
+	// }
+
+	// /* in case of not projecting the primary dimension column in the user view */
+	// if (!found_time_column)
+	// 	grp_colnames = lappend(grp_colnames, (char *) NameStr(*time_column_name));
 
 	/* Concat both lists into a single one*/
 	all_columns = list_concat(all_columns, grp_colnames);
