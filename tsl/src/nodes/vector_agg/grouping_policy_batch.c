@@ -4,6 +4,12 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
+/*
+ * This grouping policy aggregates entire compressed batches. It can be used to
+ * aggregate with no grouping, or to produce partial aggregates per each batch
+ * to group by segmentby columns.
+ */
+
 #include <postgres.h>
 
 #include <executor/tuptable.h>

@@ -177,4 +177,19 @@ select sum(t), s, count(*) from svagg group by s order by s;
                ->  Index Scan using compress_hyper_2_4_chunk_s__ts_meta_sequence_num_idx on compress_hyper_2_4_chunk
 (8 rows)
 
+select sum(t) from svagg group by s order by 1;
+    sum     
+------------
+  200010000
+  400010000
+  600010000
+  800010000
+ 1000010000
+ 1200010000
+ 1400010000
+ 1600010000
+ 1800010000
+ 2000010000
+(10 rows)
+
 drop table svagg;
