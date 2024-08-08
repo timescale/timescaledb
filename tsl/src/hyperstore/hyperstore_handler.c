@@ -2507,6 +2507,38 @@ hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, Ind
 	if (ts_is_hypertable(relation->rd_id))
 		return 0.0;
 
+	for (int i = 0; i < indexInfo->ii_NumIndexAttrs; i++)
+	{
+		const AttrNumber attno = indexInfo->ii_IndexAttrNumbers[i];
+
+		/*
+		 * User-defined attributes always have a positive attribute number (1
+		 * or larger) and these are the only ones we support, so we check for
+		 * that here and raise an error if it is not a user-defined attribute.
+		 */
+		if (!AttrNumberIsForUserDefinedAttr(attno))
+		{
+			/*
+			 * If the attribute number if zero, it means that we have an
+			 * expression index in this column and need to call the
+			 * corresponding expression tree in ii_Expressions to compute the
+			 * value to store in the index.
+			 *
+			 * If the attribute number is negative, it means that we have a
+			 * reference to a system attribute (see sysattr.h), which we do
+			 * not support either.
+			 */
+			if (attno == InvalidAttrNumber)
+				ereport(ERROR,
+						errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						errmsg("expression indexes not supported"));
+			else
+				ereport(ERROR,
+						errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						errmsg("cannot index system columns"));
+		}
+	}
+
 	hsinfo = RelationGetHyperstoreInfo(relation);
 
 	/*
