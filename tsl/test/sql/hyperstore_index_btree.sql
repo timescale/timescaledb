@@ -254,6 +254,9 @@ alter table :non_unique_chunk set access method hyperstore;
 -- non-unique values
 ---
 create unique index on non_unique_metrics (time);
+
+-- TODO(@mats): Expression indexes not yet implemented
+CREATE INDEX p1_expr_index ON :hypertable (('device_' || device_id::text));
 \set ON_ERROR_STOP 1
 
 --------------------------
