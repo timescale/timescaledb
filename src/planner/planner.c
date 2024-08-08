@@ -1628,6 +1628,9 @@ timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
 
 		if (!partials_found)
 			ts_plan_add_hashagg(root, input_rel, output_rel);
+
+		if (ts_guc_enable_chunkwise_aggregation)
+			ts_pushdown_partial_agg(root, ht, input_rel, output_rel, extra);
 	}
 
 	if (ts_cm_functions->create_upper_paths_hook != NULL)
