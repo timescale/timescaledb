@@ -94,6 +94,9 @@ BEGIN
       INNER JOIN pg_class pgc ON pgc.oid = show.oid
       INNER JOIN pg_namespace pgns ON pgc.relnamespace = pgns.oid
       INNER JOIN _timescaledb_catalog.chunk ch ON ch.table_name = pgc.relname AND ch.schema_name = pgns.nspname AND ch.hypertable_id = htid
+      INNER JOIN _timescaledb_catalog.chunk_constraint cc ON ch.id = cc.chunk_id
+      INNER JOIN _timescaledb_catalog.dimension d ON d.hypertable_id = ch.hypertable_id
+      INNER JOIN _timescaledb_catalog.dimension_slice ds ON d.id = ds.dimension_id AND cc.dimension_slice_id = ds.id
     WHERE
       NOT ch.dropped AND NOT ch.osm_chunk
       AND (
@@ -105,6 +108,7 @@ BEGIN
           )
         )
       )
+    ORDER BY ds.range_start
   LOOP
     IF chunk_rec.status = 0 THEN
       BEGIN
