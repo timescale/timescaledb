@@ -1069,3 +1069,49 @@ select create_hypertable ('test_schema.fk_parent', 'time');
 ERROR:  cannot have FOREIGN KEY constraints to hypertable "fk_parent"
 HINT:  Remove all FOREIGN KEY constraints to table "fk_parent" before making it a hypertable.
 \set ON_ERROR_STOP 1
+-- create default indexes on chunks when migrating data
+CREATE TABLE test(time TIMESTAMPTZ, val BIGINT);
+CREATE INDEX test_val_idx ON test(val);
+INSERT INTO test VALUES('2024-01-01 00:00:00-03', 500);
+SELECT FROM create_hypertable('test', 'time', migrate_data=>TRUE);
+--
+(1 row)
+
+-- should return ALL indexes for hypertable and chunk
+SELECT * FROM test.show_indexes('test') ORDER BY 1;
+     Index     | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+---------------+---------+------+--------+---------+-----------+------------
+ test_val_idx  | {val}   |      | f      | f       | f         | 
+ test_time_idx | {time}  |      | f      | f       | f         | 
+(2 rows)
+
+SELECT * FROM show_chunks('test') ch, LATERAL test.show_indexes(ch) ORDER BY 1, 2;
+                    ch                    |                         Index                          | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+------------------------------------------+--------------------------------------------------------+---------+------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_23_23_chunk | _timescaledb_internal._hyper_23_23_chunk_test_val_idx  | {val}   |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_23_23_chunk | _timescaledb_internal._hyper_23_23_chunk_test_time_idx | {time}  |      | f      | f       | f         | 
+(2 rows)
+
+DROP TABLE test;
+-- don't create default indexes on chunks when migrating data
+CREATE TABLE test(time TIMESTAMPTZ, val BIGINT);
+CREATE INDEX test_val_idx ON test(val);
+INSERT INTO test VALUES('2024-01-01 00:00:00-03', 500);
+SELECT FROM create_hypertable('test', 'time', create_default_indexes => FALSE, migrate_data=>TRUE);
+--
+(1 row)
+
+-- should NOT return default indexes for hypertable and chunk
+-- only user indexes should be returned
+SELECT * FROM test.show_indexes('test') ORDER BY 1;
+    Index     | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+--------------+---------+------+--------+---------+-----------+------------
+ test_val_idx | {val}   |      | f      | f       | f         | 
+(1 row)
+
+SELECT * FROM show_chunks('test') ch, LATERAL test.show_indexes(ch) ORDER BY 1, 2;
+                    ch                    |                         Index                         | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+------------------------------------------+-------------------------------------------------------+---------+------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_24_24_chunk | _timescaledb_internal._hyper_24_24_chunk_test_val_idx | {val}   |      | f      | f       | f         | 
+(1 row)
+
