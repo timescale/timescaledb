@@ -6,13 +6,13 @@
 #include <postgres.h>
 #include <utils/builtins.h>
 
-#include "chunk.h"
 #include "hypertable.h"
 #include "scan_iterator.h"
 #include "scanner.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_settings.h"
+#include <chunk.h>
 
 static ScanTupleResult compression_settings_tuple_update(TupleInfo *ti, void *data);
 static HeapTuple compression_settings_formdata_make_tuple(const FormData_compression_settings *fd,
