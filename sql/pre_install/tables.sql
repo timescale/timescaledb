@@ -94,9 +94,12 @@ CREATE TABLE _timescaledb_catalog.dimension (
   partitioning_func_schema name NULL,
   partitioning_func name NULL,
   -- open dimensions (e.g., time)
-  interval_length bigint NULL,
+  interval_origin bigint NOT NULL, -- origin of when to start chunk interval. TimestampTz or int64 (but always stored as a bigint).
+  interval interval NULL, -- calendar-based interval.
+  interval_length bigint NULL, -- integer-based interval
   -- compress interval is used by rollup procedure during compression
   -- in order to merge multiple chunks into a single one
+  compress_interval interval NULL,
   compress_interval_length bigint NULL,
   integer_now_func_schema name NULL,
   integer_now_func name NULL,
