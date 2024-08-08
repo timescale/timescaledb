@@ -220,41 +220,29 @@ EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."two_Partitions" WHERE serie
 
 --note that without time transform things work too
 EXPLAIN (verbose ON, costs off)SELECT "timeCustom" t, min(series_0) FROM PUBLIC."two_Partitions" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
-                                                                     QUERY PLAN                                                                      
------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: "two_Partitions"."timeCustom", (min("two_Partitions".series_0))
-   ->  Finalize GroupAggregate
+   ->  GroupAggregate
          Output: "two_Partitions"."timeCustom", min("two_Partitions".series_0)
          Group Key: "two_Partitions"."timeCustom"
          ->  Custom Scan (ChunkAppend) on public."two_Partitions"
-               Output: "two_Partitions"."timeCustom", (PARTIAL min("two_Partitions".series_0))
+               Output: "two_Partitions"."timeCustom", "two_Partitions".series_0
                Order: "two_Partitions"."timeCustom" DESC NULLS LAST
                Startup Exclusion: false
                Runtime Exclusion: false
-               ->  Partial GroupAggregate
-                     Output: _hyper_1_3_chunk."timeCustom", PARTIAL min(_hyper_1_3_chunk.series_0)
-                     Group Key: _hyper_1_3_chunk."timeCustom"
-                     ->  Index Scan using "_hyper_1_3_chunk_two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_3_chunk
-                           Output: _hyper_1_3_chunk."timeCustom", _hyper_1_3_chunk.series_0
-               ->  Partial GroupAggregate
-                     Output: _hyper_1_2_chunk."timeCustom", PARTIAL min(_hyper_1_2_chunk.series_0)
-                     Group Key: _hyper_1_2_chunk."timeCustom"
-                     ->  Index Scan using "_hyper_1_2_chunk_two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_2_chunk
-                           Output: _hyper_1_2_chunk."timeCustom", _hyper_1_2_chunk.series_0
+               ->  Index Scan using "_hyper_1_3_chunk_two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_3_chunk
+                     Output: _hyper_1_3_chunk."timeCustom", _hyper_1_3_chunk.series_0
+               ->  Index Scan using "_hyper_1_2_chunk_two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_2_chunk
+                     Output: _hyper_1_2_chunk."timeCustom", _hyper_1_2_chunk.series_0
                ->  Merge Append
                      Sort Key: _hyper_1_4_chunk."timeCustom" DESC NULLS LAST
-                     ->  Partial GroupAggregate
-                           Output: _hyper_1_4_chunk."timeCustom", PARTIAL min(_hyper_1_4_chunk.series_0)
-                           Group Key: _hyper_1_4_chunk."timeCustom"
-                           ->  Index Scan using "_hyper_1_4_chunk_two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_4_chunk
-                                 Output: _hyper_1_4_chunk."timeCustom", _hyper_1_4_chunk.series_0
-                     ->  Partial GroupAggregate
-                           Output: _hyper_1_1_chunk."timeCustom", PARTIAL min(_hyper_1_1_chunk.series_0)
-                           Group Key: _hyper_1_1_chunk."timeCustom"
-                           ->  Index Scan using "_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_1_chunk
-                                 Output: _hyper_1_1_chunk."timeCustom", _hyper_1_1_chunk.series_0
-(32 rows)
+                     ->  Index Scan using "_hyper_1_4_chunk_two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_4_chunk
+                           Output: _hyper_1_4_chunk."timeCustom", _hyper_1_4_chunk.series_0
+                     ->  Index Scan using "_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx" on _timescaledb_internal._hyper_1_1_chunk
+                           Output: _hyper_1_1_chunk."timeCustom", _hyper_1_1_chunk.series_0
+(20 rows)
 
 --The query should still use the index on timeCustom, even though the GROUP BY/ORDER BY is on the transformed time 't'.
 --However, current query plans show that it does not.
