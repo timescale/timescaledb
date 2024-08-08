@@ -80,21 +80,24 @@ propagate_fk(Relation ht_rel, HeapTuple fk_tuple, List *chunks)
 	foreach (lc, chunks)
 	{
 		Chunk *chunk = lfirst(lc);
-		clone_constraint_on_chunk(chunk,
-								  ht_rel,
-								  fk,
-								  numfks,
-								  conkey,
-								  confkey,
-								  conpfeqop,
-								  conppeqop,
-								  conffeqop,
+		if (!chunk->fd.osm_chunk)
+		{
+			clone_constraint_on_chunk(chunk,
+									  ht_rel,
+									  fk,
+									  numfks,
+									  conkey,
+									  confkey,
+									  conpfeqop,
+									  conppeqop,
+									  conffeqop,
 #if PG15_GE
-								  numfkdelsetcols,
-								  confdelsetcols,
+									  numfkdelsetcols,
+									  confdelsetcols,
 #endif
-								  parentDelTrigger,
-								  parentUpdTrigger);
+									  parentDelTrigger,
+									  parentUpdTrigger);
+		}
 	}
 }
 
