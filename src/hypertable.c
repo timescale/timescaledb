@@ -2000,6 +2000,9 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 		ts_tablespace_attach_internal(&tspc_name, table_relid, false);
 	}
 
+	if ((flags & HYPERTABLE_CREATE_DISABLE_DEFAULT_INDEXES) == 0)
+		ts_indexing_create_default_indexes(ht);
+
 	/*
 	 * Migrate data from the main table to chunks
 	 *
@@ -2018,9 +2021,6 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	}
 
 	insert_blocker_trigger_add(table_relid);
-
-	if ((flags & HYPERTABLE_CREATE_DISABLE_DEFAULT_INDEXES) == 0)
-		ts_indexing_create_default_indexes(ht);
 
 	ts_cache_release(hcache);
 

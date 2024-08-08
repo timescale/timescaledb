@@ -645,3 +645,23 @@ create table test_schema.fk_child(
 );
 select create_hypertable ('test_schema.fk_parent', 'time');
 \set ON_ERROR_STOP 1
+
+-- create default indexes on chunks when migrating data
+CREATE TABLE test(time TIMESTAMPTZ, val BIGINT);
+CREATE INDEX test_val_idx ON test(val);
+INSERT INTO test VALUES('2024-01-01 00:00:00-03', 500);
+SELECT FROM create_hypertable('test', 'time', migrate_data=>TRUE);
+-- should return ALL indexes for hypertable and chunk
+SELECT * FROM test.show_indexes('test') ORDER BY 1;
+SELECT * FROM show_chunks('test') ch, LATERAL test.show_indexes(ch) ORDER BY 1, 2;
+DROP TABLE test;
+
+-- don't create default indexes on chunks when migrating data
+CREATE TABLE test(time TIMESTAMPTZ, val BIGINT);
+CREATE INDEX test_val_idx ON test(val);
+INSERT INTO test VALUES('2024-01-01 00:00:00-03', 500);
+SELECT FROM create_hypertable('test', 'time', create_default_indexes => FALSE, migrate_data=>TRUE);
+-- should NOT return default indexes for hypertable and chunk
+-- only user indexes should be returned
+SELECT * FROM test.show_indexes('test') ORDER BY 1;
+SELECT * FROM show_chunks('test') ch, LATERAL test.show_indexes(ch) ORDER BY 1, 2;
