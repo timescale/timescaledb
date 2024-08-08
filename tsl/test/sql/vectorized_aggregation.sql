@@ -59,15 +59,20 @@ SELECT sum(segment_by_value) FROM testtable GROUP BY float_value;
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable GROUP BY int_value;
 
+-- FIXME here the partitionwise aggregation plan is not chosen due to costs?
 :EXPLAIN
 SELECT sum(int_value) FROM testtable GROUP BY segment_by_value;
 
--- Vectorization not possible due to two variables and grouping
+-- Vectorization possible with grouping by a segmentby column.
 :EXPLAIN
-SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_by_value;
+SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
+
+SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
 
 :EXPLAIN
-SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_by_value;
+SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
+
+SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
 
 -- Vectorized aggregation possible
 SELECT sum(int_value) FROM testtable;
@@ -132,11 +137,17 @@ SELECT sum(int_value) FROM testtable;
 
 RESET timescaledb.enable_vectorized_aggregation;
 
--- Vectorized aggregation NOT possible without bulk decompression
+-- Vectorized aggregation without bulk decompression only possible for
+-- segmentby columns.
 SET timescaledb.enable_bulk_decompression = OFF;
 
 :EXPLAIN
 SELECT sum(int_value) FROM testtable;
+
+:EXPLAIN
+SELECT sum(segment_by_value) FROM testtable;
+
+SELECT sum(segment_by_value) FROM testtable;
 
 RESET timescaledb.enable_bulk_decompression;
 
@@ -148,8 +159,10 @@ SELECT sum(int_value), sum(int_value) FROM testtable;
 :EXPLAIN
 SELECT sum(segment_by_value), sum(segment_by_value) FROM testtable;
 
--- Performing a sum on multiple columns is currently not supported by vectorization
+-- Performing a sum on multiple columns is supported.
 :EXPLAIN
+SELECT sum(int_value), sum(segment_by_value) FROM testtable;
+
 SELECT sum(int_value), sum(segment_by_value) FROM testtable;
 
 -- Using the sum function together with another non-vector capable aggregate is not supported
