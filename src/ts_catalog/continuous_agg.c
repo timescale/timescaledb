@@ -384,12 +384,12 @@ continuous_agg_init(ContinuousAgg *cagg, const Form_continuous_agg fd)
 	Assert(OidIsValid(cagg->relid));
 	Assert(OidIsValid(cagg->partition_type));
 
-	ObjectAddress direct_view =
-		get_and_lock_rel_by_name(&fd->direct_view_schema, &fd->direct_view_name, AccessShareLock);
-	Assert(OidIsValid(direct_view.objectId));
+	ObjectAddress partial_view =
+		get_and_lock_rel_by_name(&fd->partial_view_schema, &fd->partial_view_name, AccessShareLock);
+	Assert(OidIsValid(partial_view.objectId));
 
 	cagg->bucket_function =
-		ts_cm_functions->continuous_agg_get_bucket_function_info_internal(direct_view.objectId);
+		ts_cm_functions->continuous_agg_get_bucket_function_info_internal(partial_view.objectId);
 }
 
 TSDLLEXPORT CaggsInfo

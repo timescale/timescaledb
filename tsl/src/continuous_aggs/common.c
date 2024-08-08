@@ -1497,7 +1497,7 @@ tsl_cagg_get_bucket_function_info(Oid view_oid)
 	Assert(query->commandType == CMD_SELECT);
 
 	ContinuousAggsBucketFunction *bf = palloc0(sizeof(ContinuousAggsBucketFunction));
-	TIMESTAMP_NOBEGIN(bf->bucket_time_origin);	
+	TIMESTAMP_NOBEGIN(bf->bucket_time_origin);
 
 	ListCell *l;
 	foreach (l, query->groupClause)
