@@ -34,6 +34,30 @@ typedef struct
 
 static const GroupingPolicy grouping_policy_batch_functions;
 
+GroupingPolicy *
+create_grouping_policy_batch(List *agg_defs, List *output_grouping_columns, bool partial_per_batch)
+{
+	GroupingPolicyBatch *policy = palloc0(sizeof(GroupingPolicyBatch));
+	policy->partial_per_batch = partial_per_batch;
+	policy->funcs = grouping_policy_batch_functions;
+	policy->output_grouping_columns = output_grouping_columns;
+	policy->agg_defs = agg_defs;
+	ListCell *lc;
+	foreach (lc, agg_defs)
+	{
+		VectorAggDef *def = lfirst(lc);
+		policy->agg_states = lappend(policy->agg_states, palloc0(def->func->state_bytes));
+	}
+	policy->output_grouping_values =
+		(Datum *) palloc0(MAXALIGN(list_length(output_grouping_columns) * sizeof(Datum)) +
+						  MAXALIGN(list_length(output_grouping_columns) * sizeof(bool)));
+	policy->output_grouping_isnull =
+		(bool *) ((char *) policy->output_grouping_values +
+				  MAXALIGN(list_length(output_grouping_columns) * sizeof(Datum)));
+	policy->funcs.gp_reset(&policy->funcs);
+	return &policy->funcs;
+}
+
 static void
 gp_batch_reset(GroupingPolicy *obj)
 {
@@ -56,68 +80,62 @@ gp_batch_reset(GroupingPolicy *obj)
 	policy->have_results = false;
 }
 
-GroupingPolicy *
-create_grouping_policy_batch(List *agg_defs, List *output_grouping_columns, bool partial_per_batch)
-{
-	GroupingPolicyBatch *policy = palloc0(sizeof(GroupingPolicyBatch));
-	policy->partial_per_batch = partial_per_batch;
-	policy->funcs = grouping_policy_batch_functions;
-	policy->output_grouping_columns = output_grouping_columns;
-	policy->agg_defs = agg_defs;
-	ListCell *lc;
-	foreach (lc, agg_defs)
-	{
-		VectorAggDef *def = lfirst(lc);
-		policy->agg_states = lappend(policy->agg_states, palloc0(def->func->state_bytes));
-	}
-	policy->output_grouping_values =
-		(Datum *) palloc0(MAXALIGN(list_length(output_grouping_columns) * sizeof(Datum)) +
-						  MAXALIGN(list_length(output_grouping_columns) * sizeof(bool)));
-	policy->output_grouping_isnull =
-		(bool *) ((char *) policy->output_grouping_values +
-				  MAXALIGN(list_length(output_grouping_columns) * sizeof(Datum)));
-	gp_batch_reset(&policy->funcs);
-	return &policy->funcs;
-}
-
 static void
 compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_def, void *agg_state)
 {
-	/*
-	 * To calculate the sum for a segment by value or default compressed
-	 * column value, we need to multiply this value with the number of
-	 * passing decompressed tuples in this batch.
-	 */
-	int n = batch_state->total_batch_rows;
-	if (batch_state->vector_qual_result)
-	{
-		n = arrow_num_valid(batch_state->vector_qual_result, n);
-		Assert(n > 0);
-	}
+	ArrowArray *arg_arrow = NULL;
+	Datum arg_datum = 0;
+	bool arg_isnull = true;
 
+	/*
+	 * We have functions with one argument, and one function with no arguments
+	 * (count(*)). Collect the arguments.
+	 */
 	if (agg_def->input_offset >= 0)
 	{
 		CompressedColumnValues *values = &batch_state->compressed_columns[agg_def->input_offset];
 		Assert(values->decompression_type != DT_Invalid);
 		Assert(values->decompression_type != DT_Iterator);
 
-		if (values->arrow == NULL)
+		if (values->arrow != NULL)
 		{
-			Assert(values->decompression_type == DT_Scalar);
-			agg_def->func->agg_const(agg_state, *values->output_value, *values->output_isnull, n);
+			arg_arrow = values->arrow;
 		}
 		else
 		{
-			agg_def->func->agg_vector(agg_state, values->arrow, batch_state->vector_qual_result);
+			Assert(values->decompression_type == DT_Scalar);
+			arg_datum = *values->output_value;
+			arg_isnull = *values->output_isnull;
 		}
+	}
+
+	/*
+	 * Now call the function.
+	 */
+	if (arg_arrow != NULL)
+	{
+		/* Arrow argument. */
+		agg_def->func->agg_vector(agg_state, arg_arrow, batch_state->vector_qual_result);
 	}
 	else
 	{
 		/*
-		 * We have only one function w/o arguments -- count(*). Unfortunately
-		 * it has to have a special code path everywhere.
+		 * Scalar argument, or count(*). Have to also count the valid rows in
+		 * the batch.
 		 */
-		agg_def->func->agg_const(agg_state, 0, true, n);
+		int n = batch_state->total_batch_rows;
+		if (batch_state->vector_qual_result)
+		{
+			n = arrow_num_valid(batch_state->vector_qual_result, n);
+		}
+
+		/*
+		 * The batches that are fully filtered out by vectorized quals should
+		 * have been skipped by the caller.
+		 */
+		Assert(n > 0);
+
+		agg_def->func->agg_const(agg_state, arg_datum, arg_isnull, n);
 	}
 }
 
@@ -143,7 +161,13 @@ gp_batch_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 		CompressedColumnValues *values = &batch_state->compressed_columns[col->input_offset];
 		Assert(values->decompression_type == DT_Scalar);
 
-		/* FIXME do proper copy here? */
+		/*
+		 * By sheer luck, we can avoid generically copying the Datum here,
+		 * because if we have any output grouping columns in this policy, it
+		 * means we're grouping by segmentby, and these values will be valid
+		 * until the next call to the vector agg node.
+		 */
+		Assert(policy->partial_per_batch);
 		policy->output_grouping_values[i] = *values->output_value;
 		policy->output_grouping_isnull[i] = *values->output_isnull;
 	}

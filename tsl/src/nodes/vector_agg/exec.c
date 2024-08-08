@@ -21,8 +21,8 @@
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/vector_agg.h"
 
-static void
-get_input_offset(DecompressChunkState *decompress_state, Var *var, int *input_offset)
+static int
+get_input_offset(DecompressChunkState *decompress_state, Var *var)
 {
 	DecompressContext *dcontext = &decompress_state->decompress_context;
 
@@ -48,7 +48,7 @@ get_input_offset(DecompressChunkState *decompress_state, Var *var, int *input_of
 	Assert(value_column_description->type == COMPRESSED_COLUMN ||
 		   value_column_description->type == SEGMENTBY_COLUMN);
 
-	*input_offset = value_column_description - dcontext->compressed_chunk_columns;
+	return value_column_description - dcontext->compressed_chunk_columns;
 }
 
 static void
@@ -72,19 +72,23 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 	 * node output targetlist.
 	 * The output targetlist, in turn, consists of just the INDEX_VAR references
 	 * into the custom_scan_tlist.
+	 * Now, iterate through the aggregated targetlist to collect aggregates and
+	 * output grouping columns.
 	 */
 	List *aggregated_tlist =
 		castNode(CustomScan, vector_agg_state->custom.ss.ps.plan)->custom_scan_tlist;
 	const int naggs = list_length(aggregated_tlist);
 	for (int i = 0; i < naggs; i++)
 	{
-		/* Determine which kind of vectorized aggregation we should perform */
 		TargetEntry *tlentry = (TargetEntry *) list_nth(aggregated_tlist, i);
 		if (IsA(tlentry->expr, Aggref))
 		{
-			Aggref *aggref = castNode(Aggref, tlentry->expr);
-
+			/* This is an aggregate function. */
 			VectorAggDef *def = palloc0(sizeof(VectorAggDef));
+			vector_agg_state->agg_defs = lappend(vector_agg_state->agg_defs, def);
+			def->output_offset = i;
+
+			Aggref *aggref = castNode(Aggref, tlentry->expr);
 			VectorAggFunctions *func = get_vector_aggregate(aggref->aggfnoid);
 			Assert(func != NULL);
 			def->func = func;
@@ -97,26 +101,25 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 				Assert(aggref->aggsplit == AGGSPLIT_INITIAL_SERIAL);
 
 				Var *var = castNode(Var, castNode(TargetEntry, linitial(aggref->args))->expr);
-				get_input_offset(decompress_state, var, &def->input_offset);
+				def->input_offset = get_input_offset(decompress_state, var);
 			}
 			else
 			{
 				def->input_offset = -1;
 			}
-
-			def->output_offset = i;
-
-			vector_agg_state->agg_defs = lappend(vector_agg_state->agg_defs, def);
 		}
 		else
 		{
+			/* This is a grouping column. */
 			Assert(IsA(tlentry->expr, Var));
-			Var *var = castNode(Var, tlentry->expr);
+
 			GroupingColumn *col = palloc0(sizeof(GroupingColumn));
-			col->output_offset = i;
-			get_input_offset(decompress_state, var, &col->input_offset);
 			vector_agg_state->output_grouping_columns =
 				lappend(vector_agg_state->output_grouping_columns, col);
+			col->output_offset = i;
+
+			Var *var = castNode(Var, tlentry->expr);
+			col->input_offset = get_input_offset(decompress_state, var);
 		}
 	}
 

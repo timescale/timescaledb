@@ -132,6 +132,9 @@ static VectorAggFunctions int4_sum_agg = {
 	.agg_emit = int4_sum_emit,
 };
 
+/*
+ * Aggregate function count(*).
+ */
 typedef struct
 {
 	int64 count;

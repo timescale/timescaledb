@@ -166,6 +166,10 @@ vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk)
 	return (Plan *) custom;
 }
 
+/*
+ * Whether the expression can be used for vectorized processing: must be a Var
+ * that refers to either a bulk-decompressed or a segmentby column.
+ */
 static bool
 is_vector_var(CustomScan *custom, Expr *expr, bool *out_is_segmentby)
 {
@@ -308,6 +312,10 @@ can_vectorize_aggref(Aggref *aggref, CustomScan *custom)
 	return true;
 }
 
+/*
+ * Whether we can perform vectorized aggregation with a given grouping.
+ * Currently supports either no grouping or grouping by segmentby columns.
+ */
 static bool
 can_vectorize_grouping(Agg *agg, CustomScan *custom)
 {
