@@ -1,0 +1,1 @@
+Implements: #6882 Allow DELETE on compressed chunks without decompression
