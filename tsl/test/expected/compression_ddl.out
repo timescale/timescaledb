@@ -2497,5 +2497,17 @@ select decompress_chunk(show_chunks('hyper_unique_deferred'));
  _timescaledb_internal._hyper_40_146_chunk
 (1 row)
 
+\set ON_ERROR_STOP 0
 begin; insert INTO hyper_unique_deferred values (1257987700000000000, 'dev1', 1); abort;
 ERROR:  new row for relation "_hyper_40_146_chunk" violates check constraint "hyper_unique_deferred_sensor_1_check"
+\set ON_ERROR_STOP 1
+select compress_chunk(show_chunks('hyper_unique_deferred'));
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_40_146_chunk
+(1 row)
+
+\set ON_ERROR_STOP 0
+begin; insert INTO hyper_unique_deferred values (1257987700000000000, 'dev1', 1); abort;
+ERROR:  duplicate key value violates unique constraint "146_2_hyper_unique_deferred_time_key"
+\set ON_ERROR_STOP 1
