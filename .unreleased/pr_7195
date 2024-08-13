@@ -1,0 +1,1 @@
+Fixes: #7195 Fix segmentby/orderby check when dropping a column from a compressed hypertable
