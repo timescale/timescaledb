@@ -708,10 +708,6 @@ object_ownercheck(Oid classid, Oid objectid, Oid roleid)
 }
 #endif
 
-#if PG14_LT
-#define F_COUNT_ 2803
-#endif
-
 /*
  * PG15 refactored elog.c functions and exposed error_severity
  * but previous versions don't have it exposed, so imported it
