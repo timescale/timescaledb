@@ -128,29 +128,30 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 		decompressed_values[i] = decompressed_values[simple8brle_bitmap_prefix_sum(&tag0s, i) - 1];
 	}
 
-	/*
-	 * We have unpacked the non-null data. Now reshuffle it to account for nulls,
-	 * and fill the validity bitmap.
-	 */
-	const int validity_bitmap_bytes = sizeof(uint64) * ((n_total + 64 - 1) / 64);
-	uint64 *restrict validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
-
-	/*
-	 * First, mark all data as valid, we will fill the nulls later if needed.
-	 * Note that the validity bitmap size is a multiple of 64 bits. We have to
-	 * fill the tail bits with zeros, because the corresponding elements are not
-	 * valid.
-	 *
-	 */
-	memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
-	if (n_total % 64)
-	{
-		const uint64 tail_mask = -1ULL >> (64 - n_total % 64);
-		validity_bitmap[n_total / 64] &= tail_mask;
-	}
-
+	uint64 *restrict validity_bitmap = NULL;
 	if (has_nulls)
 	{
+		/*
+		 * We have unpacked the non-null data. Now reshuffle it to account for nulls,
+		 * and fill the validity bitmap.
+		 */
+		const int validity_bitmap_bytes = sizeof(uint64) * ((n_total + 64 - 1) / 64);
+		uint64 *restrict validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
+
+		/*
+		 * First, mark all data as valid, we will fill the nulls later if needed.
+		 * Note that the validity bitmap size is a multiple of 64 bits. We have to
+		 * fill the tail bits with zeros, because the corresponding elements are not
+		 * valid.
+		 *
+		 */
+		memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
+		if (n_total % 64)
+		{
+			const uint64 tail_mask = -1ULL >> (64 - n_total % 64);
+			validity_bitmap[n_total / 64] &= tail_mask;
+		}
+
 		/*
 		 * We have decompressed the data with nulls skipped, reshuffle it
 		 * according to the nulls bitmap.

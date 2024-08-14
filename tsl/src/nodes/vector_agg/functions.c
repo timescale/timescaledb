@@ -53,29 +53,12 @@ int4_sum_vector(void *agg_state, ArrowArray *vector, uint64 *filter)
 	Assert(vector->length <= INT_MAX);
 
 	int64 batch_sum = 0;
-
-	/*
-	 * This loop is not unrolled automatically, so do it manually as usual.
-	 * The value buffer is padded to an even multiple of 64 bytes, i.e. to
-	 * 64 / 4 = 16 elements. The bitmap is an even multiple of 64 elements.
-	 * The number of elements in the inner loop must be less than both these
-	 * values so that we don't go out of bounds. The particular value was
-	 * chosen because it gives some speedup, and the larger values blow up
-	 * the generated code with no performance benefit (checked on clang 16).
-	 */
-#define INNER_LOOP_SIZE 4
-	const int outer_boundary = pad_to_multiple(INNER_LOOP_SIZE, vector->length);
-	for (int outer = 0; outer < outer_boundary; outer += INNER_LOOP_SIZE)
+	for (int row = 0; row < vector->length; row++)
 	{
-		for (int inner = 0; inner < INNER_LOOP_SIZE; inner++)
-		{
-			const int row = outer + inner;
-			const int32 arrow_value = ((int32 *) vector->buffers[1])[row];
-			const bool passes_filter = filter ? arrow_row_is_valid(filter, row) : true;
-			batch_sum += passes_filter * arrow_value * arrow_row_is_valid(vector->buffers[0], row);
-		}
+		const int32 arrow_value = ((int32 *) vector->buffers[1])[row];
+		batch_sum += arrow_value * arrow_row_is_valid(filter, row) *
+					 arrow_row_is_valid(vector->buffers[0], row);
 	}
-#undef INNER_LOOP_SIZE
 
 	if (unlikely(pg_add_s64_overflow(state->result, batch_sum, &state->result)))
 	{
