@@ -123,7 +123,8 @@ compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_de
 		 * Scalar argument, or count(*). Have to also count the valid rows in
 		 * the batch.
 		 */
-		const int n = arrow_num_valid(batch_state->vector_qual_result, batch_state->total_batch_rows);
+		const int n =
+			arrow_num_valid(batch_state->vector_qual_result, batch_state->total_batch_rows);
 
 		/*
 		 * The batches that are fully filtered out by vectorized quals should

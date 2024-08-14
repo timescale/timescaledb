@@ -152,6 +152,30 @@ VectorAggFunctions count_star_agg = {
 	.agg_emit = count_emit,
 };
 
+typedef struct
+{
+	bool isvalid;
+	Datum value;
+} MinMaxState;
+
+static void
+minmax_init(void *agg_state)
+{
+	MinMaxState *state = (MinMaxState *) agg_state;
+	state->isvalid = false;
+	state->value = 0;
+}
+
+static void
+minmax_emit(void *agg_state, Datum *out_result, bool *out_isnull)
+{
+	MinMaxState *state = (MinMaxState *) agg_state;
+	*out_result = state->value;
+	*out_isnull = !state->isvalid;
+}
+
+#include "function_templates.c"
+
 VectorAggFunctions *
 get_vector_aggregate(Oid aggfnoid)
 {
@@ -161,6 +185,9 @@ get_vector_aggregate(Oid aggfnoid)
 			return &int4_sum_agg;
 		case F_COUNT_:
 			return &count_star_agg;
+#define GENERATE_DISPATCH_TABLE 1
+#include "function_templates.c"
+#undef GENERATE_DISPATCH_TABLE
 		default:
 			return NULL;
 	}
