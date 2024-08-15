@@ -1,0 +1,2 @@
+Fixes: #7201 Use generic extension description when building apt and rpm loader packages
+Thanks: @posuch For reporting misleading extension description in the generic loader package
