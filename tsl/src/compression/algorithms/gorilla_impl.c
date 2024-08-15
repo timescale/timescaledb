@@ -136,7 +136,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 		 * and fill the validity bitmap.
 		 */
 		const int validity_bitmap_bytes = sizeof(uint64) * ((n_total + 64 - 1) / 64);
-		uint64 *restrict validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
+		validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
 
 		/*
 		 * First, mark all data as valid, we will fill the nulls later if needed.
