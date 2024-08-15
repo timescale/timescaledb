@@ -9,6 +9,7 @@
 #include <postgres.h>
 
 #include <common/int.h>
+#include <utils/float.h>
 #include <utils/fmgroids.h>
 
 #include "functions.h"
