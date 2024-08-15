@@ -52,16 +52,28 @@ INSERT INTO partial_aggregation VALUES('2023-01-20T09:00:43', 7, 'words');
 -- Use enable_partitionwise_aggregate to create partial aggregates per chunk
 SET enable_partitionwise_aggregate = ON;
 
-select format('select %3$s, %1$s from partial_aggregation where %2$s group by %3$s order by 1, 2',
-    function, condition, grouping)
-from unnest(array['first(time, quantity), last(time, quantity)',
-        'last(longvalue, quantity)', 'last(quantity, longvalue)',
-        'last(quantity, time)', 'last(time, longvalue)']) function,
-    unnest(array['true', 'time < ''2021-01-01''', 'quantity is null',
-        'quantity is not null', 'quantity > 3']) condition,
-    unnest(array['777::text' /* dummy grouping column */, 'longvalue',
-        'quantity', 'time_bucket(''1 year'', time)',
-        'time_bucket(''3 year'', time)']) grouping
+SELECT
+    format('SELECT %3$s, %1$s FROM partial_aggregation WHERE %2$s GROUP BY %3$s ORDER BY by 1, 2;',
+            function, condition, grouping)
+FROM
+    unnest(array[
+            'first(time, quantity), last(time, quantity)',
+            'last(longvalue, quantity)',
+            'last(quantity, longvalue)',
+            'last(quantity, time)',
+            'last(time, longvalue)']) AS function,
+    unnest(array[
+            'true',
+            $$time < '2021-01-01'$$,
+            'quantity is null',
+            'quantity is not null',
+            'quantity > 3']) AS condition,
+    unnest(array[
+            '777::text' /* dummy grouping column */,
+            'longvalue',
+            'quantity',
+            $$time_bucket('1 year', time)$$,
+            $$time_bucket('3 year', time)$$]) AS grouping
 \gexec
 
 SET enable_partitionwise_aggregate = OFF;
