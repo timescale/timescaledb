@@ -42,13 +42,13 @@ minmax_emit(void *agg_state, Datum *out_result, bool *out_isnull)
  * Templated parts for vectorized min(), max().
  */
 #define AGG_NAME MIN
-#define PREDICATE(CURRENT, NEW) ((CURRENT) <= (NEW))
+#define PREDICATE(CURRENT, NEW) ((CURRENT) > (NEW))
 #include "minmax_arithmetic_types.c"
 #undef PREDICATE
 #undef AGG_NAME
 
 #define AGG_NAME MAX
-#define PREDICATE(CURRENT, NEW) ((CURRENT) >= (NEW))
+#define PREDICATE(CURRENT, NEW) ((CURRENT) < (NEW))
 #include "minmax_arithmetic_types.c"
 #undef PREDICATE
 #undef AGG_NAME

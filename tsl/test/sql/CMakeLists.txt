@@ -40,6 +40,7 @@ set(TEST_FILES
     size_utils_tsl.sql
     skip_scan.sql
     transparent_decompression_join_index.sql
+    vector_agg_functions.sql
     vector_agg_param.sql
     vectorized_aggregation.sql)
 

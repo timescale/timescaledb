@@ -17,21 +17,23 @@ FUNCTION_NAME(const)(void *agg_state, Datum constvalue, bool constisnull, int n)
 		return;
 	}
 
-	const CTYPE new = DATUM_TO_CTYPE(constvalue);
-	if (!isfinite((double) new))
-	{
-		/* Skip NaNs. */
-		return;
-	}
-
 	if (!state->isvalid)
 	{
 		state->isvalid = true;
 		state->value = constvalue;
 	}
 
+	const CTYPE new = DATUM_TO_CTYPE(constvalue);
+	if (!isfinite((double) new))
+	{
+		/* If we have a NaN input, the result is NaN. */
+		state->isvalid = true;
+		state->value = CTYPE_TO_DATUM(NAN);
+		return;
+	}
+
 	const CTYPE current = DATUM_TO_CTYPE(state->value);
-	if (!(PREDICATE(current, new)))
+	if (PREDICATE(current, new))
 	{
 		state->value = CTYPE_TO_DATUM(new);
 	}
@@ -53,7 +55,9 @@ FUNCTION_NAME(vector)(void *agg_state, ArrowArray *vector, uint64 *filter)
 
 		if (!isfinite((double) values[i]))
 		{
-			/* Skip NaNs. */
+			/* If we have a NaN input, the result is NaN. */
+			state->isvalid = true;
+			result = NAN;
 			continue;
 		}
 
@@ -63,7 +67,7 @@ FUNCTION_NAME(vector)(void *agg_state, ArrowArray *vector, uint64 *filter)
 			result = values[i];
 		}
 
-		if (!(PREDICATE(result, values[i])))
+		if (PREDICATE(result, values[i]))
 		{
 			result = values[i];
 		}

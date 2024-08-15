@@ -1,0 +1,2774 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- helper function: float -> pseudorandom float [-0.5..0.5]
+CREATE OR REPLACE FUNCTION mix(x anyelement) RETURNS float8 AS $$
+    SELECT hashfloat8(x::float8) / pow(2, 32)
+$$ LANGUAGE SQL;
+\set CHUNKS 2::int
+\set CHUNK_ROWS 100000::int
+\set GROUPING_CARDINALITY 10::int
+create table aggfns(t int, s int, ss int,
+    cint2 int2, cint4 int4, cint8 int8,
+    cfloat4 float4, cfloat8 float8);
+select create_hypertable('aggfns', 's', chunk_time_interval => :GROUPING_CARDINALITY / :CHUNKS);
+NOTICE:  adding not-null constraint to column "s"
+  create_hypertable  
+---------------------
+ (1,public,aggfns,t)
+(1 row)
+
+insert into aggfns
+select s * 10000::int + t,
+    s,
+    s,
+    case when t % 1051 = 0 then null else (mix(s + t + 1) * 32767)::int2 end,
+    (mix(s + t + 2) * 32767 * 65536)::int4,
+    (mix(s + t + 3) * 32767 * 65536)::int8,
+    case when s = 1 and t = 1061 then 'nan'::float4
+        else (mix(s + t + 4) * 100)::float4 end,
+    (mix(s + t + 5) * 100)::float8
+from
+    generate_series(1::int, :CHUNK_ROWS * :CHUNKS / :GROUPING_CARDINALITY) t,
+    generate_series(0::int, :GROUPING_CARDINALITY - 1::int) s(s)
+;
+alter table aggfns set (timescaledb.compress, timescaledb.compress_orderby = 't',
+    timescaledb.compress_segmentby = 's');
+select count(compress_chunk(x)) from show_chunks('aggfns') x;
+ count 
+-------
+     2
+(1 row)
+
+analyze aggfns;
+select
+    format('select %4$s, %1$s(%2$s) from aggfns where %3$s group by %4$s order by 1, 2;',
+            function, variable, condition, grouping)
+from
+    unnest(array[
+        't',
+        's',
+        'ss',
+        'cint2',
+        'cint4',
+        'cint8',
+        'cfloat4',
+        'cfloat8']) variable,
+    unnest(array[
+        'min',
+        'max',
+        'sum',
+        'avg',
+        'count']) function,
+    unnest(array[
+        'true',
+        'cfloat8 < 50',
+        'cfloat8 > 1000']) with ordinality as condition(condition, n),
+    unnest(array[
+        '777::text' /* dummy grouping column */,
+        's',
+        'ss']) grouping
+where
+    case when function = 'count' then variable = 'cfloat4'
+        when variable = 't' then function in ('min', 'max')
+        else true end
+order by condition.n, variable, function, grouping
+\gexec
+select 777::text, avg(cfloat4) from aggfns where true group by 777::text order by 1, 2;
+ text | avg 
+------+-----
+ 777  | NaN
+(1 row)
+
+select s, avg(cfloat4) from aggfns where true group by s order by 1, 2;
+ s |        avg         
+---+--------------------
+ 0 | -0.132126759885764
+ 1 |                NaN
+ 2 | -0.129096583007788
+ 3 | -0.132733890937781
+ 4 |  -0.13252146150968
+ 5 | -0.130611110996222
+ 6 | -0.131984978889441
+ 7 | -0.131050092529273
+ 8 | -0.131313872741675
+ 9 | -0.132765194868064
+(10 rows)
+
+select ss, avg(cfloat4) from aggfns where true group by ss order by 1, 2;
+ ss |        avg         
+----+--------------------
+  0 | -0.132126759885764
+  1 |                NaN
+  2 | -0.129096583007788
+  3 | -0.132733890937781
+  4 |  -0.13252146150968
+  5 | -0.130611110996222
+  6 | -0.131984978889441
+  7 | -0.131050092529273
+  8 | -0.131313872741675
+  9 | -0.132765194868064
+(10 rows)
+
+select 777::text, count(cfloat4) from aggfns where true group by 777::text order by 1, 2;
+ text | count  
+------+--------
+ 777  | 200000
+(1 row)
+
+select s, count(cfloat4) from aggfns where true group by s order by 1, 2;
+ s | count 
+---+-------
+ 0 | 20000
+ 1 | 20000
+ 2 | 20000
+ 3 | 20000
+ 4 | 20000
+ 5 | 20000
+ 6 | 20000
+ 7 | 20000
+ 8 | 20000
+ 9 | 20000
+(10 rows)
+
+select ss, count(cfloat4) from aggfns where true group by ss order by 1, 2;
+ ss | count 
+----+-------
+  0 | 20000
+  1 | 20000
+  2 | 20000
+  3 | 20000
+  4 | 20000
+  5 | 20000
+  6 | 20000
+  7 | 20000
+  8 | 20000
+  9 | 20000
+(10 rows)
+
+select 777::text, max(cfloat4) from aggfns where true group by 777::text order by 1, 2;
+ text | max 
+------+-----
+ 777  | NaN
+(1 row)
+
+select s, max(cfloat4) from aggfns where true group by s order by 1, 2;
+ s |   max   
+---+---------
+ 0 | 49.9977
+ 1 |     NaN
+ 2 | 49.9977
+ 3 | 49.9977
+ 4 | 49.9977
+ 5 | 49.9977
+ 6 | 49.9977
+ 7 | 49.9977
+ 8 | 49.9977
+ 9 | 49.9977
+(10 rows)
+
+select ss, max(cfloat4) from aggfns where true group by ss order by 1, 2;
+ ss |   max   
+----+---------
+  0 | 49.9977
+  1 |     NaN
+  2 | 49.9977
+  3 | 49.9977
+  4 | 49.9977
+  5 | 49.9977
+  6 | 49.9977
+  7 | 49.9977
+  8 | 49.9977
+  9 | 49.9977
+(10 rows)
+
+select 777::text, min(cfloat4) from aggfns where true group by 777::text order by 1, 2;
+ text |   min    
+------+----------
+ 777  | -49.9756
+(1 row)
+
+select s, min(cfloat4) from aggfns where true group by s order by 1, 2;
+ s |   min    
+---+----------
+ 0 | -49.9756
+ 1 | -49.9756
+ 2 | -49.9756
+ 3 | -49.9756
+ 4 | -49.9756
+ 5 | -49.9756
+ 6 | -49.9756
+ 7 | -49.9756
+ 8 | -49.9756
+ 9 | -49.9756
+(10 rows)
+
+select ss, min(cfloat4) from aggfns where true group by ss order by 1, 2;
+ ss |   min    
+----+----------
+  0 | -49.9756
+  1 | -49.9756
+  2 | -49.9756
+  3 | -49.9756
+  4 | -49.9756
+  5 | -49.9756
+  6 | -49.9756
+  7 | -49.9756
+  8 | -49.9756
+  9 | -49.9756
+(10 rows)
+
+select 777::text, sum(cfloat4) from aggfns where true group by 777::text order by 1, 2;
+ text | sum 
+------+-----
+ 777  | NaN
+(1 row)
+
+select s, sum(cfloat4) from aggfns where true group by s order by 1, 2;
+ s |   sum    
+---+----------
+ 0 | -2642.54
+ 1 |      NaN
+ 2 | -2581.93
+ 3 | -2654.68
+ 4 | -2650.43
+ 5 | -2612.22
+ 6 |  -2639.7
+ 7 |    -2621
+ 8 | -2626.28
+ 9 |  -2655.3
+(10 rows)
+
+select ss, sum(cfloat4) from aggfns where true group by ss order by 1, 2;
+ ss |   sum    
+----+----------
+  0 | -2642.54
+  1 |      NaN
+  2 | -2581.93
+  3 | -2654.68
+  4 | -2650.43
+  5 | -2612.22
+  6 |  -2639.7
+  7 |    -2621
+  8 | -2626.28
+  9 |  -2655.3
+(10 rows)
+
+select 777::text, avg(cfloat8) from aggfns where true group by 777::text order by 1, 2;
+ text |        avg         
+------+--------------------
+ 777  | -0.131776180773973
+(1 row)
+
+select s, avg(cfloat8) from aggfns where true group by s order by 1, 2;
+ s |        avg         
+---+--------------------
+ 0 | -0.131261021163082
+ 1 | -0.129096584053477
+ 2 | -0.132733892038232
+ 3 | -0.132521462687291
+ 4 | -0.130611112199258
+ 5 | -0.131984980024863
+ 6 | -0.131050093692029
+ 7 |  -0.13131387403002
+ 8 | -0.132765196124092
+ 9 | -0.134423591727391
+(10 rows)
+
+select ss, avg(cfloat8) from aggfns where true group by ss order by 1, 2;
+ ss |        avg         
+----+--------------------
+  0 | -0.131261021163082
+  1 | -0.129096584053477
+  2 | -0.132733892038232
+  3 | -0.132521462687291
+  4 | -0.130611112199258
+  5 | -0.131984980024863
+  6 | -0.131050093692029
+  7 |  -0.13131387403002
+  8 | -0.132765196124092
+  9 | -0.134423591727391
+(10 rows)
+
+select 777::text, max(cfloat8) from aggfns where true group by 777::text order by 1, 2;
+ text |       max       
+------+-----------------
+ 777  | 49.997744965367
+(1 row)
+
+select s, max(cfloat8) from aggfns where true group by s order by 1, 2;
+ s |       max       
+---+-----------------
+ 0 | 49.997744965367
+ 1 | 49.997744965367
+ 2 | 49.997744965367
+ 3 | 49.997744965367
+ 4 | 49.997744965367
+ 5 | 49.997744965367
+ 6 | 49.997744965367
+ 7 | 49.997744965367
+ 8 | 49.997744965367
+ 9 | 49.997744965367
+(10 rows)
+
+select ss, max(cfloat8) from aggfns where true group by ss order by 1, 2;
+ ss |       max       
+----+-----------------
+  0 | 49.997744965367
+  1 | 49.997744965367
+  2 | 49.997744965367
+  3 | 49.997744965367
+  4 | 49.997744965367
+  5 | 49.997744965367
+  6 | 49.997744965367
+  7 | 49.997744965367
+  8 | 49.997744965367
+  9 | 49.997744965367
+(10 rows)
+
+select 777::text, min(cfloat8) from aggfns where true group by 777::text order by 1, 2;
+ text |        min        
+------+-------------------
+ 777  | -49.9755693599582
+(1 row)
+
+select s, min(cfloat8) from aggfns where true group by s order by 1, 2;
+ s |        min        
+---+-------------------
+ 0 | -49.9755693599582
+ 1 | -49.9755693599582
+ 2 | -49.9755693599582
+ 3 | -49.9755693599582
+ 4 | -49.9755693599582
+ 5 | -49.9755693599582
+ 6 | -49.9755693599582
+ 7 | -49.9755693599582
+ 8 | -49.9755693599582
+ 9 | -49.9755693599582
+(10 rows)
+
+select ss, min(cfloat8) from aggfns where true group by ss order by 1, 2;
+ ss |        min        
+----+-------------------
+  0 | -49.9755693599582
+  1 | -49.9755693599582
+  2 | -49.9755693599582
+  3 | -49.9755693599582
+  4 | -49.9755693599582
+  5 | -49.9755693599582
+  6 | -49.9755693599582
+  7 | -49.9755693599582
+  8 | -49.9755693599582
+  9 | -49.9755693599582
+(10 rows)
+
+select 777::text, sum(cfloat8) from aggfns where true group by 777::text order by 1, 2;
+ text |        sum        
+------+-------------------
+ 777  | -26355.2361547947
+(1 row)
+
+select s, sum(cfloat8) from aggfns where true group by s order by 1, 2;
+ s |        sum        
+---+-------------------
+ 0 | -2625.22042326164
+ 1 | -2581.93168106955
+ 2 | -2654.67784076463
+ 3 | -2650.42925374582
+ 4 | -2612.22224398516
+ 5 | -2639.69960049726
+ 6 | -2621.00187384058
+ 7 |  -2626.2774806004
+ 8 | -2655.30392248183
+ 9 | -2688.47183454782
+(10 rows)
+
+select ss, sum(cfloat8) from aggfns where true group by ss order by 1, 2;
+ ss |        sum        
+----+-------------------
+  0 | -2625.22042326164
+  1 | -2581.93168106955
+  2 | -2654.67784076463
+  3 | -2650.42925374582
+  4 | -2612.22224398516
+  5 | -2639.69960049726
+  6 | -2621.00187384058
+  7 |  -2626.2774806004
+  8 | -2655.30392248183
+  9 | -2688.47183454782
+(10 rows)
+
+select 777::text, avg(cint2) from aggfns where true group by 777::text order by 1, 2;
+ text |         avg          
+------+----------------------
+ 777  | -42.1591712126520194
+(1 row)
+
+select s, avg(cint2) from aggfns where true group by s order by 1, 2;
+ s |         avg          
+---+----------------------
+ 0 | -42.2972824182973825
+ 1 | -43.0287773384715480
+ 2 | -40.9893899204244032
+ 3 | -42.8851408838396477
+ 4 | -42.0152144537310445
+ 5 | -43.5287022671537961
+ 6 | -41.7711325759471498
+ 7 | -41.3288123717531655
+ 8 | -40.6353035383614434
+ 9 | -43.1119563585406136
+(10 rows)
+
+select ss, avg(cint2) from aggfns where true group by ss order by 1, 2;
+ ss |         avg          
+----+----------------------
+  0 | -42.2972824182973825
+  1 | -43.0287773384715480
+  2 | -40.9893899204244032
+  3 | -42.8851408838396477
+  4 | -42.0152144537310445
+  5 | -43.5287022671537961
+  6 | -41.7711325759471498
+  7 | -41.3288123717531655
+  8 | -40.6353035383614434
+  9 | -43.1119563585406136
+(10 rows)
+
+select 777::text, max(cint2) from aggfns where true group by 777::text order by 1, 2;
+ text |  max  
+------+-------
+ 777  | 16383
+(1 row)
+
+select s, max(cint2) from aggfns where true group by s order by 1, 2;
+ s |  max  
+---+-------
+ 0 | 16383
+ 1 | 16383
+ 2 | 16383
+ 3 | 16383
+ 4 | 16383
+ 5 | 16383
+ 6 | 16383
+ 7 | 16383
+ 8 | 16383
+ 9 | 16383
+(10 rows)
+
+select ss, max(cint2) from aggfns where true group by ss order by 1, 2;
+ ss |  max  
+----+-------
+  0 | 16383
+  1 | 16383
+  2 | 16383
+  3 | 16383
+  4 | 16383
+  5 | 16383
+  6 | 16383
+  7 | 16383
+  8 | 16383
+  9 | 16383
+(10 rows)
+
+select 777::text, min(cint2) from aggfns where true group by 777::text order by 1, 2;
+ text |  min   
+------+--------
+ 777  | -16375
+(1 row)
+
+select s, min(cint2) from aggfns where true group by s order by 1, 2;
+ s |  min   
+---+--------
+ 0 | -16375
+ 1 | -16375
+ 2 | -16375
+ 3 | -16375
+ 4 | -16375
+ 5 | -16375
+ 6 | -16375
+ 7 | -16375
+ 8 | -16375
+ 9 | -16375
+(10 rows)
+
+select ss, min(cint2) from aggfns where true group by ss order by 1, 2;
+ ss |  min   
+----+--------
+  0 | -16375
+  1 | -16375
+  2 | -16375
+  3 | -16375
+  4 | -16375
+  5 | -16375
+  6 | -16375
+  7 | -16375
+  8 | -16375
+  9 | -16375
+(10 rows)
+
+select 777::text, sum(cint2) from aggfns where true group by 777::text order by 1, 2;
+ text |   sum    
+------+----------
+ 777  | -8423824
+(1 row)
+
+select s, sum(cint2) from aggfns where true group by s order by 1, 2;
+ s |   sum   
+---+---------
+ 0 | -845142
+ 1 | -859758
+ 2 | -819009
+ 3 | -856888
+ 4 | -839506
+ 5 | -869747
+ 6 | -834629
+ 7 | -825791
+ 8 | -811934
+ 9 | -861420
+(10 rows)
+
+select ss, sum(cint2) from aggfns where true group by ss order by 1, 2;
+ ss |   sum   
+----+---------
+  0 | -845142
+  1 | -859758
+  2 | -819009
+  3 | -856888
+  4 | -839506
+  5 | -869747
+  6 | -834629
+  7 | -825791
+  8 | -811934
+  9 | -861420
+(10 rows)
+
+select 777::text, avg(cint4) from aggfns where true group by 777::text order by 1, 2;
+ text |          avg          
+------+-----------------------
+ 777  | -2833327.786810000000
+(1 row)
+
+select s, avg(cint4) from aggfns where true group by s order by 1, 2;
+ s |          avg          
+---+-----------------------
+ 0 | -2919248.121000000000
+ 1 | -2836378.364750000000
+ 2 | -2837313.994650000000
+ 3 | -2818722.941500000000
+ 4 | -2772243.427000000000
+ 5 | -2850351.637450000000
+ 6 | -2845789.891100000000
+ 7 | -2804766.678700000000
+ 8 | -2834269.365200000000
+ 9 | -2814193.446750000000
+(10 rows)
+
+select ss, avg(cint4) from aggfns where true group by ss order by 1, 2;
+ ss |          avg          
+----+-----------------------
+  0 | -2919248.121000000000
+  1 | -2836378.364750000000
+  2 | -2837313.994650000000
+  3 | -2818722.941500000000
+  4 | -2772243.427000000000
+  5 | -2850351.637450000000
+  6 | -2845789.891100000000
+  7 | -2804766.678700000000
+  8 | -2834269.365200000000
+  9 | -2814193.446750000000
+(10 rows)
+
+select 777::text, max(cint4) from aggfns where true group by 777::text order by 1, 2;
+ text |    max     
+------+------------
+ 777  | 1073660631
+(1 row)
+
+select s, max(cint4) from aggfns where true group by s order by 1, 2;
+ s |    max     
+---+------------
+ 0 | 1073660631
+ 1 | 1073660631
+ 2 | 1073660631
+ 3 | 1073660631
+ 4 | 1073660631
+ 5 | 1073660631
+ 6 | 1073660631
+ 7 | 1073660631
+ 8 | 1073660631
+ 9 | 1073660631
+(10 rows)
+
+select ss, max(cint4) from aggfns where true group by ss order by 1, 2;
+ ss |    max     
+----+------------
+  0 | 1073660631
+  1 | 1073660631
+  2 | 1073660631
+  3 | 1073660631
+  4 | 1073660631
+  5 | 1073660631
+  6 | 1073660631
+  7 | 1073660631
+  8 | 1073660631
+  9 | 1073660631
+(10 rows)
+
+select 777::text, min(cint4) from aggfns where true group by 777::text order by 1, 2;
+ text |     min     
+------+-------------
+ 777  | -1073184428
+(1 row)
+
+select s, min(cint4) from aggfns where true group by s order by 1, 2;
+ s |     min     
+---+-------------
+ 0 | -1073184428
+ 1 | -1073184428
+ 2 | -1073184428
+ 3 | -1073184428
+ 4 | -1073184428
+ 5 | -1073184428
+ 6 | -1073184428
+ 7 | -1073184428
+ 8 | -1073184428
+ 9 | -1073184428
+(10 rows)
+
+select ss, min(cint4) from aggfns where true group by ss order by 1, 2;
+ ss |     min     
+----+-------------
+  0 | -1073184428
+  1 | -1073184428
+  2 | -1073184428
+  3 | -1073184428
+  4 | -1073184428
+  5 | -1073184428
+  6 | -1073184428
+  7 | -1073184428
+  8 | -1073184428
+  9 | -1073184428
+(10 rows)
+
+select 777::text, sum(cint4) from aggfns where true group by 777::text order by 1, 2;
+ text |      sum      
+------+---------------
+ 777  | -566665557362
+(1 row)
+
+select s, sum(cint4) from aggfns where true group by s order by 1, 2;
+ s |     sum      
+---+--------------
+ 0 | -58384962420
+ 1 | -56727567295
+ 2 | -56746279893
+ 3 | -56374458830
+ 4 | -55444868540
+ 5 | -57007032749
+ 6 | -56915797822
+ 7 | -56095333574
+ 8 | -56685387304
+ 9 | -56283868935
+(10 rows)
+
+select ss, sum(cint4) from aggfns where true group by ss order by 1, 2;
+ ss |     sum      
+----+--------------
+  0 | -58384962420
+  1 | -56727567295
+  2 | -56746279893
+  3 | -56374458830
+  4 | -55444868540
+  5 | -57007032749
+  6 | -56915797822
+  7 | -56095333574
+  8 | -56685387304
+  9 | -56283868935
+(10 rows)
+
+select 777::text, avg(cint8) from aggfns where true group by 777::text order by 1, 2;
+ text |          avg          
+------+-----------------------
+ 777  | -2823388.766060000000
+(1 row)
+
+select s, avg(cint8) from aggfns where true group by s order by 1, 2;
+ s |          avg          
+---+-----------------------
+ 0 | -2836378.364750000000
+ 1 | -2837313.994650000000
+ 2 | -2818722.941500000000
+ 3 | -2772243.427000000000
+ 4 | -2850351.637450000000
+ 5 | -2845789.891100000000
+ 6 | -2804766.678700000000
+ 7 | -2834269.365200000000
+ 8 | -2814193.446750000000
+ 9 | -2819857.913500000000
+(10 rows)
+
+select ss, avg(cint8) from aggfns where true group by ss order by 1, 2;
+ ss |          avg          
+----+-----------------------
+  0 | -2836378.364750000000
+  1 | -2837313.994650000000
+  2 | -2818722.941500000000
+  3 | -2772243.427000000000
+  4 | -2850351.637450000000
+  5 | -2845789.891100000000
+  6 | -2804766.678700000000
+  7 | -2834269.365200000000
+  8 | -2814193.446750000000
+  9 | -2819857.913500000000
+(10 rows)
+
+select 777::text, max(cint8) from aggfns where true group by 777::text order by 1, 2;
+ text |    max     
+------+------------
+ 777  | 1073660631
+(1 row)
+
+select s, max(cint8) from aggfns where true group by s order by 1, 2;
+ s |    max     
+---+------------
+ 0 | 1073660631
+ 1 | 1073660631
+ 2 | 1073660631
+ 3 | 1073660631
+ 4 | 1073660631
+ 5 | 1073660631
+ 6 | 1073660631
+ 7 | 1073660631
+ 8 | 1073660631
+ 9 | 1073660631
+(10 rows)
+
+select ss, max(cint8) from aggfns where true group by ss order by 1, 2;
+ ss |    max     
+----+------------
+  0 | 1073660631
+  1 | 1073660631
+  2 | 1073660631
+  3 | 1073660631
+  4 | 1073660631
+  5 | 1073660631
+  6 | 1073660631
+  7 | 1073660631
+  8 | 1073660631
+  9 | 1073660631
+(10 rows)
+
+select 777::text, min(cint8) from aggfns where true group by 777::text order by 1, 2;
+ text |     min     
+------+-------------
+ 777  | -1073184428
+(1 row)
+
+select s, min(cint8) from aggfns where true group by s order by 1, 2;
+ s |     min     
+---+-------------
+ 0 | -1073184428
+ 1 | -1073184428
+ 2 | -1073184428
+ 3 | -1073184428
+ 4 | -1073184428
+ 5 | -1073184428
+ 6 | -1073184428
+ 7 | -1073184428
+ 8 | -1073184428
+ 9 | -1073184428
+(10 rows)
+
+select ss, min(cint8) from aggfns where true group by ss order by 1, 2;
+ ss |     min     
+----+-------------
+  0 | -1073184428
+  1 | -1073184428
+  2 | -1073184428
+  3 | -1073184428
+  4 | -1073184428
+  5 | -1073184428
+  6 | -1073184428
+  7 | -1073184428
+  8 | -1073184428
+  9 | -1073184428
+(10 rows)
+
+select 777::text, sum(cint8) from aggfns where true group by 777::text order by 1, 2;
+ text |      sum      
+------+---------------
+ 777  | -564677753212
+(1 row)
+
+select s, sum(cint8) from aggfns where true group by s order by 1, 2;
+ s |     sum      
+---+--------------
+ 0 | -56727567295
+ 1 | -56746279893
+ 2 | -56374458830
+ 3 | -55444868540
+ 4 | -57007032749
+ 5 | -56915797822
+ 6 | -56095333574
+ 7 | -56685387304
+ 8 | -56283868935
+ 9 | -56397158270
+(10 rows)
+
+select ss, sum(cint8) from aggfns where true group by ss order by 1, 2;
+ ss |     sum      
+----+--------------
+  0 | -56727567295
+  1 | -56746279893
+  2 | -56374458830
+  3 | -55444868540
+  4 | -57007032749
+  5 | -56915797822
+  6 | -56095333574
+  7 | -56685387304
+  8 | -56283868935
+  9 | -56397158270
+(10 rows)
+
+select 777::text, avg(s) from aggfns where true group by 777::text order by 1, 2;
+ text |        avg         
+------+--------------------
+ 777  | 4.5000000000000000
+(1 row)
+
+select s, avg(s) from aggfns where true group by s order by 1, 2;
+ s |            avg             
+---+----------------------------
+ 0 | 0.000000000000000000000000
+ 1 |     1.00000000000000000000
+ 2 |         2.0000000000000000
+ 3 |         3.0000000000000000
+ 4 |         4.0000000000000000
+ 5 |         5.0000000000000000
+ 6 |         6.0000000000000000
+ 7 |         7.0000000000000000
+ 8 |         8.0000000000000000
+ 9 |         9.0000000000000000
+(10 rows)
+
+select ss, avg(s) from aggfns where true group by ss order by 1, 2;
+ ss |            avg             
+----+----------------------------
+  0 | 0.000000000000000000000000
+  1 |     1.00000000000000000000
+  2 |         2.0000000000000000
+  3 |         3.0000000000000000
+  4 |         4.0000000000000000
+  5 |         5.0000000000000000
+  6 |         6.0000000000000000
+  7 |         7.0000000000000000
+  8 |         8.0000000000000000
+  9 |         9.0000000000000000
+(10 rows)
+
+select 777::text, max(s) from aggfns where true group by 777::text order by 1, 2;
+ text | max 
+------+-----
+ 777  |   9
+(1 row)
+
+select s, max(s) from aggfns where true group by s order by 1, 2;
+ s | max 
+---+-----
+ 0 |   0
+ 1 |   1
+ 2 |   2
+ 3 |   3
+ 4 |   4
+ 5 |   5
+ 6 |   6
+ 7 |   7
+ 8 |   8
+ 9 |   9
+(10 rows)
+
+select ss, max(s) from aggfns where true group by ss order by 1, 2;
+ ss | max 
+----+-----
+  0 |   0
+  1 |   1
+  2 |   2
+  3 |   3
+  4 |   4
+  5 |   5
+  6 |   6
+  7 |   7
+  8 |   8
+  9 |   9
+(10 rows)
+
+select 777::text, min(s) from aggfns where true group by 777::text order by 1, 2;
+ text | min 
+------+-----
+ 777  |   0
+(1 row)
+
+select s, min(s) from aggfns where true group by s order by 1, 2;
+ s | min 
+---+-----
+ 0 |   0
+ 1 |   1
+ 2 |   2
+ 3 |   3
+ 4 |   4
+ 5 |   5
+ 6 |   6
+ 7 |   7
+ 8 |   8
+ 9 |   9
+(10 rows)
+
+select ss, min(s) from aggfns where true group by ss order by 1, 2;
+ ss | min 
+----+-----
+  0 |   0
+  1 |   1
+  2 |   2
+  3 |   3
+  4 |   4
+  5 |   5
+  6 |   6
+  7 |   7
+  8 |   8
+  9 |   9
+(10 rows)
+
+select 777::text, sum(s) from aggfns where true group by 777::text order by 1, 2;
+ text |  sum   
+------+--------
+ 777  | 900000
+(1 row)
+
+select s, sum(s) from aggfns where true group by s order by 1, 2;
+ s |  sum   
+---+--------
+ 0 |      0
+ 1 |  20000
+ 2 |  40000
+ 3 |  60000
+ 4 |  80000
+ 5 | 100000
+ 6 | 120000
+ 7 | 140000
+ 8 | 160000
+ 9 | 180000
+(10 rows)
+
+select ss, sum(s) from aggfns where true group by ss order by 1, 2;
+ ss |  sum   
+----+--------
+  0 |      0
+  1 |  20000
+  2 |  40000
+  3 |  60000
+  4 |  80000
+  5 | 100000
+  6 | 120000
+  7 | 140000
+  8 | 160000
+  9 | 180000
+(10 rows)
+
+select 777::text, avg(ss) from aggfns where true group by 777::text order by 1, 2;
+ text |        avg         
+------+--------------------
+ 777  | 4.5000000000000000
+(1 row)
+
+select s, avg(ss) from aggfns where true group by s order by 1, 2;
+ s |            avg             
+---+----------------------------
+ 0 | 0.000000000000000000000000
+ 1 |     1.00000000000000000000
+ 2 |         2.0000000000000000
+ 3 |         3.0000000000000000
+ 4 |         4.0000000000000000
+ 5 |         5.0000000000000000
+ 6 |         6.0000000000000000
+ 7 |         7.0000000000000000
+ 8 |         8.0000000000000000
+ 9 |         9.0000000000000000
+(10 rows)
+
+select ss, avg(ss) from aggfns where true group by ss order by 1, 2;
+ ss |            avg             
+----+----------------------------
+  0 | 0.000000000000000000000000
+  1 |     1.00000000000000000000
+  2 |         2.0000000000000000
+  3 |         3.0000000000000000
+  4 |         4.0000000000000000
+  5 |         5.0000000000000000
+  6 |         6.0000000000000000
+  7 |         7.0000000000000000
+  8 |         8.0000000000000000
+  9 |         9.0000000000000000
+(10 rows)
+
+select 777::text, max(ss) from aggfns where true group by 777::text order by 1, 2;
+ text | max 
+------+-----
+ 777  |   9
+(1 row)
+
+select s, max(ss) from aggfns where true group by s order by 1, 2;
+ s | max 
+---+-----
+ 0 |   0
+ 1 |   1
+ 2 |   2
+ 3 |   3
+ 4 |   4
+ 5 |   5
+ 6 |   6
+ 7 |   7
+ 8 |   8
+ 9 |   9
+(10 rows)
+
+select ss, max(ss) from aggfns where true group by ss order by 1, 2;
+ ss | max 
+----+-----
+  0 |   0
+  1 |   1
+  2 |   2
+  3 |   3
+  4 |   4
+  5 |   5
+  6 |   6
+  7 |   7
+  8 |   8
+  9 |   9
+(10 rows)
+
+select 777::text, min(ss) from aggfns where true group by 777::text order by 1, 2;
+ text | min 
+------+-----
+ 777  |   0
+(1 row)
+
+select s, min(ss) from aggfns where true group by s order by 1, 2;
+ s | min 
+---+-----
+ 0 |   0
+ 1 |   1
+ 2 |   2
+ 3 |   3
+ 4 |   4
+ 5 |   5
+ 6 |   6
+ 7 |   7
+ 8 |   8
+ 9 |   9
+(10 rows)
+
+select ss, min(ss) from aggfns where true group by ss order by 1, 2;
+ ss | min 
+----+-----
+  0 |   0
+  1 |   1
+  2 |   2
+  3 |   3
+  4 |   4
+  5 |   5
+  6 |   6
+  7 |   7
+  8 |   8
+  9 |   9
+(10 rows)
+
+select 777::text, sum(ss) from aggfns where true group by 777::text order by 1, 2;
+ text |  sum   
+------+--------
+ 777  | 900000
+(1 row)
+
+select s, sum(ss) from aggfns where true group by s order by 1, 2;
+ s |  sum   
+---+--------
+ 0 |      0
+ 1 |  20000
+ 2 |  40000
+ 3 |  60000
+ 4 |  80000
+ 5 | 100000
+ 6 | 120000
+ 7 | 140000
+ 8 | 160000
+ 9 | 180000
+(10 rows)
+
+select ss, sum(ss) from aggfns where true group by ss order by 1, 2;
+ ss |  sum   
+----+--------
+  0 |      0
+  1 |  20000
+  2 |  40000
+  3 |  60000
+  4 |  80000
+  5 | 100000
+  6 | 120000
+  7 | 140000
+  8 | 160000
+  9 | 180000
+(10 rows)
+
+select 777::text, max(t) from aggfns where true group by 777::text order by 1, 2;
+ text |  max   
+------+--------
+ 777  | 110000
+(1 row)
+
+select s, max(t) from aggfns where true group by s order by 1, 2;
+ s |  max   
+---+--------
+ 0 |  20000
+ 1 |  30000
+ 2 |  40000
+ 3 |  50000
+ 4 |  60000
+ 5 |  70000
+ 6 |  80000
+ 7 |  90000
+ 8 | 100000
+ 9 | 110000
+(10 rows)
+
+select ss, max(t) from aggfns where true group by ss order by 1, 2;
+ ss |  max   
+----+--------
+  0 |  20000
+  1 |  30000
+  2 |  40000
+  3 |  50000
+  4 |  60000
+  5 |  70000
+  6 |  80000
+  7 |  90000
+  8 | 100000
+  9 | 110000
+(10 rows)
+
+select 777::text, min(t) from aggfns where true group by 777::text order by 1, 2;
+ text | min 
+------+-----
+ 777  |   1
+(1 row)
+
+select s, min(t) from aggfns where true group by s order by 1, 2;
+ s |  min  
+---+-------
+ 0 |     1
+ 1 | 10001
+ 2 | 20001
+ 3 | 30001
+ 4 | 40001
+ 5 | 50001
+ 6 | 60001
+ 7 | 70001
+ 8 | 80001
+ 9 | 90001
+(10 rows)
+
+select ss, min(t) from aggfns where true group by ss order by 1, 2;
+ ss |  min  
+----+-------
+  0 |     1
+  1 | 10001
+  2 | 20001
+  3 | 30001
+  4 | 40001
+  5 | 50001
+  6 | 60001
+  7 | 70001
+  8 | 80001
+  9 | 90001
+(10 rows)
+
+select 777::text, avg(cfloat4) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text | avg 
+------+-----
+ 777  | NaN
+(1 row)
+
+select s, avg(cfloat4) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |        avg         
+---+--------------------
+ 0 | -0.132126759885764
+ 1 |                NaN
+ 2 | -0.129096583007788
+ 3 | -0.132733890937781
+ 4 |  -0.13252146150968
+ 5 | -0.130611110996222
+ 6 | -0.131984978889441
+ 7 | -0.131050092529273
+ 8 | -0.131313872741675
+ 9 | -0.132765194868064
+(10 rows)
+
+select ss, avg(cfloat4) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |        avg         
+----+--------------------
+  0 | -0.132126759885764
+  1 |                NaN
+  2 | -0.129096583007788
+  3 | -0.132733890937781
+  4 |  -0.13252146150968
+  5 | -0.130611110996222
+  6 | -0.131984978889441
+  7 | -0.131050092529273
+  8 | -0.131313872741675
+  9 | -0.132765194868064
+(10 rows)
+
+select 777::text, count(cfloat4) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text | count  
+------+--------
+ 777  | 200000
+(1 row)
+
+select s, count(cfloat4) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s | count 
+---+-------
+ 0 | 20000
+ 1 | 20000
+ 2 | 20000
+ 3 | 20000
+ 4 | 20000
+ 5 | 20000
+ 6 | 20000
+ 7 | 20000
+ 8 | 20000
+ 9 | 20000
+(10 rows)
+
+select ss, count(cfloat4) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss | count 
+----+-------
+  0 | 20000
+  1 | 20000
+  2 | 20000
+  3 | 20000
+  4 | 20000
+  5 | 20000
+  6 | 20000
+  7 | 20000
+  8 | 20000
+  9 | 20000
+(10 rows)
+
+select 777::text, max(cfloat4) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text | max 
+------+-----
+ 777  | NaN
+(1 row)
+
+select s, max(cfloat4) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |   max   
+---+---------
+ 0 | 49.9977
+ 1 |     NaN
+ 2 | 49.9977
+ 3 | 49.9977
+ 4 | 49.9977
+ 5 | 49.9977
+ 6 | 49.9977
+ 7 | 49.9977
+ 8 | 49.9977
+ 9 | 49.9977
+(10 rows)
+
+select ss, max(cfloat4) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |   max   
+----+---------
+  0 | 49.9977
+  1 |     NaN
+  2 | 49.9977
+  3 | 49.9977
+  4 | 49.9977
+  5 | 49.9977
+  6 | 49.9977
+  7 | 49.9977
+  8 | 49.9977
+  9 | 49.9977
+(10 rows)
+
+select 777::text, min(cfloat4) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text |   min    
+------+----------
+ 777  | -49.9756
+(1 row)
+
+select s, min(cfloat4) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |   min    
+---+----------
+ 0 | -49.9756
+ 1 | -49.9756
+ 2 | -49.9756
+ 3 | -49.9756
+ 4 | -49.9756
+ 5 | -49.9756
+ 6 | -49.9756
+ 7 | -49.9756
+ 8 | -49.9756
+ 9 | -49.9756
+(10 rows)
+
+select ss, min(cfloat4) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |   min    
+----+----------
+  0 | -49.9756
+  1 | -49.9756
+  2 | -49.9756
+  3 | -49.9756
+  4 | -49.9756
+  5 | -49.9756
+  6 | -49.9756
+  7 | -49.9756
+  8 | -49.9756
+  9 | -49.9756
+(10 rows)
+
+select 777::text, sum(cfloat4) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text | sum 
+------+-----
+ 777  | NaN
+(1 row)
+
+select s, sum(cfloat4) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |   sum    
+---+----------
+ 0 | -2642.54
+ 1 |      NaN
+ 2 | -2581.93
+ 3 | -2654.68
+ 4 | -2650.43
+ 5 | -2612.22
+ 6 |  -2639.7
+ 7 |    -2621
+ 8 | -2626.28
+ 9 |  -2655.3
+(10 rows)
+
+select ss, sum(cfloat4) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |   sum    
+----+----------
+  0 | -2642.54
+  1 |      NaN
+  2 | -2581.93
+  3 | -2654.68
+  4 | -2650.43
+  5 | -2612.22
+  6 |  -2639.7
+  7 |    -2621
+  8 | -2626.28
+  9 |  -2655.3
+(10 rows)
+
+select 777::text, avg(cfloat8) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text |        avg         
+------+--------------------
+ 777  | -0.131776180773973
+(1 row)
+
+select s, avg(cfloat8) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |        avg         
+---+--------------------
+ 0 | -0.131261021163082
+ 1 | -0.129096584053477
+ 2 | -0.132733892038232
+ 3 | -0.132521462687291
+ 4 | -0.130611112199258
+ 5 | -0.131984980024863
+ 6 | -0.131050093692029
+ 7 |  -0.13131387403002
+ 8 | -0.132765196124092
+ 9 | -0.134423591727391
+(10 rows)
+
+select ss, avg(cfloat8) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |        avg         
+----+--------------------
+  0 | -0.131261021163082
+  1 | -0.129096584053477
+  2 | -0.132733892038232
+  3 | -0.132521462687291
+  4 | -0.130611112199258
+  5 | -0.131984980024863
+  6 | -0.131050093692029
+  7 |  -0.13131387403002
+  8 | -0.132765196124092
+  9 | -0.134423591727391
+(10 rows)
+
+select 777::text, max(cfloat8) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text |       max       
+------+-----------------
+ 777  | 49.997744965367
+(1 row)
+
+select s, max(cfloat8) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |       max       
+---+-----------------
+ 0 | 49.997744965367
+ 1 | 49.997744965367
+ 2 | 49.997744965367
+ 3 | 49.997744965367
+ 4 | 49.997744965367
+ 5 | 49.997744965367
+ 6 | 49.997744965367
+ 7 | 49.997744965367
+ 8 | 49.997744965367
+ 9 | 49.997744965367
+(10 rows)
+
+select ss, max(cfloat8) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |       max       
+----+-----------------
+  0 | 49.997744965367
+  1 | 49.997744965367
+  2 | 49.997744965367
+  3 | 49.997744965367
+  4 | 49.997744965367
+  5 | 49.997744965367
+  6 | 49.997744965367
+  7 | 49.997744965367
+  8 | 49.997744965367
+  9 | 49.997744965367
+(10 rows)
+
+select 777::text, min(cfloat8) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text |        min        
+------+-------------------
+ 777  | -49.9755693599582
+(1 row)
+
+select s, min(cfloat8) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |        min        
+---+-------------------
+ 0 | -49.9755693599582
+ 1 | -49.9755693599582
+ 2 | -49.9755693599582
+ 3 | -49.9755693599582
+ 4 | -49.9755693599582
+ 5 | -49.9755693599582
+ 6 | -49.9755693599582
+ 7 | -49.9755693599582
+ 8 | -49.9755693599582
+ 9 | -49.9755693599582
+(10 rows)
+
+select ss, min(cfloat8) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |        min        
+----+-------------------
+  0 | -49.9755693599582
+  1 | -49.9755693599582
+  2 | -49.9755693599582
+  3 | -49.9755693599582
+  4 | -49.9755693599582
+  5 | -49.9755693599582
+  6 | -49.9755693599582
+  7 | -49.9755693599582
+  8 | -49.9755693599582
+  9 | -49.9755693599582
+(10 rows)
+
+select 777::text, sum(cfloat8) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text |        sum        
+------+-------------------
+ 777  | -26355.2361547947
+(1 row)
+
+select s, sum(cfloat8) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |        sum        
+---+-------------------
+ 0 | -2625.22042326164
+ 1 | -2581.93168106955
+ 2 | -2654.67784076463
+ 3 | -2650.42925374582
+ 4 | -2612.22224398516
+ 5 | -2639.69960049726
+ 6 | -2621.00187384058
+ 7 |  -2626.2774806004
+ 8 | -2655.30392248183
+ 9 | -2688.47183454782
+(10 rows)
+
+select ss, sum(cfloat8) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |        sum        
+----+-------------------
+  0 | -2625.22042326164
+  1 | -2581.93168106955
+  2 | -2654.67784076463
+  3 | -2650.42925374582
+  4 | -2612.22224398516
+  5 | -2639.69960049726
+  6 | -2621.00187384058
+  7 |  -2626.2774806004
+  8 | -2655.30392248183
+  9 | -2688.47183454782
+(10 rows)
+
+select 777::text, avg(cint2) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text |         avg          
+------+----------------------
+ 777  | -42.1591712126520194
+(1 row)
+
+select s, avg(cint2) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |         avg          
+---+----------------------
+ 0 | -42.2972824182973825
+ 1 | -43.0287773384715480
+ 2 | -40.9893899204244032
+ 3 | -42.8851408838396477
+ 4 | -42.0152144537310445
+ 5 | -43.5287022671537961
+ 6 | -41.7711325759471498
+ 7 | -41.3288123717531655
+ 8 | -40.6353035383614434
+ 9 | -43.1119563585406136
+(10 rows)
+
+select ss, avg(cint2) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |         avg          
+----+----------------------
+  0 | -42.2972824182973825
+  1 | -43.0287773384715480
+  2 | -40.9893899204244032
+  3 | -42.8851408838396477
+  4 | -42.0152144537310445
+  5 | -43.5287022671537961
+  6 | -41.7711325759471498
+  7 | -41.3288123717531655
+  8 | -40.6353035383614434
+  9 | -43.1119563585406136
+(10 rows)
+
+select 777::text, max(cint2) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text |  max  
+------+-------
+ 777  | 16383
+(1 row)
+
+select s, max(cint2) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |  max  
+---+-------
+ 0 | 16383
+ 1 | 16383
+ 2 | 16383
+ 3 | 16383
+ 4 | 16383
+ 5 | 16383
+ 6 | 16383
+ 7 | 16383
+ 8 | 16383
+ 9 | 16383
+(10 rows)
+
+select ss, max(cint2) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |  max  
+----+-------
+  0 | 16383
+  1 | 16383
+  2 | 16383
+  3 | 16383
+  4 | 16383
+  5 | 16383
+  6 | 16383
+  7 | 16383
+  8 | 16383
+  9 | 16383
+(10 rows)
+
+select 777::text, min(cint2) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text |  min   
+------+--------
+ 777  | -16375
+(1 row)
+
+select s, min(cint2) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |  min   
+---+--------
+ 0 | -16375
+ 1 | -16375
+ 2 | -16375
+ 3 | -16375
+ 4 | -16375
+ 5 | -16375
+ 6 | -16375
+ 7 | -16375
+ 8 | -16375
+ 9 | -16375
+(10 rows)
+
+select ss, min(cint2) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |  min   
+----+--------
+  0 | -16375
+  1 | -16375
+  2 | -16375
+  3 | -16375
+  4 | -16375
+  5 | -16375
+  6 | -16375
+  7 | -16375
+  8 | -16375
+  9 | -16375
+(10 rows)
+
+select 777::text, sum(cint2) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text |   sum    
+------+----------
+ 777  | -8423824
+(1 row)
+
+select s, sum(cint2) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |   sum   
+---+---------
+ 0 | -845142
+ 1 | -859758
+ 2 | -819009
+ 3 | -856888
+ 4 | -839506
+ 5 | -869747
+ 6 | -834629
+ 7 | -825791
+ 8 | -811934
+ 9 | -861420
+(10 rows)
+
+select ss, sum(cint2) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |   sum   
+----+---------
+  0 | -845142
+  1 | -859758
+  2 | -819009
+  3 | -856888
+  4 | -839506
+  5 | -869747
+  6 | -834629
+  7 | -825791
+  8 | -811934
+  9 | -861420
+(10 rows)
+
+select 777::text, avg(cint4) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text |          avg          
+------+-----------------------
+ 777  | -2833327.786810000000
+(1 row)
+
+select s, avg(cint4) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |          avg          
+---+-----------------------
+ 0 | -2919248.121000000000
+ 1 | -2836378.364750000000
+ 2 | -2837313.994650000000
+ 3 | -2818722.941500000000
+ 4 | -2772243.427000000000
+ 5 | -2850351.637450000000
+ 6 | -2845789.891100000000
+ 7 | -2804766.678700000000
+ 8 | -2834269.365200000000
+ 9 | -2814193.446750000000
+(10 rows)
+
+select ss, avg(cint4) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |          avg          
+----+-----------------------
+  0 | -2919248.121000000000
+  1 | -2836378.364750000000
+  2 | -2837313.994650000000
+  3 | -2818722.941500000000
+  4 | -2772243.427000000000
+  5 | -2850351.637450000000
+  6 | -2845789.891100000000
+  7 | -2804766.678700000000
+  8 | -2834269.365200000000
+  9 | -2814193.446750000000
+(10 rows)
+
+select 777::text, max(cint4) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text |    max     
+------+------------
+ 777  | 1073660631
+(1 row)
+
+select s, max(cint4) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |    max     
+---+------------
+ 0 | 1073660631
+ 1 | 1073660631
+ 2 | 1073660631
+ 3 | 1073660631
+ 4 | 1073660631
+ 5 | 1073660631
+ 6 | 1073660631
+ 7 | 1073660631
+ 8 | 1073660631
+ 9 | 1073660631
+(10 rows)
+
+select ss, max(cint4) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |    max     
+----+------------
+  0 | 1073660631
+  1 | 1073660631
+  2 | 1073660631
+  3 | 1073660631
+  4 | 1073660631
+  5 | 1073660631
+  6 | 1073660631
+  7 | 1073660631
+  8 | 1073660631
+  9 | 1073660631
+(10 rows)
+
+select 777::text, min(cint4) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text |     min     
+------+-------------
+ 777  | -1073184428
+(1 row)
+
+select s, min(cint4) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |     min     
+---+-------------
+ 0 | -1073184428
+ 1 | -1073184428
+ 2 | -1073184428
+ 3 | -1073184428
+ 4 | -1073184428
+ 5 | -1073184428
+ 6 | -1073184428
+ 7 | -1073184428
+ 8 | -1073184428
+ 9 | -1073184428
+(10 rows)
+
+select ss, min(cint4) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |     min     
+----+-------------
+  0 | -1073184428
+  1 | -1073184428
+  2 | -1073184428
+  3 | -1073184428
+  4 | -1073184428
+  5 | -1073184428
+  6 | -1073184428
+  7 | -1073184428
+  8 | -1073184428
+  9 | -1073184428
+(10 rows)
+
+select 777::text, sum(cint4) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text |      sum      
+------+---------------
+ 777  | -566665557362
+(1 row)
+
+select s, sum(cint4) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |     sum      
+---+--------------
+ 0 | -58384962420
+ 1 | -56727567295
+ 2 | -56746279893
+ 3 | -56374458830
+ 4 | -55444868540
+ 5 | -57007032749
+ 6 | -56915797822
+ 7 | -56095333574
+ 8 | -56685387304
+ 9 | -56283868935
+(10 rows)
+
+select ss, sum(cint4) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |     sum      
+----+--------------
+  0 | -58384962420
+  1 | -56727567295
+  2 | -56746279893
+  3 | -56374458830
+  4 | -55444868540
+  5 | -57007032749
+  6 | -56915797822
+  7 | -56095333574
+  8 | -56685387304
+  9 | -56283868935
+(10 rows)
+
+select 777::text, avg(cint8) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text |          avg          
+------+-----------------------
+ 777  | -2823388.766060000000
+(1 row)
+
+select s, avg(cint8) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |          avg          
+---+-----------------------
+ 0 | -2836378.364750000000
+ 1 | -2837313.994650000000
+ 2 | -2818722.941500000000
+ 3 | -2772243.427000000000
+ 4 | -2850351.637450000000
+ 5 | -2845789.891100000000
+ 6 | -2804766.678700000000
+ 7 | -2834269.365200000000
+ 8 | -2814193.446750000000
+ 9 | -2819857.913500000000
+(10 rows)
+
+select ss, avg(cint8) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |          avg          
+----+-----------------------
+  0 | -2836378.364750000000
+  1 | -2837313.994650000000
+  2 | -2818722.941500000000
+  3 | -2772243.427000000000
+  4 | -2850351.637450000000
+  5 | -2845789.891100000000
+  6 | -2804766.678700000000
+  7 | -2834269.365200000000
+  8 | -2814193.446750000000
+  9 | -2819857.913500000000
+(10 rows)
+
+select 777::text, max(cint8) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text |    max     
+------+------------
+ 777  | 1073660631
+(1 row)
+
+select s, max(cint8) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |    max     
+---+------------
+ 0 | 1073660631
+ 1 | 1073660631
+ 2 | 1073660631
+ 3 | 1073660631
+ 4 | 1073660631
+ 5 | 1073660631
+ 6 | 1073660631
+ 7 | 1073660631
+ 8 | 1073660631
+ 9 | 1073660631
+(10 rows)
+
+select ss, max(cint8) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |    max     
+----+------------
+  0 | 1073660631
+  1 | 1073660631
+  2 | 1073660631
+  3 | 1073660631
+  4 | 1073660631
+  5 | 1073660631
+  6 | 1073660631
+  7 | 1073660631
+  8 | 1073660631
+  9 | 1073660631
+(10 rows)
+
+select 777::text, min(cint8) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text |     min     
+------+-------------
+ 777  | -1073184428
+(1 row)
+
+select s, min(cint8) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |     min     
+---+-------------
+ 0 | -1073184428
+ 1 | -1073184428
+ 2 | -1073184428
+ 3 | -1073184428
+ 4 | -1073184428
+ 5 | -1073184428
+ 6 | -1073184428
+ 7 | -1073184428
+ 8 | -1073184428
+ 9 | -1073184428
+(10 rows)
+
+select ss, min(cint8) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |     min     
+----+-------------
+  0 | -1073184428
+  1 | -1073184428
+  2 | -1073184428
+  3 | -1073184428
+  4 | -1073184428
+  5 | -1073184428
+  6 | -1073184428
+  7 | -1073184428
+  8 | -1073184428
+  9 | -1073184428
+(10 rows)
+
+select 777::text, sum(cint8) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text |      sum      
+------+---------------
+ 777  | -564677753212
+(1 row)
+
+select s, sum(cint8) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |     sum      
+---+--------------
+ 0 | -56727567295
+ 1 | -56746279893
+ 2 | -56374458830
+ 3 | -55444868540
+ 4 | -57007032749
+ 5 | -56915797822
+ 6 | -56095333574
+ 7 | -56685387304
+ 8 | -56283868935
+ 9 | -56397158270
+(10 rows)
+
+select ss, sum(cint8) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |     sum      
+----+--------------
+  0 | -56727567295
+  1 | -56746279893
+  2 | -56374458830
+  3 | -55444868540
+  4 | -57007032749
+  5 | -56915797822
+  6 | -56095333574
+  7 | -56685387304
+  8 | -56283868935
+  9 | -56397158270
+(10 rows)
+
+select 777::text, avg(s) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text |        avg         
+------+--------------------
+ 777  | 4.5000000000000000
+(1 row)
+
+select s, avg(s) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |            avg             
+---+----------------------------
+ 0 | 0.000000000000000000000000
+ 1 |     1.00000000000000000000
+ 2 |         2.0000000000000000
+ 3 |         3.0000000000000000
+ 4 |         4.0000000000000000
+ 5 |         5.0000000000000000
+ 6 |         6.0000000000000000
+ 7 |         7.0000000000000000
+ 8 |         8.0000000000000000
+ 9 |         9.0000000000000000
+(10 rows)
+
+select ss, avg(s) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |            avg             
+----+----------------------------
+  0 | 0.000000000000000000000000
+  1 |     1.00000000000000000000
+  2 |         2.0000000000000000
+  3 |         3.0000000000000000
+  4 |         4.0000000000000000
+  5 |         5.0000000000000000
+  6 |         6.0000000000000000
+  7 |         7.0000000000000000
+  8 |         8.0000000000000000
+  9 |         9.0000000000000000
+(10 rows)
+
+select 777::text, max(s) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text | max 
+------+-----
+ 777  |   9
+(1 row)
+
+select s, max(s) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s | max 
+---+-----
+ 0 |   0
+ 1 |   1
+ 2 |   2
+ 3 |   3
+ 4 |   4
+ 5 |   5
+ 6 |   6
+ 7 |   7
+ 8 |   8
+ 9 |   9
+(10 rows)
+
+select ss, max(s) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss | max 
+----+-----
+  0 |   0
+  1 |   1
+  2 |   2
+  3 |   3
+  4 |   4
+  5 |   5
+  6 |   6
+  7 |   7
+  8 |   8
+  9 |   9
+(10 rows)
+
+select 777::text, min(s) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text | min 
+------+-----
+ 777  |   0
+(1 row)
+
+select s, min(s) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s | min 
+---+-----
+ 0 |   0
+ 1 |   1
+ 2 |   2
+ 3 |   3
+ 4 |   4
+ 5 |   5
+ 6 |   6
+ 7 |   7
+ 8 |   8
+ 9 |   9
+(10 rows)
+
+select ss, min(s) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss | min 
+----+-----
+  0 |   0
+  1 |   1
+  2 |   2
+  3 |   3
+  4 |   4
+  5 |   5
+  6 |   6
+  7 |   7
+  8 |   8
+  9 |   9
+(10 rows)
+
+select 777::text, sum(s) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text |  sum   
+------+--------
+ 777  | 900000
+(1 row)
+
+select s, sum(s) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |  sum   
+---+--------
+ 0 |      0
+ 1 |  20000
+ 2 |  40000
+ 3 |  60000
+ 4 |  80000
+ 5 | 100000
+ 6 | 120000
+ 7 | 140000
+ 8 | 160000
+ 9 | 180000
+(10 rows)
+
+select ss, sum(s) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |  sum   
+----+--------
+  0 |      0
+  1 |  20000
+  2 |  40000
+  3 |  60000
+  4 |  80000
+  5 | 100000
+  6 | 120000
+  7 | 140000
+  8 | 160000
+  9 | 180000
+(10 rows)
+
+select 777::text, avg(ss) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text |        avg         
+------+--------------------
+ 777  | 4.5000000000000000
+(1 row)
+
+select s, avg(ss) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |            avg             
+---+----------------------------
+ 0 | 0.000000000000000000000000
+ 1 |     1.00000000000000000000
+ 2 |         2.0000000000000000
+ 3 |         3.0000000000000000
+ 4 |         4.0000000000000000
+ 5 |         5.0000000000000000
+ 6 |         6.0000000000000000
+ 7 |         7.0000000000000000
+ 8 |         8.0000000000000000
+ 9 |         9.0000000000000000
+(10 rows)
+
+select ss, avg(ss) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |            avg             
+----+----------------------------
+  0 | 0.000000000000000000000000
+  1 |     1.00000000000000000000
+  2 |         2.0000000000000000
+  3 |         3.0000000000000000
+  4 |         4.0000000000000000
+  5 |         5.0000000000000000
+  6 |         6.0000000000000000
+  7 |         7.0000000000000000
+  8 |         8.0000000000000000
+  9 |         9.0000000000000000
+(10 rows)
+
+select 777::text, max(ss) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text | max 
+------+-----
+ 777  |   9
+(1 row)
+
+select s, max(ss) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s | max 
+---+-----
+ 0 |   0
+ 1 |   1
+ 2 |   2
+ 3 |   3
+ 4 |   4
+ 5 |   5
+ 6 |   6
+ 7 |   7
+ 8 |   8
+ 9 |   9
+(10 rows)
+
+select ss, max(ss) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss | max 
+----+-----
+  0 |   0
+  1 |   1
+  2 |   2
+  3 |   3
+  4 |   4
+  5 |   5
+  6 |   6
+  7 |   7
+  8 |   8
+  9 |   9
+(10 rows)
+
+select 777::text, min(ss) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text | min 
+------+-----
+ 777  |   0
+(1 row)
+
+select s, min(ss) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s | min 
+---+-----
+ 0 |   0
+ 1 |   1
+ 2 |   2
+ 3 |   3
+ 4 |   4
+ 5 |   5
+ 6 |   6
+ 7 |   7
+ 8 |   8
+ 9 |   9
+(10 rows)
+
+select ss, min(ss) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss | min 
+----+-----
+  0 |   0
+  1 |   1
+  2 |   2
+  3 |   3
+  4 |   4
+  5 |   5
+  6 |   6
+  7 |   7
+  8 |   8
+  9 |   9
+(10 rows)
+
+select 777::text, sum(ss) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text |  sum   
+------+--------
+ 777  | 900000
+(1 row)
+
+select s, sum(ss) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |  sum   
+---+--------
+ 0 |      0
+ 1 |  20000
+ 2 |  40000
+ 3 |  60000
+ 4 |  80000
+ 5 | 100000
+ 6 | 120000
+ 7 | 140000
+ 8 | 160000
+ 9 | 180000
+(10 rows)
+
+select ss, sum(ss) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |  sum   
+----+--------
+  0 |      0
+  1 |  20000
+  2 |  40000
+  3 |  60000
+  4 |  80000
+  5 | 100000
+  6 | 120000
+  7 | 140000
+  8 | 160000
+  9 | 180000
+(10 rows)
+
+select 777::text, max(t) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text |  max   
+------+--------
+ 777  | 110000
+(1 row)
+
+select s, max(t) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |  max   
+---+--------
+ 0 |  20000
+ 1 |  30000
+ 2 |  40000
+ 3 |  50000
+ 4 |  60000
+ 5 |  70000
+ 6 |  80000
+ 7 |  90000
+ 8 | 100000
+ 9 | 110000
+(10 rows)
+
+select ss, max(t) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |  max   
+----+--------
+  0 |  20000
+  1 |  30000
+  2 |  40000
+  3 |  50000
+  4 |  60000
+  5 |  70000
+  6 |  80000
+  7 |  90000
+  8 | 100000
+  9 | 110000
+(10 rows)
+
+select 777::text, min(t) from aggfns where cfloat8 < 50 group by 777::text order by 1, 2;
+ text | min 
+------+-----
+ 777  |   1
+(1 row)
+
+select s, min(t) from aggfns where cfloat8 < 50 group by s order by 1, 2;
+ s |  min  
+---+-------
+ 0 |     1
+ 1 | 10001
+ 2 | 20001
+ 3 | 30001
+ 4 | 40001
+ 5 | 50001
+ 6 | 60001
+ 7 | 70001
+ 8 | 80001
+ 9 | 90001
+(10 rows)
+
+select ss, min(t) from aggfns where cfloat8 < 50 group by ss order by 1, 2;
+ ss |  min  
+----+-------
+  0 |     1
+  1 | 10001
+  2 | 20001
+  3 | 30001
+  4 | 40001
+  5 | 50001
+  6 | 60001
+  7 | 70001
+  8 | 80001
+  9 | 90001
+(10 rows)
+
+select 777::text, avg(cfloat4) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | avg 
+------+-----
+(0 rows)
+
+select s, avg(cfloat4) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | avg 
+---+-----
+(0 rows)
+
+select ss, avg(cfloat4) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | avg 
+----+-----
+(0 rows)
+
+select 777::text, count(cfloat4) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | count 
+------+-------
+(0 rows)
+
+select s, count(cfloat4) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | count 
+---+-------
+(0 rows)
+
+select ss, count(cfloat4) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | count 
+----+-------
+(0 rows)
+
+select 777::text, max(cfloat4) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | max 
+------+-----
+(0 rows)
+
+select s, max(cfloat4) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | max 
+---+-----
+(0 rows)
+
+select ss, max(cfloat4) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | max 
+----+-----
+(0 rows)
+
+select 777::text, min(cfloat4) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | min 
+------+-----
+(0 rows)
+
+select s, min(cfloat4) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | min 
+---+-----
+(0 rows)
+
+select ss, min(cfloat4) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | min 
+----+-----
+(0 rows)
+
+select 777::text, sum(cfloat4) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | sum 
+------+-----
+(0 rows)
+
+select s, sum(cfloat4) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | sum 
+---+-----
+(0 rows)
+
+select ss, sum(cfloat4) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | sum 
+----+-----
+(0 rows)
+
+select 777::text, avg(cfloat8) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | avg 
+------+-----
+(0 rows)
+
+select s, avg(cfloat8) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | avg 
+---+-----
+(0 rows)
+
+select ss, avg(cfloat8) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | avg 
+----+-----
+(0 rows)
+
+select 777::text, max(cfloat8) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | max 
+------+-----
+(0 rows)
+
+select s, max(cfloat8) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | max 
+---+-----
+(0 rows)
+
+select ss, max(cfloat8) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | max 
+----+-----
+(0 rows)
+
+select 777::text, min(cfloat8) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | min 
+------+-----
+(0 rows)
+
+select s, min(cfloat8) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | min 
+---+-----
+(0 rows)
+
+select ss, min(cfloat8) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | min 
+----+-----
+(0 rows)
+
+select 777::text, sum(cfloat8) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | sum 
+------+-----
+(0 rows)
+
+select s, sum(cfloat8) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | sum 
+---+-----
+(0 rows)
+
+select ss, sum(cfloat8) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | sum 
+----+-----
+(0 rows)
+
+select 777::text, avg(cint2) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | avg 
+------+-----
+(0 rows)
+
+select s, avg(cint2) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | avg 
+---+-----
+(0 rows)
+
+select ss, avg(cint2) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | avg 
+----+-----
+(0 rows)
+
+select 777::text, max(cint2) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | max 
+------+-----
+(0 rows)
+
+select s, max(cint2) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | max 
+---+-----
+(0 rows)
+
+select ss, max(cint2) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | max 
+----+-----
+(0 rows)
+
+select 777::text, min(cint2) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | min 
+------+-----
+(0 rows)
+
+select s, min(cint2) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | min 
+---+-----
+(0 rows)
+
+select ss, min(cint2) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | min 
+----+-----
+(0 rows)
+
+select 777::text, sum(cint2) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | sum 
+------+-----
+(0 rows)
+
+select s, sum(cint2) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | sum 
+---+-----
+(0 rows)
+
+select ss, sum(cint2) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | sum 
+----+-----
+(0 rows)
+
+select 777::text, avg(cint4) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | avg 
+------+-----
+(0 rows)
+
+select s, avg(cint4) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | avg 
+---+-----
+(0 rows)
+
+select ss, avg(cint4) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | avg 
+----+-----
+(0 rows)
+
+select 777::text, max(cint4) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | max 
+------+-----
+(0 rows)
+
+select s, max(cint4) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | max 
+---+-----
+(0 rows)
+
+select ss, max(cint4) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | max 
+----+-----
+(0 rows)
+
+select 777::text, min(cint4) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | min 
+------+-----
+(0 rows)
+
+select s, min(cint4) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | min 
+---+-----
+(0 rows)
+
+select ss, min(cint4) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | min 
+----+-----
+(0 rows)
+
+select 777::text, sum(cint4) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | sum 
+------+-----
+(0 rows)
+
+select s, sum(cint4) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | sum 
+---+-----
+(0 rows)
+
+select ss, sum(cint4) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | sum 
+----+-----
+(0 rows)
+
+select 777::text, avg(cint8) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | avg 
+------+-----
+(0 rows)
+
+select s, avg(cint8) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | avg 
+---+-----
+(0 rows)
+
+select ss, avg(cint8) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | avg 
+----+-----
+(0 rows)
+
+select 777::text, max(cint8) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | max 
+------+-----
+(0 rows)
+
+select s, max(cint8) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | max 
+---+-----
+(0 rows)
+
+select ss, max(cint8) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | max 
+----+-----
+(0 rows)
+
+select 777::text, min(cint8) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | min 
+------+-----
+(0 rows)
+
+select s, min(cint8) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | min 
+---+-----
+(0 rows)
+
+select ss, min(cint8) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | min 
+----+-----
+(0 rows)
+
+select 777::text, sum(cint8) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | sum 
+------+-----
+(0 rows)
+
+select s, sum(cint8) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | sum 
+---+-----
+(0 rows)
+
+select ss, sum(cint8) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | sum 
+----+-----
+(0 rows)
+
+select 777::text, avg(s) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | avg 
+------+-----
+(0 rows)
+
+select s, avg(s) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | avg 
+---+-----
+(0 rows)
+
+select ss, avg(s) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | avg 
+----+-----
+(0 rows)
+
+select 777::text, max(s) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | max 
+------+-----
+(0 rows)
+
+select s, max(s) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | max 
+---+-----
+(0 rows)
+
+select ss, max(s) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | max 
+----+-----
+(0 rows)
+
+select 777::text, min(s) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | min 
+------+-----
+(0 rows)
+
+select s, min(s) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | min 
+---+-----
+(0 rows)
+
+select ss, min(s) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | min 
+----+-----
+(0 rows)
+
+select 777::text, sum(s) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | sum 
+------+-----
+(0 rows)
+
+select s, sum(s) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | sum 
+---+-----
+(0 rows)
+
+select ss, sum(s) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | sum 
+----+-----
+(0 rows)
+
+select 777::text, avg(ss) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | avg 
+------+-----
+(0 rows)
+
+select s, avg(ss) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | avg 
+---+-----
+(0 rows)
+
+select ss, avg(ss) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | avg 
+----+-----
+(0 rows)
+
+select 777::text, max(ss) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | max 
+------+-----
+(0 rows)
+
+select s, max(ss) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | max 
+---+-----
+(0 rows)
+
+select ss, max(ss) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | max 
+----+-----
+(0 rows)
+
+select 777::text, min(ss) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | min 
+------+-----
+(0 rows)
+
+select s, min(ss) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | min 
+---+-----
+(0 rows)
+
+select ss, min(ss) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | min 
+----+-----
+(0 rows)
+
+select 777::text, sum(ss) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | sum 
+------+-----
+(0 rows)
+
+select s, sum(ss) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | sum 
+---+-----
+(0 rows)
+
+select ss, sum(ss) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | sum 
+----+-----
+(0 rows)
+
+select 777::text, max(t) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | max 
+------+-----
+(0 rows)
+
+select s, max(t) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | max 
+---+-----
+(0 rows)
+
+select ss, max(t) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | max 
+----+-----
+(0 rows)
+
+select 777::text, min(t) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | min 
+------+-----
+(0 rows)
+
+select s, min(t) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | min 
+---+-----
+(0 rows)
+
+select ss, min(t) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | min 
+----+-----
+(0 rows)
+
