@@ -53,7 +53,7 @@ INSERT INTO partial_aggregation VALUES('2023-01-20T09:00:43', 7, 'words');
 SET enable_partitionwise_aggregate = ON;
 
 SELECT
-    format('SELECT %3$s, %1$s FROM partial_aggregation WHERE %2$s GROUP BY %3$s ORDER BY by 1, 2;',
+    format('SELECT %3$s, %1$s FROM partial_aggregation WHERE %2$s GROUP BY %3$s ORDER BY 1, 2;',
             function, condition, grouping)
 FROM
     unnest(array[
