@@ -375,16 +375,3 @@ spi_insert_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 		}
 	}
 }
-/*
- * Initialize MatTableColumnInfo.
- */
-void
-mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *grouplist)
-{
-	matcolinfo->matcollist = NIL;
-	matcolinfo->partial_seltlist = NIL;
-	matcolinfo->partial_grouplist = grouplist;
-	matcolinfo->mat_groupcolname_list = NIL;
-	matcolinfo->matpartcolno = -1;
-	matcolinfo->matpartcolname = NULL;
-}

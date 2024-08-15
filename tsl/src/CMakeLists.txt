@@ -1,6 +1,7 @@
 set(SOURCES
     chunk_api.c
     chunk.c
+    chunkwise_agg.c
     init.c
     partialize_finalize.c
     planner.c

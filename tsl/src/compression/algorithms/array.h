@@ -26,6 +26,7 @@ typedef struct ArrayDecompressionIterator ArrayDecompressionIterator;
 
 extern const Compressor array_compressor;
 
+extern bool array_compressed_has_nulls(const CompressedDataHeader *header);
 extern Compressor *array_compressor_for_type(Oid element_type);
 extern ArrayCompressor *array_compressor_alloc(Oid type_to_compress);
 extern void array_compressor_append_null(ArrayCompressor *compressor);

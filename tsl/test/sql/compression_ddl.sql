@@ -996,6 +996,10 @@ INSERT INTO hyper_unique_deferred(time, device_id,sensor_1) VALUES (125798770000
 alter table hyper_unique_deferred set (timescaledb.compress);
 select compress_chunk(show_chunks('hyper_unique_deferred')); -- also worked fine before 2.11.0
 select decompress_chunk(show_chunks('hyper_unique_deferred'));
+\set ON_ERROR_STOP 0
 begin; insert INTO hyper_unique_deferred values (1257987700000000000, 'dev1', 1); abort;
+\set ON_ERROR_STOP 1
 select compress_chunk(show_chunks('hyper_unique_deferred'));
+\set ON_ERROR_STOP 0
 begin; insert INTO hyper_unique_deferred values (1257987700000000000, 'dev1', 1); abort;
+\set ON_ERROR_STOP 1
