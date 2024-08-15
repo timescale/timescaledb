@@ -31,7 +31,7 @@ FUNCTION_NAME(const)(void *agg_state, Datum constvalue, bool constisnull, int n)
 	}
 
 	const CTYPE current = DATUM_TO_CTYPE(state->value);
-	if (PREDICATE(current, new))
+	if (!(PREDICATE(current, new)))
 	{
 		state->value = CTYPE_TO_DATUM(new);
 	}
@@ -63,7 +63,7 @@ FUNCTION_NAME(vector)(void *agg_state, ArrowArray *vector, uint64 *filter)
 			result = values[i];
 		}
 
-		if (PREDICATE(result, values[i]))
+		if (!(PREDICATE(result, values[i])))
 		{
 			result = values[i];
 		}
