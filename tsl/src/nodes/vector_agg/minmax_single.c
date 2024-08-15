@@ -24,6 +24,7 @@ FUNCTION_NAME(const)(void *agg_state, Datum constvalue, bool constisnull, int n)
 	}
 
 	const CTYPE new = DATUM_TO_CTYPE(constvalue);
+#ifdef HANDLE_NAN
 	if (!isfinite((double) new))
 	{
 		/* If we have a NaN input, the result is NaN. */
@@ -31,6 +32,7 @@ FUNCTION_NAME(const)(void *agg_state, Datum constvalue, bool constisnull, int n)
 		state->value = CTYPE_TO_DATUM(NAN);
 		return;
 	}
+#endif
 
 	const CTYPE current = DATUM_TO_CTYPE(state->value);
 	if (PREDICATE(current, new))
@@ -53,6 +55,7 @@ FUNCTION_NAME(vector)(void *agg_state, ArrowArray *vector, uint64 *filter)
 			continue;
 		}
 
+#ifdef HANDLE_NAN
 		if (!isfinite((double) values[i]))
 		{
 			/* If we have a NaN input, the result is NaN. */
@@ -60,6 +63,7 @@ FUNCTION_NAME(vector)(void *agg_state, ArrowArray *vector, uint64 *filter)
 			result = NAN;
 			continue;
 		}
+#endif
 
 		if (!state->isvalid)
 		{
