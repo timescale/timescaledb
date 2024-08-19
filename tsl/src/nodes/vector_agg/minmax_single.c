@@ -28,11 +28,10 @@ FUNCTION_NAME(const)(void *agg_state, Datum constvalue, bool constisnull, int n)
 	const CTYPE current = DATUM_TO_CTYPE(state->value);
 
 	/*
-	 * We use this formulation to properly handle the NaNs w/o float-specific
-	 * code.
+	 * Note that we have to properly handle NaNs and Infinities for floats.
 	 */
-	const bool do_replace = PREDICATE(current, new);
-	state->value = CTYPE_TO_DATUM(!do_replace * current + do_replace * new);
+	const bool do_replace = PREDICATE(current, new) || isnan((double) new);
+	state->value = CTYPE_TO_DATUM(do_replace ? new : current);
 }
 
 static void
@@ -50,18 +49,14 @@ FUNCTION_NAME(vector)(void *agg_state, ArrowArray *vector, uint64 *filter)
 		const bool passes = arrow_row_is_valid(filter, i);
 
 		/*
-		 * This formulation looks slightly cryptic, but it has less branches and
-		 * handles NaNs as well w/o float-specific code. Note that we still have
-		 * to handle 'passes' separately, so that we don't get a NaN result even
-		 * if we have a NaN that doesn't pass the quals.
+		 * Note that we have to properly handle NaNs and Infinities for floats.
 		 */
-		if (!passes)
-		{
-			continue;
-		}
-		const bool do_replace = !result_isvalid || (new_isvalid && PREDICATE(result, new_value));
-		result = result * !do_replace + new_value * do_replace;
-		result_isvalid |= new_isvalid;
+		const bool do_replace =
+			passes && new_isvalid &&
+			(!result_isvalid || PREDICATE(result, new_value) || isnan((double) new_value));
+
+		result = do_replace ? new_value : result;
+		result_isvalid |= do_replace;
 	}
 
 	state->value = CTYPE_TO_DATUM(result);

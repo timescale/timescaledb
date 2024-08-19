@@ -31,37 +31,31 @@ FUNCTION_NAME(vector)(void *agg_state, ArrowArray *vector, uint64 *filter)
 		for (int inner = 0; inner < UNROLL_SIZE; inner++)
 		{
 			const int row = outer + inner;
+			const CTYPE value = values[row];
 			const bool isvalid = arrow_row_is_valid(validity, row);
 			const bool passes = arrow_row_is_valid(filter, row);
-			if (!passes)
+			if (!passes || !isvalid)
 			{
-				/*
-				 * Note that we have to handle NaNs that don't pass the filter,
-				 * so we can't use the multiplication for 'passes'.
-				 */
 				continue;
 			}
 
-			accu[inner] += values[row] * isvalid;
-			have_result |= isvalid;
+			accu[inner] += value;
+			have_result = true;
 		}
 	}
 
 	for (int row = UNROLL_SIZE * (n / UNROLL_SIZE); row < n; row++)
 	{
+		const CTYPE value = values[row];
 		const bool isvalid = arrow_row_is_valid(validity, row);
 		const bool passes = arrow_row_is_valid(filter, row);
-		if (!passes)
+		if (!passes || !isvalid)
 		{
-			/*
-			 * Note that we have to handle NaNs that don't pass the filter,
-			 * so we can't use the multiplication for 'passes'.
-			 */
 			continue;
 		}
 
-		accu[0] += values[row] * isvalid;
-		have_result |= isvalid;
+		accu[0] += value;
+		have_result = true;
 	}
 
 	for (int i = 1; i < UNROLL_SIZE; i++)

@@ -25,6 +25,8 @@ select s * 10000::int + t,
     (mix(s + t + 2) * 32767 * 65536)::int4,
     (mix(s + t + 3) * 32767 * 65536)::int8,
     case when s = 1 and t = 1061 then 'nan'::float4
+        when s = 2 and t = 1061 then '+inf'::float4
+        when s = 3 and t = 1061 then '-inf'::float4
         else (mix(s + t + 4) * 100)::float4 end,
     (mix(s + t + 5) * 100)::float8
 from
@@ -73,9 +75,7 @@ from
         '777::text' /* dummy grouping column */,
         's',
         'ss']) grouping
-where
-    case
-        when condition = 'cint2 is null' then variable = 'cint2'
+where case when condition = 'cint2 is null' then variable = 'cint2'
         when function = 'count' then variable = 'cfloat4'
         when variable = 't' then function in ('min', 'max')
         else true end
