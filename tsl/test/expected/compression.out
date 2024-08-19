@@ -1829,8 +1829,8 @@ SELECT sum(cpu) FROM f_sensor_data;
    ->  Gather
          Output: (PARTIAL sum(_hyper_37_73_chunk.cpu))
          Workers Planned: 4
-         ->  Partial Aggregate
-               Output: PARTIAL sum(_hyper_37_73_chunk.cpu)
+         ->  Custom Scan (VectorAgg)
+               Output: (PARTIAL sum(_hyper_37_73_chunk.cpu))
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_73_chunk
                      Output: _hyper_37_73_chunk.cpu
                      ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_38_74_chunk
@@ -1884,8 +1884,8 @@ SELECT sum(cpu) FROM f_sensor_data;
                      Output: PARTIAL sum(_hyper_37_73_chunk.cpu)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_37_73_chunk
                            Output: _hyper_37_73_chunk.cpu
-               ->  Partial Aggregate
-                     Output: PARTIAL sum(_hyper_37_73_chunk.cpu)
+               ->  Custom Scan (VectorAgg)
+                     Output: (PARTIAL sum(_hyper_37_73_chunk.cpu))
                      ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_73_chunk
                            Output: _hyper_37_73_chunk.cpu
                            ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_38_74_chunk

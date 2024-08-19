@@ -80,7 +80,7 @@ SELECT sum(int_value) FROM testtable;
 :EXPLAIN
 SELECT sum(int_value) FROM testtable;
 
--- Vectorized aggregation not possible
+-- Vectorized aggregation possible
 SELECT sum(float_value) FROM testtable;
 
 :EXPLAIN
@@ -167,11 +167,11 @@ SELECT sum(int_value), sum(segment_by_value) FROM testtable;
 
 -- Using the sum function together with another non-vector capable aggregate is not supported
 :EXPLAIN
-SELECT sum(int_value), max(int_value) FROM testtable;
+SELECT sum(int_value), bit_or(int_value) FROM testtable;
 
 -- Using the sum function together with another non-vector capable aggregate is not supported
 :EXPLAIN
-SELECT sum(segment_by_value), max(segment_by_value) FROM testtable;
+SELECT sum(segment_by_value), bit_or(segment_by_value) FROM testtable;
 
 ---
 -- Tests with only negative values

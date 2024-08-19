@@ -38,8 +38,8 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
  Finalize Aggregate (actual rows=1 loops=1)
    Output: count(*), sum(_hyper_1_1_chunk.v0), sum(_hyper_1_1_chunk.v1), sum(_hyper_1_1_chunk.v2), sum(_hyper_1_1_chunk.v3)
    ->  Append (actual rows=2 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               Output: PARTIAL count(*), PARTIAL sum(_hyper_1_1_chunk.v0), PARTIAL sum(_hyper_1_1_chunk.v1), PARTIAL sum(_hyper_1_1_chunk.v2), PARTIAL sum(_hyper_1_1_chunk.v3)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               Output: (PARTIAL count(*)), (PARTIAL sum(_hyper_1_1_chunk.v0)), (PARTIAL sum(_hyper_1_1_chunk.v1)), (PARTIAL sum(_hyper_1_1_chunk.v2)), (PARTIAL sum(_hyper_1_1_chunk.v3))
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=25 loops=1)
                      Output: _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
                      Vectorized Filter: ((_hyper_1_1_chunk."time" >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (_hyper_1_1_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
@@ -47,8 +47,8 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_3_chunk (actual rows=5 loops=1)
                            Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk._ts_meta_sequence_num, compress_hyper_2_3_chunk.device_id, compress_hyper_2_3_chunk.filter_1, compress_hyper_2_3_chunk.filler_2, compress_hyper_2_3_chunk.filler_3, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1, compress_hyper_2_3_chunk."time", compress_hyper_2_3_chunk.v0, compress_hyper_2_3_chunk.v1, compress_hyper_2_3_chunk.v2, compress_hyper_2_3_chunk.v3
                            Filter: ((compress_hyper_2_3_chunk._ts_meta_max_1 >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (compress_hyper_2_3_chunk._ts_meta_min_1 <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               Output: PARTIAL count(*), PARTIAL sum(_hyper_1_2_chunk.v0), PARTIAL sum(_hyper_1_2_chunk.v1), PARTIAL sum(_hyper_1_2_chunk.v2), PARTIAL sum(_hyper_1_2_chunk.v3)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               Output: (PARTIAL count(*)), (PARTIAL sum(_hyper_1_2_chunk.v0)), (PARTIAL sum(_hyper_1_2_chunk.v1)), (PARTIAL sum(_hyper_1_2_chunk.v2)), (PARTIAL sum(_hyper_1_2_chunk.v3))
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk (actual rows=25 loops=1)
                      Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
                      Vectorized Filter: ((_hyper_1_2_chunk."time" >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (_hyper_1_2_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
@@ -77,8 +77,8 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
  Finalize Aggregate (actual rows=1 loops=1)
    Output: count(*), sum(_hyper_1_1_chunk.v0), sum(_hyper_1_1_chunk.v1), sum(_hyper_1_1_chunk.v2), sum(_hyper_1_1_chunk.v3)
    ->  Append (actual rows=4 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               Output: PARTIAL count(*), PARTIAL sum(_hyper_1_1_chunk.v0), PARTIAL sum(_hyper_1_1_chunk.v1), PARTIAL sum(_hyper_1_1_chunk.v2), PARTIAL sum(_hyper_1_1_chunk.v3)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               Output: (PARTIAL count(*)), (PARTIAL sum(_hyper_1_1_chunk.v0)), (PARTIAL sum(_hyper_1_1_chunk.v1)), (PARTIAL sum(_hyper_1_1_chunk.v2)), (PARTIAL sum(_hyper_1_1_chunk.v3))
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=25 loops=1)
                      Output: _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
                      Vectorized Filter: ((_hyper_1_1_chunk."time" >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (_hyper_1_1_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
@@ -91,8 +91,8 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
                ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk (actual rows=25 loops=1)
                      Output: _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
                      Filter: ((_hyper_1_1_chunk."time" >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (_hyper_1_1_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               Output: PARTIAL count(*), PARTIAL sum(_hyper_1_2_chunk.v0), PARTIAL sum(_hyper_1_2_chunk.v1), PARTIAL sum(_hyper_1_2_chunk.v2), PARTIAL sum(_hyper_1_2_chunk.v3)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               Output: (PARTIAL count(*)), (PARTIAL sum(_hyper_1_2_chunk.v0)), (PARTIAL sum(_hyper_1_2_chunk.v1)), (PARTIAL sum(_hyper_1_2_chunk.v2)), (PARTIAL sum(_hyper_1_2_chunk.v3))
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk (actual rows=25 loops=1)
                      Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
                      Vectorized Filter: ((_hyper_1_2_chunk."time" >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (_hyper_1_2_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
@@ -125,8 +125,8 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
          Startup Exclusion: true
          Runtime Exclusion: false
          Chunks excluded during startup: 0
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               Output: PARTIAL count(*), PARTIAL sum(_hyper_1_1_chunk.v0), PARTIAL sum(_hyper_1_1_chunk.v1), PARTIAL sum(_hyper_1_1_chunk.v2), PARTIAL sum(_hyper_1_1_chunk.v3)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               Output: (PARTIAL count(*)), (PARTIAL sum(_hyper_1_1_chunk.v0)), (PARTIAL sum(_hyper_1_1_chunk.v1)), (PARTIAL sum(_hyper_1_1_chunk.v2)), (PARTIAL sum(_hyper_1_1_chunk.v3))
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=25 loops=1)
                      Output: _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
                      Vectorized Filter: ((_hyper_1_1_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (_hyper_1_1_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
@@ -139,8 +139,8 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
                ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk (actual rows=25 loops=1)
                      Output: _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
                      Filter: ((_hyper_1_1_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (_hyper_1_1_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               Output: PARTIAL count(*), PARTIAL sum(_hyper_1_2_chunk.v0), PARTIAL sum(_hyper_1_2_chunk.v1), PARTIAL sum(_hyper_1_2_chunk.v2), PARTIAL sum(_hyper_1_2_chunk.v3)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               Output: (PARTIAL count(*)), (PARTIAL sum(_hyper_1_2_chunk.v0)), (PARTIAL sum(_hyper_1_2_chunk.v1)), (PARTIAL sum(_hyper_1_2_chunk.v2)), (PARTIAL sum(_hyper_1_2_chunk.v3))
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk (actual rows=25 loops=1)
                      Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
                      Vectorized Filter: ((_hyper_1_2_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (_hyper_1_2_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
@@ -167,8 +167,8 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
          Startup Exclusion: true
          Runtime Exclusion: false
          Chunks excluded during startup: 2
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               Output: PARTIAL count(*), PARTIAL sum(_hyper_1_2_chunk.v0), PARTIAL sum(_hyper_1_2_chunk.v1), PARTIAL sum(_hyper_1_2_chunk.v2), PARTIAL sum(_hyper_1_2_chunk.v3)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               Output: (PARTIAL count(*)), (PARTIAL sum(_hyper_1_2_chunk.v0)), (PARTIAL sum(_hyper_1_2_chunk.v1)), (PARTIAL sum(_hyper_1_2_chunk.v2)), (PARTIAL sum(_hyper_1_2_chunk.v3))
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk (actual rows=10 loops=1)
                      Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
                      Vectorized Filter: ((_hyper_1_2_chunk."time" >= ('2000-01-09 00:00:00+0'::cstring)::timestamp with time zone) AND (_hyper_1_2_chunk."time" <= ('2000-02-01 00:00:00+0'::cstring)::timestamp with time zone))
@@ -204,8 +204,8 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
          Startup Exclusion: true
          Runtime Exclusion: false
          Chunks excluded during startup: 0
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               Output: PARTIAL count(*), PARTIAL sum(_hyper_1_1_chunk.v0), PARTIAL sum(_hyper_1_1_chunk.v1), PARTIAL sum(_hyper_1_1_chunk.v2), PARTIAL sum(_hyper_1_1_chunk.v3)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               Output: (PARTIAL count(*)), (PARTIAL sum(_hyper_1_1_chunk.v0)), (PARTIAL sum(_hyper_1_1_chunk.v1)), (PARTIAL sum(_hyper_1_1_chunk.v2)), (PARTIAL sum(_hyper_1_1_chunk.v3))
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=25 loops=1)
                      Output: _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
                      Vectorized Filter: ((_hyper_1_1_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (_hyper_1_1_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
@@ -218,8 +218,8 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
                ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk (actual rows=25 loops=1)
                      Output: _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
                      Filter: ((_hyper_1_1_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (_hyper_1_1_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               Output: PARTIAL count(*), PARTIAL sum(_hyper_1_2_chunk.v0), PARTIAL sum(_hyper_1_2_chunk.v1), PARTIAL sum(_hyper_1_2_chunk.v2), PARTIAL sum(_hyper_1_2_chunk.v3)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               Output: (PARTIAL count(*)), (PARTIAL sum(_hyper_1_2_chunk.v0)), (PARTIAL sum(_hyper_1_2_chunk.v1)), (PARTIAL sum(_hyper_1_2_chunk.v2)), (PARTIAL sum(_hyper_1_2_chunk.v3))
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk (actual rows=25 loops=1)
                      Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
                      Vectorized Filter: ((_hyper_1_2_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (_hyper_1_2_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
@@ -259,8 +259,8 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
                Runtime Exclusion: false
                Chunks excluded during startup: 2
                Worker 0:  actual rows=2 loops=1
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     Output: PARTIAL count(*), PARTIAL sum(_hyper_1_2_chunk.v0), PARTIAL sum(_hyper_1_2_chunk.v1), PARTIAL sum(_hyper_1_2_chunk.v2), PARTIAL sum(_hyper_1_2_chunk.v3)
+               ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+                     Output: (PARTIAL count(*)), (PARTIAL sum(_hyper_1_2_chunk.v0)), (PARTIAL sum(_hyper_1_2_chunk.v1)), (PARTIAL sum(_hyper_1_2_chunk.v2)), (PARTIAL sum(_hyper_1_2_chunk.v3))
                      Worker 0:  actual rows=1 loops=1
                      ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk (actual rows=10 loops=1)
                            Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
