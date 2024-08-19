@@ -22,8 +22,6 @@
 #define CTYPE_TO_DATUM Int64GetDatum
 #include "minmax_single.c"
 
-#define HANDLE_NAN
-
 #define PG_TYPE FLOAT4
 #define CTYPE float
 #define DATUM_TO_CTYPE DatumGetFloat4
@@ -35,5 +33,3 @@
 #define DATUM_TO_CTYPE DatumGetFloat8
 #define CTYPE_TO_DATUM Float8GetDatum
 #include "minmax_single.c"
-
-#undef HANDLE_NAN

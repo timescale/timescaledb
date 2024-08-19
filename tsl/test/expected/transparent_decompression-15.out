@@ -1801,12 +1801,12 @@ SELECT count(time)
 FROM :TEST_TABLE
 WHERE device_id = 1;
 :PREFIX EXECUTE prep;
-                                          QUERY PLAN                                           
------------------------------------------------------------------------------------------------
+                                      QUERY PLAN                                       
+---------------------------------------------------------------------------------------
  Finalize Aggregate (actual rows=1 loops=1)
    ->  Append (actual rows=3 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=720 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (never executed)
                      ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=1 loops=1)
                            Filter: (device_id = 1)
                            Rows Removed by Filter: 4
@@ -1814,8 +1814,8 @@ WHERE device_id = 1;
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=672 loops=1)
                      Filter: (device_id = 1)
                      Rows Removed by Filter: 2688
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=336 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (never executed)
                      ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=1 loops=1)
                            Filter: (device_id = 1)
                            Rows Removed by Filter: 4
@@ -5810,19 +5810,19 @@ SELECT count(time)
 FROM :TEST_TABLE
 WHERE device_id = 1;
 :PREFIX EXECUTE prep;
-                                           QUERY PLAN                                           
-------------------------------------------------------------------------------------------------
+                                      QUERY PLAN                                       
+---------------------------------------------------------------------------------------
  Finalize Aggregate (actual rows=1 loops=1)
    ->  Append (actual rows=3 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk (actual rows=720 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk (never executed)
                      ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=1 loops=1)
                            Filter: (device_id = 1)
          ->  Partial Aggregate (actual rows=1 loops=1)
                ->  Seq Scan on _hyper_2_7_chunk (actual rows=672 loops=1)
                      Filter: (device_id = 1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk (actual rows=336 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk (never executed)
                      ->  Seq Scan on compress_hyper_6_20_chunk (actual rows=1 loops=1)
                            Filter: (device_id = 1)
 (13 rows)

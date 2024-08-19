@@ -29,12 +29,16 @@ FUNCTION_NAME(vector)(void *agg_state, ArrowArray *vector, uint64 *filter)
 	 */
 	Assert(vector->length <= INT_MAX);
 
+	const uint64 *validity = (uint64 *) vector->buffers[0];
+	const CTYPE *values = (CTYPE *) vector->buffers[1];
 	int64 batch_sum = 0;
+	bool have_result = false;
 	for (int row = 0; row < vector->length; row++)
 	{
-		const CTYPE arrow_value = ((CTYPE *) vector->buffers[1])[row];
-		batch_sum += arrow_value * arrow_row_is_valid(filter, row) *
-					 arrow_row_is_valid(vector->buffers[0], row);
+		const bool passes = arrow_row_is_valid(filter, row);
+		const bool isvalid = arrow_row_is_valid(validity, row);
+		batch_sum += values[row] * passes * isvalid;
+		have_result |= passes && isvalid;
 	}
 
 	if (unlikely(pg_add_s64_overflow(state->result, batch_sum, &state->result)))
@@ -43,7 +47,7 @@ FUNCTION_NAME(vector)(void *agg_state, ArrowArray *vector, uint64 *filter)
 				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE), errmsg("bigint out of range")));
 	}
 
-	state->isnull = false;
+	state->isnull &= !have_result;
 }
 
 static void

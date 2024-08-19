@@ -39,6 +39,9 @@ select count(compress_chunk(x)) from show_chunks('aggfns') x;
 
 analyze aggfns;
 
+---- Uncomment to generate reference. Note that there are minor discrepancies
+---- on float4 due to different numeric stability in our and PG implementations.
+--set timescaledb.enable_vectorized_aggregation to off;
 
 select
     format('select %4$s, %1$s(%2$s) from aggfns where %3$s group by %4$s order by 1, 2;',
@@ -61,14 +64,19 @@ from
         'count']) function,
     unnest(array[
         'true',
-        'cfloat8 < 50',
-        'cfloat8 > 1000']) with ordinality as condition(condition, n),
+        'cfloat8 > 0',
+        'cfloat8 <= 0',
+        'cfloat8 < 1000' /* vectorized qual is true for all rows */,
+        'cfloat8 > 1000' /* vectorized qual is false for all rows */,
+        'cint2 is null']) with ordinality as condition(condition, n),
     unnest(array[
         '777::text' /* dummy grouping column */,
         's',
         'ss']) grouping
 where
-    case when function = 'count' then variable = 'cfloat4'
+    case
+        when condition = 'cint2 is null' then variable = 'cint2'
+        when function = 'count' then variable = 'cfloat4'
         when variable = 't' then function in ('min', 'max')
         else true end
 order by condition.n, variable, function, grouping
