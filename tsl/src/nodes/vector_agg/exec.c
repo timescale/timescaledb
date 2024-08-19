@@ -214,7 +214,8 @@ vector_agg_exec(CustomScanState *node)
 		 * were fully filtered out, and their rows, were already counted in
 		 * compressed_batch_set_compressed_tuple().
 		 */
-		const int not_filtered_rows = arrow_num_valid(batch_state->vector_qual_result, batch_state->total_batch_rows);
+		const int not_filtered_rows =
+			arrow_num_valid(batch_state->vector_qual_result, batch_state->total_batch_rows);
 		InstrCountFiltered1(dcontext->ps, batch_state->total_batch_rows - not_filtered_rows);
 		if (dcontext->ps->instrument)
 		{
