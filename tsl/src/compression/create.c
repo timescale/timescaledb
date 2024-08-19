@@ -1192,10 +1192,22 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 				 errmsg("cannot drop orderby or segmentby column from a hypertable with "
 						"compression enabled")));
 
+	List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
+	ListCell *lc;
+	foreach (lc, chunks)
+	{
+		Chunk *chunk = lfirst(lc);
+		CompressionSettings *settings = ts_compression_settings_get(chunk->table_id);
+		if (ts_array_is_member(settings->fd.segmentby, name) ||
+			ts_array_is_member(settings->fd.orderby, name))
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot drop orderby or segmentby column from a chunk with "
+							"compression enabled")));
+	}
+
 	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
-		List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
-		ListCell *lc;
 		foreach (lc, chunks)
 		{
 			Chunk *chunk = lfirst(lc);
