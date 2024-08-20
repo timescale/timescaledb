@@ -139,6 +139,8 @@ append_ec_for_seqnum(PlannerInfo *root, CompressionInfo *info, SortInfo *sort_in
 	newec->ec_max_security = 0;
 	newec->ec_merged = NULL;
 
+	info->compressed_rel->eclass_indexes =
+		bms_add_member(info->compressed_rel->eclass_indexes, list_length(root->eq_classes));
 	root->eq_classes = lappend(root->eq_classes, newec);
 
 	MemoryContextSwitchTo(oldcontext);
@@ -1839,11 +1841,36 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, Comp
 		 * decompression
 		 */
 		List *orig_pathkeys = root->query_pathkeys;
+		List *orig_eq_classes = root->eq_classes;
+		Bitmapset *orig_eclass_indexes = info->compressed_rel->eclass_indexes;
 		build_compressed_scan_pathkeys(sort_info, root, root->query_pathkeys, info);
 		root->query_pathkeys = sort_info->required_compressed_pathkeys;
+
+		/* We can optimize iterating over EquivalenceClasses by reducing them to
+		 * the subset which are from the compressed chunk. This only works if we don't
+		 * have joins based on equivalence classes involved since those
+		 * use eclass_indexes which is not valid with this optimization.
+		 *
+		 * Clauseless joins work fine since they don't rely on eclass_indexes.
+		 */
+		if (!info->chunk_rel->has_eclass_joins)
+		{
+			int i = -1;
+			List *required_eq_classes = NIL;
+			while ((i = bms_next_member(info->compressed_rel->eclass_indexes, i)) >= 0)
+			{
+				EquivalenceClass *cur_ec = (EquivalenceClass *) list_nth(root->eq_classes, i);
+				required_eq_classes = lappend(required_eq_classes, cur_ec);
+			}
+			root->eq_classes = required_eq_classes;
+			info->compressed_rel->eclass_indexes = NULL;
+		}
+
 		check_index_predicates(root, compressed_rel);
 		create_index_paths(root, compressed_rel);
 		root->query_pathkeys = orig_pathkeys;
+		root->eq_classes = orig_eq_classes;
+		info->compressed_rel->eclass_indexes = orig_eclass_indexes;
 	}
 	else
 	{

@@ -24,6 +24,7 @@
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
 #include <commands/trigger.h>
+#include <commands/user.h>
 #include <commands/vacuum.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
@@ -4061,6 +4062,60 @@ process_create_rule_start(ProcessUtilityArgs *args)
 	return DDL_CONTINUE;
 }
 
+/*
+ * Update the owner of a background job given by a heap tuple.
+ *
+ * Note that there is no check for correct privileges here and this is the
+ * responsibility of the caller.
+ */
+static void
+ts_bgw_job_update_owner(Relation rel, HeapTuple tuple, TupleDesc tupledesc, Oid newrole_oid)
+{
+	bool isnull[Natts_bgw_job];
+	Datum values[Natts_bgw_job];
+	bool replace[Natts_bgw_job] = { false };
+	HeapTuple new_tuple;
+
+	heap_deform_tuple(tuple, tupledesc, values, isnull);
+
+	if (DatumGetObjectId(values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)]) != newrole_oid)
+	{
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = Int32GetDatum(newrole_oid);
+		replace[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = true;
+		new_tuple = heap_modify_tuple(tuple, tupledesc, values, isnull, replace);
+		ts_catalog_update(rel, new_tuple);
+		heap_freetuple(new_tuple);
+	}
+}
+
+static DDLResult
+process_reassign_owned_start(ProcessUtilityArgs *args)
+{
+	ReassignOwnedStmt *stmt = (ReassignOwnedStmt *) args->parsetree;
+	List *role_ids = roleSpecsToIds(stmt->roles);
+	ScanIterator iterator =
+		ts_scan_iterator_create(BGW_JOB, RowExclusiveLock, CurrentMemoryContext);
+	ts_scanner_foreach(&iterator)
+	{
+		bool should_free, isnull;
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		Datum value = slot_getattr(ti->slot, Anum_bgw_job_owner, &isnull);
+		if (!isnull && list_member_oid(role_ids, DatumGetObjectId(value)))
+		{
+			Oid newrole_oid = get_rolespec_oid(stmt->newrole, false);
+			HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+
+			/* We do not need to check privileges here since ReassignOwnedObjects() will check the
+			 * privileges and error out if they are not correct. */
+			ts_bgw_job_update_owner(ti->scanrel, tuple, ts_scanner_get_tupledesc(ti), newrole_oid);
+
+			if (should_free)
+				heap_freetuple(tuple);
+		}
+	}
+	return DDL_CONTINUE;
+}
+
 /* ALTER TABLE <name> SET ( timescaledb.compress, ...) */
 static DDLResult
 process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
@@ -4240,6 +4295,9 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 			break;
 		case T_RuleStmt:
 			handler = process_create_rule_start;
+			break;
+		case T_ReassignOwnedStmt:
+			handler = process_reassign_owned_start;
 			break;
 		case T_DropStmt:
 			/*

@@ -564,6 +564,16 @@ JOIN devices ON conditions.device_id = devices.device_id
 JOIN location ON location.name = devices.location
 GROUP BY bucket, devices.name, location.name;
 
+SELECT * FROM conditions_by_day ORDER BY bucket, device, location;
+
+ALTER MATERIALIZED VIEW conditions_by_day SET (timescaledb.materialized_only = FALSE);
+
+-- Insert one more row on conditions and check the result (should have one more row)
+INSERT INTO conditions (day, city, temperature, device_id) VALUES
+  ('2024-07-01', 'Moscow', 28, 3);
+
+SELECT * FROM conditions_by_day ORDER BY bucket, device, location;
+
 -- JOIN with a foreign table
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT current_setting('port') AS "PGPORT", current_database() AS "PGDATABASE" \gset

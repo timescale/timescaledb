@@ -51,21 +51,21 @@ INSERT INTO sample_table VALUES (:'start_date'::timestamptz, 16, 14.6554, 47, 'n
 -- Non-int, date, timestamp cannot be specified as a min/max ranges for now
 -- We could expand to FLOATs, NUMERICs later
 \set ON_ERROR_STOP 0
-SELECT * FROM enable_column_stats('sample_table', 'name');
+SELECT * FROM enable_chunk_skipping('sample_table', 'name');
 ERROR:  data type "character varying" unsupported for range calculation
-SELECT * FROM enable_column_stats('sample_table', NULL);
+SELECT * FROM enable_chunk_skipping('sample_table', NULL);
 ERROR:  column name cannot be NULL
-SELECT * FROM enable_column_stats(NULL, 'name');
+SELECT * FROM enable_chunk_skipping(NULL, 'name');
 ERROR:  hypertable cannot be NULL
-SELECT * FROM enable_column_stats('sample_table1', 'name');
-ERROR:  relation "sample_table1" does not exist at character 35
+SELECT * FROM enable_chunk_skipping('sample_table1', 'name');
+ERROR:  relation "sample_table1" does not exist at character 37
 CREATE TABLE plain_table(like sample_table);
-SELECT * FROM enable_column_stats('plain_table', 'sensor_id');
+SELECT * FROM enable_chunk_skipping('plain_table', 'sensor_id');
 ERROR:  table "plain_table" is not a hypertable
 DROP TABLE plain_table;
 \set ON_ERROR_STOP 1
 -- Specify tracking of min/max ranges for a column
-SELECT * FROM enable_column_stats('sample_table', 'sensor_id');
+SELECT * FROM enable_chunk_skipping('sample_table', 'sensor_id');
  column_stats_id | enabled 
 -----------------+---------
                1 | t
@@ -82,7 +82,7 @@ SELECT * from _timescaledb_catalog.chunk_column_stats;
 (3 rows)
 
 -- Skipping should work
-SELECT * FROM enable_column_stats('sample_table', 'sensor_id', true);
+SELECT * FROM enable_chunk_skipping('sample_table', 'sensor_id', true);
 NOTICE:  already enabled for column "sensor_id", skipping
  column_stats_id | enabled 
 -----------------+---------
@@ -250,17 +250,18 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 
 -- Executor startup time exclusion will also use these ranges appropriately
 :PREFIX UPDATE sample_table set sensor_id = 10 WHERE sensor_id > length(substring(version(),1,9));
-                                   QUERY PLAN                                   
---------------------------------------------------------------------------------
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
  Custom Scan (HypertableModify)
    ->  Update on sample_table
          Update on _hyper_1_1_chunk sample_table
          Update on _hyper_1_2_chunk sample_table_1
-         ->  Custom Scan (ChunkAppend) on sample_table
-               Chunks excluded during startup: 1
-               ->  Seq Scan on _hyper_1_2_chunk sample_table_1
-                     Filter: (sensor_id > length("substring"(version(), 1, 9)))
-(8 rows)
+         ->  Result
+               ->  Custom Scan (ChunkAppend) on sample_table
+                     Chunks excluded during startup: 1
+                     ->  Seq Scan on _hyper_1_2_chunk sample_table_1
+                           Filter: (sensor_id > length("substring"(version(), 1, 9)))
+(9 rows)
 
 :PREFIX DELETE FROM sample_table  WHERE sensor_id > length(substring(version(),1,10));
                                    QUERY PLAN                                    
@@ -334,8 +335,8 @@ SELECT * from _timescaledb_catalog.chunk_column_stats;
 
 -- Check that a RENAME COLUMN works ok
 ALTER TABLE sample_table RENAME COLUMN sensor_id TO sense_id;
--- use the disable_column_stats API to remove the min/max range entries
-SELECT * from disable_column_stats('sample_table', 'sense_id');
+-- use the disable_chunk_skipping API to remove the min/max range entries
+SELECT * from disable_chunk_skipping('sample_table', 'sense_id');
  hypertable_id | column_name | disabled 
 ---------------+-------------+----------
              1 | sense_id    | t
@@ -346,7 +347,7 @@ SELECT * from _timescaledb_catalog.chunk_column_stats;
 ----+---------------+----------+-------------+-------------+-----------+-------
 (0 rows)
 
-SELECT * from disable_column_stats('sample_table', 'sense_id', true);
+SELECT * from disable_chunk_skipping('sample_table', 'sense_id', true);
 NOTICE:  statistics not enabled for column "sense_id", skipping
  hypertable_id | column_name | disabled 
 ---------------+-------------+----------
@@ -355,21 +356,21 @@ NOTICE:  statistics not enabled for column "sense_id", skipping
 
 ALTER TABLE sample_table RENAME COLUMN sense_id TO sensor_id;
 \set ON_ERROR_STOP 0
-SELECT * from disable_column_stats('sample_table', 'sensor_id');
+SELECT * from disable_chunk_skipping('sample_table', 'sensor_id');
 ERROR:  statistics not enabled for column "sensor_id"
-SELECT * from disable_column_stats('sample_table', NULL);
+SELECT * from disable_chunk_skipping('sample_table', NULL);
 ERROR:  column name cannot be NULL
-SELECT * from disable_column_stats(NULL, 'sensor_id');
+SELECT * from disable_chunk_skipping(NULL, 'sensor_id');
 ERROR:  hypertable cannot be NULL
-SELECT * from disable_column_stats('sample_table1', 'sensor_id');
-ERROR:  relation "sample_table1" does not exist at character 36
+SELECT * from disable_chunk_skipping('sample_table1', 'sensor_id');
+ERROR:  relation "sample_table1" does not exist at character 38
 -- should only work on columns that have been enabled for tracking
-SELECT * from disable_column_stats('sample_table', 'time');
+SELECT * from disable_chunk_skipping('sample_table', 'time');
 ERROR:  statistics not enabled for column "time"
-SELECT * from disable_column_stats('sample_table', 'cpu');
+SELECT * from disable_chunk_skipping('sample_table', 'cpu');
 ERROR:  statistics not enabled for column "cpu"
 \set ON_ERROR_STOP 1
-SELECT * FROM enable_column_stats('sample_table', 'sensor_id');
+SELECT * FROM enable_chunk_skipping('sample_table', 'sensor_id');
  column_stats_id | enabled 
 -----------------+---------
                5 | t
@@ -485,7 +486,7 @@ SELECT * from _timescaledb_catalog.chunk_column_stats;
 ----+---------------+----------+-------------+-------------+-----------+-------
 (0 rows)
 
--- Check that empty hypertables can have enable_column_stats and
+-- Check that empty hypertables can have enable_chunk_skipping and
 -- that new chunks get entries in the catalog as they get added
 CREATE TABLE sample_table1 (
        time TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -503,7 +504,7 @@ WARNING:  column type "character varying" used for "name" does not follow best p
              3 | public      | sample_table1 | t
 (1 row)
 
-SELECT * FROM enable_column_stats('sample_table1', 'sensor_id');
+SELECT * FROM enable_chunk_skipping('sample_table1', 'sensor_id');
  column_stats_id | enabled 
 -----------------+---------
                9 | t
@@ -534,7 +535,7 @@ ERROR:  column "sensor_id" cannot be cast automatically to type timestamp with t
 ALTER TABLE sample_table1 ALTER COLUMN sensor_id TYPE TEXT;
 ERROR:  data type "text" unsupported for statistics calculation
 \set ON_ERROR_STOP 1
-SELECT * FROM disable_column_stats('sample_table1', 'sensor_id');
+SELECT * FROM disable_chunk_skipping('sample_table1', 'sensor_id');
  hypertable_id | column_name | disabled 
 ---------------+-------------+----------
              3 | sensor_id   | t
