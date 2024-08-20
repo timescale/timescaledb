@@ -148,7 +148,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 		memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
 		if (n_total % 64)
 		{
-			const uint64 tail_mask = -1ULL >> (64 - n_total % 64);
+			const uint64 tail_mask = ~0ULL >> (64 - n_total % 64);
 			validity_bitmap[n_total / 64] &= tail_mask;
 		}
 
