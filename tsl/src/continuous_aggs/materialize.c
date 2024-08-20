@@ -35,31 +35,37 @@ static TimeRange internal_time_range_to_time_range(InternalTimeRange internal);
 static int64 range_length(const InternalTimeRange range);
 static Datum internal_to_time_value_or_infinite(int64 internal, Oid time_type,
 												bool *is_infinite_out);
+static List *cagg_find_aggref_and_var_cols(ContinuousAgg *cagg, Hypertable *mat_ht);
+static char *build_merge_insert_columns(List *strings, const char *separator, const char *prefix);
+static char *build_merge_join_clause(List *column_names);
+static char *build_merge_update_clause(List *column_names);
 
 /***************************
  * materialization support *
  ***************************/
-
+static void spi_update_watermark(Hypertable *mat_ht, SchemaAndName materialization_table,
+								 const NameData *time_column_name, char *materialization_start,
+								 Oid materialization_type, const char *const chunk_condition);
 static void spi_update_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 										SchemaAndName partial_view,
 										SchemaAndName materialization_table,
 										const NameData *time_column_name,
 										TimeRange invalidation_range, const int32 chunk_id);
-static void spi_delete_materializations(SchemaAndName materialization_table,
-										const NameData *time_column_name,
-										TimeRange invalidation_range,
-										const char *const chunk_condition);
-static void spi_insert_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
-										SchemaAndName partial_view,
-										SchemaAndName materialization_table,
-										const NameData *time_column_name,
-										TimeRange materialization_range,
-										const char *const chunk_condition);
-static void spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
-									   SchemaAndName partial_view,
-									   SchemaAndName materialization_table,
-									   const NameData *time_column_name,
-									   TimeRange materialization_range);
+static uint64 spi_delete_materializations(SchemaAndName materialization_table,
+										  const NameData *time_column_name,
+										  char *invalidation_start, char *invalidation_end,
+										  const char *const chunk_condition);
+static uint64 spi_insert_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
+										  SchemaAndName partial_view,
+										  SchemaAndName materialization_table,
+										  const NameData *time_column_name,
+										  char *materialization_start, char *materialization_end,
+										  const char *const chunk_condition);
+static uint64 spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
+										 SchemaAndName partial_view,
+										 SchemaAndName materialization_table,
+										 const NameData *time_column_name,
+										 char *materialization_start, char *materialization_end);
 
 void
 continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *cagg,
@@ -331,51 +337,6 @@ build_merge_update_clause(List *column_names)
 }
 
 static void
-spi_update_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
-							SchemaAndName partial_view, SchemaAndName materialization_table,
-							const NameData *time_column_name, TimeRange invalidation_range,
-							const int32 chunk_id)
-{
-	/* MERGE statement is available starting on PG15 and we'll support it only in the new format of
-	 * CAggs and for non-compressed hypertables */
-	if (ts_guc_enable_merge_on_cagg_refresh && PG_VERSION_NUM >= 150000 &&
-		ContinuousAggIsFinalized(cagg) && !TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(mat_ht))
-	{
-		spi_merge_materializations(mat_ht,
-								   cagg,
-								   partial_view,
-								   materialization_table,
-								   time_column_name,
-								   invalidation_range);
-	}
-	else
-	{
-		StringInfo chunk_condition = makeStringInfo();
-
-		/*
-		 * chunk_id is valid if the materializaion update should be done only on the given chunk.
-		 * This is used currently for refresh on chunk drop only. In other cases, manual
-		 * call to refresh_continuous_aggregate or call from a refresh policy, chunk_id is
-		 * not provided, i.e., invalid.
-		 */
-		if (chunk_id != INVALID_CHUNK_ID)
-			appendStringInfo(chunk_condition, "AND chunk_id = %d", chunk_id);
-
-		spi_delete_materializations(materialization_table,
-									time_column_name,
-									invalidation_range,
-									chunk_condition->data);
-		spi_insert_materializations(mat_ht,
-									cagg,
-									partial_view,
-									materialization_table,
-									time_column_name,
-									invalidation_range,
-									chunk_condition->data);
-	}
-}
-
-static void
 spi_update_watermark(Hypertable *mat_ht, SchemaAndName materialization_table,
 					 const NameData *time_column_name, char *materialization_start,
 					 Oid materialization_type, const char *const chunk_condition)
@@ -417,44 +378,89 @@ spi_update_watermark(Hypertable *mat_ht, SchemaAndName materialization_table,
 }
 
 static void
+spi_update_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
+							SchemaAndName partial_view, SchemaAndName materialization_table,
+							const NameData *time_column_name, TimeRange invalidation_range,
+							const int32 chunk_id)
+{
+	Oid out_fn;
+	bool type_is_varlena;
+	char *invalidation_start;
+	char *invalidation_end;
+	StringInfo chunk_condition = makeStringInfo();
+	uint64 rows_processed = 0;
+
+	getTypeOutputInfo(invalidation_range.type, &out_fn, &type_is_varlena);
+	invalidation_start = OidOutputFunctionCall(out_fn, invalidation_range.start);
+	invalidation_end = OidOutputFunctionCall(out_fn, invalidation_range.end);
+
+	/* MERGE statement is available starting on PG15 and we'll support it only in the new format of
+	 * CAggs and for non-compressed hypertables */
+	if (ts_guc_enable_merge_on_cagg_refresh && PG_VERSION_NUM >= 150000 &&
+		ContinuousAggIsFinalized(cagg) && !TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(mat_ht))
+	{
+		rows_processed = spi_merge_materializations(mat_ht,
+													cagg,
+													partial_view,
+													materialization_table,
+													time_column_name,
+													invalidation_start,
+													invalidation_end);
+	}
+	else
+	{
+		/*
+		 * chunk_id is valid if the materializaion update should be done only on the given chunk.
+		 * This is used currently for refresh on chunk drop only. In other cases, manual
+		 * call to refresh_continuous_aggregate or call from a refresh policy, chunk_id is
+		 * not provided, i.e., invalid.
+		 */
+		if (chunk_id != INVALID_CHUNK_ID)
+			appendStringInfo(chunk_condition, "AND chunk_id = %d", chunk_id);
+
+		rows_processed += spi_delete_materializations(materialization_table,
+													  time_column_name,
+													  invalidation_start,
+													  invalidation_end,
+													  chunk_condition->data);
+		rows_processed += spi_insert_materializations(mat_ht,
+													  cagg,
+													  partial_view,
+													  materialization_table,
+													  time_column_name,
+													  invalidation_start,
+													  invalidation_end,
+													  chunk_condition->data);
+	}
+
+	/* Get the max(time_dimension) of the materialized data */
+	if (rows_processed > 0)
+	{
+		spi_update_watermark(mat_ht,
+							 materialization_table,
+							 time_column_name,
+							 invalidation_start,
+							 invalidation_range.type,
+							 chunk_condition->data);
+	}
+}
+
+static uint64
 spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 						   SchemaAndName partial_view, SchemaAndName materialization_table,
-						   const NameData *time_column_name, TimeRange materialization_range)
+						   const NameData *time_column_name, char *materialization_start,
+						   char *materialization_end)
 {
 	int res;
 	StringInfo command = makeStringInfo();
-	Oid out_fn;
-	bool type_is_varlena;
-	char *materialization_start;
-	char *materialization_end;
 	List *grp_colnames = cagg_find_groupingcols((ContinuousAgg *) cagg, mat_ht);
 	List *agg_colnames = cagg_find_aggref_and_var_cols((ContinuousAgg *) cagg, mat_ht);
 	List *all_columns = NIL;
 	uint64 rows_processed = 0;
 
-	// ListCell *lc;
-	// bool found_time_column = false;
-	// foreach (lc, grp_colnames)
-	// {
-	// 	char *col = (char *) lfirst(lc);
-	// 	if (strncmp(col, NameStr(*time_column_name), NAMEDATALEN) == 0)
-	// 	{
-	// 		found_time_column = true;
-	// 		break;
-	// 	}
-	// }
-
-	// /* in case of not projecting the primary dimension column in the user view */
-	// if (!found_time_column)
-	// 	grp_colnames = lappend(grp_colnames, (char *) NameStr(*time_column_name));
-
 	/* Concat both lists into a single one*/
 	all_columns = list_concat(all_columns, grp_colnames);
 	all_columns = list_concat(all_columns, agg_colnames);
-
-	getTypeOutputInfo(materialization_range.type, &out_fn, &type_is_varlena);
-	materialization_start = OidOutputFunctionCall(out_fn, materialization_range.start);
-	materialization_end = OidOutputFunctionCall(out_fn, materialization_range.end);
 
 	StringInfo merge_update = makeStringInfo();
 	char *merge_update_clause = build_merge_update_clause(agg_colnames);
@@ -578,32 +584,16 @@ spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 
 	rows_processed += SPI_processed;
 
-	/* Get the max(time_dimension) of the materialized data */
-	if (rows_processed > 0)
-	{
-		spi_update_watermark(mat_ht,
-							 materialization_table,
-							 time_column_name,
-							 materialization_start,
-							 materialization_range.type,
-							 "" /* empty chunk condition */);
-	}
+	return rows_processed;
 }
 
-static void
+static uint64
 spi_delete_materializations(SchemaAndName materialization_table, const NameData *time_column_name,
-							TimeRange invalidation_range, const char *const chunk_condition)
+							char *invalidation_start, char *invalidation_end,
+							const char *const chunk_condition)
 {
 	int res;
 	StringInfo command = makeStringInfo();
-	Oid out_fn;
-	bool type_is_varlena;
-	char *invalidation_start;
-	char *invalidation_end;
-
-	getTypeOutputInfo(invalidation_range.type, &out_fn, &type_is_varlena);
-	invalidation_start = OidOutputFunctionCall(out_fn, invalidation_range.start);
-	invalidation_end = OidOutputFunctionCall(out_fn, invalidation_range.end);
 
 	appendStringInfo(command,
 					 "DELETE FROM %s.%s AS D WHERE "
@@ -629,24 +619,18 @@ spi_delete_materializations(SchemaAndName materialization_table, const NameData 
 			 SPI_processed,
 			 NameStr(*materialization_table.schema),
 			 NameStr(*materialization_table.name));
+
+	return SPI_processed;
 }
 
-static void
+static uint64
 spi_insert_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 							SchemaAndName partial_view, SchemaAndName materialization_table,
-							const NameData *time_column_name, TimeRange materialization_range,
-							const char *const chunk_condition)
+							const NameData *time_column_name, char *materialization_start,
+							char *materialization_end, const char *const chunk_condition)
 {
 	int res;
 	StringInfo command = makeStringInfo();
-	Oid out_fn;
-	bool type_is_varlena;
-	char *materialization_start;
-	char *materialization_end;
-
-	getTypeOutputInfo(materialization_range.type, &out_fn, &type_is_varlena);
-	materialization_start = OidOutputFunctionCall(out_fn, materialization_range.start);
-	materialization_end = OidOutputFunctionCall(out_fn, materialization_range.end);
 
 	appendStringInfo(command,
 					 "INSERT INTO %s.%s SELECT * FROM %s.%s AS I "
@@ -675,15 +659,5 @@ spi_insert_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 			 NameStr(*materialization_table.schema),
 			 NameStr(*materialization_table.name));
 
-	/* Get the max(time_dimension) of the materialized data */
-	if (SPI_processed > 0)
-	{
-		spi_update_watermark(mat_ht,
-							 materialization_table,
-							 time_column_name,
-							 materialization_start,
-							 materialization_range.type,
-							 chunk_condition);
-	}
+	return SPI_processed;
 }
-
