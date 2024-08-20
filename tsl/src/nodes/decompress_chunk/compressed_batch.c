@@ -566,9 +566,16 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 		Assert((predicate_result != default_value_predicate_result) ||
 			   n_vector_result_words == 1); /* to placate Coverity. */
 		const uint64 *validity = (const uint64 *) vector->buffers[0];
-		for (size_t i = 0; i < n_vector_result_words; i++)
+		if (validity)
 		{
-			predicate_result[i] &= validity[i];
+			for (size_t i = 0; i < n_vector_result_words; i++)
+			{
+				predicate_result[i] &= validity[i];
+			}
+		}
+		else
+		{
+			Assert(vector->null_count == 0);
 		}
 	}
 

@@ -136,6 +136,11 @@ struct ArrowSchema
 static pg_attribute_always_inline bool
 arrow_row_is_valid(const uint64 *bitmap, size_t row_number)
 {
+	if (bitmap == NULL)
+	{
+		return true;
+	}
+
 	const size_t qword_index = row_number / 64;
 	const size_t bit_index = row_number % 64;
 	const uint64 mask = 1ull << bit_index;
@@ -164,6 +169,11 @@ pad_to_multiple(uint64 pad_to, uint64 source_value)
 static inline size_t
 arrow_num_valid(uint64 *bitmap, size_t total_rows)
 {
+	if (bitmap == NULL)
+	{
+		return total_rows;
+	}
+
 	uint64 num_valid = 0;
 #ifdef HAVE__BUILTIN_POPCOUNT
 	const uint64 words = pad_to_multiple(64, total_rows) / 64;

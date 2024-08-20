@@ -149,12 +149,9 @@ vector_agg_exec(CustomScanState *vector_agg_state)
 		 * column value, we need to multiply this value with the number of
 		 * passing decompressed tuples in this batch.
 		 */
-		int n = batch_state->total_batch_rows;
-		if (batch_state->vector_qual_result)
-		{
-			n = arrow_num_valid(batch_state->vector_qual_result, n);
-			Assert(n > 0);
-		}
+		const int n =
+			arrow_num_valid(batch_state->vector_qual_result, batch_state->total_batch_rows);
+		Assert(n > 0);
 
 		int offs = AttrNumberGetAttrOffset(value_column_description->custom_scan_attno);
 		agg->agg_const(batch_state->decompressed_scan_slot_data.base.tts_values[offs],
