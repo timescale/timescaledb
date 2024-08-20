@@ -367,6 +367,7 @@ spi_update_watermark(Hypertable *mat_ht, SchemaAndName materialization_table,
 		   "partition types for result (%d) and dimension (%d) do not match",
 		   SPI_gettypeid(SPI_tuptable->tupdesc, 1),
 		   materialization_type);
+
 	if (SPI_processed > 0)
 		maxdat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
 
