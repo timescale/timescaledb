@@ -117,7 +117,7 @@ float_sum_init(void *agg_state)
 #endif
 
 /*
- * Templated parts for vectorized sum(int).
+ * Templated parts for vectorized sum(float).
  */
 #define AGG_NAME SUM
 

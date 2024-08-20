@@ -20,7 +20,11 @@ FUNCTION_NAME(emit)(void *agg_state, Datum *out_result, bool *out_isnull)
 static void
 FUNCTION_NAME(vector)(void *agg_state, ArrowArray *vector, uint64 *filter)
 {
-#define UNROLL_SIZE 4
+	/*
+	 * Vector registers can be up to 512 bits wide.
+	 */
+#define UNROLL_SIZE ((int) (512 / 8 / sizeof(CTYPE)))
+
 	bool have_result = false;
 	double accu[UNROLL_SIZE] = { 0 };
 	const int n = vector->length;
@@ -31,31 +35,27 @@ FUNCTION_NAME(vector)(void *agg_state, ArrowArray *vector, uint64 *filter)
 		for (int inner = 0; inner < UNROLL_SIZE; inner++)
 		{
 			const int row = outer + inner;
-			const CTYPE value = values[row];
-			const bool isvalid = arrow_row_is_valid(validity, row);
-			const bool passes = arrow_row_is_valid(filter, row);
-			if (!passes || !isvalid)
-			{
-				continue;
-			}
+			double *dest = &accu[inner];
+#define INNER_LOOP                                                                                 \
+	const CTYPE value = values[row];                                                               \
+	const bool isvalid = arrow_row_is_valid(validity, row);                                        \
+	const bool passes = arrow_row_is_valid(filter, row);                                           \
+	if (!passes || !isvalid)                                                                       \
+	{                                                                                              \
+		continue;                                                                                  \
+	}                                                                                              \
+                                                                                                   \
+	*dest += value;                                                                                \
+	have_result = true;
 
-			accu[inner] += value;
-			have_result = true;
+			INNER_LOOP
 		}
 	}
 
 	for (int row = UNROLL_SIZE * (n / UNROLL_SIZE); row < n; row++)
 	{
-		const CTYPE value = values[row];
-		const bool isvalid = arrow_row_is_valid(validity, row);
-		const bool passes = arrow_row_is_valid(filter, row);
-		if (!passes || !isvalid)
-		{
-			continue;
-		}
-
-		accu[0] += value;
-		have_result = true;
+		double *dest = &accu[0];
+		INNER_LOOP
 	}
 
 	for (int i = 1; i < UNROLL_SIZE; i++)
@@ -63,6 +63,7 @@ FUNCTION_NAME(vector)(void *agg_state, ArrowArray *vector, uint64 *filter)
 		accu[0] += accu[i];
 	}
 #undef UNROLL_SIZE
+#undef INNER_LOOP
 
 	FloatSumState *state = (FloatSumState *) agg_state;
 	state->isnull &= !have_result;

@@ -29,11 +29,17 @@ FUNCTION_NAME(vector)(void *agg_state, ArrowArray *vector, uint64 *filter)
 	 */
 	Assert(vector->length <= INT_MAX);
 
+	/*
+	 * Note that we use a simplest loop here, there are many possibilities of
+	 * optimizing this function (for example, this loop is not unrolled by
+	 * clang-16).
+	 */
+	const int n = vector->length;
 	const uint64 *validity = (uint64 *) vector->buffers[0];
 	const CTYPE *values = (CTYPE *) vector->buffers[1];
 	int64 batch_sum = 0;
 	bool have_result = false;
-	for (int row = 0; row < vector->length; row++)
+	for (int row = 0; row < n; row++)
 	{
 		const bool passes = arrow_row_is_valid(filter, row);
 		const bool isvalid = arrow_row_is_valid(validity, row);

@@ -136,7 +136,7 @@ struct ArrowSchema
 static pg_attribute_always_inline bool
 arrow_row_is_valid(const uint64 *bitmap, size_t row_number)
 {
-	if (bitmap == NULL)
+	if (likely(bitmap == NULL))
 	{
 		return true;
 	}
