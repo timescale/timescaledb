@@ -135,6 +135,86 @@ float_sum_init(void *agg_state)
 
 #undef AGG_NAME
 
+/*
+ * Functions handled by *accum() aggregate functions states.
+ */
+#define AVG_CASE(PG_TYPE) AVG_CASE_HELPER(PG_TYPE)
+#define AVG_CASE_HELPER(PG_TYPE)                                                                   \
+	case F_STDDEV_##PG_TYPE:                                                                       \
+	case F_STDDEV_SAMP_##PG_TYPE:                                                                  \
+	case F_STDDEV_POP_##PG_TYPE:                                                                   \
+	case F_VARIANCE_##PG_TYPE:                                                                     \
+	case F_VAR_SAMP_##PG_TYPE:                                                                     \
+	case F_VAR_POP_##PG_TYPE:                                                                      \
+	case F_AVG_##PG_TYPE:
+
+/*
+ * Common parts for vectorized avg(float).
+ */
+#ifndef GENERATE_DISPATCH_TABLE
+/*
+ * State of Youngs-Cramer algorithm, see the comments for float8_accum().
+ */
+typedef struct
+{
+	double N;
+	double Sx;
+	double Sxx;
+} FloatAvgState;
+
+static void
+avg_float_init(void *agg_state)
+{
+	FloatAvgState *state = (FloatAvgState *) agg_state;
+	*state = (FloatAvgState){ 0 };
+}
+
+static void
+avg_float_emit(void *agg_state, Datum *out_result, bool *out_isnull)
+{
+	FloatAvgState *state = (FloatAvgState *) agg_state;
+
+	Datum transdatums[3] = {
+
+		Float8GetDatumFast(state->N),
+		Float8GetDatumFast(state->Sx),
+		Float8GetDatumFast(state->Sxx),
+	};
+
+	ArrayType *result = construct_array(transdatums,
+										3,
+										FLOAT8OID,
+										sizeof(float8),
+										FLOAT8PASSBYVAL,
+										TYPALIGN_DOUBLE);
+
+	*out_result = PointerGetDatum(result);
+	*out_isnull = false;
+}
+#endif
+
+/*
+ * Templated parts for vectorized avg(float).
+ */
+#define AGG_NAME AVG
+
+#define PG_TYPE FLOAT4
+#define CTYPE float
+#define CTYPE_TO_DATUM Float4GetDatum
+#define DATUM_TO_CTYPE DatumGetFloat4
+#include "avg_float_single.c"
+
+#define PG_TYPE FLOAT8
+#define CTYPE double
+#define CTYPE_TO_DATUM Float8GetDatum
+#define DATUM_TO_CTYPE DatumGetFloat8
+#include "avg_float_single.c"
+
+#undef AGG_NAME
+
+#undef AVG_CASE
+#undef AVG_CASE_HELPER
+
 #undef FUNCTION_NAME
 #undef FUNCTION_NAME_HELPER
 #undef FUNCTION_NAME_HELPER2

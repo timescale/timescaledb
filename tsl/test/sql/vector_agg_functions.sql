@@ -63,6 +63,7 @@ from
         'max',
         'sum',
         'avg',
+        'stddev',
         'count']) function,
     unnest(array[
         'true',
