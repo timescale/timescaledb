@@ -44,6 +44,11 @@ int4_sum_vector(ArrowArray *vector, uint64 *filter, Datum *agg_value, bool *agg_
 	 */
 	Assert(vector->length <= INT_MAX);
 
+	/*
+	 * Note that we use a simplest loop here, there are many possibilities of
+	 * optimizing this function (for example, this loop is not unrolled by
+	 * clang-16).
+	 */
 	int64 batch_sum = 0;
 	for (int row = 0; row < vector->length; row++)
 	{
