@@ -72,8 +72,8 @@ count_any_vector(void *agg_state, ArrowArray *vector, uint64 *restrict filter)
 	/* First, process the full words. */
 	for (int i = 0; i < n / 64; i++)
 	{
-		const uint64 validity_word = validity ? validity[i] : -1ULL;
-		const uint64 filter_word = filter ? filter[i] : -1ULL;
+		const uint64 validity_word = validity ? validity[i] : ~0ULL;
+		const uint64 filter_word = filter ? filter[i] : ~0ULL;
 		const uint64 resulting_word = validity_word & filter_word;
 
 #ifdef HAVE__BUILTIN_POPCOUNT

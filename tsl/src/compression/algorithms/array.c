@@ -584,7 +584,7 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 		memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
 		if (n_total % 64)
 		{
-			const uint64 tail_mask = -1ULL >> (64 - n_total % 64);
+			const uint64 tail_mask = ~0ULL >> (64 - n_total % 64);
 			validity_bitmap[n_total / 64] &= tail_mask;
 		}
 
