@@ -162,11 +162,6 @@ jobs:
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
 
-          # wait in case there are in-progress coredumps
-          sleep 10
-          if coredumpctl -q list >/dev/null; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
-          # print OOM killer information
-          sudo journalctl --system -q --facility=kern --grep "Killed process" || true
         if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
         grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
         cat regression.log
@@ -188,10 +183,18 @@ jobs:
         path: postmaster.*
 
     - name: Stack trace Linux
-      if: always() && steps.collectlogs.outputs.coredumps == 'true'
+      if: always()
       shell: bash
       run: |
-        sudo coredumpctl debug --debugger=gdb --debugger-arguments='' <<<"
+        # wait in case there are in-progress coredumps
+        sleep 10
+        cat /proc/sys/kernel/core_pattern
+        if compgen -G "/tmp/core*" > /dev/null; then
+          PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
+          apt-get install postgresql-${PG_MAJOR}-dbgsym >/dev/null
+          for file in /tmp/core*
+          do
+            gdb /usr/lib/postgresql/${PG_MAJOR}/bin/postgres -c $file <<<"
           set verbose on
           set trace-commands on
           show debug-file-directory
@@ -209,12 +212,15 @@ jobs:
           list
           info args
           info locals
-        " 2>&1 | tee stacktrace.log
-        ./scripts/bundle_coredumps.sh
+            " 2>&1 | tee -a stacktrace.log
+          done
+          echo "coredumps=true" >>$GITHUB_OUTPUT
+          exit 1
+        fi
 
 
     - name: Coredumps
-      if: always() && steps.collectlogs.outputs.coredumps == 'true'
+      if: always() && steps.coredumps.outputs.coredumps == 'true'
       uses: actions/upload-artifact@v4
       with:
         name: Coredumps linux-i386 PG${{ matrix.pg }}

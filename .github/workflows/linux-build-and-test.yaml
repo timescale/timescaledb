@@ -275,7 +275,7 @@ jobs:
         path: coredumps
 
     - name: Save stacktraces
-      if: always() && steps.coredumps.outputs.coredumps == 'true'
+      if: always() && steps.collectlogs.outputs.coredumps == 'true'
       uses: actions/upload-artifact@v4
       with:
         name: Stacktraces ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
