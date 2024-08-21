@@ -55,9 +55,6 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	Assert(n_total >= n_notnull);
 	Assert(n_total <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
-	const int validity_bitmap_bytes = sizeof(uint64) * ((n_total + 64 - 1) / 64);
-	uint64 *restrict validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
-
 	/*
 	 * We need additional padding at the end of buffer, because the code that
 	 * converts the elements to postres Datum always reads in 8 bytes.
@@ -91,23 +88,27 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	}
 #undef INNER_LOOP_SIZE
 
-	/*
-	 * First, mark all data as valid, we will fill the nulls later if needed.
-	 * Note that the validity bitmap size is a multiple of 64 bits. We have to
-	 * fill the tail bits with zeros, because the corresponding elements are not
-	 * valid.
-	 *
-	 */
-	memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
-	if (n_total % 64)
-	{
-		const uint64 tail_mask = -1ULL >> (64 - n_total % 64);
-		validity_bitmap[n_total / 64] &= tail_mask;
-	}
-
-	/* Now move the data to account for nulls, and fill the validity bitmap. */
+	uint64 *restrict validity_bitmap = NULL;
 	if (has_nulls)
 	{
+		/* Now move the data to account for nulls, and fill the validity bitmap. */
+		const int validity_bitmap_bytes = sizeof(uint64) * ((n_total + 64 - 1) / 64);
+		validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
+
+		/*
+		 * First, mark all data as valid, we will fill the nulls later if needed.
+		 * Note that the validity bitmap size is a multiple of 64 bits. We have to
+		 * fill the tail bits with zeros, because the corresponding elements are not
+		 * valid.
+		 *
+		 */
+		memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
+		if (n_total % 64)
+		{
+			const uint64 tail_mask = ~0ULL >> (64 - n_total % 64);
+			validity_bitmap[n_total / 64] &= tail_mask;
+		}
+
 		/*
 		 * The number of not-null elements we have must be consistent with the
 		 * nulls bitmap.

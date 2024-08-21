@@ -2034,95 +2034,67 @@ ORDER BY time DESC, device_id;
 
 -- aggregates should prevent pushdown
 :PREFIX SELECT count(*) FROM metrics_timestamptz LIMIT 1;
-                                    QUERY PLAN                                    
-----------------------------------------------------------------------------------
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Finalize Aggregate (actual rows=1 loops=1)
-         ->  Append (actual rows=5 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_5_17_chunk (actual rows=4032 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_5_18_chunk (actual rows=6048 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_5_19_chunk (actual rows=6048 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_5_20_chunk (actual rows=6048 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_5_21_chunk (actual rows=4611 loops=1)
-(13 rows)
+   ->  Aggregate (actual rows=1 loops=1)
+         ->  Append (actual rows=26787 loops=1)
+               ->  Seq Scan on _hyper_5_17_chunk (actual rows=4032 loops=1)
+               ->  Seq Scan on _hyper_5_18_chunk (actual rows=6048 loops=1)
+               ->  Seq Scan on _hyper_5_19_chunk (actual rows=6048 loops=1)
+               ->  Seq Scan on _hyper_5_20_chunk (actual rows=6048 loops=1)
+               ->  Seq Scan on _hyper_5_21_chunk (actual rows=4611 loops=1)
+(8 rows)
 
 :PREFIX SELECT count(*) FROM metrics_space LIMIT 1;
-                                    QUERY PLAN                                    
-----------------------------------------------------------------------------------
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Finalize Aggregate (actual rows=1 loops=1)
-         ->  Append (actual rows=9 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_6_22_chunk (actual rows=5376 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_6_23_chunk (actual rows=5376 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_6_24_chunk (actual rows=2688 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_6_25_chunk (actual rows=8064 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_6_26_chunk (actual rows=8064 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_6_27_chunk (actual rows=4032 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_6_28_chunk (actual rows=1540 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_6_29_chunk (actual rows=1540 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_6_30_chunk (actual rows=770 loops=1)
-(21 rows)
+   ->  Aggregate (actual rows=1 loops=1)
+         ->  Append (actual rows=37450 loops=1)
+               ->  Seq Scan on _hyper_6_22_chunk (actual rows=5376 loops=1)
+               ->  Seq Scan on _hyper_6_23_chunk (actual rows=5376 loops=1)
+               ->  Seq Scan on _hyper_6_24_chunk (actual rows=2688 loops=1)
+               ->  Seq Scan on _hyper_6_25_chunk (actual rows=8064 loops=1)
+               ->  Seq Scan on _hyper_6_26_chunk (actual rows=8064 loops=1)
+               ->  Seq Scan on _hyper_6_27_chunk (actual rows=4032 loops=1)
+               ->  Seq Scan on _hyper_6_28_chunk (actual rows=1540 loops=1)
+               ->  Seq Scan on _hyper_6_29_chunk (actual rows=1540 loops=1)
+               ->  Seq Scan on _hyper_6_30_chunk (actual rows=770 loops=1)
+(12 rows)
 
 -- HAVING should prevent pushdown
 :PREFIX SELECT 1 FROM metrics_timestamptz HAVING count(*) > 1 LIMIT 1;
-                                    QUERY PLAN                                    
-----------------------------------------------------------------------------------
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Finalize Aggregate (actual rows=1 loops=1)
+   ->  Aggregate (actual rows=1 loops=1)
          Filter: (count(*) > 1)
-         ->  Append (actual rows=5 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_5_17_chunk (actual rows=4032 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_5_18_chunk (actual rows=6048 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_5_19_chunk (actual rows=6048 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_5_20_chunk (actual rows=6048 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_5_21_chunk (actual rows=4611 loops=1)
-(14 rows)
+         ->  Append (actual rows=26787 loops=1)
+               ->  Seq Scan on _hyper_5_17_chunk (actual rows=4032 loops=1)
+               ->  Seq Scan on _hyper_5_18_chunk (actual rows=6048 loops=1)
+               ->  Seq Scan on _hyper_5_19_chunk (actual rows=6048 loops=1)
+               ->  Seq Scan on _hyper_5_20_chunk (actual rows=6048 loops=1)
+               ->  Seq Scan on _hyper_5_21_chunk (actual rows=4611 loops=1)
+(9 rows)
 
 :PREFIX SELECT 1 FROM metrics_space HAVING count(*) > 1 LIMIT 1;
-                                    QUERY PLAN                                    
-----------------------------------------------------------------------------------
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Finalize Aggregate (actual rows=1 loops=1)
+   ->  Aggregate (actual rows=1 loops=1)
          Filter: (count(*) > 1)
-         ->  Append (actual rows=9 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_6_22_chunk (actual rows=5376 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_6_23_chunk (actual rows=5376 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_6_24_chunk (actual rows=2688 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_6_25_chunk (actual rows=8064 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_6_26_chunk (actual rows=8064 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_6_27_chunk (actual rows=4032 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_6_28_chunk (actual rows=1540 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_6_29_chunk (actual rows=1540 loops=1)
-               ->  Partial Aggregate (actual rows=1 loops=1)
-                     ->  Seq Scan on _hyper_6_30_chunk (actual rows=770 loops=1)
-(22 rows)
+         ->  Append (actual rows=37450 loops=1)
+               ->  Seq Scan on _hyper_6_22_chunk (actual rows=5376 loops=1)
+               ->  Seq Scan on _hyper_6_23_chunk (actual rows=5376 loops=1)
+               ->  Seq Scan on _hyper_6_24_chunk (actual rows=2688 loops=1)
+               ->  Seq Scan on _hyper_6_25_chunk (actual rows=8064 loops=1)
+               ->  Seq Scan on _hyper_6_26_chunk (actual rows=8064 loops=1)
+               ->  Seq Scan on _hyper_6_27_chunk (actual rows=4032 loops=1)
+               ->  Seq Scan on _hyper_6_28_chunk (actual rows=1540 loops=1)
+               ->  Seq Scan on _hyper_6_29_chunk (actual rows=1540 loops=1)
+               ->  Seq Scan on _hyper_6_30_chunk (actual rows=770 loops=1)
+(13 rows)
 
 -- DISTINCT should prevent pushdown
 SET enable_hashagg TO false;

@@ -35,12 +35,11 @@ EXPLAIN (costs off) SELECT first(i, j) FROM "test";
  Finalize Aggregate
    ->  Gather
          Workers Planned: 2
-         ->  Parallel Append
-               ->  Partial Aggregate
+         ->  Partial Aggregate
+               ->  Parallel Append
                      ->  Parallel Seq Scan on _hyper_1_1_chunk
-               ->  Partial Aggregate
                      ->  Parallel Seq Scan on _hyper_1_2_chunk
-(8 rows)
+(7 rows)
 
 SELECT first(i, j) FROM "test";
  first 
@@ -54,12 +53,11 @@ EXPLAIN (costs off) SELECT last(i, j) FROM "test";
  Finalize Aggregate
    ->  Gather
          Workers Planned: 2
-         ->  Parallel Append
-               ->  Partial Aggregate
+         ->  Partial Aggregate
+               ->  Parallel Append
                      ->  Parallel Seq Scan on _hyper_1_1_chunk
-               ->  Partial Aggregate
                      ->  Parallel Seq Scan on _hyper_1_2_chunk
-(8 rows)
+(7 rows)
 
 SELECT last(i, j) FROM "test";
   last  
@@ -143,12 +141,11 @@ EXPLAIN (costs off) SELECT histogram(i, 1, 1000000, 2) FROM "test";
  Finalize Aggregate
    ->  Gather
          Workers Planned: 2
-         ->  Parallel Append
-               ->  Partial Aggregate
+         ->  Partial Aggregate
+               ->  Parallel Append
                      ->  Parallel Seq Scan on _hyper_1_1_chunk
-               ->  Partial Aggregate
                      ->  Parallel Seq Scan on _hyper_1_2_chunk
-(8 rows)
+(7 rows)
 
 SELECT histogram(i, 1, 1000000, 2) FROM "test";
      histogram     
@@ -162,12 +159,11 @@ EXPLAIN (costs off) SELECT histogram(i, 1,1000001,10) FROM "test";
  Finalize Aggregate
    ->  Gather
          Workers Planned: 2
-         ->  Parallel Append
-               ->  Partial Aggregate
+         ->  Partial Aggregate
+               ->  Parallel Append
                      ->  Parallel Seq Scan on _hyper_1_1_chunk
-               ->  Partial Aggregate
                      ->  Parallel Seq Scan on _hyper_1_2_chunk
-(8 rows)
+(7 rows)
 
 SELECT histogram(i, 1, 1000001, 10) FROM "test";
                             histogram                             
@@ -181,12 +177,11 @@ EXPLAIN (costs off) SELECT histogram(i, 0,100000,5) FROM "test";
  Finalize Aggregate
    ->  Gather
          Workers Planned: 2
-         ->  Parallel Append
-               ->  Partial Aggregate
+         ->  Partial Aggregate
+               ->  Parallel Append
                      ->  Parallel Seq Scan on _hyper_1_1_chunk
-               ->  Partial Aggregate
                      ->  Parallel Seq Scan on _hyper_1_2_chunk
-(8 rows)
+(7 rows)
 
 SELECT histogram(i, 0, 100000, 5) FROM "test";
              histogram              
@@ -200,12 +195,11 @@ EXPLAIN (costs off) SELECT histogram(i, 10,100000,5) FROM "test";
  Finalize Aggregate
    ->  Gather
          Workers Planned: 2
-         ->  Parallel Append
-               ->  Partial Aggregate
+         ->  Partial Aggregate
+               ->  Parallel Append
                      ->  Parallel Seq Scan on _hyper_1_1_chunk
-               ->  Partial Aggregate
                      ->  Parallel Seq Scan on _hyper_1_2_chunk
-(8 rows)
+(7 rows)
 
 SELECT histogram(i, 10, 100000, 5) FROM "test";
              histogram              
@@ -219,14 +213,13 @@ EXPLAIN (costs off) SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = c
  Finalize Aggregate
    ->  Gather
          Workers Planned: 2
-         ->  Parallel Append
-               ->  Partial Aggregate
+         ->  Partial Aggregate
+               ->  Parallel Append
                      ->  Parallel Seq Scan on _hyper_1_1_chunk
                            Filter: ((i)::double precision = '-1'::double precision)
-               ->  Partial Aggregate
                      ->  Parallel Seq Scan on _hyper_1_2_chunk
                            Filter: ((i)::double precision = '-1'::double precision)
-(10 rows)
+(9 rows)
 
 SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = coalesce(-1,j);
  histogram 
@@ -259,21 +252,20 @@ SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = coalesce(-1,j);
  Finalize Aggregate
    ->  Gather
          Workers Planned: 2
-         ->  Result
-               One-Time Filter: (length(version()) > 0)
-               ->  Parallel Custom Scan (ChunkAppend) on test
-                     Chunks excluded during startup: 0
-                     ->  Partial Aggregate
+         ->  Partial Aggregate
+               ->  Result
+                     One-Time Filter: (length(version()) > 0)
+                     ->  Parallel Custom Scan (ChunkAppend) on test
+                           Chunks excluded during startup: 0
                            ->  Result
                                  One-Time Filter: (length(version()) > 0)
                                  ->  Parallel Seq Scan on _hyper_1_1_chunk
                                        Filter: (i > 1)
-                     ->  Partial Aggregate
                            ->  Result
                                  One-Time Filter: (length(version()) > 0)
                                  ->  Parallel Seq Scan on _hyper_1_2_chunk
                                        Filter: (i > 1)
-(17 rows)
+(16 rows)
 
 SELECT count(*) FROM "test" WHERE i > 1 AND length(version()) > 0;
  count 
@@ -559,21 +551,20 @@ SET max_parallel_workers_per_gather TO 2;
  Finalize Aggregate
    ->  Gather
          Workers Planned: 2
-         ->  Result
-               One-Time Filter: (length(version()) > 0)
-               ->  Parallel Custom Scan (ChunkAppend) on test
-                     Chunks excluded during startup: 0
-                     ->  Partial Aggregate
+         ->  Partial Aggregate
+               ->  Result
+                     One-Time Filter: (length(version()) > 0)
+                     ->  Parallel Custom Scan (ChunkAppend) on test
+                           Chunks excluded during startup: 0
                            ->  Result
                                  One-Time Filter: (length(version()) > 0)
                                  ->  Parallel Index Only Scan using _hyper_1_1_chunk_test_i_idx on _hyper_1_1_chunk
                                        Index Cond: (i >= 400000)
-                     ->  Partial Aggregate
                            ->  Result
                                  One-Time Filter: (length(version()) > 0)
                                  ->  Parallel Seq Scan on _hyper_1_2_chunk
                                        Filter: (i >= 400000)
-(17 rows)
+(16 rows)
 
 SELECT count(*) FROM "test" WHERE i >= 400000 AND length(version()) > 0;
  count 
@@ -589,21 +580,20 @@ SELECT count(*) FROM "test" WHERE i >= 400000 AND length(version()) > 0;
  Finalize Aggregate
    ->  Gather
          Workers Planned: 2
-         ->  Result
-               One-Time Filter: (length(version()) > 0)
-               ->  Parallel Custom Scan (ChunkAppend) on test
-                     Chunks excluded during startup: 0
-                     ->  Partial Aggregate
+         ->  Partial Aggregate
+               ->  Result
+                     One-Time Filter: (length(version()) > 0)
+                     ->  Parallel Custom Scan (ChunkAppend) on test
+                           Chunks excluded during startup: 0
                            ->  Result
                                  One-Time Filter: (length(version()) > 0)
                                  ->  Parallel Index Only Scan using _hyper_1_2_chunk_test_i_idx on _hyper_1_2_chunk
                                        Index Cond: (i < 600000)
-                     ->  Partial Aggregate
                            ->  Result
                                  One-Time Filter: (length(version()) > 0)
                                  ->  Parallel Seq Scan on _hyper_1_1_chunk
                                        Filter: (i < 600000)
-(17 rows)
+(16 rows)
 
 SELECT count(*) FROM "test" WHERE i < 600000 AND length(version()) > 0;
  count 
@@ -619,19 +609,18 @@ SET max_parallel_workers_per_gather TO 1;
  Finalize Aggregate
    ->  Gather
          Workers Planned: 1
-         ->  Result
-               One-Time Filter: (length(version()) > 0)
-               ->  Parallel Custom Scan (ChunkAppend) on test
-                     Chunks excluded during startup: 0
-                     ->  Partial Aggregate
+         ->  Partial Aggregate
+               ->  Result
+                     One-Time Filter: (length(version()) > 0)
+                     ->  Parallel Custom Scan (ChunkAppend) on test
+                           Chunks excluded during startup: 0
                            ->  Result
                                  One-Time Filter: (length(version()) > 0)
                                  ->  Parallel Seq Scan on _hyper_1_1_chunk
-                     ->  Partial Aggregate
                            ->  Result
                                  One-Time Filter: (length(version()) > 0)
                                  ->  Parallel Seq Scan on _hyper_1_2_chunk
-(15 rows)
+(14 rows)
 
 SELECT count(*) FROM "test" WHERE length(version()) > 0;
  count  
@@ -675,21 +664,20 @@ ALTER TABLE :CHUNK2 SET (parallel_workers=2);
  Finalize Aggregate
    ->  Gather
          Workers Planned: 2
-         ->  Result
-               One-Time Filter: (length(version()) > 0)
-               ->  Parallel Custom Scan (ChunkAppend) on test
-                     Chunks excluded during startup: 0
-                     ->  Partial Aggregate
+         ->  Partial Aggregate
+               ->  Result
+                     One-Time Filter: (length(version()) > 0)
+                     ->  Parallel Custom Scan (ChunkAppend) on test
+                           Chunks excluded during startup: 0
                            ->  Result
                                  One-Time Filter: (length(version()) > 0)
                                  ->  Index Only Scan using _hyper_1_1_chunk_test_i_idx on _hyper_1_1_chunk
                                        Index Cond: (i > 400000)
-                     ->  Partial Aggregate
                            ->  Result
                                  One-Time Filter: (length(version()) > 0)
                                  ->  Parallel Seq Scan on _hyper_1_2_chunk
                                        Filter: (i > 400000)
-(17 rows)
+(16 rows)
 
 ALTER TABLE :CHUNK1 SET (parallel_workers=2);
 ALTER TABLE :CHUNK2 SET (parallel_workers=0);
@@ -699,21 +687,20 @@ ALTER TABLE :CHUNK2 SET (parallel_workers=0);
  Finalize Aggregate
    ->  Gather
          Workers Planned: 2
-         ->  Result
-               One-Time Filter: (length(version()) > 0)
-               ->  Parallel Custom Scan (ChunkAppend) on test
-                     Chunks excluded during startup: 0
-                     ->  Partial Aggregate
+         ->  Partial Aggregate
+               ->  Result
+                     One-Time Filter: (length(version()) > 0)
+                     ->  Parallel Custom Scan (ChunkAppend) on test
+                           Chunks excluded during startup: 0
                            ->  Result
                                  One-Time Filter: (length(version()) > 0)
                                  ->  Index Only Scan using _hyper_1_2_chunk_test_i_idx on _hyper_1_2_chunk
                                        Index Cond: (i < 600000)
-                     ->  Partial Aggregate
                            ->  Result
                                  One-Time Filter: (length(version()) > 0)
                                  ->  Parallel Seq Scan on _hyper_1_1_chunk
                                        Filter: (i < 600000)
-(17 rows)
+(16 rows)
 
 ALTER TABLE :CHUNK1 RESET (parallel_workers);
 ALTER TABLE :CHUNK2 RESET (parallel_workers);

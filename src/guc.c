@@ -65,9 +65,11 @@ bool ts_guc_enable_constraint_exclusion = true;
 bool ts_guc_enable_qual_propagation = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 bool ts_guc_enable_now_constify = true;
+bool ts_guc_enable_foreign_key_propagation = true;
 TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify = true;
 TSDLLEXPORT int ts_guc_cagg_max_individual_materializations = 10;
 bool ts_guc_enable_osm_reads = true;
+TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering = true;
 TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml = 100000;
@@ -417,6 +419,17 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_foreign_key_propagation"),
+							 "Enable foreign key propagation",
+							 "Adjust foreign key lookup queries to target whole hypertable",
+							 &ts_guc_enable_foreign_key_propagation,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_qual_propagation"),
 							 "Enable qualifier propagation",
 							 "Enable propagation of qualifiers in JOINs",
@@ -444,6 +457,17 @@ _guc_init(void)
 							 "Recheck tuples during DML decompression to only decompress batches "
 							 "with matching tuples",
 							 &ts_guc_enable_dml_decompression_tuple_filtering,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compressed_direct_batch_delete"),
+							 "Enable direct deletion of compressed batches",
+							 "Enable direct batch deletion in compressed chunks",
+							 &ts_guc_enable_compressed_direct_batch_delete,
 							 true,
 							 PGC_USERSET,
 							 0,

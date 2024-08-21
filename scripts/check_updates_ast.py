@@ -154,8 +154,14 @@ class SQLVisitor(Visitor):
         if args.latest:
             # C functions should only appear in actual function definition but not
             # in latest-dev.sql as that would introduce a dependency on the library.
+            # In that case, we want to use a dedicated placeholder function.
             lang = [elem for elem in node.options if elem.defname == "language"]
-            if lang and lang[0].arg.sval == "c":
+            code = [elem for elem in node.options if elem.defname == "as"][0].arg
+            if (
+                lang
+                and lang[0].arg.sval == "c"
+                and code[-1].sval != "ts_update_placeholder"
+            ):
                 self.errors += 1
                 functype = "procedure" if node.is_procedure else "function"
                 print(

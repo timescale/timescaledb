@@ -714,7 +714,7 @@ gather_restriction_dimension_vectors(const HypertableRestrictInfo *hri)
 
 Chunk **
 ts_hypertable_restrict_info_get_chunks(HypertableRestrictInfo *hri, Hypertable *ht,
-									   unsigned int *num_chunks)
+									   bool include_osm, unsigned int *num_chunks)
 {
 	/*
 	 * Remove the dimensions for which we don't have a restriction, that is,
@@ -747,7 +747,7 @@ ts_hypertable_restrict_info_get_chunks(HypertableRestrictInfo *hri, Hypertable *
 		 * as well. We need to remove it when OSM reads are disabled via GUC
 		 * variable.
 		 */
-		if (!ts_guc_enable_osm_reads)
+		if (!include_osm || !ts_guc_enable_osm_reads)
 		{
 			int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
 
@@ -862,8 +862,8 @@ chunk_cmp_reverse(const void *c1, const void *c2)
  */
 Chunk **
 ts_hypertable_restrict_info_get_chunks_ordered(HypertableRestrictInfo *hri, Hypertable *ht,
-											   Chunk **chunks, bool reverse, List **nested_oids,
-											   unsigned int *num_chunks)
+											   bool include_osm, Chunk **chunks, bool reverse,
+											   List **nested_oids, unsigned int *num_chunks)
 {
 	List *slot_chunk_oids = NIL;
 	DimensionSlice *slice = NULL;
@@ -871,7 +871,7 @@ ts_hypertable_restrict_info_get_chunks_ordered(HypertableRestrictInfo *hri, Hype
 
 	if (chunks == NULL)
 	{
-		chunks = ts_hypertable_restrict_info_get_chunks(hri, ht, num_chunks);
+		chunks = ts_hypertable_restrict_info_get_chunks(hri, ht, include_osm, num_chunks);
 	}
 
 	if (*num_chunks == 0)
