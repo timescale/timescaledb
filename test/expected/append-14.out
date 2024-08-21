@@ -320,22 +320,18 @@ psql:include/append_query.sql:62: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:62: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:62: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:62: NOTICE:  Stable function now_s() called!
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
- Finalize GroupAggregate (actual rows=1 loops=1)
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=1 loops=1)
    Group Key: (date_trunc('year'::text, append_test."time"))
-   ->  Custom Scan (ChunkAppend) on append_test (actual rows=2 loops=1)
+   ->  Custom Scan (ChunkAppend) on append_test (actual rows=3 loops=1)
          Order: date_trunc('year'::text, append_test."time") DESC
          Chunks excluded during startup: 1
-         ->  Partial GroupAggregate (actual rows=1 loops=1)
-               Group Key: date_trunc('year'::text, _hyper_1_3_chunk."time")
-               ->  Index Scan using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
-                     Index Cond: ("time" > (now_s() - '@ 4 mons'::interval))
-         ->  Partial GroupAggregate (actual rows=1 loops=1)
-               Group Key: date_trunc('year'::text, _hyper_1_2_chunk."time")
-               ->  Index Scan using _hyper_1_2_chunk_append_test_time_idx on _hyper_1_2_chunk (actual rows=2 loops=1)
-                     Index Cond: ("time" > (now_s() - '@ 4 mons'::interval))
-(13 rows)
+         ->  Index Scan using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+               Index Cond: ("time" > (now_s() - '@ 4 mons'::interval))
+         ->  Index Scan using _hyper_1_2_chunk_append_test_time_idx on _hyper_1_2_chunk (actual rows=2 loops=1)
+               Index Cond: ("time" > (now_s() - '@ 4 mons'::interval))
+(9 rows)
 
 -- querying outside the time range should return nothing. This tests
 -- that ConstraintAwareAppend can handle the case when an Append node
@@ -401,8 +397,8 @@ psql:include/append_query.sql:102: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:102: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:102: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:102: NOTICE:  Stable function now_s() called!
-                                                                         QUERY PLAN                                                                          
--------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                   QUERY PLAN                                                                    
+-------------------------------------------------------------------------------------------------------------------------------------------------
  Sort (actual rows=6 loops=1)
    Sort Key: (time_bucket('@ 30 days'::interval, "time"."time"))
    Sort Method: quicksort 
@@ -412,29 +408,21 @@ psql:include/append_query.sql:102: NOTICE:  Stable function now_s() called!
          ->  Hash (actual rows=3 loops=1)
                Buckets: 1024  Batches: 1 
                ->  Subquery Scan on data (actual rows=3 loops=1)
-                     ->  Finalize GroupAggregate (actual rows=3 loops=1)
-                           Group Key: (time_bucket('@ 30 days'::interval, append_test."time"))
-                           ->  Sort (actual rows=3 loops=1)
-                                 Sort Key: (time_bucket('@ 30 days'::interval, append_test."time"))
-                                 Sort Method: quicksort 
-                                 ->  Custom Scan (ChunkAppend) on append_test (actual rows=3 loops=1)
-                                       Chunks excluded during startup: 0
-                                       ->  Partial GroupAggregate (actual rows=1 loops=1)
-                                             Group Key: time_bucket('@ 30 days'::interval, _hyper_1_1_chunk."time")
-                                             ->  Index Scan Backward using _hyper_1_1_chunk_append_test_time_idx on _hyper_1_1_chunk (actual rows=2 loops=1)
-                                                   Index Cond: ("time" > (now_s() - '@ 400 days'::interval))
-                                                   Filter: (colorid > 0)
-                                       ->  Partial GroupAggregate (actual rows=1 loops=1)
-                                             Group Key: time_bucket('@ 30 days'::interval, _hyper_1_2_chunk."time")
-                                             ->  Index Scan Backward using _hyper_1_2_chunk_append_test_time_idx on _hyper_1_2_chunk (actual rows=2 loops=1)
-                                                   Index Cond: ("time" > (now_s() - '@ 400 days'::interval))
-                                                   Filter: (colorid > 0)
-                                       ->  Partial GroupAggregate (actual rows=1 loops=1)
-                                             Group Key: time_bucket('@ 30 days'::interval, _hyper_1_3_chunk."time")
-                                             ->  Index Scan Backward using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
-                                                   Index Cond: ("time" > (now_s() - '@ 400 days'::interval))
-                                                   Filter: (colorid > 0)
-(31 rows)
+                     ->  HashAggregate (actual rows=3 loops=1)
+                           Group Key: time_bucket('@ 30 days'::interval, append_test."time")
+                           Batches: 1 
+                           ->  Custom Scan (ChunkAppend) on append_test (actual rows=5 loops=1)
+                                 Chunks excluded during startup: 0
+                                 ->  Index Scan Backward using _hyper_1_1_chunk_append_test_time_idx on _hyper_1_1_chunk (actual rows=2 loops=1)
+                                       Index Cond: ("time" > (now_s() - '@ 400 days'::interval))
+                                       Filter: (colorid > 0)
+                                 ->  Index Scan Backward using _hyper_1_2_chunk_append_test_time_idx on _hyper_1_2_chunk (actual rows=2 loops=1)
+                                       Index Cond: ("time" > (now_s() - '@ 400 days'::interval))
+                                       Filter: (colorid > 0)
+                                 ->  Index Scan Backward using _hyper_1_3_chunk_append_test_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+                                       Index Cond: ("time" > (now_s() - '@ 400 days'::interval))
+                                       Filter: (colorid > 0)
+(23 rows)
 
 WITH data AS (
     SELECT time_bucket(INTERVAL '30 day', TIME) AS btime, AVG(temp) AS VALUE

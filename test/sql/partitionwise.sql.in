@@ -152,7 +152,8 @@ FROM hyper
 GROUP BY 1, 2
 ORDER BY 1, 2;
 
--- Partial aggregation pushdown when a projection is used in the path.
+-- Partial aggregation pushdown is currently not supported for this query by
+-- the TSDB pushdown code since a projection is used in the path.
 SET enable_partitionwise_aggregate = 'on';
 :PREFIX
 SELECT date_trunc('month', time), device, avg(temp)
@@ -264,7 +265,8 @@ GROUP BY 1, 2
 ORDER BY 1, 2
 LIMIT 10;
 
--- Partial aggregation pushdown when a projection is used in the path.
+-- Partial aggregation pushdown is currently not supported for this query by
+-- the TSDB pushdown code since a projection is used in the path.
 :PREFIX
 SELECT time_func(time), _timescaledb_functions.get_partition_hash(device), avg(temp)
 FROM hyper_timepart
