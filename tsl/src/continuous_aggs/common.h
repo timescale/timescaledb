@@ -36,7 +36,6 @@
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
 
-#define CONTINUOUS_AGG_MAX_JOIN_RELATIONS 2
 #define DEFAULT_MATPARTCOLUMN_NAME "time_partition_col"
 #define CAGG_INVALIDATION_THRESHOLD_NAME "invalidation threshold watermark"
 
@@ -66,6 +65,7 @@ typedef struct CAggTimebucketInfo
 	int32 htid;						/* hypertable id */
 	int32 parent_mat_hypertable_id; /* parent materialization hypertable id */
 	Oid htoid;						/* hypertable oid */
+	Oid htoidparent;				/* parent hypertable oid in case of hierarchical */
 	AttrNumber htpartcolno;			/* primary partitioning column of raw hypertable */
 									/* This should also be the column used by time_bucket */
 	Oid htpartcoltype;				/* The collation type */

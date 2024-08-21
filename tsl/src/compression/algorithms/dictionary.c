@@ -48,6 +48,13 @@ typedef struct DictionaryCompressed
 	uint64 alignment_sentinel[FLEXIBLE_ARRAY_MEMBER];
 } DictionaryCompressed;
 
+bool
+dictionary_compressed_has_nulls(const CompressedDataHeader *header)
+{
+	const DictionaryCompressed *dc = (const DictionaryCompressed *) header;
+	return dc->has_nulls;
+}
+
 static void
 pg_attribute_unused() assertions(void)
 {

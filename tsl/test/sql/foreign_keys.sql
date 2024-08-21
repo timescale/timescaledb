@@ -531,7 +531,20 @@ DELETE FROM fk_cascade;
 SELECT * FROM ht;
 ROLLBACK;
 
--- ON DELETE CASCADE with compression
+-- ON DELETE CASCADE with compression without direct batch delete
+SET timescaledb.enable_compressed_direct_batch_delete TO false;
+BEGIN;
+INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
+INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should cascade
+DELETE FROM fk_cascade;
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+RESET timescaledb.enable_compressed_direct_batch_delete;
+
+-- ON DELETE CASCADE with compression and direct batch delete
 BEGIN;
 INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
 INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');

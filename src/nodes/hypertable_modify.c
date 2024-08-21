@@ -240,6 +240,7 @@ hypertable_modify_explain(CustomScanState *node, List *ancestors, ExplainState *
 		foreach (lc, chunk_dispatch_states)
 		{
 			ChunkDispatchState *cds = (ChunkDispatchState *) lfirst(lc);
+			state->batches_deleted += cds->batches_deleted;
 			state->batches_filtered += cds->batches_filtered;
 			state->batches_decompressed += cds->batches_decompressed;
 			state->tuples_decompressed += cds->tuples_decompressed;
@@ -251,6 +252,8 @@ hypertable_modify_explain(CustomScanState *node, List *ancestors, ExplainState *
 		ExplainPropertyInteger("Batches decompressed", NULL, state->batches_decompressed, es);
 	if (state->tuples_decompressed > 0)
 		ExplainPropertyInteger("Tuples decompressed", NULL, state->tuples_decompressed, es);
+	if (state->batches_deleted > 0)
+		ExplainPropertyInteger("Batches deleted", NULL, state->batches_deleted, es);
 }
 
 static CustomExecMethods hypertable_modify_state_methods = {

@@ -69,7 +69,7 @@ View definition:
 ( SELECT _materialized_hypertable_3.bucket,
     _materialized_hypertable_3.avg,
     _materialized_hypertable_3.name
-   FROM _timescaledb_internal._materialized_hypertable_3 _materialized_hypertable_3
+   FROM _timescaledb_internal._materialized_hypertable_3
   WHERE _materialized_hypertable_3.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(3)), '-infinity'::timestamp with time zone)
   ORDER BY _materialized_hypertable_3.bucket)
 UNION ALL
@@ -147,7 +147,7 @@ View definition:
 ( SELECT _materialized_hypertable_4.bucket,
     _materialized_hypertable_4.avg,
     _materialized_hypertable_4.name
-   FROM _timescaledb_internal._materialized_hypertable_4 _materialized_hypertable_4
+   FROM _timescaledb_internal._materialized_hypertable_4
   WHERE _materialized_hypertable_4.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
   ORDER BY _materialized_hypertable_4.bucket)
 UNION ALL
@@ -226,7 +226,7 @@ View definition:
 ( SELECT _materialized_hypertable_5.bucket,
     _materialized_hypertable_5.avg,
     _materialized_hypertable_5.name
-   FROM _timescaledb_internal._materialized_hypertable_5 _materialized_hypertable_5
+   FROM _timescaledb_internal._materialized_hypertable_5
   WHERE _materialized_hypertable_5.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(5)), '-infinity'::timestamp with time zone)
   ORDER BY _materialized_hypertable_5.bucket)
 UNION ALL
@@ -306,7 +306,7 @@ View definition:
 ( SELECT _materialized_hypertable_6.bucket,
     _materialized_hypertable_6.avg,
     _materialized_hypertable_6.name
-   FROM _timescaledb_internal._materialized_hypertable_6 _materialized_hypertable_6
+   FROM _timescaledb_internal._materialized_hypertable_6
   WHERE _materialized_hypertable_6.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(6)), '-infinity'::timestamp with time zone)
   ORDER BY _materialized_hypertable_6.bucket)
 UNION ALL
@@ -387,7 +387,7 @@ View definition:
 ( SELECT _materialized_hypertable_7.bucket,
     _materialized_hypertable_7.avg,
     _materialized_hypertable_7.name
-   FROM _timescaledb_internal._materialized_hypertable_7 _materialized_hypertable_7
+   FROM _timescaledb_internal._materialized_hypertable_7
   WHERE _materialized_hypertable_7.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(7)), '-infinity'::timestamp with time zone)
   ORDER BY _materialized_hypertable_7.bucket)
 UNION ALL
@@ -470,7 +470,7 @@ View definition:
 ( SELECT _materialized_hypertable_8.bucket,
     _materialized_hypertable_8.avg,
     _materialized_hypertable_8.name
-   FROM _timescaledb_internal._materialized_hypertable_8 _materialized_hypertable_8
+   FROM _timescaledb_internal._materialized_hypertable_8
   WHERE _materialized_hypertable_8.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone)
   ORDER BY _materialized_hypertable_8.bucket)
 UNION ALL
@@ -1165,6 +1165,53 @@ JOIN location ON location.name = devices.location
 GROUP BY bucket, devices.name, location.name;
 NOTICE:  refreshing continuous aggregate "conditions_by_day"
 HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+SELECT * FROM conditions_by_day ORDER BY bucket, device, location;
+            bucket            |         avg         |  device  | location  
+------------------------------+---------------------+----------+-----------
+ Sun Jun 13 17:00:00 2021 PDT | 26.0000000000000000 | thermo_1 | Moscow
+ Mon Jun 14 17:00:00 2021 PDT | 22.0000000000000000 | thermo_2 | Berlin
+ Tue Jun 15 17:00:00 2021 PDT | 24.0000000000000000 | thermo_3 | London
+ Wed Jun 16 17:00:00 2021 PDT | 24.0000000000000000 | thermo_4 | Stockholm
+ Thu Jun 17 17:00:00 2021 PDT | 27.0000000000000000 | thermo_4 | Stockholm
+ Fri Jun 18 17:00:00 2021 PDT | 28.0000000000000000 | thermo_4 | Stockholm
+ Sat Jun 19 17:00:00 2021 PDT | 30.0000000000000000 | thermo_1 | Moscow
+ Sun Jun 20 17:00:00 2021 PDT | 31.0000000000000000 | thermo_1 | Moscow
+ Mon Jun 21 17:00:00 2021 PDT | 34.0000000000000000 | thermo_1 | Moscow
+ Tue Jun 22 17:00:00 2021 PDT | 34.0000000000000000 | thermo_2 | Berlin
+ Wed Jun 23 17:00:00 2021 PDT | 34.0000000000000000 | thermo_2 | Berlin
+ Thu Jun 24 17:00:00 2021 PDT | 32.0000000000000000 | thermo_3 | London
+ Fri Jun 25 17:00:00 2021 PDT | 32.0000000000000000 | thermo_3 | London
+ Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 | thermo_3 | London
+ Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3 | London
+ Wed Jun 30 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3 | London
+(16 rows)
+
+ALTER MATERIALIZED VIEW conditions_by_day SET (timescaledb.materialized_only = FALSE);
+-- Insert one more row on conditions and check the result (should have one more row)
+INSERT INTO conditions (day, city, temperature, device_id) VALUES
+  ('2024-07-01', 'Moscow', 28, 3);
+SELECT * FROM conditions_by_day ORDER BY bucket, device, location;
+            bucket            |         avg         |  device  | location  
+------------------------------+---------------------+----------+-----------
+ Sun Jun 13 17:00:00 2021 PDT | 26.0000000000000000 | thermo_1 | Moscow
+ Mon Jun 14 17:00:00 2021 PDT | 22.0000000000000000 | thermo_2 | Berlin
+ Tue Jun 15 17:00:00 2021 PDT | 24.0000000000000000 | thermo_3 | London
+ Wed Jun 16 17:00:00 2021 PDT | 24.0000000000000000 | thermo_4 | Stockholm
+ Thu Jun 17 17:00:00 2021 PDT | 27.0000000000000000 | thermo_4 | Stockholm
+ Fri Jun 18 17:00:00 2021 PDT | 28.0000000000000000 | thermo_4 | Stockholm
+ Sat Jun 19 17:00:00 2021 PDT | 30.0000000000000000 | thermo_1 | Moscow
+ Sun Jun 20 17:00:00 2021 PDT | 31.0000000000000000 | thermo_1 | Moscow
+ Mon Jun 21 17:00:00 2021 PDT | 34.0000000000000000 | thermo_1 | Moscow
+ Tue Jun 22 17:00:00 2021 PDT | 34.0000000000000000 | thermo_2 | Berlin
+ Wed Jun 23 17:00:00 2021 PDT | 34.0000000000000000 | thermo_2 | Berlin
+ Thu Jun 24 17:00:00 2021 PDT | 32.0000000000000000 | thermo_3 | London
+ Fri Jun 25 17:00:00 2021 PDT | 32.0000000000000000 | thermo_3 | London
+ Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 | thermo_3 | London
+ Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3 | London
+ Wed Jun 30 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3 | London
+ Sun Jun 30 17:00:00 2024 PDT | 28.0000000000000000 | thermo_3 | London
+(17 rows)
+
 -- JOIN with a foreign table
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT current_setting('port') AS "PGPORT", current_database() AS "PGDATABASE" \gset
