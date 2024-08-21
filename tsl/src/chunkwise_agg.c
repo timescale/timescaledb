@@ -261,9 +261,25 @@ add_partially_aggregated_subpaths(PlannerInfo *root, PathTarget *input_target,
 	 * Note that we cannot use apply_projection_to_path() here, because it might
 	 * modify the targetlist of the projection-capable paths in place, which
 	 * would cause a mismatch when these paths are used in another context.
+	 *
+	 * In case of DecompressChunk path, we can make a copy of it and push the
+	 * projection down to it.
+	 *
+	 * In general, the projection here arises because the pathtarget of the
+	 * table scans is determined early based on the reltarget which lists all
+	 * used columns in attno order, and the pathtarget before grouping is
+	 * computed by apply_scanjoin_target and has the grouping columns in front.
 	 */
-	subpath = (Path *)
-		create_projection_path(root, subpath->parent, subpath, chunk_target_before_grouping);
+	if (ts_is_decompress_chunk_path(subpath))
+	{
+		subpath = (Path *) copy_decompress_chunk_path((DecompressChunkPath *) subpath);
+		subpath->pathtarget = chunk_target_before_grouping;
+	}
+	else
+	{
+		subpath = (Path *)
+			create_projection_path(root, subpath->parent, subpath, chunk_target_before_grouping);
+	}
 
 	if (can_sort)
 	{
