@@ -56,8 +56,8 @@ FUNCTION_NAME(const)(void *agg_state, Datum constvalue, bool constisnull, int n)
  * Youngs-Cramer update for rows after the first.
  */
 static pg_attribute_always_inline void
-FUNCTION_NAME(inner_update)(const uint64 *filter, const uint64 *validity, const CTYPE *values,
-							int row, double *N, double *Sx, double *Sxx)
+FUNCTION_NAME(update)(const uint64 *filter, const uint64 *validity, const CTYPE *values, int row,
+					  double *N, double *Sx, double *Sxx)
 {
 	const CTYPE newval = values[row];
 	const bool passes = arrow_row_is_valid(filter, row);
@@ -71,11 +71,9 @@ FUNCTION_NAME(inner_update)(const uint64 *filter, const uint64 *validity, const 
 	 * This code follows float8_accum(), see the comments there.
 	 */
 #ifdef NEED_SXX
-	if (*N > 0.0)
-	{
-		const double tmp = newval * (*N + 1.0) - (*Sx + newval);
-		*Sxx += tmp * tmp / (*N * (*N + 1.0));
-	}
+	Assert(*N > 0.0);
+	const double tmp = newval * (*N + 1.0) - (*Sx + newval);
+	*Sxx += tmp * tmp / (*N * (*N + 1.0));
 #endif
 
 	*N = *N + 1.0;
@@ -93,16 +91,56 @@ static pg_attribute_always_inline void
 FUNCTION_NAME(vector_impl)(FloatAvgState *state, int rows, const CTYPE *values,
 						   const uint64 *validity, const uint64 *filter)
 {
+	int row = 0;
+
 	/*
 	 * Vector registers can be up to 512 bits wide.
 	 */
 #define UNROLL_SIZE ((int) (512 / 8 / sizeof(CTYPE)))
 
+	/*
+	 * Each inner iteration works with its own accumulators to avoid data
+	 * dependencies.
+	 */
 	double Narray[UNROLL_SIZE] = { 0 };
 	double Sxarray[UNROLL_SIZE] = { 0 };
 	double Sxxarray[UNROLL_SIZE] = { 0 };
 
-	int row = 0;
+#ifdef NEED_SXX
+	/*
+	 * Initialize each state with the first matching row. We do this separately
+	 * to make the actual update function branchless, namely the computation of
+	 * Sxx which works differently for the first row.
+	 */
+	for (int inner = 0; inner < UNROLL_SIZE; inner++)
+	{
+		for (; row < rows; row++)
+		{
+			const CTYPE newval = values[row];
+			const bool passes = arrow_row_is_valid(filter, row);
+			const bool isvalid = arrow_row_is_valid(validity, row);
+			if (passes && isvalid)
+			{
+				Narray[inner] = 1;
+				Sxarray[inner] = newval;
+				Sxxarray[inner] = 0 * newval;
+				row++;
+				break;
+			}
+		}
+	}
+
+	/*
+	 * Scroll to the row that is a multiple of UNROLL_SIZE. This is the correct
+	 * row at which to enter the unrolled loop below.
+	 */
+	for (int inner = row % UNROLL_SIZE; inner > 0 && inner < UNROLL_SIZE && row < rows;
+		 inner++, row++)
+	{
+		FUNCTION_NAME(update)
+		(filter, validity, values, row, &Narray[inner], &Sxarray[inner], &Sxxarray[inner]);
+	}
+#endif
 
 	/*
 	 * Unrolled loop.
@@ -112,7 +150,7 @@ FUNCTION_NAME(vector_impl)(FloatAvgState *state, int rows, const CTYPE *values,
 	{
 		for (int inner = 0; inner < UNROLL_SIZE; inner++)
 		{
-			FUNCTION_NAME(inner_update)
+			FUNCTION_NAME(update)
 			(filter,
 			 validity,
 			 values,
@@ -128,8 +166,9 @@ FUNCTION_NAME(vector_impl)(FloatAvgState *state, int rows, const CTYPE *values,
 	 */
 	for (; row < rows; row++)
 	{
-		FUNCTION_NAME(inner_update)
-		(filter, validity, values, row, &Narray[0], &Sxarray[0], &Sxxarray[0]);
+		const int inner = row % UNROLL_SIZE;
+		FUNCTION_NAME(update)
+		(filter, validity, values, row, &Narray[inner], &Sxarray[inner], &Sxxarray[inner]);
 	}
 
 	/*
@@ -152,8 +191,13 @@ FUNCTION_NAME(vector_impl)(FloatAvgState *state, int rows, const CTYPE *values,
 	youngs_cramer_combine(&state->N, &state->Sx, &state->Sxx, Narray[0], Sxarray[0], Sxxarray[0]);
 }
 
+/*
+ * Nudge the compiler to generate a separate implementation for the common case
+ * where we have no nulls and all rows pass the filter. It avoids branches so
+ * can be more easily vectorized.
+ */
 static pg_noinline void
-FUNCTION_NAME(vector_impl_nofilter)(FloatAvgState *state, int rows, const CTYPE *values)
+FUNCTION_NAME(vector_nofilter)(FloatAvgState *state, int rows, const CTYPE *values)
 {
 	FUNCTION_NAME(vector_impl)(state, rows, values, NULL, NULL);
 }
@@ -168,7 +212,7 @@ FUNCTION_NAME(vector)(void *agg_state, ArrowArray *vector, uint64 *filter)
 
 	if (filter == NULL && validity == NULL)
 	{
-		FUNCTION_NAME(vector_impl_nofilter)(state, rows, values);
+		FUNCTION_NAME(vector_nofilter)(state, rows, values);
 	}
 	else
 	{
