@@ -8,5 +8,3 @@
 \ir post.catalog.sql
 \ir post.policies.sql
 \ir post.functions.sql
-
-SELECT * FROM cagg_join.measurement_daily ORDER BY 1, 2, 3, 4, 5, 6;
