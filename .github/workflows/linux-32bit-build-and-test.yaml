@@ -189,11 +189,13 @@ jobs:
         # wait in case there are in-progress coredumps
         sleep 10
         cat /proc/sys/kernel/core_pattern
-        touch "$(cat /proc/sys/kernel/core_pattern)"
+        sudo -u postgres touch "$(cat /proc/sys/kernel/core_pattern)"
+        sudo -u postgres sleep 10 &
+        killall -SIGSEGV sleep
         ls -lath /tmp
         if compgen -G "/tmp/core*" > /dev/null; then
           PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
-          apt-get install postgresql-${PG_MAJOR}-dbgsym >/dev/null
+          # apt-get install postgresql-${PG_MAJOR}-dbgsym >/dev/null
           for file in /tmp/core*
           do
             gdb /usr/lib/postgresql/${PG_MAJOR}/bin/postgres -c $file <<<"
