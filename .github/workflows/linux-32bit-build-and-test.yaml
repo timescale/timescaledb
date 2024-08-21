@@ -189,6 +189,8 @@ jobs:
         # wait in case there are in-progress coredumps
         sleep 10
         cat /proc/sys/kernel/core_pattern
+        touch "$(cat /proc/sys/kernel/core_pattern)"
+        ls -lath /tmp
         if compgen -G "/tmp/core*" > /dev/null; then
           PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
           apt-get install postgresql-${PG_MAJOR}-dbgsym >/dev/null
