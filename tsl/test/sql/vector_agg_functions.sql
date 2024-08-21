@@ -77,7 +77,7 @@ from
         's',
         'ss']) grouping
 where case when condition = 'cint2 is null' then variable = 'cint2'
-        when function = 'count' then variable = 'cfloat4'
+        when function = 'count' then variable in ('cfloat4', 's')
         when variable = 't' then function in ('min', 'max')
         else true end
 order by condition.n, variable, function, grouping

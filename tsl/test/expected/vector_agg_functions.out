@@ -79,7 +79,7 @@ from
         's',
         'ss']) grouping
 where case when condition = 'cint2 is null' then variable = 'cint2'
-        when function = 'count' then variable = 'cfloat4'
+        when function = 'count' then variable in ('cfloat4', 's')
         when variable = 't' then function in ('min', 'max')
         else true end
 order by condition.n, variable, function, grouping
@@ -1054,6 +1054,42 @@ select ss, avg(s) from aggfns where true group by ss order by 1, 2;
   7 |         7.0000000000000000
   8 |         8.0000000000000000
   9 |         9.0000000000000000
+(10 rows)
+
+select 777::text, count(s) from aggfns where true group by 777::text order by 1, 2;
+ text | count  
+------+--------
+ 777  | 200000
+(1 row)
+
+select s, count(s) from aggfns where true group by s order by 1, 2;
+ s | count 
+---+-------
+ 0 | 20000
+ 1 | 20000
+ 2 | 20000
+ 3 | 20000
+ 4 | 20000
+ 5 | 20000
+ 6 | 20000
+ 7 | 20000
+ 8 | 20000
+ 9 | 20000
+(10 rows)
+
+select ss, count(s) from aggfns where true group by ss order by 1, 2;
+ ss | count 
+----+-------
+  0 | 20000
+  1 | 20000
+  2 | 20000
+  3 | 20000
+  4 | 20000
+  5 | 20000
+  6 | 20000
+  7 | 20000
+  8 | 20000
+  9 | 20000
 (10 rows)
 
 select 777::text, max(s) from aggfns where true group by 777::text order by 1, 2;
@@ -2424,6 +2460,42 @@ select ss, avg(s) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 |     9.0000000000000000
 (10 rows)
 
+select 777::text, count(s) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
+ text | count 
+------+-------
+ 777  | 99430
+(1 row)
+
+select s, count(s) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+ s | count 
+---+-------
+ 0 |  9943
+ 1 |  9943
+ 2 |  9942
+ 3 |  9942
+ 4 |  9943
+ 5 |  9943
+ 6 |  9944
+ 7 |  9944
+ 8 |  9943
+ 9 |  9943
+(10 rows)
+
+select ss, count(s) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+ ss | count 
+----+-------
+  0 |  9943
+  1 |  9943
+  2 |  9942
+  3 |  9942
+  4 |  9943
+  5 |  9943
+  6 |  9944
+  7 |  9944
+  8 |  9943
+  9 |  9943
+(10 rows)
+
 select 777::text, max(s) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
  text | max 
 ------+-----
@@ -3790,6 +3862,42 @@ select ss, avg(s) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   7 |         7.0000000000000000
   8 |         8.0000000000000000
   9 |         9.0000000000000000
+(10 rows)
+
+select 777::text, count(s) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
+ text | count  
+------+--------
+ 777  | 100570
+(1 row)
+
+select s, count(s) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+ s | count 
+---+-------
+ 0 | 10057
+ 1 | 10057
+ 2 | 10058
+ 3 | 10058
+ 4 | 10057
+ 5 | 10057
+ 6 | 10056
+ 7 | 10056
+ 8 | 10057
+ 9 | 10057
+(10 rows)
+
+select ss, count(s) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+ ss | count 
+----+-------
+  0 | 10057
+  1 | 10057
+  2 | 10058
+  3 | 10058
+  4 | 10057
+  5 | 10057
+  6 | 10056
+  7 | 10056
+  8 | 10057
+  9 | 10057
 (10 rows)
 
 select 777::text, max(s) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
@@ -5160,6 +5268,42 @@ select ss, avg(s) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
   9 |         9.0000000000000000
 (10 rows)
 
+select 777::text, count(s) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
+ text | count  
+------+--------
+ 777  | 200000
+(1 row)
+
+select s, count(s) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+ s | count 
+---+-------
+ 0 | 20000
+ 1 | 20000
+ 2 | 20000
+ 3 | 20000
+ 4 | 20000
+ 5 | 20000
+ 6 | 20000
+ 7 | 20000
+ 8 | 20000
+ 9 | 20000
+(10 rows)
+
+select ss, count(s) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+ ss | count 
+----+-------
+  0 | 20000
+  1 | 20000
+  2 | 20000
+  3 | 20000
+  4 | 20000
+  5 | 20000
+  6 | 20000
+  7 | 20000
+  8 | 20000
+  9 | 20000
+(10 rows)
+
 select 777::text, max(s) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
  text | max 
 ------+-----
@@ -5959,6 +6103,21 @@ select s, avg(s) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
 select ss, avg(s) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
  ss | avg 
 ----+-----
+(0 rows)
+
+select 777::text, count(s) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
+ text | count 
+------+-------
+(0 rows)
+
+select s, count(s) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
+ s | count 
+---+-------
+(0 rows)
+
+select ss, count(s) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
+ ss | count 
+----+-------
 (0 rows)
 
 select 777::text, max(s) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;

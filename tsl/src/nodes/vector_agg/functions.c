@@ -59,8 +59,13 @@ VectorAggFunctions count_star_agg = {
 static void
 count_any_const(void *agg_state, Datum constvalue, bool constisnull, int n)
 {
+	if (constisnull)
+	{
+		return;
+	}
+
 	CountState *state = (CountState *) agg_state;
-	state->count += n * constisnull;
+	state->count += n;
 }
 
 static void
