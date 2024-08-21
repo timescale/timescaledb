@@ -89,14 +89,10 @@ FUNCTION_NAME(inner_update)(const uint64 *filter, const uint64 *validity, const 
 	*Sxx += 0.0 * newval;
 }
 
-static void
-FUNCTION_NAME(vector)(void *agg_state, ArrowArray *vector, uint64 *filter)
+static pg_attribute_always_inline void
+FUNCTION_NAME(vector_impl)(FloatAvgState *state, int rows, const CTYPE *values,
+						   const uint64 *validity, const uint64 *filter)
 {
-	FloatAvgState *state = (FloatAvgState *) agg_state;
-	const int rows = vector->length;
-	const uint64 *validity = vector->buffers[0];
-	const CTYPE *values = vector->buffers[1];
-
 	/*
 	 * Vector registers can be up to 512 bits wide.
 	 */
@@ -154,6 +150,30 @@ FUNCTION_NAME(vector)(void *agg_state, ArrowArray *vector, uint64 *filter)
 	 * Merge the total computed state into the aggregate function state.
 	 */
 	youngs_cramer_combine(&state->N, &state->Sx, &state->Sxx, Narray[0], Sxarray[0], Sxxarray[0]);
+}
+
+static pg_noinline void
+FUNCTION_NAME(vector_impl_nofilter)(FloatAvgState *state, int rows, const CTYPE *values)
+{
+	FUNCTION_NAME(vector_impl)(state, rows, values, NULL, NULL);
+}
+
+static pg_attribute_always_inline void
+FUNCTION_NAME(vector)(void *agg_state, ArrowArray *vector, uint64 *filter)
+{
+	FloatAvgState *state = (FloatAvgState *) agg_state;
+	const int rows = vector->length;
+	const uint64 *validity = vector->buffers[0];
+	const CTYPE *values = vector->buffers[1];
+
+	if (filter == NULL && validity == NULL)
+	{
+		FUNCTION_NAME(vector_impl_nofilter)(state, rows, values);
+	}
+	else
+	{
+		FUNCTION_NAME(vector_impl)(state, rows, values, validity, filter);
+	}
 }
 
 static VectorAggFunctions FUNCTION_NAME(argdef) = { .state_bytes = sizeof(FloatAvgState),
