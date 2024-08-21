@@ -206,6 +206,27 @@ vector_agg_exec(CustomScanState *node)
 			continue;
 		}
 
+		/*
+		 * Count rows filtered out by vectorized filters for EXPLAIN. Normally
+		 * this is done in tuple-by-tuple interface of DecompressChunk, so that
+		 * it doesn't say it filtered out more rows that were returned (e.g.
+		 * with LIMIT). Here we always work in full batches. The batches that
+		 * were fully filtered out, and their rows, were already counted in
+		 * compressed_batch_set_compressed_tuple().
+		 */
+		const int not_filtered_rows =
+			arrow_num_valid(batch_state->vector_qual_result, batch_state->total_batch_rows);
+		InstrCountFiltered1(dcontext->ps, batch_state->total_batch_rows - not_filtered_rows);
+		if (dcontext->ps->instrument)
+		{
+			/*
+			 * These values are normally updated by InstrStopNode(), and are
+			 * required so that the calculations in InstrEndLoop() run properly.
+			 */
+			dcontext->ps->instrument->running = true;
+			dcontext->ps->instrument->tuplecount += not_filtered_rows;
+		}
+
 		grouping->gp_add_batch(grouping, batch_state);
 
 		compressed_batch_discard_tuples(batch_state);
