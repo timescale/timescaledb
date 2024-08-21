@@ -44,14 +44,10 @@ minmax_emit(void *agg_state, Datum *out_result, bool *out_isnull)
 #define AGG_NAME MIN
 #define PREDICATE(CURRENT, NEW) ((CURRENT) > (NEW))
 #include "minmax_arithmetic_types.c"
-#undef PREDICATE
-#undef AGG_NAME
 
 #define AGG_NAME MAX
 #define PREDICATE(CURRENT, NEW) ((CURRENT) < (NEW))
 #include "minmax_arithmetic_types.c"
-#undef PREDICATE
-#undef AGG_NAME
 
 /*
  * Common parts for vectorized sum(int).
@@ -136,19 +132,6 @@ float_sum_init(void *agg_state)
 #undef AGG_NAME
 
 /*
- * Functions handled by *accum() aggregate functions states.
- */
-#define AVG_CASE(PG_TYPE) AVG_CASE_HELPER(PG_TYPE)
-#define AVG_CASE_HELPER(PG_TYPE)                                                                   \
-	case F_STDDEV_##PG_TYPE:                                                                       \
-	case F_STDDEV_SAMP_##PG_TYPE:                                                                  \
-	case F_STDDEV_POP_##PG_TYPE:                                                                   \
-	case F_VARIANCE_##PG_TYPE:                                                                     \
-	case F_VAR_SAMP_##PG_TYPE:                                                                     \
-	case F_VAR_POP_##PG_TYPE:                                                                      \
-	case F_AVG_##PG_TYPE:
-
-/*
  * Common parts for vectorized avg(float).
  */
 #ifndef GENERATE_DISPATCH_TABLE
@@ -191,29 +174,55 @@ avg_float_emit(void *agg_state, Datum *out_result, bool *out_isnull)
 	*out_result = PointerGetDatum(result);
 	*out_isnull = false;
 }
+
+/*
+ * Combine two Youngs-Cramer states following the float8_combine() function.
+ */
+static pg_attribute_always_inline void
+youngs_cramer_combine(double *inout_N, double *inout_Sx, double *inout_Sxx, double N2, double Sx2,
+					  double Sxx2)
+{
+	const double N1 = *inout_N;
+	const double Sx1 = *inout_Sx;
+	const double Sxx1 = *inout_Sxx;
+
+	if (unlikely(N1 == 0))
+	{
+		*inout_N = N2;
+		*inout_Sx = Sx2;
+		*inout_Sxx = Sxx2;
+		return;
+	}
+
+	if (unlikely(N2 == 0))
+	{
+		*inout_N = N1;
+		*inout_Sx = Sx1;
+		*inout_Sxx = Sxx1;
+		return;
+	}
+
+	const double combinedN = N1 + N2;
+	const double combinedSx = Sx1 + Sx2;
+	const double tmp = Sx1 / N1 - Sx2 / N2;
+	const double combinedSxx = Sxx1 + Sxx2 + N1 * N2 * tmp * tmp / combinedN;
+
+	*inout_N = combinedN;
+	*inout_Sx = combinedSx;
+	*inout_Sxx = combinedSxx;
+}
+
 #endif
 
 /*
  * Templated parts for vectorized avg(float).
  */
-#define AGG_NAME AVG
+#define AGG_NAME accum_no_squares
+#include "accum_float_types.c"
 
-#define PG_TYPE FLOAT4
-#define CTYPE float
-#define CTYPE_TO_DATUM Float4GetDatum
-#define DATUM_TO_CTYPE DatumGetFloat4
-#include "avg_float_single.c"
-
-#define PG_TYPE FLOAT8
-#define CTYPE double
-#define CTYPE_TO_DATUM Float8GetDatum
-#define DATUM_TO_CTYPE DatumGetFloat8
-#include "avg_float_single.c"
-
-#undef AGG_NAME
-
-#undef AVG_CASE
-#undef AVG_CASE_HELPER
+#define AGG_NAME accum_with_squares
+#define NEED_SXX
+#include "accum_float_types.c"
 
 #undef FUNCTION_NAME
 #undef FUNCTION_NAME_HELPER

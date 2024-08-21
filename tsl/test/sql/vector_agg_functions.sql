@@ -46,8 +46,11 @@ analyze aggfns;
 --set timescaledb.enable_vectorized_aggregation to off;
 
 select
-    format('select %4$s, %1$s(%2$s) from aggfns where %3$s group by %4$s order by 1, 2;',
-            function, variable, condition, grouping)
+    format('select %s%s(%s) from aggfns%s%s order by 1;',
+            grouping || ', ',
+            function, variable,
+            ' where ' || condition,
+            ' group by ' || grouping )
 from
     unnest(array[
         't',
@@ -66,19 +69,19 @@ from
         'stddev',
         'count']) function,
     unnest(array[
-        'true',
+        null,
         'cfloat8 > 0',
         'cfloat8 <= 0',
         'cfloat8 < 1000' /* vectorized qual is true for all rows */,
         'cfloat8 > 1000' /* vectorized qual is false for all rows */,
         'cint2 is null']) with ordinality as condition(condition, n),
     unnest(array[
-        '777::text' /* dummy grouping column */,
+        null,
         's',
-        'ss']) grouping
+        'ss']) with ordinality as grouping(grouping, n)
 where case when condition = 'cint2 is null' then variable = 'cint2'
         when function = 'count' then variable in ('cfloat4', 's')
         when variable = 't' then function in ('min', 'max')
         else true end
-order by condition.n, variable, function, grouping
+order by condition.n, variable, function, grouping.n
 \gexec

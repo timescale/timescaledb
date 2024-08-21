@@ -48,8 +48,11 @@ analyze aggfns;
 ---- on float4 due to different numeric stability in our and PG implementations.
 --set timescaledb.enable_vectorized_aggregation to off;
 select
-    format('select %4$s, %1$s(%2$s) from aggfns where %3$s group by %4$s order by 1, 2;',
-            function, variable, condition, grouping)
+    format('select %s%s(%s) from aggfns%s%s order by 1;',
+            grouping || ', ',
+            function, variable,
+            ' where ' || condition,
+            ' group by ' || grouping )
 from
     unnest(array[
         't',
@@ -68,29 +71,29 @@ from
         'stddev',
         'count']) function,
     unnest(array[
-        'true',
+        null,
         'cfloat8 > 0',
         'cfloat8 <= 0',
         'cfloat8 < 1000' /* vectorized qual is true for all rows */,
         'cfloat8 > 1000' /* vectorized qual is false for all rows */,
         'cint2 is null']) with ordinality as condition(condition, n),
     unnest(array[
-        '777::text' /* dummy grouping column */,
+        null,
         's',
-        'ss']) grouping
+        'ss']) with ordinality as grouping(grouping, n)
 where case when condition = 'cint2 is null' then variable = 'cint2'
         when function = 'count' then variable in ('cfloat4', 's')
         when variable = 't' then function in ('min', 'max')
         else true end
-order by condition.n, variable, function, grouping
+order by condition.n, variable, function, grouping.n
 \gexec
-select 777::text, avg(cfloat4) from aggfns where true group by 777::text order by 1, 2;
- text | avg 
-------+-----
- 777  | NaN
+select avg(cfloat4) from aggfns order by 1;
+ avg 
+-----
+ NaN
 (1 row)
 
-select s, avg(cfloat4) from aggfns where true group by s order by 1, 2;
+select s, avg(cfloat4) from aggfns group by s order by 1;
  s |        avg         
 ---+--------------------
  0 | -0.132126759885764
@@ -105,7 +108,7 @@ select s, avg(cfloat4) from aggfns where true group by s order by 1, 2;
  9 | -0.132765194868064
 (10 rows)
 
-select ss, avg(cfloat4) from aggfns where true group by ss order by 1, 2;
+select ss, avg(cfloat4) from aggfns group by ss order by 1;
  ss |        avg         
 ----+--------------------
   0 | -0.132126759885764
@@ -120,13 +123,13 @@ select ss, avg(cfloat4) from aggfns where true group by ss order by 1, 2;
   9 | -0.132765194868064
 (10 rows)
 
-select 777::text, count(cfloat4) from aggfns where true group by 777::text order by 1, 2;
- text | count  
-------+--------
- 777  | 200000
+select count(cfloat4) from aggfns order by 1;
+ count  
+--------
+ 200000
 (1 row)
 
-select s, count(cfloat4) from aggfns where true group by s order by 1, 2;
+select s, count(cfloat4) from aggfns group by s order by 1;
  s | count 
 ---+-------
  0 | 20000
@@ -141,7 +144,7 @@ select s, count(cfloat4) from aggfns where true group by s order by 1, 2;
  9 | 20000
 (10 rows)
 
-select ss, count(cfloat4) from aggfns where true group by ss order by 1, 2;
+select ss, count(cfloat4) from aggfns group by ss order by 1;
  ss | count 
 ----+-------
   0 | 20000
@@ -156,13 +159,13 @@ select ss, count(cfloat4) from aggfns where true group by ss order by 1, 2;
   9 | 20000
 (10 rows)
 
-select 777::text, max(cfloat4) from aggfns where true group by 777::text order by 1, 2;
- text | max 
-------+-----
- 777  | NaN
+select max(cfloat4) from aggfns order by 1;
+ max 
+-----
+ NaN
 (1 row)
 
-select s, max(cfloat4) from aggfns where true group by s order by 1, 2;
+select s, max(cfloat4) from aggfns group by s order by 1;
  s |   max    
 ---+----------
  0 |  49.9977
@@ -177,7 +180,7 @@ select s, max(cfloat4) from aggfns where true group by s order by 1, 2;
  9 |  49.9977
 (10 rows)
 
-select ss, max(cfloat4) from aggfns where true group by ss order by 1, 2;
+select ss, max(cfloat4) from aggfns group by ss order by 1;
  ss |   max    
 ----+----------
   0 |  49.9977
@@ -192,13 +195,13 @@ select ss, max(cfloat4) from aggfns where true group by ss order by 1, 2;
   9 |  49.9977
 (10 rows)
 
-select 777::text, min(cfloat4) from aggfns where true group by 777::text order by 1, 2;
- text |    min    
-------+-----------
- 777  | -Infinity
+select min(cfloat4) from aggfns order by 1;
+    min    
+-----------
+ -Infinity
 (1 row)
 
-select s, min(cfloat4) from aggfns where true group by s order by 1, 2;
+select s, min(cfloat4) from aggfns group by s order by 1;
  s |    min    
 ---+-----------
  0 |  -49.9756
@@ -213,7 +216,7 @@ select s, min(cfloat4) from aggfns where true group by s order by 1, 2;
  9 |  -49.9756
 (10 rows)
 
-select ss, min(cfloat4) from aggfns where true group by ss order by 1, 2;
+select ss, min(cfloat4) from aggfns group by ss order by 1;
  ss |    min    
 ----+-----------
   0 |  -49.9756
@@ -228,13 +231,13 @@ select ss, min(cfloat4) from aggfns where true group by ss order by 1, 2;
   9 |  -49.9756
 (10 rows)
 
-select 777::text, stddev(cfloat4) from aggfns where true group by 777::text order by 1, 2;
- text | stddev 
-------+--------
- 777  |    NaN
+select stddev(cfloat4) from aggfns order by 1;
+ stddev 
+--------
+    NaN
 (1 row)
 
-select s, stddev(cfloat4) from aggfns where true group by s order by 1, 2;
+select s, stddev(cfloat4) from aggfns group by s order by 1;
  s |      stddev      
 ---+------------------
  0 | 28.8941380063426
@@ -249,7 +252,7 @@ select s, stddev(cfloat4) from aggfns where true group by s order by 1, 2;
  9 | 28.8968307405967
 (10 rows)
 
-select ss, stddev(cfloat4) from aggfns where true group by ss order by 1, 2;
+select ss, stddev(cfloat4) from aggfns group by ss order by 1;
  ss |      stddev      
 ----+------------------
   0 | 28.8941380063427
@@ -264,13 +267,13 @@ select ss, stddev(cfloat4) from aggfns where true group by ss order by 1, 2;
   9 | 28.8968307405966
 (10 rows)
 
-select 777::text, sum(cfloat4) from aggfns where true group by 777::text order by 1, 2;
- text | sum 
-------+-----
- 777  | NaN
+select sum(cfloat4) from aggfns order by 1;
+ sum 
+-----
+ NaN
 (1 row)
 
-select s, sum(cfloat4) from aggfns where true group by s order by 1, 2;
+select s, sum(cfloat4) from aggfns group by s order by 1;
  s |    sum    
 ---+-----------
  0 |  -2642.54
@@ -285,7 +288,7 @@ select s, sum(cfloat4) from aggfns where true group by s order by 1, 2;
  9 |   -2655.3
 (10 rows)
 
-select ss, sum(cfloat4) from aggfns where true group by ss order by 1, 2;
+select ss, sum(cfloat4) from aggfns group by ss order by 1;
  ss |    sum    
 ----+-----------
   0 |  -2642.54
@@ -300,13 +303,13 @@ select ss, sum(cfloat4) from aggfns where true group by ss order by 1, 2;
   9 |   -2655.3
 (10 rows)
 
-select 777::text, avg(cfloat8) from aggfns where true group by 777::text order by 1, 2;
- text |        avg         
-------+--------------------
- 777  | -0.131776180773973
+select avg(cfloat8) from aggfns order by 1;
+        avg         
+--------------------
+ -0.131776180773973
 (1 row)
 
-select s, avg(cfloat8) from aggfns where true group by s order by 1, 2;
+select s, avg(cfloat8) from aggfns group by s order by 1;
  s |        avg         
 ---+--------------------
  0 | -0.131261021163082
@@ -321,7 +324,7 @@ select s, avg(cfloat8) from aggfns where true group by s order by 1, 2;
  9 | -0.134423591727391
 (10 rows)
 
-select ss, avg(cfloat8) from aggfns where true group by ss order by 1, 2;
+select ss, avg(cfloat8) from aggfns group by ss order by 1;
  ss |        avg         
 ----+--------------------
   0 | -0.131261021163082
@@ -336,13 +339,13 @@ select ss, avg(cfloat8) from aggfns where true group by ss order by 1, 2;
   9 | -0.134423591727391
 (10 rows)
 
-select 777::text, max(cfloat8) from aggfns where true group by 777::text order by 1, 2;
- text |       max       
-------+-----------------
- 777  | 49.997744965367
+select max(cfloat8) from aggfns order by 1;
+       max       
+-----------------
+ 49.997744965367
 (1 row)
 
-select s, max(cfloat8) from aggfns where true group by s order by 1, 2;
+select s, max(cfloat8) from aggfns group by s order by 1;
  s |       max       
 ---+-----------------
  0 | 49.997744965367
@@ -357,7 +360,7 @@ select s, max(cfloat8) from aggfns where true group by s order by 1, 2;
  9 | 49.997744965367
 (10 rows)
 
-select ss, max(cfloat8) from aggfns where true group by ss order by 1, 2;
+select ss, max(cfloat8) from aggfns group by ss order by 1;
  ss |       max       
 ----+-----------------
   0 | 49.997744965367
@@ -372,13 +375,13 @@ select ss, max(cfloat8) from aggfns where true group by ss order by 1, 2;
   9 | 49.997744965367
 (10 rows)
 
-select 777::text, min(cfloat8) from aggfns where true group by 777::text order by 1, 2;
- text |        min        
-------+-------------------
- 777  | -49.9755693599582
+select min(cfloat8) from aggfns order by 1;
+        min        
+-------------------
+ -49.9755693599582
 (1 row)
 
-select s, min(cfloat8) from aggfns where true group by s order by 1, 2;
+select s, min(cfloat8) from aggfns group by s order by 1;
  s |        min        
 ---+-------------------
  0 | -49.9755693599582
@@ -393,7 +396,7 @@ select s, min(cfloat8) from aggfns where true group by s order by 1, 2;
  9 | -49.9755693599582
 (10 rows)
 
-select ss, min(cfloat8) from aggfns where true group by ss order by 1, 2;
+select ss, min(cfloat8) from aggfns group by ss order by 1;
  ss |        min        
 ----+-------------------
   0 | -49.9755693599582
@@ -408,13 +411,13 @@ select ss, min(cfloat8) from aggfns where true group by ss order by 1, 2;
   9 | -49.9755693599582
 (10 rows)
 
-select 777::text, stddev(cfloat8) from aggfns where true group by 777::text order by 1, 2;
- text |     stddev      
-------+-----------------
- 777  | 28.894749851557
+select stddev(cfloat8) from aggfns order by 1;
+     stddev      
+-----------------
+ 28.894749851557
 (1 row)
 
-select s, stddev(cfloat8) from aggfns where true group by s order by 1, 2;
+select s, stddev(cfloat8) from aggfns group by s order by 1;
  s |      stddev      
 ---+------------------
  0 |  28.893219634188
@@ -429,7 +432,7 @@ select s, stddev(cfloat8) from aggfns where true group by s order by 1, 2;
  9 | 28.8953209642426
 (10 rows)
 
-select ss, stddev(cfloat8) from aggfns where true group by ss order by 1, 2;
+select ss, stddev(cfloat8) from aggfns group by ss order by 1;
  ss |      stddev      
 ----+------------------
   0 |  28.893219634188
@@ -444,13 +447,13 @@ select ss, stddev(cfloat8) from aggfns where true group by ss order by 1, 2;
   9 | 28.8953209642426
 (10 rows)
 
-select 777::text, sum(cfloat8) from aggfns where true group by 777::text order by 1, 2;
- text |        sum        
-------+-------------------
- 777  | -26355.2361547947
+select sum(cfloat8) from aggfns order by 1;
+        sum        
+-------------------
+ -26355.2361547947
 (1 row)
 
-select s, sum(cfloat8) from aggfns where true group by s order by 1, 2;
+select s, sum(cfloat8) from aggfns group by s order by 1;
  s |        sum        
 ---+-------------------
  0 | -2625.22042326164
@@ -465,7 +468,7 @@ select s, sum(cfloat8) from aggfns where true group by s order by 1, 2;
  9 | -2688.47183454782
 (10 rows)
 
-select ss, sum(cfloat8) from aggfns where true group by ss order by 1, 2;
+select ss, sum(cfloat8) from aggfns group by ss order by 1;
  ss |        sum        
 ----+-------------------
   0 | -2625.22042326164
@@ -480,13 +483,13 @@ select ss, sum(cfloat8) from aggfns where true group by ss order by 1, 2;
   9 | -2688.47183454782
 (10 rows)
 
-select 777::text, avg(cint2) from aggfns where true group by 777::text order by 1, 2;
- text |         avg          
-------+----------------------
- 777  | -42.1591712126520194
+select avg(cint2) from aggfns order by 1;
+         avg          
+----------------------
+ -42.1591712126520194
 (1 row)
 
-select s, avg(cint2) from aggfns where true group by s order by 1, 2;
+select s, avg(cint2) from aggfns group by s order by 1;
  s |         avg          
 ---+----------------------
  0 | -42.2972824182973825
@@ -501,7 +504,7 @@ select s, avg(cint2) from aggfns where true group by s order by 1, 2;
  9 | -43.1119563585406136
 (10 rows)
 
-select ss, avg(cint2) from aggfns where true group by ss order by 1, 2;
+select ss, avg(cint2) from aggfns group by ss order by 1;
  ss |         avg          
 ----+----------------------
   0 | -42.2972824182973825
@@ -516,13 +519,13 @@ select ss, avg(cint2) from aggfns where true group by ss order by 1, 2;
   9 | -43.1119563585406136
 (10 rows)
 
-select 777::text, max(cint2) from aggfns where true group by 777::text order by 1, 2;
- text |  max  
-------+-------
- 777  | 16383
+select max(cint2) from aggfns order by 1;
+  max  
+-------
+ 16383
 (1 row)
 
-select s, max(cint2) from aggfns where true group by s order by 1, 2;
+select s, max(cint2) from aggfns group by s order by 1;
  s |  max  
 ---+-------
  0 | 16383
@@ -537,7 +540,7 @@ select s, max(cint2) from aggfns where true group by s order by 1, 2;
  9 | 16383
 (10 rows)
 
-select ss, max(cint2) from aggfns where true group by ss order by 1, 2;
+select ss, max(cint2) from aggfns group by ss order by 1;
  ss |  max  
 ----+-------
   0 | 16383
@@ -552,13 +555,13 @@ select ss, max(cint2) from aggfns where true group by ss order by 1, 2;
   9 | 16383
 (10 rows)
 
-select 777::text, min(cint2) from aggfns where true group by 777::text order by 1, 2;
- text |  min   
-------+--------
- 777  | -16375
+select min(cint2) from aggfns order by 1;
+  min   
+--------
+ -16375
 (1 row)
 
-select s, min(cint2) from aggfns where true group by s order by 1, 2;
+select s, min(cint2) from aggfns group by s order by 1;
  s |  min   
 ---+--------
  0 | -16375
@@ -573,7 +576,7 @@ select s, min(cint2) from aggfns where true group by s order by 1, 2;
  9 | -16375
 (10 rows)
 
-select ss, min(cint2) from aggfns where true group by ss order by 1, 2;
+select ss, min(cint2) from aggfns group by ss order by 1;
  ss |  min   
 ----+--------
   0 | -16375
@@ -588,13 +591,13 @@ select ss, min(cint2) from aggfns where true group by ss order by 1, 2;
   9 | -16375
 (10 rows)
 
-select 777::text, stddev(cint2) from aggfns where true group by 777::text order by 1, 2;
- text |      stddev       
-------+-------------------
- 777  | 9467.689085960139
+select stddev(cint2) from aggfns order by 1;
+      stddev       
+-------------------
+ 9467.689085960139
 (1 row)
 
-select s, stddev(cint2) from aggfns where true group by s order by 1, 2;
+select s, stddev(cint2) from aggfns group by s order by 1;
  s |      stddev       
 ---+-------------------
  0 | 9468.854793575036
@@ -609,7 +612,7 @@ select s, stddev(cint2) from aggfns where true group by s order by 1, 2;
  9 | 9468.145452253715
 (10 rows)
 
-select ss, stddev(cint2) from aggfns where true group by ss order by 1, 2;
+select ss, stddev(cint2) from aggfns group by ss order by 1;
  ss |      stddev       
 ----+-------------------
   0 | 9468.854793575036
@@ -624,13 +627,13 @@ select ss, stddev(cint2) from aggfns where true group by ss order by 1, 2;
   9 | 9468.145452253715
 (10 rows)
 
-select 777::text, sum(cint2) from aggfns where true group by 777::text order by 1, 2;
- text |   sum    
-------+----------
- 777  | -8423824
+select sum(cint2) from aggfns order by 1;
+   sum    
+----------
+ -8423824
 (1 row)
 
-select s, sum(cint2) from aggfns where true group by s order by 1, 2;
+select s, sum(cint2) from aggfns group by s order by 1;
  s |   sum   
 ---+---------
  0 | -845142
@@ -645,7 +648,7 @@ select s, sum(cint2) from aggfns where true group by s order by 1, 2;
  9 | -861420
 (10 rows)
 
-select ss, sum(cint2) from aggfns where true group by ss order by 1, 2;
+select ss, sum(cint2) from aggfns group by ss order by 1;
  ss |   sum   
 ----+---------
   0 | -845142
@@ -660,13 +663,13 @@ select ss, sum(cint2) from aggfns where true group by ss order by 1, 2;
   9 | -861420
 (10 rows)
 
-select 777::text, avg(cint4) from aggfns where true group by 777::text order by 1, 2;
- text |          avg          
-------+-----------------------
- 777  | -2833327.786810000000
+select avg(cint4) from aggfns order by 1;
+          avg          
+-----------------------
+ -2833327.786810000000
 (1 row)
 
-select s, avg(cint4) from aggfns where true group by s order by 1, 2;
+select s, avg(cint4) from aggfns group by s order by 1;
  s |          avg          
 ---+-----------------------
  0 | -2919248.121000000000
@@ -681,7 +684,7 @@ select s, avg(cint4) from aggfns where true group by s order by 1, 2;
  9 | -2814193.446750000000
 (10 rows)
 
-select ss, avg(cint4) from aggfns where true group by ss order by 1, 2;
+select ss, avg(cint4) from aggfns group by ss order by 1;
  ss |          avg          
 ----+-----------------------
   0 | -2919248.121000000000
@@ -696,13 +699,13 @@ select ss, avg(cint4) from aggfns where true group by ss order by 1, 2;
   9 | -2814193.446750000000
 (10 rows)
 
-select 777::text, max(cint4) from aggfns where true group by 777::text order by 1, 2;
- text |    max     
-------+------------
- 777  | 1073660631
+select max(cint4) from aggfns order by 1;
+    max     
+------------
+ 1073660631
 (1 row)
 
-select s, max(cint4) from aggfns where true group by s order by 1, 2;
+select s, max(cint4) from aggfns group by s order by 1;
  s |    max     
 ---+------------
  0 | 1073660631
@@ -717,7 +720,7 @@ select s, max(cint4) from aggfns where true group by s order by 1, 2;
  9 | 1073660631
 (10 rows)
 
-select ss, max(cint4) from aggfns where true group by ss order by 1, 2;
+select ss, max(cint4) from aggfns group by ss order by 1;
  ss |    max     
 ----+------------
   0 | 1073660631
@@ -732,13 +735,13 @@ select ss, max(cint4) from aggfns where true group by ss order by 1, 2;
   9 | 1073660631
 (10 rows)
 
-select 777::text, min(cint4) from aggfns where true group by 777::text order by 1, 2;
- text |     min     
-------+-------------
- 777  | -1073184428
+select min(cint4) from aggfns order by 1;
+     min     
+-------------
+ -1073184428
 (1 row)
 
-select s, min(cint4) from aggfns where true group by s order by 1, 2;
+select s, min(cint4) from aggfns group by s order by 1;
  s |     min     
 ---+-------------
  0 | -1073184428
@@ -753,7 +756,7 @@ select s, min(cint4) from aggfns where true group by s order by 1, 2;
  9 | -1073184428
 (10 rows)
 
-select ss, min(cint4) from aggfns where true group by ss order by 1, 2;
+select ss, min(cint4) from aggfns group by ss order by 1;
  ss |     min     
 ----+-------------
   0 | -1073184428
@@ -768,13 +771,13 @@ select ss, min(cint4) from aggfns where true group by ss order by 1, 2;
   9 | -1073184428
 (10 rows)
 
-select 777::text, stddev(cint4) from aggfns where true group by 777::text order by 1, 2;
- text |  stddev   
-------+-----------
- 777  | 620480022
+select stddev(cint4) from aggfns order by 1;
+  stddev   
+-----------
+ 620480022
 (1 row)
 
-select s, stddev(cint4) from aggfns where true group by s order by 1, 2;
+select s, stddev(cint4) from aggfns group by s order by 1;
  s |  stddev   
 ---+-----------
  0 | 620497458
@@ -789,7 +792,7 @@ select s, stddev(cint4) from aggfns where true group by s order by 1, 2;
  9 | 620517247
 (10 rows)
 
-select ss, stddev(cint4) from aggfns where true group by ss order by 1, 2;
+select ss, stddev(cint4) from aggfns group by ss order by 1;
  ss |  stddev   
 ----+-----------
   0 | 620497458
@@ -804,13 +807,13 @@ select ss, stddev(cint4) from aggfns where true group by ss order by 1, 2;
   9 | 620517247
 (10 rows)
 
-select 777::text, sum(cint4) from aggfns where true group by 777::text order by 1, 2;
- text |      sum      
-------+---------------
- 777  | -566665557362
+select sum(cint4) from aggfns order by 1;
+      sum      
+---------------
+ -566665557362
 (1 row)
 
-select s, sum(cint4) from aggfns where true group by s order by 1, 2;
+select s, sum(cint4) from aggfns group by s order by 1;
  s |     sum      
 ---+--------------
  0 | -58384962420
@@ -825,7 +828,7 @@ select s, sum(cint4) from aggfns where true group by s order by 1, 2;
  9 | -56283868935
 (10 rows)
 
-select ss, sum(cint4) from aggfns where true group by ss order by 1, 2;
+select ss, sum(cint4) from aggfns group by ss order by 1;
  ss |     sum      
 ----+--------------
   0 | -58384962420
@@ -840,13 +843,13 @@ select ss, sum(cint4) from aggfns where true group by ss order by 1, 2;
   9 | -56283868935
 (10 rows)
 
-select 777::text, avg(cint8) from aggfns where true group by 777::text order by 1, 2;
- text |          avg          
-------+-----------------------
- 777  | -2823388.766060000000
+select avg(cint8) from aggfns order by 1;
+          avg          
+-----------------------
+ -2823388.766060000000
 (1 row)
 
-select s, avg(cint8) from aggfns where true group by s order by 1, 2;
+select s, avg(cint8) from aggfns group by s order by 1;
  s |          avg          
 ---+-----------------------
  0 | -2836378.364750000000
@@ -861,7 +864,7 @@ select s, avg(cint8) from aggfns where true group by s order by 1, 2;
  9 | -2819857.913500000000
 (10 rows)
 
-select ss, avg(cint8) from aggfns where true group by ss order by 1, 2;
+select ss, avg(cint8) from aggfns group by ss order by 1;
  ss |          avg          
 ----+-----------------------
   0 | -2836378.364750000000
@@ -876,13 +879,13 @@ select ss, avg(cint8) from aggfns where true group by ss order by 1, 2;
   9 | -2819857.913500000000
 (10 rows)
 
-select 777::text, max(cint8) from aggfns where true group by 777::text order by 1, 2;
- text |    max     
-------+------------
- 777  | 1073660631
+select max(cint8) from aggfns order by 1;
+    max     
+------------
+ 1073660631
 (1 row)
 
-select s, max(cint8) from aggfns where true group by s order by 1, 2;
+select s, max(cint8) from aggfns group by s order by 1;
  s |    max     
 ---+------------
  0 | 1073660631
@@ -897,7 +900,7 @@ select s, max(cint8) from aggfns where true group by s order by 1, 2;
  9 | 1073660631
 (10 rows)
 
-select ss, max(cint8) from aggfns where true group by ss order by 1, 2;
+select ss, max(cint8) from aggfns group by ss order by 1;
  ss |    max     
 ----+------------
   0 | 1073660631
@@ -912,13 +915,13 @@ select ss, max(cint8) from aggfns where true group by ss order by 1, 2;
   9 | 1073660631
 (10 rows)
 
-select 777::text, min(cint8) from aggfns where true group by 777::text order by 1, 2;
- text |     min     
-------+-------------
- 777  | -1073184428
+select min(cint8) from aggfns order by 1;
+     min     
+-------------
+ -1073184428
 (1 row)
 
-select s, min(cint8) from aggfns where true group by s order by 1, 2;
+select s, min(cint8) from aggfns group by s order by 1;
  s |     min     
 ---+-------------
  0 | -1073184428
@@ -933,7 +936,7 @@ select s, min(cint8) from aggfns where true group by s order by 1, 2;
  9 | -1073184428
 (10 rows)
 
-select ss, min(cint8) from aggfns where true group by ss order by 1, 2;
+select ss, min(cint8) from aggfns group by ss order by 1;
  ss |     min     
 ----+-------------
   0 | -1073184428
@@ -948,13 +951,13 @@ select ss, min(cint8) from aggfns where true group by ss order by 1, 2;
   9 | -1073184428
 (10 rows)
 
-select 777::text, stddev(cint8) from aggfns where true group by 777::text order by 1, 2;
- text |  stddev   
-------+-----------
- 777  | 620482773
+select stddev(cint8) from aggfns order by 1;
+  stddev   
+-----------
+ 620482773
 (1 row)
 
-select s, stddev(cint8) from aggfns where true group by s order by 1, 2;
+select s, stddev(cint8) from aggfns group by s order by 1;
  s |  stddev   
 ---+-----------
  0 | 620477996
@@ -969,7 +972,7 @@ select s, stddev(cint8) from aggfns where true group by s order by 1, 2;
  9 | 620524975
 (10 rows)
 
-select ss, stddev(cint8) from aggfns where true group by ss order by 1, 2;
+select ss, stddev(cint8) from aggfns group by ss order by 1;
  ss |  stddev   
 ----+-----------
   0 | 620477996
@@ -984,13 +987,13 @@ select ss, stddev(cint8) from aggfns where true group by ss order by 1, 2;
   9 | 620524975
 (10 rows)
 
-select 777::text, sum(cint8) from aggfns where true group by 777::text order by 1, 2;
- text |      sum      
-------+---------------
- 777  | -564677753212
+select sum(cint8) from aggfns order by 1;
+      sum      
+---------------
+ -564677753212
 (1 row)
 
-select s, sum(cint8) from aggfns where true group by s order by 1, 2;
+select s, sum(cint8) from aggfns group by s order by 1;
  s |     sum      
 ---+--------------
  0 | -56727567295
@@ -1005,7 +1008,7 @@ select s, sum(cint8) from aggfns where true group by s order by 1, 2;
  9 | -56397158270
 (10 rows)
 
-select ss, sum(cint8) from aggfns where true group by ss order by 1, 2;
+select ss, sum(cint8) from aggfns group by ss order by 1;
  ss |     sum      
 ----+--------------
   0 | -56727567295
@@ -1020,13 +1023,13 @@ select ss, sum(cint8) from aggfns where true group by ss order by 1, 2;
   9 | -56397158270
 (10 rows)
 
-select 777::text, avg(s) from aggfns where true group by 777::text order by 1, 2;
- text |        avg         
-------+--------------------
- 777  | 4.5000000000000000
+select avg(s) from aggfns order by 1;
+        avg         
+--------------------
+ 4.5000000000000000
 (1 row)
 
-select s, avg(s) from aggfns where true group by s order by 1, 2;
+select s, avg(s) from aggfns group by s order by 1;
  s |            avg             
 ---+----------------------------
  0 | 0.000000000000000000000000
@@ -1041,7 +1044,7 @@ select s, avg(s) from aggfns where true group by s order by 1, 2;
  9 |         9.0000000000000000
 (10 rows)
 
-select ss, avg(s) from aggfns where true group by ss order by 1, 2;
+select ss, avg(s) from aggfns group by ss order by 1;
  ss |            avg             
 ----+----------------------------
   0 | 0.000000000000000000000000
@@ -1056,13 +1059,13 @@ select ss, avg(s) from aggfns where true group by ss order by 1, 2;
   9 |         9.0000000000000000
 (10 rows)
 
-select 777::text, count(s) from aggfns where true group by 777::text order by 1, 2;
- text | count  
-------+--------
- 777  | 200000
+select count(s) from aggfns order by 1;
+ count  
+--------
+ 200000
 (1 row)
 
-select s, count(s) from aggfns where true group by s order by 1, 2;
+select s, count(s) from aggfns group by s order by 1;
  s | count 
 ---+-------
  0 | 20000
@@ -1077,7 +1080,7 @@ select s, count(s) from aggfns where true group by s order by 1, 2;
  9 | 20000
 (10 rows)
 
-select ss, count(s) from aggfns where true group by ss order by 1, 2;
+select ss, count(s) from aggfns group by ss order by 1;
  ss | count 
 ----+-------
   0 | 20000
@@ -1092,13 +1095,13 @@ select ss, count(s) from aggfns where true group by ss order by 1, 2;
   9 | 20000
 (10 rows)
 
-select 777::text, max(s) from aggfns where true group by 777::text order by 1, 2;
- text | max 
-------+-----
- 777  |   9
+select max(s) from aggfns order by 1;
+ max 
+-----
+   9
 (1 row)
 
-select s, max(s) from aggfns where true group by s order by 1, 2;
+select s, max(s) from aggfns group by s order by 1;
  s | max 
 ---+-----
  0 |   0
@@ -1113,7 +1116,7 @@ select s, max(s) from aggfns where true group by s order by 1, 2;
  9 |   9
 (10 rows)
 
-select ss, max(s) from aggfns where true group by ss order by 1, 2;
+select ss, max(s) from aggfns group by ss order by 1;
  ss | max 
 ----+-----
   0 |   0
@@ -1128,13 +1131,13 @@ select ss, max(s) from aggfns where true group by ss order by 1, 2;
   9 |   9
 (10 rows)
 
-select 777::text, min(s) from aggfns where true group by 777::text order by 1, 2;
- text | min 
-------+-----
- 777  |   0
+select min(s) from aggfns order by 1;
+ min 
+-----
+   0
 (1 row)
 
-select s, min(s) from aggfns where true group by s order by 1, 2;
+select s, min(s) from aggfns group by s order by 1;
  s | min 
 ---+-----
  0 |   0
@@ -1149,7 +1152,7 @@ select s, min(s) from aggfns where true group by s order by 1, 2;
  9 |   9
 (10 rows)
 
-select ss, min(s) from aggfns where true group by ss order by 1, 2;
+select ss, min(s) from aggfns group by ss order by 1;
  ss | min 
 ----+-----
   0 |   0
@@ -1164,13 +1167,13 @@ select ss, min(s) from aggfns where true group by ss order by 1, 2;
   9 |   9
 (10 rows)
 
-select 777::text, stddev(s) from aggfns where true group by 777::text order by 1, 2;
- text |       stddev       
-------+--------------------
- 777  | 2.8722885039992502
+select stddev(s) from aggfns order by 1;
+       stddev       
+--------------------
+ 2.8722885039992502
 (1 row)
 
-select s, stddev(s) from aggfns where true group by s order by 1, 2;
+select s, stddev(s) from aggfns group by s order by 1;
  s | stddev 
 ---+--------
  0 |      0
@@ -1185,7 +1188,7 @@ select s, stddev(s) from aggfns where true group by s order by 1, 2;
  9 |      0
 (10 rows)
 
-select ss, stddev(s) from aggfns where true group by ss order by 1, 2;
+select ss, stddev(s) from aggfns group by ss order by 1;
  ss | stddev 
 ----+--------
   0 |      0
@@ -1200,13 +1203,13 @@ select ss, stddev(s) from aggfns where true group by ss order by 1, 2;
   9 |      0
 (10 rows)
 
-select 777::text, sum(s) from aggfns where true group by 777::text order by 1, 2;
- text |  sum   
-------+--------
- 777  | 900000
+select sum(s) from aggfns order by 1;
+  sum   
+--------
+ 900000
 (1 row)
 
-select s, sum(s) from aggfns where true group by s order by 1, 2;
+select s, sum(s) from aggfns group by s order by 1;
  s |  sum   
 ---+--------
  0 |      0
@@ -1221,7 +1224,7 @@ select s, sum(s) from aggfns where true group by s order by 1, 2;
  9 | 180000
 (10 rows)
 
-select ss, sum(s) from aggfns where true group by ss order by 1, 2;
+select ss, sum(s) from aggfns group by ss order by 1;
  ss |  sum   
 ----+--------
   0 |      0
@@ -1236,13 +1239,13 @@ select ss, sum(s) from aggfns where true group by ss order by 1, 2;
   9 | 180000
 (10 rows)
 
-select 777::text, avg(ss) from aggfns where true group by 777::text order by 1, 2;
- text |        avg         
-------+--------------------
- 777  | 4.5000000000000000
+select avg(ss) from aggfns order by 1;
+        avg         
+--------------------
+ 4.5000000000000000
 (1 row)
 
-select s, avg(ss) from aggfns where true group by s order by 1, 2;
+select s, avg(ss) from aggfns group by s order by 1;
  s |            avg             
 ---+----------------------------
  0 | 0.000000000000000000000000
@@ -1257,7 +1260,7 @@ select s, avg(ss) from aggfns where true group by s order by 1, 2;
  9 |         9.0000000000000000
 (10 rows)
 
-select ss, avg(ss) from aggfns where true group by ss order by 1, 2;
+select ss, avg(ss) from aggfns group by ss order by 1;
  ss |            avg             
 ----+----------------------------
   0 | 0.000000000000000000000000
@@ -1272,13 +1275,13 @@ select ss, avg(ss) from aggfns where true group by ss order by 1, 2;
   9 |         9.0000000000000000
 (10 rows)
 
-select 777::text, max(ss) from aggfns where true group by 777::text order by 1, 2;
- text | max 
-------+-----
- 777  |   9
+select max(ss) from aggfns order by 1;
+ max 
+-----
+   9
 (1 row)
 
-select s, max(ss) from aggfns where true group by s order by 1, 2;
+select s, max(ss) from aggfns group by s order by 1;
  s | max 
 ---+-----
  0 |   0
@@ -1293,7 +1296,7 @@ select s, max(ss) from aggfns where true group by s order by 1, 2;
  9 |   9
 (10 rows)
 
-select ss, max(ss) from aggfns where true group by ss order by 1, 2;
+select ss, max(ss) from aggfns group by ss order by 1;
  ss | max 
 ----+-----
   0 |   0
@@ -1308,13 +1311,13 @@ select ss, max(ss) from aggfns where true group by ss order by 1, 2;
   9 |   9
 (10 rows)
 
-select 777::text, min(ss) from aggfns where true group by 777::text order by 1, 2;
- text | min 
-------+-----
- 777  |   0
+select min(ss) from aggfns order by 1;
+ min 
+-----
+   0
 (1 row)
 
-select s, min(ss) from aggfns where true group by s order by 1, 2;
+select s, min(ss) from aggfns group by s order by 1;
  s | min 
 ---+-----
  0 |   0
@@ -1329,7 +1332,7 @@ select s, min(ss) from aggfns where true group by s order by 1, 2;
  9 |   9
 (10 rows)
 
-select ss, min(ss) from aggfns where true group by ss order by 1, 2;
+select ss, min(ss) from aggfns group by ss order by 1;
  ss | min 
 ----+-----
   0 |   0
@@ -1344,13 +1347,13 @@ select ss, min(ss) from aggfns where true group by ss order by 1, 2;
   9 |   9
 (10 rows)
 
-select 777::text, stddev(ss) from aggfns where true group by 777::text order by 1, 2;
- text |       stddev       
-------+--------------------
- 777  | 2.8722885039992502
+select stddev(ss) from aggfns order by 1;
+       stddev       
+--------------------
+ 2.8722885039992502
 (1 row)
 
-select s, stddev(ss) from aggfns where true group by s order by 1, 2;
+select s, stddev(ss) from aggfns group by s order by 1;
  s | stddev 
 ---+--------
  0 |      0
@@ -1365,7 +1368,7 @@ select s, stddev(ss) from aggfns where true group by s order by 1, 2;
  9 |      0
 (10 rows)
 
-select ss, stddev(ss) from aggfns where true group by ss order by 1, 2;
+select ss, stddev(ss) from aggfns group by ss order by 1;
  ss | stddev 
 ----+--------
   0 |      0
@@ -1380,13 +1383,13 @@ select ss, stddev(ss) from aggfns where true group by ss order by 1, 2;
   9 |      0
 (10 rows)
 
-select 777::text, sum(ss) from aggfns where true group by 777::text order by 1, 2;
- text |  sum   
-------+--------
- 777  | 900000
+select sum(ss) from aggfns order by 1;
+  sum   
+--------
+ 900000
 (1 row)
 
-select s, sum(ss) from aggfns where true group by s order by 1, 2;
+select s, sum(ss) from aggfns group by s order by 1;
  s |  sum   
 ---+--------
  0 |      0
@@ -1401,7 +1404,7 @@ select s, sum(ss) from aggfns where true group by s order by 1, 2;
  9 | 180000
 (10 rows)
 
-select ss, sum(ss) from aggfns where true group by ss order by 1, 2;
+select ss, sum(ss) from aggfns group by ss order by 1;
  ss |  sum   
 ----+--------
   0 |      0
@@ -1416,13 +1419,13 @@ select ss, sum(ss) from aggfns where true group by ss order by 1, 2;
   9 | 180000
 (10 rows)
 
-select 777::text, max(t) from aggfns where true group by 777::text order by 1, 2;
- text |  max   
-------+--------
- 777  | 110000
+select max(t) from aggfns order by 1;
+  max   
+--------
+ 110000
 (1 row)
 
-select s, max(t) from aggfns where true group by s order by 1, 2;
+select s, max(t) from aggfns group by s order by 1;
  s |  max   
 ---+--------
  0 |  20000
@@ -1437,7 +1440,7 @@ select s, max(t) from aggfns where true group by s order by 1, 2;
  9 | 110000
 (10 rows)
 
-select ss, max(t) from aggfns where true group by ss order by 1, 2;
+select ss, max(t) from aggfns group by ss order by 1;
  ss |  max   
 ----+--------
   0 |  20000
@@ -1452,13 +1455,13 @@ select ss, max(t) from aggfns where true group by ss order by 1, 2;
   9 | 110000
 (10 rows)
 
-select 777::text, min(t) from aggfns where true group by 777::text order by 1, 2;
- text | min 
-------+-----
- 777  |   1
+select min(t) from aggfns order by 1;
+ min 
+-----
+   1
 (1 row)
 
-select s, min(t) from aggfns where true group by s order by 1, 2;
+select s, min(t) from aggfns group by s order by 1;
  s |  min  
 ---+-------
  0 |     1
@@ -1473,7 +1476,7 @@ select s, min(t) from aggfns where true group by s order by 1, 2;
  9 | 90001
 (10 rows)
 
-select ss, min(t) from aggfns where true group by ss order by 1, 2;
+select ss, min(t) from aggfns group by ss order by 1;
  ss |  min  
 ----+-------
   0 |     1
@@ -1488,13 +1491,13 @@ select ss, min(t) from aggfns where true group by ss order by 1, 2;
   9 | 90001
 (10 rows)
 
-select 777::text, avg(cfloat4) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |    avg    
-------+-----------
- 777  | -Infinity
+select avg(cfloat4) from aggfns where cfloat8 > 0 order by 1;
+    avg    
+-----------
+ -Infinity
 (1 row)
 
-select s, avg(cfloat4) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, avg(cfloat4) from aggfns where cfloat8 > 0 group by s order by 1;
  s |        avg         
 ---+--------------------
  0 | -0.542617154225893
@@ -1509,7 +1512,7 @@ select s, avg(cfloat4) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | -0.547059247380753
 (10 rows)
 
-select ss, avg(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, avg(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |        avg         
 ----+--------------------
   0 | -0.542617154225893
@@ -1524,13 +1527,13 @@ select ss, avg(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 | -0.547059247380753
 (10 rows)
 
-select 777::text, count(cfloat4) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text | count 
-------+-------
- 777  | 99430
+select count(cfloat4) from aggfns where cfloat8 > 0 order by 1;
+ count 
+-------
+ 99430
 (1 row)
 
-select s, count(cfloat4) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, count(cfloat4) from aggfns where cfloat8 > 0 group by s order by 1;
  s | count 
 ---+-------
  0 |  9943
@@ -1545,7 +1548,7 @@ select s, count(cfloat4) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 |  9943
 (10 rows)
 
-select ss, count(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, count(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss | count 
 ----+-------
   0 |  9943
@@ -1560,13 +1563,13 @@ select ss, count(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1, 
   9 |  9943
 (10 rows)
 
-select 777::text, max(cfloat4) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |   max   
-------+---------
- 777  | 49.9734
+select max(cfloat4) from aggfns where cfloat8 > 0 order by 1;
+   max   
+---------
+ 49.9734
 (1 row)
 
-select s, max(cfloat4) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, max(cfloat4) from aggfns where cfloat8 > 0 group by s order by 1;
  s |   max   
 ---+---------
  0 | 49.9734
@@ -1581,7 +1584,7 @@ select s, max(cfloat4) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | 49.9734
 (10 rows)
 
-select ss, max(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, max(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |   max   
 ----+---------
   0 | 49.9734
@@ -1596,13 +1599,13 @@ select ss, max(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 | 49.9734
 (10 rows)
 
-select 777::text, min(cfloat4) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |    min    
-------+-----------
- 777  | -Infinity
+select min(cfloat4) from aggfns where cfloat8 > 0 order by 1;
+    min    
+-----------
+ -Infinity
 (1 row)
 
-select s, min(cfloat4) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, min(cfloat4) from aggfns where cfloat8 > 0 group by s order by 1;
  s |    min    
 ---+-----------
  0 |  -49.9722
@@ -1617,7 +1620,7 @@ select s, min(cfloat4) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 |  -49.9722
 (10 rows)
 
-select ss, min(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, min(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |    min    
 ----+-----------
   0 |  -49.9722
@@ -1632,13 +1635,13 @@ select ss, min(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 |  -49.9722
 (10 rows)
 
-select 777::text, stddev(cfloat4) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text | stddev 
-------+--------
- 777  |    NaN
+select stddev(cfloat4) from aggfns where cfloat8 > 0 order by 1;
+ stddev 
+--------
+    NaN
 (1 row)
 
-select s, stddev(cfloat4) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, stddev(cfloat4) from aggfns where cfloat8 > 0 group by s order by 1;
  s |      stddev      
 ---+------------------
  0 |  28.889048755135
@@ -1653,7 +1656,7 @@ select s, stddev(cfloat4) from aggfns where cfloat8 > 0 group by s order by 1, 2
  9 | 28.8893600799806
 (10 rows)
 
-select ss, stddev(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, stddev(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |      stddev      
 ----+------------------
   0 |  28.889048755135
@@ -1668,13 +1671,13 @@ select ss, stddev(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1,
   9 | 28.8893600799806
 (10 rows)
 
-select 777::text, sum(cfloat4) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |    sum    
-------+-----------
- 777  | -Infinity
+select sum(cfloat4) from aggfns where cfloat8 > 0 order by 1;
+    sum    
+-----------
+ -Infinity
 (1 row)
 
-select s, sum(cfloat4) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, sum(cfloat4) from aggfns where cfloat8 > 0 group by s order by 1;
  s |    sum    
 ---+-----------
  0 |  -5395.24
@@ -1689,7 +1692,7 @@ select s, sum(cfloat4) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 |  -5439.41
 (10 rows)
 
-select ss, sum(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, sum(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |    sum    
 ----+-----------
   0 |  -5395.24
@@ -1704,13 +1707,13 @@ select ss, sum(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 |  -5439.41
 (10 rows)
 
-select 777::text, avg(cfloat8) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |       avg        
-------+------------------
- 777  | 25.0275627282681
+select avg(cfloat8) from aggfns where cfloat8 > 0 order by 1;
+       avg        
+------------------
+ 25.0275627282681
 (1 row)
 
-select s, avg(cfloat8) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, avg(cfloat8) from aggfns where cfloat8 > 0 group by s order by 1;
  s |       avg        
 ---+------------------
  0 | 25.0253254492148
@@ -1725,7 +1728,7 @@ select s, avg(cfloat8) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | 25.0252759158804
 (10 rows)
 
-select ss, avg(cfloat8) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, avg(cfloat8) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |       avg        
 ----+------------------
   0 | 25.0253254492148
@@ -1740,13 +1743,13 @@ select ss, avg(cfloat8) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 | 25.0252759158804
 (10 rows)
 
-select 777::text, max(cfloat8) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |       max       
-------+-----------------
- 777  | 49.997744965367
+select max(cfloat8) from aggfns where cfloat8 > 0 order by 1;
+       max       
+-----------------
+ 49.997744965367
 (1 row)
 
-select s, max(cfloat8) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, max(cfloat8) from aggfns where cfloat8 > 0 group by s order by 1;
  s |       max       
 ---+-----------------
  0 | 49.997744965367
@@ -1761,7 +1764,7 @@ select s, max(cfloat8) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | 49.997744965367
 (10 rows)
 
-select ss, max(cfloat8) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, max(cfloat8) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |       max       
 ----+-----------------
   0 | 49.997744965367
@@ -1776,13 +1779,13 @@ select ss, max(cfloat8) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 | 49.997744965367
 (10 rows)
 
-select 777::text, min(cfloat8) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |         min         
-------+---------------------
- 777  | 0.00456937123090029
+select min(cfloat8) from aggfns where cfloat8 > 0 order by 1;
+         min         
+---------------------
+ 0.00456937123090029
 (1 row)
 
-select s, min(cfloat8) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, min(cfloat8) from aggfns where cfloat8 > 0 group by s order by 1;
  s |         min         
 ---+---------------------
  0 | 0.00456937123090029
@@ -1797,7 +1800,7 @@ select s, min(cfloat8) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | 0.00456937123090029
 (10 rows)
 
-select ss, min(cfloat8) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, min(cfloat8) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |         min         
 ----+---------------------
   0 | 0.00456937123090029
@@ -1812,13 +1815,13 @@ select ss, min(cfloat8) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 | 0.00456937123090029
 (10 rows)
 
-select 777::text, stddev(cfloat8) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |      stddev      
-------+------------------
- 777  | 14.4387600969317
+select stddev(cfloat8) from aggfns where cfloat8 > 0 order by 1;
+      stddev      
+------------------
+ 14.4387600969317
 (1 row)
 
-select s, stddev(cfloat8) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, stddev(cfloat8) from aggfns where cfloat8 > 0 group by s order by 1;
  s |      stddev      
 ---+------------------
  0 | 14.4393152148108
@@ -1833,7 +1836,7 @@ select s, stddev(cfloat8) from aggfns where cfloat8 > 0 group by s order by 1, 2
  9 | 14.4386334818318
 (10 rows)
 
-select ss, stddev(cfloat8) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, stddev(cfloat8) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |      stddev      
 ----+------------------
   0 | 14.4393152148108
@@ -1848,13 +1851,13 @@ select ss, stddev(cfloat8) from aggfns where cfloat8 > 0 group by ss order by 1,
   9 | 14.4386334818319
 (10 rows)
 
-select 777::text, sum(cfloat8) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |       sum       
-------+-----------------
- 777  | 2488490.5620717
+select sum(cfloat8) from aggfns where cfloat8 > 0 order by 1;
+       sum       
+-----------------
+ 2488490.5620717
 (1 row)
 
-select s, sum(cfloat8) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, sum(cfloat8) from aggfns where cfloat8 > 0 group by s order by 1;
  s |       sum        
 ---+------------------
  0 | 248826.810941542
@@ -1869,7 +1872,7 @@ select s, sum(cfloat8) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | 248826.318431599
 (10 rows)
 
-select ss, sum(cfloat8) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, sum(cfloat8) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |       sum        
 ----+------------------
   0 | 248826.810941542
@@ -1884,13 +1887,13 @@ select ss, sum(cfloat8) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 | 248826.318431599
 (10 rows)
 
-select 777::text, avg(cint2) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |         avg         
-------+---------------------
- 777  | 59.9930038252466277
+select avg(cint2) from aggfns where cfloat8 > 0 order by 1;
+         avg         
+---------------------
+ 59.9930038252466277
 (1 row)
 
-select s, avg(cint2) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, avg(cint2) from aggfns where cfloat8 > 0 group by s order by 1;
  s |         avg         
 ---+---------------------
  0 | 62.5336219045701631
@@ -1905,7 +1908,7 @@ select s, avg(cint2) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | 59.3958123615864707
 (10 rows)
 
-select ss, avg(cint2) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, avg(cint2) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |         avg         
 ----+---------------------
   0 | 62.5336219045701631
@@ -1920,13 +1923,13 @@ select ss, avg(cint2) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 | 59.3958123615864707
 (10 rows)
 
-select 777::text, max(cint2) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |  max  
-------+-------
- 777  | 16377
+select max(cint2) from aggfns where cfloat8 > 0 order by 1;
+  max  
+-------
+ 16377
 (1 row)
 
-select s, max(cint2) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, max(cint2) from aggfns where cfloat8 > 0 group by s order by 1;
  s |  max  
 ---+-------
  0 | 16377
@@ -1941,7 +1944,7 @@ select s, max(cint2) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | 16377
 (10 rows)
 
-select ss, max(cint2) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, max(cint2) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |  max  
 ----+-------
   0 | 16377
@@ -1956,13 +1959,13 @@ select ss, max(cint2) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 | 16377
 (10 rows)
 
-select 777::text, min(cint2) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |  min   
-------+--------
- 777  | -16374
+select min(cint2) from aggfns where cfloat8 > 0 order by 1;
+  min   
+--------
+ -16374
 (1 row)
 
-select s, min(cint2) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, min(cint2) from aggfns where cfloat8 > 0 group by s order by 1;
  s |  min   
 ---+--------
  0 | -16374
@@ -1977,7 +1980,7 @@ select s, min(cint2) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | -16374
 (10 rows)
 
-select ss, min(cint2) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, min(cint2) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |  min   
 ----+--------
   0 | -16374
@@ -1992,13 +1995,13 @@ select ss, min(cint2) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 | -16374
 (10 rows)
 
-select 777::text, stddev(cint2) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |      stddev       
-------+-------------------
- 777  | 9395.467286148261
+select stddev(cint2) from aggfns where cfloat8 > 0 order by 1;
+      stddev       
+-------------------
+ 9395.467286148261
 (1 row)
 
-select s, stddev(cint2) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, stddev(cint2) from aggfns where cfloat8 > 0 group by s order by 1;
  s |      stddev       
 ---+-------------------
  0 | 9396.868628954375
@@ -2013,7 +2016,7 @@ select s, stddev(cint2) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | 9396.374239570388
 (10 rows)
 
-select ss, stddev(cint2) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, stddev(cint2) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |      stddev       
 ----+-------------------
   0 | 9396.868628954375
@@ -2028,13 +2031,13 @@ select ss, stddev(cint2) from aggfns where cfloat8 > 0 group by ss order by 1, 2
   9 | 9396.374239570388
 (10 rows)
 
-select 777::text, sum(cint2) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |   sum   
-------+---------
- 777  | 5959705
+select sum(cint2) from aggfns where cfloat8 > 0 order by 1;
+   sum   
+---------
+ 5959705
 (1 row)
 
-select s, sum(cint2) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, sum(cint2) from aggfns where cfloat8 > 0 group by s order by 1;
  s |  sum   
 ---+--------
  0 | 621209
@@ -2049,7 +2052,7 @@ select s, sum(cint2) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | 590038
 (10 rows)
 
-select ss, sum(cint2) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, sum(cint2) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |  sum   
 ----+--------
   0 | 621209
@@ -2064,13 +2067,13 @@ select ss, sum(cint2) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 | 590038
 (10 rows)
 
-select 777::text, avg(cint4) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |          avg          
-------+-----------------------
- 777  | -3042925.418565825204
+select avg(cint4) from aggfns where cfloat8 > 0 order by 1;
+          avg          
+-----------------------
+ -3042925.418565825204
 (1 row)
 
-select s, avg(cint4) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, avg(cint4) from aggfns where cfloat8 > 0 group by s order by 1;
  s |          avg          
 ---+-----------------------
  0 | -3230391.667404203963
@@ -2085,7 +2088,7 @@ select s, avg(cint4) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | -2983069.716282812029
 (10 rows)
 
-select ss, avg(cint4) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, avg(cint4) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |          avg          
 ----+-----------------------
   0 | -3230391.667404203963
@@ -2100,13 +2103,13 @@ select ss, avg(cint4) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 | -2983069.716282812029
 (10 rows)
 
-select 777::text, max(cint4) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |    max     
-------+------------
- 777  | 1073213373
+select max(cint4) from aggfns where cfloat8 > 0 order by 1;
+    max     
+------------
+ 1073213373
 (1 row)
 
-select s, max(cint4) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, max(cint4) from aggfns where cfloat8 > 0 group by s order by 1;
  s |    max     
 ---+------------
  0 | 1073213373
@@ -2121,7 +2124,7 @@ select s, max(cint4) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | 1073213373
 (10 rows)
 
-select ss, max(cint4) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, max(cint4) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |    max     
 ----+------------
   0 | 1073213373
@@ -2136,13 +2139,13 @@ select ss, max(cint4) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 | 1073213373
 (10 rows)
 
-select 777::text, min(cint4) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |     min     
-------+-------------
- 777  | -1073053412
+select min(cint4) from aggfns where cfloat8 > 0 order by 1;
+     min     
+-------------
+ -1073053412
 (1 row)
 
-select s, min(cint4) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, min(cint4) from aggfns where cfloat8 > 0 group by s order by 1;
  s |     min     
 ---+-------------
  0 | -1073053412
@@ -2157,7 +2160,7 @@ select s, min(cint4) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | -1073053412
 (10 rows)
 
-select ss, min(cint4) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, min(cint4) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |     min     
 ----+-------------
   0 | -1073053412
@@ -2172,13 +2175,13 @@ select ss, min(cint4) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 | -1073053412
 (10 rows)
 
-select 777::text, stddev(cint4) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |  stddev   
-------+-----------
- 777  | 622278617
+select stddev(cint4) from aggfns where cfloat8 > 0 order by 1;
+  stddev   
+-----------
+ 622278617
 (1 row)
 
-select s, stddev(cint4) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, stddev(cint4) from aggfns where cfloat8 > 0 group by s order by 1;
  s |  stddev   
 ---+-----------
  0 | 622275017
@@ -2193,7 +2196,7 @@ select s, stddev(cint4) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | 622356873
 (10 rows)
 
-select ss, stddev(cint4) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, stddev(cint4) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |  stddev   
 ----+-----------
   0 | 622275017
@@ -2208,13 +2211,13 @@ select ss, stddev(cint4) from aggfns where cfloat8 > 0 group by ss order by 1, 2
   9 | 622356873
 (10 rows)
 
-select 777::text, sum(cint4) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |      sum      
-------+---------------
- 777  | -302558074368
+select sum(cint4) from aggfns where cfloat8 > 0 order by 1;
+      sum      
+---------------
+ -302558074368
 (1 row)
 
-select s, sum(cint4) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, sum(cint4) from aggfns where cfloat8 > 0 group by s order by 1;
  s |     sum      
 ---+--------------
  0 | -32119784349
@@ -2229,7 +2232,7 @@ select s, sum(cint4) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | -29660662189
 (10 rows)
 
-select ss, sum(cint4) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, sum(cint4) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |     sum      
 ----+--------------
   0 | -32119784349
@@ -2244,13 +2247,13 @@ select ss, sum(cint4) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 | -29660662189
 (10 rows)
 
-select 777::text, avg(cint8) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |          avg          
-------+-----------------------
- 777  | -7287038.185889570552
+select avg(cint8) from aggfns where cfloat8 > 0 order by 1;
+          avg          
+-----------------------
+ -7287038.185889570552
 (1 row)
 
-select s, avg(cint8) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, avg(cint8) from aggfns where cfloat8 > 0 group by s order by 1;
  s |          avg          
 ---+-----------------------
  0 | -7332793.526098762949
@@ -2265,7 +2268,7 @@ select s, avg(cint8) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | -7258411.696771598109
 (10 rows)
 
-select ss, avg(cint8) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, avg(cint8) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |          avg          
 ----+-----------------------
   0 | -7332793.526098762949
@@ -2280,13 +2283,13 @@ select ss, avg(cint8) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 | -7258411.696771598109
 (10 rows)
 
-select 777::text, max(cint8) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |    max     
-------+------------
- 777  | 1073659785
+select max(cint8) from aggfns where cfloat8 > 0 order by 1;
+    max     
+------------
+ 1073659785
 (1 row)
 
-select s, max(cint8) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, max(cint8) from aggfns where cfloat8 > 0 group by s order by 1;
  s |    max     
 ---+------------
  0 | 1073659785
@@ -2301,7 +2304,7 @@ select s, max(cint8) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | 1073659785
 (10 rows)
 
-select ss, max(cint8) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, max(cint8) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |    max     
 ----+------------
   0 | 1073659785
@@ -2316,13 +2319,13 @@ select ss, max(cint8) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 | 1073659785
 (10 rows)
 
-select 777::text, min(cint8) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |     min     
-------+-------------
- 777  | -1073184428
+select min(cint8) from aggfns where cfloat8 > 0 order by 1;
+     min     
+-------------
+ -1073184428
 (1 row)
 
-select s, min(cint8) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, min(cint8) from aggfns where cfloat8 > 0 group by s order by 1;
  s |     min     
 ---+-------------
  0 | -1073184428
@@ -2337,7 +2340,7 @@ select s, min(cint8) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | -1073184428
 (10 rows)
 
-select ss, min(cint8) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, min(cint8) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |     min     
 ----+-------------
   0 | -1073184428
@@ -2352,13 +2355,13 @@ select ss, min(cint8) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 | -1073184428
 (10 rows)
 
-select 777::text, stddev(cint8) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |  stddev   
-------+-----------
- 777  | 623577068
+select stddev(cint8) from aggfns where cfloat8 > 0 order by 1;
+  stddev   
+-----------
+ 623577068
 (1 row)
 
-select s, stddev(cint8) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, stddev(cint8) from aggfns where cfloat8 > 0 group by s order by 1;
  s |  stddev   
 ---+-----------
  0 | 623613696
@@ -2373,7 +2376,7 @@ select s, stddev(cint8) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | 623635702
 (10 rows)
 
-select ss, stddev(cint8) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, stddev(cint8) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |  stddev   
 ----+-----------
   0 | 623613696
@@ -2388,13 +2391,13 @@ select ss, stddev(cint8) from aggfns where cfloat8 > 0 group by ss order by 1, 2
   9 | 623635702
 (10 rows)
 
-select 777::text, sum(cint8) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |      sum      
-------+---------------
- 777  | -724550206823
+select sum(cint8) from aggfns where cfloat8 > 0 order by 1;
+      sum      
+---------------
+ -724550206823
 (1 row)
 
-select s, sum(cint8) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, sum(cint8) from aggfns where cfloat8 > 0 group by s order by 1;
  s |     sum      
 ---+--------------
  0 | -72909966030
@@ -2409,7 +2412,7 @@ select s, sum(cint8) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | -72170387501
 (10 rows)
 
-select ss, sum(cint8) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, sum(cint8) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |     sum      
 ----+--------------
   0 | -72909966030
@@ -2424,13 +2427,13 @@ select ss, sum(cint8) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 | -72170387501
 (10 rows)
 
-select 777::text, avg(s) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |        avg         
-------+--------------------
- 777  | 4.5000804586141004
+select avg(s) from aggfns where cfloat8 > 0 order by 1;
+        avg         
+--------------------
+ 4.5000804586141004
 (1 row)
 
-select s, avg(s) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, avg(s) from aggfns where cfloat8 > 0 group by s order by 1;
  s |          avg           
 ---+------------------------
  0 | 0.00000000000000000000
@@ -2445,7 +2448,7 @@ select s, avg(s) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 |     9.0000000000000000
 (10 rows)
 
-select ss, avg(s) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, avg(s) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |          avg           
 ----+------------------------
   0 | 0.00000000000000000000
@@ -2460,13 +2463,13 @@ select ss, avg(s) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 |     9.0000000000000000
 (10 rows)
 
-select 777::text, count(s) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text | count 
-------+-------
- 777  | 99430
+select count(s) from aggfns where cfloat8 > 0 order by 1;
+ count 
+-------
+ 99430
 (1 row)
 
-select s, count(s) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, count(s) from aggfns where cfloat8 > 0 group by s order by 1;
  s | count 
 ---+-------
  0 |  9943
@@ -2481,7 +2484,7 @@ select s, count(s) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 |  9943
 (10 rows)
 
-select ss, count(s) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, count(s) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss | count 
 ----+-------
   0 |  9943
@@ -2496,13 +2499,13 @@ select ss, count(s) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 |  9943
 (10 rows)
 
-select 777::text, max(s) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text | max 
-------+-----
- 777  |   9
+select max(s) from aggfns where cfloat8 > 0 order by 1;
+ max 
+-----
+   9
 (1 row)
 
-select s, max(s) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, max(s) from aggfns where cfloat8 > 0 group by s order by 1;
  s | max 
 ---+-----
  0 |   0
@@ -2517,7 +2520,7 @@ select s, max(s) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 |   9
 (10 rows)
 
-select ss, max(s) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, max(s) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss | max 
 ----+-----
   0 |   0
@@ -2532,13 +2535,13 @@ select ss, max(s) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 |   9
 (10 rows)
 
-select 777::text, min(s) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text | min 
-------+-----
- 777  |   0
+select min(s) from aggfns where cfloat8 > 0 order by 1;
+ min 
+-----
+   0
 (1 row)
 
-select s, min(s) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, min(s) from aggfns where cfloat8 > 0 group by s order by 1;
  s | min 
 ---+-----
  0 |   0
@@ -2553,7 +2556,7 @@ select s, min(s) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 |   9
 (10 rows)
 
-select ss, min(s) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, min(s) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss | min 
 ----+-----
   0 |   0
@@ -2568,13 +2571,13 @@ select ss, min(s) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 |   9
 (10 rows)
 
-select 777::text, stddev(s) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |       stddev       
-------+--------------------
- 777  | 2.8722957659869625
+select stddev(s) from aggfns where cfloat8 > 0 order by 1;
+       stddev       
+--------------------
+ 2.8722957659869625
 (1 row)
 
-select s, stddev(s) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, stddev(s) from aggfns where cfloat8 > 0 group by s order by 1;
  s | stddev 
 ---+--------
  0 |      0
@@ -2589,7 +2592,7 @@ select s, stddev(s) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 |      0
 (10 rows)
 
-select ss, stddev(s) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, stddev(s) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss | stddev 
 ----+--------
   0 |      0
@@ -2604,13 +2607,13 @@ select ss, stddev(s) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 |      0
 (10 rows)
 
-select 777::text, sum(s) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |  sum   
-------+--------
- 777  | 447443
+select sum(s) from aggfns where cfloat8 > 0 order by 1;
+  sum   
+--------
+ 447443
 (1 row)
 
-select s, sum(s) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, sum(s) from aggfns where cfloat8 > 0 group by s order by 1;
  s |  sum  
 ---+-------
  0 |     0
@@ -2625,7 +2628,7 @@ select s, sum(s) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | 89487
 (10 rows)
 
-select ss, sum(s) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, sum(s) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |  sum  
 ----+-------
   0 |     0
@@ -2640,13 +2643,13 @@ select ss, sum(s) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 | 89487
 (10 rows)
 
-select 777::text, avg(ss) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |        avg         
-------+--------------------
- 777  | 4.5000804586141004
+select avg(ss) from aggfns where cfloat8 > 0 order by 1;
+        avg         
+--------------------
+ 4.5000804586141004
 (1 row)
 
-select s, avg(ss) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, avg(ss) from aggfns where cfloat8 > 0 group by s order by 1;
  s |          avg           
 ---+------------------------
  0 | 0.00000000000000000000
@@ -2661,7 +2664,7 @@ select s, avg(ss) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 |     9.0000000000000000
 (10 rows)
 
-select ss, avg(ss) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, avg(ss) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |          avg           
 ----+------------------------
   0 | 0.00000000000000000000
@@ -2676,13 +2679,13 @@ select ss, avg(ss) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 |     9.0000000000000000
 (10 rows)
 
-select 777::text, max(ss) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text | max 
-------+-----
- 777  |   9
+select max(ss) from aggfns where cfloat8 > 0 order by 1;
+ max 
+-----
+   9
 (1 row)
 
-select s, max(ss) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, max(ss) from aggfns where cfloat8 > 0 group by s order by 1;
  s | max 
 ---+-----
  0 |   0
@@ -2697,7 +2700,7 @@ select s, max(ss) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 |   9
 (10 rows)
 
-select ss, max(ss) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, max(ss) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss | max 
 ----+-----
   0 |   0
@@ -2712,13 +2715,13 @@ select ss, max(ss) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 |   9
 (10 rows)
 
-select 777::text, min(ss) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text | min 
-------+-----
- 777  |   0
+select min(ss) from aggfns where cfloat8 > 0 order by 1;
+ min 
+-----
+   0
 (1 row)
 
-select s, min(ss) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, min(ss) from aggfns where cfloat8 > 0 group by s order by 1;
  s | min 
 ---+-----
  0 |   0
@@ -2733,7 +2736,7 @@ select s, min(ss) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 |   9
 (10 rows)
 
-select ss, min(ss) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, min(ss) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss | min 
 ----+-----
   0 |   0
@@ -2748,13 +2751,13 @@ select ss, min(ss) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 |   9
 (10 rows)
 
-select 777::text, stddev(ss) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |       stddev       
-------+--------------------
- 777  | 2.8722957659869625
+select stddev(ss) from aggfns where cfloat8 > 0 order by 1;
+       stddev       
+--------------------
+ 2.8722957659869625
 (1 row)
 
-select s, stddev(ss) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, stddev(ss) from aggfns where cfloat8 > 0 group by s order by 1;
  s | stddev 
 ---+--------
  0 |      0
@@ -2769,7 +2772,7 @@ select s, stddev(ss) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 |      0
 (10 rows)
 
-select ss, stddev(ss) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, stddev(ss) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss | stddev 
 ----+--------
   0 |      0
@@ -2784,13 +2787,13 @@ select ss, stddev(ss) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 |      0
 (10 rows)
 
-select 777::text, sum(ss) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |  sum   
-------+--------
- 777  | 447443
+select sum(ss) from aggfns where cfloat8 > 0 order by 1;
+  sum   
+--------
+ 447443
 (1 row)
 
-select s, sum(ss) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, sum(ss) from aggfns where cfloat8 > 0 group by s order by 1;
  s |  sum  
 ---+-------
  0 |     0
@@ -2805,7 +2808,7 @@ select s, sum(ss) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | 89487
 (10 rows)
 
-select ss, sum(ss) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, sum(ss) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |  sum  
 ----+-------
   0 |     0
@@ -2820,13 +2823,13 @@ select ss, sum(ss) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 | 89487
 (10 rows)
 
-select 777::text, max(t) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text |  max   
-------+--------
- 777  | 110000
+select max(t) from aggfns where cfloat8 > 0 order by 1;
+  max   
+--------
+ 110000
 (1 row)
 
-select s, max(t) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, max(t) from aggfns where cfloat8 > 0 group by s order by 1;
  s |  max   
 ---+--------
  0 |  19999
@@ -2841,7 +2844,7 @@ select s, max(t) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | 110000
 (10 rows)
 
-select ss, max(t) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, max(t) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |  max   
 ----+--------
   0 |  19999
@@ -2856,13 +2859,13 @@ select ss, max(t) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 | 110000
 (10 rows)
 
-select 777::text, min(t) from aggfns where cfloat8 > 0 group by 777::text order by 1, 2;
- text | min 
-------+-----
- 777  |   1
+select min(t) from aggfns where cfloat8 > 0 order by 1;
+ min 
+-----
+   1
 (1 row)
 
-select s, min(t) from aggfns where cfloat8 > 0 group by s order by 1, 2;
+select s, min(t) from aggfns where cfloat8 > 0 group by s order by 1;
  s |  min  
 ---+-------
  0 |     1
@@ -2877,7 +2880,7 @@ select s, min(t) from aggfns where cfloat8 > 0 group by s order by 1, 2;
  9 | 90001
 (10 rows)
 
-select ss, min(t) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
+select ss, min(t) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |  min  
 ----+-------
   0 |     1
@@ -2892,13 +2895,13 @@ select ss, min(t) from aggfns where cfloat8 > 0 group by ss order by 1, 2;
   9 | 90001
 (10 rows)
 
-select 777::text, avg(cfloat4) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text | avg 
-------+-----
- 777  | NaN
+select avg(cfloat4) from aggfns where cfloat8 <= 0 order by 1;
+ avg 
+-----
+ NaN
 (1 row)
 
-select s, avg(cfloat4) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, avg(cfloat4) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |        avg        
 ---+-------------------
  0 | 0.273710566446533
@@ -2913,7 +2916,7 @@ select s, avg(cfloat4) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | 0.276832673694496
 (10 rows)
 
-select ss, avg(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, avg(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |        avg        
 ----+-------------------
   0 | 0.273710566446533
@@ -2928,13 +2931,13 @@ select ss, avg(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1, 2
   9 | 0.276832673694496
 (10 rows)
 
-select 777::text, count(cfloat4) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text | count  
-------+--------
- 777  | 100570
+select count(cfloat4) from aggfns where cfloat8 <= 0 order by 1;
+ count  
+--------
+ 100570
 (1 row)
 
-select s, count(cfloat4) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, count(cfloat4) from aggfns where cfloat8 <= 0 group by s order by 1;
  s | count 
 ---+-------
  0 | 10057
@@ -2949,7 +2952,7 @@ select s, count(cfloat4) from aggfns where cfloat8 <= 0 group by s order by 1, 2
  9 | 10057
 (10 rows)
 
-select ss, count(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, count(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss | count 
 ----+-------
   0 | 10057
@@ -2964,13 +2967,13 @@ select ss, count(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1,
   9 | 10057
 (10 rows)
 
-select 777::text, max(cfloat4) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text | max 
-------+-----
- 777  | NaN
+select max(cfloat4) from aggfns where cfloat8 <= 0 order by 1;
+ max 
+-----
+ NaN
 (1 row)
 
-select s, max(cfloat4) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, max(cfloat4) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |   max    
 ---+----------
  0 |  49.9977
@@ -2985,7 +2988,7 @@ select s, max(cfloat4) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 |  49.9977
 (10 rows)
 
-select ss, max(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, max(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |   max    
 ----+----------
   0 |  49.9977
@@ -3000,13 +3003,13 @@ select ss, max(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1, 2
   9 |  49.9977
 (10 rows)
 
-select 777::text, min(cfloat4) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |   min    
-------+----------
- 777  | -49.9756
+select min(cfloat4) from aggfns where cfloat8 <= 0 order by 1;
+   min    
+----------
+ -49.9756
 (1 row)
 
-select s, min(cfloat4) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, min(cfloat4) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |   min    
 ---+----------
  0 | -49.9756
@@ -3021,7 +3024,7 @@ select s, min(cfloat4) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | -49.9756
 (10 rows)
 
-select ss, min(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, min(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |   min    
 ----+----------
   0 | -49.9756
@@ -3036,13 +3039,13 @@ select ss, min(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1, 2
   9 | -49.9756
 (10 rows)
 
-select 777::text, stddev(cfloat4) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text | stddev 
-------+--------
- 777  |    NaN
+select stddev(cfloat4) from aggfns where cfloat8 <= 0 order by 1;
+ stddev 
+--------
+    NaN
 (1 row)
 
-select s, stddev(cfloat4) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, stddev(cfloat4) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |      stddev      
 ---+------------------
  0 | 28.8948722701767
@@ -3057,7 +3060,7 @@ select s, stddev(cfloat4) from aggfns where cfloat8 <= 0 group by s order by 1, 
  9 | 28.8998126918449
 (10 rows)
 
-select ss, stddev(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, stddev(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |      stddev      
 ----+------------------
   0 | 28.8948722701767
@@ -3072,13 +3075,13 @@ select ss, stddev(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1
   9 | 28.8998126918449
 (10 rows)
 
-select 777::text, sum(cfloat4) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text | sum 
-------+-----
- 777  | NaN
+select sum(cfloat4) from aggfns where cfloat8 <= 0 order by 1;
+ sum 
+-----
+ NaN
 (1 row)
 
-select s, sum(cfloat4) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, sum(cfloat4) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |   sum    
 ---+----------
  0 |  2752.71
@@ -3093,7 +3096,7 @@ select s, sum(cfloat4) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 |  2784.11
 (10 rows)
 
-select ss, sum(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, sum(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |   sum    
 ----+----------
   0 |   2752.7
@@ -3108,13 +3111,13 @@ select ss, sum(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1, 2
   9 |   2784.1
 (10 rows)
 
-select 777::text, avg(cfloat8) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |        avg        
-------+-------------------
- 777  | -25.0059242142437
+select avg(cfloat8) from aggfns where cfloat8 <= 0 order by 1;
+        avg        
+-------------------
+ -25.0059242142437
 (1 row)
 
-select s, avg(cfloat8) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, avg(cfloat8) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |        avg        
 ---+-------------------
  0 | -25.0026878159296
@@ -3129,7 +3132,7 @@ select s, avg(cfloat8) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | -25.0089281362381
 (10 rows)
 
-select ss, avg(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, avg(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |        avg        
 ----+-------------------
   0 | -25.0026878159296
@@ -3144,13 +3147,13 @@ select ss, avg(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by 1, 2
   9 | -25.0089281362381
 (10 rows)
 
-select 777::text, max(cfloat8) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |          max          
-------+-----------------------
- 777  | -0.000542588531970978
+select max(cfloat8) from aggfns where cfloat8 <= 0 order by 1;
+          max          
+-----------------------
+ -0.000542588531970978
 (1 row)
 
-select s, max(cfloat8) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, max(cfloat8) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |          max          
 ---+-----------------------
  0 | -0.000542588531970978
@@ -3165,7 +3168,7 @@ select s, max(cfloat8) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | -0.000542588531970978
 (10 rows)
 
-select ss, max(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, max(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |          max          
 ----+-----------------------
   0 | -0.000542588531970978
@@ -3180,13 +3183,13 @@ select ss, max(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by 1, 2
   9 | -0.000542588531970978
 (10 rows)
 
-select 777::text, min(cfloat8) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |        min        
-------+-------------------
- 777  | -49.9755693599582
+select min(cfloat8) from aggfns where cfloat8 <= 0 order by 1;
+        min        
+-------------------
+ -49.9755693599582
 (1 row)
 
-select s, min(cfloat8) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, min(cfloat8) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |        min        
 ---+-------------------
  0 | -49.9755693599582
@@ -3201,7 +3204,7 @@ select s, min(cfloat8) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | -49.9755693599582
 (10 rows)
 
-select ss, min(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, min(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |        min        
 ----+-------------------
   0 | -49.9755693599582
@@ -3216,13 +3219,13 @@ select ss, min(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by 1, 2
   9 | -49.9755693599582
 (10 rows)
 
-select 777::text, stddev(cfloat8) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |      stddev      
-------+------------------
- 777  | 14.4806777057013
+select stddev(cfloat8) from aggfns where cfloat8 <= 0 order by 1;
+      stddev      
+------------------
+ 14.4806777057013
 (1 row)
 
-select s, stddev(cfloat8) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, stddev(cfloat8) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |      stddev      
 ---+------------------
  0 | 14.4821730365752
@@ -3232,12 +3235,12 @@ select s, stddev(cfloat8) from aggfns where cfloat8 <= 0 group by s order by 1, 
  4 |   14.48183169158
  5 | 14.4805923063393
  6 | 14.4807418968606
- 7 | 14.4812687827813
+ 7 | 14.4812687827814
  8 | 14.4805491499824
  9 | 14.4805491499824
 (10 rows)
 
-select ss, stddev(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, stddev(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |      stddev      
 ----+------------------
   0 | 14.4821730365752
@@ -3252,13 +3255,13 @@ select ss, stddev(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by 1
   9 | 14.4805491499824
 (10 rows)
 
-select 777::text, sum(cfloat8) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |        sum        
-------+-------------------
- 777  | -2514845.79822649
+select sum(cfloat8) from aggfns where cfloat8 <= 0 order by 1;
+        sum        
+-------------------
+ -2514845.79822649
 (1 row)
 
-select s, sum(cfloat8) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, sum(cfloat8) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |        sum        
 ---+-------------------
  0 | -251452.031364804
@@ -3273,7 +3276,7 @@ select s, sum(cfloat8) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | -251514.790266147
 (10 rows)
 
-select ss, sum(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, sum(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |        sum        
 ----+-------------------
   0 | -251452.031364804
@@ -3288,13 +3291,13 @@ select ss, sum(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by 1, 2
   9 | -251514.790266147
 (10 rows)
 
-select 777::text, avg(cint2) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |          avg          
-------+-----------------------
- 777  | -143.1624265950034836
+select avg(cint2) from aggfns where cfloat8 <= 0 order by 1;
+          avg          
+-----------------------
+ -143.1624265950034836
 (1 row)
 
-select s, avg(cint2) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, avg(cint2) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |          avg          
 ---+-----------------------
  0 | -145.9491390464815368
@@ -3309,7 +3312,7 @@ select s, avg(cint2) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | -144.4668060117447994
 (10 rows)
 
-select ss, avg(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, avg(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |          avg          
 ----+-----------------------
   0 | -145.9491390464815368
@@ -3324,13 +3327,13 @@ select ss, avg(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 | -144.4668060117447994
 (10 rows)
 
-select 777::text, max(cint2) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |  max  
-------+-------
- 777  | 16383
+select max(cint2) from aggfns where cfloat8 <= 0 order by 1;
+  max  
+-------
+ 16383
 (1 row)
 
-select s, max(cint2) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, max(cint2) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |  max  
 ---+-------
  0 | 16383
@@ -3345,7 +3348,7 @@ select s, max(cint2) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | 16383
 (10 rows)
 
-select ss, max(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, max(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |  max  
 ----+-------
   0 | 16383
@@ -3360,13 +3363,13 @@ select ss, max(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 | 16383
 (10 rows)
 
-select 777::text, min(cint2) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |  min   
-------+--------
- 777  | -16375
+select min(cint2) from aggfns where cfloat8 <= 0 order by 1;
+  min   
+--------
+ -16375
 (1 row)
 
-select s, min(cint2) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, min(cint2) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |  min   
 ---+--------
  0 | -16375
@@ -3381,7 +3384,7 @@ select s, min(cint2) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | -16375
 (10 rows)
 
-select ss, min(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, min(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |  min   
 ----+--------
   0 | -16375
@@ -3396,13 +3399,13 @@ select ss, min(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 | -16375
 (10 rows)
 
-select 777::text, stddev(cint2) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |      stddev       
-------+-------------------
- 777  | 9537.532064200194
+select stddev(cint2) from aggfns where cfloat8 <= 0 order by 1;
+      stddev       
+-------------------
+ 9537.532064200194
 (1 row)
 
-select s, stddev(cint2) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, stddev(cint2) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |      stddev       
 ---+-------------------
  0 | 9538.832178541630
@@ -3417,7 +3420,7 @@ select s, stddev(cint2) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | 9537.962959664725
 (10 rows)
 
-select ss, stddev(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, stddev(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |      stddev       
 ----+-------------------
   0 | 9538.832178541630
@@ -3432,13 +3435,13 @@ select ss, stddev(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1, 
   9 | 9537.962959664725
 (10 rows)
 
-select 777::text, sum(cint2) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |    sum    
-------+-----------
- 777  | -14383529
+select sum(cint2) from aggfns where cfloat8 <= 0 order by 1;
+    sum    
+-----------
+ -14383529
 (1 row)
 
-select s, sum(cint2) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, sum(cint2) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |   sum    
 ---+----------
  0 | -1466351
@@ -3453,7 +3456,7 @@ select s, sum(cint2) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | -1451458
 (10 rows)
 
-select ss, sum(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, sum(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |   sum    
 ----+----------
   0 | -1466351
@@ -3468,13 +3471,13 @@ select ss, sum(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 | -1451458
 (10 rows)
 
-select 777::text, avg(cint4) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |          avg          
-------+-----------------------
- 777  | -2626106.025594113553
+select avg(cint4) from aggfns where cfloat8 <= 0 order by 1;
+          avg          
+-----------------------
+ -2626106.025594113553
 (1 row)
 
-select s, avg(cint4) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, avg(cint4) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |          avg          
 ---+-----------------------
  0 | -2611631.507507208909
@@ -3489,7 +3492,7 @@ select s, avg(cint4) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | -2647231.455304762852
 (10 rows)
 
-select ss, avg(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, avg(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |          avg          
 ----+-----------------------
   0 | -2611631.507507208909
@@ -3504,13 +3507,13 @@ select ss, avg(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 | -2647231.455304762852
 (10 rows)
 
-select 777::text, max(cint4) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |    max     
-------+------------
- 777  | 1073660631
+select max(cint4) from aggfns where cfloat8 <= 0 order by 1;
+    max     
+------------
+ 1073660631
 (1 row)
 
-select s, max(cint4) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, max(cint4) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |    max     
 ---+------------
  0 | 1073660631
@@ -3525,7 +3528,7 @@ select s, max(cint4) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | 1073660631
 (10 rows)
 
-select ss, max(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, max(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |    max     
 ----+------------
   0 | 1073660631
@@ -3540,13 +3543,13 @@ select ss, max(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 | 1073660631
 (10 rows)
 
-select 777::text, min(cint4) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |     min     
-------+-------------
- 777  | -1073184428
+select min(cint4) from aggfns where cfloat8 <= 0 order by 1;
+     min     
+-------------
+ -1073184428
 (1 row)
 
-select s, min(cint4) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, min(cint4) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |     min     
 ---+-------------
  0 | -1073184428
@@ -3561,7 +3564,7 @@ select s, min(cint4) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | -1073184428
 (10 rows)
 
-select ss, min(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, min(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |     min     
 ----+-------------
   0 | -1073184428
@@ -3576,13 +3579,13 @@ select ss, min(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 | -1073184428
 (10 rows)
 
-select 777::text, stddev(cint4) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |  stddev   
-------+-----------
- 777  | 618699699
+select stddev(cint4) from aggfns where cfloat8 <= 0 order by 1;
+  stddev   
+-----------
+ 618699699
 (1 row)
 
-select s, stddev(cint4) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, stddev(cint4) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |  stddev   
 ---+-----------
  0 | 618765816
@@ -3597,7 +3600,7 @@ select s, stddev(cint4) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | 618723996
 (10 rows)
 
-select ss, stddev(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, stddev(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |  stddev   
 ----+-----------
   0 | 618765816
@@ -3612,13 +3615,13 @@ select ss, stddev(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1, 
   9 | 618723996
 (10 rows)
 
-select 777::text, sum(cint4) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |      sum      
-------+---------------
- 777  | -264107482994
+select sum(cint4) from aggfns where cfloat8 <= 0 order by 1;
+      sum      
+---------------
+ -264107482994
 (1 row)
 
-select s, sum(cint4) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, sum(cint4) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |     sum      
 ---+--------------
  0 | -26265178071
@@ -3633,7 +3636,7 @@ select s, sum(cint4) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | -26623206746
 (10 rows)
 
-select ss, sum(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, sum(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |     sum      
 ----+--------------
   0 | -26265178071
@@ -3648,13 +3651,13 @@ select ss, sum(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 | -26623206746
 (10 rows)
 
-select 777::text, avg(cint8) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |         avg          
-------+----------------------
- 777  | 1589663.454419807100
+select avg(cint8) from aggfns where cfloat8 <= 0 order by 1;
+         avg          
+----------------------
+ 1589663.454419807100
 (1 row)
 
-select s, avg(cint8) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, avg(cint8) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |         avg          
 ---+----------------------
  0 | 1609068.184846375659
@@ -3669,7 +3672,7 @@ select s, avg(cint8) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | 1568383.139206522820
 (10 rows)
 
-select ss, avg(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, avg(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |         avg          
 ----+----------------------
   0 | 1609068.184846375659
@@ -3684,13 +3687,13 @@ select ss, avg(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 | 1568383.139206522820
 (10 rows)
 
-select 777::text, max(cint8) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |    max     
-------+------------
- 777  | 1073660631
+select max(cint8) from aggfns where cfloat8 <= 0 order by 1;
+    max     
+------------
+ 1073660631
 (1 row)
 
-select s, max(cint8) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, max(cint8) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |    max     
 ---+------------
  0 | 1073660631
@@ -3705,7 +3708,7 @@ select s, max(cint8) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | 1073660631
 (10 rows)
 
-select ss, max(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, max(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |    max     
 ----+------------
   0 | 1073660631
@@ -3720,13 +3723,13 @@ select ss, max(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 | 1073660631
 (10 rows)
 
-select 777::text, min(cint8) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |     min     
-------+-------------
- 777  | -1073053412
+select min(cint8) from aggfns where cfloat8 <= 0 order by 1;
+     min     
+-------------
+ -1073053412
 (1 row)
 
-select s, min(cint8) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, min(cint8) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |     min     
 ---+-------------
  0 | -1073053412
@@ -3741,7 +3744,7 @@ select s, min(cint8) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | -1073053412
 (10 rows)
 
-select ss, min(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, min(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |     min     
 ----+-------------
   0 | -1073053412
@@ -3756,13 +3759,13 @@ select ss, min(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 | -1073053412
 (10 rows)
 
-select 777::text, stddev(cint8) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |  stddev   
-------+-----------
- 777  | 617379684
+select stddev(cint8) from aggfns where cfloat8 <= 0 order by 1;
+  stddev   
+-----------
+ 617379684
 (1 row)
 
-select s, stddev(cint8) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, stddev(cint8) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |  stddev   
 ---+-----------
  0 | 617360997
@@ -3777,7 +3780,7 @@ select s, stddev(cint8) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | 617433744
 (10 rows)
 
-select ss, stddev(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, stddev(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |  stddev   
 ----+-----------
   0 | 617360997
@@ -3792,13 +3795,13 @@ select ss, stddev(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1, 
   9 | 617433744
 (10 rows)
 
-select 777::text, sum(cint8) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |     sum      
-------+--------------
- 777  | 159872453611
+select sum(cint8) from aggfns where cfloat8 <= 0 order by 1;
+     sum      
+--------------
+ 159872453611
 (1 row)
 
-select s, sum(cint8) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, sum(cint8) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |     sum     
 ---+-------------
  0 | 16182398735
@@ -3813,7 +3816,7 @@ select s, sum(cint8) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | 15773229231
 (10 rows)
 
-select ss, sum(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, sum(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |     sum     
 ----+-------------
   0 | 16182398735
@@ -3828,13 +3831,13 @@ select ss, sum(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 | 15773229231
 (10 rows)
 
-select 777::text, avg(s) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |        avg         
-------+--------------------
- 777  | 4.4999204534155315
+select avg(s) from aggfns where cfloat8 <= 0 order by 1;
+        avg         
+--------------------
+ 4.4999204534155315
 (1 row)
 
-select s, avg(s) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, avg(s) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |            avg             
 ---+----------------------------
  0 | 0.000000000000000000000000
@@ -3849,7 +3852,7 @@ select s, avg(s) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 |         9.0000000000000000
 (10 rows)
 
-select ss, avg(s) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, avg(s) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |            avg             
 ----+----------------------------
   0 | 0.000000000000000000000000
@@ -3864,13 +3867,13 @@ select ss, avg(s) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 |         9.0000000000000000
 (10 rows)
 
-select 777::text, count(s) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text | count  
-------+--------
- 777  | 100570
+select count(s) from aggfns where cfloat8 <= 0 order by 1;
+ count  
+--------
+ 100570
 (1 row)
 
-select s, count(s) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, count(s) from aggfns where cfloat8 <= 0 group by s order by 1;
  s | count 
 ---+-------
  0 | 10057
@@ -3885,7 +3888,7 @@ select s, count(s) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | 10057
 (10 rows)
 
-select ss, count(s) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, count(s) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss | count 
 ----+-------
   0 | 10057
@@ -3900,13 +3903,13 @@ select ss, count(s) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 | 10057
 (10 rows)
 
-select 777::text, max(s) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text | max 
-------+-----
- 777  |   9
+select max(s) from aggfns where cfloat8 <= 0 order by 1;
+ max 
+-----
+   9
 (1 row)
 
-select s, max(s) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, max(s) from aggfns where cfloat8 <= 0 group by s order by 1;
  s | max 
 ---+-----
  0 |   0
@@ -3921,7 +3924,7 @@ select s, max(s) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 |   9
 (10 rows)
 
-select ss, max(s) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, max(s) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss | max 
 ----+-----
   0 |   0
@@ -3936,13 +3939,13 @@ select ss, max(s) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 |   9
 (10 rows)
 
-select 777::text, min(s) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text | min 
-------+-----
- 777  |   0
+select min(s) from aggfns where cfloat8 <= 0 order by 1;
+ min 
+-----
+   0
 (1 row)
 
-select s, min(s) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, min(s) from aggfns where cfloat8 <= 0 group by s order by 1;
  s | min 
 ---+-----
  0 |   0
@@ -3957,7 +3960,7 @@ select s, min(s) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 |   9
 (10 rows)
 
-select ss, min(s) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, min(s) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss | min 
 ----+-----
   0 |   0
@@ -3972,13 +3975,13 @@ select ss, min(s) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 |   9
 (10 rows)
 
-select 777::text, stddev(s) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |       stddev       
-------+--------------------
- 777  | 2.8722956022845549
+select stddev(s) from aggfns where cfloat8 <= 0 order by 1;
+       stddev       
+--------------------
+ 2.8722956022845549
 (1 row)
 
-select s, stddev(s) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, stddev(s) from aggfns where cfloat8 <= 0 group by s order by 1;
  s | stddev 
 ---+--------
  0 |      0
@@ -3993,7 +3996,7 @@ select s, stddev(s) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 |      0
 (10 rows)
 
-select ss, stddev(s) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, stddev(s) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss | stddev 
 ----+--------
   0 |      0
@@ -4008,13 +4011,13 @@ select ss, stddev(s) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 |      0
 (10 rows)
 
-select 777::text, sum(s) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |  sum   
-------+--------
- 777  | 452557
+select sum(s) from aggfns where cfloat8 <= 0 order by 1;
+  sum   
+--------
+ 452557
 (1 row)
 
-select s, sum(s) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, sum(s) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |  sum  
 ---+-------
  0 |     0
@@ -4029,7 +4032,7 @@ select s, sum(s) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | 90513
 (10 rows)
 
-select ss, sum(s) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, sum(s) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |  sum  
 ----+-------
   0 |     0
@@ -4044,13 +4047,13 @@ select ss, sum(s) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 | 90513
 (10 rows)
 
-select 777::text, avg(ss) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |        avg         
-------+--------------------
- 777  | 4.4999204534155315
+select avg(ss) from aggfns where cfloat8 <= 0 order by 1;
+        avg         
+--------------------
+ 4.4999204534155315
 (1 row)
 
-select s, avg(ss) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, avg(ss) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |            avg             
 ---+----------------------------
  0 | 0.000000000000000000000000
@@ -4065,7 +4068,7 @@ select s, avg(ss) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 |         9.0000000000000000
 (10 rows)
 
-select ss, avg(ss) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, avg(ss) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |            avg             
 ----+----------------------------
   0 | 0.000000000000000000000000
@@ -4080,13 +4083,13 @@ select ss, avg(ss) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 |         9.0000000000000000
 (10 rows)
 
-select 777::text, max(ss) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text | max 
-------+-----
- 777  |   9
+select max(ss) from aggfns where cfloat8 <= 0 order by 1;
+ max 
+-----
+   9
 (1 row)
 
-select s, max(ss) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, max(ss) from aggfns where cfloat8 <= 0 group by s order by 1;
  s | max 
 ---+-----
  0 |   0
@@ -4101,7 +4104,7 @@ select s, max(ss) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 |   9
 (10 rows)
 
-select ss, max(ss) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, max(ss) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss | max 
 ----+-----
   0 |   0
@@ -4116,13 +4119,13 @@ select ss, max(ss) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 |   9
 (10 rows)
 
-select 777::text, min(ss) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text | min 
-------+-----
- 777  |   0
+select min(ss) from aggfns where cfloat8 <= 0 order by 1;
+ min 
+-----
+   0
 (1 row)
 
-select s, min(ss) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, min(ss) from aggfns where cfloat8 <= 0 group by s order by 1;
  s | min 
 ---+-----
  0 |   0
@@ -4137,7 +4140,7 @@ select s, min(ss) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 |   9
 (10 rows)
 
-select ss, min(ss) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, min(ss) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss | min 
 ----+-----
   0 |   0
@@ -4152,13 +4155,13 @@ select ss, min(ss) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 |   9
 (10 rows)
 
-select 777::text, stddev(ss) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |       stddev       
-------+--------------------
- 777  | 2.8722956022845549
+select stddev(ss) from aggfns where cfloat8 <= 0 order by 1;
+       stddev       
+--------------------
+ 2.8722956022845549
 (1 row)
 
-select s, stddev(ss) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, stddev(ss) from aggfns where cfloat8 <= 0 group by s order by 1;
  s | stddev 
 ---+--------
  0 |      0
@@ -4173,7 +4176,7 @@ select s, stddev(ss) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 |      0
 (10 rows)
 
-select ss, stddev(ss) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, stddev(ss) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss | stddev 
 ----+--------
   0 |      0
@@ -4188,13 +4191,13 @@ select ss, stddev(ss) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 |      0
 (10 rows)
 
-select 777::text, sum(ss) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |  sum   
-------+--------
- 777  | 452557
+select sum(ss) from aggfns where cfloat8 <= 0 order by 1;
+  sum   
+--------
+ 452557
 (1 row)
 
-select s, sum(ss) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, sum(ss) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |  sum  
 ---+-------
  0 |     0
@@ -4209,7 +4212,7 @@ select s, sum(ss) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | 90513
 (10 rows)
 
-select ss, sum(ss) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, sum(ss) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |  sum  
 ----+-------
   0 |     0
@@ -4224,13 +4227,13 @@ select ss, sum(ss) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 | 90513
 (10 rows)
 
-select 777::text, max(t) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text |  max   
-------+--------
- 777  | 109999
+select max(t) from aggfns where cfloat8 <= 0 order by 1;
+  max   
+--------
+ 109999
 (1 row)
 
-select s, max(t) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, max(t) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |  max   
 ---+--------
  0 |  20000
@@ -4245,7 +4248,7 @@ select s, max(t) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | 109999
 (10 rows)
 
-select ss, max(t) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, max(t) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |  max   
 ----+--------
   0 |  20000
@@ -4260,13 +4263,13 @@ select ss, max(t) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 | 109999
 (10 rows)
 
-select 777::text, min(t) from aggfns where cfloat8 <= 0 group by 777::text order by 1, 2;
- text | min 
-------+-----
- 777  |   3
+select min(t) from aggfns where cfloat8 <= 0 order by 1;
+ min 
+-----
+   3
 (1 row)
 
-select s, min(t) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
+select s, min(t) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |  min  
 ---+-------
  0 |     3
@@ -4281,7 +4284,7 @@ select s, min(t) from aggfns where cfloat8 <= 0 group by s order by 1, 2;
  9 | 90002
 (10 rows)
 
-select ss, min(t) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
+select ss, min(t) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |  min  
 ----+-------
   0 |     3
@@ -4296,13 +4299,13 @@ select ss, min(t) from aggfns where cfloat8 <= 0 group by ss order by 1, 2;
   9 | 90002
 (10 rows)
 
-select 777::text, avg(cfloat4) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text | avg 
-------+-----
- 777  | NaN
+select avg(cfloat4) from aggfns where cfloat8 < 1000 order by 1;
+ avg 
+-----
+ NaN
 (1 row)
 
-select s, avg(cfloat4) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, avg(cfloat4) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |        avg         
 ---+--------------------
  0 | -0.132126759885764
@@ -4317,7 +4320,7 @@ select s, avg(cfloat4) from aggfns where cfloat8 < 1000 group by s order by 1, 2
  9 | -0.132765194868064
 (10 rows)
 
-select ss, avg(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, avg(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |        avg         
 ----+--------------------
   0 | -0.132126759885764
@@ -4332,13 +4335,13 @@ select ss, avg(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1,
   9 | -0.132765194868064
 (10 rows)
 
-select 777::text, count(cfloat4) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text | count  
-------+--------
- 777  | 200000
+select count(cfloat4) from aggfns where cfloat8 < 1000 order by 1;
+ count  
+--------
+ 200000
 (1 row)
 
-select s, count(cfloat4) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, count(cfloat4) from aggfns where cfloat8 < 1000 group by s order by 1;
  s | count 
 ---+-------
  0 | 20000
@@ -4353,7 +4356,7 @@ select s, count(cfloat4) from aggfns where cfloat8 < 1000 group by s order by 1,
  9 | 20000
 (10 rows)
 
-select ss, count(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, count(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss | count 
 ----+-------
   0 | 20000
@@ -4368,13 +4371,13 @@ select ss, count(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 
   9 | 20000
 (10 rows)
 
-select 777::text, max(cfloat4) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text | max 
-------+-----
- 777  | NaN
+select max(cfloat4) from aggfns where cfloat8 < 1000 order by 1;
+ max 
+-----
+ NaN
 (1 row)
 
-select s, max(cfloat4) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, max(cfloat4) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |   max    
 ---+----------
  0 |  49.9977
@@ -4389,7 +4392,7 @@ select s, max(cfloat4) from aggfns where cfloat8 < 1000 group by s order by 1, 2
  9 |  49.9977
 (10 rows)
 
-select ss, max(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, max(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |   max    
 ----+----------
   0 |  49.9977
@@ -4404,13 +4407,13 @@ select ss, max(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1,
   9 |  49.9977
 (10 rows)
 
-select 777::text, min(cfloat4) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |    min    
-------+-----------
- 777  | -Infinity
+select min(cfloat4) from aggfns where cfloat8 < 1000 order by 1;
+    min    
+-----------
+ -Infinity
 (1 row)
 
-select s, min(cfloat4) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, min(cfloat4) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |    min    
 ---+-----------
  0 |  -49.9756
@@ -4425,7 +4428,7 @@ select s, min(cfloat4) from aggfns where cfloat8 < 1000 group by s order by 1, 2
  9 |  -49.9756
 (10 rows)
 
-select ss, min(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, min(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |    min    
 ----+-----------
   0 |  -49.9756
@@ -4440,13 +4443,13 @@ select ss, min(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1,
   9 |  -49.9756
 (10 rows)
 
-select 777::text, stddev(cfloat4) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text | stddev 
-------+--------
- 777  |    NaN
+select stddev(cfloat4) from aggfns where cfloat8 < 1000 order by 1;
+ stddev 
+--------
+    NaN
 (1 row)
 
-select s, stddev(cfloat4) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, stddev(cfloat4) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |      stddev      
 ---+------------------
  0 | 28.8941380063426
@@ -4461,7 +4464,7 @@ select s, stddev(cfloat4) from aggfns where cfloat8 < 1000 group by s order by 1
  9 | 28.8968307405967
 (10 rows)
 
-select ss, stddev(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, stddev(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |      stddev      
 ----+------------------
   0 | 28.8941380063427
@@ -4476,13 +4479,13 @@ select ss, stddev(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by
   9 | 28.8968307405966
 (10 rows)
 
-select 777::text, sum(cfloat4) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text | sum 
-------+-----
- 777  | NaN
+select sum(cfloat4) from aggfns where cfloat8 < 1000 order by 1;
+ sum 
+-----
+ NaN
 (1 row)
 
-select s, sum(cfloat4) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, sum(cfloat4) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |    sum    
 ---+-----------
  0 |  -2642.54
@@ -4497,7 +4500,7 @@ select s, sum(cfloat4) from aggfns where cfloat8 < 1000 group by s order by 1, 2
  9 |   -2655.3
 (10 rows)
 
-select ss, sum(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, sum(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |    sum    
 ----+-----------
   0 |  -2642.54
@@ -4512,13 +4515,13 @@ select ss, sum(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1,
   9 |   -2655.3
 (10 rows)
 
-select 777::text, avg(cfloat8) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |        avg         
-------+--------------------
- 777  | -0.131776180773973
+select avg(cfloat8) from aggfns where cfloat8 < 1000 order by 1;
+        avg         
+--------------------
+ -0.131776180773973
 (1 row)
 
-select s, avg(cfloat8) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, avg(cfloat8) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |        avg         
 ---+--------------------
  0 | -0.131261021163082
@@ -4533,7 +4536,7 @@ select s, avg(cfloat8) from aggfns where cfloat8 < 1000 group by s order by 1, 2
  9 | -0.134423591727391
 (10 rows)
 
-select ss, avg(cfloat8) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, avg(cfloat8) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |        avg         
 ----+--------------------
   0 | -0.131261021163082
@@ -4548,13 +4551,13 @@ select ss, avg(cfloat8) from aggfns where cfloat8 < 1000 group by ss order by 1,
   9 | -0.134423591727391
 (10 rows)
 
-select 777::text, max(cfloat8) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |       max       
-------+-----------------
- 777  | 49.997744965367
+select max(cfloat8) from aggfns where cfloat8 < 1000 order by 1;
+       max       
+-----------------
+ 49.997744965367
 (1 row)
 
-select s, max(cfloat8) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, max(cfloat8) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |       max       
 ---+-----------------
  0 | 49.997744965367
@@ -4569,7 +4572,7 @@ select s, max(cfloat8) from aggfns where cfloat8 < 1000 group by s order by 1, 2
  9 | 49.997744965367
 (10 rows)
 
-select ss, max(cfloat8) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, max(cfloat8) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |       max       
 ----+-----------------
   0 | 49.997744965367
@@ -4584,13 +4587,13 @@ select ss, max(cfloat8) from aggfns where cfloat8 < 1000 group by ss order by 1,
   9 | 49.997744965367
 (10 rows)
 
-select 777::text, min(cfloat8) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |        min        
-------+-------------------
- 777  | -49.9755693599582
+select min(cfloat8) from aggfns where cfloat8 < 1000 order by 1;
+        min        
+-------------------
+ -49.9755693599582
 (1 row)
 
-select s, min(cfloat8) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, min(cfloat8) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |        min        
 ---+-------------------
  0 | -49.9755693599582
@@ -4605,7 +4608,7 @@ select s, min(cfloat8) from aggfns where cfloat8 < 1000 group by s order by 1, 2
  9 | -49.9755693599582
 (10 rows)
 
-select ss, min(cfloat8) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, min(cfloat8) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |        min        
 ----+-------------------
   0 | -49.9755693599582
@@ -4620,13 +4623,13 @@ select ss, min(cfloat8) from aggfns where cfloat8 < 1000 group by ss order by 1,
   9 | -49.9755693599582
 (10 rows)
 
-select 777::text, stddev(cfloat8) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |     stddev      
-------+-----------------
- 777  | 28.894749851557
+select stddev(cfloat8) from aggfns where cfloat8 < 1000 order by 1;
+     stddev      
+-----------------
+ 28.894749851557
 (1 row)
 
-select s, stddev(cfloat8) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, stddev(cfloat8) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |      stddev      
 ---+------------------
  0 |  28.893219634188
@@ -4641,7 +4644,7 @@ select s, stddev(cfloat8) from aggfns where cfloat8 < 1000 group by s order by 1
  9 | 28.8953209642426
 (10 rows)
 
-select ss, stddev(cfloat8) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, stddev(cfloat8) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |      stddev      
 ----+------------------
   0 |  28.893219634188
@@ -4656,13 +4659,13 @@ select ss, stddev(cfloat8) from aggfns where cfloat8 < 1000 group by ss order by
   9 | 28.8953209642426
 (10 rows)
 
-select 777::text, sum(cfloat8) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |        sum        
-------+-------------------
- 777  | -26355.2361547947
+select sum(cfloat8) from aggfns where cfloat8 < 1000 order by 1;
+        sum        
+-------------------
+ -26355.2361547947
 (1 row)
 
-select s, sum(cfloat8) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, sum(cfloat8) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |        sum        
 ---+-------------------
  0 | -2625.22042326164
@@ -4677,7 +4680,7 @@ select s, sum(cfloat8) from aggfns where cfloat8 < 1000 group by s order by 1, 2
  9 | -2688.47183454782
 (10 rows)
 
-select ss, sum(cfloat8) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, sum(cfloat8) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |        sum        
 ----+-------------------
   0 | -2625.22042326164
@@ -4692,13 +4695,13 @@ select ss, sum(cfloat8) from aggfns where cfloat8 < 1000 group by ss order by 1,
   9 | -2688.47183454782
 (10 rows)
 
-select 777::text, avg(cint2) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |         avg          
-------+----------------------
- 777  | -42.1591712126520194
+select avg(cint2) from aggfns where cfloat8 < 1000 order by 1;
+         avg          
+----------------------
+ -42.1591712126520194
 (1 row)
 
-select s, avg(cint2) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, avg(cint2) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |         avg          
 ---+----------------------
  0 | -42.2972824182973825
@@ -4713,7 +4716,7 @@ select s, avg(cint2) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 | -43.1119563585406136
 (10 rows)
 
-select ss, avg(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, avg(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |         avg          
 ----+----------------------
   0 | -42.2972824182973825
@@ -4728,13 +4731,13 @@ select ss, avg(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1, 2
   9 | -43.1119563585406136
 (10 rows)
 
-select 777::text, max(cint2) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |  max  
-------+-------
- 777  | 16383
+select max(cint2) from aggfns where cfloat8 < 1000 order by 1;
+  max  
+-------
+ 16383
 (1 row)
 
-select s, max(cint2) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, max(cint2) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |  max  
 ---+-------
  0 | 16383
@@ -4749,7 +4752,7 @@ select s, max(cint2) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 | 16383
 (10 rows)
 
-select ss, max(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, max(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |  max  
 ----+-------
   0 | 16383
@@ -4764,13 +4767,13 @@ select ss, max(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1, 2
   9 | 16383
 (10 rows)
 
-select 777::text, min(cint2) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |  min   
-------+--------
- 777  | -16375
+select min(cint2) from aggfns where cfloat8 < 1000 order by 1;
+  min   
+--------
+ -16375
 (1 row)
 
-select s, min(cint2) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, min(cint2) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |  min   
 ---+--------
  0 | -16375
@@ -4785,7 +4788,7 @@ select s, min(cint2) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 | -16375
 (10 rows)
 
-select ss, min(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, min(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |  min   
 ----+--------
   0 | -16375
@@ -4800,13 +4803,13 @@ select ss, min(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1, 2
   9 | -16375
 (10 rows)
 
-select 777::text, stddev(cint2) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |      stddev       
-------+-------------------
- 777  | 9467.689085960139
+select stddev(cint2) from aggfns where cfloat8 < 1000 order by 1;
+      stddev       
+-------------------
+ 9467.689085960139
 (1 row)
 
-select s, stddev(cint2) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, stddev(cint2) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |      stddev       
 ---+-------------------
  0 | 9468.854793575036
@@ -4821,7 +4824,7 @@ select s, stddev(cint2) from aggfns where cfloat8 < 1000 group by s order by 1, 
  9 | 9468.145452253715
 (10 rows)
 
-select ss, stddev(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, stddev(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |      stddev       
 ----+-------------------
   0 | 9468.854793575036
@@ -4836,13 +4839,13 @@ select ss, stddev(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1
   9 | 9468.145452253715
 (10 rows)
 
-select 777::text, sum(cint2) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |   sum    
-------+----------
- 777  | -8423824
+select sum(cint2) from aggfns where cfloat8 < 1000 order by 1;
+   sum    
+----------
+ -8423824
 (1 row)
 
-select s, sum(cint2) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, sum(cint2) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |   sum   
 ---+---------
  0 | -845142
@@ -4857,7 +4860,7 @@ select s, sum(cint2) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 | -861420
 (10 rows)
 
-select ss, sum(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, sum(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |   sum   
 ----+---------
   0 | -845142
@@ -4872,13 +4875,13 @@ select ss, sum(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1, 2
   9 | -861420
 (10 rows)
 
-select 777::text, avg(cint4) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |          avg          
-------+-----------------------
- 777  | -2833327.786810000000
+select avg(cint4) from aggfns where cfloat8 < 1000 order by 1;
+          avg          
+-----------------------
+ -2833327.786810000000
 (1 row)
 
-select s, avg(cint4) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, avg(cint4) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |          avg          
 ---+-----------------------
  0 | -2919248.121000000000
@@ -4893,7 +4896,7 @@ select s, avg(cint4) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 | -2814193.446750000000
 (10 rows)
 
-select ss, avg(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, avg(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |          avg          
 ----+-----------------------
   0 | -2919248.121000000000
@@ -4908,13 +4911,13 @@ select ss, avg(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1, 2
   9 | -2814193.446750000000
 (10 rows)
 
-select 777::text, max(cint4) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |    max     
-------+------------
- 777  | 1073660631
+select max(cint4) from aggfns where cfloat8 < 1000 order by 1;
+    max     
+------------
+ 1073660631
 (1 row)
 
-select s, max(cint4) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, max(cint4) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |    max     
 ---+------------
  0 | 1073660631
@@ -4929,7 +4932,7 @@ select s, max(cint4) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 | 1073660631
 (10 rows)
 
-select ss, max(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, max(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |    max     
 ----+------------
   0 | 1073660631
@@ -4944,13 +4947,13 @@ select ss, max(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1, 2
   9 | 1073660631
 (10 rows)
 
-select 777::text, min(cint4) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |     min     
-------+-------------
- 777  | -1073184428
+select min(cint4) from aggfns where cfloat8 < 1000 order by 1;
+     min     
+-------------
+ -1073184428
 (1 row)
 
-select s, min(cint4) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, min(cint4) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |     min     
 ---+-------------
  0 | -1073184428
@@ -4965,7 +4968,7 @@ select s, min(cint4) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 | -1073184428
 (10 rows)
 
-select ss, min(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, min(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |     min     
 ----+-------------
   0 | -1073184428
@@ -4980,13 +4983,13 @@ select ss, min(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1, 2
   9 | -1073184428
 (10 rows)
 
-select 777::text, stddev(cint4) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |  stddev   
-------+-----------
- 777  | 620480022
+select stddev(cint4) from aggfns where cfloat8 < 1000 order by 1;
+  stddev   
+-----------
+ 620480022
 (1 row)
 
-select s, stddev(cint4) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, stddev(cint4) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |  stddev   
 ---+-----------
  0 | 620497458
@@ -5001,7 +5004,7 @@ select s, stddev(cint4) from aggfns where cfloat8 < 1000 group by s order by 1, 
  9 | 620517247
 (10 rows)
 
-select ss, stddev(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, stddev(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |  stddev   
 ----+-----------
   0 | 620497458
@@ -5016,13 +5019,13 @@ select ss, stddev(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1
   9 | 620517247
 (10 rows)
 
-select 777::text, sum(cint4) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |      sum      
-------+---------------
- 777  | -566665557362
+select sum(cint4) from aggfns where cfloat8 < 1000 order by 1;
+      sum      
+---------------
+ -566665557362
 (1 row)
 
-select s, sum(cint4) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, sum(cint4) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |     sum      
 ---+--------------
  0 | -58384962420
@@ -5037,7 +5040,7 @@ select s, sum(cint4) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 | -56283868935
 (10 rows)
 
-select ss, sum(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, sum(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |     sum      
 ----+--------------
   0 | -58384962420
@@ -5052,13 +5055,13 @@ select ss, sum(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1, 2
   9 | -56283868935
 (10 rows)
 
-select 777::text, avg(cint8) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |          avg          
-------+-----------------------
- 777  | -2823388.766060000000
+select avg(cint8) from aggfns where cfloat8 < 1000 order by 1;
+          avg          
+-----------------------
+ -2823388.766060000000
 (1 row)
 
-select s, avg(cint8) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, avg(cint8) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |          avg          
 ---+-----------------------
  0 | -2836378.364750000000
@@ -5073,7 +5076,7 @@ select s, avg(cint8) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 | -2819857.913500000000
 (10 rows)
 
-select ss, avg(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, avg(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |          avg          
 ----+-----------------------
   0 | -2836378.364750000000
@@ -5088,13 +5091,13 @@ select ss, avg(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1, 2
   9 | -2819857.913500000000
 (10 rows)
 
-select 777::text, max(cint8) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |    max     
-------+------------
- 777  | 1073660631
+select max(cint8) from aggfns where cfloat8 < 1000 order by 1;
+    max     
+------------
+ 1073660631
 (1 row)
 
-select s, max(cint8) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, max(cint8) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |    max     
 ---+------------
  0 | 1073660631
@@ -5109,7 +5112,7 @@ select s, max(cint8) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 | 1073660631
 (10 rows)
 
-select ss, max(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, max(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |    max     
 ----+------------
   0 | 1073660631
@@ -5124,13 +5127,13 @@ select ss, max(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1, 2
   9 | 1073660631
 (10 rows)
 
-select 777::text, min(cint8) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |     min     
-------+-------------
- 777  | -1073184428
+select min(cint8) from aggfns where cfloat8 < 1000 order by 1;
+     min     
+-------------
+ -1073184428
 (1 row)
 
-select s, min(cint8) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, min(cint8) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |     min     
 ---+-------------
  0 | -1073184428
@@ -5145,7 +5148,7 @@ select s, min(cint8) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 | -1073184428
 (10 rows)
 
-select ss, min(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, min(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |     min     
 ----+-------------
   0 | -1073184428
@@ -5160,13 +5163,13 @@ select ss, min(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1, 2
   9 | -1073184428
 (10 rows)
 
-select 777::text, stddev(cint8) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |  stddev   
-------+-----------
- 777  | 620482773
+select stddev(cint8) from aggfns where cfloat8 < 1000 order by 1;
+  stddev   
+-----------
+ 620482773
 (1 row)
 
-select s, stddev(cint8) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, stddev(cint8) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |  stddev   
 ---+-----------
  0 | 620477996
@@ -5181,7 +5184,7 @@ select s, stddev(cint8) from aggfns where cfloat8 < 1000 group by s order by 1, 
  9 | 620524975
 (10 rows)
 
-select ss, stddev(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, stddev(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |  stddev   
 ----+-----------
   0 | 620477996
@@ -5196,13 +5199,13 @@ select ss, stddev(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1
   9 | 620524975
 (10 rows)
 
-select 777::text, sum(cint8) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |      sum      
-------+---------------
- 777  | -564677753212
+select sum(cint8) from aggfns where cfloat8 < 1000 order by 1;
+      sum      
+---------------
+ -564677753212
 (1 row)
 
-select s, sum(cint8) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, sum(cint8) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |     sum      
 ---+--------------
  0 | -56727567295
@@ -5217,7 +5220,7 @@ select s, sum(cint8) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 | -56397158270
 (10 rows)
 
-select ss, sum(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, sum(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |     sum      
 ----+--------------
   0 | -56727567295
@@ -5232,13 +5235,13 @@ select ss, sum(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1, 2
   9 | -56397158270
 (10 rows)
 
-select 777::text, avg(s) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |        avg         
-------+--------------------
- 777  | 4.5000000000000000
+select avg(s) from aggfns where cfloat8 < 1000 order by 1;
+        avg         
+--------------------
+ 4.5000000000000000
 (1 row)
 
-select s, avg(s) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, avg(s) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |            avg             
 ---+----------------------------
  0 | 0.000000000000000000000000
@@ -5253,7 +5256,7 @@ select s, avg(s) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 |         9.0000000000000000
 (10 rows)
 
-select ss, avg(s) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, avg(s) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |            avg             
 ----+----------------------------
   0 | 0.000000000000000000000000
@@ -5268,13 +5271,13 @@ select ss, avg(s) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
   9 |         9.0000000000000000
 (10 rows)
 
-select 777::text, count(s) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text | count  
-------+--------
- 777  | 200000
+select count(s) from aggfns where cfloat8 < 1000 order by 1;
+ count  
+--------
+ 200000
 (1 row)
 
-select s, count(s) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, count(s) from aggfns where cfloat8 < 1000 group by s order by 1;
  s | count 
 ---+-------
  0 | 20000
@@ -5289,7 +5292,7 @@ select s, count(s) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 | 20000
 (10 rows)
 
-select ss, count(s) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, count(s) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss | count 
 ----+-------
   0 | 20000
@@ -5304,13 +5307,13 @@ select ss, count(s) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
   9 | 20000
 (10 rows)
 
-select 777::text, max(s) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text | max 
-------+-----
- 777  |   9
+select max(s) from aggfns where cfloat8 < 1000 order by 1;
+ max 
+-----
+   9
 (1 row)
 
-select s, max(s) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, max(s) from aggfns where cfloat8 < 1000 group by s order by 1;
  s | max 
 ---+-----
  0 |   0
@@ -5325,7 +5328,7 @@ select s, max(s) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 |   9
 (10 rows)
 
-select ss, max(s) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, max(s) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss | max 
 ----+-----
   0 |   0
@@ -5340,13 +5343,13 @@ select ss, max(s) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
   9 |   9
 (10 rows)
 
-select 777::text, min(s) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text | min 
-------+-----
- 777  |   0
+select min(s) from aggfns where cfloat8 < 1000 order by 1;
+ min 
+-----
+   0
 (1 row)
 
-select s, min(s) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, min(s) from aggfns where cfloat8 < 1000 group by s order by 1;
  s | min 
 ---+-----
  0 |   0
@@ -5361,7 +5364,7 @@ select s, min(s) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 |   9
 (10 rows)
 
-select ss, min(s) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, min(s) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss | min 
 ----+-----
   0 |   0
@@ -5376,13 +5379,13 @@ select ss, min(s) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
   9 |   9
 (10 rows)
 
-select 777::text, stddev(s) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |       stddev       
-------+--------------------
- 777  | 2.8722885039992502
+select stddev(s) from aggfns where cfloat8 < 1000 order by 1;
+       stddev       
+--------------------
+ 2.8722885039992502
 (1 row)
 
-select s, stddev(s) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, stddev(s) from aggfns where cfloat8 < 1000 group by s order by 1;
  s | stddev 
 ---+--------
  0 |      0
@@ -5397,7 +5400,7 @@ select s, stddev(s) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 |      0
 (10 rows)
 
-select ss, stddev(s) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, stddev(s) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss | stddev 
 ----+--------
   0 |      0
@@ -5412,13 +5415,13 @@ select ss, stddev(s) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
   9 |      0
 (10 rows)
 
-select 777::text, sum(s) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |  sum   
-------+--------
- 777  | 900000
+select sum(s) from aggfns where cfloat8 < 1000 order by 1;
+  sum   
+--------
+ 900000
 (1 row)
 
-select s, sum(s) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, sum(s) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |  sum   
 ---+--------
  0 |      0
@@ -5433,7 +5436,7 @@ select s, sum(s) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 | 180000
 (10 rows)
 
-select ss, sum(s) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, sum(s) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |  sum   
 ----+--------
   0 |      0
@@ -5448,13 +5451,13 @@ select ss, sum(s) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
   9 | 180000
 (10 rows)
 
-select 777::text, avg(ss) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |        avg         
-------+--------------------
- 777  | 4.5000000000000000
+select avg(ss) from aggfns where cfloat8 < 1000 order by 1;
+        avg         
+--------------------
+ 4.5000000000000000
 (1 row)
 
-select s, avg(ss) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, avg(ss) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |            avg             
 ---+----------------------------
  0 | 0.000000000000000000000000
@@ -5469,7 +5472,7 @@ select s, avg(ss) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 |         9.0000000000000000
 (10 rows)
 
-select ss, avg(ss) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, avg(ss) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |            avg             
 ----+----------------------------
   0 | 0.000000000000000000000000
@@ -5484,13 +5487,13 @@ select ss, avg(ss) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
   9 |         9.0000000000000000
 (10 rows)
 
-select 777::text, max(ss) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text | max 
-------+-----
- 777  |   9
+select max(ss) from aggfns where cfloat8 < 1000 order by 1;
+ max 
+-----
+   9
 (1 row)
 
-select s, max(ss) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, max(ss) from aggfns where cfloat8 < 1000 group by s order by 1;
  s | max 
 ---+-----
  0 |   0
@@ -5505,7 +5508,7 @@ select s, max(ss) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 |   9
 (10 rows)
 
-select ss, max(ss) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, max(ss) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss | max 
 ----+-----
   0 |   0
@@ -5520,13 +5523,13 @@ select ss, max(ss) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
   9 |   9
 (10 rows)
 
-select 777::text, min(ss) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text | min 
-------+-----
- 777  |   0
+select min(ss) from aggfns where cfloat8 < 1000 order by 1;
+ min 
+-----
+   0
 (1 row)
 
-select s, min(ss) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, min(ss) from aggfns where cfloat8 < 1000 group by s order by 1;
  s | min 
 ---+-----
  0 |   0
@@ -5541,7 +5544,7 @@ select s, min(ss) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 |   9
 (10 rows)
 
-select ss, min(ss) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, min(ss) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss | min 
 ----+-----
   0 |   0
@@ -5556,13 +5559,13 @@ select ss, min(ss) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
   9 |   9
 (10 rows)
 
-select 777::text, stddev(ss) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |       stddev       
-------+--------------------
- 777  | 2.8722885039992502
+select stddev(ss) from aggfns where cfloat8 < 1000 order by 1;
+       stddev       
+--------------------
+ 2.8722885039992502
 (1 row)
 
-select s, stddev(ss) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, stddev(ss) from aggfns where cfloat8 < 1000 group by s order by 1;
  s | stddev 
 ---+--------
  0 |      0
@@ -5577,7 +5580,7 @@ select s, stddev(ss) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 |      0
 (10 rows)
 
-select ss, stddev(ss) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, stddev(ss) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss | stddev 
 ----+--------
   0 |      0
@@ -5592,13 +5595,13 @@ select ss, stddev(ss) from aggfns where cfloat8 < 1000 group by ss order by 1, 2
   9 |      0
 (10 rows)
 
-select 777::text, sum(ss) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |  sum   
-------+--------
- 777  | 900000
+select sum(ss) from aggfns where cfloat8 < 1000 order by 1;
+  sum   
+--------
+ 900000
 (1 row)
 
-select s, sum(ss) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, sum(ss) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |  sum   
 ---+--------
  0 |      0
@@ -5613,7 +5616,7 @@ select s, sum(ss) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 | 180000
 (10 rows)
 
-select ss, sum(ss) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, sum(ss) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |  sum   
 ----+--------
   0 |      0
@@ -5628,13 +5631,13 @@ select ss, sum(ss) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
   9 | 180000
 (10 rows)
 
-select 777::text, max(t) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text |  max   
-------+--------
- 777  | 110000
+select max(t) from aggfns where cfloat8 < 1000 order by 1;
+  max   
+--------
+ 110000
 (1 row)
 
-select s, max(t) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, max(t) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |  max   
 ---+--------
  0 |  20000
@@ -5649,7 +5652,7 @@ select s, max(t) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 | 110000
 (10 rows)
 
-select ss, max(t) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, max(t) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |  max   
 ----+--------
   0 |  20000
@@ -5664,13 +5667,13 @@ select ss, max(t) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
   9 | 110000
 (10 rows)
 
-select 777::text, min(t) from aggfns where cfloat8 < 1000 group by 777::text order by 1, 2;
- text | min 
-------+-----
- 777  |   1
+select min(t) from aggfns where cfloat8 < 1000 order by 1;
+ min 
+-----
+   1
 (1 row)
 
-select s, min(t) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
+select s, min(t) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |  min  
 ---+-------
  0 |     1
@@ -5685,7 +5688,7 @@ select s, min(t) from aggfns where cfloat8 < 1000 group by s order by 1, 2;
  9 | 90001
 (10 rows)
 
-select ss, min(t) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
+select ss, min(t) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |  min  
 ----+-------
   0 |     1
@@ -5700,598 +5703,630 @@ select ss, min(t) from aggfns where cfloat8 < 1000 group by ss order by 1, 2;
   9 | 90001
 (10 rows)
 
-select 777::text, avg(cfloat4) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | avg 
-------+-----
-(0 rows)
-
-select s, avg(cfloat4) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | avg 
----+-----
-(0 rows)
-
-select ss, avg(cfloat4) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | avg 
-----+-----
-(0 rows)
-
-select 777::text, count(cfloat4) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | count 
-------+-------
-(0 rows)
-
-select s, count(cfloat4) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | count 
----+-------
-(0 rows)
-
-select ss, count(cfloat4) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | count 
-----+-------
-(0 rows)
-
-select 777::text, max(cfloat4) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | max 
-------+-----
-(0 rows)
-
-select s, max(cfloat4) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | max 
----+-----
-(0 rows)
-
-select ss, max(cfloat4) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | max 
-----+-----
-(0 rows)
-
-select 777::text, min(cfloat4) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | min 
-------+-----
-(0 rows)
-
-select s, min(cfloat4) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | min 
----+-----
-(0 rows)
-
-select ss, min(cfloat4) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | min 
-----+-----
-(0 rows)
-
-select 777::text, stddev(cfloat4) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | stddev 
-------+--------
-(0 rows)
-
-select s, stddev(cfloat4) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | stddev 
----+--------
-(0 rows)
-
-select ss, stddev(cfloat4) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | stddev 
-----+--------
-(0 rows)
-
-select 777::text, sum(cfloat4) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | sum 
-------+-----
-(0 rows)
-
-select s, sum(cfloat4) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | sum 
----+-----
-(0 rows)
-
-select ss, sum(cfloat4) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | sum 
-----+-----
-(0 rows)
-
-select 777::text, avg(cfloat8) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | avg 
-------+-----
-(0 rows)
-
-select s, avg(cfloat8) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | avg 
----+-----
-(0 rows)
-
-select ss, avg(cfloat8) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | avg 
-----+-----
-(0 rows)
-
-select 777::text, max(cfloat8) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | max 
-------+-----
-(0 rows)
-
-select s, max(cfloat8) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | max 
----+-----
-(0 rows)
-
-select ss, max(cfloat8) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | max 
-----+-----
-(0 rows)
-
-select 777::text, min(cfloat8) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | min 
-------+-----
-(0 rows)
-
-select s, min(cfloat8) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | min 
----+-----
-(0 rows)
-
-select ss, min(cfloat8) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | min 
-----+-----
-(0 rows)
-
-select 777::text, stddev(cfloat8) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | stddev 
-------+--------
-(0 rows)
-
-select s, stddev(cfloat8) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | stddev 
----+--------
-(0 rows)
-
-select ss, stddev(cfloat8) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | stddev 
-----+--------
-(0 rows)
-
-select 777::text, sum(cfloat8) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | sum 
-------+-----
-(0 rows)
-
-select s, sum(cfloat8) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | sum 
----+-----
-(0 rows)
-
-select ss, sum(cfloat8) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | sum 
-----+-----
-(0 rows)
-
-select 777::text, avg(cint2) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | avg 
-------+-----
-(0 rows)
-
-select s, avg(cint2) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | avg 
----+-----
-(0 rows)
-
-select ss, avg(cint2) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | avg 
-----+-----
-(0 rows)
-
-select 777::text, max(cint2) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | max 
-------+-----
-(0 rows)
-
-select s, max(cint2) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | max 
----+-----
-(0 rows)
-
-select ss, max(cint2) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | max 
-----+-----
-(0 rows)
-
-select 777::text, min(cint2) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | min 
-------+-----
-(0 rows)
-
-select s, min(cint2) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | min 
----+-----
-(0 rows)
-
-select ss, min(cint2) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | min 
-----+-----
-(0 rows)
-
-select 777::text, stddev(cint2) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | stddev 
-------+--------
-(0 rows)
-
-select s, stddev(cint2) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | stddev 
----+--------
-(0 rows)
-
-select ss, stddev(cint2) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | stddev 
-----+--------
-(0 rows)
-
-select 777::text, sum(cint2) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | sum 
-------+-----
-(0 rows)
-
-select s, sum(cint2) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | sum 
----+-----
-(0 rows)
-
-select ss, sum(cint2) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | sum 
-----+-----
-(0 rows)
-
-select 777::text, avg(cint4) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | avg 
-------+-----
-(0 rows)
-
-select s, avg(cint4) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | avg 
----+-----
-(0 rows)
-
-select ss, avg(cint4) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | avg 
-----+-----
-(0 rows)
-
-select 777::text, max(cint4) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | max 
-------+-----
-(0 rows)
-
-select s, max(cint4) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | max 
----+-----
-(0 rows)
-
-select ss, max(cint4) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | max 
-----+-----
-(0 rows)
-
-select 777::text, min(cint4) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | min 
-------+-----
-(0 rows)
-
-select s, min(cint4) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | min 
----+-----
-(0 rows)
-
-select ss, min(cint4) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | min 
-----+-----
-(0 rows)
-
-select 777::text, stddev(cint4) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | stddev 
-------+--------
-(0 rows)
-
-select s, stddev(cint4) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | stddev 
----+--------
-(0 rows)
-
-select ss, stddev(cint4) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | stddev 
-----+--------
-(0 rows)
-
-select 777::text, sum(cint4) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | sum 
-------+-----
-(0 rows)
-
-select s, sum(cint4) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | sum 
----+-----
-(0 rows)
-
-select ss, sum(cint4) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | sum 
-----+-----
-(0 rows)
-
-select 777::text, avg(cint8) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | avg 
-------+-----
-(0 rows)
-
-select s, avg(cint8) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | avg 
----+-----
-(0 rows)
-
-select ss, avg(cint8) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | avg 
-----+-----
-(0 rows)
-
-select 777::text, max(cint8) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | max 
-------+-----
-(0 rows)
-
-select s, max(cint8) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | max 
----+-----
-(0 rows)
-
-select ss, max(cint8) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | max 
-----+-----
-(0 rows)
-
-select 777::text, min(cint8) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | min 
-------+-----
-(0 rows)
-
-select s, min(cint8) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | min 
----+-----
-(0 rows)
-
-select ss, min(cint8) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | min 
-----+-----
-(0 rows)
-
-select 777::text, stddev(cint8) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | stddev 
-------+--------
-(0 rows)
-
-select s, stddev(cint8) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | stddev 
----+--------
-(0 rows)
-
-select ss, stddev(cint8) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | stddev 
-----+--------
-(0 rows)
-
-select 777::text, sum(cint8) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | sum 
-------+-----
-(0 rows)
-
-select s, sum(cint8) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | sum 
----+-----
-(0 rows)
-
-select ss, sum(cint8) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | sum 
-----+-----
-(0 rows)
-
-select 777::text, avg(s) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | avg 
-------+-----
-(0 rows)
-
-select s, avg(s) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | avg 
----+-----
-(0 rows)
-
-select ss, avg(s) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | avg 
-----+-----
-(0 rows)
-
-select 777::text, count(s) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | count 
-------+-------
-(0 rows)
-
-select s, count(s) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | count 
----+-------
-(0 rows)
-
-select ss, count(s) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | count 
-----+-------
-(0 rows)
-
-select 777::text, max(s) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | max 
-------+-----
-(0 rows)
-
-select s, max(s) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | max 
----+-----
-(0 rows)
-
-select ss, max(s) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | max 
-----+-----
-(0 rows)
-
-select 777::text, min(s) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | min 
-------+-----
-(0 rows)
-
-select s, min(s) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | min 
----+-----
-(0 rows)
-
-select ss, min(s) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | min 
-----+-----
-(0 rows)
-
-select 777::text, stddev(s) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | stddev 
-------+--------
-(0 rows)
-
-select s, stddev(s) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | stddev 
----+--------
-(0 rows)
-
-select ss, stddev(s) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | stddev 
-----+--------
-(0 rows)
-
-select 777::text, sum(s) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | sum 
-------+-----
-(0 rows)
-
-select s, sum(s) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | sum 
----+-----
-(0 rows)
-
-select ss, sum(s) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | sum 
-----+-----
-(0 rows)
-
-select 777::text, avg(ss) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | avg 
-------+-----
-(0 rows)
-
-select s, avg(ss) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | avg 
----+-----
-(0 rows)
-
-select ss, avg(ss) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | avg 
-----+-----
-(0 rows)
-
-select 777::text, max(ss) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | max 
-------+-----
-(0 rows)
-
-select s, max(ss) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | max 
----+-----
-(0 rows)
-
-select ss, max(ss) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | max 
-----+-----
-(0 rows)
-
-select 777::text, min(ss) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | min 
-------+-----
-(0 rows)
-
-select s, min(ss) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | min 
----+-----
-(0 rows)
-
-select ss, min(ss) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | min 
-----+-----
-(0 rows)
-
-select 777::text, stddev(ss) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | stddev 
-------+--------
-(0 rows)
-
-select s, stddev(ss) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | stddev 
----+--------
-(0 rows)
-
-select ss, stddev(ss) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | stddev 
-----+--------
-(0 rows)
-
-select 777::text, sum(ss) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | sum 
-------+-----
-(0 rows)
-
-select s, sum(ss) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | sum 
----+-----
-(0 rows)
-
-select ss, sum(ss) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | sum 
-----+-----
-(0 rows)
-
-select 777::text, max(t) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | max 
-------+-----
-(0 rows)
-
-select s, max(t) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | max 
----+-----
-(0 rows)
-
-select ss, max(t) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | max 
-----+-----
-(0 rows)
-
-select 777::text, min(t) from aggfns where cfloat8 > 1000 group by 777::text order by 1, 2;
- text | min 
-------+-----
-(0 rows)
-
-select s, min(t) from aggfns where cfloat8 > 1000 group by s order by 1, 2;
- s | min 
----+-----
-(0 rows)
-
-select ss, min(t) from aggfns where cfloat8 > 1000 group by ss order by 1, 2;
- ss | min 
-----+-----
-(0 rows)
-
-select 777::text, avg(cint2) from aggfns where cint2 is null group by 777::text order by 1, 2;
- text | avg 
-------+-----
- 777  |    
+select avg(cfloat4) from aggfns where cfloat8 > 1000 order by 1;
+ avg 
+-----
+    
 (1 row)
 
-select s, avg(cint2) from aggfns where cint2 is null group by s order by 1, 2;
+select s, avg(cfloat4) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | avg 
+---+-----
+(0 rows)
+
+select ss, avg(cfloat4) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | avg 
+----+-----
+(0 rows)
+
+select count(cfloat4) from aggfns where cfloat8 > 1000 order by 1;
+ count 
+-------
+     0
+(1 row)
+
+select s, count(cfloat4) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | count 
+---+-------
+(0 rows)
+
+select ss, count(cfloat4) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | count 
+----+-------
+(0 rows)
+
+select max(cfloat4) from aggfns where cfloat8 > 1000 order by 1;
+ max 
+-----
+    
+(1 row)
+
+select s, max(cfloat4) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | max 
+---+-----
+(0 rows)
+
+select ss, max(cfloat4) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | max 
+----+-----
+(0 rows)
+
+select min(cfloat4) from aggfns where cfloat8 > 1000 order by 1;
+ min 
+-----
+    
+(1 row)
+
+select s, min(cfloat4) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | min 
+---+-----
+(0 rows)
+
+select ss, min(cfloat4) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | min 
+----+-----
+(0 rows)
+
+select stddev(cfloat4) from aggfns where cfloat8 > 1000 order by 1;
+ stddev 
+--------
+       
+(1 row)
+
+select s, stddev(cfloat4) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | stddev 
+---+--------
+(0 rows)
+
+select ss, stddev(cfloat4) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | stddev 
+----+--------
+(0 rows)
+
+select sum(cfloat4) from aggfns where cfloat8 > 1000 order by 1;
+ sum 
+-----
+    
+(1 row)
+
+select s, sum(cfloat4) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | sum 
+---+-----
+(0 rows)
+
+select ss, sum(cfloat4) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | sum 
+----+-----
+(0 rows)
+
+select avg(cfloat8) from aggfns where cfloat8 > 1000 order by 1;
+ avg 
+-----
+    
+(1 row)
+
+select s, avg(cfloat8) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | avg 
+---+-----
+(0 rows)
+
+select ss, avg(cfloat8) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | avg 
+----+-----
+(0 rows)
+
+select max(cfloat8) from aggfns where cfloat8 > 1000 order by 1;
+ max 
+-----
+    
+(1 row)
+
+select s, max(cfloat8) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | max 
+---+-----
+(0 rows)
+
+select ss, max(cfloat8) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | max 
+----+-----
+(0 rows)
+
+select min(cfloat8) from aggfns where cfloat8 > 1000 order by 1;
+ min 
+-----
+    
+(1 row)
+
+select s, min(cfloat8) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | min 
+---+-----
+(0 rows)
+
+select ss, min(cfloat8) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | min 
+----+-----
+(0 rows)
+
+select stddev(cfloat8) from aggfns where cfloat8 > 1000 order by 1;
+ stddev 
+--------
+       
+(1 row)
+
+select s, stddev(cfloat8) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | stddev 
+---+--------
+(0 rows)
+
+select ss, stddev(cfloat8) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | stddev 
+----+--------
+(0 rows)
+
+select sum(cfloat8) from aggfns where cfloat8 > 1000 order by 1;
+ sum 
+-----
+    
+(1 row)
+
+select s, sum(cfloat8) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | sum 
+---+-----
+(0 rows)
+
+select ss, sum(cfloat8) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | sum 
+----+-----
+(0 rows)
+
+select avg(cint2) from aggfns where cfloat8 > 1000 order by 1;
+ avg 
+-----
+    
+(1 row)
+
+select s, avg(cint2) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | avg 
+---+-----
+(0 rows)
+
+select ss, avg(cint2) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | avg 
+----+-----
+(0 rows)
+
+select max(cint2) from aggfns where cfloat8 > 1000 order by 1;
+ max 
+-----
+    
+(1 row)
+
+select s, max(cint2) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | max 
+---+-----
+(0 rows)
+
+select ss, max(cint2) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | max 
+----+-----
+(0 rows)
+
+select min(cint2) from aggfns where cfloat8 > 1000 order by 1;
+ min 
+-----
+    
+(1 row)
+
+select s, min(cint2) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | min 
+---+-----
+(0 rows)
+
+select ss, min(cint2) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | min 
+----+-----
+(0 rows)
+
+select stddev(cint2) from aggfns where cfloat8 > 1000 order by 1;
+ stddev 
+--------
+(0 rows)
+
+select s, stddev(cint2) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | stddev 
+---+--------
+(0 rows)
+
+select ss, stddev(cint2) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | stddev 
+----+--------
+(0 rows)
+
+select sum(cint2) from aggfns where cfloat8 > 1000 order by 1;
+ sum 
+-----
+    
+(1 row)
+
+select s, sum(cint2) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | sum 
+---+-----
+(0 rows)
+
+select ss, sum(cint2) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | sum 
+----+-----
+(0 rows)
+
+select avg(cint4) from aggfns where cfloat8 > 1000 order by 1;
+ avg 
+-----
+    
+(1 row)
+
+select s, avg(cint4) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | avg 
+---+-----
+(0 rows)
+
+select ss, avg(cint4) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | avg 
+----+-----
+(0 rows)
+
+select max(cint4) from aggfns where cfloat8 > 1000 order by 1;
+ max 
+-----
+    
+(1 row)
+
+select s, max(cint4) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | max 
+---+-----
+(0 rows)
+
+select ss, max(cint4) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | max 
+----+-----
+(0 rows)
+
+select min(cint4) from aggfns where cfloat8 > 1000 order by 1;
+ min 
+-----
+    
+(1 row)
+
+select s, min(cint4) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | min 
+---+-----
+(0 rows)
+
+select ss, min(cint4) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | min 
+----+-----
+(0 rows)
+
+select stddev(cint4) from aggfns where cfloat8 > 1000 order by 1;
+ stddev 
+--------
+(0 rows)
+
+select s, stddev(cint4) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | stddev 
+---+--------
+(0 rows)
+
+select ss, stddev(cint4) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | stddev 
+----+--------
+(0 rows)
+
+select sum(cint4) from aggfns where cfloat8 > 1000 order by 1;
+ sum 
+-----
+    
+(1 row)
+
+select s, sum(cint4) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | sum 
+---+-----
+(0 rows)
+
+select ss, sum(cint4) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | sum 
+----+-----
+(0 rows)
+
+select avg(cint8) from aggfns where cfloat8 > 1000 order by 1;
+ avg 
+-----
+(0 rows)
+
+select s, avg(cint8) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | avg 
+---+-----
+(0 rows)
+
+select ss, avg(cint8) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | avg 
+----+-----
+(0 rows)
+
+select max(cint8) from aggfns where cfloat8 > 1000 order by 1;
+ max 
+-----
+    
+(1 row)
+
+select s, max(cint8) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | max 
+---+-----
+(0 rows)
+
+select ss, max(cint8) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | max 
+----+-----
+(0 rows)
+
+select min(cint8) from aggfns where cfloat8 > 1000 order by 1;
+ min 
+-----
+    
+(1 row)
+
+select s, min(cint8) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | min 
+---+-----
+(0 rows)
+
+select ss, min(cint8) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | min 
+----+-----
+(0 rows)
+
+select stddev(cint8) from aggfns where cfloat8 > 1000 order by 1;
+ stddev 
+--------
+(0 rows)
+
+select s, stddev(cint8) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | stddev 
+---+--------
+(0 rows)
+
+select ss, stddev(cint8) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | stddev 
+----+--------
+(0 rows)
+
+select sum(cint8) from aggfns where cfloat8 > 1000 order by 1;
+ sum 
+-----
+(0 rows)
+
+select s, sum(cint8) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | sum 
+---+-----
+(0 rows)
+
+select ss, sum(cint8) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | sum 
+----+-----
+(0 rows)
+
+select avg(s) from aggfns where cfloat8 > 1000 order by 1;
+ avg 
+-----
+    
+(1 row)
+
+select s, avg(s) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | avg 
+---+-----
+(0 rows)
+
+select ss, avg(s) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | avg 
+----+-----
+(0 rows)
+
+select count(s) from aggfns where cfloat8 > 1000 order by 1;
+ count 
+-------
+     0
+(1 row)
+
+select s, count(s) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | count 
+---+-------
+(0 rows)
+
+select ss, count(s) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | count 
+----+-------
+(0 rows)
+
+select max(s) from aggfns where cfloat8 > 1000 order by 1;
+ max 
+-----
+    
+(1 row)
+
+select s, max(s) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | max 
+---+-----
+(0 rows)
+
+select ss, max(s) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | max 
+----+-----
+(0 rows)
+
+select min(s) from aggfns where cfloat8 > 1000 order by 1;
+ min 
+-----
+    
+(1 row)
+
+select s, min(s) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | min 
+---+-----
+(0 rows)
+
+select ss, min(s) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | min 
+----+-----
+(0 rows)
+
+select stddev(s) from aggfns where cfloat8 > 1000 order by 1;
+ stddev 
+--------
+(0 rows)
+
+select s, stddev(s) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | stddev 
+---+--------
+(0 rows)
+
+select ss, stddev(s) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | stddev 
+----+--------
+(0 rows)
+
+select sum(s) from aggfns where cfloat8 > 1000 order by 1;
+ sum 
+-----
+    
+(1 row)
+
+select s, sum(s) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | sum 
+---+-----
+(0 rows)
+
+select ss, sum(s) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | sum 
+----+-----
+(0 rows)
+
+select avg(ss) from aggfns where cfloat8 > 1000 order by 1;
+ avg 
+-----
+    
+(1 row)
+
+select s, avg(ss) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | avg 
+---+-----
+(0 rows)
+
+select ss, avg(ss) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | avg 
+----+-----
+(0 rows)
+
+select max(ss) from aggfns where cfloat8 > 1000 order by 1;
+ max 
+-----
+    
+(1 row)
+
+select s, max(ss) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | max 
+---+-----
+(0 rows)
+
+select ss, max(ss) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | max 
+----+-----
+(0 rows)
+
+select min(ss) from aggfns where cfloat8 > 1000 order by 1;
+ min 
+-----
+    
+(1 row)
+
+select s, min(ss) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | min 
+---+-----
+(0 rows)
+
+select ss, min(ss) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | min 
+----+-----
+(0 rows)
+
+select stddev(ss) from aggfns where cfloat8 > 1000 order by 1;
+ stddev 
+--------
+(0 rows)
+
+select s, stddev(ss) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | stddev 
+---+--------
+(0 rows)
+
+select ss, stddev(ss) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | stddev 
+----+--------
+(0 rows)
+
+select sum(ss) from aggfns where cfloat8 > 1000 order by 1;
+ sum 
+-----
+    
+(1 row)
+
+select s, sum(ss) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | sum 
+---+-----
+(0 rows)
+
+select ss, sum(ss) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | sum 
+----+-----
+(0 rows)
+
+select max(t) from aggfns where cfloat8 > 1000 order by 1;
+ max 
+-----
+    
+(1 row)
+
+select s, max(t) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | max 
+---+-----
+(0 rows)
+
+select ss, max(t) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | max 
+----+-----
+(0 rows)
+
+select min(t) from aggfns where cfloat8 > 1000 order by 1;
+ min 
+-----
+    
+(1 row)
+
+select s, min(t) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | min 
+---+-----
+(0 rows)
+
+select ss, min(t) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | min 
+----+-----
+(0 rows)
+
+select avg(cint2) from aggfns where cint2 is null order by 1;
+ avg 
+-----
+    
+(1 row)
+
+select s, avg(cint2) from aggfns where cint2 is null group by s order by 1;
  s | avg 
 ---+-----
  0 |    
@@ -6306,7 +6341,7 @@ select s, avg(cint2) from aggfns where cint2 is null group by s order by 1, 2;
  9 |    
 (10 rows)
 
-select ss, avg(cint2) from aggfns where cint2 is null group by ss order by 1, 2;
+select ss, avg(cint2) from aggfns where cint2 is null group by ss order by 1;
  ss | avg 
 ----+-----
   0 |    
@@ -6321,13 +6356,13 @@ select ss, avg(cint2) from aggfns where cint2 is null group by ss order by 1, 2;
   9 |    
 (10 rows)
 
-select 777::text, count(cint2) from aggfns where cint2 is null group by 777::text order by 1, 2;
- text | count 
-------+-------
- 777  |     0
+select count(cint2) from aggfns where cint2 is null order by 1;
+ count 
+-------
+     0
 (1 row)
 
-select s, count(cint2) from aggfns where cint2 is null group by s order by 1, 2;
+select s, count(cint2) from aggfns where cint2 is null group by s order by 1;
  s | count 
 ---+-------
  0 |     0
@@ -6342,7 +6377,7 @@ select s, count(cint2) from aggfns where cint2 is null group by s order by 1, 2;
  9 |     0
 (10 rows)
 
-select ss, count(cint2) from aggfns where cint2 is null group by ss order by 1, 2;
+select ss, count(cint2) from aggfns where cint2 is null group by ss order by 1;
  ss | count 
 ----+-------
   0 |     0
@@ -6357,13 +6392,13 @@ select ss, count(cint2) from aggfns where cint2 is null group by ss order by 1, 
   9 |     0
 (10 rows)
 
-select 777::text, max(cint2) from aggfns where cint2 is null group by 777::text order by 1, 2;
- text | max 
-------+-----
- 777  |    
+select max(cint2) from aggfns where cint2 is null order by 1;
+ max 
+-----
+    
 (1 row)
 
-select s, max(cint2) from aggfns where cint2 is null group by s order by 1, 2;
+select s, max(cint2) from aggfns where cint2 is null group by s order by 1;
  s | max 
 ---+-----
  0 |    
@@ -6378,7 +6413,7 @@ select s, max(cint2) from aggfns where cint2 is null group by s order by 1, 2;
  9 |    
 (10 rows)
 
-select ss, max(cint2) from aggfns where cint2 is null group by ss order by 1, 2;
+select ss, max(cint2) from aggfns where cint2 is null group by ss order by 1;
  ss | max 
 ----+-----
   0 |    
@@ -6393,13 +6428,13 @@ select ss, max(cint2) from aggfns where cint2 is null group by ss order by 1, 2;
   9 |    
 (10 rows)
 
-select 777::text, min(cint2) from aggfns where cint2 is null group by 777::text order by 1, 2;
- text | min 
-------+-----
- 777  |    
+select min(cint2) from aggfns where cint2 is null order by 1;
+ min 
+-----
+    
 (1 row)
 
-select s, min(cint2) from aggfns where cint2 is null group by s order by 1, 2;
+select s, min(cint2) from aggfns where cint2 is null group by s order by 1;
  s | min 
 ---+-----
  0 |    
@@ -6414,7 +6449,7 @@ select s, min(cint2) from aggfns where cint2 is null group by s order by 1, 2;
  9 |    
 (10 rows)
 
-select ss, min(cint2) from aggfns where cint2 is null group by ss order by 1, 2;
+select ss, min(cint2) from aggfns where cint2 is null group by ss order by 1;
  ss | min 
 ----+-----
   0 |    
@@ -6429,13 +6464,13 @@ select ss, min(cint2) from aggfns where cint2 is null group by ss order by 1, 2;
   9 |    
 (10 rows)
 
-select 777::text, stddev(cint2) from aggfns where cint2 is null group by 777::text order by 1, 2;
- text | stddev 
-------+--------
- 777  |       
+select stddev(cint2) from aggfns where cint2 is null order by 1;
+ stddev 
+--------
+       
 (1 row)
 
-select s, stddev(cint2) from aggfns where cint2 is null group by s order by 1, 2;
+select s, stddev(cint2) from aggfns where cint2 is null group by s order by 1;
  s | stddev 
 ---+--------
  0 |       
@@ -6450,7 +6485,7 @@ select s, stddev(cint2) from aggfns where cint2 is null group by s order by 1, 2
  9 |       
 (10 rows)
 
-select ss, stddev(cint2) from aggfns where cint2 is null group by ss order by 1, 2;
+select ss, stddev(cint2) from aggfns where cint2 is null group by ss order by 1;
  ss | stddev 
 ----+--------
   0 |       
@@ -6465,13 +6500,13 @@ select ss, stddev(cint2) from aggfns where cint2 is null group by ss order by 1,
   9 |       
 (10 rows)
 
-select 777::text, sum(cint2) from aggfns where cint2 is null group by 777::text order by 1, 2;
- text | sum 
-------+-----
- 777  |    
+select sum(cint2) from aggfns where cint2 is null order by 1;
+ sum 
+-----
+    
 (1 row)
 
-select s, sum(cint2) from aggfns where cint2 is null group by s order by 1, 2;
+select s, sum(cint2) from aggfns where cint2 is null group by s order by 1;
  s | sum 
 ---+-----
  0 |    
@@ -6486,7 +6521,7 @@ select s, sum(cint2) from aggfns where cint2 is null group by s order by 1, 2;
  9 |    
 (10 rows)
 
-select ss, sum(cint2) from aggfns where cint2 is null group by ss order by 1, 2;
+select ss, sum(cint2) from aggfns where cint2 is null group by ss order by 1;
  ss | sum 
 ----+-----
   0 |    

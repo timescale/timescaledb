@@ -73,7 +73,7 @@ vector_array_predicate(VectorPredicate *vector_const_predicate, bool is_or,
 
 			for (size_t word = 0; word < result_words; word++)
 			{
-				array_result[word] = 0;
+				final_result[word] = 0;
 			}
 			return;
 		}
@@ -95,7 +95,7 @@ vector_array_predicate(VectorPredicate *vector_const_predicate, bool is_or,
 			single_result = single_result_storage;
 			for (size_t outer = 0; outer < result_words; outer++)
 			{
-				single_result[outer] = -1;
+				single_result[outer] = ~0ULL;
 			}
 		}
 		else

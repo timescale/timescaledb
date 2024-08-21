@@ -33,3 +33,6 @@
 #define DATUM_TO_CTYPE DatumGetFloat8
 #define CTYPE_TO_DATUM Float8GetDatum
 #include "minmax_single.c"
+
+#undef PREDICATE
+#undef AGG_NAME
