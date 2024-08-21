@@ -148,7 +148,7 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 			const int elements_this_block = Min(64, num_elements - decompressed_index);
 			Assert(elements_this_block <= 64);
 			Assert(elements_this_block > 0);
-			block_data &= (-1ULL) >> (64 - elements_this_block);
+			block_data &= (~0ULL) >> (64 - elements_this_block);
 
 			/*
 			 * The number of block elements should fit within padding. Previous
@@ -161,7 +161,7 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 			for (uint16 i = 0; i < 64; i++)
 			{
 				const uint16 word_prefix_sum =
-					__builtin_popcountll(block_data & (-1ULL >> (63 - i)));
+					__builtin_popcountll(block_data & ((~0ULL) >> (63 - i)));
 				prefix_sums[decompressed_index + i] = num_ones + word_prefix_sum;
 			}
 			num_ones += __builtin_popcountll(block_data);
@@ -304,7 +304,7 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 			const int elements_this_block = Min(64, num_elements - decompressed_index);
 			Assert(elements_this_block <= 64);
 			Assert(elements_this_block > 0);
-			block_data &= (-1ULL) >> (64 - elements_this_block);
+			block_data &= (~0ULL) >> (64 - elements_this_block);
 
 			/*
 			 * The number of block elements should fit within padding. Previous

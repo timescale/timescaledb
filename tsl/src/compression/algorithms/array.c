@@ -40,6 +40,13 @@ typedef struct ArrayCompressed
 	uint64 alignment_sentinel[FLEXIBLE_ARRAY_MEMBER];
 } ArrayCompressed;
 
+bool
+array_compressed_has_nulls(const CompressedDataHeader *header)
+{
+	const ArrayCompressed *ac = (const ArrayCompressed *) header;
+	return ac->has_nulls;
+}
+
 static void
 pg_attribute_unused() assertions(void)
 {
@@ -568,25 +575,26 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 	}
 	offsets[n_notnull] = offset;
 
-	const int validity_bitmap_bytes = sizeof(uint64) * (pad_to_multiple(64, n_total) / 64);
-	uint64 *restrict validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
-
-	/*
-	 * First, mark all data as valid, we will fill the nulls later if needed.
-	 * Note that the validity bitmap size is a multiple of 64 bits. We have to
-	 * fill the tail bits with zeros, because the corresponding elements are not
-	 * valid.
-	 *
-	 */
-	memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
-	if (n_total % 64)
-	{
-		const uint64 tail_mask = -1ULL >> (64 - n_total % 64);
-		validity_bitmap[n_total / 64] &= tail_mask;
-	}
-
+	uint64 *restrict validity_bitmap = NULL;
 	if (has_nulls)
 	{
+		const int validity_bitmap_bytes = sizeof(uint64) * (pad_to_multiple(64, n_total) / 64);
+		validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
+
+		/*
+		 * First, mark all data as valid, we will fill the nulls later if needed.
+		 * Note that the validity bitmap size is a multiple of 64 bits. We have to
+		 * fill the tail bits with zeros, because the corresponding elements are not
+		 * valid.
+		 *
+		 */
+		memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
+		if (n_total % 64)
+		{
+			const uint64 tail_mask = ~0ULL >> (64 - n_total % 64);
+			validity_bitmap[n_total / 64] &= tail_mask;
+		}
+
 		/*
 		 * We have decompressed the data with nulls skipped, reshuffle it
 		 * according to the nulls bitmap.

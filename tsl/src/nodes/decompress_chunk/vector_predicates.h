@@ -38,7 +38,7 @@ get_vector_qual_summary(uint64 *restrict qual_result, size_t n_rows)
 
 	if (n_rows % 64 != 0)
 	{
-		const uint64 last_word_mask = -1ULL >> (64 - n_rows % 64);
+		const uint64 last_word_mask = ~0ULL >> (64 - n_rows % 64);
 		any_rows_pass |= (qual_result[n_rows / 64] & last_word_mask) != 0;
 		all_rows_pass &= ((~qual_result[n_rows / 64]) & last_word_mask) == 0;
 	}

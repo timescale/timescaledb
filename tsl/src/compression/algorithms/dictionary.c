@@ -48,6 +48,13 @@ typedef struct DictionaryCompressed
 	uint64 alignment_sentinel[FLEXIBLE_ARRAY_MEMBER];
 } DictionaryCompressed;
 
+bool
+dictionary_compressed_has_nulls(const CompressedDataHeader *header)
+{
+	const DictionaryCompressed *dc = (const DictionaryCompressed *) header;
+	return dc->has_nulls;
+}
+
 static void
 pg_attribute_unused() assertions(void)
 {
@@ -451,26 +458,27 @@ tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 		text_array_decompress_all_serialized_no_header(&si, /* has_nulls = */ false, dest_mctx);
 	CheckCompressedData(header->num_distinct == dict->length);
 
-	/* Fill validity and indices of the array elements, reshuffling for nulls if needed. */
-	const int validity_bitmap_bytes = sizeof(uint64) * pad_to_multiple(64, n_total) / 64;
-	uint64 *restrict validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
-
-	/*
-	 * First, mark all data as valid, we will fill the nulls later if needed.
-	 * Note that the validity bitmap size is a multiple of 64 bits. We have to
-	 * fill the tail bits with zeros, because the corresponding elements are not
-	 * valid.
-	 *
-	 */
-	memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
-	if (n_total % 64)
-	{
-		const uint64 tail_mask = -1ULL >> (64 - n_total % 64);
-		validity_bitmap[n_total / 64] &= tail_mask;
-	}
-
+	uint64 *restrict validity_bitmap = NULL;
 	if (header->has_nulls)
 	{
+		/* Fill validity and indices of the array elements, reshuffling for nulls if needed. */
+		const int validity_bitmap_bytes = sizeof(uint64) * pad_to_multiple(64, n_total) / 64;
+		validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
+
+		/*
+		 * First, mark all data as valid, we will fill the nulls later if needed.
+		 * Note that the validity bitmap size is a multiple of 64 bits. We have to
+		 * fill the tail bits with zeros, because the corresponding elements are not
+		 * valid.
+		 *
+		 */
+		memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
+		if (n_total % 64)
+		{
+			const uint64 tail_mask = ~0ULL >> (64 - n_total % 64);
+			validity_bitmap[n_total / 64] &= tail_mask;
+		}
+
 		/*
 		 * We have decompressed the data with nulls skipped, reshuffle it
 		 * according to the nulls bitmap.

@@ -498,25 +498,25 @@ mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *mattblinfo, Quer
 {
 	Query *partial_selquery = NULL;
 
-	CAGG_MAKEQUERY(partial_selquery, userview_query);
-	partial_selquery->rtable = copyObject(userview_query->rtable);
-	partial_selquery->jointree = copyObject(userview_query->jointree);
-#if PG16_GE
-	partial_selquery->rteperminfos = copyObject(userview_query->rteperminfos);
-#endif
-
-	partial_selquery->targetList = mattblinfo->partial_seltlist;
-	partial_selquery->groupClause = mattblinfo->partial_grouplist;
-
-	if (finalized)
+	if (!finalized)
 	{
-		partial_selquery->havingQual = copyObject(userview_query->havingQual);
-		partial_selquery->sortClause = copyObject(userview_query->sortClause);
+		CAGG_MAKEQUERY(partial_selquery, userview_query);
+		partial_selquery->rtable = copyObject(userview_query->rtable);
+		partial_selquery->jointree = copyObject(userview_query->jointree);
+#if PG16_GE
+		partial_selquery->rteperminfos = copyObject(userview_query->rteperminfos);
+#endif
+		partial_selquery->targetList = mattblinfo->partial_seltlist;
+		partial_selquery->groupClause = mattblinfo->partial_grouplist;
+		partial_selquery->havingQual = NULL;
+		partial_selquery->sortClause = NULL;
 	}
 	else
 	{
-		partial_selquery->havingQual = NULL;
-		partial_selquery->sortClause = NULL;
+		partial_selquery = copyObject(userview_query);
+		/* Partial view should always include the time dimension column */
+		partial_selquery->targetList = mattblinfo->partial_seltlist;
+		partial_selquery->groupClause = mattblinfo->partial_grouplist;
 	}
 
 	return partial_selquery;

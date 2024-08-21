@@ -156,7 +156,7 @@ AS '@MODULE_PATHNAME@', 'ts_dimension_add_general' LANGUAGE C VOLATILE;
 -- if_not_exists - If set, and the entry already exists, generate a notice instead of an error
 -- Returns the "id" of the entry created. The "enabled" field
 -- is set to true if entry is created or exists already.
-CREATE OR REPLACE FUNCTION @extschema@.enable_column_stats(
+CREATE OR REPLACE FUNCTION @extschema@.enable_chunk_skipping(
     hypertable              REGCLASS,
     column_name             NAME,
     if_not_exists           BOOLEAN = FALSE
@@ -170,7 +170,7 @@ AS '@MODULE_PATHNAME@', 'ts_chunk_column_stats_enable' LANGUAGE C VOLATILE;
 -- if_not_exists - If set, and the entry does not exist,
 -- generate a notice instead of an error. The "disabled" field
 -- is set to true if entry is deleted successfully.
-CREATE OR REPLACE FUNCTION @extschema@.disable_column_stats(
+CREATE OR REPLACE FUNCTION @extschema@.disable_chunk_skipping(
     hypertable              REGCLASS,
     column_name             NAME,
     if_not_exists           BOOLEAN = FALSE

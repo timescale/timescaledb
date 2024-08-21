@@ -74,13 +74,14 @@ vector_nulltest(const ArrowArray *arrow, int test_type, uint64 *restrict result)
 	const uint64 *validity = (const uint64 *) arrow->buffers[0];
 	for (uint16 i = 0; i < bitmap_words; i++)
 	{
+		const uint64 validity_word = validity != NULL ? validity[i] : ~0ULL;
 		if (should_be_null)
 		{
-			result[i] &= ~validity[i];
+			result[i] &= ~validity_word;
 		}
 		else
 		{
-			result[i] &= validity[i];
+			result[i] &= validity_word;
 		}
 	}
 }
