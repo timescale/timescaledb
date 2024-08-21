@@ -268,7 +268,7 @@ add_partially_aggregated_subpaths(PlannerInfo *root, PathTarget *input_target,
 	 * In general, the projection here arises because the pathtarget of the
 	 * table scans is determined early based on the reltarget which lists all
 	 * used columns in attno order, and the pathtarget before grouping is
-	 * computed by apply_scanjoin_target and has the grouping columns in front.
+	 * computed later and has the grouping columns in front.
 	 */
 	if (ts_is_decompress_chunk_path(subpath))
 	{
