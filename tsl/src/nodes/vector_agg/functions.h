@@ -20,7 +20,7 @@ typedef struct
 	void (*agg_init)(void *agg_state);
 
 	/* Aggregate a given arrow array. */
-	void (*agg_vector)(void *agg_state, ArrowArray *vector, uint64 *filter);
+	void (*agg_vector)(void *agg_state, const ArrowArray *vector, const uint64 *filter);
 
 	/* Aggregate a constant (like segmentby or column with default value). */
 	void (*agg_const)(void *agg_state, Datum constvalue, bool constisnull, int n);

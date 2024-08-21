@@ -123,22 +123,31 @@ jobs:
         sed -i 's/^# *\(en_US.UTF-8\)/\1/' /etc/locale.gen
         locale-gen
 
+    - name: Upload config.log
+      if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: config.log for i386 PostgreSQL ${{ matrix.pg }}
+        path: ~/${{ env.PG_SRC_DIR }}/config.log
+
     - name: Build TimescaleDB
       run: |
         # The owner of the checkout directory and the files do not match. Add the directory to
         # Git's "safe.directory" setting. Otherwise git would complain about
         # 'detected dubious ownership in repository'
         git config --global --add safe.directory $(pwd)
-        ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" -DPG_SOURCE_DIR=~/$PG_SRC_DIR \
-          -DPG_PATH=~/$PG_INSTALL_DIR -DREQUIRE_ALL_TESTS=ON
+        ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" \
+          -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
+          -DREQUIRE_ALL_TESTS=ON \
+          -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         make -j $MAKE_JOBS -C build
         make -C build install
         chown -R postgres:postgres .
 
     - name: make installcheck
       id: installcheck
-      shell: bash
       run: |
+        ulimit -c unlimited
         set -o pipefail
         export LANG=C.UTF-8
         # PostgreSQL cannot be run as root. So, switch to postgres user.
@@ -148,27 +157,38 @@ jobs:
     - name: Show regression diffs
       if: always()
       id: collectlogs
-      shell: bash
       run: |
-        find build -name regression.diffs -exec cat {} + > regression.log
-        find build -name postmaster.log -exec cat {} + > postmaster.log
+        find . -name regression.diffs -exec cat {} + > regression.log
+
+          # wait in case there are in-progress coredumps
+          sleep 10
+          if coredumpctl -q list >/dev/null; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
+          # print OOM killer information
+          sudo journalctl --system -q --facility=kern --grep "Killed process" || true
         if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
         grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
         cat regression.log
 
-    - name: Coredumps
+    - name: Save regression diffs
+      if: always() && steps.collectlogs.outputs.regression_diff == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: Regression diff linux-i386 PG${{ matrix.pg }}
+        path: |
+          regression.log
+          installcheck.log
+
+    - name: Save PostgreSQL log
       if: always()
-      id: coredumps
-      shell: bash
+      uses: actions/upload-artifact@v4
+      with:
+        name: PostgreSQL log linux-i386 PG${{ matrix.pg }}
+        path: postmaster.*
+
+    - name: Stack trace Linux
+      if: always() && steps.collectlogs.outputs.coredumps == 'true'
       run: |
-        # wait in case there are in-progress coredumps
-        sleep 10
-        if compgen -G "/tmp/core*" > /dev/null; then
-          PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
-          apt-get install postgresql-${PG_MAJOR}-dbgsym >/dev/null
-          for file in /tmp/core*
-          do
-            gdb /usr/lib/postgresql/${PG_MAJOR}/bin/postgres -c $file <<<"
+        sudo coredumpctl debug --debugger=gdb --debugger-arguments='' <<<"
           set verbose on
           set trace-commands on
           show debug-file-directory
@@ -186,20 +206,16 @@ jobs:
           list
           info args
           info locals
-            " | tee -a stacktrace.log
-          done
-          echo "coredumps=true" >>$GITHUB_OUTPUT
-          exit 1
-        fi
+        " 2>&1 | tee stacktrace.log
+        ./scripts/bundle_coredumps.sh
 
-    - name: Save regression diffs
-      if: always() && steps.collectlogs.outputs.regression_diff == 'true'
+
+    - name: Coredumps
+      if: always() && steps.collectlogs.outputs.coredumps == 'true'
       uses: actions/upload-artifact@v4
       with:
-        name: Regression diff linux-i386 PG${{ matrix.pg }}
-        path: |
-          regression.log
-          installcheck.log
+        name: Coredumps linux-i386 PG${{ matrix.pg }}
+        path: coredumps
 
     - name: Save stacktraces
       if: always() && steps.coredumps.outputs.coredumps == 'true'
@@ -207,13 +223,6 @@ jobs:
       with:
         name: Stacktraces linux-i386 PG${{ matrix.pg }}
         path: stacktrace.log
-
-    - name: Save PostgreSQL log
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: PostgreSQL log linux-i386 PG${{ matrix.pg }}
-        path: postmaster.log
 
     - name: Save TAP test logs
       if: always()
@@ -226,7 +235,6 @@ jobs:
 
     - name: Upload test results to the database
       if: always()
-      shell: bash
       env:
         # GitHub Actions allow you neither to use the env context for the job name,
         # nor to access the job name from the step context, so we have to

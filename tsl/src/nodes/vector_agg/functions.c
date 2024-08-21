@@ -69,7 +69,7 @@ count_any_const(void *agg_state, Datum constvalue, bool constisnull, int n)
 }
 
 static void
-count_any_vector(void *agg_state, ArrowArray *vector, uint64 *restrict filter)
+count_any_vector(void *agg_state, const ArrowArray *vector, const uint64 *filter)
 {
 	CountState *state = (CountState *) agg_state;
 	const int n = vector->length;

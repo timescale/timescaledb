@@ -203,7 +203,7 @@ FUNCTION_NAME(vector_nofilter)(FloatAvgState *state, int rows, const CTYPE *valu
 }
 
 static pg_attribute_always_inline void
-FUNCTION_NAME(vector)(void *agg_state, ArrowArray *vector, uint64 *filter)
+FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *vector, const uint64 *filter)
 {
 	FloatAvgState *state = (FloatAvgState *) agg_state;
 	const int rows = vector->length;

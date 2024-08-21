@@ -10,7 +10,7 @@ case PG_AGG_OID_HELPER(AGG_NAME, PG_TYPE):
 #else
 
 static void
-FUNCTION_NAME(vector)(void *agg_state, ArrowArray *vector, uint64 *filter)
+FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *vector, const uint64 *filter)
 {
 	IntSumState *state = (IntSumState *) agg_state;
 

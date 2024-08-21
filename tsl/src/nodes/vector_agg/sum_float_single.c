@@ -18,7 +18,7 @@ FUNCTION_NAME(emit)(void *agg_state, Datum *out_result, bool *out_isnull)
 }
 
 static void
-FUNCTION_NAME(vector)(void *agg_state, ArrowArray *vector, uint64 *filter)
+FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *vector, const uint64 *filter)
 {
 	/*
 	 * Vector registers can be up to 512 bits wide.

@@ -35,7 +35,7 @@ FUNCTION_NAME(const)(void *agg_state, Datum constvalue, bool constisnull, int n)
 }
 
 static void
-FUNCTION_NAME(vector)(void *agg_state, ArrowArray *vector, uint64 *filter)
+FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *vector, const uint64 *filter)
 {
 	MinMaxState *state = (MinMaxState *) agg_state;
 	const int n = vector->length;
