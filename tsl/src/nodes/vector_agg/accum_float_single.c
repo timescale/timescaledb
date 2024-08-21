@@ -70,14 +70,16 @@ FUNCTION_NAME(inner_update)(const uint64 *filter, const uint64 *validity, const 
 	/*
 	 * This code follows float8_accum(), see the comments there.
 	 */
-	*N += 1.0;
-	*Sx += newval;
-
 #ifdef NEED_SXX
-	Assert(*N > 1.0);
-	const double tmp = newval * *N - *Sx;
-	*Sxx += tmp * tmp / (*N * (*N - 1));
+	if (*N > 0.0)
+	{
+		const double tmp = newval * (*N + 1.0) - (*Sx + newval);
+		*Sxx += tmp * tmp / (*N * (*N + 1.0));
+	}
 #endif
+
+	*N = *N + 1.0;
+	*Sx = *Sx + newval;
 
 	/*
 	 * Sxx should be NaN if any of the inputs are infinite or NaN. This is
@@ -104,38 +106,7 @@ FUNCTION_NAME(vector)(void *agg_state, ArrowArray *vector, uint64 *filter)
 	double Sxarray[UNROLL_SIZE] = { 0 };
 	double Sxxarray[UNROLL_SIZE] = { 0 };
 
-	/*
-	 * Initialize each state with the first matching row. We do this separately
-	 * to make the actual update function branchless.
-	 */
 	int row = 0;
-	for (int inner = 0; inner < UNROLL_SIZE; inner++)
-	{
-		for (; row < rows; row++)
-		{
-			const CTYPE newval = values[row];
-			const bool passes = arrow_row_is_valid(filter, row);
-			const bool isvalid = arrow_row_is_valid(validity, row);
-			if (passes && isvalid)
-			{
-				Narray[inner] = 1;
-				Sxarray[inner] = newval;
-				Sxxarray[inner] = 0 * newval;
-				row++;
-				break;
-			}
-		}
-	}
-
-	/*
-	 * Scroll to the even offset so that we can enter the unrolled loop, adding
-	 * the rows to the first intermediate state.
-	 */
-	for (; row < rows && (row % UNROLL_SIZE) != 0; row++)
-	{
-		FUNCTION_NAME(inner_update)
-		(filter, validity, values, row, &Narray[0], &Sxarray[0], &Sxxarray[0]);
-	}
 
 	/*
 	 * Unrolled loop.
