@@ -188,11 +188,15 @@ jobs:
       run: |
         # wait in case there are in-progress coredumps
         set -x
+        ulimit -c unlimited
         sleep 10
         cat /proc/sys/kernel/core_pattern
         sudo -u postgres touch "$(cat /proc/sys/kernel/core_pattern)"
         sudo -u postgres sleep 10 &
         sudo killall -SIGSEGV sleep
+        sleep 10
+        pwd
+        ls -lath .
         ls -lath /tmp
         if compgen -G "/tmp/core*" > /dev/null; then
           PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')

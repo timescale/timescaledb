@@ -158,17 +158,12 @@ jobs:
 
     - name: Build TimescaleDB
       run: |
-        # The owner of the checkout directory and the files do not match. Add the directory to
-        # Git's "safe.directory" setting. Otherwise git would complain about
-        # 'detected dubious ownership in repository'
-        git config --global --add safe.directory $(pwd)
-        ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" \
+        ./bootstrap -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
           -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
           ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         make -j $MAKE_JOBS -C build
         make -C build install
-        chown -R postgres:postgres .
 
     - name: Check exported symbols
       run: ./build/scripts/export_prefix_check.sh
