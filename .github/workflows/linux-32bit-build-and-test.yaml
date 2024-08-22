@@ -187,11 +187,12 @@ jobs:
       shell: bash
       run: |
         # wait in case there are in-progress coredumps
+        set -x
         sleep 10
         cat /proc/sys/kernel/core_pattern
         sudo -u postgres touch "$(cat /proc/sys/kernel/core_pattern)"
         sudo -u postgres sleep 10 &
-        killall -SIGSEGV sleep
+        sudo killall -SIGSEGV sleep
         ls -lath /tmp
         if compgen -G "/tmp/core*" > /dev/null; then
           PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
