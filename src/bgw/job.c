@@ -26,6 +26,7 @@
 #include <utils/builtins.h>
 #include <utils/elog.h>
 #include <utils/jsonb.h>
+#include <utils/lsyscache.h>
 #include <utils/memutils.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
@@ -44,6 +45,7 @@
 #include "license_guc.h"
 #include "scan_iterator.h"
 #include "scanner.h"
+#include "tss_callbacks.h"
 #include "utils.h"
 
 #ifdef USE_TELEMETRY
@@ -1054,6 +1056,56 @@ zero_guc(const char *guc_name)
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("could not set \"%s\" guc", guc_name)));
 }
 
+extern Oid
+ts_bgw_job_get_funcid(BgwJob *job)
+{
+	ObjectWithArgs *object = makeNode(ObjectWithArgs);
+	object->objname = list_make2(makeString(NameStr(job->fd.proc_schema)),
+								 makeString(NameStr(job->fd.proc_name)));
+	object->objargs = list_make2(SystemTypeName("int4"), SystemTypeName("jsonb"));
+
+	return LookupFuncWithArgs(OBJECT_ROUTINE, object, false);
+}
+
+static char *
+ts_bgw_job_function_call_string(BgwJob *job)
+{
+	char prokind = get_func_prokind(ts_bgw_job_get_funcid(job));
+	StringInfo stmt = makeStringInfo();
+	char *jsonb_str = "NULL";
+
+	if (job->fd.config)
+		jsonb_str = (char *) quote_identifier(
+			JsonbToCString(NULL, &job->fd.config->root, VARSIZE(job->fd.config)));
+
+	switch (prokind)
+	{
+		case PROKIND_FUNCTION:
+			appendStringInfo(stmt,
+							 "SELECT %s.%s('%d', %s)",
+							 quote_identifier(NameStr(job->fd.proc_schema)),
+							 quote_identifier(NameStr(job->fd.proc_name)),
+							 job->fd.id,
+							 jsonb_str);
+			break;
+		case PROKIND_PROCEDURE:
+			appendStringInfo(stmt,
+							 "CALL %s.%s('%d', %s)",
+							 quote_identifier(NameStr(job->fd.proc_schema)),
+							 quote_identifier(NameStr(job->fd.proc_name)),
+							 job->fd.id,
+							 jsonb_str);
+			break;
+		default:
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("unsupported function type")));
+			pg_unreachable();
+			break;
+	}
+
+	return stmt->data;
+}
+
 extern Datum
 ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 {
@@ -1114,6 +1166,10 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	pgstat_report_appname(NameStr(job->fd.application_name));
 	MemoryContext oldcontext = CurrentMemoryContext;
 
+	bool job_failed = false;
+	if (scheduler_test_hook == NULL)
+		ts_begin_tss_store_callback();
+
 	PG_TRY();
 	{
 		/*
@@ -1153,6 +1209,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 		/* switch away from error context to not lose the data */
 		MemoryContextSwitchTo(oldcontext);
+		job_failed = true;
 		edata = CopyErrorData();
 
 		/*
@@ -1203,6 +1260,12 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	 * is launched
 	 */
 	ts_bgw_job_stat_mark_end(job, res, NULL);
+
+	if (!job_failed && ts_is_tss_enabled() && scheduler_test_hook == NULL)
+	{
+		char *stmt = ts_bgw_job_function_call_string(job);
+		ts_end_tss_store_callback(stmt, -1, (int) strlen(stmt), 0, 0);
+	}
 
 	CommitTransactionCommand();
 
