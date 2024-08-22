@@ -203,11 +203,17 @@ jobs:
         sudo -u postgres sleep 10 &
         sudo killall -SIGSEGV sleep
 
+        sudo echo "core2" > /proc/sys/kernel/core_pattern
+        cat /proc/sys/kernel/core_pattern
+        sleep 10 &
+        killall -SIGSEGV sleep
+
         sleep 10
 
         pwd
         ls -lath .
         ls -lath /tmp
+        ls -lathd /tmp
         if compgen -G "/tmp/core*" > /dev/null; then
           PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
           # apt-get install postgresql-${PG_MAJOR}-dbgsym >/dev/null
