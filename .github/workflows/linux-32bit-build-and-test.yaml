@@ -35,7 +35,7 @@ jobs:
     needs: config
     container:
       image: i386/debian:bookworm-slim
-      options: --privileged --ulimit core=-1
+      options: --ulimit core=-1
       env:
         PG_SRC_DIR: pgbuild
         PG_INSTALL_DIR: postgresql
@@ -61,14 +61,14 @@ jobs:
     # /__e/node16/bin/node (used by actions/checkout@v4) needs 64-bit libraries
     - name: Install 64-bit libraries for GitHub actions
       run: |
-        apt-get update
-        apt-get install -y lib64atomic1 lib64gcc-s1 lib64stdc++6 libc6-amd64
+        sudo apt-get update
+        sudo apt-get install -y lib64atomic1 lib64gcc-s1 lib64stdc++6 libc6-amd64
 
     - name: Install build dependencies
       run: |
         PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
         echo '/tmp/core.%h.%e.%t' > /proc/sys/kernel/core_pattern
-        apt-get install -y gcc make cmake libssl-dev libkrb5-dev libipc-run-perl \
+        sudo apt-get install -y gcc make cmake libssl-dev libkrb5-dev libipc-run-perl \
           libtest-most-perl sudo gdb git wget gawk lbzip2 flex bison lcov base-files \
           locales clang-14 llvm-14 llvm-14-dev llvm-14-tools postgresql-client pkgconf \
           icu-devtools
@@ -113,7 +113,7 @@ jobs:
 
     - name: Install PostgreSQL ${{ matrix.pg }}
       run: |
-        useradd postgres
+        sudo useradd postgres
         cd ~/$PG_SRC_DIR
         make install
         for ext in ${EXTENSIONS}; do
