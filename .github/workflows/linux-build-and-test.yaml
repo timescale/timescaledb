@@ -173,6 +173,7 @@ jobs:
       run: |
         ulimit -c unlimited
         set -o pipefail
+        whoami
         make -k -C build installcheck IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \
             SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }} \
             | tee installcheck.log
