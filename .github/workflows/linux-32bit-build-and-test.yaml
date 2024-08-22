@@ -191,12 +191,18 @@ jobs:
         ulimit -c unlimited
         ulimit -f unlimited
         ulimit -a
+        sudo -u postgres bash -c "ulimit -a"
         sleep 10
+        whoami
 
         cat /proc/sys/kernel/core_pattern
         sudo -u postgres touch "$(cat /proc/sys/kernel/core_pattern)"
         sudo -u postgres sleep 10 &
         sudo killall -SIGSEGV sleep
+
+        cat /proc/sys/kernel/core_pattern
+        sleep 10 &
+        killall -SIGSEGV sleep
 
         sudo echo "core" > /proc/sys/kernel/core_pattern
         cat /proc/sys/kernel/core_pattern
@@ -207,6 +213,16 @@ jobs:
         cat /proc/sys/kernel/core_pattern
         sleep 10 &
         killall -SIGSEGV sleep
+
+        sudo echo "/tmp/core3" > /proc/sys/kernel/core_pattern
+        cat /proc/sys/kernel/core_pattern
+        sleep 10 &
+        killall -SIGSEGV sleep
+
+        sudo echo "/tmp/core3" > /proc/sys/kernel/core_pattern
+        cat /proc/sys/kernel/core_pattern
+        sudo -u postgres sleep 10 &
+        sudo killall -SIGSEGV sleep
 
         sleep 10
 
