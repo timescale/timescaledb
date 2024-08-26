@@ -2,6 +2,10 @@ name: Regression Linux i386
 "on":
   schedule:
     # run daily 0:00 on main branch
+    # Since we use the date as a part of the cache key to ensure no
+    # stale cache entries hiding build failures we need to make sure
+    # we have a cache entry present before workflows that depend on cache
+    # are run.
     - cron: '0 0 * * *'
   push:
     branches:
@@ -39,7 +43,6 @@ jobs:
       env:
         PG_SRC_DIR: pgbuild
         PG_INSTALL_DIR: postgresql
-        MAKE_JOBS: 6
         CLANG: clang-14
         CC: clang-14
         CXX: clang++-14
@@ -48,13 +51,13 @@ jobs:
         SKIPS: chunk_adaptive histogram_test-*
         EXTENSIONS: "postgres_fdw test_decoding"
     strategy:
-      fail-fast: false
       matrix:
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
         build_type: [ Debug ]
         include:
           - pg: ${{ fromJson(needs.config.outputs.pg16_latest) }}
             build_type: Debug
+      fail-fast: false
 
     steps:
 
@@ -106,9 +109,9 @@ jobs:
         ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
           --without-readline --without-zlib --without-libxml --enable-cassert \
           --enable-debug --with-llvm --without-icu LLVM_CONFIG=llvm-config-14 CFLAGS="-msse2"
-        make -j $MAKE_JOBS
+        make -j $(nproc)
         for ext in ${EXTENSIONS}; do
-          make -j$(nproc) -C contrib/${ext}
+          make -j $(nproc) -C contrib/${ext}
         done
 
     - name: Install PostgreSQL ${{ matrix.pg }}
@@ -140,7 +143,7 @@ jobs:
           -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
           -DREQUIRE_ALL_TESTS=ON \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
-        make -j $MAKE_JOBS -C build
+        make -j $(nproc) -C build
         make -C build install
         chown -R postgres:postgres .
 
@@ -151,8 +154,10 @@ jobs:
         set -o pipefail
         export LANG=C.UTF-8
         # PostgreSQL cannot be run as root. So, switch to postgres user.
-        runuser -u postgres -- make -k -C build installcheck IGNORES="${IGNORES}" \
-          SKIPS="${SKIPS}" PSQL="${HOME}/${PG_INSTALL_DIR}/bin/psql" | tee installcheck.log
+        runuser -u postgres -- \
+          make -k -C build installcheck IGNORES="${IGNORES}" \
+            SKIPS="${SKIPS}" PSQL="${HOME}/${PG_INSTALL_DIR}/bin/psql"
+            | tee installcheck.log
 
     - name: Show regression diffs
       if: always()
@@ -189,7 +194,6 @@ jobs:
         sleep 10
         if compgen -G "/tmp/core*" > /dev/null; then
           PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
-          # apt-get install postgresql-${PG_MAJOR}-dbgsym >/dev/null
           for file in /tmp/core*
           do
             gdb "${HOME}/${PG_INSTALL_DIR}/bin/postgres" -c $file <<<"
