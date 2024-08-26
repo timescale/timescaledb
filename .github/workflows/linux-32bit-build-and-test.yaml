@@ -147,7 +147,7 @@ jobs:
     - name: make installcheck
       id: installcheck
       shell: bash
-      run: sudo -u postgres -- scripts/installcheck_32bit.sh
+      run: runuser -u postgres -- scripts/installcheck_32bit.sh
 
     - name: Show regression diffs
       if: always()
