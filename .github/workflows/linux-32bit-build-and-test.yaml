@@ -147,7 +147,12 @@ jobs:
     - name: make installcheck
       id: installcheck
       shell: bash
-      run: runuser -u postgres -- scripts/installcheck_32bit.sh
+      run: |
+        set -o pipefail
+        export LANG=C.UTF-8
+        # PostgreSQL cannot be run as root. So, switch to postgres user.
+        runuser -u postgres -- make -k -C build installcheck IGNORES="${IGNORES}" \
+          SKIPS="${SKIPS}" PSQL="${HOME}/${PG_INSTALL_DIR}/bin/psql" | tee installcheck.log
 
     - name: Show regression diffs
       if: always()
