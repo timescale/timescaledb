@@ -881,9 +881,9 @@ ts_hypertable_restrict_info_get_chunks_ordered(HypertableRestrictInfo *hri, Hype
 	Assert(IS_OPEN_DIMENSION(&ht->space->dimensions[0]));
 
 	if (reverse)
-		qsort(chunks, *num_chunks, sizeof(Chunk *), chunk_cmp_reverse);
+		qsort((void *) chunks, *num_chunks, sizeof(Chunk *), chunk_cmp_reverse);
 	else
-		qsort(chunks, *num_chunks, sizeof(Chunk *), chunk_cmp);
+		qsort((void *) chunks, *num_chunks, sizeof(Chunk *), chunk_cmp);
 
 	for (i = 0; i < *num_chunks; i++)
 	{

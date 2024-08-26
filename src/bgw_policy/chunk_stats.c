@@ -18,7 +18,7 @@
 static ScanTupleResult
 bgw_policy_chunk_stats_tuple_found(TupleInfo *ti, void *const data)
 {
-	BgwPolicyChunkStats **chunk_stats = data;
+	BgwPolicyChunkStats **chunk_stats = (BgwPolicyChunkStats **) data;
 
 	*chunk_stats =
 		STRUCT_FROM_SLOT(ti->slot, ti->mctx, BgwPolicyChunkStats, FormData_bgw_policy_chunk_stats);
@@ -148,7 +148,7 @@ ts_bgw_policy_chunk_stats_find(int32 job_id, int32 chunk_id)
 						bgw_policy_chunk_stats_tuple_found,
 						AccessShareLock,
 						BGW_POLICY_CHUNK_STATS_TABLE_NAME,
-						&stats);
+						(void *) &stats);
 	return stats;
 }
 

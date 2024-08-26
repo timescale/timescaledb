@@ -1026,7 +1026,11 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 																	  false, /* is_null */
 																	  false	 /* is_array_op */
 																	  ));
+							break;
 						}
+						default:
+							/* Do nothing for unknown operator strategies. */
+							break;
 					}
 					continue;
 				}
@@ -1125,6 +1129,10 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 																	 false	/* is_array_op */
 																	 ));
 						}
+						break;
+						default:
+							/* Do nothing for unknown operator strategies. */
+							break;
 					}
 				}
 			}
@@ -1170,7 +1178,11 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 																	  false, /* is_null */
 																	  true	 /* is_array_op */
 																	  ));
+							break;
 						}
+						default:
+							/* Do nothing on unknown operator strategies. */
+							break;
 					}
 					continue;
 				}

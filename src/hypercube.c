@@ -146,7 +146,10 @@ ts_hypercube_add_slice(Hypercube *hc, const DimensionSlice *slice)
 void
 ts_hypercube_slice_sort(Hypercube *hc)
 {
-	qsort(hc->slices, hc->num_slices, sizeof(DimensionSlice *), cmp_slices_by_dimension_id);
+	qsort((void *) hc->slices,
+		  hc->num_slices,
+		  sizeof(DimensionSlice *),
+		  cmp_slices_by_dimension_id);
 }
 
 const DimensionSlice *
@@ -162,8 +165,8 @@ ts_hypercube_get_slice_by_dimension_id(const Hypercube *hc, int32 dimension_id)
 
 	Assert(hypercube_is_sorted(hc));
 
-	ptr = bsearch(&ptr,
-				  hc->slices,
+	ptr = bsearch((void *) &ptr,
+				  (void *) hc->slices,
 				  hc->num_slices,
 				  sizeof(DimensionSlice *),
 				  cmp_slices_by_dimension_id);

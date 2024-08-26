@@ -41,7 +41,7 @@ ts_function_telemetry_shmem_startup()
 	 * segfaults. Since the shmem_startup_hook is run on every backend, we use
 	 * a ShmemInitStruct to detect if this function has been called before.
 	 */
-	lock = ShmemInitStruct("fn_telemetry_detect_first_run", sizeof(LWLock *), &found);
+	lock = (LWLock **) ShmemInitStruct("fn_telemetry_detect_first_run", sizeof(LWLock *), &found);
 	if (!found)
 		*lock = &(GetNamedLWLockTranche(FN_TELEMETRY_LWLOCK_TRANCHE_NAME))->lock;
 

@@ -279,7 +279,15 @@ ts_array_add_element_bool(ArrayType *arr, bool value)
 		Assert(position);
 		position++;
 
-		d = array_set_element(d, 1, &position, value, false, -1, 1, true, TYPALIGN_CHAR);
+		d = array_set_element(d,
+							  1,
+							  &position,
+							  BoolGetDatum(value),
+							  false,
+							  -1,
+							  1,
+							  true,
+							  TYPALIGN_CHAR);
 
 		return DatumGetArrayTypeP(d);
 	}

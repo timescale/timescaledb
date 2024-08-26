@@ -1206,7 +1206,7 @@ gapfill_state_initialize_columns(GapFillState *state)
 	int i;
 
 	state->ncolumns = tupledesc->natts;
-	state->columns = palloc(state->ncolumns * sizeof(GapFillColumnState *));
+	state->columns = (GapFillColumnState **) palloc(state->ncolumns * sizeof(GapFillColumnState *));
 
 	for (i = 0; i < state->ncolumns; i++)
 	{

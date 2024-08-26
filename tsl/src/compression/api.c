@@ -1232,7 +1232,7 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 	bool changed_segment = false;
 	/************ current segment **************/
 	CompressedSegmentInfo **current_segment =
-		palloc(sizeof(CompressedSegmentInfo *) * nsegmentby_cols);
+		(CompressedSegmentInfo **) palloc(sizeof(CompressedSegmentInfo *) * nsegmentby_cols);
 
 	for (int i = 0; i < nsegmentby_cols; i++)
 	{

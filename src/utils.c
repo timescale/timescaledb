@@ -289,9 +289,9 @@ ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid)
 
 			return ts_time_value_to_internal(time_val, type_oid);
 		}
+		default:
+			return ts_time_value_to_internal(time_val, type_oid);
 	}
-
-	return ts_time_value_to_internal(time_val, type_oid);
 }
 
 TS_FUNCTION_INFO_V1(ts_time_to_internal);

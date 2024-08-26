@@ -464,7 +464,7 @@ generate_partial_agg_pushdown_path(PlannerInfo *root, Path *cheapest_partial_pat
 														partially_grouped_rel->reltarget,
 														NULL,
 														&total_groups);
-		add_path(partially_grouped_rel, (Path *) gather_path);
+		add_path(partially_grouped_rel, gather_path);
 	}
 }
 

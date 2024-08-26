@@ -1450,7 +1450,8 @@ build_decompressor(Relation in_rel, Relation out_rel)
 														ALLOCSET_DEFAULT_SIZES),
 		.estate = CreateExecutorState(),
 
-		.decompressed_slots = palloc0(sizeof(void *) * TARGET_COMPRESSED_BATCH_SIZE),
+		.decompressed_slots =
+			(TupleTableSlot **) palloc0(sizeof(void *) * TARGET_COMPRESSED_BATCH_SIZE),
 	};
 
 	create_per_compressed_column(&decompressor);
@@ -2034,6 +2035,9 @@ tsl_compressed_data_info(PG_FUNCTION_ARGS)
 			break;
 		case COMPRESSION_ALGORITHM_ARRAY:
 			has_nulls = array_compressed_has_nulls(header);
+			break;
+		default:
+			elog(ERROR, "unknown compression algorithm %d", header->compression_algorithm);
 			break;
 	}
 

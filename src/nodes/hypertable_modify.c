@@ -1461,10 +1461,10 @@ ExecInsert(ModifyTableContext *context, ResultRelInfo *resultRelInfo, TupleTable
 
 			if (resultRelInfo->ri_Slots == NULL)
 			{
-				resultRelInfo->ri_Slots =
-					palloc(sizeof(TupleTableSlot *) * resultRelInfo->ri_BatchSize);
-				resultRelInfo->ri_PlanSlots =
-					palloc(sizeof(TupleTableSlot *) * resultRelInfo->ri_BatchSize);
+				resultRelInfo->ri_Slots = (TupleTableSlot **) palloc(sizeof(TupleTableSlot *) *
+																	 resultRelInfo->ri_BatchSize);
+				resultRelInfo->ri_PlanSlots = (TupleTableSlot **) palloc(
+					sizeof(TupleTableSlot *) * resultRelInfo->ri_BatchSize);
 			}
 
 			/*

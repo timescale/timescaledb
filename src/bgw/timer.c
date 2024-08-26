@@ -73,7 +73,7 @@ wait_using_wait_latch(TimestampTz until)
 		timeout = MAX_TIMEOUT;
 
 	/* Wait latch requires timeout to be <= INT_MAX */
-	if ((int64) timeout > (int64) INT_MAX)
+	if (timeout > (int64) INT_MAX)
 		timeout = INT_MAX;
 
 	wl_rc = WaitLatch(MyLatch,

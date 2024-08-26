@@ -463,7 +463,6 @@ relation_get_fk_constraint(Oid conrelid, Oid confrelid)
 	Relation conrel;
 	SysScanDesc conscan;
 	ScanKeyData skey[3];
-	HeapTuple htup = NULL;
 
 	/* Prepare to scan pg_constraint for entries having confrelid = this rel. */
 	ScanKeyInit(&skey[0],
@@ -487,7 +486,8 @@ relation_get_fk_constraint(Oid conrelid, Oid confrelid)
 	conrel = table_open(ConstraintRelationId, AccessShareLock);
 	conscan = systable_beginscan(conrel, InvalidOid, false, NULL, 3, skey);
 
-	if (HeapTupleIsValid(htup = systable_getnext(conscan)))
+	HeapTuple htup = systable_getnext(conscan);
+	if (HeapTupleIsValid(htup))
 	{
 		htup = heap_copytuple(htup);
 	}

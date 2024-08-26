@@ -56,7 +56,7 @@ ts_dimension_vec_sort(DimensionVec **vecptr)
 	DimensionVec *vec = *vecptr;
 
 	if (vec->num_slices > 1)
-		qsort(vec->slices, vec->num_slices, sizeof(DimensionSlice *), cmp_slices);
+		qsort((void *) vec->slices, vec->num_slices, sizeof(DimensionSlice *), cmp_slices);
 
 	return vec;
 }
@@ -102,8 +102,8 @@ ts_dimension_vec_remove_slice(DimensionVec **vecptr, int32 index)
 	DimensionVec *vec = *vecptr;
 
 	ts_dimension_slice_free(vec->slices[index]);
-	memmove(vec->slices + index,
-			vec->slices + (index + 1),
+	memmove((void *) &vec->slices[index],
+			(void *) &vec->slices[index + 1],
 			sizeof(DimensionSlice *) * (vec->num_slices - index - 1));
 	vec->num_slices--;
 }
@@ -118,7 +118,7 @@ dimension_vec_is_sorted(const DimensionVec *vec)
 		return true;
 
 	for (i = 1; i < vec->num_slices; i++)
-		if (cmp_slices(&vec->slices[i - 1], &vec->slices[i]) > 0)
+		if (cmp_slices((void *) &vec->slices[i - 1], (void *) &vec->slices[i]) > 0)
 			return false;
 
 	return true;
@@ -135,11 +135,11 @@ ts_dimension_vec_find_slice(const DimensionVec *vec, int64 coordinate)
 
 	Assert(dimension_vec_is_sorted(vec));
 
-	res = bsearch(&coordinate,
-				  vec->slices,
-				  vec->num_slices,
-				  sizeof(DimensionSlice *),
-				  cmp_coordinate_and_slice);
+	res = (DimensionSlice **) bsearch(&coordinate,
+									  (void *) vec->slices,
+									  vec->num_slices,
+									  sizeof(DimensionSlice *),
+									  cmp_coordinate_and_slice);
 
 	if (res == NULL)
 		return NULL;
