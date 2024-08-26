@@ -253,6 +253,7 @@ vector_agg_exec(CustomScanState *node)
 	 * grouping policy asked us to stop but couldn't produce any partials.
 	 */
 	Assert(false);
+	pg_unreachable();
 	return NULL;
 }
 
