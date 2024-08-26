@@ -9,6 +9,8 @@ set -o pipefail
 
 sudo cat /etc/security/limits.conf
 
+ulimit -a
+
 ulimit -c unlimited
 export LANG=C.UTF-8
 whoami
