@@ -35,7 +35,7 @@ jobs:
     needs: config
     container:
       image: i386/debian:bookworm-slim
-      options: --privileged --ulimit core=-1
+      options: --privileged --ulimit core=-1:-1 fsize=-1:-1
       env:
         PG_SRC_DIR: pgbuild
         PG_INSTALL_DIR: postgresql
