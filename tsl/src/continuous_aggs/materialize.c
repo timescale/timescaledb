@@ -298,7 +298,7 @@ build_merge_join_clause(List *column_names)
 
 			appendStringInfoString(ret, "P.");
 			appendStringInfoString(ret, quote_identifier(column));
-			appendStringInfoString(ret, " = M.");
+			appendStringInfoString(ret, " IS NOT DISTINCT FROM M.");
 			appendStringInfoString(ret, quote_identifier(column));
 		}
 
@@ -464,7 +464,7 @@ spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 	all_columns = list_concat(all_columns, agg_colnames);
 
 	StringInfo merge_update = makeStringInfo();
-	char *merge_update_clause = build_merge_update_clause(agg_colnames);
+	char *merge_update_clause = build_merge_update_clause(all_columns);
 
 	/* It make no sense but is possible to create a cagg only with time bucket (without aggregate
 	 * functions) */
