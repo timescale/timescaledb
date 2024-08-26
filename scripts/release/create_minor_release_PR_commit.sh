@@ -46,7 +46,7 @@ git pull && git diff HEAD
 
 echo "---- Modifying version.config to the new versions ----"
 
-sed -i.bak "s/"-dev"/""/g" version.config
+sed -i.bak "s/-dev//g" version.config
 rm version.config.bak
 
 
