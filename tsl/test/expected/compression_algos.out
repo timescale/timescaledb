@@ -44,9 +44,9 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::bigint FROM (s
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
 psql:include/compression_test.sql:7: NOTICE:  table "compressed" does not exist, skipping
- compressed size 
------------------
-            1720
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DELTADELTA | f         |            1720
 (1 row)
 
                                    ?column?                                    | count 
@@ -78,9 +78,9 @@ INSERT INTO base_ints VALUES (0, NULL), (10, NULL), (10000, NULL);
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              93
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DELTADELTA | t         |              93
 (1 row)
 
                                    ?column?                                    | count 
@@ -117,9 +117,9 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::bigint FROM (S
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              45
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DELTADELTA | f         |              45
 (1 row)
 
                                    ?column?                                    | count 
@@ -162,9 +162,9 @@ CREATE TABLE base_ints AS SELECT row_number() over () as rn, item FROM
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             184
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DELTADELTA | f         |             184
 (1 row)
 
                                    ?column?                                    | count 
@@ -195,9 +195,9 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(i, 5) item FR
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              69
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DELTADELTA | t         |              69
 (1 row)
 
                                    ?column?                                    | count 
@@ -227,9 +227,9 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(i, 1) item FR
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              69
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DELTADELTA | t         |              69
 (1 row)
 
                                    ?column?                                    | count 
@@ -259,9 +259,9 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(i, 10) item F
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              69
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DELTADELTA | t         |              69
 (1 row)
 
                                    ?column?                                    | count 
@@ -291,9 +291,9 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLIF
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              69
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DELTADELTA | t         |              69
 (1 row)
 
                                    ?column?                                    | count 
@@ -334,9 +334,9 @@ SELECT
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-            1720
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DELTADELTA | f         |            1720
 (1 row)
 
                                    ?column?                                    | count 
@@ -380,9 +380,9 @@ CREATE TABLE base_time AS SELECT row_number() OVER() as rn, item FROM
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-            5332
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DELTADELTA | f         |            5332
 (1 row)
 
                                    ?column?                                    | count 
@@ -426,9 +426,9 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, item::float4 FROM
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-            1808
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | f         |            1808
 (1 row)
 
                                    ?column?                                    | count 
@@ -465,9 +465,9 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, item::float4 FROM 
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             109
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | f         |             109
 (1 row)
 
                                    ?column?                                    | count 
@@ -509,9 +509,9 @@ CREATE TABLE base_floats AS SELECT row_number() over () as rn, item FROM
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             152
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | f         |             152
 (1 row)
 
                                    ?column?                                    | count 
@@ -542,9 +542,9 @@ CREATE TABLE base_floats AS SELECT row_number() over () as rn, 0::float4 as item
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             160
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | f         |             160
 (1 row)
 
                                    ?column?                                    | count 
@@ -575,9 +575,9 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::floa
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             136
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | t         |             136
 (1 row)
 
                                    ?column?                                    | count 
@@ -607,9 +607,9 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::floa
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             136
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | t         |             136
 (1 row)
 
                                    ?column?                                    | count 
@@ -639,9 +639,9 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::flo
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             136
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | t         |             136
 (1 row)
 
                                    ?column?                                    | count 
@@ -671,9 +671,9 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULL
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             136
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | t         |             136
 (1 row)
 
                                    ?column?                                    | count 
@@ -717,9 +717,9 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, item::double prec
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-            1808
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | f         |            1808
 (1 row)
 
                                    ?column?                                    | count 
@@ -756,9 +756,9 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, item::double prec
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             109
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | f         |             109
 (1 row)
 
                                    ?column?                                    | count 
@@ -800,9 +800,9 @@ CREATE TABLE base_doubles AS SELECT row_number() over () as rn, item FROM
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             152
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | f         |             152
 (1 row)
 
                                    ?column?                                    | count 
@@ -833,9 +833,9 @@ CREATE TABLE base_doubles AS SELECT row_number() over () as rn, 0::FLOAT(50) as 
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             160
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | f         |             160
 (1 row)
 
                                    ?column?                                    | count 
@@ -866,9 +866,9 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::DOU
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             136
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | t         |             136
 (1 row)
 
                                    ?column?                                    | count 
@@ -898,9 +898,9 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::DOU
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             136
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | t         |             136
 (1 row)
 
                                    ?column?                                    | count 
@@ -930,9 +930,9 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::DO
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             136
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | t         |             136
 (1 row)
 
                                    ?column?                                    | count 
@@ -962,9 +962,9 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NUL
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             136
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | t         |             136
 (1 row)
 
                                    ?column?                                    | count 
@@ -1009,9 +1009,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-            4305
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ ARRAY     | f         |            4305
 (1 row)
 
                                    ?column?                                    | count 
@@ -1049,9 +1049,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             605
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DICTIONARY | f         |             605
 (1 row)
 
                                    ?column?                                    | count 
@@ -1082,9 +1082,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM (SE
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              39
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ ARRAY     | f         |              39
 (1 row)
 
                                    ?column?                                    | count 
@@ -1125,9 +1125,9 @@ SELECT pg_total_relation_size(reltoastrelid)
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-         1100092
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ ARRAY     | f         |         1100092
 (1 row)
 
                                    ?column?                                    | count 
@@ -1158,9 +1158,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::TEXT 
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             187
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DICTIONARY | t         |             187
 (1 row)
 
                                    ?column?                                    | count 
@@ -1190,9 +1190,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::TEXT 
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             179
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DICTIONARY | t         |             179
 (1 row)
 
                                    ?column?                                    | count 
@@ -1222,9 +1222,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::TEXT
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             178
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DICTIONARY | t         |             178
 (1 row)
 
                                    ?column?                                    | count 
@@ -1254,9 +1254,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLI
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             189
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DICTIONARY | t         |             189
 (1 row)
 
                                    ?column?                                    | count 
@@ -1301,9 +1301,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             356
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ ARRAY     | f         |             356
 (1 row)
 
                                    ?column?                                    | count 
@@ -1340,9 +1340,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM (SE
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              39
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ ARRAY     | f         |              39
 (1 row)
 
                                    ?column?                                    | count 
@@ -1383,9 +1383,9 @@ SELECT pg_total_relation_size(reltoastrelid)
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-         1100092
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ ARRAY     | f         |         1100092
 (1 row)
 
                                    ?column?                                    | count 
@@ -1416,9 +1416,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::TEXT 
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              80
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ ARRAY     | t         |              80
 (1 row)
 
                                    ?column?                                    | count 
@@ -1448,9 +1448,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::TEXT 
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              80
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ ARRAY     | t         |              80
 (1 row)
 
                                    ?column?                                    | count 
@@ -1480,9 +1480,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::TEXT
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              79
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ ARRAY     | t         |              79
 (1 row)
 
                                    ?column?                                    | count 
@@ -1512,9 +1512,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLI
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              74
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ ARRAY     | t         |              74
 (1 row)
 
                                    ?column?                                    | count 

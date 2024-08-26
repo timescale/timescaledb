@@ -28,6 +28,7 @@
 #define is_supported_pg_version_14(version) ((version >= 140000) && (version < 150000))
 #define is_supported_pg_version_15(version) ((version >= 150000) && (version < 160000))
 #define is_supported_pg_version_16(version) ((version >= 160000) && (version < 170000))
+#define is_supported_pg_version_17(version) ((version >= 170000) && (version < 180000))
 
 /*
  * PG16 support is a WIP and not complete yet.
@@ -35,11 +36,12 @@
  */
 #define is_supported_pg_version(version)                                                           \
 	(is_supported_pg_version_14(version) || is_supported_pg_version_15(version) ||                 \
-	 is_supported_pg_version_16(version))
+	 is_supported_pg_version_16(version) || is_supported_pg_version_17(version))
 
 #define PG14 is_supported_pg_version_14(PG_VERSION_NUM)
 #define PG15 is_supported_pg_version_15(PG_VERSION_NUM)
 #define PG16 is_supported_pg_version_16(PG_VERSION_NUM)
+#define PG17 is_supported_pg_version_17(PG_VERSION_NUM)
 
 #define PG14_LT (PG_VERSION_NUM < 140000)
 #define PG14_GE (PG_VERSION_NUM >= 140000)
@@ -47,6 +49,8 @@
 #define PG15_GE (PG_VERSION_NUM >= 150000)
 #define PG16_LT (PG_VERSION_NUM < 160000)
 #define PG16_GE (PG_VERSION_NUM >= 160000)
+#define PG17_LT (PG_VERSION_NUM < 170000)
+#define PG17_GE (PG_VERSION_NUM >= 170000)
 
 #if !(is_supported_pg_version(PG_VERSION_NUM))
 #error "Unsupported PostgreSQL version"
@@ -764,4 +768,155 @@ error_severity(int elevel)
 
 	return prefix;
 }
+#endif
+
+#if PG17_LT
+/*
+ * Backport of RestrictSearchPath() from PG17
+ *
+ * We skip the check for IsBootstrapProcessingMode() since it creates problems
+ * on Windows builds and we don't need it for our use case.
+ */
+#include <utils/guc.h>
+static inline void
+RestrictSearchPath(void)
+{
+	set_config_option("search_path",
+					  "pg_catalog, pg_temp",
+					  PGC_USERSET,
+					  PGC_S_SESSION,
+					  GUC_ACTION_SAVE,
+					  true,
+					  0,
+					  false);
+}
+
+/* This macro was renamed in PG17, see 414f6c0fb79a */
+#define WAIT_EVENT_MESSAGE_QUEUE_INTERNAL WAIT_EVENT_MQ_INTERNAL
+
+/* 'flush' argument was added in 173b56f1ef59 */
+#define LogLogicalMessageCompat(prefix, message, size, transactional, flush)                       \
+	LogLogicalMessage(prefix, message, size, transactional)
+
+/* 'stmt' argument was added in f21848de2013 */
+#define reindex_relation_compat(stmt, relid, flags, params) reindex_relation(relid, flags, params)
+
+/* 'mergeActions' argument was added in 5f2e179bd31e */
+#define CheckValidResultRelCompat(resultRelInfo, operation, mergeActions)                          \
+	CheckValidResultRel(resultRelInfo, operation)
+
+/* 'vacuum_is_relation_owner' was renamed to 'vacuum_is_permitted_for_relation' in ecb0fd33720f */
+#define vacuum_is_permitted_for_relation_compat(relid, reltuple, options)                          \
+	vacuum_is_relation_owner(relid, reltuple, options)
+
+/*
+ * 'BackendIdGetProc' was renamed to 'ProcNumberGetProc' in 024c52111757.
+ * Also 'backendId' was renamed to 'procNumber'
+ */
+#define VirtualTransactionGetProcCompat(vxid) BackendIdGetProc((vxid)->backendId)
+
+/*
+ * 'opclassOptions' argument was added in 784162357130.
+ * Previously indexInfo->ii_OpclassOptions was used instead.
+ * On top of that 'stattargets' argument was added in 6a004f1be87d.
+ */
+#define index_create_compat(heapRelation,                                                          \
+							indexRelationName,                                                     \
+							indexRelationId,                                                       \
+							parentIndexRelid,                                                      \
+							parentConstraintId,                                                    \
+							relFileNumber,                                                         \
+							indexInfo,                                                             \
+							indexColNames,                                                         \
+							accessMethodId,                                                        \
+							tableSpaceId,                                                          \
+							collationIds,                                                          \
+							opclassIds,                                                            \
+							opclassOptions,                                                        \
+							coloptions,                                                            \
+							stattargets,                                                           \
+							reloptions,                                                            \
+							flags,                                                                 \
+							constr_flags,                                                          \
+							allow_system_table_mods,                                               \
+							is_internal,                                                           \
+							constraintId)                                                          \
+	index_create(heapRelation,                                                                     \
+				 indexRelationName,                                                                \
+				 indexRelationId,                                                                  \
+				 parentIndexRelid,                                                                 \
+				 parentConstraintId,                                                               \
+				 relFileNumber,                                                                    \
+				 indexInfo,                                                                        \
+				 indexColNames,                                                                    \
+				 accessMethodId,                                                                   \
+				 tableSpaceId,                                                                     \
+				 collationIds,                                                                     \
+				 opclassIds,                                                                       \
+				 coloptions,                                                                       \
+				 reloptions,                                                                       \
+				 flags,                                                                            \
+				 constr_flags,                                                                     \
+				 allow_system_table_mods,                                                          \
+				 is_internal,                                                                      \
+				 constraintId)
+
+#else /* PG17_GE */
+
+#define LogLogicalMessageCompat(prefix, message, size, transactional, flush)                       \
+	LogLogicalMessage(prefix, message, size, transactional, flush)
+
+#define reindex_relation_compat(stmt, relid, flags, params)                                        \
+	reindex_relation(stmt, relid, flags, params)
+
+#define CheckValidResultRelCompat(resultRelInfo, operation, mergeActions)                          \
+	CheckValidResultRel(resultRelInfo, operation, mergeActions)
+
+#define vacuum_is_permitted_for_relation_compat(relid, reltuple, options)                          \
+	vacuum_is_permitted_for_relation(relid, reltuple, options)
+
+#define VirtualTransactionGetProcCompat(vxid) ProcNumberGetProc(vxid->procNumber)
+
+#define index_create_compat(heapRelation,                                                          \
+							indexRelationName,                                                     \
+							indexRelationId,                                                       \
+							parentIndexRelid,                                                      \
+							parentConstraintId,                                                    \
+							relFileNumber,                                                         \
+							indexInfo,                                                             \
+							indexColNames,                                                         \
+							accessMethodId,                                                        \
+							tableSpaceId,                                                          \
+							collationIds,                                                          \
+							opclassIds,                                                            \
+							opclassOptions,                                                        \
+							coloptions,                                                            \
+							stattargets,                                                           \
+							reloptions,                                                            \
+							flags,                                                                 \
+							constr_flags,                                                          \
+							allow_system_table_mods,                                               \
+							is_internal,                                                           \
+							constraintId)                                                          \
+	index_create(heapRelation,                                                                     \
+				 indexRelationName,                                                                \
+				 indexRelationId,                                                                  \
+				 parentIndexRelid,                                                                 \
+				 parentConstraintId,                                                               \
+				 relFileNumber,                                                                    \
+				 indexInfo,                                                                        \
+				 indexColNames,                                                                    \
+				 accessMethodId,                                                                   \
+				 tableSpaceId,                                                                     \
+				 collationIds,                                                                     \
+				 opclassIds,                                                                       \
+				 opclassOptions,                                                                   \
+				 coloptions,                                                                       \
+				 stattargets,                                                                      \
+				 reloptions,                                                                       \
+				 flags,                                                                            \
+				 constr_flags,                                                                     \
+				 allow_system_table_mods,                                                          \
+				 is_internal,                                                                      \
+				 constraintId)
 #endif

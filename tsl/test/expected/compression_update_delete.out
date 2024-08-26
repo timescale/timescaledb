@@ -122,12 +122,13 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
  chunk_status |    CHUNK_NAME    
 --------------+------------------
-            9 | _hyper_1_1_chunk
+            1 | _hyper_1_1_chunk
             9 | _hyper_1_2_chunk
 (2 rows)
 
 -- recompress the partial chunks
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -173,12 +174,13 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
  chunk_status |    CHUNK_NAME    
 --------------+------------------
-            9 | _hyper_1_1_chunk
+            1 | _hyper_1_1_chunk
             9 | _hyper_1_2_chunk
 (2 rows)
 
 -- recompress the paritial chunks
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -978,7 +980,7 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
  chunk_status |     CHUNK_NAME     
 --------------+--------------------
-            9 | _hyper_13_27_chunk
+            1 | _hyper_13_27_chunk
             1 | _hyper_13_28_chunk
 (2 rows)
 
@@ -1141,7 +1143,7 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
  chunk_status |     CHUNK_NAME     
 --------------+--------------------
             1 | _hyper_15_31_chunk
-            9 | _hyper_15_32_chunk
+            1 | _hyper_15_32_chunk
 (2 rows)
 
 -- get rowcount from compressed chunks where device_id IS NULL
@@ -2958,6 +2960,10 @@ INSERT INTO test_pushdown SELECT '2020-01-01', 'b';
 INSERT INTO test_pushdown SELECT '2020-01-01 05:00', 'c';
 CREATE TABLE devices(device text);
 INSERT INTO devices VALUES ('a'), ('b'), ('c');
+CREATE TABLE devices2(device text);
+INSERT INTO devices2 VALUES ('d'), ('e'), ('f');
+CREATE TABLE devices3(device text);
+INSERT INTO devices3 VALUES ('b'), ('d'), ('g');
 ALTER TABLE test_pushdown SET (timescaledb.compress, timescaledb.compress_segmentby='device');
 NOTICE:  default order by for hypertable "test_pushdown" is set to ""time" DESC"
 SELECT compress_chunk(show_chunks('test_pushdown'));
@@ -2967,6 +2973,7 @@ SELECT compress_chunk(show_chunks('test_pushdown'));
 (1 row)
 
 -- 3 batch decompressions means pushdown is not working so we expect less than 3 for all these queries
+SET timescaledb.enable_compressed_direct_batch_delete TO false;
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'a' = device; ROLLBACK;
                                      QUERY PLAN                                     
 ------------------------------------------------------------------------------------
@@ -3063,6 +3070,7 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'b' <= device; ROLLBACK;
                Filter: ('b'::text <= device)
 (7 rows)
 
+RESET timescaledb.enable_compressed_direct_batch_delete;
 -- cant pushdown OR atm
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = 'a' OR device = 'b'; ROLLBACK;
                                      QUERY PLAN                                     
@@ -3105,8 +3113,10 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = substring(CURRENT_USER,
                      Filter: (device = ("substring"((CURRENT_USER)::text, (length((CURRENT_USER)::text) + 1)) || 'c'::text))
 (9 rows)
 
+-- JOIN tests
 -- no filtering in decompression
-BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices d WHERE p.device=d.device; ROLLBACK;
+SET timescaledb.enable_compressed_direct_batch_delete TO false;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices3 d WHERE p.device=d.device; SELECT * FROM test_pushdown p ORDER BY p; ROLLBACK;
                                      QUERY PLAN                                     
 ------------------------------------------------------------------------------------
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
@@ -3114,20 +3124,54 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices d WHERE p.device=d.dev
    Tuples decompressed: 3
    ->  Delete on test_pushdown p (actual rows=0 loops=1)
          Delete on _hyper_39_79_chunk p_1
-         ->  Merge Join (actual rows=3 loops=1)
+         ->  Merge Join (actual rows=1 loops=1)
                Merge Cond: (p_1.device = d.device)
                ->  Sort (actual rows=3 loops=1)
                      Sort Key: p_1.device
                      Sort Method: quicksort 
                      ->  Seq Scan on _hyper_39_79_chunk p_1 (actual rows=3 loops=1)
-               ->  Sort (actual rows=3 loops=1)
+               ->  Sort (actual rows=2 loops=1)
                      Sort Key: d.device
                      Sort Method: quicksort 
-                     ->  Seq Scan on devices d (actual rows=3 loops=1)
+                     ->  Seq Scan on devices3 d (actual rows=3 loops=1)
 (15 rows)
 
+             time             | device 
+------------------------------+--------
+ Wed Jan 01 00:00:00 2020 PST | a
+ Wed Jan 01 05:00:00 2020 PST | c
+(2 rows)
+
+RESET timescaledb.enable_compressed_direct_batch_delete;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices3 d WHERE p.device=d.device; SELECT * FROM test_pushdown p ORDER BY p; ROLLBACK;
+                                     QUERY PLAN                                     
+------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 3
+   Tuples decompressed: 3
+   ->  Delete on test_pushdown p (actual rows=0 loops=1)
+         Delete on _hyper_39_79_chunk p_1
+         ->  Merge Join (actual rows=1 loops=1)
+               Merge Cond: (p_1.device = d.device)
+               ->  Sort (actual rows=3 loops=1)
+                     Sort Key: p_1.device
+                     Sort Method: quicksort 
+                     ->  Seq Scan on _hyper_39_79_chunk p_1 (actual rows=3 loops=1)
+               ->  Sort (actual rows=2 loops=1)
+                     Sort Key: d.device
+                     Sort Method: quicksort 
+                     ->  Seq Scan on devices3 d (actual rows=3 loops=1)
+(15 rows)
+
+             time             | device 
+------------------------------+--------
+ Wed Jan 01 00:00:00 2020 PST | a
+ Wed Jan 01 05:00:00 2020 PST | c
+(2 rows)
+
 -- can filter in decompression even before executing join
-BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices d WHERE p.device=d.device AND d.device ='b' ; ROLLBACK;
+SET timescaledb.enable_compressed_direct_batch_delete TO false;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices d WHERE p.device=d.device AND d.device ='b'; SELECT * FROM test_pushdown p ORDER BY p; ROLLBACK;
                                      QUERY PLAN                                     
 ------------------------------------------------------------------------------------
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
@@ -3144,8 +3188,39 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices d WHERE p.device=d.dev
                            Filter: (device = 'b'::text)
 (12 rows)
 
+             time             | device 
+------------------------------+--------
+ Wed Jan 01 00:00:00 2020 PST | a
+ Wed Jan 01 05:00:00 2020 PST | c
+(2 rows)
+
+RESET timescaledb.enable_compressed_direct_batch_delete;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices d WHERE p.device=d.device AND d.device ='b'; SELECT * FROM test_pushdown p ORDER BY p; ROLLBACK;
+                                     QUERY PLAN                                     
+------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 1
+   Tuples decompressed: 1
+   ->  Delete on test_pushdown p (actual rows=0 loops=1)
+         Delete on _hyper_39_79_chunk p_1
+         ->  Nested Loop (actual rows=1 loops=1)
+               ->  Seq Scan on devices d (actual rows=1 loops=1)
+                     Filter: (device = 'b'::text)
+                     Rows Removed by Filter: 2
+               ->  Materialize (actual rows=1 loops=1)
+                     ->  Seq Scan on _hyper_39_79_chunk p_1 (actual rows=1 loops=1)
+                           Filter: (device = 'b'::text)
+(12 rows)
+
+             time             | device 
+------------------------------+--------
+ Wed Jan 01 00:00:00 2020 PST | a
+ Wed Jan 01 05:00:00 2020 PST | c
+(2 rows)
+
 -- test prepared statement
 PREPARE q1(text) AS DELETE FROM test_pushdown WHERE device = $1;
+SET timescaledb.enable_compressed_direct_batch_delete TO false;
 BEGIN; :EXPLAIN EXECUTE q1('a'); ROLLBACK;
                                      QUERY PLAN                                     
 ------------------------------------------------------------------------------------
@@ -3158,30 +3233,50 @@ BEGIN; :EXPLAIN EXECUTE q1('a'); ROLLBACK;
                Filter: (device = 'a'::text)
 (7 rows)
 
+RESET timescaledb.enable_compressed_direct_batch_delete;
+BEGIN; :EXPLAIN EXECUTE q1('a'); ROLLBACK;
+                                     QUERY PLAN                                     
+------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches deleted: 1
+   ->  Delete on test_pushdown (actual rows=0 loops=1)
+         Delete on _hyper_39_79_chunk test_pushdown_1
+         ->  Seq Scan on _hyper_39_79_chunk test_pushdown_1 (actual rows=0 loops=1)
+               Filter: (device = 'a'::text)
+(6 rows)
+
+BEGIN; :EXPLAIN EXECUTE q1('not here'); ROLLBACK;
+                                     QUERY PLAN                                     
+------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   ->  Delete on test_pushdown (actual rows=0 loops=1)
+         Delete on _hyper_39_79_chunk test_pushdown_1
+         ->  Seq Scan on _hyper_39_79_chunk test_pushdown_1 (actual rows=0 loops=1)
+               Filter: (device = 'not here'::text)
+(5 rows)
+
 -- test arrayop pushdown less than 3 decompressions are expected for successful pushdown
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device IN ('a','d'); ROLLBACK;
                                      QUERY PLAN                                     
 ------------------------------------------------------------------------------------
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
-   Batches decompressed: 1
-   Tuples decompressed: 1
+   Batches deleted: 1
    ->  Delete on test_pushdown (actual rows=0 loops=1)
          Delete on _hyper_39_79_chunk test_pushdown_1
-         ->  Seq Scan on _hyper_39_79_chunk test_pushdown_1 (actual rows=1 loops=1)
+         ->  Seq Scan on _hyper_39_79_chunk test_pushdown_1 (actual rows=0 loops=1)
                Filter: (device = ANY ('{a,d}'::text[]))
-(7 rows)
+(6 rows)
 
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = ANY('{a,d}'); ROLLBACK;
                                      QUERY PLAN                                     
 ------------------------------------------------------------------------------------
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
-   Batches decompressed: 1
-   Tuples decompressed: 1
+   Batches deleted: 1
    ->  Delete on test_pushdown (actual rows=0 loops=1)
          Delete on _hyper_39_79_chunk test_pushdown_1
-         ->  Seq Scan on _hyper_39_79_chunk test_pushdown_1 (actual rows=1 loops=1)
+         ->  Seq Scan on _hyper_39_79_chunk test_pushdown_1 (actual rows=0 loops=1)
                Filter: (device = ANY ('{a,d}'::text[]))
-(7 rows)
+(6 rows)
 
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device IN ('a',CURRENT_USER); ROLLBACK;
                                         QUERY PLAN                                        

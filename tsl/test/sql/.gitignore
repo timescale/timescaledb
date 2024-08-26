@@ -1,6 +1,7 @@
 /*.pgbinary
 /bgw_custom-*.sql
 /cagg_*-1[3-9].sql
+/chunk_column_stats*-1[3-9].sql
 /compression*-1[3-9].sql
 /continuous_aggs*-1[3-9].sql
 /jit-*.sql

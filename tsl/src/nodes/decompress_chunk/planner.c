@@ -1304,6 +1304,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	lfirst_int(list_nth_cell(settings, DCS_Reverse)) = dcpath->reverse;
 	lfirst_int(list_nth_cell(settings, DCS_BatchSortedMerge)) = dcpath->batch_sorted_merge;
 	lfirst_int(list_nth_cell(settings, DCS_EnableBulkDecompression)) = enable_bulk_decompression;
+	lfirst_int(list_nth_cell(settings, DCS_HasRowMarks)) = root->parse->rowMarks != NIL;
 
 	/*
 	 * Vectorized quals must go into custom_exprs, because Postgres has to see

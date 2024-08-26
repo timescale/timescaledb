@@ -21,7 +21,6 @@
 #include <tcop/tcopprot.h>
 
 #include "compat/compat.h"
-#include "compression/array.h"
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
 #include "guc.h"
@@ -82,6 +81,7 @@ decompress_chunk_state_create(CustomScan *cscan)
 		list_nth_int(settings, DCS_BatchSortedMerge);
 	chunk_state->decompress_context.enable_bulk_decompression =
 		list_nth_int(settings, DCS_EnableBulkDecompression);
+	chunk_state->has_row_marks = list_nth_int(settings, DCS_HasRowMarks);
 
 	Assert(IsA(cscan->custom_exprs, List));
 	Assert(list_length(cscan->custom_exprs) == 1);
@@ -427,6 +427,13 @@ decompress_chunk_exec_impl(DecompressChunkState *chunk_state, const BatchQueueFu
 	if (TupIsNull(result_slot))
 	{
 		return NULL;
+	}
+
+	if (chunk_state->has_row_marks)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("locking compressed tuples is not supported")));
 	}
 
 	if (chunk_state->csstate.ss.ps.ps_ProjInfo)

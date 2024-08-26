@@ -123,9 +123,9 @@ SELECT * FROM cagg_validate_query($$ SELECT 1 FROM pg_catalog.pg_class $$);
 (1 row)
 
 SELECT * FROM cagg_validate_query($$ SELECT relkind, count(*) FROM pg_catalog.pg_class GROUP BY 1 $$);
- is_valid | error_level | error_code |            error_message             | error_detail | error_hint 
-----------+-------------+------------+--------------------------------------+--------------+------------
- f        | ERROR       | TS001      | table "pg_class" is not a hypertable |              | 
+ is_valid | error_level | error_code |           error_message           |                          error_detail                          | error_hint 
+----------+-------------+------------+-----------------------------------+----------------------------------------------------------------+------------
+ f        | ERROR       | 0A000      | invalid continuous aggregate view | At least one hypertable should be used in the view definition. | 
 (1 row)
 
 -- time_bucket with offset is not allowed
@@ -158,33 +158,33 @@ SELECT * FROM cagg_validate_query($$ SELECT time_bucket_gapfill('1 hour', "time"
 
 -- invalid join queries
 SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 hour', a."time"), count(*) FROM metrics a, metrics b GROUP BY 1 $$);
- is_valid | error_level | error_code |           error_message           |                              error_detail                               | error_hint 
-----------+-------------+------------+-----------------------------------+-------------------------------------------------------------------------+------------
- f        | ERROR       | 0A000      | invalid continuous aggregate view | Multiple hypertables or normal tables are not supported in FROM clause. | 
+ is_valid | error_level | error_code |           error_message           |                         error_detail                         | error_hint 
+----------+-------------+------------+-----------------------------------+--------------------------------------------------------------+------------
+ f        | ERROR       | 0A000      | invalid continuous aggregate view | Only one hypertable is allowed in continuous aggregate view. | 
 (1 row)
 
 SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 hour', "time"), count(*) FROM metrics, devices a, devices b GROUP BY 1 $$);
- is_valid | error_level | error_code |                                           error_message                                           | error_detail | error_hint 
-----------+-------------+------------+---------------------------------------------------------------------------------------------------+--------------+------------
- f        | ERROR       | 0A000      | only two tables with one hypertable and one normal tableare  allowed in continuous aggregate view |              | 
+ is_valid | error_level | error_code | error_message | error_detail | error_hint 
+----------+-------------+------------+---------------+--------------+------------
+ t        |             |            |               |              | 
 (1 row)
 
 SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 hour', "time"), device_id, count(*) FROM metrics LEFT JOIN devices ON id = device_id GROUP BY 1, 2 $$);
- is_valid | error_level | error_code |                      error_message                      | error_detail | error_hint 
-----------+-------------+------------+---------------------------------------------------------+--------------+------------
- f        | ERROR       | 0A000      | only inner joins are supported in continuous aggregates |              | 
+ is_valid | error_level | error_code | error_message | error_detail | error_hint 
+----------+-------------+------------+---------------+--------------+------------
+ t        |             |            |               |              | 
 (1 row)
 
 SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 hour', "time"), device_id, count(*) FROM metrics JOIN devices ON id = device_id AND name = 'foo' GROUP BY 1, 2 $$);
- is_valid | error_level | error_code |           error_message           |              error_detail              |                            error_hint                            
-----------+-------------+------------+-----------------------------------+----------------------------------------+------------------------------------------------------------------
- f        | ERROR       | 0A000      | invalid continuous aggregate view | Unsupported expression in join clause. | Only equality conditions are supported in continuous aggregates.
+ is_valid | error_level | error_code | error_message | error_detail | error_hint 
+----------+-------------+------------+---------------+--------------+------------
+ t        |             |            |               |              | 
 (1 row)
 
 SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 hour', "time"), device_id, count(*) FROM metrics JOIN devices ON id < device_id GROUP BY 1, 2 $$);
- is_valid | error_level | error_code |           error_message           |                           error_detail                           | error_hint 
-----------+-------------+------------+-----------------------------------+------------------------------------------------------------------+------------
- f        | ERROR       | 0A000      | invalid continuous aggregate view | Only equality conditions are supported in continuous aggregates. | 
+ is_valid | error_level | error_code | error_message | error_detail | error_hint 
+----------+-------------+------------+---------------+--------------+------------
+ t        |             |            |               |              | 
 (1 row)
 
 -- invalid caggs on caggs
@@ -310,6 +310,18 @@ CREATE MATERIALIZED VIEW temperature_tz_4h_ts
     FROM timestamptz_ht
     GROUP BY 1 ORDER BY 1;
 NOTICE:  refreshing continuous aggregate "temperature_tz_4h_ts"
+CREATE MATERIALIZED VIEW temperature_tz_4h_ts_origin
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('4 hour', time, timezone => 'Europe/Berlin', origin => '2001-01-01'::timestamptz), avg(value)
+    FROM timestamptz_ht
+    GROUP BY 1 ORDER BY 1;
+NOTICE:  refreshing continuous aggregate "temperature_tz_4h_ts_origin"
+CREATE MATERIALIZED VIEW temperature_tz_4h_ts_offset
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('4 hour', time, timezone => 'Europe/Berlin', "offset" => '1 hour'::interval), avg(value)
+    FROM timestamptz_ht
+    GROUP BY 1 ORDER BY 1;
+NOTICE:  refreshing continuous aggregate "temperature_tz_4h_ts_offset"
 CREATE TABLE integer_ht(a integer, b integer, c integer);
 SELECT table_name FROM create_hypertable('integer_ht', 'a', chunk_time_interval=> 10);
 NOTICE:  adding not-null constraint to column "a"
@@ -327,22 +339,49 @@ SELECT set_integer_now_func('integer_ht', 'integer_now_integer_ht');
 
 CREATE MATERIALIZED VIEW integer_ht_cagg
   WITH (timescaledb.continuous) AS
-  SELECT a, count(b)
+  SELECT time_bucket(1, a) AS bucket, a, count(b)
      FROM integer_ht
-     GROUP BY time_bucket(1, a), a;
+     GROUP BY bucket, a;
 NOTICE:  continuous aggregate "integer_ht_cagg" is already up-to-date
---- Get the bucket Oids
+CREATE MATERIALIZED VIEW integer_ht_cagg_offset
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket(1, a, "offset" => 10) AS bucket, a, count(b)
+     FROM integer_ht
+     GROUP BY bucket, a;
+NOTICE:  continuous aggregate "integer_ht_cagg_offset" is already up-to-date
+-- Get the bucket Oids
 SELECT user_view_name, cagg_get_bucket_function(mat_hypertable_id)
 FROM _timescaledb_catalog.continuous_agg
-WHERE user_view_name IN ('temperature_4h', 'temperature_tz_4h', 'temperature_tz_4h_ts', 'integer_ht_cagg')
+WHERE user_view_name IN
+  ('temperature_4h', 'temperature_tz_4h', 'temperature_tz_4h_ts', 'temperature_tz_4h_ts_origin', 'temperature_tz_4h_ts_offset', 'integer_ht_cagg', 'integer_ht_cagg_offset')
 ORDER BY user_view_name;
-    user_view_name    |                               cagg_get_bucket_function                                
-----------------------+---------------------------------------------------------------------------------------
- integer_ht_cagg      | time_bucket(integer,integer)
- temperature_4h       | time_bucket(interval,timestamp without time zone)
- temperature_tz_4h    | time_bucket(interval,timestamp with time zone)
- temperature_tz_4h_ts | time_bucket(interval,timestamp with time zone,text,timestamp with time zone,interval)
-(4 rows)
+       user_view_name        |                               cagg_get_bucket_function                                
+-----------------------------+---------------------------------------------------------------------------------------
+ integer_ht_cagg             | time_bucket(integer,integer)
+ integer_ht_cagg_offset      | time_bucket(integer,integer,integer)
+ temperature_4h              | time_bucket(interval,timestamp without time zone)
+ temperature_tz_4h           | time_bucket(interval,timestamp with time zone)
+ temperature_tz_4h_ts        | time_bucket(interval,timestamp with time zone,text,timestamp with time zone,interval)
+ temperature_tz_4h_ts_offset | time_bucket(interval,timestamp with time zone,text,timestamp with time zone,interval)
+ temperature_tz_4h_ts_origin | time_bucket(interval,timestamp with time zone,text,timestamp with time zone,interval)
+(7 rows)
+
+-- Get all bucket function information
+SELECT user_view_name, bf.*
+FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id) AS bf
+WHERE user_view_name IN
+  ('temperature_4h', 'temperature_tz_4h', 'temperature_tz_4h_ts', 'temperature_tz_4h_ts_origin', 'temperature_tz_4h_ts_offset', 'integer_ht_cagg', 'integer_ht_cagg_offset')
+ORDER BY user_view_name;
+       user_view_name        |                                      bucket_func                                      | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
+-----------------------------+---------------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
+ integer_ht_cagg             | time_bucket(integer,integer)                                                          | 1            |                              |               |                 | t
+ integer_ht_cagg_offset      | time_bucket(integer,integer,integer)                                                  | 1            |                              | 10            |                 | t
+ temperature_4h              | time_bucket(interval,timestamp without time zone)                                     | @ 4 hours    | Fri Dec 31 16:00:00 1999 PST |               |                 | t
+ temperature_tz_4h           | time_bucket(interval,timestamp with time zone)                                        | @ 4 hours    | Fri Dec 31 16:00:00 1999 PST |               |                 | t
+ temperature_tz_4h_ts        | time_bucket(interval,timestamp with time zone,text,timestamp with time zone,interval) | @ 4 hours    | Fri Dec 31 16:00:00 1999 PST |               | Europe/Berlin   | f
+ temperature_tz_4h_ts_offset | time_bucket(interval,timestamp with time zone,text,timestamp with time zone,interval) | @ 4 hours    | Fri Dec 31 16:00:00 1999 PST | @ 1 hour      | Europe/Berlin   | f
+ temperature_tz_4h_ts_origin | time_bucket(interval,timestamp with time zone,text,timestamp with time zone,interval) | @ 4 hours    | Mon Jan 01 00:00:00 2001 PST |               | Europe/Berlin   | f
+(7 rows)
 
 -- Valid multiple time_bucket usage on view definition
 CREATE MATERIALIZED VIEW temperature_tz_4h_2
@@ -352,11 +391,11 @@ FROM timestamptz_ht
 GROUP BY time_bucket('4 hour', time)
 ORDER BY 1
 WITH NO DATA;
-SELECT user_view_name, cagg_get_bucket_function(mat_hypertable_id)
-FROM _timescaledb_catalog.continuous_agg
+SELECT user_view_name, bf.bucket_func
+FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id) AS bf
 WHERE user_view_name = 'temperature_tz_4h_2'
 ORDER BY user_view_name;
-   user_view_name    |            cagg_get_bucket_function            
+   user_view_name    |                  bucket_func                   
 ---------------------+------------------------------------------------
  temperature_tz_4h_2 | time_bucket(interval,timestamp with time zone)
 (1 row)
@@ -370,11 +409,11 @@ CREATE OR REPLACE VIEW :direct_view_schema.:direct_view_name AS
 SELECT NULL::date AS timezone, NULL::FLOAT8 AS avg;
 \set ON_ERROR_STOP 0
 -- Should error because there's no time_bucket function on the view definition
-SELECT user_view_name, cagg_get_bucket_function(mat_hypertable_id)
-FROM _timescaledb_catalog.continuous_agg
+SELECT user_view_name, bf.bucket_func
+FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id) AS bf
 WHERE user_view_name = 'temperature_tz_4h_2'
 ORDER BY user_view_name;
-ERROR:  time_bucket function not found in CAgg definition for mat_ht_id: 11
+ERROR:  time_bucket function not found in CAgg definition for mat_ht_id: 14
 \set ON_ERROR_STOP 1
 -- Group by another function to make sure it will be ignored
 CREATE FUNCTION skip() RETURNS INTEGER AS $$ SELECT 1; $$ IMMUTABLE LANGUAGE SQL;
@@ -385,15 +424,13 @@ FROM timestamptz_ht
 GROUP BY 1, 2
 ORDER BY 1
 WITH NO DATA;
-SELECT user_view_name, cagg_get_bucket_function(mat_hypertable_id)
-FROM _timescaledb_catalog.continuous_agg
+SELECT user_view_name, bf.bucket_func
+FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id) AS bf
 WHERE user_view_name = 'temperature_tz_4h_3'
 ORDER BY user_view_name;
-   user_view_name    |            cagg_get_bucket_function            
+   user_view_name    |                  bucket_func                   
 ---------------------+------------------------------------------------
  temperature_tz_4h_3 | time_bucket(interval,timestamp with time zone)
 (1 row)
 
---- Cleanup
 DROP FUNCTION IF EXISTS cagg_get_bucket_function(INTEGER);
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER

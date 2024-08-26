@@ -348,5 +348,5 @@ static uint64
 bit_array_low_bits_mask(uint8 bits_used)
 {
 	Assert(bits_used > 0);
-	return -1ULL >> (64 - bits_used);
+	return ~0ULL >> (64 - bits_used);
 }

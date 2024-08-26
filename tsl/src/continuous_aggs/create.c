@@ -498,25 +498,25 @@ mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *mattblinfo, Quer
 {
 	Query *partial_selquery = NULL;
 
-	CAGG_MAKEQUERY(partial_selquery, userview_query);
-	partial_selquery->rtable = copyObject(userview_query->rtable);
-	partial_selquery->jointree = copyObject(userview_query->jointree);
-#if PG16_GE
-	partial_selquery->rteperminfos = copyObject(userview_query->rteperminfos);
-#endif
-
-	partial_selquery->targetList = mattblinfo->partial_seltlist;
-	partial_selquery->groupClause = mattblinfo->partial_grouplist;
-
-	if (finalized)
+	if (!finalized)
 	{
-		partial_selquery->havingQual = copyObject(userview_query->havingQual);
-		partial_selquery->sortClause = copyObject(userview_query->sortClause);
+		CAGG_MAKEQUERY(partial_selquery, userview_query);
+		partial_selquery->rtable = copyObject(userview_query->rtable);
+		partial_selquery->jointree = copyObject(userview_query->jointree);
+#if PG16_GE
+		partial_selquery->rteperminfos = copyObject(userview_query->rteperminfos);
+#endif
+		partial_selquery->targetList = mattblinfo->partial_seltlist;
+		partial_selquery->groupClause = mattblinfo->partial_grouplist;
+		partial_selquery->havingQual = NULL;
+		partial_selquery->sortClause = NULL;
 	}
 	else
 	{
-		partial_selquery->havingQual = NULL;
-		partial_selquery->sortClause = NULL;
+		partial_selquery = copyObject(userview_query);
+		/* Partial view should always include the time dimension column */
+		partial_selquery->targetList = mattblinfo->partial_seltlist;
+		partial_selquery->groupClause = mattblinfo->partial_grouplist;
 	}
 
 	return partial_selquery;
@@ -777,7 +777,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	char *bucket_offset = NULL;
 	char *bucket_width = NULL;
 
-	if (IS_TIME_BUCKET_INFO_TIME_BASED(bucket_info))
+	if (IS_TIME_BUCKET_INFO_TIME_BASED(bucket_info->bf))
 	{
 		/* Bucketing on time */
 		Assert(bucket_info->bf->bucket_time_width != NULL);
@@ -802,7 +802,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	else
 	{
 		/* Bucketing on integers */
-		bucket_width = palloc0(MAXINT8LEN + 1 * sizeof(char));
+		bucket_width = palloc0(MAXINT8LEN + 1);
 		pg_lltoa(bucket_info->bf->bucket_integer_width, bucket_width);
 
 		/* Integer buckets with origin are not supported, so noting to do. */
@@ -810,7 +810,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 
 		if (bucket_info->bf->bucket_integer_offset != 0)
 		{
-			bucket_offset = palloc0(MAXINT8LEN + 1 * sizeof(char));
+			bucket_offset = palloc0(MAXINT8LEN + 1);
 			pg_lltoa(bucket_info->bf->bucket_integer_offset, bucket_offset);
 		}
 	}

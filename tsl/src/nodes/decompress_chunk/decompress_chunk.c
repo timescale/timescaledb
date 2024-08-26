@@ -139,6 +139,8 @@ append_ec_for_seqnum(PlannerInfo *root, CompressionInfo *info, SortInfo *sort_in
 	newec->ec_max_security = 0;
 	newec->ec_merged = NULL;
 
+	info->compressed_rel->eclass_indexes =
+		bms_add_member(info->compressed_rel->eclass_indexes, list_length(root->eq_classes));
 	root->eq_classes = lappend(root->eq_classes, newec);
 
 	MemoryContextSwitchTo(oldcontext);
@@ -170,11 +172,8 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 		 * seen from the start, so that we arrive at the proper counts of seen
 		 * segmentby columns in the end.
 		 */
-		Bitmapset *segmentby_columns = bms_copy(info->chunk_const_segmentby);
 		ListCell *lc;
-		for (lc = list_head(chunk_pathkeys);
-			 lc != NULL && bms_num_members(segmentby_columns) < info->num_segmentby_columns;
-			 lc = lnext(chunk_pathkeys, lc))
+		for (lc = list_head(chunk_pathkeys); lc; lc = lnext(chunk_pathkeys, lc))
 		{
 			PathKey *pk = lfirst(lc);
 			EquivalenceMember *compressed_em = NULL;
@@ -195,21 +194,11 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 			 * already refers a compressed column, it is a bug. See
 			 * build_sortinfo().
 			 */
-			Ensure(compressed_em, "corresponding equivalence member not found");
+			if (!compressed_em)
+				break;
 
 			required_compressed_pathkeys = lappend(required_compressed_pathkeys, pk);
-
-			segmentby_columns =
-				bms_add_member(segmentby_columns, castNode(Var, compressed_em->em_expr)->varattno);
 		}
-
-		/*
-		 * Either we sort by all segmentby columns, or by subset of them and
-		 * nothing else. We verified this condition in build_sortinfo(), so only
-		 * asserting here.
-		 */
-		Assert(bms_num_members(segmentby_columns) == info->num_segmentby_columns ||
-			   list_length(required_compressed_pathkeys) == list_length(chunk_pathkeys));
 	}
 
 	/*
@@ -1682,7 +1671,7 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk
 
 	expand_planner_arrays(root, 1);
 	info->compressed_rte =
-		decompress_chunk_make_rte(compressed_reloid, AccessShareLock, root->parse);
+		decompress_chunk_make_rte(compressed_reloid, info->chunk_rte->rellockmode, root->parse);
 	root->simple_rte_array[compressed_index] = info->compressed_rte;
 
 	root->parse->rtable = lappend(root->parse->rtable, info->compressed_rte);
@@ -1852,11 +1841,36 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, Comp
 		 * decompression
 		 */
 		List *orig_pathkeys = root->query_pathkeys;
+		List *orig_eq_classes = root->eq_classes;
+		Bitmapset *orig_eclass_indexes = info->compressed_rel->eclass_indexes;
 		build_compressed_scan_pathkeys(sort_info, root, root->query_pathkeys, info);
 		root->query_pathkeys = sort_info->required_compressed_pathkeys;
+
+		/* We can optimize iterating over EquivalenceClasses by reducing them to
+		 * the subset which are from the compressed chunk. This only works if we don't
+		 * have joins based on equivalence classes involved since those
+		 * use eclass_indexes which is not valid with this optimization.
+		 *
+		 * Clauseless joins work fine since they don't rely on eclass_indexes.
+		 */
+		if (!info->chunk_rel->has_eclass_joins)
+		{
+			int i = -1;
+			List *required_eq_classes = NIL;
+			while ((i = bms_next_member(info->compressed_rel->eclass_indexes, i)) >= 0)
+			{
+				EquivalenceClass *cur_ec = (EquivalenceClass *) list_nth(root->eq_classes, i);
+				required_eq_classes = lappend(required_eq_classes, cur_ec);
+			}
+			root->eq_classes = required_eq_classes;
+			info->compressed_rel->eclass_indexes = NULL;
+		}
+
 		check_index_predicates(root, compressed_rel);
 		create_index_paths(root, compressed_rel);
 		root->query_pathkeys = orig_pathkeys;
+		root->eq_classes = orig_eq_classes;
+		info->compressed_rel->eclass_indexes = orig_eclass_indexes;
 	}
 	else
 	{

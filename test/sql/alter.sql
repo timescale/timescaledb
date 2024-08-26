@@ -23,7 +23,8 @@ SELECT * FROM alter_before;
 
 -- Show that deleted column is marked as dropped and that attnums are
 -- now different for the root table and the chunk
-SELECT c.relname, a.attname, a.attnum, a.attoptions, a.attstattarget, a.attstorage FROM pg_attribute a, pg_class c
+-- PG17 made attstattarget NULLABLE and changed the default from -1 to NULL
+SELECT c.relname, a.attname, a.attnum, a.attoptions, CASE WHEN a.attstattarget = -1 THEN NULL ELSE a.attstattarget END attstattarget, a.attstorage FROM pg_attribute a, pg_class c
 WHERE a.attrelid = c.oid
 AND (c.relname LIKE '_hyper_1%_chunk' OR c.relname = 'alter_before')
 AND a.attnum > 0
@@ -73,7 +74,8 @@ ALTER TABLE  _timescaledb_internal._hyper_2_4_chunk ALTER COLUMN temp SET (n_dis
 ALTER TABLE  _timescaledb_internal._hyper_2_4_chunk ALTER COLUMN temp SET STATISTICS 201;
 ALTER TABLE  _timescaledb_internal._hyper_2_4_chunk ALTER COLUMN notes SET STORAGE EXTERNAL;
 
-SELECT c.relname, a.attname, a.attnum, a.attoptions, a.attstattarget, a.attstorage FROM pg_attribute a, pg_class c
+-- PG17 made attstattarget NULLABLE and changed the default from -1 to NULL
+SELECT c.relname, a.attname, a.attnum, a.attoptions, CASE WHEN a.attstattarget = -1 THEN NULL ELSE a.attstattarget END attstattarget, a.attstorage FROM pg_attribute a, pg_class c
 WHERE a.attrelid = c.oid
 AND (c.relname LIKE '_hyper_2%_chunk' OR c.relname = 'alter_after')
 AND a.attnum > 0

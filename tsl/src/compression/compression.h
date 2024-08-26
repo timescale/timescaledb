@@ -138,6 +138,8 @@ typedef struct RowDecompressor
 	CommandId mycid;
 	BulkInsertState bistate;
 
+	bool delete_only;
+
 	Datum *compressed_datums;
 	bool *compressed_is_nulls;
 
@@ -147,8 +149,10 @@ typedef struct RowDecompressor
 	MemoryContext per_compressed_row_ctx;
 	int64 batches_decompressed;
 	int64 tuples_decompressed;
+	int64 batches_deleted;
 
 	TupleTableSlot **decompressed_slots;
+	int unprocessed_tuples;
 
 	Detoaster detoaster;
 } RowDecompressor;
@@ -295,6 +299,7 @@ extern Datum tsl_compressed_data_send(PG_FUNCTION_ARGS);
 extern Datum tsl_compressed_data_recv(PG_FUNCTION_ARGS);
 extern Datum tsl_compressed_data_in(PG_FUNCTION_ARGS);
 extern Datum tsl_compressed_data_out(PG_FUNCTION_ARGS);
+extern Datum tsl_compressed_data_info(PG_FUNCTION_ARGS);
 
 static void
 pg_attribute_unused() assert_num_compression_algorithms_sane(void)
@@ -319,6 +324,7 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 					 "number of algorithms have changed, the asserts should be updated");
 }
 
+extern Name compression_get_algorithm_name(CompressionAlgorithm alg);
 extern CompressionStorage compression_get_toast_storage(CompressionAlgorithm algo);
 extern CompressionAlgorithm compression_get_default_algorithm(Oid typeoid);
 
@@ -346,7 +352,7 @@ extern bool segment_info_datum_is_in_group(SegmentInfo *segment_info, Datum datu
 extern TupleTableSlot *compress_row_exec(CompressSingleRowState *cr, TupleTableSlot *slot);
 extern void compress_row_end(CompressSingleRowState *cr);
 extern void compress_row_destroy(CompressSingleRowState *cr);
-extern void row_decompressor_decompress_row_to_table(RowDecompressor *row_decompressor);
+extern int row_decompressor_decompress_row_to_table(RowDecompressor *row_decompressor);
 extern void row_decompressor_decompress_row_to_tuplesort(RowDecompressor *row_decompressor,
 														 Tuplesortstate *tuplesortstate);
 extern void compress_chunk_populate_sort_info_for_column(CompressionSettings *settings, Oid table,
@@ -368,8 +374,10 @@ extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_nu
 
 extern RowDecompressor build_decompressor(Relation in_rel, Relation out_rel);
 
+extern void row_decompressor_reset(RowDecompressor *decompressor);
 extern void row_decompressor_close(RowDecompressor *decompressor);
 extern enum CompressionAlgorithms compress_get_default_algorithm(Oid typeoid);
+extern int decompress_batch(RowDecompressor *decompressor);
 /*
  * A convenience macro to throw an error about the corrupted compressed data, if
  * the argument is false. When fuzzing is enabled, we don't show the message not
@@ -404,3 +412,11 @@ consumeCompressedData(StringInfo si, int bytes)
 #define GLOBAL_MAX_ROWS_PER_COMPRESSION INT16_MAX
 
 const CompressionAlgorithmDefinition *algorithm_definition(CompressionAlgorithm algo);
+
+struct decompress_batches_stats
+{
+	int64 batches_deleted;
+	int64 batches_filtered;
+	int64 batches_decompressed;
+	int64 tuples_decompressed;
+};

@@ -110,6 +110,7 @@ typedef struct CrossModuleFunctions
 										  WithClauseResult *with_clause_options);
 	PGFunction continuous_agg_validate_query;
 	PGFunction continuous_agg_get_bucket_function;
+	PGFunction continuous_agg_get_bucket_function_info;
 	PGFunction continuous_agg_migrate_to_time_bucket;
 	PGFunction cagg_try_repair;
 
@@ -117,6 +118,7 @@ typedef struct CrossModuleFunctions
 	PGFunction compressed_data_recv;
 	PGFunction compressed_data_in;
 	PGFunction compressed_data_out;
+	PGFunction compressed_data_info;
 	bool (*process_compress_table)(AlterTableCmd *cmd, Hypertable *ht,
 								   WithClauseResult *with_clause_options);
 	void (*process_altertable_cmd)(Hypertable *ht, const AlterTableCmd *cmd);

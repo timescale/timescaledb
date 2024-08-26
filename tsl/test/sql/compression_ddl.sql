@@ -996,6 +996,43 @@ INSERT INTO hyper_unique_deferred(time, device_id,sensor_1) VALUES (125798770000
 alter table hyper_unique_deferred set (timescaledb.compress);
 select compress_chunk(show_chunks('hyper_unique_deferred')); -- also worked fine before 2.11.0
 select decompress_chunk(show_chunks('hyper_unique_deferred'));
+\set ON_ERROR_STOP 0
 begin; insert INTO hyper_unique_deferred values (1257987700000000000, 'dev1', 1); abort;
+\set ON_ERROR_STOP 1
 select compress_chunk(show_chunks('hyper_unique_deferred'));
+\set ON_ERROR_STOP 0
 begin; insert INTO hyper_unique_deferred values (1257987700000000000, 'dev1', 1); abort;
+\set ON_ERROR_STOP 1
+-- tests chunks being compressed using different segmentby settings
+-- github issue #7102
+CREATE TABLE compression_drop(time timestamptz NOT NULL, v0 int, v1 int);
+CREATE INDEX ON compression_drop(time);
+CREATE INDEX ON compression_drop(v0,time);
+SELECT create_hypertable('compression_drop','time',create_default_indexes:=false);
+ALTER TABLE compression_drop SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='v0');
+
+-- insert data and compress chunk
+INSERT INTO compression_drop(time, v0, v1)
+SELECT time, v0, v0+1
+FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-03 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gv0(v0);
+
+SELECT compress_chunk(ch, true) AS "CHUNK_NAME" FROM show_chunks('compression_drop') ch ORDER BY ch DESC \gset
+
+-- change segmentby column
+ALTER TABLE compression_drop SET (timescaledb.compress_segmentby='v1');
+
+-- insert more data and compress next chunk
+INSERT INTO compression_drop(time, v0, v1)
+SELECT time, v0, v0+1
+FROM generate_series('2000-01-07 0:00:00+0'::timestamptz,'2000-01-09 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gv0(v0);
+
+SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name)) AS "CHUNK_NAME"
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'compression_drop' AND NOT is_compressed;
+
+-- try dropping column v0, should fail
+\set ON_ERROR_STOP 0
+ALTER TABLE compression_drop DROP COLUMN v0;
+\set ON_ERROR_STOP 1
+
+DROP TABLE compression_drop;

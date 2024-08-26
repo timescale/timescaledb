@@ -240,14 +240,20 @@ hypertable_modify_explain(CustomScanState *node, List *ancestors, ExplainState *
 		foreach (lc, chunk_dispatch_states)
 		{
 			ChunkDispatchState *cds = (ChunkDispatchState *) lfirst(lc);
+			state->batches_deleted += cds->batches_deleted;
+			state->batches_filtered += cds->batches_filtered;
 			state->batches_decompressed += cds->batches_decompressed;
 			state->tuples_decompressed += cds->tuples_decompressed;
 		}
 	}
+	if (state->batches_filtered > 0)
+		ExplainPropertyInteger("Batches filtered", NULL, state->batches_filtered, es);
 	if (state->batches_decompressed > 0)
 		ExplainPropertyInteger("Batches decompressed", NULL, state->batches_decompressed, es);
 	if (state->tuples_decompressed > 0)
 		ExplainPropertyInteger("Tuples decompressed", NULL, state->tuples_decompressed, es);
+	if (state->batches_deleted > 0)
+		ExplainPropertyInteger("Batches deleted", NULL, state->batches_deleted, es);
 }
 
 static CustomExecMethods hypertable_modify_state_methods = {
@@ -315,58 +321,6 @@ make_var_targetlist(const List *tlist)
 }
 
 /*
- * Plan the private FDW data for a remote hypertable. Note that the private data
- * for a result relation is a list, so we return a list of lists, one for each
- * result relation.  In case of no remote modify, we still need to return a list
- * of empty lists.
- */
-static void
-plan_remote_modify(PlannerInfo *root, HypertableModifyPath *hmpath, ModifyTable *mt,
-				   FdwRoutine *fdwroutine)
-{
-	List *fdw_private_list = NIL;
-	/* Keep any existing direct modify plans */
-	Bitmapset *direct_modify_plans = mt->fdwDirectModifyPlans;
-	ListCell *lc;
-	int i = 0;
-
-	/* Iterate all subplans / result relations to check which ones are inserts
-	 * into hypertables. In case we find a remote hypertable insert, we either
-	 * have to plan it using the FDW or, in case of data node dispatching, we
-	 * just need to mark the plan as "direct" to let ModifyTable know it
-	 * should not invoke the regular FDW modify API. */
-	foreach (lc, mt->resultRelations)
-	{
-		Index rti = lfirst_int(lc);
-		RangeTblEntry *rte = planner_rt_fetch(rti, root);
-		List *fdwprivate = NIL;
-		bool is_distributed_insert = bms_is_member(i, hmpath->distributed_insert_plans);
-
-		/* If data node batching is supported, we won't actually use the FDW
-		 * direct modify API (everything is done in DataNodeDispatch), but we
-		 * need to trick ModifyTable to believe we're doing direct modify so
-		 * that it doesn't invoke the non-direct FDW API for inserts. Instead,
-		 * it should handle only returning projections as if it was a direct
-		 * modify. We do this by adding the result relation's plan to
-		 * fdwDirectModifyPlans. See ExecModifyTable for more details. */
-		if (is_distributed_insert)
-			direct_modify_plans = bms_add_member(direct_modify_plans, i);
-
-		if (!is_distributed_insert && NULL != fdwroutine && fdwroutine->PlanForeignModify != NULL &&
-			ts_is_hypertable(rte->relid))
-			fdwprivate = fdwroutine->PlanForeignModify(root, mt, rti, i);
-		else
-			fdwprivate = NIL;
-
-		i++;
-		fdw_private_list = lappend(fdw_private_list, fdwprivate);
-	}
-
-	mt->fdwDirectModifyPlans = direct_modify_plans;
-	mt->fdwPrivLists = fdw_private_list;
-}
-
-/*
  * Construct the HypertableInsert's target list based on the ModifyTable's
  * target list, which now exists after having been created by
  * set_plan_references().
@@ -429,10 +383,8 @@ static Plan *
 hypertable_modify_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_path,
 							  List *tlist, List *clauses, List *custom_plans)
 {
-	HypertableModifyPath *hmpath = (HypertableModifyPath *) best_path;
 	CustomScan *cscan = makeNode(CustomScan);
 	ModifyTable *mt = linitial_node(ModifyTable, custom_plans);
-	FdwRoutine *fdwroutine = NULL;
 
 	cscan->methods = &hypertable_modify_plan_methods;
 	cscan->custom_plans = custom_plans;
@@ -443,27 +395,6 @@ hypertable_modify_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 	cscan->scan.plan.total_cost = mt->plan.total_cost;
 	cscan->scan.plan.plan_rows = mt->plan.plan_rows;
 	cscan->scan.plan.plan_width = mt->plan.plan_width;
-
-	if (NIL != hmpath->serveroids)
-	{
-		/* Get the foreign data wrapper routines for the first data node. Should be
-		 * the same for all data nodes. */
-		Oid serverid = linitial_oid(hmpath->serveroids);
-
-		fdwroutine = GetFdwRoutineByServerId(serverid);
-	}
-
-	/*
-	 * A remote hypertable is not a foreign table since it cannot have indexes
-	 * in that case. But we run the FDW planning for the hypertable here as if
-	 * it was a foreign table. This is because when we do an FDW insert of a
-	 * foreign table chunk, we actually would like to do that as if the INSERT
-	 * happened on the root table. Thus we need the plan state from the root
-	 * table, which we can reuse on every chunk. This plan state includes,
-	 * e.g., a deparsed INSERT statement that references the hypertable
-	 * instead of a chunk.
-	 */
-	plan_remote_modify(root, hmpath, mt, fdwroutine);
 
 	/* The tlist is always NIL since the ModifyTable subplan doesn't have its
 	 * targetlist set until set_plan_references (setrefs.c) is run */
@@ -530,10 +461,8 @@ hypertable_modify_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 	 * because we modify that list during execution and
 	 * we still need the original list in case that plan
 	 * gets reused.
-	 *
-	 * We also pass on the data nodes to insert on.
 	 */
-	cscan->custom_private = list_make2(mt->arbiterIndexes, hmpath->serveroids);
+	cscan->custom_private = list_make1(mt->arbiterIndexes);
 
 	return &cscan->scan.plan;
 }
@@ -550,7 +479,6 @@ ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hyp
 	Path *path = &mtpath->path;
 	Path *subpath = NULL;
 	Cache *hcache = ts_hypertable_cache_pin();
-	Bitmapset *distributed_insert_plans = NULL;
 	HypertableModifyPath *hmpath;
 	int i = 0;
 
@@ -583,8 +511,6 @@ ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hyp
 	hmpath->cpath.path.pathtype = T_CustomScan;
 	hmpath->cpath.custom_paths = list_make1(mtpath);
 	hmpath->cpath.methods = &hypertable_modify_path_methods;
-	hmpath->distributed_insert_plans = distributed_insert_plans;
-	hmpath->serveroids = NIL;
 	path = &hmpath->cpath.path;
 	if (subpath)
 		mtpath->subpath = subpath;
@@ -767,12 +693,29 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 
 		context.planSlot = ExecProcNode(subplanstate);
 
+		if (cds && cds->rri && operation == CMD_INSERT && cds->skip_current_tuple)
+		{
+			cds->skip_current_tuple = false;
+			if (node->ps.instrument)
+				node->ps.instrument->ntuples2++;
+			return NULL;
+		}
+
 		/* No more tuples to process? */
 		if (TupIsNull(context.planSlot))
 			break;
 
-#if PG15_GE
-		/* copy INSERT merge action list to result relation info of corresponding chunk */
+			/*
+			 * copy INSERT merge action list to result relation info of corresponding chunk
+			 *
+			 * XXX do we need an additional support of NOT MATCHED BY SOURCE
+			 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
+			 */
+#if PG17_GE
+		if (cds && cds->rri && operation == CMD_MERGE)
+			cds->rri->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET] =
+				resultRelInfo->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
+#elif PG15_GE
 		if (cds && cds->rri && operation == CMD_MERGE)
 			cds->rri->ri_notMatchedMergeAction = resultRelInfo->ri_notMatchedMergeAction;
 #endif

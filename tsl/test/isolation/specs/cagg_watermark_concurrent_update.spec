@@ -46,6 +46,11 @@ setup
                           '2020-01-01 23:59:59+0','1m') time;
 }
 
+setup
+{
+  VACUUM ANALYZE;
+}
+
 teardown {
     DROP TABLE temperature CASCADE;
 }

@@ -398,10 +398,16 @@ endif(PG_SOURCE_DIR)
 
 set(EXT_CONTROL_FILE ${PROJECT_NAME}.control)
 
-if(APACHE_ONLY)
-  set(LICENSE_EDITION "Apache 2 Edition")
+# When building apt or rpm packages we build a separate loader package that will
+# be used by both the apache and community editions. Having the edition in the
+# description would be misleading so we remove it for these cases.
+set(GENERIC_LOADER_METHOD apt rpm)
+if(PROJECT_INSTALL_METHOD IN_LIST GENERIC_LOADER_METHOD)
+  set(COMMENT_SUFFIX "")
+elseif(APACHE_ONLY)
+  set(COMMENT_SUFFIX " (Apache 2 Edition)")
 else()
-  set(LICENSE_EDITION "Community Edition")
+  set(COMMENT_SUFFIX " (Community Edition)")
 endif()
 configure_file(${EXT_CONTROL_FILE}.in ${EXT_CONTROL_FILE})
 
@@ -596,7 +602,10 @@ if(USE_OPENSSL AND (NOT PG_USE_OPENSSL))
   )
 endif(USE_OPENSSL AND (NOT PG_USE_OPENSSL))
 
-if(USE_OPENSSL)
+# While we dont link directly against OpenSSL on non-Windows, doing this on
+# Windows causes linker errors. So on Windows we link directly against the
+# OpenSSL libraries.
+if(USE_OPENSSL AND MSVC)
   # Try to find a local OpenSSL installation
   find_package(OpenSSL)
 
@@ -635,7 +644,7 @@ if(USE_OPENSSL)
     message(STATUS "OpenSSL libraries: ${_path}")
   endforeach()
   message(STATUS "Using OpenSSL version ${OPENSSL_VERSION}")
-endif(USE_OPENSSL)
+endif(USE_OPENSSL AND MSVC)
 
 if(CODECOVERAGE)
   message(STATUS "Code coverage is enabled.")

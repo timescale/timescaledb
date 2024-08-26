@@ -1729,3 +1729,16 @@ ts_heap_form_tuple(TupleDesc tupleDescriptor, NullableDatum *datums)
 
 	return heap_form_tuple(tupleDescriptor, values, nulls);
 }
+
+/*
+ * To not introduce shared object dependencies on functions in extension update
+ * scripts we use this stub function as placeholder whenever we need to reference
+ * c functions in the update scripts.
+ */
+TS_FUNCTION_INFO_V1(ts_update_placeholder);
+Datum
+ts_update_placeholder(PG_FUNCTION_ARGS)
+{
+	elog(ERROR, "this stub function is used only as placeholder during extension updates");
+	PG_RETURN_NULL();
+}

@@ -33,6 +33,7 @@
 #include "dimension_vector.h"
 #include "errors.h"
 #include "export.h"
+#include "foreign_key.h"
 #include "hypercube.h"
 #include "hypertable.h"
 #include "partitioning.h"
@@ -512,6 +513,9 @@ ts_chunk_constraints_create(const Hypertable *ht, const Chunk *chunk)
 		Assert(list_length(cookedconstrs) == list_length(newconstrs));
 		CommandCounterIncrement();
 	}
+
+	/* Copy FK triggers to this chunk */
+	ts_chunk_copy_referencing_fk(ht, chunk);
 }
 
 ScanIterator
@@ -725,7 +729,7 @@ ts_chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_id, ChunkCo
 }
 
 static bool
-chunk_constraint_need_on_chunk(const char chunk_relkind, Form_pg_constraint conform)
+chunk_constraint_need_on_chunk(Form_pg_constraint conform)
 {
 	if (conform->contype == CONSTRAINT_CHECK)
 	{
@@ -749,24 +753,7 @@ chunk_constraint_need_on_chunk(const char chunk_relkind, Form_pg_constraint conf
 	if (conform->contype == CONSTRAINT_FOREIGN && OidIsValid(conform->conparentid))
 		return false;
 
-	/* Foreign tables do not support non-check constraints, so skip them */
-	if (chunk_relkind == RELKIND_FOREIGN_TABLE)
-		return false;
-
 	return true;
-}
-
-static bool
-chunk_constraint_is_check(const char chunk_relkind, Form_pg_constraint conform)
-{
-	if (conform->contype == CONSTRAINT_CHECK)
-	{
-		/*
-		 * check constraints supported on foreign tables (like OSM chunks)
-		 */
-		return true;
-	}
-	return false;
 }
 
 int
@@ -795,7 +782,7 @@ chunk_constraint_add(HeapTuple constraint_tuple, void *arg)
 	ConstraintContext *cc = arg;
 	Form_pg_constraint constraint = (Form_pg_constraint) GETSTRUCT(constraint_tuple);
 
-	if (chunk_constraint_need_on_chunk(cc->chunk_relkind, constraint))
+	if (cc->chunk_relkind != RELKIND_FOREIGN_TABLE && chunk_constraint_need_on_chunk(constraint))
 	{
 		ts_chunk_constraints_add(cc->ccs, cc->chunk_id, 0, NULL, NameStr(constraint->conname));
 		return CONSTR_PROCESSED;
@@ -824,7 +811,7 @@ chunk_constraint_add_check(HeapTuple constraint_tuple, void *arg)
 	ConstraintContext *cc = arg;
 	Form_pg_constraint constraint = (Form_pg_constraint) GETSTRUCT(constraint_tuple);
 
-	if (chunk_constraint_is_check(cc->chunk_relkind, constraint))
+	if (constraint->contype == CONSTRAINT_CHECK)
 	{
 		ts_chunk_constraints_add(cc->ccs,
 								 cc->chunk_id,
@@ -863,7 +850,7 @@ ts_chunk_constraint_create_on_chunk(const Hypertable *ht, const Chunk *chunk, Oi
 
 	con = (Form_pg_constraint) GETSTRUCT(tuple);
 
-	if (chunk_constraint_need_on_chunk(chunk->relkind, con))
+	if (chunk->relkind != RELKIND_FOREIGN_TABLE && chunk_constraint_need_on_chunk(con))
 	{
 		ChunkConstraint *cc = ts_chunk_constraints_add(chunk->constraints,
 													   chunk->fd.id,

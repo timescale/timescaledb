@@ -13,7 +13,9 @@
 #include <parser/parsetree.h>
 
 #include "compat/compat.h"
+
 #include "chunk.h"
+#include "chunkwise_agg.h"
 #include "continuous_aggs/planner.h"
 #include "guc.h"
 #include "hypertable.h"
@@ -24,6 +26,7 @@
 #include "nodes/skip_scan/skip_scan.h"
 #include "nodes/vector_agg/plan.h"
 #include "planner.h"
+#include "planner/partialize.h"
 
 #include <math.h>
 
@@ -42,6 +45,26 @@ is_osm_present()
 	return osm_present;
 }
 
+static bool
+involves_hypertable(PlannerInfo *root, RelOptInfo *parent)
+{
+	for (int relid = bms_next_member(parent->relids, -1); relid > 0;
+		 relid = bms_next_member(parent->relids, relid))
+	{
+		Hypertable *ht;
+		RelOptInfo *child = root->simple_rel_array[relid];
+		/*
+		 * RelOptInfo can be null here for join RTEs on PG >= 16. This doesn't
+		 * matter because we'll have all the baserels in relids bitmap as well.
+		 */
+		if (child != NULL && ts_classify_relation(root, child, &ht) == TS_REL_HYPERTABLE)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 void
 tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel,
 							RelOptInfo *output_rel, TsRelType input_reltype, Hypertable *ht,
@@ -51,7 +74,16 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 	{
 		case UPPERREL_GROUP_AGG:
 			if (input_reltype != TS_REL_HYPERTABLE_CHILD)
+			{
 				plan_add_gapfill(root, output_rel);
+			}
+
+			if (ts_guc_enable_chunkwise_aggregation && input_rel != NULL &&
+				!IS_DUMMY_REL(input_rel) && output_rel != NULL &&
+				involves_hypertable(root, input_rel))
+			{
+				tsl_pushdown_partial_agg(root, ht, input_rel, output_rel, extra);
+			}
 			break;
 		case UPPERREL_WINDOW:
 			if (IsA(linitial(input_rel->pathlist), CustomPath))
@@ -91,15 +123,7 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 			 * 2) if it is not a SELECT QUERY.
 			 * Caching is done by our hypertable expansion, which doesn't run in
 			 * these cases.
-			 *
-			 * Also on PG13 when a DELETE query runs through SPI, its command
-			 * type is CMD_SELECT. Apparently it goes into inheritance_planner,
-			 * which uses a hack to pretend it's actually a SELECT query, but
-			 * for some reason for non-SPI queries the query type is still
-			 * correct. You can observe it in the continuous_aggs-13 test.
-			 * Just ignore this assertion on 13 and look up the chunk.
 			 */
-			Assert(rel->reloptkind == RELOPT_BASEREL || root->parse->commandType != CMD_SELECT);
 			fdw_private->cached_chunk_struct =
 				ts_chunk_get_by_relid(rte->relid, /* fail_if_not_found = */ true);
 		}

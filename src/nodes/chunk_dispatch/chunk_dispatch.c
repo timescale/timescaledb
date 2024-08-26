@@ -173,7 +173,7 @@ ts_chunk_dispatch_decompress_batches_for_insert(ChunkDispatch *dispatch, ChunkIn
 		if (ts_cm_functions->decompress_batches_for_insert)
 		{
 			ts_cm_functions->decompress_batches_for_insert(cis, slot);
-			OnConflictAction onconflict_action = chunk_dispatch_get_on_conflict_action(dispatch);
+			OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
 			/* mark rows visible */
 			if (onconflict_action == ONCONFLICT_UPDATE)
 				dispatch->estate->es_output_cid = GetCurrentCommandId(true);
@@ -252,7 +252,10 @@ chunk_dispatch_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *be
 	cscan->custom_scan_tlist = tlist;
 	cscan->scan.plan.targetlist = tlist;
 
-#if PG15_GE
+	/*
+	 * XXX mergeUseOuterJoin is gone in PG17, see 0294df2f1f84
+	 */
+#if ((PG15_GE) && (PG17_LT))
 	if (root->parse->mergeUseOuterJoin)
 	{
 		/* replace expressions of ROWID_VAR */
@@ -375,8 +378,17 @@ chunk_dispatch_exec(CustomScanState *node)
 		}
 		for (int i = 0; i < ht->space->num_dimensions; i++)
 		{
+			/*
+			 * XXX do we need an additional support of NOT MATCHED BY SOURCE
+			 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
+			 */
+#if PG17_GE
+			List *actionStates = dispatch->dispatch_state->mtstate->resultRelInfo
+									 ->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
+#else
 			List *actionStates =
 				dispatch->dispatch_state->mtstate->resultRelInfo->ri_notMatchedMergeAction;
+#endif
 			ListCell *l;
 			foreach (l, actionStates)
 			{

@@ -29,19 +29,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install pip postgresql-common libkrb5-dev
 
-      # Using e375302a until 1.10.1 get released including the following PR
-      # https://github.com/postgrespro/testgres/pull/125
-      - name: Checkout testgres
-        uses: actions/checkout@v4
-        with:
-          repository: 'postgrespro/testgres'
-          path: 'testgres'
-          ref: e375302a114cd4df3ceed54d6526f250c44c08e7
-
-      - name: Build and install testgres
+      - name: Install testgres
         run: |
-          cd testgres
-          python setup.py install --user
+          pip install testgres
 
       - name: Install PostgreSQL ${{ matrix.pg_version_old}} and ${{ matrix.pg_version_new }}
         run: |

@@ -3,8 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#include <postgres.h>
 
+#include <postgres.h>
 #include <access/htup_details.h>
 #include <access/xact.h>
 #include <catalog/index.h>
@@ -24,11 +24,13 @@
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
 #include <commands/trigger.h>
+#include <commands/user.h>
 #include <commands/vacuum.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodes.h>
 #include <nodes/parsenodes.h>
+#include <parser/parse_type.h>
 #include <parser/parse_utilcmd.h>
 #include <storage/lmgr.h>
 #include <tcop/utility.h>
@@ -56,6 +58,7 @@
 #include "export.h"
 #include "extension.h"
 #include "extension_constants.h"
+#include "foreign_key.h"
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
@@ -67,6 +70,7 @@
 #include "trigger.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
+#include "ts_catalog/chunk_column_stats.h"
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
@@ -139,6 +143,18 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 					/* allowed on chunks */
 					break;
 				case AT_AddConstraint:
+				{
+					/* if this is an OSM chunk, block the operation */
+					Chunk *chunk = ts_chunk_get_by_relid(relid, false /* fail_if_not_found */);
+					if (chunk && chunk->fd.osm_chunk)
+					{
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								 errmsg("operation not supported on OSM chunk tables")));
+					}
+					break;
+				}
+				case AT_DropConstraint:
 				{
 					/* if this is an OSM chunk, block the operation */
 					Chunk *chunk = ts_chunk_get_by_relid(relid, false /* fail_if_not_found */);
@@ -720,9 +736,9 @@ ts_get_all_vacuum_rels(bool is_vacuumcmd)
 		relid = classform->oid;
 
 		/* check permissions of relation */
-		if (!vacuum_is_relation_owner(relid,
-									  classform,
-									  is_vacuumcmd ? VACOPT_VACUUM : VACOPT_ANALYZE))
+		if (!vacuum_is_permitted_for_relation_compat(relid,
+													 classform,
+													 is_vacuumcmd ? VACOPT_VACUUM : VACOPT_ANALYZE))
 			continue;
 
 		/*
@@ -1040,6 +1056,9 @@ process_truncate(ProcessUtilityArgs *args)
 								list_changed = true;
 							}
 						}
+
+						/* if the chunk has statistics enabled on it then reset them */
+						ts_chunk_column_stats_reset_by_chunk_id(chunk->fd.id);
 					}
 					break;
 				}
@@ -1938,9 +1957,14 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 					 errhint("Rename the column on the continuous aggregate instead.")));
 	}
 
-	/* If there were a hypertable or a continuous aggregate, we need to rename
+	/*
+	 * If there were a hypertable or a continuous aggregate, we need to rename
 	 * the dimension that we used as well as rebuilding the view. Otherwise,
-	 * we don't do anything. */
+	 * we don't do anything.
+	 *
+	 * If it's not a dimension then we also need to check if column statistics
+	 * have been enabled on this column.
+	 * */
 	if (ht)
 	{
 		ts_compression_settings_rename_column_hypertable(ht, stmt->subname, stmt->newname);
@@ -1951,6 +1975,24 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 
 		if (dim)
 			ts_dimension_set_name(dim, stmt->newname);
+		else
+		{
+			Form_chunk_column_stats form =
+				ts_chunk_column_stats_lookup(ht->fd.id, INVALID_CHUNK_ID, stmt->subname);
+			if (form != NULL)
+			{
+				ts_chunk_column_stats_set_name(form, stmt->newname);
+
+				/* refresh the ht entry to accommodate this rename */
+				if (ht->range_space)
+					pfree(ht->range_space);
+				ht->range_space =
+					ts_chunk_column_stats_range_space_scan(ht->fd.id,
+														   ht->main_table_relid,
+														   ts_cache_memory_ctx(hcache));
+			}
+		}
+
 		if (ts_cm_functions->process_rename_cmd)
 			ts_cm_functions->process_rename_cmd(relid, hcache, stmt);
 	}
@@ -2233,6 +2275,7 @@ static void
 process_altertable_drop_column(Hypertable *ht, AlterTableCmd *cmd)
 {
 	int i;
+	bool dropped;
 
 	for (i = 0; i < ht->space->num_dimensions; i++)
 	{
@@ -2245,35 +2288,9 @@ process_altertable_drop_column(Hypertable *ht, AlterTableCmd *cmd)
 					 errdetail("Cannot drop column that is a hypertable partitioning (space or "
 							   "time) dimension.")));
 	}
-}
 
-/* process all regular-table alter commands to make sure they aren't adding
- * foreign-key constraints to hypertables */
-static void
-verify_constraint_plaintable(RangeVar *relation, Constraint *constr)
-{
-	Cache *hcache;
-	Hypertable *ht;
-
-	Assert(IsA(constr, Constraint));
-
-	hcache = ts_hypertable_cache_pin();
-
-	switch (constr->contype)
-	{
-		case CONSTR_FOREIGN:
-			ht = ts_hypertable_cache_get_entry_rv(hcache, constr->pktable);
-
-			if (NULL != ht)
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("foreign keys to hypertables are not supported")));
-			break;
-		default:
-			break;
-	}
-
-	ts_cache_release(hcache);
+	/* Delete dimension range entries on this column, if any.  */
+	ts_chunk_column_stats_drop(ht, cmd->name, &dropped);
 }
 
 /*
@@ -2293,6 +2310,16 @@ verify_constraint_hypertable(Hypertable *ht, Node *constr_node)
 		contype = constr->contype;
 		keys = (contype == CONSTR_EXCLUSION) ? constr->exclusions : constr->keys;
 		indexname = constr->indexname;
+
+		if (contype == CONSTR_FOREIGN)
+		{
+			Oid confrelid = ts_hypertable_relid(constr->pktable);
+			if (OidIsValid(confrelid))
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("hypertables cannot be used as foreign key references of "
+								"hypertables")));
+		}
 
 		/* NO INHERIT constraints do not really make sense on a hypertable */
 		if (constr->is_no_inherit)
@@ -2345,9 +2372,7 @@ verify_constraint(RangeVar *relation, Constraint *constr)
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *ht = ts_hypertable_cache_get_entry_rv(hcache, relation);
 
-	if (NULL == ht)
-		verify_constraint_plaintable(relation, constr);
-	else
+	if (ht)
 		verify_constraint_hypertable(ht, (Node *) constr);
 
 	ts_cache_release(hcache);
@@ -3019,9 +3044,6 @@ process_cluster_start(ProcessUtilityArgs *args)
 /*
  * Process create table statements.
  *
- * For regular tables, we need to ensure that they don't have any foreign key
- * constraints that point to hypertables.
- *
  * NOTE that this function should be called after parse analysis (in an end DDL
  * trigger or by running parse analysis manually).
  */
@@ -3072,10 +3094,11 @@ typename_get_unqual_name(TypeName *tn)
 }
 
 static void
-process_alter_column_type_start(Hypertable *ht, AlterTableCmd *cmd)
+process_alter_column_type_start(ParseState *pstate, Hypertable *ht, AlterTableCmd *cmd)
 {
 	int i;
 
+	/* check if it's a partitioning column */
 	for (i = 0; i < ht->space->num_dimensions; i++)
 	{
 		Dimension *dim = &ht->space->dimensions[i];
@@ -3092,6 +3115,47 @@ process_alter_column_type_start(Hypertable *ht, AlterTableCmd *cmd)
 					(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
 					 errmsg("cannot change the type of a column with a custom partitioning "
 							"function")));
+	}
+
+	/*
+	 * Check if column has statistics enabled on it, if yes we need to check that the
+	 * new type is a permissible type.
+	 */
+	Form_chunk_column_stats form =
+		ts_chunk_column_stats_lookup(ht->fd.id, INVALID_CHUNK_ID, cmd->name);
+
+	if (form != NULL)
+	{
+		ColumnDef *def = (ColumnDef *) cmd->def;
+		TypeName *typeName = def->typeName;
+		Oid newtypid = typenameTypeId(pstate, typeName);
+
+		/*
+		 * We only support a subset of types for ranges right now. If it's a
+		 * supported type and ranges have been calculated then we should
+		 * still be able to use them for chunk exclusion.
+		 *
+		 * So, we only do a basic check for compatible new data type. Nothing
+		 * else needs to be done.
+		 */
+		switch (newtypid)
+		{
+			case INT2OID:
+			case INT4OID:
+			case INT8OID:
+			case TIMESTAMPOID:
+			case TIMESTAMPTZOID:
+			case DATEOID:
+				break;
+			default:
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("data type \"%s\" unsupported for statistics calculation",
+								format_type_be(newtypid)),
+						 errhint("Integer-like, timestamp-like data types supported currently."
+								 " Disable the stats using disable_column_stats function"
+								 " before changing the type")));
+		}
 	}
 }
 
@@ -3368,10 +3432,7 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				col = (ColumnDef *) cmd->def;
 				if (ht && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 					check_altertable_add_column_for_compressed(ht, col);
-				if (NULL == ht)
-					foreach (constraint_lc, col->constraints)
-						verify_constraint_plaintable(stmt->relation, lfirst(constraint_lc));
-				else
+				if (ht)
 					foreach (constraint_lc, col->constraints)
 						verify_constraint_hypertable(ht, lfirst(constraint_lc));
 				break;
@@ -3380,7 +3441,7 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 #if PG16_LT
 			case AT_DropColumnRecurse:
 #endif
-				if (NULL != ht)
+				if (ht)
 					process_altertable_drop_column(ht, cmd);
 				break;
 			case AT_AddConstraint:
@@ -3389,16 +3450,14 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 #endif
 				Assert(IsA(cmd->def, Constraint));
 
-				if (NULL == ht)
-					verify_constraint_plaintable(stmt->relation, (Constraint *) cmd->def);
-				else
+				if (ht)
 					verify_constraint_hypertable(ht, cmd->def);
 				break;
 			case AT_AlterColumnType:
 				Assert(IsA(cmd->def, ColumnDef));
 
-				if (ht != NULL)
-					process_alter_column_type_start(ht, cmd);
+				if (ht)
+					process_alter_column_type_start(args->parse_state, ht, cmd);
 				break;
 			case AT_AttachPartition:
 			{
@@ -3407,7 +3466,7 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 
 				partstmt = (PartitionCmd *) cmd->def;
 				relation = partstmt->name;
-				Assert(NULL != relation);
+				Assert(relation);
 
 				if (OidIsValid(ts_hypertable_relid(relation)))
 				{
@@ -3766,7 +3825,6 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_ColumnDefault:
 		case AT_CookedColumnDefault:
 		case AT_SetNotNull:
-		case AT_CheckNotNull:
 		case AT_DropNotNull:
 		case AT_AddOf:
 		case AT_DropOf:
@@ -3875,7 +3933,7 @@ process_altertable_end_table(Node *parsetree, CollectedCommand *cmd)
 
 	ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
 
-	if (NULL != ht)
+	if (ht)
 	{
 		switch (cmd->type)
 		{
@@ -3889,6 +3947,40 @@ process_altertable_end_table(Node *parsetree, CollectedCommand *cmd)
 				break;
 		}
 	}
+
+	/*
+	 * Check any ALTER TABLE command is adding a FOREIGN KEY constraint
+	 * referencing a hypertable.
+	 */
+	if (cmd->type == SCT_AlterTable)
+	{
+		AlterTableStmt *stmt = castNode(AlterTableStmt, parsetree);
+		ListCell *lc;
+
+		foreach (lc, stmt->cmds)
+		{
+			AlterTableCmd *subcmd = (AlterTableCmd *) lfirst(lc);
+
+			if (subcmd->subtype != AT_AddConstraint ||
+				castNode(Constraint, subcmd->def)->contype != CONSTR_FOREIGN)
+				continue;
+
+			Constraint *c = castNode(Constraint, subcmd->def);
+			Oid confrelid = RangeVarGetRelid(c->pktable, AccessShareLock, true);
+			Hypertable *pk =
+				ts_hypertable_cache_get_entry(hcache, confrelid, CACHE_FLAG_MISSING_OK);
+			if (pk)
+			{
+				if (ht)
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("hypertables cannot be used as foreign key references of "
+									"hypertables")));
+				ts_fk_propagate(relid, pk);
+			}
+		}
+	}
+
 	ts_cache_release(hcache);
 }
 
@@ -3967,6 +4059,60 @@ process_create_rule_start(ProcessUtilityArgs *args)
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("hypertables do not support rules")));
 
+	return DDL_CONTINUE;
+}
+
+/*
+ * Update the owner of a background job given by a heap tuple.
+ *
+ * Note that there is no check for correct privileges here and this is the
+ * responsibility of the caller.
+ */
+static void
+ts_bgw_job_update_owner(Relation rel, HeapTuple tuple, TupleDesc tupledesc, Oid newrole_oid)
+{
+	bool isnull[Natts_bgw_job];
+	Datum values[Natts_bgw_job];
+	bool replace[Natts_bgw_job] = { false };
+	HeapTuple new_tuple;
+
+	heap_deform_tuple(tuple, tupledesc, values, isnull);
+
+	if (DatumGetObjectId(values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)]) != newrole_oid)
+	{
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = Int32GetDatum(newrole_oid);
+		replace[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = true;
+		new_tuple = heap_modify_tuple(tuple, tupledesc, values, isnull, replace);
+		ts_catalog_update(rel, new_tuple);
+		heap_freetuple(new_tuple);
+	}
+}
+
+static DDLResult
+process_reassign_owned_start(ProcessUtilityArgs *args)
+{
+	ReassignOwnedStmt *stmt = (ReassignOwnedStmt *) args->parsetree;
+	List *role_ids = roleSpecsToIds(stmt->roles);
+	ScanIterator iterator =
+		ts_scan_iterator_create(BGW_JOB, RowExclusiveLock, CurrentMemoryContext);
+	ts_scanner_foreach(&iterator)
+	{
+		bool should_free, isnull;
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		Datum value = slot_getattr(ti->slot, Anum_bgw_job_owner, &isnull);
+		if (!isnull && list_member_oid(role_ids, DatumGetObjectId(value)))
+		{
+			Oid newrole_oid = get_rolespec_oid(stmt->newrole, false);
+			HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+
+			/* We do not need to check privileges here since ReassignOwnedObjects() will check the
+			 * privileges and error out if they are not correct. */
+			ts_bgw_job_update_owner(ti->scanrel, tuple, ts_scanner_get_tupledesc(ti), newrole_oid);
+
+			if (should_free)
+				heap_freetuple(tuple);
+		}
+	}
 	return DDL_CONTINUE;
 }
 
@@ -4149,6 +4295,9 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 			break;
 		case T_RuleStmt:
 			handler = process_create_rule_start;
+			break;
+		case T_ReassignOwnedStmt:
+			handler = process_reassign_owned_start;
 			break;
 		case T_DropStmt:
 			/*

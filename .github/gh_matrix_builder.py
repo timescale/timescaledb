@@ -48,7 +48,9 @@ default_ignored_tests = {
     "bgw_db_scheduler",
     "bgw_db_scheduler_fixed",
     "telemetry",
+    "memoize",
 }
+
 
 # helper functions to generate matrix entries
 # the release and apache config inherit from the
@@ -179,23 +181,27 @@ m["include"].append(
     )
 )
 
+m["include"].append(
+    build_debug_config(
+        {
+            "pg": "17",
+            "snapshot": "snapshot",
+            "tsdb_build_args": "-DEXPERIMENTAL=ON",
+            "skipped_tests": "merge_compress merge_dml merge size_utils ts_merge-17",
+        }
+    )
+)
+
 # if this is not a pull request e.g. a scheduled run or a push
 # to a specific branch like prerelease_test we add additional
 # entries to the matrix
 if not pull_request:
-    # add debug test for first supported PG14 version
-    pull_request_ignored_tests = {
-        "memoize",
-    }
     m["include"].append(
         build_debug_config(
             {
                 "pg": PG14_EARLIEST,
                 # The early releases don't build with llvm 14.
                 "pg_extra_args": "--enable-debug --enable-cassert --without-llvm",
-                "ignored_tests": default_ignored_tests.union(
-                    pull_request_ignored_tests
-                ),
             }
         )
     )
@@ -222,13 +228,9 @@ if not pull_request:
 
     # to discover issues with upcoming releases we run CI against
     # the stable branches of supported PG releases
-    pg14_ignored_tests = {
-        "memoize",
-    }
     m["include"].append(
         build_debug_config(
             {
-                "ignored_tests": default_ignored_tests.union(pg14_ignored_tests),
                 "pg": 14,
                 "snapshot": "snapshot",
             }

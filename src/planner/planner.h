@@ -96,7 +96,8 @@ bool ts_plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *output_rel);
 
 extern void ts_plan_add_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output_rel);
 extern void ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist);
-extern void ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel);
+extern void ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel,
+											 bool include_osm);
 extern void ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel);
 extern Expr *ts_transform_time_bucket_comparison(Expr *);
 extern Node *ts_constify_now(PlannerInfo *root, List *rtable, Node *node);
@@ -105,4 +106,5 @@ extern Node *ts_add_space_constraints(PlannerInfo *root, List *rtable, Node *nod
 
 extern TSDLLEXPORT void ts_add_baserel_cache_entry_for_chunk(Oid chunk_reloid,
 															 Hypertable *hypertable);
-TsRelType ts_classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **ht);
+TsRelType TSDLLEXPORT ts_classify_relation(const PlannerInfo *root, const RelOptInfo *rel,
+										   Hypertable **ht);

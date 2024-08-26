@@ -16,13 +16,13 @@
 #include "bgw_policy/retention_api.h"
 #include "chunk.h"
 #include "chunk_api.h"
+#include "compression/algorithms/array.h"
+#include "compression/algorithms/deltadelta.h"
+#include "compression/algorithms/dictionary.h"
+#include "compression/algorithms/gorilla.h"
 #include "compression/api.h"
-#include "compression/array.h"
 #include "compression/compression.h"
 #include "compression/create.h"
-#include "compression/deltadelta.h"
-#include "compression/dictionary.h"
-#include "compression/gorilla.h"
 #include "compression/segment_meta.h"
 #include "config.h"
 #include "continuous_aggs/create.h"
@@ -133,6 +133,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_update_options = continuous_agg_update_options,
 	.continuous_agg_validate_query = continuous_agg_validate_query,
 	.continuous_agg_get_bucket_function = continuous_agg_get_bucket_function,
+	.continuous_agg_get_bucket_function_info = continuous_agg_get_bucket_function_info,
 	.continuous_agg_migrate_to_time_bucket = continuous_agg_migrate_to_time_bucket,
 	.cagg_try_repair = tsl_cagg_try_repair,
 
@@ -143,6 +144,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.compressed_data_recv = tsl_compressed_data_recv,
 	.compressed_data_in = tsl_compressed_data_in,
 	.compressed_data_out = tsl_compressed_data_out,
+	.compressed_data_info = tsl_compressed_data_info,
 	.deltadelta_compressor_append = tsl_deltadelta_compressor_append,
 	.deltadelta_compressor_finish = tsl_deltadelta_compressor_finish,
 	.gorilla_compressor_append = tsl_gorilla_compressor_append,

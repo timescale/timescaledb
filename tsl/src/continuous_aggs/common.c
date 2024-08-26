@@ -11,22 +11,29 @@
 
 #include "guc.h"
 
-static Const *check_time_bucket_argument(Node *arg, char *position);
+static Const *check_time_bucket_argument(Node *arg, char *position, bool process_checks);
 static void caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id,
 									Oid hypertable_oid, AttrNumber hypertable_partition_colno,
 									Oid hypertable_partition_coltype,
 									int64 hypertable_partition_col_interval,
 									int32 parent_mat_hypertable_id);
+static void process_additional_timebucket_parameter(ContinuousAggsBucketFunction *bf, Const *arg);
+static void process_timebucket_parameters(FuncExpr *fe, ContinuousAggsBucketFunction *bf,
+										  bool process_checks, bool is_cagg_create,
+										  AttrNumber htpartcolno);
 static void caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *targetList,
 									bool is_cagg_create);
 static bool cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail,
 								 const bool finalized);
+static Datum get_bucket_width_datum(CAggTimebucketInfo bucket_info);
+static int64 get_bucket_width(CAggTimebucketInfo bucket_info);
 static FuncExpr *build_conversion_call(Oid type, FuncExpr *boundary);
 static FuncExpr *build_boundary_call(int32 ht_id, Oid type);
 static Const *cagg_boundary_make_lower_bound(Oid type);
 static Node *build_union_query_quals(int32 ht_id, Oid partcoltype, Oid opno, int varno,
 									 AttrNumber attno);
 static RangeTblEntry *makeRangeTblEntry(Query *subquery, const char *aliasname);
+static bool time_bucket_info_has_fixed_width(const ContinuousAggsBucketFunction *bf);
 
 #define INTERNAL_TO_DATE_FUNCTION "to_date"
 #define INTERNAL_TO_TSTZ_FUNCTION "to_timestamp"
@@ -34,14 +41,14 @@ static RangeTblEntry *makeRangeTblEntry(Query *subquery, const char *aliasname);
 #define BOUNDARY_FUNCTION "cagg_watermark"
 
 static Const *
-check_time_bucket_argument(Node *arg, char *position)
+check_time_bucket_argument(Node *arg, char *position, bool process_checks)
 {
 	if (IsA(arg, NamedArgExpr))
 		arg = (Node *) castNode(NamedArgExpr, arg)->arg;
 
 	Node *expr = eval_const_expressions(NULL, arg);
 
-	if (!IsA(expr, Const))
+	if (process_checks && !IsA(expr, Const))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("only immutable expressions allowed in time bucket function"),
@@ -62,6 +69,7 @@ caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id, Oid hypert
 	src->htid = hypertable_id;
 	src->parent_mat_hypertable_id = parent_mat_hypertable_id;
 	src->htoid = hypertable_oid;
+	src->htoidparent = InvalidOid;
 	src->htpartcolno = hypertable_partition_colno;
 	src->htpartcoltype = hypertable_partition_coltype;
 	src->htpartcol_interval_len = hypertable_partition_col_interval;
@@ -80,6 +88,20 @@ caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id, Oid hypert
 	/* Integer based buckets */
 	src->bf->bucket_integer_width = 0;	/* invalid value */
 	src->bf->bucket_integer_offset = 0; /* invalid value */
+}
+
+/*
+ * Initialize MatTableColumnInfo.
+ */
+void
+mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *grouplist)
+{
+	matcolinfo->matcollist = NIL;
+	matcolinfo->partial_seltlist = NIL;
+	matcolinfo->partial_grouplist = grouplist;
+	matcolinfo->mat_groupcolname_list = NIL;
+	matcolinfo->matpartcolno = -1;
+	matcolinfo->matpartcolname = NULL;
 }
 
 /*
@@ -215,6 +237,158 @@ process_additional_timebucket_parameter(ContinuousAggsBucketFunction *bf, Const 
 }
 
 /*
+ * Process the FuncExpr node to fill the bucket function data structure. The other
+ * parameters are used when `process_check` is true that means we need to raise errors
+ * when invalid parameters are passed to the time bucket function when creating a cagg.
+ */
+static void
+process_timebucket_parameters(FuncExpr *fe, ContinuousAggsBucketFunction *bf, bool process_checks,
+							  bool is_cagg_create, AttrNumber htpartcolno)
+{
+	Node *width_arg;
+	Node *col_arg;
+	bool custom_origin = false;
+	Const *const_arg;
+
+	/* Only column allowed : time_bucket('1day', <column> ) */
+	col_arg = lsecond(fe->args);
+	/* Could be a named argument */
+	if (IsA(col_arg, NamedArgExpr))
+		col_arg = (Node *) castNode(NamedArgExpr, col_arg)->arg;
+
+	if (process_checks && htpartcolno != InvalidAttrNumber &&
+		(!(IsA(col_arg, Var)) || castNode(Var, col_arg)->varattno != htpartcolno))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("time bucket function must reference the primary hypertable "
+						"dimension column")));
+
+	if (list_length(fe->args) >= 3)
+	{
+		Const *arg = check_time_bucket_argument(lthird(fe->args), "third", process_checks);
+		process_additional_timebucket_parameter(bf, arg);
+	}
+
+	if (list_length(fe->args) >= 4)
+	{
+		Const *arg = check_time_bucket_argument(lfourth(fe->args), "fourth", process_checks);
+		process_additional_timebucket_parameter(bf, arg);
+	}
+
+	/* Check for custom origin. */
+	switch (exprType(col_arg))
+	{
+		case DATEOID:
+			/* Origin is always 3rd arg for date variants. */
+			if (list_length(fe->args) == 3 && exprType(lthird(fe->args)) == DATEOID)
+			{
+				Node *arg = lthird(fe->args);
+				custom_origin = true;
+				/* this function also takes care of named arguments */
+				const_arg = check_time_bucket_argument(arg, "third", process_checks);
+				bf->bucket_time_origin =
+					DatumGetTimestamp(DirectFunctionCall1(date_timestamp, const_arg->constvalue));
+			}
+			break;
+		case TIMESTAMPOID:
+			/* Origin is always 3rd arg for timestamp variants. */
+			if (list_length(fe->args) == 3 && exprType(lthird(fe->args)) == TIMESTAMPOID)
+			{
+				Node *arg = lthird(fe->args);
+				custom_origin = true;
+				const_arg = check_time_bucket_argument(arg, "third", process_checks);
+				bf->bucket_time_origin = DatumGetTimestamp(const_arg->constvalue);
+			}
+			break;
+		case TIMESTAMPTZOID:
+			/* Origin can be 3rd or 4th arg for timestamptz variants. */
+			if (list_length(fe->args) >= 3 && exprType(lthird(fe->args)) == TIMESTAMPTZOID)
+			{
+				Node *arg = lthird(fe->args);
+				custom_origin = true;
+				Const *constval = check_time_bucket_argument(arg, "third", process_checks);
+				bf->bucket_time_origin = DatumGetTimestampTz(constval->constvalue);
+			}
+			else if (list_length(fe->args) >= 4 && exprType(lfourth(fe->args)) == TIMESTAMPTZOID)
+			{
+				custom_origin = true;
+				if (IsA(lfourth(fe->args), Const))
+				{
+					bf->bucket_time_origin =
+						DatumGetTimestampTz(castNode(Const, lfourth(fe->args))->constvalue);
+				}
+				/* could happen in a statement like time_bucket('1h', .., 'utc', origin =>
+				 * ...) */
+				else if (IsA(lfourth(fe->args), NamedArgExpr))
+				{
+					Const *constval =
+						check_time_bucket_argument(lfourth(fe->args), "fourth", process_checks);
+
+					bf->bucket_time_origin = DatumGetTimestampTz(constval->constvalue);
+				}
+			}
+	}
+	if (process_checks && custom_origin && TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid origin value: infinity")));
+	}
+
+	/*
+	 * We constify width expression here so any immutable expression will be allowed.
+	 * Otherwise it would make it harder to create caggs for hypertables with e.g. int8
+	 * partitioning column as int constants default to int4 and so expression would
+	 * have a cast and not be a Const.
+	 */
+	width_arg = linitial(fe->args);
+
+	if (IsA(width_arg, NamedArgExpr))
+		width_arg = (Node *) castNode(NamedArgExpr, width_arg)->arg;
+
+	width_arg = eval_const_expressions(NULL, width_arg);
+	if (IsA(width_arg, Const))
+	{
+		Const *width = castNode(Const, width_arg);
+		bf->bucket_width_type = width->consttype;
+
+		if (width->constisnull)
+		{
+			if (process_checks && is_cagg_create)
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("invalid bucket width for time bucket function")));
+		}
+		else
+		{
+			if (width->consttype == INTERVALOID)
+			{
+				bf->bucket_time_width = DatumGetIntervalP(width->constvalue);
+			}
+
+			if (!IS_TIME_BUCKET_INFO_TIME_BASED(bf))
+			{
+				bf->bucket_integer_width =
+					ts_interval_value_to_internal(width->constvalue, width->consttype);
+			}
+		}
+	}
+	else
+	{
+		if (process_checks)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("only immutable expressions allowed in time bucket function"),
+					 errhint("Use an immutable expression as first argument to the time bucket "
+							 "function.")));
+	}
+
+	bf->bucket_function = fe->funcid;
+	bf->bucket_time_based = ts_continuous_agg_bucket_on_interval(bf->bucket_function);
+	bf->bucket_fixed_interval = time_bucket_info_has_fixed_width(bf);
+}
+
+/*
  * Check if the group-by clauses has exactly 1 time_bucket(.., <col>) where
  * <col> is the hypertable's partitioning column and other invariants. Then fill
  * the `bucket_width` and other fields of `tbinfo`.
@@ -225,8 +399,6 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 {
 	ListCell *l;
 	bool found = false;
-	bool custom_origin = false;
-	Const *const_arg;
 
 	/* Make sure tbinfo was initialized. This assumption is used below. */
 	Assert(tbinfo->bf->bucket_integer_width == 0);
@@ -240,9 +412,7 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 
 		if (IsA(tle->expr, FuncExpr))
 		{
-			FuncExpr *fe = ((FuncExpr *) tle->expr);
-			Node *width_arg;
-			Node *col_arg;
+			FuncExpr *fe = castNode(FuncExpr, tle->expr);
 
 			/* Filter any non bucketing functions */
 			FuncInfo *finfo = ts_func_cache_get_bucketing_func(fe->funcid);
@@ -286,143 +456,11 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 			else
 				found = true;
 
-			/* Only column allowed : time_bucket('1day', <column> ) */
-			col_arg = lsecond(fe->args);
-			/* Could be a named argument */
-			if (IsA(col_arg, NamedArgExpr))
-				col_arg = (Node *) castNode(NamedArgExpr, col_arg)->arg;
-
-			if (!(IsA(col_arg, Var)) || ((Var *) col_arg)->varattno != tbinfo->htpartcolno)
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("time bucket function must reference the primary hypertable "
-								"dimension column")));
-
-			if (list_length(fe->args) >= 3)
-			{
-				Const *arg = check_time_bucket_argument(lthird(fe->args), "third");
-				process_additional_timebucket_parameter(tbinfo->bf, arg);
-			}
-
-			if (list_length(fe->args) >= 4)
-			{
-				Const *arg = check_time_bucket_argument(lfourth(fe->args), "fourth");
-				process_additional_timebucket_parameter(tbinfo->bf, arg);
-			}
-
-			/* Check for custom origin. */
-			switch (exprType(col_arg))
-			{
-				case DATEOID:
-					/* Origin is always 3rd arg for date variants. */
-					if (list_length(fe->args) == 3 && exprType(lthird(fe->args)) == DATEOID)
-					{
-						Node *arg = lthird(fe->args);
-						custom_origin = true;
-						/* this function also takes care of named arguments */
-						const_arg = check_time_bucket_argument(arg, "third");
-						tbinfo->bf->bucket_time_origin = DatumGetTimestamp(
-							DirectFunctionCall1(date_timestamp, const_arg->constvalue));
-					}
-					break;
-				case TIMESTAMPOID:
-					/* Origin is always 3rd arg for timestamp variants. */
-					if (list_length(fe->args) == 3 && exprType(lthird(fe->args)) == TIMESTAMPOID)
-					{
-						Node *arg = lthird(fe->args);
-						custom_origin = true;
-						const_arg = check_time_bucket_argument(arg, "third");
-						tbinfo->bf->bucket_time_origin = DatumGetTimestamp(const_arg->constvalue);
-					}
-					break;
-				case TIMESTAMPTZOID:
-					/* Origin can be 3rd or 4th arg for timestamptz variants. */
-					if (list_length(fe->args) >= 3 && exprType(lthird(fe->args)) == TIMESTAMPTZOID)
-					{
-						Node *arg = lthird(fe->args);
-						custom_origin = true;
-						Const *constval = check_time_bucket_argument(arg, "third");
-						tbinfo->bf->bucket_time_origin = DatumGetTimestampTz(constval->constvalue);
-					}
-					else if (list_length(fe->args) >= 4 &&
-							 exprType(lfourth(fe->args)) == TIMESTAMPTZOID)
-					{
-						custom_origin = true;
-						if (IsA(lfourth(fe->args), Const))
-						{
-							tbinfo->bf->bucket_time_origin =
-								DatumGetTimestampTz(castNode(Const, lfourth(fe->args))->constvalue);
-						}
-						/* could happen in a statement like time_bucket('1h', .., 'utc', origin =>
-						 * ...) */
-						else if (IsA(lfourth(fe->args), NamedArgExpr))
-						{
-							Const *constval =
-								check_time_bucket_argument(lfourth(fe->args), "fourth");
-
-							tbinfo->bf->bucket_time_origin =
-								DatumGetTimestampTz(constval->constvalue);
-						}
-					}
-			}
-			if (custom_origin && TIMESTAMP_NOT_FINITE(tbinfo->bf->bucket_time_origin))
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						 errmsg("invalid origin value: infinity")));
-			}
-
-			/*
-			 * We constify width expression here so any immutable expression will be allowed.
-			 * Otherwise it would make it harder to create caggs for hypertables with e.g. int8
-			 * partitioning column as int constants default to int4 and so expression would
-			 * have a cast and not be a Const.
-			 */
-			width_arg = linitial(fe->args);
-
-			if (IsA(width_arg, NamedArgExpr))
-				width_arg = (Node *) castNode(NamedArgExpr, width_arg)->arg;
-
-			width_arg = eval_const_expressions(NULL, width_arg);
-			if (IsA(width_arg, Const))
-			{
-				Const *width = castNode(Const, width_arg);
-				tbinfo->bf->bucket_width_type = width->consttype;
-
-				if (width->constisnull)
-				{
-					if (is_cagg_create)
-						ereport(ERROR,
-								(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-								 errmsg("invalid bucket width for time bucket function")));
-				}
-				else
-				{
-					if (width->consttype == INTERVALOID)
-					{
-						tbinfo->bf->bucket_time_width = DatumGetIntervalP(width->constvalue);
-					}
-
-					if (!IS_TIME_BUCKET_INFO_TIME_BASED(tbinfo))
-					{
-						tbinfo->bf->bucket_integer_width =
-							ts_interval_value_to_internal(width->constvalue, width->consttype);
-					}
-				}
-			}
-			else
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("only immutable expressions allowed in time bucket function"),
-						 errhint("Use an immutable expression as first argument to the time bucket "
-								 "function.")));
-			}
-
-			tbinfo->bf->bucket_function = fe->funcid;
-			tbinfo->bf->bucket_time_based =
-				ts_continuous_agg_bucket_on_interval(tbinfo->bf->bucket_function);
-			tbinfo->bf->bucket_fixed_interval = time_bucket_info_has_fixed_width(tbinfo);
+			process_timebucket_parameters(fe,
+										  tbinfo->bf,
+										  true,
+										  is_cagg_create,
+										  tbinfo->htpartcolno);
 		}
 	}
 
@@ -435,11 +473,11 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 						"supported")));
 	}
 
-	if (!time_bucket_info_has_fixed_width(tbinfo))
+	if (!time_bucket_info_has_fixed_width(tbinfo->bf))
 	{
 		/* Variable-sized buckets can be used only with intervals. */
 		Assert(tbinfo->bf->bucket_time_width != NULL);
-		Assert(IS_TIME_BUCKET_INFO_TIME_BASED(tbinfo));
+		Assert(IS_TIME_BUCKET_INFO_TIME_BASED(tbinfo->bf));
 
 		if ((tbinfo->bf->bucket_time_width->month != 0) &&
 			((tbinfo->bf->bucket_time_width->day != 0) ||
@@ -644,17 +682,12 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 	CAggTimebucketInfo bucket_info = { 0 };
 	CAggTimebucketInfo bucket_info_parent = { 0 };
 	Hypertable *ht = NULL, *ht_parent = NULL;
-	RangeTblRef *rtref = NULL, *rtref_other = NULL;
-	RangeTblEntry *rte = NULL, *rte_other = NULL;
-	JoinType jointype = JOIN_FULL;
-	OpExpr *op = NULL;
-	List *fromList = NIL;
+	RangeTblEntry *rte = NULL;
 	StringInfo hint = makeStringInfo();
 	StringInfo detail = makeStringInfo();
 	bool is_hierarchical = false;
 	Query *prev_query = NULL;
 	ContinuousAgg *cagg_parent = NULL;
-	Oid normal_table_id = InvalidOid;
 
 	if (!cagg_query_supported(query, hint, detail, finalized))
 	{
@@ -665,145 +698,66 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 				 detail->len > 0 ? errdetail("%s", detail->data) : 0));
 	}
 
-	/* Check if there are only two tables in the from list. */
-	fromList = query->jointree->fromlist;
-	if (list_length(fromList) > CONTINUOUS_AGG_MAX_JOIN_RELATIONS)
+	int num_hypertables = 0;
+	ListCell *lc;
+	foreach (lc, query->rtable)
+	{
+		RangeTblEntry *inner_rte = lfirst_node(RangeTblEntry, lc);
+
+		if (inner_rte->rtekind == RTE_RELATION)
+		{
+			bool is_hypertable = ts_is_hypertable(inner_rte->relid) ||
+								 ts_continuous_agg_find_by_relid(inner_rte->relid);
+
+			if (is_hypertable)
+			{
+				num_hypertables++;
+				if (rte == NULL)
+					rte = copyObject(inner_rte);
+			}
+
+			if (is_hypertable && inner_rte->inh == false)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("invalid continuous aggregate view"),
+						 errdetail(
+							 "FROM ONLY on hypertables is not allowed in continuous aggregate.")));
+		}
+
+		/* Only inner joins are allowed. */
+		if (inner_rte->jointype != JOIN_INNER && inner_rte->jointype != JOIN_LEFT)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("only INNER or LEFT joins are supported in continuous aggregates")));
+
+		/* Subquery only using LATERAL */
+		if (inner_rte->subquery && !inner_rte->lateral)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("invalid continuous aggregate view"),
+					 errdetail("Sub-queries are not supported in FROM clause.")));
+
+		/* TABLESAMPLE not allowed */
+		if (inner_rte->tablesample)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("invalid continuous aggregate view"),
+					 errdetail("TABLESAMPLE is not supported in continuous aggregate.")));
+	}
+
+	if (num_hypertables > 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("invalid continuous aggregate view"),
+				 errdetail("Only one hypertable is allowed in continuous aggregate view.")));
+
+	if (rte == NULL)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("only two tables with one hypertable and one normal table"
-						"are  allowed in continuous aggregate view")));
+				 errmsg("invalid continuous aggregate view"),
+				 errdetail("At least one hypertable should be used in the view definition.")));
 	}
-	/* Extra checks for joins in Caggs. */
-	if (list_length(fromList) == CONTINUOUS_AGG_MAX_JOIN_RELATIONS ||
-		!IsA(linitial(query->jointree->fromlist), RangeTblRef))
-	{
-		if (list_length(fromList) == CONTINUOUS_AGG_MAX_JOIN_RELATIONS)
-		{
-			if (!IsA(linitial(fromList), RangeTblRef) || !IsA(lsecond(fromList), RangeTblRef))
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("invalid continuous aggregate view"),
-						 errdetail(
-							 "From clause can only have one hypertable and one normal table.")));
-
-			rtref = linitial_node(RangeTblRef, query->jointree->fromlist);
-			rte = list_nth(query->rtable, rtref->rtindex - 1);
-			rtref_other = lsecond_node(RangeTblRef, query->jointree->fromlist);
-			rte_other = list_nth(query->rtable, rtref_other->rtindex - 1);
-			jointype = rte->jointype || rte_other->jointype;
-
-			if (query->jointree->quals != NULL && IsA(query->jointree->quals, OpExpr))
-				op = (OpExpr *) query->jointree->quals;
-		}
-		else
-		{
-			ListCell *l;
-			foreach (l, query->jointree->fromlist)
-			{
-				Node *jtnode = (Node *) lfirst(l);
-				JoinExpr *join = NULL;
-				if (IsA(jtnode, JoinExpr))
-				{
-					join = castNode(JoinExpr, jtnode);
-					jointype = join->jointype;
-					op = (OpExpr *) join->quals;
-					rte = list_nth(query->rtable, ((RangeTblRef *) join->larg)->rtindex - 1);
-					rte_other = list_nth(query->rtable, ((RangeTblRef *) join->rarg)->rtindex - 1);
-					if (rte->subquery != NULL || rte_other->subquery != NULL)
-						ereport(ERROR,
-								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("invalid continuous aggregate view"),
-								 errdetail("Sub-queries are not supported in FROM clause.")));
-					RangeTblEntry *jrte = rt_fetch(join->rtindex, query->rtable);
-					if (jrte->joinaliasvars == NIL)
-						ereport(ERROR,
-								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("invalid continuous aggregate view")));
-				}
-			}
-		}
-
-		/*
-		 * Error out if there is aynthing else than one normal table and one hypertable
-		 * in the from clause, e.g. sub-query, lateral, two hypertables, etc.
-		 */
-		if (rte->lateral || rte_other->lateral)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("invalid continuous aggregate view"),
-					 errdetail("Lateral joins are not supported in FROM clause.")));
-		if ((rte->relkind == RELKIND_VIEW && ts_is_hypertable(rte_other->relid)) ||
-			(rte_other->relkind == RELKIND_VIEW && ts_is_hypertable(rte->relid)))
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("invalid continuous aggregate view"),
-					 errdetail("Views are not supported in FROM clause.")));
-		if (rte->relkind != RELKIND_VIEW && rte_other->relkind != RELKIND_VIEW &&
-			(ts_is_hypertable(rte->relid) == ts_is_hypertable(rte_other->relid)))
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("invalid continuous aggregate view"),
-					 errdetail("Multiple hypertables or normal tables are not supported in FROM "
-							   "clause.")));
-
-		/* Only inner joins are allowed. */
-		if (jointype != JOIN_INNER)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("only inner joins are supported in continuous aggregates")));
-
-		/* Only equality conditions are permitted on joins. */
-		if (op && IsA(op, OpExpr) &&
-			list_length(castNode(OpExpr, op)->args) == CONTINUOUS_AGG_MAX_JOIN_RELATIONS)
-		{
-			Oid left_type = exprType(linitial(op->args));
-			Oid right_type = exprType(lsecond(op->args));
-			if (!ts_is_equality_operator(op->opno, left_type, right_type))
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("invalid continuous aggregate view"),
-						 errdetail(
-							 "Only equality conditions are supported in continuous aggregates.")));
-		}
-		else
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("invalid continuous aggregate view"),
-					 errdetail("Unsupported expression in join clause."),
-					 errhint("Only equality conditions are supported in continuous aggregates.")));
-		/*
-		 * Record the table oid of the normal table. This is required so
-		 * that we know which one is hypertable to carry out the related
-		 * processing in later parts of code.
-		 */
-		if (rte->relkind == RELKIND_VIEW)
-			normal_table_id = rte_other->relid;
-		else if (rte_other->relkind == RELKIND_VIEW)
-			normal_table_id = rte->relid;
-		else
-			normal_table_id = ts_is_hypertable(rte->relid) ? rte_other->relid : rte->relid;
-		if (normal_table_id == rte->relid)
-			rte = rte_other;
-	}
-	else
-	{
-		/* Check if we have a hypertable in the FROM clause. */
-		rtref = linitial_node(RangeTblRef, query->jointree->fromlist);
-		rte = list_nth(query->rtable, rtref->rtindex - 1);
-	}
-	/* FROM only <tablename> sets rte->inh to false. */
-	if (rte->rtekind != RTE_JOIN)
-	{
-		if ((rte->relkind != RELKIND_RELATION && rte->relkind != RELKIND_VIEW) ||
-			rte->tablesample || rte->inh == false)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("invalid continuous aggregate view")));
-	}
-
-	Ensure(rte->relkind == RELKIND_RELATION || rte->relkind == RELKIND_VIEW,
-		   "invalid continuous aggregate view");
 
 	const Dimension *part_dimension = NULL;
 	int32 parent_mat_hypertable_id = INVALID_HYPERTABLE_ID;
@@ -988,8 +942,8 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 								is_cagg_create);
 
 		/* Cannot create cagg with fixed bucket on top of variable bucket. */
-		if (time_bucket_info_has_fixed_width(&bucket_info_parent) == false &&
-			time_bucket_info_has_fixed_width(&bucket_info) == true)
+		if (time_bucket_info_has_fixed_width(bucket_info_parent.bf) == false &&
+			time_bucket_info_has_fixed_width(bucket_info.bf) == true)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -1142,6 +1096,9 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 							   bucket_info_parent.bf->bucket_integer_offset)));
 		}
 	}
+
+	if (is_hierarchical)
+		bucket_info.htoidparent = cagg_parent->relid;
 
 	return bucket_info;
 }
@@ -1393,55 +1350,27 @@ build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query
 	/*
 	 * If there is join in CAgg definition then adjust varno
 	 * to get time column from the hypertable in the join.
-	 *
-	 * In case of joins it is enough to check if the first node is not RangeTblRef,
-	 * because the jointree has RangeTblRef as leaves and JoinExpr above them.
-	 * So if JoinExpr is present, it is the first node.
-	 * Other cases of join i.e. without explicit JOIN clause is confirmed
-	 * by reading the length of rtable.
 	 */
-	if (list_length(q2->rtable) == CONTINUOUS_AGG_MAX_JOIN_RELATIONS ||
-		!IsA(linitial(q2->jointree->fromlist), RangeTblRef))
-	{
-		Oid normal_table_id = InvalidOid;
-		RangeTblEntry *rte = NULL;
-		RangeTblEntry *rte_other = NULL;
+	varno = list_length(q2->rtable);
 
-		if (list_length(q2->rtable) == CONTINUOUS_AGG_MAX_JOIN_RELATIONS)
+	if (list_length(q2->rtable) > 1)
+	{
+		int nvarno = 1;
+		foreach (lc2, q2->rtable)
 		{
-			RangeTblRef *rtref = linitial_node(RangeTblRef, q2->jointree->fromlist);
-			rte = list_nth(q2->rtable, rtref->rtindex - 1);
-			RangeTblRef *rtref_other = lsecond_node(RangeTblRef, q2->jointree->fromlist);
-			rte_other = list_nth(q2->rtable, rtref_other->rtindex - 1);
-		}
-		else if (!IsA(linitial(q2->jointree->fromlist), RangeTblRef))
-		{
-			ListCell *l;
-			foreach (l, q2->jointree->fromlist)
+			RangeTblEntry *rte = lfirst_node(RangeTblEntry, lc2);
+			if (rte->rtekind == RTE_RELATION)
 			{
-				Node *jtnode = (Node *) lfirst(l);
-				JoinExpr *join = NULL;
-				if (IsA(jtnode, JoinExpr))
+				/* look for hypertable or parent hypertable in RangeTableEntry list */
+				if (rte->relid == tbinfo->htoid || rte->relid == tbinfo->htoidparent)
 				{
-					join = castNode(JoinExpr, jtnode);
-					rte = list_nth(q2->rtable, ((RangeTblRef *) join->larg)->rtindex - 1);
-					rte_other = list_nth(q2->rtable, ((RangeTblRef *) join->rarg)->rtindex - 1);
+					varno = nvarno;
+					break;
 				}
 			}
+			nvarno++;
 		}
-		if (rte->relkind == RELKIND_VIEW)
-			normal_table_id = rte_other->relid;
-		else if (rte_other->relkind == RELKIND_VIEW)
-			normal_table_id = rte->relid;
-		else
-			normal_table_id = ts_is_hypertable(rte->relid) ? rte_other->relid : rte->relid;
-		if (normal_table_id == rte->relid)
-			varno = 2;
-		else
-			varno = 1;
 	}
-	else
-		varno = list_length(q2->rtable);
 
 	q2_quals = build_union_query_quals(materialize_htid,
 									   tbinfo->htpartcoltype,
@@ -1517,10 +1446,10 @@ build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query
 /*
  * Returns true if the time bucket size is fixed
  */
-bool
-time_bucket_info_has_fixed_width(const CAggTimebucketInfo *tbinfo)
+static bool
+time_bucket_info_has_fixed_width(const ContinuousAggsBucketFunction *bf)
 {
-	if (!IS_TIME_BUCKET_INFO_TIME_BASED(tbinfo))
+	if (!IS_TIME_BUCKET_INFO_TIME_BASED(bf))
 	{
 		return true;
 	}
@@ -1528,8 +1457,7 @@ time_bucket_info_has_fixed_width(const CAggTimebucketInfo *tbinfo)
 	{
 		/* Historically, we treat all buckets with timezones as variable. Buckets with only days are
 		 * treated as fixed. */
-		return tbinfo->bf->bucket_time_width->month == 0 &&
-			   tbinfo->bf->bucket_time_timezone == NULL;
+		return bf->bucket_time_width->month == 0 && bf->bucket_time_timezone == NULL;
 	}
 }
 
@@ -1559,4 +1487,42 @@ cagg_get_by_relid_or_fail(const Oid cagg_relid)
 	}
 
 	return cagg;
+}
+
+/* Get time bucket function info based on the view definition */
+ContinuousAggsBucketFunction *
+ts_cagg_get_bucket_function_info(Oid view_oid)
+{
+	Relation view_rel = relation_open(view_oid, AccessShareLock);
+	Query *query = copyObject(get_view_query(view_rel));
+	relation_close(view_rel, NoLock);
+
+	Assert(query != NULL);
+	Assert(query->commandType == CMD_SELECT);
+
+	ContinuousAggsBucketFunction *bf = palloc0(sizeof(ContinuousAggsBucketFunction));
+
+	ListCell *l;
+	foreach (l, query->groupClause)
+	{
+		SortGroupClause *sgc = lfirst_node(SortGroupClause, l);
+		TargetEntry *tle = get_sortgroupclause_tle(sgc, query->targetList);
+
+		if (IsA(tle->expr, FuncExpr))
+		{
+			FuncExpr *fe = castNode(FuncExpr, tle->expr);
+
+			/* Filter any non bucketing functions */
+			FuncInfo *finfo = ts_func_cache_get_bucketing_func(fe->funcid);
+			if (finfo == NULL)
+				continue;
+
+			Assert(finfo->is_bucketing_func);
+
+			process_timebucket_parameters(fe, bf, false, false, InvalidAttrNumber);
+			break;
+		}
+	}
+
+	return bf;
 }

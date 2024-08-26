@@ -149,6 +149,34 @@ CREATE OR REPLACE FUNCTION @extschema@.add_dimension(
 ) RETURNS TABLE(dimension_id INT, created BOOL)
 AS '@MODULE_PATHNAME@', 'ts_dimension_add_general' LANGUAGE C VOLATILE;
 
+-- Enable tracking of statistics on a column of a hypertable.
+--
+-- hypertable - OID of the table to which the column belongs to
+-- column_name - The column to track statistics for
+-- if_not_exists - If set, and the entry already exists, generate a notice instead of an error
+-- Returns the "id" of the entry created. The "enabled" field
+-- is set to true if entry is created or exists already.
+CREATE OR REPLACE FUNCTION @extschema@.enable_chunk_skipping(
+    hypertable              REGCLASS,
+    column_name             NAME,
+    if_not_exists           BOOLEAN = FALSE
+) RETURNS TABLE(column_stats_id INT, enabled BOOL)
+AS '@MODULE_PATHNAME@', 'ts_chunk_column_stats_enable' LANGUAGE C VOLATILE;
+
+-- Disable tracking of statistics on a column of a hypertable.
+--
+-- hypertable - OID of the table to remove from
+-- column_name - NAME of the column on which the stats are tracked
+-- if_not_exists - If set, and the entry does not exist,
+-- generate a notice instead of an error. The "disabled" field
+-- is set to true if entry is deleted successfully.
+CREATE OR REPLACE FUNCTION @extschema@.disable_chunk_skipping(
+    hypertable              REGCLASS,
+    column_name             NAME,
+    if_not_exists           BOOLEAN = FALSE
+) RETURNS TABLE(hypertable_id INT, column_name NAME, disabled BOOL)
+AS '@MODULE_PATHNAME@', 'ts_chunk_column_stats_disable' LANGUAGE C VOLATILE;
+
 CREATE OR REPLACE FUNCTION @extschema@.by_hash(column_name NAME, number_partitions INTEGER,
                                                partition_func regproc = NULL)
     RETURNS _timescaledb_internal.dimension_info LANGUAGE C
