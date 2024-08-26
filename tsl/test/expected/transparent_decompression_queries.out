@@ -55,6 +55,7 @@ select * from test_chartab order by mac_id , ts limit 2;
 
 -- test constraintawareappend sort node handling
 SET enable_hashagg TO false;
+SET timescaledb.enable_chunkwise_aggregation TO false;
 CREATE TABLE public.merge_sort (time timestamp NOT NULL, measure_id integer NOT NULL, device_id integer NOT NULL, value float);
 SELECT create_hypertable('merge_sort', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
@@ -65,7 +66,6 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
 
 ALTER TABLE merge_sort SET (timescaledb.compress = true, timescaledb.compress_orderby = 'time', timescaledb.compress_segmentby = 'device_id, measure_id');
 INSERT INTO merge_sort SELECT time, 1, 1, extract(epoch from time) * 0.001 FROM generate_series('2000-01-01'::timestamp,'2000-02-01'::timestamp,'1h'::interval) g1(time);
-ANALYZE merge_sort;
 --compress first chunk
 SELECT compress_chunk(ch) FROM show_chunks('merge_sort') ch LIMIT 1;
              compress_chunk             
@@ -73,6 +73,7 @@ SELECT compress_chunk(ch) FROM show_chunks('merge_sort') ch LIMIT 1;
  _timescaledb_internal._hyper_3_5_chunk
 (1 row)
 
+VACUUM ANALYZE merge_sort;
 -- this should have a MergeAppend with children wrapped in Sort nodes
 EXPLAIN (analyze,costs off,timing off,summary off) SELECT
   last(time, time) as time,
@@ -157,6 +158,7 @@ GROUP BY 2, 3;
 (27 rows)
 
 RESET enable_hashagg;
+RESET timescaledb.enable_chunkwise_aggregation;
 -- test if volatile function quals are applied to compressed chunks
 CREATE FUNCTION check_equal_228( intval INTEGER) RETURNS BOOL
 LANGUAGE PLPGSQL AS
@@ -270,7 +272,7 @@ SELECT compress_chunk(ch) FROM show_chunks('options_data', older_than=> '2023-12
  _timescaledb_internal._hyper_7_16_chunk
 (4 rows)
 
-ANALYZE options_data;
+VACUUM ANALYZE options_data;
 SELECT max(date) AS date FROM options_data WHERE contract_code='CONTRACT2023-12-03 04:00:00+01';
  date 
 ------

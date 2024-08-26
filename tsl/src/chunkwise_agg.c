@@ -186,6 +186,17 @@ copy_append_like_path(PlannerInfo *root, Path *path, List *new_subpaths, PathTar
 			ts_chunk_append_path_copy(chunk_append_path, new_subpaths, pathtarget);
 		return &new_chunk_append_path->cpath.path;
 	}
+	else if (IsA(path, ProjectionPath))
+	{
+		/*
+		 * Projection goes under partial aggregation, so here we can just ignore
+		 * it.
+		 */
+		return copy_append_like_path(root,
+									 castNode(ProjectionPath, path)->subpath,
+									 new_subpaths,
+									 pathtarget);
+	}
 
 	/* Should never happen, already checked by caller */
 	Ensure(false, "unknown path type");
@@ -286,8 +297,29 @@ add_partially_aggregated_subpaths(PlannerInfo *root, PathTarget *input_target,
 										(Node *) chunk_target_before_grouping->exprs,
 										/* nappinfos = */ 1,
 										&appinfo));
-	subpath =
-		apply_projection_to_path(root, subpath->parent, subpath, chunk_target_before_grouping);
+	/*
+	 * Note that we cannot use apply_projection_to_path() here, because it might
+	 * modify the targetlist of the projection-capable paths in place, which
+	 * would cause a mismatch when these paths are used in another context.
+	 *
+	 * In case of DecompressChunk path, we can make a copy of it and push the
+	 * projection down to it.
+	 *
+	 * In general, the projection here arises because the pathtarget of the
+	 * table scans is determined early based on the reltarget which lists all
+	 * used columns in attno order, and the pathtarget before grouping is
+	 * computed later and has the grouping columns in front.
+	 */
+	if (ts_is_decompress_chunk_path(subpath))
+	{
+		subpath = (Path *) copy_decompress_chunk_path((DecompressChunkPath *) subpath);
+		subpath->pathtarget = chunk_target_before_grouping;
+	}
+	else
+	{
+		subpath = (Path *)
+			create_projection_path(root, subpath->parent, subpath, chunk_target_before_grouping);
+	}
 
 	if (can_sort)
 	{
