@@ -186,55 +186,13 @@ jobs:
       shell: bash
       run: |
         # wait in case there are in-progress coredumps
-        set -x
-        ulimit -c unlimited
-        ulimit -f unlimited
-        ulimit -a
-        sudo -u postgres bash -c "ulimit -a"
         sleep 10
-        whoami
-
-        cat /proc/sys/kernel/core_pattern
-        sudo -u postgres touch "$(cat /proc/sys/kernel/core_pattern)"
-        sudo -u postgres sleep 10 &
-        sudo killall -SIGSEGV sleep
-
-        cat /proc/sys/kernel/core_pattern
-        sleep 10 &
-        killall -SIGSEGV sleep
-
-        sudo echo "core" > /proc/sys/kernel/core_pattern
-        cat /proc/sys/kernel/core_pattern
-        sudo -u postgres sleep 10 &
-        sudo killall -SIGSEGV sleep
-
-        sudo echo "core2" > /proc/sys/kernel/core_pattern
-        cat /proc/sys/kernel/core_pattern
-        sleep 10 &
-        killall -SIGSEGV sleep
-
-        sudo echo "/tmp/core3" > /proc/sys/kernel/core_pattern
-        cat /proc/sys/kernel/core_pattern
-        sleep 10 &
-        killall -SIGSEGV sleep
-
-        sudo echo "/tmp/core3" > /proc/sys/kernel/core_pattern
-        cat /proc/sys/kernel/core_pattern
-        sudo -u postgres sleep 10 &
-        sudo killall -SIGSEGV sleep
-
-        sleep 10
-
-        pwd
-        ls -lath .
-        ls -lath /tmp
-        ls -lathd /tmp
         if compgen -G "/tmp/core*" > /dev/null; then
           PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
           # apt-get install postgresql-${PG_MAJOR}-dbgsym >/dev/null
           for file in /tmp/core*
           do
-            gdb /usr/lib/postgresql/${PG_MAJOR}/bin/postgres -c $file <<<"
+            gdb "${HOME}/${PG_INSTALL_DIR}/bin/postgres" -c $file <<<"
           set verbose on
           set trace-commands on
           show debug-file-directory
