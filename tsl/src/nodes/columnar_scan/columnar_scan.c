@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 #include <access/attnum.h>
+#include <access/sdir.h>
 #include <access/skey.h>
 #include <catalog/pg_attribute.h>
 #include <executor/tuptable.h>
@@ -327,6 +328,13 @@ ExecVectorQual(VectorQualState *vqstate, ExprContext *econtext)
 	return nfiltered;
 }
 
+static pg_attribute_always_inline bool
+getnextslot(TableScanDesc scandesc, ScanDirection direction, TupleTableSlot *slot)
+{
+	return arrow_slot_try_getnext(slot, direction) ||
+		   table_scan_getnextslot(scandesc, direction, slot);
+}
+
 static TupleTableSlot *
 columnar_scan_exec(CustomScanState *state)
 {
@@ -372,7 +380,7 @@ columnar_scan_exec(CustomScanState *state)
 		CHECK_FOR_INTERRUPTS();
 		ResetExprContext(econtext);
 
-		if (table_scan_getnextslot(scandesc, direction, slot))
+		if (getnextslot(scandesc, direction, slot))
 			return slot;
 		return NULL;
 	}
@@ -388,7 +396,7 @@ columnar_scan_exec(CustomScanState *state)
 		CHECK_FOR_INTERRUPTS();
 		slot = state->ss.ss_ScanTupleSlot;
 
-		if (!table_scan_getnextslot(scandesc, direction, slot))
+		if (!getnextslot(scandesc, direction, slot))
 		{
 			/* Nothing to return, but be careful to use the projection result
 			 * slot so it has correct tupleDesc. */

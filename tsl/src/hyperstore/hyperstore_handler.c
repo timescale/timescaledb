@@ -566,6 +566,9 @@ hyperstore_endscan(TableScanDesc sscan)
 static bool
 hyperstore_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTableSlot *slot)
 {
+	if (arrow_slot_try_getnext(slot, direction))
+		return true;
+
 	HyperstoreScanDesc scan = (HyperstoreScanDesc) sscan;
 
 	TS_DEBUG_LOG("relid: %d, relation: %s, reset: %s, scan_state: %s",
