@@ -82,7 +82,13 @@ typedef struct ArrowTupleTableSlot
 
 extern const TupleTableSlotOps TTSOpsArrowTuple;
 
-extern const int16 *arrow_slot_get_attribute_offset_map(TupleTableSlot *slot);
+extern const int16 *arrow_slot_get_attribute_offset_map_slow(TupleTableSlot *slot);
+
+#define arrow_slot_get_attribute_offset_map(slot)                                                  \
+	((ArrowTupleTableSlot *) slot)->attrs_offset_map ?                                             \
+		((ArrowTupleTableSlot *) slot)->attrs_offset_map :                                         \
+		arrow_slot_get_attribute_offset_map_slow(slot)
+
 extern TupleTableSlot *ExecStoreArrowTuple(TupleTableSlot *slot, uint16 tuple_index);
 
 #define TTS_IS_ARROWTUPLE(slot) ((slot)->tts_ops == &TTSOpsArrowTuple)
@@ -321,7 +327,6 @@ ExecDecrArrowTuple(TupleTableSlot *slot, uint16 decrement)
 #define ExecStoreNextArrowTuple(slot) ExecIncrArrowTuple(slot, 1)
 #define ExecStorePreviousArrowTuple(slot) ExecDecrArrowTuple(slot, 1)
 
-extern const int16 *arrow_slot_get_attribute_offset_map(TupleTableSlot *slot);
 extern bool is_compressed_col(const TupleDesc tupdesc, AttrNumber attno);
 extern const ArrowArray *arrow_slot_get_array(TupleTableSlot *slot, AttrNumber attno);
 extern void arrow_slot_set_referenced_attrs(TupleTableSlot *slot, Bitmapset *attrs);
