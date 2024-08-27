@@ -69,17 +69,17 @@ echo "---- Adding update sql file to CMakeLists.txt  ----"
 
 cd ..
 gawk -i inplace '/'$LAST_UPDATE_FILE')/ { print; print "    updates/'$UPDATE_FILE')"; next }1' CMakeLists.txt
-sed -i.bak "s/"$LAST_UPDATE_FILE")/"$LAST_UPDATE_FILE"/g" CMakeLists.txt
+sed -i.bak "s/${LAST_UPDATE_FILE})/${LAST_UPDATE_FILE}/g" CMakeLists.txt
 rm CMakeLists.txt.bak
 
 
 echo "---- Adding downgrade sql file to CMakeLists.txt  ----"
 
 gawk -i inplace '/  '$LAST_DOWNGRADE_FILE')/ { print; print "    '$DOWNGRADE_FILE')"; next }1' CMakeLists.txt
-sed -i.bak "s/  "$LAST_DOWNGRADE_FILE")/  "$LAST_DOWNGRADE_FILE"/g" CMakeLists.txt
+sed -i.bak "s/  ${LAST_DOWNGRADE_FILE})/  ${LAST_DOWNGRADE_FILE}/g" CMakeLists.txt
 rm CMakeLists.txt.bak
 
-sed -i.bak "s/FILE reverse-dev.sql)/FILE "$DOWNGRADE_FILE")/g" CMakeLists.txt
+sed -i.bak "s/FILE reverse-dev.sql)/FILE ${DOWNGRADE_FILE})/g" CMakeLists.txt
 rm CMakeLists.txt.bak
 
 
