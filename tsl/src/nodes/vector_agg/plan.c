@@ -345,18 +345,23 @@ can_vectorize_grouping(Agg *agg, CustomScan *custom)
 }
 
 /*
- * Check if we have a vectorized aggregation node in the plan tree. This is used
- * for testing.
+ * Check if we have a vectorized aggregation node and the usual Postgres
+ * aggregation node in the plan tree. This is used for testing.
  */
 bool
-has_vector_agg_node(Plan *plan)
+has_vector_agg_node(Plan *plan, bool *has_normal_agg)
 {
-	if (plan->lefttree && has_vector_agg_node(plan->lefttree))
+	if (IsA(plan, Agg))
+	{
+		*has_normal_agg = true;
+	}
+
+	if (plan->lefttree && has_vector_agg_node(plan->lefttree, has_normal_agg))
 	{
 		return true;
 	}
 
-	if (plan->righttree && has_vector_agg_node(plan->righttree))
+	if (plan->righttree && has_vector_agg_node(plan->righttree, has_normal_agg))
 	{
 		return true;
 	}
@@ -381,7 +386,7 @@ has_vector_agg_node(Plan *plan)
 		ListCell *lc;
 		foreach (lc, append_plans)
 		{
-			if (has_vector_agg_node(lfirst(lc)))
+			if (has_vector_agg_node(lfirst(lc), has_normal_agg))
 			{
 				return true;
 			}

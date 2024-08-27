@@ -16,4 +16,4 @@ typedef struct VectorAggPlan
 extern void _vector_agg_init(void);
 
 Plan *try_insert_vector_agg_node(Plan *plan);
-bool has_vector_agg_node(Plan *plan);
+bool has_vector_agg_node(Plan *plan, bool *has_normal_agg);

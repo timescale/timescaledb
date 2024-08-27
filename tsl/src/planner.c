@@ -214,13 +214,21 @@ tsl_postprocess_plan(PlannedStmt *stmt)
 		stmt->planTree = try_insert_vector_agg_node(stmt->planTree);
 	}
 
-	if (ts_guc_debug_require_vector_agg != RVA_Allow)
+#ifdef TS_DEBUG
+	if (ts_guc_debug_require_vector_agg != DRO_Allow)
 	{
-		const bool has_vector_agg = has_vector_agg_node(stmt->planTree);
-		const bool should_have_vector_agg = (ts_guc_debug_require_vector_agg == RVA_Require);
-		if (has_vector_agg != should_have_vector_agg)
+		bool has_normal_agg = false;
+		const bool has_vector_agg = has_vector_agg_node(stmt->planTree, &has_normal_agg);
+		const bool should_have_vector_agg = (ts_guc_debug_require_vector_agg == DRO_Require);
+
+		/*
+		 * For convenience, we don't complain about queries that don't have
+		 * aggregation at all.
+		 */
+		if ((has_normal_agg || has_vector_agg) && (has_vector_agg != should_have_vector_agg))
 		{
 			elog(ERROR, "vector aggregation inconsistent with debug_require_vector_agg GUC");
 		}
 	}
+#endif
 }

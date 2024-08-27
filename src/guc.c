@@ -113,26 +113,15 @@ char *ts_current_timestamp_mock = NULL;
 int ts_guc_debug_toast_tuple_target = 128;
 
 #ifdef TS_DEBUG
-static const struct config_enum_entry require_vector_qual_options[] = {
-	{ "allow", RVQ_Allow, false },
-	{ "forbid", RVQ_Forbid, false },
-	{ "only", RVQ_Only, false },
-	{ NULL, 0, false }
-};
+static const struct config_enum_entry debug_require_options[] = { { "allow", DRO_Allow, false },
+																  { "forbid", DRO_Forbid, false },
+																  { "require", DRO_Require, false },
+																  { NULL, 0, false } };
+
+DebugRequireOption ts_guc_debug_require_vector_qual = DRO_Allow;
+
+DebugRequireOption ts_guc_debug_require_vector_agg = DRO_Allow;
 #endif
-
-DebugRequireVectorQual ts_guc_debug_require_vector_qual = RVQ_Allow;
-
-#ifdef TS_DEBUG
-static const struct config_enum_entry require_vector_agg_options[] = {
-	{ "allow", RVA_Allow, false },
-	{ "forbid", RVA_Forbid, false },
-	{ "require", RVA_Require, false },
-	{ NULL, 0, false }
-};
-#endif
-
-DebugRequireVectorAgg ts_guc_debug_require_vector_agg = RVA_Allow;
 
 bool ts_guc_debug_compression_path_info = false;
 
@@ -885,8 +874,8 @@ _guc_init(void)
 							 "ensure that vectorized aggregation is used or not",
 							 /* long_desc= */ "this is for debugging purposes",
 							 /* valueAddr= */ (int *) &ts_guc_debug_require_vector_agg,
-							 /* bootValue= */ RVQ_Allow,
-							 /* options = */ require_vector_agg_options,
+							 /* bootValue= */ DRO_Allow,
+							 /* options = */ debug_require_options,
 							 /* context= */ PGC_USERSET,
 							 /* flags= */ 0,
 							 /* check_hook= */ NULL,
@@ -903,8 +892,8 @@ _guc_init(void)
 							 "and "
 							 "using the test templates is a pain",
 							 /* valueAddr= */ (int *) &ts_guc_debug_require_vector_qual,
-							 /* bootValue= */ RVQ_Allow,
-							 /* options = */ require_vector_qual_options,
+							 /* bootValue= */ DRO_Allow,
+							 /* options = */ debug_require_options,
 							 /* context= */ PGC_USERSET,
 							 /* flags= */ 0,
 							 /* check_hook= */ NULL,

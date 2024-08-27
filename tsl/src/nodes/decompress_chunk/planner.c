@@ -1281,11 +1281,11 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	}
 
 #ifdef TS_DEBUG
-	if (ts_guc_debug_require_vector_qual == RVQ_Forbid && list_length(vectorized_quals) > 0)
+	if (ts_guc_debug_require_vector_qual == DRO_Forbid && list_length(vectorized_quals) > 0)
 	{
 		elog(ERROR, "debug: encountered vector quals when they are disabled");
 	}
-	else if (ts_guc_debug_require_vector_qual == RVQ_Only)
+	else if (ts_guc_debug_require_vector_qual == DRO_Require)
 	{
 		if (list_length(decompress_plan->scan.plan.qual) > 0)
 		{
