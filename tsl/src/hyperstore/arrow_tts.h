@@ -8,6 +8,7 @@
 #include <postgres.h>
 #include <access/attnum.h>
 #include <access/htup_details.h>
+#include <access/sdir.h>
 #include <access/tupdesc.h>
 #include <catalog/index.h>
 #include <catalog/pg_attribute.h>
@@ -326,6 +327,42 @@ ExecDecrArrowTuple(TupleTableSlot *slot, uint16 decrement)
 
 #define ExecStoreNextArrowTuple(slot) ExecIncrArrowTuple(slot, 1)
 #define ExecStorePreviousArrowTuple(slot) ExecDecrArrowTuple(slot, 1)
+
+/*
+ * Try populating the slot with the next "row" from its stored arrow arrays.
+ *
+ * Returns false if the slot is empty, does not hold compressed data, or it
+ * has reached the last set of values.
+ */
+static inline bool
+arrow_slot_try_getnext(TupleTableSlot *slot, ScanDirection direction)
+{
+	const ArrowTupleTableSlot *aslot = (const ArrowTupleTableSlot *) slot;
+
+	Assert(TTS_IS_ARROWTUPLE(slot));
+	Assert(direction == ForwardScanDirection || direction == BackwardScanDirection);
+
+	/* If empty or not containing a compressed tuple, there is nothing to do */
+	if (unlikely(TTS_EMPTY(slot)) || aslot->tuple_index == InvalidTupleIndex)
+		return false;
+
+	if (direction == ForwardScanDirection)
+	{
+		if (aslot->tuple_index < aslot->total_row_count)
+		{
+			ExecStoreNextArrowTuple(slot);
+			return true;
+		}
+	}
+	else if (aslot->tuple_index > 1)
+	{
+		Assert(direction == BackwardScanDirection);
+		ExecStorePreviousArrowTuple(slot);
+		return true;
+	}
+
+	return false;
+}
 
 extern bool is_compressed_col(const TupleDesc tupdesc, AttrNumber attno);
 extern const ArrowArray *arrow_slot_get_array(TupleTableSlot *slot, AttrNumber attno);
