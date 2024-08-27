@@ -36,15 +36,14 @@ tsl_is_compressed_tid(PG_FUNCTION_ARGS)
  * relation compared to the regular one.
  */
 const int16 *
-arrow_slot_get_attribute_offset_map(TupleTableSlot *slot)
+arrow_slot_get_attribute_offset_map_slow(TupleTableSlot *slot)
 {
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
 	const TupleDesc tupdesc = slot->tts_tupleDescriptor;
 	Oid relid =
 		OidIsValid(slot->tts_tableOid) ? slot->tts_tableOid : TupleDescAttr(tupdesc, 0)->attrelid;
 
-	if (aslot->attrs_offset_map)
-		return aslot->attrs_offset_map;
+	Assert(aslot->attrs_offset_map == NULL);
 
 	Ensure(OidIsValid(relid), "invalid relation for ArrowTupleTableSlot");
 
