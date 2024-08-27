@@ -47,8 +47,8 @@ git pull && git diff HEAD
 
 echo "---- Modifying version.config to the new versions ----"
 
-sed -i.bak "s/"$CURRENT_VERSION"/"$NEW_VERSION"/g" version.config
-sed -i.bak "s/"$LAST_VERSION"/"$CURRENT_VERSION"/g" version.config
+sed -i.bak "s/${CURRENT_VERSION}/${NEW_VERSION}/g" version.config
+sed -i.bak "s/${LAST_VERSION}/${CURRENT_VERSION}/g" version.config
 rm version.config.bak
 
 
@@ -62,6 +62,7 @@ truncate -s 0 latest-dev.sql
 
 echo "---- Creating downgrade SQL file $DOWNGRADE_FILE ----"
 
+touch reverse-dev.sql
 cp reverse-dev.sql "$DOWNGRADE_FILE"
 git add "$DOWNGRADE_FILE"
 truncate -s 0 reverse-dev.sql
@@ -71,17 +72,17 @@ echo "---- Adding update sql file to CMakeLists.txt  ----"
 
 cd ..
 gawk -i inplace '/'$LAST_UPDATE_FILE')/ { print; print "    updates/'$UPDATE_FILE')"; next }1' CMakeLists.txt
-sed -i.bak "s/"$LAST_UPDATE_FILE")/"$LAST_UPDATE_FILE"/g" CMakeLists.txt
+sed -i.bak "s/${LAST_UPDATE_FILE})/${LAST_UPDATE_FILE}/g" CMakeLists.txt
 rm CMakeLists.txt.bak
 
 
 echo "---- Adding downgrade sql file to CMakeLists.txt  ----"
 
 gawk -i inplace '/  '$LAST_DOWNGRADE_FILE')/ { print; print "    '$DOWNGRADE_FILE')"; next }1' CMakeLists.txt
-sed -i.bak "s/  "$LAST_DOWNGRADE_FILE")/  "$LAST_DOWNGRADE_FILE"/g" CMakeLists.txt
+sed -i.bak "s/  ${LAST_DOWNGRADE_FILE})/  ${LAST_DOWNGRADE_FILE}/g" CMakeLists.txt
 rm CMakeLists.txt.bak
 
-sed -i.bak "s/FILE "$LAST_DOWNGRADE_FILE")/FILE "$DOWNGRADE_FILE")/g" CMakeLists.txt
+sed -i.bak "s/FILE ${LAST_DOWNGRADE_FILE})/FILE ${DOWNGRADE_FILE})/g" CMakeLists.txt
 rm CMakeLists.txt.bak
 
 
