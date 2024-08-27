@@ -159,7 +159,7 @@ jobs:
             SKIPS="${SKIPS}" PSQL="${HOME}/${PG_INSTALL_DIR}/bin/psql"
             | tee installcheck.log
         ls -lath
-		runuser -u postgres -- bash -c "echo 1" | tee -a installcheck.log
+        runuser -u postgres -- bash -c "echo 1" | tee -a installcheck.log
         tail installcheck.log
 
     - name: Show regression diffs
