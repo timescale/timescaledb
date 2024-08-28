@@ -450,7 +450,7 @@ static void
 set_attr_value(TupleTableSlot *slot, ArrowArray **arrow_arrays, const AttrNumber attnum)
 {
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
-	const int16 *attrs_offset_map;
+	const int16 *attrs_offset_map = arrow_slot_get_attribute_offset_map(slot);
 	const int16 attoff = AttrNumberGetAttrOffset(attnum);
 
 	TS_DEBUG_LOG("attnum: %d, valid: %s, segmentby: %s, array: %s",
@@ -462,8 +462,6 @@ set_attr_value(TupleTableSlot *slot, ArrowArray **arrow_arrays, const AttrNumber
 	/* Check if value is already set */
 	if (aslot->valid_attrs[attoff])
 		return;
-
-	attrs_offset_map = arrow_slot_get_attribute_offset_map(slot);
 
 	/* Nothing to do for dropped attribute */
 	if (attrs_offset_map[attoff] == -1)
@@ -506,11 +504,10 @@ set_attr_value(TupleTableSlot *slot, ArrowArray **arrow_arrays, const AttrNumber
 }
 
 static inline bool
-is_used_attr(TupleTableSlot *slot, AttrNumber attno)
+is_used_attr(const TupleTableSlot *slot, const int16 attoff)
 {
 	const ArrowTupleTableSlot *aslot = (const ArrowTupleTableSlot *) slot;
 	const TupleDesc tupdesc = slot->tts_tupleDescriptor;
-	const int16 attoff = AttrNumberGetAttrOffset(attno);
 
 	if (TupleDescAttr(tupdesc, attoff)->attisdropped)
 		return false;
@@ -550,10 +547,27 @@ tts_arrow_getsomeattrs(TupleTableSlot *slot, int natts)
 	{
 		const AttrNumber attno = AttrOffsetGetAttrNumber(attoff);
 
-		if (is_used_attr(slot, attno) && !aslot->valid_attrs[attoff])
+		if (!aslot->valid_attrs[attoff])
 		{
-			ArrowArray **arrow_arrays = arrow_column_cache_read_one(aslot, attno);
-			set_attr_value(slot, arrow_arrays, attno);
+			/* Check if we can do a fast path for segmentby values and avoid a
+			 * decompression cache lookup */
+			if (aslot->segmentby_attrs[attoff])
+			{
+				const int16 *attrs_offset_map = arrow_slot_get_attribute_offset_map(slot);
+				const int16 cattoff = attrs_offset_map[attoff]; /* offset in compressed tuple */
+				const AttrNumber cattnum = AttrOffsetGetAttrNumber(cattoff);
+
+				/* Segment-by column. Value is not compressed so get directly from
+				 * child slot. */
+				slot->tts_values[attoff] =
+					slot_getattr(aslot->child_slot, cattnum, &slot->tts_isnull[attoff]);
+				aslot->valid_attrs[attoff] = true;
+			}
+			else if (is_used_attr(slot, attoff))
+			{
+				ArrowArray **arrow_arrays = arrow_column_cache_read_one(aslot, attno);
+				set_attr_value(slot, arrow_arrays, attno);
+			}
 		}
 	}
 
@@ -781,7 +795,7 @@ arrow_slot_get_array(TupleTableSlot *slot, AttrNumber attno)
 		return NULL;
 	}
 
-	if (!is_used_attr(slot, attno))
+	if (!is_used_attr(slot, attoff))
 		return NULL;
 
 	arrow_arrays = arrow_column_cache_read_one(aslot, attno);
