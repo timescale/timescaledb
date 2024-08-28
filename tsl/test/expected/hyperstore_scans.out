@@ -429,7 +429,7 @@ select device from :chunk where device = 1;
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=17 loops=1)
    Scankey: (device = 1)
  Array Cache Hits: 0
- Array Cache Misses: 1
+ Array Cache Misses: 0
  Array Cache Evictions: 0
  Array Decompressions: 0
 (6 rows)
@@ -475,7 +475,7 @@ select device from :chunk where device = 1;
    Filter: (device = 1)
    Rows Removed by Filter: 392
  Array Cache Hits: 0
- Array Cache Misses: 30
+ Array Cache Misses: 0
  Array Cache Evictions: 0
  Array Decompressions: 0
 (7 rows)
