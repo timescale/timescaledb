@@ -125,6 +125,12 @@ Kubernetes. For more information, see [Install TimescaleDB](https://docs.timesca
 
 To build from source, see [Building from source](https://github.com/timescale/timescaledb/blob/main/docs/BuildSource.md).
 
+## Deployment
+
+You can deploy TimescaleDB on Elestio using one-click-deployment.
+
+[![Deploy on Elestio](https://elest.io/images/logos/deploy-to-elestio-btn.png)](https://elest.io/open-source/timescaledb)
+
 ## Resources
 
 ### Architecture documents
