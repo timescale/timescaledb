@@ -41,7 +41,6 @@ set(TEST_FILES
     size_utils_tsl.sql
     skip_scan.sql
     transparent_decompression_join_index.sql
-    vector_agg_default.sql
     vector_agg_param.sql)
 
 if(USE_TELEMETRY)
@@ -97,8 +96,9 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     license_tsl.sql
     fixed_schedules.sql
     recompress_chunk_segmentwise.sql
-    feature_flags.sql)
-
+    feature_flags.sql
+    vector_agg_default.sql
+    vector_agg_segmentby.sql)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
