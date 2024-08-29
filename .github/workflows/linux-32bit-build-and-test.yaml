@@ -164,7 +164,6 @@ jobs:
       id: collectlogs
       shell: bash
       run: |
-        ls -lath
         find . -name regression.diffs -exec cat {} + > regression.log
 
         if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi

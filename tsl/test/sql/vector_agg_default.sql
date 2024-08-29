@@ -22,8 +22,6 @@ select compress_chunk(show_chunks('dvagg'));
 explain (costs off) select sum(c) from dvagg;
 select sum(c) from dvagg;
 
--- hheheheheheh
-
 
 -- Vectorized aggregation should work with vectorized filters.
 select sum(c) from dvagg where b >= 0;
