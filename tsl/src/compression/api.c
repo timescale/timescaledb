@@ -741,10 +741,10 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	PG_RETURN_OID(chunk_relid);
 }
 
+#if WITH_HYPERSTORE
 static Oid
 set_access_method(Oid relid, const char *amname)
 {
-#if PG15_GE
 	AlterTableCmd cmd = {
 		.type = T_AlterTableCmd,
 		.subtype = AT_SetAccessMethod,
@@ -761,13 +761,9 @@ set_access_method(Oid relid, const char *amname)
 	AlterTableInternal(relid, list_make1(&cmd), false);
 	hyperstore_alter_access_method_finish(relid, !to_hyperstore);
 
-#else
-	ereport(ERROR,
-			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("compression using hyperstore is not supported")));
-#endif
 	return relid;
 }
+#endif
 
 Datum
 tsl_compress_chunk(PG_FUNCTION_ARGS)
@@ -781,12 +777,11 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
-	bool rel_is_hyperstore =
-		(get_table_am_oid("hyperstore", false) == ts_get_rel_am(uncompressed_chunk_id));
 	bool arg_is_heap = false;
-	bool arg_is_hyperstore = false;
 	bool is_hyperstore_recompression = false;
 
+#if WITH_HYPERSTORE
+	bool arg_is_hyperstore = false;
 	if (compress_using != NULL)
 	{
 		if (strcmp(compress_using, "heap") == 0)
@@ -795,6 +790,8 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 			arg_is_hyperstore = true;
 	}
 
+	bool rel_is_hyperstore =
+		(get_table_am_oid("hyperstore", false) == ts_get_rel_am(uncompressed_chunk_id));
 	if (ts_chunk_is_compressed(chunk) && !rel_is_hyperstore && arg_is_hyperstore)
 	{
 		/* Do quick migration to hyperstore of already compressed data by
@@ -817,6 +814,7 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 	}
 	else if (rel_is_hyperstore && (arg_is_hyperstore || NULL == compress_using))
 		is_hyperstore_recompression = true;
+#endif
 
 	if (compress_using == NULL || arg_is_heap || is_hyperstore_recompression)
 	{
@@ -825,6 +823,7 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 		 * recompression. */
 		uncompressed_chunk_id = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
 	}
+#if WITH_HYPERSTORE
 	else if (arg_is_hyperstore)
 	{
 		if (!if_not_compressed && rel_is_hyperstore)
@@ -839,6 +838,7 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("can only compress using \"heap\" or \"hyperstore\"")));
+#endif
 
 	PG_RETURN_OID(uncompressed_chunk_id);
 }
@@ -916,18 +916,24 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 	if (!ht->fd.compressed_hypertable_id)
 		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing compressed hypertable")));
 
+#if WITH_HYPERSTORE
 	if (ts_relation_uses_hyperstore(uncompressed_chunk_id))
 		set_access_method(uncompressed_chunk_id, "heap");
-	else if (!ts_chunk_is_compressed(uncompressed_chunk))
-	{
-		ereport((if_compressed ? NOTICE : ERROR),
-				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("chunk \"%s\" is not compressed", get_rel_name(uncompressed_chunk_id))));
-
-		PG_RETURN_NULL();
-	}
 	else
-		decompress_chunk_impl(uncompressed_chunk, if_compressed);
+#endif
+	{
+		if (!ts_chunk_is_compressed(uncompressed_chunk))
+		{
+			ereport((if_compressed ? NOTICE : ERROR),
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("chunk \"%s\" is not compressed",
+							get_rel_name(uncompressed_chunk_id))));
+
+			PG_RETURN_NULL();
+		}
+		else
+			decompress_chunk_impl(uncompressed_chunk, if_compressed);
+	}
 
 	/*
 	 * Post decompression regular DML can happen into this chunk. So, we update
@@ -1528,6 +1534,7 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 	/* Need to rebuild indexes if the relation is using hyperstore
 	 * TAM. Alternatively, we could insert into indexes when inserting into
 	 * the compressed rel. */
+#if WITH_HYPERSTORE
 	if (uncompressed_chunk_rel->rd_tableam == hyperstore_routine())
 	{
 		ReindexParams params = {
@@ -1535,12 +1542,9 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 			.tablespaceOid = InvalidOid,
 		};
 
-#if PG17_GE
-		reindex_relation(NULL, RelationGetRelid(uncompressed_chunk_rel), 0, &params);
-#else
 		reindex_relation(RelationGetRelid(uncompressed_chunk_rel), 0, &params);
-#endif
 	}
+#endif
 
 	table_close(uncompressed_chunk_rel, NoLock);
 	table_close(compressed_chunk_rel, NoLock);

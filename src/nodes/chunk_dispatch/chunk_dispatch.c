@@ -166,7 +166,11 @@ ts_chunk_dispatch_decompress_batches_for_insert(ChunkDispatch *dispatch, ChunkIn
 	if (cis->chunk_compressed)
 	{
 		OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
+#if WITH_HYPERSTORE
 		Oid amoid = get_table_am_oid("hyperstore", false);
+#else
+		Oid amoid = InvalidOid;
+#endif
 
 		if (cis->rel->rd_rel->relam == amoid && onconflict_action != ONCONFLICT_UPDATE)
 		{

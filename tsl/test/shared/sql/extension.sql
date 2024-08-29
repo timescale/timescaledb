@@ -19,5 +19,5 @@ FROM pg_proc p
   JOIN pg_extension e ON
     e.extname = 'timescaledb' AND
     e.oid = d.refobjid
-WHERE proname <> 'get_telemetry_report'
+WHERE proname NOT IN ('get_telemetry_report', 'ts_hsproxy_handler', 'ts_hyperstore_handler')
 ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text COLLATE "C";

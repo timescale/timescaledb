@@ -103,10 +103,14 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     vector_agg_segmentby.sql)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
-if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
+if(${PG_VERSION_MAJOR} GREATER_EQUAL "15")
   if(CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_FILES bgw_scheduler_control.sql)
   endif()
+  list(APPEND TEST_FILES merge_compress.sql)
+endif()
+
+if(WITH_HYPERSTORE)
   list(
     APPEND
     TEST_FILES
@@ -127,12 +131,10 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     hyperstore_types.sql
     hyperstore_update.sql
     hyperstore_vacuum.sql
-    hyperstore_vacuum_full.sql
-    merge_compress.sql)
-endif()
-
-if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
-  list(APPEND TEST_FILES hyperstore_parallel.sql)
+    hyperstore_vacuum_full.sql)
+  if(${PG_VERSION_MAJOR} GREATER_EQUAL "16")
+    list(APPEND TEST_FILES hyperstore_parallel.sql)
+  endif()
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))

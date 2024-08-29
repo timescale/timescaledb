@@ -27,7 +27,6 @@ set(PRE_INSTALL_FUNCTION_FILES
 set(SOURCE_FILES
     hypertable.sql
     chunk.sql
-    hyperstore.sql
     ddl_internal.sql
     util_time.sql
     util_internal_table_ddl.sql
@@ -57,6 +56,10 @@ set(SOURCE_FILES
     job_stat_history_log_retention.sql
     osm_api.sql
     compression_defaults.sql)
+
+if(WITH_HYPERSTORE)
+  list(APPEND SOURCE_FILES hyperstore.sql)
+endif()
 
 if(ENABLE_DEBUG_UTILS AND CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND SOURCE_FILES debug_build_utils.sql)

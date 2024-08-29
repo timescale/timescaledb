@@ -19,6 +19,7 @@ option(
   USE_TELEMETRY
   "Include telemetry functionality in the build. Disabling will exclude all telemetry code from the build."
   ON)
+option(WITH_HYPERSTORE "Include Hyperstore Table Access Method in build" ON)
 
 option(REGRESS_CHECKS "PostgreSQL regress checks through installcheck" ON)
 option(
@@ -353,6 +354,20 @@ if((${PG_VERSION_MAJOR} LESS "14")
    OR (${PG_VERSION_MAJOR} GREATER "16")
    AND NOT (${EXPERIMENTAL}))
   message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 14, 15 and 16")
+endif()
+
+if(WITH_HYPERSTORE)
+  if((${PG_VERSION_MAJOR} GREATER "16") OR (${PG_VERSION_MAJOR} LESS "15"))
+    set(WITH_HYPERSTORE OFF)
+    message(
+      STATUS
+        "Building without hyperstore since it is only supported for PG version 15 and 16"
+    )
+  else()
+    message(STATUS "Configured to build with hyperstore")
+  endif()
+else()
+  message(STATUS "Configured to build without hyperstore")
 endif()
 
 # Get PostgreSQL configuration from pg_config

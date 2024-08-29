@@ -18,7 +18,6 @@ bool decompress_cache_print = false;
 struct DecompressCacheStats decompress_cache_stats;
 static ExplainOneQuery_hook_type prev_ExplainOneQuery_hook = NULL;
 
-#if PG17_LT
 /*
  * Copied from backend/commands/explain.c since there is no such function for
  * ExplainOneQuery. Also using the naming convention for other similar
@@ -59,7 +58,6 @@ standard_ExplainOneQuery(Query *query, int cursorOptions, IntoClause *into, Expl
 				   &planduration,
 				   (es->buffers ? &bufusage : NULL));
 }
-#endif
 
 static struct
 {

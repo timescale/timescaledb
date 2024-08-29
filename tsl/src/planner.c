@@ -101,7 +101,6 @@ void
 tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte,
 						   Hypertable *ht)
 {
-	bool ishyperstore = ts_relation_uses_hyperstore(rte->relid);
 	const bool use_transparent_decompression =
 		ts_should_use_transparent_decompression(ht, rte->relid);
 	/* We can get here via query on hypertable in that case reloptkind
@@ -138,13 +137,15 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 		}
 	}
 
-	if (ishyperstore)
+#if WITH_HYPERSTORE
+	if (ts_relation_uses_hyperstore(rte->relid))
 	{
 		if (ts_guc_enable_transparent_decompression != 2 && ts_guc_enable_columnarscan)
 			columnar_scan_set_rel_pathlist(root, rel, ht);
 
 		hyperstore_set_rel_pathlist(root, rel, ht);
 	}
+#endif
 }
 
 void

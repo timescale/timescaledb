@@ -40,7 +40,7 @@ tsl_ddl_command_start(ProcessUtilityArgs *args)
 
 				switch (cmd->subtype)
 				{
-#if PG15_GE
+#if WITH_HYPERSTORE
 					case AT_SetAccessMethod:
 					{
 						Oid relid = AlterTableLookupRelation(stmt, NoLock);
@@ -183,7 +183,7 @@ tsl_ddl_command_end(EventTriggerData *command)
 
 				switch (cmd->subtype)
 				{
-#if PG15_GE
+#if WITH_HYPERSTORE
 					case AT_SetAccessMethod:
 					{
 						Oid relid = AlterTableLookupRelation(stmt, NoLock);

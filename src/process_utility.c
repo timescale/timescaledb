@@ -3490,7 +3490,11 @@ process_set_access_method(AlterTableCmd *cmd, ProcessUtilityArgs *args)
 {
 	AlterTableStmt *stmt = castNode(AlterTableStmt, args->parsetree);
 	Oid relid = AlterTableLookupRelation(stmt, NoLock);
+#if WITH_HYPERSTORE
 	bool to_hyperstore = (strcmp(cmd->name, "hyperstore") == 0);
+#else
+	bool to_hyperstore = false;
+#endif
 	Cache *hcache;
 	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
 	if (ht)

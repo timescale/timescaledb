@@ -9,7 +9,7 @@
 
 #include <nodes/parsenodes.h>
 
-void _arrow_cache_explain_init(void);
+extern void _arrow_cache_explain_init(void);
 
 struct DecompressCacheStats
 {

@@ -1759,6 +1759,7 @@ ts_update_placeholder(PG_FUNCTION_ARGS)
 bool
 ts_relation_uses_hyperstore(Oid relid)
 {
+#if WITH_HYPERSTORE
 	HeapTuple tup;
 	Oid clamoid = InvalidOid;
 	Oid amoid = get_am_oid("hyperstore", false);
@@ -1774,6 +1775,9 @@ ts_relation_uses_hyperstore(Oid relid)
 	}
 
 	return amoid == clamoid;
+#else
+	return false;
+#endif
 }
 
 bool
