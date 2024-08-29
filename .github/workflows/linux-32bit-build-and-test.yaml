@@ -2,6 +2,10 @@ name: Regression Linux i386
 "on":
   schedule:
     # run daily 0:00 on main branch
+    # Since we use the date as a part of the cache key to ensure no
+    # stale cache entries hiding build failures we need to make sure
+    # we have a cache entry present before workflows that depend on cache
+    # are run.
     - cron: '0 0 * * *'
   push:
     branches:
@@ -35,11 +39,10 @@ jobs:
     needs: config
     container:
       image: i386/debian:bookworm-slim
-      options: --privileged --ulimit core=-1
+      options: --privileged --ulimit core=-1:-1 --ulimit fsize=-1:-1
       env:
         PG_SRC_DIR: pgbuild
         PG_INSTALL_DIR: postgresql
-        MAKE_JOBS: 6
         CLANG: clang-14
         CC: clang-14
         CXX: clang++-14
@@ -48,13 +51,13 @@ jobs:
         SKIPS: chunk_adaptive histogram_test-*
         EXTENSIONS: "postgres_fdw test_decoding"
     strategy:
-      fail-fast: false
       matrix:
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
         build_type: [ Debug ]
         include:
           - pg: ${{ fromJson(needs.config.outputs.pg16_latest) }}
             build_type: Debug
+      fail-fast: false
 
     steps:
 
@@ -106,9 +109,9 @@ jobs:
         ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
           --without-readline --without-zlib --without-libxml --enable-cassert \
           --enable-debug --with-llvm --without-icu LLVM_CONFIG=llvm-config-14 CFLAGS="-msse2"
-        make -j $MAKE_JOBS
+        make -j $(nproc)
         for ext in ${EXTENSIONS}; do
-          make -j$(nproc) -C contrib/${ext}
+          make -j $(nproc) -C contrib/${ext}
         done
 
     - name: Install PostgreSQL ${{ matrix.pg }}
@@ -123,15 +126,24 @@ jobs:
         sed -i 's/^# *\(en_US.UTF-8\)/\1/' /etc/locale.gen
         locale-gen
 
+    - name: Upload config.log
+      if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: config.log for i386 PostgreSQL ${{ matrix.pg }}
+        path: ~/${{ env.PG_SRC_DIR }}/config.log
+
     - name: Build TimescaleDB
       run: |
         # The owner of the checkout directory and the files do not match. Add the directory to
         # Git's "safe.directory" setting. Otherwise git would complain about
         # 'detected dubious ownership in repository'
         git config --global --add safe.directory $(pwd)
-        ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" -DPG_SOURCE_DIR=~/$PG_SRC_DIR \
-          -DPG_PATH=~/$PG_INSTALL_DIR -DREQUIRE_ALL_TESTS=ON
-        make -j $MAKE_JOBS -C build
+        ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" \
+          -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
+          -DREQUIRE_ALL_TESTS=ON \
+          -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
+        make -j $(nproc) -C build
         make -C build install
         chown -R postgres:postgres .
 
@@ -142,33 +154,49 @@ jobs:
         set -o pipefail
         export LANG=C.UTF-8
         # PostgreSQL cannot be run as root. So, switch to postgres user.
-        sudo -u postgres make -k -C build installcheck IGNORES="${IGNORES}" \
-          SKIPS="${SKIPS}" PSQL="${HOME}/${PG_INSTALL_DIR}/bin/psql" | tee installcheck.log
+        runuser -u postgres -- \
+          make -k -C build installcheck IGNORES="${IGNORES}" \
+            SKIPS="${SKIPS}" PSQL="${HOME}/${PG_INSTALL_DIR}/bin/psql" \
+            | tee installcheck.log
 
     - name: Show regression diffs
       if: always()
       id: collectlogs
       shell: bash
       run: |
-        find build -name regression.diffs -exec cat {} + > regression.log
-        find build -name postmaster.log -exec cat {} + > postmaster.log
+        find . -name regression.diffs -exec cat {} + > regression.log
+
         if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
         grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
         cat regression.log
 
-    - name: Coredumps
+    - name: Save regression diffs
+      if: always() && steps.collectlogs.outputs.regression_diff == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: Regression diff linux-i386 PG${{ matrix.pg }}
+        path: |
+          regression.log
+          installcheck.log
+
+    - name: Save PostgreSQL log
       if: always()
-      id: coredumps
+      uses: actions/upload-artifact@v4
+      with:
+        name: PostgreSQL log linux-i386 PG${{ matrix.pg }}
+        path: postmaster.*
+
+    - name: Stack trace Linux
+      if: always()
       shell: bash
       run: |
         # wait in case there are in-progress coredumps
         sleep 10
         if compgen -G "/tmp/core*" > /dev/null; then
           PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
-          apt-get install postgresql-${PG_MAJOR}-dbgsym >/dev/null
           for file in /tmp/core*
           do
-            gdb /usr/lib/postgresql/${PG_MAJOR}/bin/postgres -c $file <<<"
+            gdb "${HOME}/${PG_INSTALL_DIR}/bin/postgres" -c $file <<<"
           set verbose on
           set trace-commands on
           show debug-file-directory
@@ -186,20 +214,19 @@ jobs:
           list
           info args
           info locals
-            " | tee -a stacktrace.log
+            " 2>&1 | tee -a stacktrace.log
           done
           echo "coredumps=true" >>$GITHUB_OUTPUT
           exit 1
         fi
 
-    - name: Save regression diffs
-      if: always() && steps.collectlogs.outputs.regression_diff == 'true'
+
+    - name: Coredumps
+      if: always() && steps.coredumps.outputs.coredumps == 'true'
       uses: actions/upload-artifact@v4
       with:
-        name: Regression diff linux-i386 PG${{ matrix.pg }}
-        path: |
-          regression.log
-          installcheck.log
+        name: Coredumps linux-i386 PG${{ matrix.pg }}
+        path: coredumps
 
     - name: Save stacktraces
       if: always() && steps.coredumps.outputs.coredumps == 'true'
@@ -207,13 +234,6 @@ jobs:
       with:
         name: Stacktraces linux-i386 PG${{ matrix.pg }}
         path: stacktrace.log
-
-    - name: Save PostgreSQL log
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: PostgreSQL log linux-i386 PG${{ matrix.pg }}
-        path: postmaster.log
 
     - name: Save TAP test logs
       if: always()
