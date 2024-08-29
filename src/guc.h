@@ -76,14 +76,19 @@ extern char *ts_current_timestamp_mock;
 
 extern TSDLLEXPORT int ts_guc_debug_toast_tuple_target;
 
-typedef enum DebugRequireVectorQual
+#ifdef TS_DEBUG
+typedef enum DebugRequireOption
 {
-	RVQ_Allow = 0,
-	RVQ_Forbid,
-	RVQ_Only
-} DebugRequireVectorQual;
+	DRO_Allow = 0,
+	DRO_Forbid,
+	DRO_Require
+} DebugRequireOption;
 
-extern TSDLLEXPORT DebugRequireVectorQual ts_guc_debug_require_vector_qual;
+extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_vector_qual;
+
+extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_vector_agg;
+
+#endif
 
 extern TSDLLEXPORT bool ts_guc_debug_compression_path_info;
 
