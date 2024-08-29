@@ -27,7 +27,7 @@ if(PG_VERSION VERSION_GREATER_EQUAL "14.0")
   list(APPEND TEST_FILES concurrent_decompress_update.spec)
 endif()
 
-if(PG_VERSION VERSION_GREATER_EQUAL "15.0")
+if(WITH_HYPERSTORE)
   list(APPEND TEST_FILES hyperstore_tuple_lock.spec
        hyperstore_concurrent_vacuum.spec)
 endif()

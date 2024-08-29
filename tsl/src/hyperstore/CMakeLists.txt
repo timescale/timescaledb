@@ -1,4 +1,8 @@
-set(SOURCES
+set(SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/hyperstore_init.c)
+if(WITH_HYPERSTORE)
+  list(
+    APPEND
+    SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/arrow_tts.c
     ${CMAKE_CURRENT_SOURCE_DIR}/arrow_cache.c
     ${CMAKE_CURRENT_SOURCE_DIR}/arrow_array.c
@@ -8,4 +12,5 @@ set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/hsproxy.c
     ${CMAKE_CURRENT_SOURCE_DIR}/relstats.c
     ${CMAKE_CURRENT_SOURCE_DIR}/utils.c)
+endif()
 target_sources(${TSL_LIBRARY_NAME} PRIVATE ${SOURCES})

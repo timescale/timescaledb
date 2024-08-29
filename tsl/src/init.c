@@ -23,7 +23,6 @@
 #include "compression/api.h"
 #include "compression/compression.h"
 #include "compression/create.h"
-#include "compression/segment_meta.h"
 #include "config.h"
 #include "continuous_aggs/create.h"
 #include "continuous_aggs/insert.h"
@@ -39,6 +38,7 @@
 #include "hyperstore/attr_capture.h"
 #include "hyperstore/hsproxy.h"
 #include "hyperstore/hyperstore_handler.h"
+#include "hyperstore/hyperstore_init.h"
 #include "hypertable.h"
 #include "license_guc.h"
 #include "nodes/columnar_scan/columnar_scan.h"
@@ -66,7 +66,9 @@ extern void PGDLLEXPORT _PG_init(void);
 static void
 tsl_xact_event(XactEvent event, void *arg)
 {
+#if WITH_HYPERSTORE
 	hyperstore_xact_event(event, arg);
+#endif
 }
 
 /*
@@ -84,7 +86,9 @@ CrossModuleFunctions tsl_cm_functions = {
 	.create_upper_paths_hook = tsl_create_upper_paths_hook,
 	.set_rel_pathlist_dml = tsl_set_rel_pathlist_dml,
 	.set_rel_pathlist_query = tsl_set_rel_pathlist_query,
+#if WITH_HYPERSTORE
 	.process_explain_def = tsl_process_explain_def,
+#endif
 
 	/* bgw policies */
 	.policy_compression_add = policy_compression_add,
@@ -173,9 +177,11 @@ CrossModuleFunctions tsl_cm_functions = {
 	.decompress_chunk = tsl_decompress_chunk,
 	.decompress_batches_for_insert = decompress_batches_for_insert,
 	.decompress_target_segments = decompress_target_segments,
+#if WITH_HYPERSTORE
 	.hyperstore_handler = hyperstore_handler,
 	.hsproxy_handler = hsproxy_handler,
 	.is_compressed_tid = tsl_is_compressed_tid,
+#endif
 	.ddl_command_start = tsl_ddl_command_start,
 	.ddl_command_end = tsl_ddl_command_end,
 	.show_chunk = chunk_show,
@@ -210,9 +216,7 @@ ts_module_init(PG_FUNCTION_ARGS)
 
 	_continuous_aggs_cache_inval_init();
 	_decompress_chunk_init();
-	_columnar_scan_init();
-	_arrow_cache_explain_init();
-	_attr_capture_init();
+	_hyperstore_init();
 	_skip_scan_init();
 	_vector_agg_init();
 

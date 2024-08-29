@@ -44,6 +44,8 @@
 #cmakedefine USE_TELEMETRY
 #endif
 
+#cmakedefine01 WITH_HYPERSTORE
+
 #ifndef TELEMETRY_DEFAULT
 #cmakedefine TELEMETRY_DEFAULT @TELEMETRY_DEFAULT@
 #endif
