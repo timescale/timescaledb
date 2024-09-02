@@ -1,1 +1,2 @@
 DROP FUNCTION _timescaledb_functions.compressed_data_info(_timescaledb_internal.compressed_data);
+DROP INDEX _timescaledb_catalog.compression_chunk_size_idx;
