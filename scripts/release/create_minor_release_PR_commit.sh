@@ -83,28 +83,12 @@ sed -i.bak "s/FILE reverse-dev.sql)/FILE ${DOWNGRADE_FILE})/g" CMakeLists.txt
 rm CMakeLists.txt.bak
 
 
-#delete Features section from the templates and create this version's CHANGELOG.md
-#Undo the deletion, from the template files.
 echo "---- Creating CHANGELOG_"$NEW_VERSION".md file ----"
-
-cd ~/"$SOURCES_DIR"/"$FORK_DIR"
-cd .unreleased
-
-head -n 12 RELEASE_NOTES_HEADER.md.j2 > RELEASE_NOTES_HEADER.md.j2.tmp
-mv RELEASE_NOTES_HEADER.md.j2.tmp RELEASE_NOTES_HEADER.md.j2
-
-head -n 12 template.release_notes_header.j2 > template.release_notes_header.j2.tmp
-mv template.release_notes_header.j2.tmp template.release_notes_header.j2
 
 rm -f ~/CHANGELOG_"$NEW_VERSION".md
 
 cd ~/"$SOURCES_DIR"/"$FORK_DIR"
 ./scripts/merge_changelogs.sh > ~/CHANGELOG_"$NEW_VERSION".md
-
-cd .unreleased
-rm RELEASE_NOTES_HEADER.md.j2 template.release_notes_header.j2
-git checkout RELEASE_NOTES_HEADER.md.j2 template.release_notes_header.j2
-
 
 echo "---- Editing the CHANGELOG.md file with the contents of CHANGELOG_"$NEW_VERSION".md file. ----"
 
