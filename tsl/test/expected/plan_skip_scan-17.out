@@ -1239,14 +1239,15 @@ UNION SELECT b.* FROM
                                                               QUERY PLAN                                                              
 --------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=10001 loops=1)
-   ->  Sort (actual rows=20002 loops=1)
+   ->  Merge Append (actual rows=20002 loops=1)
          Sort Key: skip_scan.dev, skip_scan."time"
-         Sort Method: quicksort 
-         ->  Append (actual rows=20002 loops=1)
-               ->  Unique (actual rows=10001 loops=1)
-                     ->  Index Only Scan using skip_scan_dev_time_idx on skip_scan (actual rows=10001 loops=1)
-                           Index Cond: (dev IS NOT NULL)
-                           Heap Fetches: 10001
+         ->  Unique (actual rows=10001 loops=1)
+               ->  Index Only Scan using skip_scan_dev_time_idx on skip_scan (actual rows=10001 loops=1)
+                     Index Cond: (dev IS NOT NULL)
+                     Heap Fetches: 10001
+         ->  Sort (actual rows=10001 loops=1)
+               Sort Key: skip_scan_2.dev, skip_scan_2."time"
+               Sort Method: quicksort 
                ->  Nested Loop (actual rows=10001 loops=1)
                      ->  Unique (actual rows=12 loops=1)
                            ->  Custom Scan (SkipScan) on skip_scan skip_scan_1 (actual rows=12 loops=1)
@@ -1258,7 +1259,7 @@ UNION SELECT b.* FROM
                                  ->  Index Only Scan using skip_scan_dev_time_idx on skip_scan skip_scan_2 (actual rows=833 loops=12)
                                        Index Cond: ((dev = skip_scan_1.dev) AND ("time" > NULL::integer))
                                        Heap Fetches: 10001
-(20 rows)
+(21 rows)
 
 -- SkipScan into INSERT
 :PREFIX INSERT INTO skip_scan_insert(time, dev, val, query) SELECT time, dev, val, 'q10_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a;
@@ -3632,25 +3633,26 @@ UNION SELECT b.* FROM
                                                                                   QUERY PLAN                                                                                  
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=10000 loops=1)
-   ->  Sort (actual rows=20000 loops=1)
+   ->  Merge Append (actual rows=20000 loops=1)
          Sort Key: _hyper_1_1_chunk.dev, _hyper_1_1_chunk."time"
-         Sort Method: quicksort 
-         ->  Append (actual rows=20000 loops=1)
-               ->  Unique (actual rows=10000 loops=1)
-                     ->  Merge Append (actual rows=10000 loops=1)
-                           Sort Key: _hyper_1_1_chunk.dev, _hyper_1_1_chunk."time"
-                           ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=2500 loops=1)
-                                 Index Cond: (dev IS NOT NULL)
-                                 Heap Fetches: 2500
-                           ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk (actual rows=2500 loops=1)
-                                 Index Cond: (dev IS NOT NULL)
-                                 Heap Fetches: 2500
-                           ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk (actual rows=2500 loops=1)
-                                 Index Cond: (dev IS NOT NULL)
-                                 Heap Fetches: 2500
-                           ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk (actual rows=2500 loops=1)
-                                 Index Cond: (dev IS NOT NULL)
-                                 Heap Fetches: 2500
+         ->  Unique (actual rows=10000 loops=1)
+               ->  Merge Append (actual rows=10000 loops=1)
+                     Sort Key: _hyper_1_1_chunk.dev, _hyper_1_1_chunk."time"
+                     ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=2500 loops=1)
+                           Index Cond: (dev IS NOT NULL)
+                           Heap Fetches: 2500
+                     ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk (actual rows=2500 loops=1)
+                           Index Cond: (dev IS NOT NULL)
+                           Heap Fetches: 2500
+                     ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk (actual rows=2500 loops=1)
+                           Index Cond: (dev IS NOT NULL)
+                           Heap Fetches: 2500
+                     ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk (actual rows=2500 loops=1)
+                           Index Cond: (dev IS NOT NULL)
+                           Heap Fetches: 2500
+         ->  Sort (actual rows=10000 loops=1)
+               Sort Key: _hyper_1_1_chunk_2.dev, _hyper_1_1_chunk_2."time"
+               Sort Method: quicksort 
                ->  Nested Loop (actual rows=10000 loops=1)
                      ->  Unique (actual rows=11 loops=1)
                            ->  Merge Append (actual rows=44 loops=1)
@@ -3690,7 +3692,7 @@ UNION SELECT b.* FROM
                                        ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_2 (actual rows=227 loops=11)
                                              Index Cond: ((dev = _hyper_1_1_chunk_1.dev) AND ("time" > NULL::integer))
                                              Heap Fetches: 2500
-(59 rows)
+(60 rows)
 
 -- SkipScan into INSERT
 :PREFIX INSERT INTO skip_scan_insert(time, dev, val, query) SELECT time, dev, val, 'q10_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a;

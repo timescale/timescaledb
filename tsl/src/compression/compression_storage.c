@@ -174,22 +174,22 @@ set_statistics_on_compressed_chunk(Oid compressed_table_id)
 	Relation table_rel = table_open(compressed_table_id, ShareUpdateExclusiveLock);
 	Relation attrelation = table_open(AttributeRelationId, RowExclusiveLock);
 	TupleDesc table_desc = RelationGetDescr(table_rel);
-#if PG17_LT
-	/* see comments about PG17+ below */
 	Oid compressed_data_type = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
-#endif
 
 	for (int i = 0; i < table_desc->natts; i++)
 	{
 		Form_pg_attribute attrtuple;
 		HeapTuple tuple;
 		Form_pg_attribute col_attr = TupleDescAttr(table_desc, i);
+		Datum repl_val[Natts_pg_attribute] = { 0 };
+		bool repl_null[Natts_pg_attribute] = { false };
+		bool repl_repl[Natts_pg_attribute] = { false };
 
 		/* skip system columns */
 		if (col_attr->attnum <= 0)
 			continue;
 
-		tuple = SearchSysCacheCopyAttName(compressed_table_id, NameStr(col_attr->attname));
+		tuple = SearchSysCacheCopyAttName(RelationGetRelid(table_rel), NameStr(col_attr->attname));
 
 		if (!HeapTupleIsValid(tuple))
 			ereport(ERROR,
@@ -200,22 +200,25 @@ set_statistics_on_compressed_chunk(Oid compressed_table_id)
 
 		attrtuple = (Form_pg_attribute) GETSTRUCT(tuple);
 
-#if PG17_LT
 		/* The planner should never look at compressed column statistics because
 		 * it will not understand them. Statistics on the other columns,
 		 * segmentbys and metadata, are very important, so we increase their
 		 * target.
-		 *
-		 * There are no 'attstattarget' and 'attstattarget' fields in PG17+.
 		 */
 		if (col_attr->atttypid == compressed_data_type)
-			attrtuple->attstattarget = 0;
+			repl_val[AttrNumberGetAttrOffset(Anum_pg_attribute_attstattarget)] = Int16GetDatum(0);
 		else
-			attrtuple->attstattarget = 1000;
-#endif
+			repl_val[AttrNumberGetAttrOffset(Anum_pg_attribute_attstattarget)] =
+				Int16GetDatum(1000);
+		repl_repl[AttrNumberGetAttrOffset(Anum_pg_attribute_attstattarget)] = true;
+
+		tuple =
+			heap_modify_tuple(tuple, RelationGetDescr(attrelation), repl_val, repl_null, repl_repl);
 		CatalogTupleUpdate(attrelation, &tuple->t_self, tuple);
 
-		InvokeObjectPostAlterHook(RelationRelationId, compressed_table_id, attrtuple->attnum);
+		InvokeObjectPostAlterHook(RelationRelationId,
+								  RelationGetRelid(table_rel),
+								  attrtuple->attnum);
 		heap_freetuple(tuple);
 	}
 

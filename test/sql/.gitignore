@@ -1,12 +1,16 @@
+/agg_bookends-*.sql
 /alternate_users-*.sql
 /append-*.sql
 /cluster-*.sql
 /cursor-*.sql
 /ddl-*.sql
 /delete-*.sql
+/drop_owned-*.sql
+/grant_hypertable-*.sql
 /histogram_test-*.sql
 /insert-*.sql
 /insert_many-*.sql
+/null_exclusion-*.sql
 /parallel-*.sql
 /partitioning-*.sql
 /partitionwise-*.sql

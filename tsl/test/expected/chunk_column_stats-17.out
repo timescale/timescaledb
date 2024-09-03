@@ -1,0 +1,544 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set PREFIX 'EXPLAIN (costs off, timing off, summary off)'
+CREATE OR REPLACE VIEW compressed_chunk_info_view AS
+SELECT
+   h.schema_name AS hypertable_schema,
+   h.table_name AS hypertable_name,
+   c.schema_name || '.' || c.table_name as chunk_name,
+   c.status as chunk_status
+FROM
+   _timescaledb_catalog.hypertable h JOIN
+  _timescaledb_catalog.chunk c ON h.id = c.hypertable_id
+   LEFT JOIN _timescaledb_catalog.chunk comp
+ON comp.id = c.compressed_chunk_id
+;
+CREATE TABLE sample_table (
+       time TIMESTAMP WITH TIME ZONE NOT NULL,
+       sensor_id INTEGER NOT NULL,
+       cpu double precision null,
+       temperature double precision null,
+       name varchar(100) default 'this is a default string value'
+);
+CREATE INDEX sense_idx ON sample_table (sensor_id);
+SELECT * FROM create_hypertable('sample_table', 'time',
+       chunk_time_interval => INTERVAL '2 months');
+WARNING:  column type "character varying" used for "name" does not follow best practices
+ hypertable_id | schema_name |  table_name  | created 
+---------------+-------------+--------------+---------
+             1 | public      | sample_table | t
+(1 row)
+
+\set start_date '2022-01-28 01:09:53.583252+05:30'
+-- insert into chunk1
+INSERT INTO sample_table VALUES (:'start_date'::timestamptz, 1, 21.98, 33.123, 'new row1');
+INSERT INTO sample_table VALUES (:'start_date'::timestamptz, 2, 17.66, 13.875, 'new row1');
+INSERT INTO sample_table VALUES (:'start_date'::timestamptz, 3, 21.98, 33.123, 'new row2');
+INSERT INTO sample_table VALUES (:'start_date'::timestamptz, 8, 21.98, 33.123, 'new row2');
+INSERT INTO sample_table VALUES (:'start_date'::timestamptz, 4, 21.98, 33.123, 'new row2');
+INSERT INTO sample_table VALUES (:'start_date'::timestamptz, 5, 0.988, 33.123, 'new row3');
+INSERT INTO sample_table VALUES (:'start_date'::timestamptz, 6, 4.6554, 47, 'new row3');
+\set start_date '2023-03-17 17:51:11.322998+05:30'
+-- insert into new chunks
+INSERT INTO sample_table VALUES (:'start_date'::timestamptz, 12, 121.98, 33.123, 'new row1');
+INSERT INTO sample_table VALUES (:'start_date'::timestamptz, 12, 117.66, 13.875, 'new row1');
+INSERT INTO sample_table VALUES (:'start_date'::timestamptz, 13, 121.98, 33.123, 'new row2');
+INSERT INTO sample_table VALUES (:'start_date'::timestamptz, 9, 121.98, 33.123, 'new row2');
+INSERT INTO sample_table VALUES (:'start_date'::timestamptz, 14, 121.98, 33.123, 'new row2');
+INSERT INTO sample_table VALUES (:'start_date'::timestamptz, 15, 10.988, 33.123, 'new row3');
+INSERT INTO sample_table VALUES (:'start_date'::timestamptz, 16, 14.6554, 47, 'new row3');
+-- Non-int, date, timestamp cannot be specified as a min/max ranges for now
+-- We could expand to FLOATs, NUMERICs later
+\set ON_ERROR_STOP 0
+SELECT * FROM enable_chunk_skipping('sample_table', 'name');
+ERROR:  data type "character varying" unsupported for range calculation
+SELECT * FROM enable_chunk_skipping('sample_table', NULL);
+ERROR:  column name cannot be NULL
+SELECT * FROM enable_chunk_skipping(NULL, 'name');
+ERROR:  hypertable cannot be NULL
+SELECT * FROM enable_chunk_skipping('sample_table1', 'name');
+ERROR:  relation "sample_table1" does not exist at character 37
+CREATE TABLE plain_table(like sample_table);
+SELECT * FROM enable_chunk_skipping('plain_table', 'sensor_id');
+ERROR:  table "plain_table" is not a hypertable
+DROP TABLE plain_table;
+\set ON_ERROR_STOP 1
+-- Specify tracking of min/max ranges for a column
+SELECT * FROM enable_chunk_skipping('sample_table', 'sensor_id');
+ column_stats_id | enabled 
+-----------------+---------
+               1 | t
+(1 row)
+
+-- The above should add an entry with MIN/MAX int64 entries for invalid chunk id
+-- to indicate that ranges on this column should be calculated for chunks
+SELECT * from _timescaledb_catalog.chunk_column_stats;
+ id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
+----+---------------+----------+-------------+----------------------+---------------------+-------
+  1 |             1 |        0 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  2 |             1 |        1 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  3 |             1 |        2 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+(3 rows)
+
+-- Skipping should work
+SELECT * FROM enable_chunk_skipping('sample_table', 'sensor_id', true);
+NOTICE:  already enabled for column "sensor_id", skipping
+ column_stats_id | enabled 
+-----------------+---------
+               1 | t
+(1 row)
+
+-- A query using a WHERE clause on "sensor_id" column will scan all the chunks
+:PREFIX SELECT * FROM sample_table WHERE sensor_id > 9;
+                              QUERY PLAN                               
+-----------------------------------------------------------------------
+ Append
+   ->  Index Scan using _hyper_1_1_chunk_sense_idx on _hyper_1_1_chunk
+         Index Cond: (sensor_id > 9)
+   ->  Index Scan using _hyper_1_2_chunk_sense_idx on _hyper_1_2_chunk
+         Index Cond: (sensor_id > 9)
+(5 rows)
+
+-- For the purposes of min/max range tracking, a compressed chunk is considered as a
+-- completed chunk.
+-- enable compression
+ALTER TABLE sample_table SET (
+	timescaledb.compress,
+    timescaledb.compress_orderby = 'time'
+);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: Please make sure sensor_id is not a unique column and appropriate for a segment by
+NOTICE:  default segment by for hypertable "sample_table" is set to "sensor_id"
+--
+-- compress one chunk
+SELECT show_chunks('sample_table') AS "CH_NAME" order by 1 limit 1 \gset
+SELECT compress_chunk(:'CH_NAME');
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+SELECT id AS "CHUNK_ID" from _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' \gset
+-- There should be an entry with min/max range computed for this chunk for this
+-- "sensor_id" column.
+SELECT * from _timescaledb_catalog.chunk_column_stats where chunk_id = :'CHUNK_ID';
+ id | hypertable_id | chunk_id | column_name | range_start | range_end | valid 
+----+---------------+----------+-------------+-------------+-----------+-------
+  2 |             1 |        1 | sensor_id   |           1 |         9 | t
+(1 row)
+
+-- check chunk compression status
+SELECT chunk_status
+FROM compressed_chunk_info_view
+WHERE hypertable_name = 'sample_table' AND chunk_name = :'CH_NAME';
+ chunk_status 
+--------------
+            1
+(1 row)
+
+:PREFIX SELECT * FROM sample_table WHERE sensor_id > 9;
+                           QUERY PLAN                            
+-----------------------------------------------------------------
+ Index Scan using _hyper_1_2_chunk_sense_idx on _hyper_1_2_chunk
+   Index Cond: (sensor_id > 9)
+(2 rows)
+
+-- do update, this will change the status of the chunk
+UPDATE sample_table SET name = 'updated row' WHERE cpu = 21.98 AND temperature = 33.123;
+-- check chunk compression status
+SELECT chunk_status
+FROM compressed_chunk_info_view
+WHERE hypertable_name = 'sample_table' AND chunk_name = :'CH_NAME';
+ chunk_status 
+--------------
+            9
+(1 row)
+
+-- There should be an entry with "valid" set to false for this chunk
+SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_ID';
+ id | hypertable_id | chunk_id | column_name | range_start | range_end | valid 
+----+---------------+----------+-------------+-------------+-----------+-------
+  2 |             1 |        1 | sensor_id   |           1 |         9 | f
+(1 row)
+
+-- A query using a WHERE clause on "sensor_id" column will go back to scanning all the chunks
+-- along with an expensive DECOMPRESS on the first chunk
+:PREFIX SELECT * FROM sample_table WHERE sensor_id > 9;
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         Filter: (sensor_id > 9)
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_sequence_num_idx on compress_hyper_2_3_chunk
+               Index Cond: (sensor_id > 9)
+   ->  Index Scan using _hyper_1_1_chunk_sense_idx on _hyper_1_1_chunk
+         Index Cond: (sensor_id > 9)
+   ->  Index Scan using _hyper_1_2_chunk_sense_idx on _hyper_1_2_chunk
+         Index Cond: (sensor_id > 9)
+(9 rows)
+
+-- Remove the index to check the sequential min/max calculation code as well
+DROP INDEX sense_idx;
+-- recompress the partial chunk
+SELECT compress_chunk(:'CH_NAME');
+WARNING:  no index on "sensor_id" found for column range on chunk "_hyper_1_1_chunk"
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+-- check chunk compression status
+SELECT chunk_status
+FROM compressed_chunk_info_view
+WHERE hypertable_name = 'sample_table' AND chunk_name = :'CH_NAME';
+ chunk_status 
+--------------
+            1
+(1 row)
+
+-- The chunk entry should become "valid" again
+SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_ID';
+ id | hypertable_id | chunk_id | column_name | range_start | range_end | valid 
+----+---------------+----------+-------------+-------------+-----------+-------
+  2 |             1 |        1 | sensor_id   |           1 |         9 | t
+(1 row)
+
+-- A query using a WHERE clause on "sensor_id" column will scan the proper chunk
+-- due to chunk exclusion using min/max ranges calculated above
+:PREFIX SELECT * FROM sample_table WHERE sensor_id > 9;
+          QUERY PLAN          
+------------------------------
+ Seq Scan on _hyper_1_2_chunk
+   Filter: (sensor_id > 9)
+(2 rows)
+
+:PREFIX SELECT * FROM sample_table WHERE sensor_id = 10;
+          QUERY PLAN          
+------------------------------
+ Seq Scan on _hyper_1_2_chunk
+   Filter: (sensor_id = 10)
+(2 rows)
+
+:PREFIX SELECT * FROM sample_table WHERE sensor_id < 11;
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_sequence_num_idx on compress_hyper_2_3_chunk
+               Index Cond: (sensor_id < 11)
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: (sensor_id < 11)
+(6 rows)
+
+:PREFIX SELECT * FROM sample_table WHERE sensor_id > 9 and sensor_id < 20;
+                    QUERY PLAN                    
+--------------------------------------------------
+ Seq Scan on _hyper_1_2_chunk
+   Filter: ((sensor_id > 9) AND (sensor_id < 20))
+(2 rows)
+
+:PREFIX SELECT * FROM sample_table WHERE sensor_id > 1 and sensor_id < 7;
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_sequence_num_idx on compress_hyper_2_3_chunk
+               Index Cond: ((sensor_id > 1) AND (sensor_id < 7))
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: ((sensor_id > 1) AND (sensor_id < 7))
+(6 rows)
+
+-- Executor startup time exclusion will also use these ranges appropriately
+:PREFIX UPDATE sample_table set sensor_id = 10 WHERE sensor_id > length(substring(version(),1,9));
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify)
+   ->  Update on sample_table
+         Update on _hyper_1_1_chunk sample_table
+         Update on _hyper_1_2_chunk sample_table_1
+         ->  Result
+               ->  Custom Scan (ChunkAppend) on sample_table
+                     Chunks excluded during startup: 1
+                     ->  Seq Scan on _hyper_1_2_chunk sample_table_1
+                           Filter: (sensor_id > length("substring"(version(), 1, 9)))
+(9 rows)
+
+:PREFIX DELETE FROM sample_table  WHERE sensor_id > length(substring(version(),1,10));
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Custom Scan (HypertableModify)
+   ->  Delete on sample_table
+         Delete on _hyper_1_1_chunk sample_table
+         Delete on _hyper_1_2_chunk sample_table_1
+         ->  Custom Scan (ChunkAppend) on sample_table
+               Chunks excluded during startup: 1
+               ->  Seq Scan on _hyper_1_2_chunk sample_table_1
+                     Filter: (sensor_id > length("substring"(version(), 1, 10)))
+(8 rows)
+
+:PREFIX SELECT * FROM sample_table  WHERE sensor_id > length(substring(version(),1,11));
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on sample_table
+   Chunks excluded during startup: 1
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: (sensor_id > length("substring"(version(), 1, 11)))
+(4 rows)
+
+-- Scan both chunks
+:PREFIX SELECT * FROM sample_table  WHERE sensor_id > length(substring(version(),1,6));
+                             QUERY PLAN                             
+--------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on sample_table
+   Chunks excluded during startup: 0
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         Filter: (sensor_id > length("substring"(version(), 1, 6)))
+         ->  Seq Scan on compress_hyper_2_3_chunk
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: (sensor_id > length("substring"(version(), 1, 6)))
+(7 rows)
+
+-- IN/ANY is not supported for now
+:PREFIX SELECT * FROM sample_table WHERE sensor_id IN (9, 10, 11);
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_sequence_num_idx on compress_hyper_2_3_chunk
+               Index Cond: (sensor_id = ANY ('{9,10,11}'::integer[]))
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: (sensor_id = ANY ('{9,10,11}'::integer[]))
+(6 rows)
+
+:PREFIX SELECT * FROM sample_table WHERE sensor_id = ANY(ARRAY[9, 10, 11]);
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_sequence_num_idx on compress_hyper_2_3_chunk
+               Index Cond: (sensor_id = ANY ('{9,10,11}'::integer[]))
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: (sensor_id = ANY ('{9,10,11}'::integer[]))
+(6 rows)
+
+-- Newly added chunks should also have MIN/MAX entry
+\set start_date '2024-01-28 01:09:51.583252+05:30'
+INSERT INTO sample_table VALUES (:'start_date'::timestamptz, 1, 9, 78.999, 'new row4');
+SELECT * from _timescaledb_catalog.chunk_column_stats;
+ id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
+----+---------------+----------+-------------+----------------------+---------------------+-------
+  1 |             1 |        0 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  3 |             1 |        2 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  2 |             1 |        1 | sensor_id   |                    1 |                   9 | t
+  4 |             1 |        4 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+(4 rows)
+
+-- Check that a RENAME COLUMN works ok
+ALTER TABLE sample_table RENAME COLUMN sensor_id TO sense_id;
+-- use the disable_chunk_skipping API to remove the min/max range entries
+SELECT * from disable_chunk_skipping('sample_table', 'sense_id');
+ hypertable_id | column_name | disabled 
+---------------+-------------+----------
+             1 | sense_id    | t
+(1 row)
+
+SELECT * from _timescaledb_catalog.chunk_column_stats;
+ id | hypertable_id | chunk_id | column_name | range_start | range_end | valid 
+----+---------------+----------+-------------+-------------+-----------+-------
+(0 rows)
+
+SELECT * from disable_chunk_skipping('sample_table', 'sense_id', true);
+NOTICE:  statistics not enabled for column "sense_id", skipping
+ hypertable_id | column_name | disabled 
+---------------+-------------+----------
+             1 | sense_id    | f
+(1 row)
+
+ALTER TABLE sample_table RENAME COLUMN sense_id TO sensor_id;
+\set ON_ERROR_STOP 0
+SELECT * from disable_chunk_skipping('sample_table', 'sensor_id');
+ERROR:  statistics not enabled for column "sensor_id"
+SELECT * from disable_chunk_skipping('sample_table', NULL);
+ERROR:  column name cannot be NULL
+SELECT * from disable_chunk_skipping(NULL, 'sensor_id');
+ERROR:  hypertable cannot be NULL
+SELECT * from disable_chunk_skipping('sample_table1', 'sensor_id');
+ERROR:  relation "sample_table1" does not exist at character 38
+-- should only work on columns that have been enabled for tracking
+SELECT * from disable_chunk_skipping('sample_table', 'time');
+ERROR:  statistics not enabled for column "time"
+SELECT * from disable_chunk_skipping('sample_table', 'cpu');
+ERROR:  statistics not enabled for column "cpu"
+\set ON_ERROR_STOP 1
+SELECT * FROM enable_chunk_skipping('sample_table', 'sensor_id');
+ column_stats_id | enabled 
+-----------------+---------
+               5 | t
+(1 row)
+
+-- Chunk was already compressed before we enabled stats. It will
+-- point to min/max entries till the ranges get refreshed later.
+SELECT decompress_chunk(:'CH_NAME');
+            decompress_chunk            
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+SELECT * from _timescaledb_catalog.chunk_column_stats;
+ id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
+----+---------------+----------+-------------+----------------------+---------------------+-------
+  5 |             1 |        0 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  6 |             1 |        2 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  8 |             1 |        4 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  7 |             1 |        1 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+(4 rows)
+
+-- Compressing a chunk again should calculate proper ranges
+SELECT compress_chunk(:'CH_NAME');
+WARNING:  no index on "sensor_id" found for column range on chunk "_hyper_1_1_chunk"
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+SELECT * from _timescaledb_catalog.chunk_column_stats;
+ id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
+----+---------------+----------+-------------+----------------------+---------------------+-------
+  5 |             1 |        0 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  6 |             1 |        2 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  8 |             1 |        4 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  7 |             1 |        1 | sensor_id   |                    1 |                   9 | t
+(4 rows)
+
+SELECT decompress_chunk(:'CH_NAME');
+            decompress_chunk            
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+-- Entry should be reset for this chunk now
+SELECT * from _timescaledb_catalog.chunk_column_stats;
+ id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
+----+---------------+----------+-------------+----------------------+---------------------+-------
+  5 |             1 |        0 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  6 |             1 |        2 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  8 |             1 |        4 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  7 |             1 |        1 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+(4 rows)
+
+-- Check that truncate resets the entry in the catalog
+SELECT compress_chunk(:'CH_NAME');
+WARNING:  no index on "sensor_id" found for column range on chunk "_hyper_1_1_chunk"
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+SELECT * from _timescaledb_catalog.chunk_column_stats;
+ id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
+----+---------------+----------+-------------+----------------------+---------------------+-------
+  5 |             1 |        0 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  6 |             1 |        2 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  8 |             1 |        4 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  7 |             1 |        1 | sensor_id   |                    1 |                   9 | t
+(4 rows)
+
+TRUNCATE :CH_NAME;
+SELECT * from _timescaledb_catalog.chunk_column_stats;
+ id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
+----+---------------+----------+-------------+----------------------+---------------------+-------
+  5 |             1 |        0 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  6 |             1 |        2 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  8 |             1 |        4 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  7 |             1 |        1 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+(4 rows)
+
+-- Check that drop chunk also removes entries from the catalog
+SELECT drop_chunks('sample_table', older_than => '2022-02-28');
+              drop_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+-- Entry should be removed for this chunk now
+SELECT * from _timescaledb_catalog.chunk_column_stats;
+ id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
+----+---------------+----------+-------------+----------------------+---------------------+-------
+  5 |             1 |        0 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  6 |             1 |        2 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  8 |             1 |        4 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+(3 rows)
+
+-- disable compression to allow dropping of the column
+ALTER TABLE sample_table SET (
+	timescaledb.compress = FALSE
+);
+-- Check that a DROP COLUMN removes entries from catalogs as well
+ALTER TABLE sample_table DROP COLUMN sensor_id;
+SELECT * from _timescaledb_catalog.chunk_column_stats;
+ id | hypertable_id | chunk_id | column_name | range_start | range_end | valid 
+----+---------------+----------+-------------+-------------+-----------+-------
+(0 rows)
+
+DROP TABLE sample_table;
+SELECT * from _timescaledb_catalog.chunk_column_stats;
+ id | hypertable_id | chunk_id | column_name | range_start | range_end | valid 
+----+---------------+----------+-------------+-------------+-----------+-------
+(0 rows)
+
+-- Check that empty hypertables can have enable_chunk_skipping and
+-- that new chunks get entries in the catalog as they get added
+CREATE TABLE sample_table1 (
+       time TIMESTAMP WITH TIME ZONE NOT NULL,
+       sensor_id INTEGER NOT NULL,
+       cpu double precision null,
+       temperature double precision null,
+       name varchar(100) default 'this is a default string value'
+);
+CREATE INDEX sense_idx ON sample_table1 (sensor_id);
+SELECT * FROM create_hypertable('sample_table1', 'time',
+       chunk_time_interval => INTERVAL '2 months');
+WARNING:  column type "character varying" used for "name" does not follow best practices
+ hypertable_id | schema_name |  table_name   | created 
+---------------+-------------+---------------+---------
+             3 | public      | sample_table1 | t
+(1 row)
+
+SELECT * FROM enable_chunk_skipping('sample_table1', 'sensor_id');
+ column_stats_id | enabled 
+-----------------+---------
+               9 | t
+(1 row)
+
+SELECT * from _timescaledb_catalog.chunk_column_stats;
+ id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
+----+---------------+----------+-------------+----------------------+---------------------+-------
+  9 |             3 |        0 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+(1 row)
+
+\set start_date '2023-03-17 17:51:11.322998+05:30'
+-- insert into new chunks
+INSERT INTO sample_table1 VALUES (:'start_date'::timestamptz, 12, 21, 33.123, 'new row1');
+SELECT * from _timescaledb_catalog.chunk_column_stats;
+ id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
+----+---------------+----------+-------------+----------------------+---------------------+-------
+  9 |             3 |        0 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+ 10 |             3 |        7 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+(2 rows)
+
+-- Check that ALTER TYPE for a column on which stats are enabled only works
+-- in a few sub types
+ALTER TABLE sample_table1 ALTER COLUMN sensor_id TYPE BIGINT;
+\set ON_ERROR_STOP 0
+ALTER TABLE sample_table1 ALTER COLUMN sensor_id TYPE TIMESTAMPTZ;
+ERROR:  column "sensor_id" cannot be cast automatically to type timestamp with time zone
+ALTER TABLE sample_table1 ALTER COLUMN sensor_id TYPE TEXT;
+ERROR:  data type "text" unsupported for statistics calculation
+\set ON_ERROR_STOP 1
+SELECT * FROM disable_chunk_skipping('sample_table1', 'sensor_id');
+ hypertable_id | column_name | disabled 
+---------------+-------------+----------
+             3 | sensor_id   | t
+(1 row)
+
+ALTER TABLE sample_table1 ALTER COLUMN sensor_id TYPE TEXT;
