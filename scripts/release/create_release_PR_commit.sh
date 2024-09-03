@@ -4,8 +4,6 @@ set -eu
 # Folder, where we have cloned repositories' sources
 SOURCES_DIR="sources"
 
-CHANGELOG_HEADER_LINES="6"
-
 GH_USERNAME=$(gh auth status | grep 'Logged in to' |cut -d ' ' -f 9)
 
 FORK_DIR="$GH_USERNAME-timescaledb"
@@ -96,8 +94,11 @@ cd ~/"$SOURCES_DIR"/"$FORK_DIR"
 echo "---- Editing the CHANGELOG.md file with the contents of CHANGELOG_"$NEW_VERSION".md file. ----"
 
 cd ~/"$SOURCES_DIR"/"$FORK_DIR"
+RELEASE_NOTE_START=$(grep -n $CURRENT_VERSION CHANGELOG.md | cut -d ':' -f 1 | head -1)
+CHANGELOG_HEADER_LINES=$((RELEASE_NOTE_START - 1))
+
 mv CHANGELOG.md CHANGELOG.md.tmp
-head -n 6 CHANGELOG.md.tmp > CHANGELOG.md
+head -n $CHANGELOG_HEADER_LINES CHANGELOG.md.tmp > CHANGELOG.md
 cat ~/CHANGELOG_"$NEW_VERSION".md >> CHANGELOG.md
 CHANGELOG_LENGTH=$(wc -l CHANGELOG.md.tmp | cut -d ' ' -f 5)
 CHANGELOG_ENTRIES=$((CHANGELOG_LENGTH-CHANGELOG_HEADER_LINES))
