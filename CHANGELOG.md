@@ -4,6 +4,23 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+
+## 2.16.2 (2024-09-03)
+
+This release contains performance improvements and bug fixes since
+the 2.16.1 release. We recommend that you upgrade at the next
+available opportunity.
+
+
+**Features**
+
+**Bugfixes**
+* #7191 Fix creating default indexes on chunks when migrating data
+* #7201 Use generic extension description when building apt and rpm loader packages
+
+**Thanks**
+* @posuch For reporting misleading extension description in the generic loader package
+
 ## 2.16.1 (2024-08-06)
 
 This release contains bug fixes since the 2.16.0 release. We recommend
