@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
+SET enable_seqscan TO off;
+
 \ir include/insert_two_partitions.sql
 
 SELECT * FROM test.show_columnsp('_timescaledb_internal.%_hyper%');

@@ -106,23 +106,23 @@ CREATE POLICY p2r ON document AS RESTRICTIVE TO regress_rls_dave
 CREATE POLICY p1r ON document AS RESTRICTIVE TO regress_rls_dave
     USING (cid <> 44);
 \dp
-                                                                  Access privileges
-       Schema       |   Name   | Type  |              Access privileges              | Column privileges |                  Policies                  
---------------------+----------+-------+---------------------------------------------+-------------------+--------------------------------------------
- regress_rls_schema | category | table | regress_rls_alice=arwdDxt/regress_rls_alice+|                   | 
-                    |          |       | =arwdDxt/regress_rls_alice                  |                   | 
- regress_rls_schema | document | table | regress_rls_alice=arwdDxt/regress_rls_alice+|                   | p1:                                       +
-                    |          |       | =arwdDxt/regress_rls_alice                  |                   |   (u): (dlevel <= ( SELECT uaccount.seclv +
-                    |          |       |                                             |                   |    FROM uaccount                          +
-                    |          |       |                                             |                   |   WHERE (uaccount.pguser = CURRENT_USER)))+
-                    |          |       |                                             |                   | p2r (RESTRICTIVE):                        +
-                    |          |       |                                             |                   |   (u): ((cid <> 44) AND (cid < 50))       +
-                    |          |       |                                             |                   |   to: regress_rls_dave                    +
-                    |          |       |                                             |                   | p1r (RESTRICTIVE):                        +
-                    |          |       |                                             |                   |   (u): (cid <> 44)                        +
-                    |          |       |                                             |                   |   to: regress_rls_dave
- regress_rls_schema | uaccount | table | regress_rls_alice=arwdDxt/regress_rls_alice+|                   | 
-                    |          |       | =r/regress_rls_alice                        |                   | 
+                                                                   Access privileges
+       Schema       |   Name   | Type  |              Access privileges               | Column privileges |                  Policies                  
+--------------------+----------+-------+----------------------------------------------+-------------------+--------------------------------------------
+ regress_rls_schema | category | table | regress_rls_alice=arwdDxtm/regress_rls_alice+|                   | 
+                    |          |       | =arwdDxtm/regress_rls_alice                  |                   | 
+ regress_rls_schema | document | table | regress_rls_alice=arwdDxtm/regress_rls_alice+|                   | p1:                                       +
+                    |          |       | =arwdDxtm/regress_rls_alice                  |                   |   (u): (dlevel <= ( SELECT uaccount.seclv +
+                    |          |       |                                              |                   |    FROM uaccount                          +
+                    |          |       |                                              |                   |   WHERE (uaccount.pguser = CURRENT_USER)))+
+                    |          |       |                                              |                   | p2r (RESTRICTIVE):                        +
+                    |          |       |                                              |                   |   (u): ((cid <> 44) AND (cid < 50))       +
+                    |          |       |                                              |                   |   to: regress_rls_dave                    +
+                    |          |       |                                              |                   | p1r (RESTRICTIVE):                        +
+                    |          |       |                                              |                   |   (u): (cid <> 44)                        +
+                    |          |       |                                              |                   |   to: regress_rls_dave
+ regress_rls_schema | uaccount | table | regress_rls_alice=arwdDxtm/regress_rls_alice+|                   | 
+                    |          |       | =r/regress_rls_alice                         |                   | 
 (3 rows)
 
 \d document
@@ -263,53 +263,53 @@ SELECT * FROM document TABLESAMPLE BERNOULLI(50) REPEATABLE(0)
 (0 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
-                     QUERY PLAN                      
------------------------------------------------------
+                             QUERY PLAN                             
+--------------------------------------------------------------------
  Custom Scan (ChunkAppend) on document
    Chunks excluded during startup: 0
-   InitPlan 1 (returns $0)
+   InitPlan 1
      ->  Index Scan using uaccount_pkey on uaccount
            Index Cond: (pguser = CURRENT_USER)
    ->  Seq Scan on document document_1
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_1_1_chunk document_2
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_1_2_chunk document_3
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_1_3_chunk document_4
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_1_4_chunk document_5
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_1_5_chunk document_6
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_1_6_chunk document_7
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
 (19 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
-                        QUERY PLAN                         
------------------------------------------------------------
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
  Hash Join
    Hash Cond: (document.cid = category.cid)
-   InitPlan 1 (returns $0)
+   InitPlan 1
      ->  Index Scan using uaccount_pkey on uaccount
            Index Cond: (pguser = CURRENT_USER)
    ->  Custom Scan (ChunkAppend) on document
          Chunks excluded during startup: 0
          ->  Seq Scan on document document_1
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+               Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
          ->  Seq Scan on _hyper_1_1_chunk document_2
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+               Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
          ->  Seq Scan on _hyper_1_2_chunk document_3
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+               Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
          ->  Seq Scan on _hyper_1_3_chunk document_4
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+               Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
          ->  Seq Scan on _hyper_1_4_chunk document_5
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+               Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
          ->  Seq Scan on _hyper_1_5_chunk document_6
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+               Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
          ->  Seq Scan on _hyper_1_6_chunk document_7
-               Filter: ((dlevel <= $0) AND f_leak(dtitle))
+               Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Hash
          ->  Seq Scan on category
 (23 rows)
@@ -355,35 +355,35 @@ NOTICE:  f_leak => awesome technology book
 (7 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
-                                             QUERY PLAN                                             
-----------------------------------------------------------------------------------------------------
+                                                    QUERY PLAN                                                     
+-------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on document
    Chunks excluded during startup: 0
-   InitPlan 1 (returns $0)
+   InitPlan 1
      ->  Index Scan using uaccount_pkey on uaccount
            Index Cond: (pguser = CURRENT_USER)
    ->  Seq Scan on document document_1
-         Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_1_1_chunk document_2
-         Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_1_2_chunk document_3
-         Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_1_3_chunk document_4
-         Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_1_4_chunk document_5
-         Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_1_5_chunk document_6
-         Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_1_6_chunk document_7
-         Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
 (19 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
-                                                   QUERY PLAN                                                   
-----------------------------------------------------------------------------------------------------------------
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
  Hash Join
    Hash Cond: (category.cid = document.cid)
-   InitPlan 1 (returns $0)
+   InitPlan 1
      ->  Index Scan using uaccount_pkey on uaccount
            Index Cond: (pguser = CURRENT_USER)
    ->  Seq Scan on category
@@ -391,19 +391,19 @@ EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dt
          ->  Custom Scan (ChunkAppend) on document
                Chunks excluded during startup: 0
                ->  Seq Scan on document document_1
-                     Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+                     Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
                ->  Seq Scan on _hyper_1_1_chunk document_2
-                     Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+                     Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
                ->  Seq Scan on _hyper_1_2_chunk document_3
-                     Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+                     Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
                ->  Seq Scan on _hyper_1_3_chunk document_4
-                     Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+                     Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
                ->  Seq Scan on _hyper_1_4_chunk document_5
-                     Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+                     Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
                ->  Seq Scan on _hyper_1_5_chunk document_6
-                     Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+                     Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
                ->  Seq Scan on _hyper_1_6_chunk document_7
-                     Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= $0) AND f_leak(dtitle))
+                     Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
 (23 rows)
 
 -- 44 would technically fail for both p2r and p1r, but we should get an error
@@ -542,8 +542,8 @@ SELECT * FROM document d FULL OUTER JOIN category c on d.cid = c.cid ORDER BY d.
 (6 rows)
 
 DELETE FROM category WHERE cid = 33;    -- fails with FK violation
-ERROR:  update or delete on table "category" violates foreign key constraint "4_7_document_cid_fkey" on table "_hyper_1_4_chunk"
-DETAIL:  Key is still referenced from table "_hyper_1_4_chunk".
+ERROR:  update or delete on table "category" violates foreign key constraint "document_cid_fkey" on table "document"
+DETAIL:  Key is still referenced from table "document".
 -- can insert FK referencing invisible PK
 SET SESSION AUTHORIZATION regress_rls_carol;
 SELECT * FROM document d FULL OUTER JOIN category c on d.cid = c.cid ORDER BY d.did, c.cid;
@@ -1076,27 +1076,27 @@ NOTICE:  f_leak => awesome science fiction
 (4 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
-                      QUERY PLAN                      
-------------------------------------------------------
+                             QUERY PLAN                             
+--------------------------------------------------------------------
  Custom Scan (ChunkAppend) on hyper_document
    Chunks excluded during startup: 0
-   InitPlan 1 (returns $0)
+   InitPlan 1
      ->  Index Scan using uaccount_pkey on uaccount
            Index Cond: (pguser = CURRENT_USER)
    ->  Seq Scan on hyper_document hyper_document_1
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_9_chunk hyper_document_2
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_10_chunk hyper_document_3
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_11_chunk hyper_document_4
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_12_chunk hyper_document_5
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_13_chunk hyper_document_6
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_14_chunk hyper_document_7
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
 (19 rows)
 
 -- viewpoint from regress_rls_carol
@@ -1127,27 +1127,27 @@ NOTICE:  f_leak => awesome technology book
 (10 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
-                      QUERY PLAN                      
-------------------------------------------------------
+                             QUERY PLAN                             
+--------------------------------------------------------------------
  Custom Scan (ChunkAppend) on hyper_document
    Chunks excluded during startup: 0
-   InitPlan 1 (returns $0)
+   InitPlan 1
      ->  Index Scan using uaccount_pkey on uaccount
            Index Cond: (pguser = CURRENT_USER)
    ->  Seq Scan on hyper_document hyper_document_1
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_9_chunk hyper_document_2
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_10_chunk hyper_document_3
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_11_chunk hyper_document_4
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_12_chunk hyper_document_5
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_13_chunk hyper_document_6
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_14_chunk hyper_document_7
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
 (19 rows)
 
 -- viewpoint from regress_rls_dave
@@ -1166,27 +1166,27 @@ NOTICE:  f_leak => awesome science fiction
 (4 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
-                             QUERY PLAN                             
---------------------------------------------------------------------
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on hyper_document
    Chunks excluded during startup: 0
-   InitPlan 1 (returns $0)
+   InitPlan 1
      ->  Index Scan using uaccount_pkey on uaccount
            Index Cond: (pguser = CURRENT_USER)
    ->  Seq Scan on hyper_document hyper_document_1
-         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((cid < 55) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_9_chunk hyper_document_2
-         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((cid < 55) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_10_chunk hyper_document_3
-         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((cid < 55) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_11_chunk hyper_document_4
-         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((cid < 55) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_12_chunk hyper_document_5
-         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((cid < 55) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_13_chunk hyper_document_6
-         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((cid < 55) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_14_chunk hyper_document_7
-         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((cid < 55) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
 (19 rows)
 
 -- pp1 ERROR
@@ -1256,27 +1256,27 @@ NOTICE:  f_leak => awesome science fiction
 (4 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
-                             QUERY PLAN                             
---------------------------------------------------------------------
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on hyper_document
    Chunks excluded during startup: 0
-   InitPlan 1 (returns $0)
+   InitPlan 1
      ->  Index Scan using uaccount_pkey on uaccount
            Index Cond: (pguser = CURRENT_USER)
    ->  Seq Scan on hyper_document hyper_document_1
-         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((cid < 55) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_9_chunk hyper_document_2
-         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((cid < 55) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_10_chunk hyper_document_3
-         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((cid < 55) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_11_chunk hyper_document_4
-         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((cid < 55) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_12_chunk hyper_document_5
-         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((cid < 55) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_13_chunk hyper_document_6
-         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((cid < 55) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_14_chunk hyper_document_7
-         Filter: ((cid < 55) AND (dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((cid < 55) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
 (19 rows)
 
 -- viewpoint from regress_rls_carol
@@ -1309,27 +1309,27 @@ NOTICE:  f_leak => awesome technology book
 (11 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
-                      QUERY PLAN                      
-------------------------------------------------------
+                             QUERY PLAN                             
+--------------------------------------------------------------------
  Custom Scan (ChunkAppend) on hyper_document
    Chunks excluded during startup: 0
-   InitPlan 1 (returns $0)
+   InitPlan 1
      ->  Index Scan using uaccount_pkey on uaccount
            Index Cond: (pguser = CURRENT_USER)
    ->  Seq Scan on hyper_document hyper_document_1
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_9_chunk hyper_document_2
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_10_chunk hyper_document_3
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_11_chunk hyper_document_4
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_12_chunk hyper_document_5
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_13_chunk hyper_document_6
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
    ->  Seq Scan on _hyper_2_14_chunk hyper_document_7
-         Filter: ((dlevel <= $0) AND f_leak(dtitle))
+         Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
 (19 rows)
 
 -- only owner can change policies
@@ -1632,7 +1632,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM only s1 WHERE f_leak(b);
                            QUERY PLAN                            
 -----------------------------------------------------------------
  Seq Scan on s1
-   Filter: ((hashed SubPlan 1) AND f_leak(b))
+   Filter: ((ANY (a = (hashed SubPlan 1).col1)) AND f_leak(b))
    SubPlan 1
      ->  Append
            ->  Seq Scan on s2 s2_1
@@ -1671,7 +1671,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM s1 WHERE f_leak(b);
  Custom Scan (ChunkAppend) on s1
    Chunks excluded during startup: 0
    ->  Seq Scan on s1 s1_1
-         Filter: ((hashed SubPlan 1) AND f_leak(b))
+         Filter: ((ANY (a = (hashed SubPlan 1).col1)) AND f_leak(b))
          SubPlan 1
            ->  Append
                  ->  Seq Scan on s2 s2_1
@@ -1691,27 +1691,27 @@ EXPLAIN (COSTS OFF) SELECT * FROM s1 WHERE f_leak(b);
                  ->  Seq Scan on _hyper_7_33_chunk s2_8
                        Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
    ->  Seq Scan on _hyper_6_16_chunk s1_2
-         Filter: ((hashed SubPlan 1) AND f_leak(b))
+         Filter: ((ANY (a = (hashed SubPlan 1).col1)) AND f_leak(b))
    ->  Seq Scan on _hyper_6_17_chunk s1_3
-         Filter: ((hashed SubPlan 1) AND f_leak(b))
+         Filter: ((ANY (a = (hashed SubPlan 1).col1)) AND f_leak(b))
    ->  Seq Scan on _hyper_6_18_chunk s1_4
-         Filter: ((hashed SubPlan 1) AND f_leak(b))
+         Filter: ((ANY (a = (hashed SubPlan 1).col1)) AND f_leak(b))
    ->  Seq Scan on _hyper_6_19_chunk s1_5
-         Filter: ((hashed SubPlan 1) AND f_leak(b))
+         Filter: ((ANY (a = (hashed SubPlan 1).col1)) AND f_leak(b))
    ->  Seq Scan on _hyper_6_20_chunk s1_6
-         Filter: ((hashed SubPlan 1) AND f_leak(b))
+         Filter: ((ANY (a = (hashed SubPlan 1).col1)) AND f_leak(b))
    ->  Seq Scan on _hyper_6_21_chunk s1_7
-         Filter: ((hashed SubPlan 1) AND f_leak(b))
+         Filter: ((ANY (a = (hashed SubPlan 1).col1)) AND f_leak(b))
    ->  Seq Scan on _hyper_6_22_chunk s1_8
-         Filter: ((hashed SubPlan 1) AND f_leak(b))
+         Filter: ((ANY (a = (hashed SubPlan 1).col1)) AND f_leak(b))
    ->  Seq Scan on _hyper_6_23_chunk s1_9
-         Filter: ((hashed SubPlan 1) AND f_leak(b))
+         Filter: ((ANY (a = (hashed SubPlan 1).col1)) AND f_leak(b))
    ->  Seq Scan on _hyper_6_24_chunk s1_10
-         Filter: ((hashed SubPlan 1) AND f_leak(b))
+         Filter: ((ANY (a = (hashed SubPlan 1).col1)) AND f_leak(b))
    ->  Seq Scan on _hyper_6_25_chunk s1_11
-         Filter: ((hashed SubPlan 1) AND f_leak(b))
+         Filter: ((ANY (a = (hashed SubPlan 1).col1)) AND f_leak(b))
    ->  Seq Scan on _hyper_6_26_chunk s1_12
-         Filter: ((hashed SubPlan 1) AND f_leak(b))
+         Filter: ((ANY (a = (hashed SubPlan 1).col1)) AND f_leak(b))
 (44 rows)
 
 SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like '%28%';
@@ -1748,7 +1748,7 @@ EXPLAIN (COSTS OFF) SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like
            ->  Result
                  ->  Custom Scan (ChunkAppend) on s1
                        ->  Seq Scan on s1 s1_1
-                             Filter: (hashed SubPlan 1)
+                             Filter: (ANY (a = (hashed SubPlan 1).col1))
                              SubPlan 1
                                ->  Append
                                      ->  Seq Scan on s2 s2_10
@@ -1768,27 +1768,27 @@ EXPLAIN (COSTS OFF) SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like
                                      ->  Seq Scan on _hyper_7_33_chunk s2_17
                                            Filter: (((x % 2) = 0) AND (y ~~ '%af%'::text))
                        ->  Seq Scan on _hyper_6_16_chunk s1_2
-                             Filter: (hashed SubPlan 1)
+                             Filter: (ANY (a = (hashed SubPlan 1).col1))
                        ->  Seq Scan on _hyper_6_17_chunk s1_3
-                             Filter: (hashed SubPlan 1)
+                             Filter: (ANY (a = (hashed SubPlan 1).col1))
                        ->  Seq Scan on _hyper_6_18_chunk s1_4
-                             Filter: (hashed SubPlan 1)
+                             Filter: (ANY (a = (hashed SubPlan 1).col1))
                        ->  Seq Scan on _hyper_6_19_chunk s1_5
-                             Filter: (hashed SubPlan 1)
+                             Filter: (ANY (a = (hashed SubPlan 1).col1))
                        ->  Seq Scan on _hyper_6_20_chunk s1_6
-                             Filter: (hashed SubPlan 1)
+                             Filter: (ANY (a = (hashed SubPlan 1).col1))
                        ->  Seq Scan on _hyper_6_21_chunk s1_7
-                             Filter: (hashed SubPlan 1)
+                             Filter: (ANY (a = (hashed SubPlan 1).col1))
                        ->  Seq Scan on _hyper_6_22_chunk s1_8
-                             Filter: (hashed SubPlan 1)
+                             Filter: (ANY (a = (hashed SubPlan 1).col1))
                        ->  Seq Scan on _hyper_6_23_chunk s1_9
-                             Filter: (hashed SubPlan 1)
+                             Filter: (ANY (a = (hashed SubPlan 1).col1))
                        ->  Seq Scan on _hyper_6_24_chunk s1_10
-                             Filter: (hashed SubPlan 1)
+                             Filter: (ANY (a = (hashed SubPlan 1).col1))
                        ->  Seq Scan on _hyper_6_25_chunk s1_11
-                             Filter: (hashed SubPlan 1)
+                             Filter: (ANY (a = (hashed SubPlan 1).col1))
                        ->  Seq Scan on _hyper_6_26_chunk s1_12
-                             Filter: (hashed SubPlan 1)
+                             Filter: (ANY (a = (hashed SubPlan 1).col1))
 (64 rows)
 
 SET SESSION AUTHORIZATION regress_rls_alice;
@@ -4717,8 +4717,8 @@ ALTER TABLE r2 ENABLE ROW LEVEL SECURITY;
 ALTER TABLE r2 FORCE ROW LEVEL SECURITY;
 -- Errors due to rows in r2
 DELETE FROM r1;
-ERROR:  update or delete on table "r1" violates foreign key constraint "113_23_r2_a_fkey" on table "_hyper_26_113_chunk"
-DETAIL:  Key (a)=(10) is still referenced from table "_hyper_26_113_chunk".
+ERROR:  update or delete on table "r1" violates foreign key constraint "r2_a_fkey" on table "r2"
+DETAIL:  Key (a)=(10) is still referenced from table "r2".
 -- Reset r2 to no-RLS
 DROP POLICY p1 ON r2;
 ALTER TABLE r2 NO FORCE ROW LEVEL SECURITY;
@@ -4796,7 +4796,7 @@ ALTER TABLE r2 FORCE ROW LEVEL SECURITY;
 UPDATE r1 SET a = a+5;
 ERROR:  new row for relation "_hyper_28_117_chunk" violates check constraint "constraint_117"
 DETAIL:  Failing row contains (15).
-CONTEXT:  SQL statement "UPDATE ONLY "_timescaledb_internal"."_hyper_28_117_chunk" SET "a" = $1 WHERE $2 OPERATOR(pg_catalog.=) "a""
+CONTEXT:  SQL statement "UPDATE ONLY "regress_rls_schema"."r2" SET "a" = $1 WHERE $2 OPERATOR(pg_catalog.=) "a""
 -- Remove FORCE from r2
 ALTER TABLE r2 NO FORCE ROW LEVEL SECURITY;
 -- As owner, we now bypass RLS
