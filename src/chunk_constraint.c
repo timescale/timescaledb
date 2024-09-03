@@ -374,7 +374,7 @@ create_dimension_check_constraint(const Dimension *dim, const DimensionSlice *sl
  * Add a constraint to a chunk table.
  */
 static Oid
-chunk_constraint_create_on_table(const ChunkConstraint *cc, Oid chunk_oid)
+chunk_constraint_create_on_table(const ChunkConstraint *cc, Oid chunk_oid, bool using_index)
 {
 	HeapTuple tuple;
 	Datum values[Natts_chunk_constraint];
@@ -389,7 +389,9 @@ chunk_constraint_create_on_table(const ChunkConstraint *cc, Oid chunk_oid)
 	RelationClose(rel);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	CatalogInternalCall1(DDL_ADD_CHUNK_CONSTRAINT, HeapTupleGetDatum(tuple));
+	CatalogInternalCall2(DDL_ADD_CHUNK_CONSTRAINT,
+						 HeapTupleGetDatum(tuple),
+						 BoolGetDatum(using_index));
 	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(tuple);
 
@@ -402,14 +404,14 @@ chunk_constraint_create_on_table(const ChunkConstraint *cc, Oid chunk_oid)
  */
 static Oid
 create_non_dimensional_constraint(const ChunkConstraint *cc, Oid chunk_oid, int32 chunk_id,
-								  Oid hypertable_oid, int32 hypertable_id)
+								  Oid hypertable_oid, int32 hypertable_id, bool using_index)
 {
 	Oid chunk_constraint_oid;
 
 	Assert(!is_dimension_constraint(cc));
 
 	ts_process_utility_set_expect_chunk_modification(true);
-	chunk_constraint_oid = chunk_constraint_create_on_table(cc, chunk_oid);
+	chunk_constraint_oid = chunk_constraint_create_on_table(cc, chunk_oid, using_index);
 	ts_process_utility_set_expect_chunk_modification(false);
 
 	/*
@@ -431,7 +433,7 @@ create_non_dimensional_constraint(const ChunkConstraint *cc, Oid chunk_oid, int3
 	{
 		FormData_pg_constraint *constr = (FormData_pg_constraint *) GETSTRUCT(tuple);
 
-		if (OidIsValid(constr->conindid) && constr->contype != CONSTRAINT_FOREIGN)
+		if (OidIsValid(constr->conindid) && constr->contype != CONSTRAINT_FOREIGN && !using_index)
 			ts_chunk_index_create_from_constraint(hypertable_id,
 												  hypertable_constraint_oid,
 												  chunk_id,
@@ -494,7 +496,8 @@ ts_chunk_constraints_create(const Hypertable *ht, const Chunk *chunk)
 											  chunk->table_id,
 											  chunk->fd.id,
 											  ht->main_table_relid,
-											  ht->fd.id);
+											  ht->fd.id,
+											  false);
 		}
 	}
 
@@ -838,7 +841,8 @@ ts_chunk_constraints_add_inheritable_check_constraints(ChunkConstraints *ccs, in
 }
 
 void
-ts_chunk_constraint_create_on_chunk(const Hypertable *ht, const Chunk *chunk, Oid constraint_oid)
+ts_chunk_constraint_create_on_chunk(const Hypertable *ht, const Chunk *chunk, Oid constraint_oid,
+									bool using_index)
 {
 	HeapTuple tuple;
 	Form_pg_constraint con;
@@ -863,7 +867,8 @@ ts_chunk_constraint_create_on_chunk(const Hypertable *ht, const Chunk *chunk, Oi
 										  chunk->table_id,
 										  chunk->fd.id,
 										  ht->main_table_relid,
-										  ht->fd.id);
+										  ht->fd.id,
+										  using_index);
 	}
 
 	ReleaseSysCache(tuple);

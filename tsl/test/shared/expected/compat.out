@@ -26,7 +26,7 @@ ERROR:  invalid materialized hypertable ID: 0
 SELECT _timescaledb_internal.calculate_chunk_interval(0,0,0);
 WARNING:  function _timescaledb_internal.calculate_chunk_interval(integer,bigint,bigint) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  could not find a matching hypertable for dimension 0
-SELECT _timescaledb_internal.chunk_constraint_add_table_constraint(NULL);
+SELECT _timescaledb_internal.chunk_constraint_add_table_constraint(NULL, NULL);
 WARNING:  function _timescaledb_internal.chunk_constraint_add_table_constraint(_timescaledb_catalog.chunk_constraint) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  query returned no rows
 SELECT _timescaledb_internal.chunk_id_from_relid(0);
