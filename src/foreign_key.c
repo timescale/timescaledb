@@ -80,6 +80,9 @@ propagate_fk(Relation ht_rel, HeapTuple fk_tuple, List *chunks)
 	foreach (lc, chunks)
 	{
 		Chunk *chunk = lfirst(lc);
+		if (chunk->fd.osm_chunk)
+			continue;
+
 		clone_constraint_on_chunk(chunk,
 								  ht_rel,
 								  fk,

@@ -691,4 +691,40 @@ DROP INDEX hyper_constr_mid_idx;
 
 \i include/chunk_utils_internal_orderedappend.sql
 
-DROP DATABASE postgres_fdw_db;
+--TEST hypertable with foreign key into it
+\c :TEST_DBNAME :ROLE_4
+CREATE TABLE hyper_fk(ts timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('hyper_fk', 'ts');
+
+INSERT INTO hyper_fk(ts, device, value) VALUES ('2020-01-01 00:00:00+00', 'd1', 1.0);
+\c postgres_fdw_db :ROLE_4
+CREATE TABLE fdw_hyper_fk(ts timestamptz NOT NULL, device text, value float);
+INSERT INTO fdw_hyper_fk VALUES( '2021-05-05 00:00:00+00', 'd2', 2.0);
+
+\c :TEST_DBNAME :ROLE_4
+-- this is a stand-in for the OSM table
+CREATE FOREIGN TABLE child_hyper_fk
+(ts timestamptz NOT NULL, device text, value float)
+ SERVER s3_server OPTIONS ( schema_name 'public', table_name 'fdw_hyper_fk');
+SELECT _timescaledb_functions.attach_osm_table_chunk('hyper_fk', 'child_hyper_fk');
+
+--create table with fk into hypertable
+CREATE TABLE event(ts timestamptz REFERENCES hyper_fk(ts) , info text);
+-- NOTE: current behavior is to allow inserts/deletes from PG tables when data
+-- references OSM table.
+--insert referencing OSM chunk
+INSERT INTO event VALUES( '2021-05-05 00:00:00+00' , 'osm_chunk_ts');
+--insert referencing non-existent value
+\set ON_ERROR_STOP 0
+INSERT INTO event VALUES( '2020-01-02 00:00:00+00' , 'does_not_exist_ts');
+\set ON_ERROR_STOP 1
+INSERT INTO event VALUES( '2020-01-01 00:00:00+00' , 'chunk_ts');
+SELECT * FROM event ORDER BY ts;
+
+DELETE FROM event WHERE  info = 'osm_chunk_ts';
+DELETE FROM event WHERE  info = 'chunk_ts';
+SELECT * FROM event ORDER BY ts;
+
+-- clean up databases created
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP DATABASE postgres_fdw_db WITH (FORCE);
