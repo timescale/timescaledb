@@ -515,7 +515,7 @@ SELECT sum(segment_by_value) FROM testtable GROUP BY int_value;
                            Output: _hyper_1_10_chunk.int_value, _hyper_1_10_chunk.segment_by_value
 (63 rows)
 
--- FIXME here the partitionwise aggregation plan is not chosen due to costs?
+-- Vectorization possible with grouping by a segmentby column.
 :EXPLAIN
 SELECT sum(int_value) FROM testtable GROUP BY segment_by_value;
                                                                                                                                                                                    QUERY PLAN                                                                                                                                                                                    
@@ -582,7 +582,6 @@ SELECT sum(int_value) FROM testtable GROUP BY segment_by_value;
                            Output: _hyper_1_10_chunk.segment_by_value, _hyper_1_10_chunk.int_value
 (60 rows)
 
--- Vectorization possible with grouping by a segmentby column.
 :EXPLAIN
 SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                       

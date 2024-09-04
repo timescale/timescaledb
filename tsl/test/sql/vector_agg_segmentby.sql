@@ -64,12 +64,11 @@ select s, sum(t), count(*) from svagg where f > 10         group by s order by s
 
 select s, sum(t), count(*) from svagg group by s order by s;
 
-
--- this should be vectorized as well but isn't because of the projection.
-set timescaledb.debug_require_vector_agg to 'forbid';
+-- another example that we used not to vectorize because of the projection.
 explain (costs off)
 select sum(t), s, count(*) from svagg group by s order by s;
 
 select sum(t) from svagg group by s order by 1;
+
 
 drop table svagg;
