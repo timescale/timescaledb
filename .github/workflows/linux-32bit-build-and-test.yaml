@@ -156,7 +156,7 @@ jobs:
         # PostgreSQL cannot be run as root. So, switch to postgres user.
         runuser -u postgres -- \
           make -k -C build installcheck IGNORES="${IGNORES}" \
-            SKIPS="${SKIPS}" PSQL="${HOME}/${PG_INSTALL_DIR}/bin/psql"
+            SKIPS="${SKIPS}" PSQL="${HOME}/${PG_INSTALL_DIR}/bin/psql" \
             | tee installcheck.log
 
     - name: Show regression diffs
