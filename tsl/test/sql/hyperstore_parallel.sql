@@ -34,10 +34,17 @@ select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore'
 -- Show count without parallel plan and without ColumnarScan
 set timescaledb.enable_columnarscan=false;
 set max_parallel_workers_per_gather=0;
+
 select explain_anonymize(format($$
        select device_id, count(*) from %s where device_id=1 group by device_id
 $$, :'hypertable'));
 select device_id, count(*) from :hypertable where device_id=1 group by device_id;
+
+-- Filter on segmentby column
+select explain_anonymize(format($$
+       select owner_id, count(*) from %s where owner_id=1 group by owner_id
+$$, :'hypertable'));
+select owner_id, count(*) from :hypertable where owner_id=1 group by owner_id;
 
 -- Enable parallel on SeqScan and check for same result
 set max_parallel_workers_per_gather=2;
@@ -46,6 +53,11 @@ select explain_anonymize(format($$
 $$, :'hypertable'));
 select device_id, count(*) from :hypertable where device_id=1 group by device_id;
 
+select explain_anonymize(format($$
+       select owner_id, count(*) from %s where owner_id=1 group by owner_id
+$$, :'hypertable'));
+select owner_id, count(*) from :hypertable where owner_id=1 group by owner_id;
+
 -- Enable ColumnarScan and check for same result
 set timescaledb.enable_columnarscan=true;
 select explain_anonymize(format($$
@@ -53,11 +65,22 @@ select explain_anonymize(format($$
 $$, :'hypertable'));
 select device_id, count(*) from :hypertable where device_id=1 group by device_id;
 
+-- Filter on segmentby column (pushing down scankeys in parallel mode)
+select explain_anonymize(format($$
+       select owner_id, count(*) from %s where owner_id=1 group by owner_id
+$$, :'hypertable'));
+select owner_id, count(*) from :hypertable where owner_id=1 group by owner_id;
+
 -- Parallel plan with hyperstore on single chunk
 select explain_anonymize(format($$
        select device_id, count(*) from %s where device_id=1 group by device_id
 $$, :'hypertable'));
 select device_id, count(*) from :chunk1 where device_id=1 group by device_id;
+
+select explain_anonymize(format($$
+       select owner_id, count(*) from %s where owner_id=1 group by owner_id
+$$, :'hypertable'));
+select owner_id, count(*) from :chunk1 where owner_id=1 group by owner_id;
 
 -- Compare hyperstore per-location counts with original counts without
 -- hyperstore
