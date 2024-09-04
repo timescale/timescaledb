@@ -32,7 +32,7 @@ CREATE OR REPLACE PROCEDURE custom_proc1(jobid int, config jsonb) LANGUAGE PLPGS
 $$
 BEGIN
   UPDATE custom_log set msg = 'msg1' where msg = 'msg0';
-  perform pg_sleep(10);
+  perform pg_sleep(5);
   COMMIT;
 END
 $$;
@@ -41,24 +41,23 @@ CREATE OR REPLACE PROCEDURE custom_proc2(jobid int, config jsonb) LANGUAGE PLPGS
 $$
 BEGIN
   UPDATE custom_log set msg = 'msg2' where msg = 'msg0';
-  perform pg_sleep(10);
   COMMIT;
 END
 $$;
 
 select add_job('custom_proc1', '2 min', initial_start => now());
 -- to make sure custom_log is first updated by custom_proc_1
-select add_job('custom_proc2', '2 min', initial_start => now() + interval '5 seconds');
+select add_job('custom_proc2', '2 min', initial_start => now() + interval '2 seconds');
 
 SELECT _timescaledb_functions.start_background_workers();
 -- enough time to for job_fail to fail
-select pg_sleep(10);
+select pg_sleep(5);
 select job_id, data->'job'->>'proc_name' as proc_name, data->'error_data'->>'message' as err_message, data->'error_data'->>'sqlerrcode' as sqlerrcode
 from _timescaledb_internal.bgw_job_stat_history where job_id = :jobf_id and succeeded is false;
 
 select delete_job(:jobf_id);
 
-select pg_sleep(20);
+select pg_sleep(5);
 -- exclude internal jobs
 select job_id, data->'job'->>'proc_name' as proc_name, data->'error_data'->>'message' as err_message, data->'error_data'->>'sqlerrcode' as sqlerrcode
 from _timescaledb_internal.bgw_job_stat_history WHERE job_id >= 1000 and succeeded is false;
