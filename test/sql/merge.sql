@@ -9,7 +9,7 @@ CREATE TABLE target (
    time        TIMESTAMPTZ       NOT NULL,
    location    SMALLINT          NOT NULL,
    temperature DOUBLE PRECISION  NULL,
-   val text default 'string -'
+   to_be_dropped text
 );
 
 SELECT create_hypertable(
@@ -25,6 +25,14 @@ FROM generate_series(
     INTERVAL '5 seconds'
   ) as time,
 generate_series(1,4) as location;
+
+-- This makes sure we have one column with attisdropped and one column
+-- with atthasmissing set to true. These two cases can cause problems
+-- with chunk dispatch execution when merging using a when-clause with
+-- inserts. Unfortunately they are hard to trigger, so this is not a
+-- definitive test.
+ALTER TABLE target DROP COLUMN to_be_dropped;
+ALTER TABLE target ADD COLUMN val text default 'string -';
 
 -- Create source table with location and temperature
 CREATE TABLE source (
