@@ -22,6 +22,7 @@
 #include <planner.h>
 #include <planner/planner.h>
 #include <utils/palloc.h>
+#include <utils/snapmgr.h>
 #include <utils/typcache.h>
 
 #include "columnar_scan.h"
@@ -575,6 +576,41 @@ columnar_scan_explain(CustomScanState *state, List *ancestors, ExplainState *es)
  *						Parallel Scan Support
  * ----------------------------------------------------------------
  */
+
+/*
+ * Local version of table_beginscan_parallel() to pass on scankeys to the
+ * table access method callback.
+ *
+ * The PostgreSQL version of this function does _not_ pass on the given
+ * scankeys (key parameter) to the underlying table access method's
+ * scan_begin() (last call in the function). The local version imported here
+ * fixes that.
+ */
+static TableScanDesc
+ts_table_beginscan_parallel(Relation relation, ParallelTableScanDesc pscan, int nkeys,
+							struct ScanKeyData *key)
+{
+	Snapshot snapshot;
+	uint32 flags = SO_TYPE_SEQSCAN | SO_ALLOW_STRAT | SO_ALLOW_SYNC | SO_ALLOW_PAGEMODE;
+
+	Assert(RelationGetRelid(relation) == pscan->phs_relid);
+
+	if (!pscan->phs_snapshot_any)
+	{
+		/* Snapshot was serialized -- restore it */
+		snapshot = RestoreSnapshot((char *) pscan + pscan->phs_snapshot_off);
+		RegisterSnapshot(snapshot);
+		flags |= SO_TEMP_SNAPSHOT;
+	}
+	else
+	{
+		/* SnapshotAny passed by caller (not serialized) */
+		snapshot = SnapshotAny;
+	}
+
+	return relation->rd_tableam->scan_begin(relation, snapshot, nkeys, key, pscan, flags);
+}
+
 static Size
 columnar_scan_estimate_dsm(CustomScanState *node, ParallelContext *pcxt)
 {
@@ -585,11 +621,15 @@ columnar_scan_estimate_dsm(CustomScanState *node, ParallelContext *pcxt)
 static void
 columnar_scan_initialize_dsm(CustomScanState *node, ParallelContext *pcxt, void *arg)
 {
+	ColumnarScanState *cstate = (ColumnarScanState *) node;
 	EState *estate = node->ss.ps.state;
 	ParallelTableScanDesc pscan = (ParallelTableScanDesc) arg;
 
 	table_parallelscan_initialize(node->ss.ss_currentRelation, pscan, estate->es_snapshot);
-	node->ss.ss_currentScanDesc = table_beginscan_parallel(node->ss.ss_currentRelation, pscan);
+	node->ss.ss_currentScanDesc = ts_table_beginscan_parallel(node->ss.ss_currentRelation,
+															  pscan,
+															  cstate->nscankeys,
+															  cstate->scankeys);
 }
 
 static void
@@ -603,9 +643,13 @@ columnar_scan_reinitialize_dsm(CustomScanState *node, ParallelContext *pcxt, voi
 static void
 columnar_scan_initialize_worker(CustomScanState *node, shm_toc *toc, void *arg)
 {
+	ColumnarScanState *cstate = (ColumnarScanState *) node;
 	ParallelTableScanDesc pscan = (ParallelTableScanDesc) arg;
 
-	node->ss.ss_currentScanDesc = table_beginscan_parallel(node->ss.ss_currentRelation, pscan);
+	node->ss.ss_currentScanDesc = ts_table_beginscan_parallel(node->ss.ss_currentRelation,
+															  pscan,
+															  cstate->nscankeys,
+															  cstate->scankeys);
 }
 
 static CustomExecMethods columnar_scan_state_methods = {
