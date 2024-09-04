@@ -34,6 +34,7 @@ INSERT INTO pg_extension(oid,extname,extowner,extnamespace,extrelocatable,extver
 CREATE SCHEMA test1;
 GRANT CREATE ON SCHEMA test1 TO :ROLE_DEFAULT_PERM_USER;
 GRANT USAGE ON SCHEMA test1 TO :ROLE_DEFAULT_PERM_USER;
+GRANT USAGE ON SCHEMA test1 TO :ROLE_4;
 
 -- mock hooks for OSM interaction with timescaledb
 CREATE OR REPLACE FUNCTION ts_setup_osm_hook( ) RETURNS VOID
@@ -455,6 +456,45 @@ SELECT _timescaledb_functions.attach_osm_table_chunk('ht_try', 'child_fdw_table'
 CREATE TABLE non_ht (time bigint, temp float);
 SELECT _timescaledb_functions.attach_osm_table_chunk('non_ht', 'child_fdw_table');
 
+-- TEST drop OSM chunk
+\c :TEST_DBNAME :ROLE_4
+-- We need the OSM chunk for other tests so we run the test in a single
+-- transaction so that we could roll it back in the end
+BEGIN;
+-- get OSM chunk id
+SELECT c.id as osm_chunk_id, c.table_name as osm_chunk_name, ds.id as osm_dimension_slice
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.hypertable ht ON ht.id = c.hypertable_id
+JOIN _timescaledb_catalog.chunk_constraint cc ON cc.chunk_id = c.id
+JOIN _timescaledb_catalog.dimension_slice ds ON ds.id = cc.dimension_slice_id
+WHERE ht.table_name = 'ht_try' AND osm_chunk = true \gset
+\echo :osm_chunk_id, :osm_chunk_name, :osm_dimension_slice
+
+-- drop OSM chunk
+SELECT _timescaledb_functions.drop_osm_chunk('ht_try');
+
+-- status should be 0 meaning hypertable doesn't have an OSM chunk
+SELECT status FROM _timescaledb_catalog.hypertable WHERE table_name = 'ht_try';
+
+-- chunk, chunk_constraint and dimension slice should have been cleaned up
+SELECT FROM _timescaledb_catalog.chunk WHERE id = :osm_chunk_id;
+SELECT FROM _timescaledb_catalog.chunk_constraint WHERE chunk_id = :osm_chunk_id;
+SELECT FROM _timescaledb_catalog.dimension_slice WHERE id = :osm_dimension_slice;
+
+-- foreign chunk no longer appears in the inheritance hierarchy
+\d+ ht_try
+
+-- verify that still can read from the table after catalog manipulations
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM ht_try;
+ROLLBACK;
+
+-- TEST error out when trying to drop an OSM chunk from a hypertable that
+-- doesn't have it
+SELECT _timescaledb_functions.drop_osm_chunk('test1.hyper1');
+
+-- TEST error out when trying to drop an OSM chunk from a regular table
+SELECT _timescaledb_functions.drop_osm_chunk('non_ht');
+
 \set ON_ERROR_STOP 1
 
 -- TEST drop the hypertable and make sure foreign chunks are dropped as well --
@@ -651,6 +691,4 @@ DROP INDEX hyper_constr_mid_idx;
 
 \i include/chunk_utils_internal_orderedappend.sql
 
--- clean up databases created
-\c :TEST_DBNAME :ROLE_SUPERUSER
-DROP DATABASE postgres_fdw_db WITH (FORCE);
+DROP DATABASE postgres_fdw_db;
