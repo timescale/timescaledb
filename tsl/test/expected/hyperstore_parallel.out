@@ -203,6 +203,40 @@ select device_id, count(*) from :hypertable where device_id=1 group by device_id
          1 |   312
 (1 row)
 
+-- Filter on segmentby column
+select explain_anonymize(format($$
+       select owner_id, count(*) from %s where owner_id=1 group by owner_id
+$$, :'hypertable'));
+               explain_anonymize                
+------------------------------------------------
+ Finalize GroupAggregate
+   ->  Append
+         ->  Partial GroupAggregate
+               ->  Seq Scan on _hyper_I_N_chunk
+                     Filter: (owner_id = 1)
+         ->  Partial GroupAggregate
+               ->  Seq Scan on _hyper_I_N_chunk
+                     Filter: (owner_id = 1)
+         ->  Partial GroupAggregate
+               ->  Seq Scan on _hyper_I_N_chunk
+                     Filter: (owner_id = 1)
+         ->  Partial GroupAggregate
+               ->  Seq Scan on _hyper_I_N_chunk
+                     Filter: (owner_id = 1)
+         ->  Partial GroupAggregate
+               ->  Seq Scan on _hyper_I_N_chunk
+                     Filter: (owner_id = 1)
+         ->  Partial GroupAggregate
+               ->  Seq Scan on _hyper_I_N_chunk
+                     Filter: (owner_id = 1)
+(20 rows)
+
+select owner_id, count(*) from :hypertable where owner_id=1 group by owner_id;
+ owner_id | count 
+----------+-------
+        1 |  1729
+(1 row)
+
 -- Enable parallel on SeqScan and check for same result
 set max_parallel_workers_per_gather=2;
 select explain_anonymize(format($$
@@ -238,6 +272,41 @@ select device_id, count(*) from :hypertable where device_id=1 group by device_id
  device_id | count 
 -----------+-------
          1 |   312
+(1 row)
+
+select explain_anonymize(format($$
+       select owner_id, count(*) from %s where owner_id=1 group by owner_id
+$$, :'hypertable'));
+                       explain_anonymize                       
+---------------------------------------------------------------
+ Finalize GroupAggregate
+   ->  Gather
+         Workers Planned: 2
+         ->  Parallel Append
+               ->  Partial GroupAggregate
+                     ->  Parallel Seq Scan on _hyper_I_N_chunk
+                           Filter: (owner_id = 1)
+               ->  Partial GroupAggregate
+                     ->  Parallel Seq Scan on _hyper_I_N_chunk
+                           Filter: (owner_id = 1)
+               ->  Partial GroupAggregate
+                     ->  Parallel Seq Scan on _hyper_I_N_chunk
+                           Filter: (owner_id = 1)
+               ->  Partial GroupAggregate
+                     ->  Parallel Seq Scan on _hyper_I_N_chunk
+                           Filter: (owner_id = 1)
+               ->  Partial GroupAggregate
+                     ->  Parallel Seq Scan on _hyper_I_N_chunk
+                           Filter: (owner_id = 1)
+               ->  Partial GroupAggregate
+                     ->  Parallel Seq Scan on _hyper_I_N_chunk
+                           Filter: (owner_id = 1)
+(22 rows)
+
+select owner_id, count(*) from :hypertable where owner_id=1 group by owner_id;
+ owner_id | count 
+----------+-------
+        1 |  1729
 (1 row)
 
 -- Enable ColumnarScan and check for same result
@@ -277,6 +346,42 @@ select device_id, count(*) from :hypertable where device_id=1 group by device_id
          1 |   312
 (1 row)
 
+-- Filter on segmentby column (pushing down scankeys in parallel mode)
+select explain_anonymize(format($$
+       select owner_id, count(*) from %s where owner_id=1 group by owner_id
+$$, :'hypertable'));
+                                explain_anonymize                                
+---------------------------------------------------------------------------------
+ Finalize GroupAggregate
+   ->  Gather
+         Workers Planned: 2
+         ->  Parallel Append
+               ->  Partial GroupAggregate
+                     ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
+                           Scankey: (owner_id = 1)
+               ->  Partial GroupAggregate
+                     ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
+                           Scankey: (owner_id = 1)
+               ->  Partial GroupAggregate
+                     ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
+                           Scankey: (owner_id = 1)
+               ->  Partial GroupAggregate
+                     ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
+                           Scankey: (owner_id = 1)
+               ->  Partial GroupAggregate
+                     ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
+                           Scankey: (owner_id = 1)
+               ->  Partial GroupAggregate
+                     ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
+                           Scankey: (owner_id = 1)
+(22 rows)
+
+select owner_id, count(*) from :hypertable where owner_id=1 group by owner_id;
+ owner_id | count 
+----------+-------
+        1 |  1729
+(1 row)
+
 -- Parallel plan with hyperstore on single chunk
 select explain_anonymize(format($$
        select device_id, count(*) from %s where device_id=1 group by device_id
@@ -311,6 +416,41 @@ select device_id, count(*) from :chunk1 where device_id=1 group by device_id;
  device_id | count 
 -----------+-------
          1 |     3
+(1 row)
+
+select explain_anonymize(format($$
+       select owner_id, count(*) from %s where owner_id=1 group by owner_id
+$$, :'hypertable'));
+                                explain_anonymize                                
+---------------------------------------------------------------------------------
+ Finalize GroupAggregate
+   ->  Gather
+         Workers Planned: 2
+         ->  Parallel Append
+               ->  Partial GroupAggregate
+                     ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
+                           Scankey: (owner_id = 1)
+               ->  Partial GroupAggregate
+                     ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
+                           Scankey: (owner_id = 1)
+               ->  Partial GroupAggregate
+                     ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
+                           Scankey: (owner_id = 1)
+               ->  Partial GroupAggregate
+                     ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
+                           Scankey: (owner_id = 1)
+               ->  Partial GroupAggregate
+                     ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
+                           Scankey: (owner_id = 1)
+               ->  Partial GroupAggregate
+                     ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
+                           Scankey: (owner_id = 1)
+(22 rows)
+
+select owner_id, count(*) from :chunk1 where owner_id=1 group by owner_id;
+ owner_id | count 
+----------+-------
+        1 |    44
 (1 row)
 
 -- Compare hyperstore per-location counts with original counts without
