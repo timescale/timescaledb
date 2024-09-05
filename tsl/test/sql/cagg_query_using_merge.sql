@@ -8,5 +8,8 @@
 -- Run tests with default role
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
-\set TEST_BASE_NAME cagg_query
+-- Enable MERGE statements for continuous aggregate refresh
+SET timescaledb.enable_merge_on_cagg_refresh TO ON;
+
+\set TEST_BASE_NAME cagg_query_using_merge
 \ir include/cagg_query_common.sql
