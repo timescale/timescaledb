@@ -10,7 +10,8 @@ case PG_AGG_OID_HELPER(AGG_NAME, PG_TYPE):
 #else
 
 static void
-FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *vector, const uint64 *filter)
+FUNCTION_NAME(vector_impl)(void *agg_state, const ArrowArray *vector, const uint64 *valid1,
+						   const uint64 *valid2)
 {
 	IntSumState *state = (IntSumState *) agg_state;
 
@@ -35,16 +36,14 @@ FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *vector, const uint64 *f
 	 * clang-16).
 	 */
 	const int n = vector->length;
-	const uint64 *validity = (uint64 *) vector->buffers[0];
 	const CTYPE *values = (CTYPE *) vector->buffers[1];
 	int64 batch_sum = 0;
 	bool have_result = false;
 	for (int row = 0; row < n; row++)
 	{
-		const bool passes = arrow_row_is_valid(filter, row);
-		const bool isvalid = arrow_row_is_valid(validity, row);
-		batch_sum += values[row] * passes * isvalid;
-		have_result |= passes && isvalid;
+		const bool row_ok = arrow_both_valid(valid1, valid2, row);
+		batch_sum += values[row] * row_ok;
+		have_result |= row_ok;
 	}
 
 	if (unlikely(pg_add_s64_overflow(state->result, batch_sum, &state->result)))
@@ -55,6 +54,8 @@ FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *vector, const uint64 *f
 
 	state->isnull &= !have_result;
 }
+
+#include "agg_vector_validity_helper.c"
 
 static void
 FUNCTION_NAME(const)(void *agg_state, Datum constvalue, bool constisnull, int n)

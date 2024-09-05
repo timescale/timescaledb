@@ -56,13 +56,11 @@ FUNCTION_NAME(const)(void *agg_state, Datum constvalue, bool constisnull, int n)
  * Youngs-Cramer update for rows after the first.
  */
 static pg_attribute_always_inline void
-FUNCTION_NAME(update)(const uint64 *filter, const uint64 *validity, const CTYPE *values, int row,
+FUNCTION_NAME(update)(const uint64 *valid1, const uint64 *valid2, const CTYPE *values, int row,
 					  double *N, double *Sx, double *Sxx)
 {
 	const CTYPE newval = values[row];
-	const bool passes = arrow_row_is_valid(filter, row);
-	const bool isvalid = arrow_row_is_valid(validity, row);
-	if (!passes || !isvalid)
+	if (!arrow_both_valid(valid1, valid2, row))
 	{
 		return;
 	}
@@ -88,9 +86,13 @@ FUNCTION_NAME(update)(const uint64 *filter, const uint64 *validity, const CTYPE 
 }
 
 static pg_attribute_always_inline void
-FUNCTION_NAME(vector_impl)(FloatAvgState *state, int rows, const CTYPE *values,
-						   const uint64 *validity, const uint64 *filter)
+FUNCTION_NAME(vector_impl)(void *agg_state, const ArrowArray *vector, const uint64 *valid1,
+						   const uint64 *valid2)
 {
+	FloatAvgState *state = (FloatAvgState *) agg_state;
+	const int rows = vector->length;
+	const CTYPE *values = vector->buffers[1];
+
 	int row = 0;
 
 	/*
@@ -117,9 +119,7 @@ FUNCTION_NAME(vector_impl)(FloatAvgState *state, int rows, const CTYPE *values,
 		for (; row < rows; row++)
 		{
 			const CTYPE newval = values[row];
-			const bool passes = arrow_row_is_valid(filter, row);
-			const bool isvalid = arrow_row_is_valid(validity, row);
-			if (passes && isvalid)
+			if (arrow_both_valid(valid1, valid2, row))
 			{
 				Narray[inner] = 1;
 				Sxarray[inner] = newval;
@@ -138,7 +138,7 @@ FUNCTION_NAME(vector_impl)(FloatAvgState *state, int rows, const CTYPE *values,
 		 inner++, row++)
 	{
 		FUNCTION_NAME(update)
-		(filter, validity, values, row, &Narray[inner], &Sxarray[inner], &Sxxarray[inner]);
+		(valid1, valid2, values, row, &Narray[inner], &Sxarray[inner], &Sxxarray[inner]);
 	}
 #endif
 
@@ -151,8 +151,8 @@ FUNCTION_NAME(vector_impl)(FloatAvgState *state, int rows, const CTYPE *values,
 		for (int inner = 0; inner < UNROLL_SIZE; inner++)
 		{
 			FUNCTION_NAME(update)
-			(filter,
-			 validity,
+			(valid1,
+			 valid2,
 			 values,
 			 row + inner,
 			 &Narray[inner],
@@ -168,7 +168,7 @@ FUNCTION_NAME(vector_impl)(FloatAvgState *state, int rows, const CTYPE *values,
 	{
 		const int inner = row % UNROLL_SIZE;
 		FUNCTION_NAME(update)
-		(filter, validity, values, row, &Narray[inner], &Sxarray[inner], &Sxxarray[inner]);
+		(valid1, valid2, values, row, &Narray[inner], &Sxarray[inner], &Sxxarray[inner]);
 	}
 
 	/*
@@ -191,34 +191,7 @@ FUNCTION_NAME(vector_impl)(FloatAvgState *state, int rows, const CTYPE *values,
 	youngs_cramer_combine(&state->N, &state->Sx, &state->Sxx, Narray[0], Sxarray[0], Sxxarray[0]);
 }
 
-/*
- * Nudge the compiler to generate a separate implementation for the common case
- * where we have no nulls and all rows pass the filter. It avoids branches so
- * can be more easily vectorized.
- */
-static pg_noinline void
-FUNCTION_NAME(vector_nofilter)(FloatAvgState *state, int rows, const CTYPE *values)
-{
-	FUNCTION_NAME(vector_impl)(state, rows, values, NULL, NULL);
-}
-
-static pg_attribute_always_inline void
-FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *vector, const uint64 *filter)
-{
-	FloatAvgState *state = (FloatAvgState *) agg_state;
-	const int rows = vector->length;
-	const uint64 *validity = vector->buffers[0];
-	const CTYPE *values = vector->buffers[1];
-
-	if (filter == NULL && validity == NULL)
-	{
-		FUNCTION_NAME(vector_nofilter)(state, rows, values);
-	}
-	else
-	{
-		FUNCTION_NAME(vector_impl)(state, rows, values, validity, filter);
-	}
-}
+#include "agg_vector_validity_helper.c"
 
 static VectorAggFunctions FUNCTION_NAME(argdef) = { .state_bytes = sizeof(FloatAvgState),
 													.agg_init = avg_float_init,

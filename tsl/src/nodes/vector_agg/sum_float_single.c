@@ -18,7 +18,8 @@ FUNCTION_NAME(emit)(void *agg_state, Datum *out_result, bool *out_isnull)
 }
 
 static void
-FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *vector, const uint64 *filter)
+FUNCTION_NAME(vector_impl)(void *agg_state, const ArrowArray *vector, const uint64 *valid1,
+						   const uint64 *valid2)
 {
 	/*
 	 * Vector registers can be up to 512 bits wide.
@@ -28,7 +29,6 @@ FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *vector, const uint64 *f
 	bool have_result = false;
 	double accu[UNROLL_SIZE] = { 0 };
 	const int n = vector->length;
-	const uint64 *validity = (uint64 *) vector->buffers[0];
 	const CTYPE *values = (CTYPE *) vector->buffers[1];
 	for (int outer = 0; outer < UNROLL_SIZE * (n / UNROLL_SIZE); outer += UNROLL_SIZE)
 	{
@@ -38,9 +38,7 @@ FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *vector, const uint64 *f
 			double *dest = &accu[inner];
 #define INNER_LOOP                                                                                 \
 	const CTYPE value = values[row];                                                               \
-	const bool isvalid = arrow_row_is_valid(validity, row);                                        \
-	const bool passes = arrow_row_is_valid(filter, row);                                           \
-	if (!passes || !isvalid)                                                                       \
+	if (!arrow_both_valid(valid1, valid2, row))                                                    \
 	{                                                                                              \
 		continue;                                                                                  \
 	}                                                                                              \
@@ -69,6 +67,8 @@ FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *vector, const uint64 *f
 	state->isnull &= !have_result;
 	state->result += accu[0];
 }
+
+#include "agg_vector_validity_helper.c"
 
 static void
 FUNCTION_NAME(const)(void *agg_state, Datum constvalue, bool constisnull, int n)

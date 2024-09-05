@@ -35,9 +35,13 @@ FUNCTION_NAME(const)(void *agg_state, Datum constvalue, bool constisnull, int n)
 }
 
 static pg_attribute_always_inline void
-FUNCTION_NAME(vector_impl)(MinMaxState *state, const int n, const CTYPE *values,
-						   const uint64 *valid1, const uint64 *valid2)
+FUNCTION_NAME(vector_impl)(void *agg_state, const ArrowArray *vector, const uint64 *valid1,
+						   const uint64 *valid2)
 {
+	MinMaxState *state = (MinMaxState *) agg_state;
+	const int n = vector->length;
+	const CTYPE *values = (CTYPE *) vector->buffers[1];
+
 #define UNROLL_SIZE ((int) (512 / 8 / sizeof(CTYPE)))
 	CTYPE outer_result = DATUM_TO_CTYPE(state->value);
 	bool outer_isvalid = state->isvalid;
@@ -91,52 +95,7 @@ FUNCTION_NAME(vector_impl)(MinMaxState *state, const int n, const CTYPE *values,
 #undef UNROLL_SIZE
 }
 
-static pg_noinline void
-FUNCTION_NAME(vector_no_validity)(MinMaxState *state, const int n, const CTYPE *values)
-{
-	FUNCTION_NAME(vector_impl)(state, n, values, NULL, NULL);
-}
-
-static pg_noinline void
-FUNCTION_NAME(vector_one_validity)(MinMaxState *state, const int n, const CTYPE *values,
-								   const uint64 *valid)
-{
-	FUNCTION_NAME(vector_impl)(state, n, values, valid, NULL);
-}
-
-static pg_noinline void
-FUNCTION_NAME(vector_two_validity)(MinMaxState *state, const int n, const CTYPE *values,
-								   const uint64 *valid1, const uint64 *valid2)
-{
-	FUNCTION_NAME(vector_impl)(state, n, values, valid1, valid2);
-}
-
-static pg_attribute_always_inline void
-FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *vector, const uint64 *filter)
-{
-	MinMaxState *state = (MinMaxState *) agg_state;
-	const int n = vector->length;
-	const CTYPE *values = (CTYPE *) vector->buffers[1];
-	const uint64 *valid1 = vector->buffers[0];
-	const uint64 *valid2 = filter;
-
-	if (valid1 == NULL && valid2 == NULL)
-	{
-		FUNCTION_NAME(vector_no_validity)(state, n, values);
-	}
-	else if (valid1 != NULL && valid2 == NULL)
-	{
-		FUNCTION_NAME(vector_one_validity)(state, n, values, valid1);
-	}
-	else if (valid2 != NULL && valid1 == NULL)
-	{
-		FUNCTION_NAME(vector_one_validity)(state, n, values, valid2);
-	}
-	else
-	{
-		FUNCTION_NAME(vector_two_validity)(state, n, values, valid1, valid2);
-	}
-}
+#include "agg_vector_validity_helper.c"
 
 static VectorAggFunctions FUNCTION_NAME(argdef) = { .state_bytes = sizeof(MinMaxState),
 													.agg_init = minmax_init,
