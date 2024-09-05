@@ -40,5 +40,11 @@
 #define CTYPE_TO_DATUM TimestampGetDatum
 #include "minmax_single.c"
 
+#define PG_TYPE TIMESTAMPTZ
+#define CTYPE TimestampTz
+#define DATUM_TO_CTYPE DatumGetTimestampTz
+#define CTYPE_TO_DATUM TimestampTzGetDatum
+#include "minmax_single.c"
+
 #undef PREDICATE
 #undef AGG_NAME

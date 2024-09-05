@@ -147,6 +147,29 @@ arrow_row_is_valid(const uint64 *bitmap, size_t row_number)
 	return bitmap[qword_index] & mask;
 }
 
+/*
+ * Same as above but for two bitmaps, this is a typical situation when we have
+ * validity bitmap + filter result.
+ */
+static pg_attribute_always_inline bool
+arrow_both_valid(const uint64 *bitmap1, const uint64 *bitmap2, size_t row_number)
+{
+	if (likely(bitmap1 == NULL))
+	{
+		return arrow_row_is_valid(bitmap2, row_number);
+	}
+
+	if (likely(bitmap2 == NULL))
+	{
+		return arrow_row_is_valid(bitmap1, row_number);
+	}
+
+	const size_t qword_index = row_number / 64;
+	const size_t bit_index = row_number % 64;
+	const uint64 mask = 1ull << bit_index;
+	return (bitmap1[qword_index] & bitmap2[qword_index]) & mask;
+}
+
 static pg_attribute_always_inline void
 arrow_set_row_validity(uint64 *bitmap, size_t row_number, bool value)
 {

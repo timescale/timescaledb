@@ -34,33 +34,108 @@ FUNCTION_NAME(const)(void *agg_state, Datum constvalue, bool constisnull, int n)
 	state->value = CTYPE_TO_DATUM(do_replace ? new : current);
 }
 
-static void
-FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *vector, const uint64 *filter)
+static pg_attribute_always_inline void
+FUNCTION_NAME(vector_impl)(MinMaxState *state, const int n, const CTYPE *values,
+						   const uint64 *valid1, const uint64 *valid2)
 {
-	MinMaxState *state = (MinMaxState *) agg_state;
-	const int n = vector->length;
-	const CTYPE *restrict values = (CTYPE *) vector->buffers[1];
-	CTYPE result = DATUM_TO_CTYPE(state->value);
-	bool result_isvalid = state->isvalid;
-	for (int i = 0; i < n; i++)
+#define UNROLL_SIZE ((int) (512 / 8 / sizeof(CTYPE)))
+	CTYPE outer_result = DATUM_TO_CTYPE(state->value);
+	bool outer_isvalid = state->isvalid;
+	for (int outer = 0; outer < (n / UNROLL_SIZE) * UNROLL_SIZE; outer += UNROLL_SIZE)
 	{
-		const CTYPE new_value = values[i];
-		const bool new_isvalid = arrow_row_is_valid(vector->buffers[0], i);
-		const bool passes = arrow_row_is_valid(filter, i);
+		bool inner_isvalid = false;
+		CTYPE inner_result = { 0 };
+		for (int inner = 0; inner < UNROLL_SIZE; inner++)
+		{
+			const int row = outer + inner;
+			const CTYPE new_value = values[row];
+			const bool new_value_ok = arrow_both_valid(valid1, valid2, row);
+
+			/*
+			 * Note that we have to properly handle NaNs and Infinities for floats.
+			 */
+			const bool do_replace =
+				new_value_ok &&
+				(!inner_isvalid || PREDICATE(inner_result, new_value) || isnan((double) new_value));
+
+			inner_result = do_replace ? new_value : inner_result;
+			inner_isvalid |= do_replace;
+		}
+
+		if (inner_isvalid && (!outer_isvalid || PREDICATE(outer_result, inner_result) ||
+							  isnan((double) inner_result)))
+		{
+			outer_result = inner_result;
+			outer_isvalid = true;
+		}
+	}
+
+	for (int row = (n / UNROLL_SIZE) * UNROLL_SIZE; row < n; row++)
+	{
+		const CTYPE new_value = values[row];
+		const bool new_value_ok = arrow_both_valid(valid1, valid2, row);
 
 		/*
 		 * Note that we have to properly handle NaNs and Infinities for floats.
 		 */
 		const bool do_replace =
-			passes && new_isvalid &&
-			(!result_isvalid || PREDICATE(result, new_value) || isnan((double) new_value));
+			new_value_ok && (unlikely(!outer_isvalid) || PREDICATE(outer_result, new_value) ||
+							 isnan((double) new_value));
 
-		result = do_replace ? new_value : result;
-		result_isvalid |= do_replace;
+		outer_result = do_replace ? new_value : outer_result;
+		outer_isvalid |= do_replace;
 	}
 
-	state->value = CTYPE_TO_DATUM(result);
-	state->isvalid = result_isvalid;
+	state->value = CTYPE_TO_DATUM(outer_result);
+	state->isvalid = outer_isvalid;
+#undef UNROLL_SIZE
+}
+
+static pg_noinline void
+FUNCTION_NAME(vector_no_validity)(MinMaxState *state, const int n, const CTYPE *values)
+{
+	FUNCTION_NAME(vector_impl)(state, n, values, NULL, NULL);
+}
+
+static pg_noinline void
+FUNCTION_NAME(vector_one_validity)(MinMaxState *state, const int n, const CTYPE *values,
+								   const uint64 *valid)
+{
+	FUNCTION_NAME(vector_impl)(state, n, values, valid, NULL);
+}
+
+static pg_noinline void
+FUNCTION_NAME(vector_two_validity)(MinMaxState *state, const int n, const CTYPE *values,
+								   const uint64 *valid1, const uint64 *valid2)
+{
+	FUNCTION_NAME(vector_impl)(state, n, values, valid1, valid2);
+}
+
+static pg_attribute_always_inline void
+FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *vector, const uint64 *filter)
+{
+	MinMaxState *state = (MinMaxState *) agg_state;
+	const int n = vector->length;
+	const CTYPE *values = (CTYPE *) vector->buffers[1];
+	const uint64 *valid1 = vector->buffers[0];
+	const uint64 *valid2 = filter;
+
+	if (valid1 == NULL && valid2 == NULL)
+	{
+		FUNCTION_NAME(vector_no_validity)(state, n, values);
+	}
+	else if (valid1 != NULL && valid2 == NULL)
+	{
+		FUNCTION_NAME(vector_one_validity)(state, n, values, valid1);
+	}
+	else if (valid2 != NULL && valid1 == NULL)
+	{
+		FUNCTION_NAME(vector_one_validity)(state, n, values, valid2);
+	}
+	else
+	{
+		FUNCTION_NAME(vector_two_validity)(state, n, values, valid1, valid2);
+	}
 }
 
 static VectorAggFunctions FUNCTION_NAME(argdef) = { .state_bytes = sizeof(MinMaxState),
