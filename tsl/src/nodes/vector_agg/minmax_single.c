@@ -40,9 +40,8 @@ FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *vector, const uint64 *f
 	MinMaxState *state = (MinMaxState *) agg_state;
 	const int n = vector->length;
 	const CTYPE *restrict values = (CTYPE *) vector->buffers[1];
-
-	CTYPE batch_result = { 0 };
-	bool batch_isvalid = false;
+	CTYPE result = DATUM_TO_CTYPE(state->value);
+	bool result_isvalid = state->isvalid;
 	for (int i = 0; i < n; i++)
 	{
 		const CTYPE new_value = values[i];
@@ -54,19 +53,14 @@ FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *vector, const uint64 *f
 		 */
 		const bool do_replace =
 			passes && new_isvalid &&
-			(!batch_isvalid || PREDICATE(batch_result, new_value) || isnan((double) new_value));
+			(!result_isvalid || PREDICATE(result, new_value) || isnan((double) new_value));
 
-		batch_result = do_replace ? new_value : batch_result;
-		batch_isvalid |= do_replace;
+		result = do_replace ? new_value : result;
+		result_isvalid |= do_replace;
 	}
 
-	if (batch_isvalid &&
-		(!state->isvalid || PREDICATE(DATUM_TO_CTYPE(state->value), batch_result) ||
-		 isnan((double) batch_result)))
-	{
-		state->value = CTYPE_TO_DATUM(batch_result);
-		state->isvalid = true;
-	}
+	state->value = CTYPE_TO_DATUM(result);
+	state->isvalid = result_isvalid;
 }
 
 static VectorAggFunctions FUNCTION_NAME(argdef) = { .state_bytes = sizeof(MinMaxState),
