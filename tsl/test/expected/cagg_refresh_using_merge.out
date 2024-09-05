@@ -1,6 +1,8 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+-- Enable MERGE statements for continuous aggregate refresh
+SET timescaledb.enable_merge_on_cagg_refresh TO ON;
 \ir include/cagg_refresh_common.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -119,8 +121,8 @@ CALL refresh_continuous_aggregate('daily_temp', '2020-04-30', '2020-05-04');
 psql:include/cagg_refresh_common.sql:65: LOG:  statement: CALL refresh_continuous_aggregate('daily_temp', '2020-04-30', '2020-05-04');
 psql:include/cagg_refresh_common.sql:65: DEBUG:  hypertable 1 existing watermark >= new invalidation threshold 1588723200000000 1588550400000000
 psql:include/cagg_refresh_common.sql:65: DEBUG:  continuous aggregate refresh (individual invalidation) on "daily_temp" in window [ Thu Apr 30 17:00:00 2020 PDT, Sat May 02 17:00:00 2020 PDT ]
+psql:include/cagg_refresh_common.sql:65: LOG:  merged 8 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 psql:include/cagg_refresh_common.sql:65: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
-psql:include/cagg_refresh_common.sql:65: LOG:  inserted 8 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 psql:include/cagg_refresh_common.sql:65: DEBUG:  hypertable 2 existing watermark >= new watermark 1588723200000000 1588723200000000
 RESET client_min_messages;
 psql:include/cagg_refresh_common.sql:66: LOG:  statement: RESET client_min_messages;

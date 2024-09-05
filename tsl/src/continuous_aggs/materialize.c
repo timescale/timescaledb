@@ -260,25 +260,22 @@ build_merge_insert_columns(List *strings, const char *separator, const char *pre
 {
 	StringInfo ret = makeStringInfo();
 
-	if (strings != NIL)
+	Assert(strings != NIL);
+
+	ListCell *lc;
+	foreach (lc, strings)
 	{
-		ListCell *lc;
-		foreach (lc, strings)
-		{
-			char *grpcol = (char *) lfirst(lc);
-			if (ret->len > 0)
-				appendStringInfoString(ret, separator);
+		char *grpcol = (char *) lfirst(lc);
+		if (ret->len > 0)
+			appendStringInfoString(ret, separator);
 
-			if (prefix)
-				appendStringInfoString(ret, prefix);
-			appendStringInfoString(ret, quote_identifier(grpcol));
-		}
-
-		elog(DEBUG2, "%s: %s", __func__, ret->data);
-		return ret->data;
+		if (prefix)
+			appendStringInfoString(ret, prefix);
+		appendStringInfoString(ret, quote_identifier(grpcol));
 	}
 
-	return NULL;
+	elog(DEBUG2, "%s: %s", __func__, ret->data);
+	return ret->data;
 }
 
 static char *
@@ -286,27 +283,24 @@ build_merge_join_clause(List *column_names)
 {
 	StringInfo ret = makeStringInfo();
 
-	if (column_names != NIL)
+	Assert(column_names != NIL);
+
+	ListCell *lc;
+	foreach (lc, column_names)
 	{
-		ListCell *lc;
-		foreach (lc, column_names)
-		{
-			char *column = (char *) lfirst(lc);
+		char *column = (char *) lfirst(lc);
 
-			if (ret->len > 0)
-				appendStringInfoString(ret, " AND ");
+		if (ret->len > 0)
+			appendStringInfoString(ret, " AND ");
 
-			appendStringInfoString(ret, "P.");
-			appendStringInfoString(ret, quote_identifier(column));
-			appendStringInfoString(ret, " IS NOT DISTINCT FROM M.");
-			appendStringInfoString(ret, quote_identifier(column));
-		}
-
-		elog(DEBUG2, "%s: %s", __func__, ret->data);
-		return ret->data;
+		appendStringInfoString(ret, "P.");
+		appendStringInfoString(ret, quote_identifier(column));
+		appendStringInfoString(ret, " IS NOT DISTINCT FROM M.");
+		appendStringInfoString(ret, quote_identifier(column));
 	}
 
-	return NULL;
+	elog(DEBUG2, "%s: %s", __func__, ret->data);
+	return ret->data;
 }
 
 static char *
@@ -314,26 +308,23 @@ build_merge_update_clause(List *column_names)
 {
 	StringInfo ret = makeStringInfo();
 
-	if (column_names != NIL)
+	Assert(column_names != NIL);
+
+	ListCell *lc;
+	foreach (lc, column_names)
 	{
-		ListCell *lc;
-		foreach (lc, column_names)
-		{
-			char *column = (char *) lfirst(lc);
+		char *column = (char *) lfirst(lc);
 
-			if (ret->len > 0)
-				appendStringInfoString(ret, ", ");
+		if (ret->len > 0)
+			appendStringInfoString(ret, ", ");
 
-			appendStringInfoString(ret, quote_identifier(column));
-			appendStringInfoString(ret, " = P.");
-			appendStringInfoString(ret, quote_identifier(column));
-		}
-
-		elog(DEBUG2, "%s: %s", __func__, ret->data);
-		return ret->data;
+		appendStringInfoString(ret, quote_identifier(column));
+		appendStringInfoString(ret, " = P.");
+		appendStringInfoString(ret, quote_identifier(column));
 	}
 
-	return NULL;
+	elog(DEBUG2, "%s: %s", __func__, ret->data);
+	return ret->data;
 }
 
 static void
@@ -342,9 +333,6 @@ spi_update_watermark(Hypertable *mat_ht, SchemaAndName materialization_table,
 					 Oid materialization_type, const char *const chunk_condition)
 {
 	int res;
-	int64 watermark;
-	bool isnull = true;
-	Datum maxdat;
 	StringInfo command = makeStringInfo();
 
 	appendStringInfo(command,
@@ -369,12 +357,15 @@ spi_update_watermark(Hypertable *mat_ht, SchemaAndName materialization_table,
 		   materialization_type);
 
 	if (SPI_processed > 0)
-		maxdat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
-
-	if (!isnull)
 	{
-		watermark = ts_time_value_to_internal(maxdat, materialization_type);
-		ts_cagg_watermark_update(mat_ht, watermark, isnull, false);
+		bool isnull;
+		Datum maxdat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+
+		if (!isnull)
+		{
+			int64 watermark = ts_time_value_to_internal(maxdat, materialization_type);
+			ts_cagg_watermark_update(mat_ht, watermark, isnull, false);
+		}
 	}
 }
 
