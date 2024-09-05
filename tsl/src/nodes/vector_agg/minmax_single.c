@@ -42,39 +42,9 @@ FUNCTION_NAME(vector_impl)(void *agg_state, const ArrowArray *vector, const uint
 	const int n = vector->length;
 	const CTYPE *values = (CTYPE *) vector->buffers[1];
 
-#define UNROLL_SIZE ((int) (512 / 8 / sizeof(CTYPE)))
 	CTYPE outer_result = DATUM_TO_CTYPE(state->value);
 	bool outer_isvalid = state->isvalid;
-	for (int outer = 0; outer < (n / UNROLL_SIZE) * UNROLL_SIZE; outer += UNROLL_SIZE)
-	{
-		bool inner_isvalid = false;
-		CTYPE inner_result = { 0 };
-		for (int inner = 0; inner < UNROLL_SIZE; inner++)
-		{
-			const int row = outer + inner;
-			const CTYPE new_value = values[row];
-			const bool new_value_ok = arrow_both_valid(valid1, valid2, row);
-
-			/*
-			 * Note that we have to properly handle NaNs and Infinities for floats.
-			 */
-			const bool do_replace =
-				new_value_ok &&
-				(!inner_isvalid || PREDICATE(inner_result, new_value) || isnan((double) new_value));
-
-			inner_result = do_replace ? new_value : inner_result;
-			inner_isvalid |= do_replace;
-		}
-
-		if (inner_isvalid && (!outer_isvalid || PREDICATE(outer_result, inner_result) ||
-							  isnan((double) inner_result)))
-		{
-			outer_result = inner_result;
-			outer_isvalid = true;
-		}
-	}
-
-	for (int row = (n / UNROLL_SIZE) * UNROLL_SIZE; row < n; row++)
+	for (int row = 0; row < n; row++)
 	{
 		const CTYPE new_value = values[row];
 		const bool new_value_ok = arrow_both_valid(valid1, valid2, row);
@@ -92,7 +62,6 @@ FUNCTION_NAME(vector_impl)(void *agg_state, const ArrowArray *vector, const uint
 
 	state->value = CTYPE_TO_DATUM(outer_result);
 	state->isvalid = outer_isvalid;
-#undef UNROLL_SIZE
 }
 
 #include "agg_vector_validity_helper.c"
