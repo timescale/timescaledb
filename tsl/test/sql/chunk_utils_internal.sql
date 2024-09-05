@@ -568,7 +568,10 @@ where conrelid = 'child_hyper_constr'::regclass ORDER BY 1;
 -- does not error out due to data in osm chunk
 \set ON_ERROR_STOP 0
 BEGIN;
+-- only show sqlstate here to hide constraint name difference
+\set VERBOSITY sqlstate
 DELETE FROM measure where id = 1;
+\set VERBOSITY terse
 ROLLBACK;
 \set ON_ERROR_STOP 1
 
