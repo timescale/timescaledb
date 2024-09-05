@@ -146,21 +146,22 @@ select s, sum(t), count(*) from svagg group by s order by s;
  9 | 2000010000 | 20000
 (10 rows)
 
--- this should be vectorized as well but isn't because of the projection.
-set timescaledb.debug_require_vector_agg to 'forbid';
+-- another example that we used not to vectorize because of the projection.
 explain (costs off)
 select sum(t), s, count(*) from svagg group by s order by s;
-                                                     QUERY PLAN                                                      
----------------------------------------------------------------------------------------------------------------------
- GroupAggregate
+                                                        QUERY PLAN                                                         
+---------------------------------------------------------------------------------------------------------------------------
+ Finalize GroupAggregate
    Group Key: svagg.s
    ->  Custom Scan (ChunkAppend) on svagg
          Order: svagg.s
-         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-               ->  Index Scan using compress_hyper_2_3_chunk_s__ts_meta_sequence_num_idx on compress_hyper_2_3_chunk
-         ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk
-               ->  Index Scan using compress_hyper_2_4_chunk_s__ts_meta_sequence_num_idx on compress_hyper_2_4_chunk
-(8 rows)
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+                     ->  Index Scan using compress_hyper_2_3_chunk_s__ts_meta_sequence_num_idx on compress_hyper_2_3_chunk
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk
+                     ->  Index Scan using compress_hyper_2_4_chunk_s__ts_meta_sequence_num_idx on compress_hyper_2_4_chunk
+(10 rows)
 
 select sum(t) from svagg group by s order by 1;
     sum     
