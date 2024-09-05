@@ -34,5 +34,11 @@
 #define CTYPE_TO_DATUM Float8GetDatum
 #include "minmax_single.c"
 
+#define PG_TYPE TIMESTAMP
+#define CTYPE Timestamp
+#define DATUM_TO_CTYPE DatumGetTimestamp
+#define CTYPE_TO_DATUM TimestampGetDatum
+#include "minmax_single.c"
+
 #undef PREDICATE
 #undef AGG_NAME

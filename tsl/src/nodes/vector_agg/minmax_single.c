@@ -42,7 +42,31 @@ FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *vector, const uint64 *f
 	const CTYPE *restrict values = (CTYPE *) vector->buffers[1];
 	CTYPE result = DATUM_TO_CTYPE(state->value);
 	bool result_isvalid = state->isvalid;
-	for (int i = 0; i < n; i++)
+	int i = 0;
+	if (!result_isvalid)
+	{
+		for (; i < n; i++)
+		{
+			const CTYPE new_value = values[i];
+			const bool new_isvalid = arrow_row_is_valid(vector->buffers[0], i);
+			const bool passes = arrow_row_is_valid(filter, i);
+
+			/*
+			 * Note that we have to properly handle NaNs and Infinities for floats.
+			 */
+			if (passes && new_isvalid)
+			{
+				result_isvalid = true;
+				result = new_value;
+				break;
+			}
+		}
+	}
+
+	/* We either found a valid value or ran out of input. */
+	Assert(result_isvalid || i == n);
+
+	for (; i < n; i++)
 	{
 		const CTYPE new_value = values[i];
 		const bool new_isvalid = arrow_row_is_valid(vector->buffers[0], i);
@@ -52,11 +76,9 @@ FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *vector, const uint64 *f
 		 * Note that we have to properly handle NaNs and Infinities for floats.
 		 */
 		const bool do_replace =
-			passes && new_isvalid &&
-			(!result_isvalid || PREDICATE(result, new_value) || isnan((double) new_value));
+			passes && new_isvalid && (PREDICATE(result, new_value) || isnan((double) new_value));
 
 		result = do_replace ? new_value : result;
-		result_isvalid |= do_replace;
 	}
 
 	state->value = CTYPE_TO_DATUM(result);
