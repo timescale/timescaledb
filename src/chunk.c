@@ -77,6 +77,7 @@ TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_single_chunk);
 TS_FUNCTION_INFO_V1(ts_chunk_attach_osm_table_chunk);
+TS_FUNCTION_INFO_V1(ts_chunk_drop_osm_chunk);
 TS_FUNCTION_INFO_V1(ts_chunk_id_from_relid);
 TS_FUNCTION_INFO_V1(ts_chunk_show);
 TS_FUNCTION_INFO_V1(ts_chunk_create);
@@ -5142,4 +5143,27 @@ get_chunks_in_creation_time_range(Hypertable *ht, int64 older_than, int64 newer_
 	*num_chunks_returned = num_chunks;
 
 	return chunks;
+}
+
+Datum
+ts_chunk_drop_osm_chunk(PG_FUNCTION_ARGS)
+{
+	Oid hypertable_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	Cache *hcache = ts_hypertable_cache_pin();
+	Hypertable *ht = ts_resolve_hypertable_from_table_or_cagg(hcache, hypertable_relid, true);
+	int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
+	Chunk *osm_chunk = ts_chunk_get_by_id(osm_chunk_id, true);
+
+	ts_chunk_validate_chunk_status_for_operation(osm_chunk, CHUNK_DROP, true);
+
+	/* do not drop any chunk dependencies */
+	ts_chunk_drop(osm_chunk, DROP_RESTRICT, LOG);
+
+	/* reset hypertable OSM status */
+	ht->fd.status =
+		ts_clear_flags_32(ht->fd.status,
+						  HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
+	ts_hypertable_update_status_osm(ht);
+	ts_cache_release(hcache);
+	PG_RETURN_BOOL(true);
 }

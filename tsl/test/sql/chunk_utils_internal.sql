@@ -34,6 +34,7 @@ INSERT INTO pg_extension(oid,extname,extowner,extnamespace,extrelocatable,extver
 CREATE SCHEMA test1;
 GRANT CREATE ON SCHEMA test1 TO :ROLE_DEFAULT_PERM_USER;
 GRANT USAGE ON SCHEMA test1 TO :ROLE_DEFAULT_PERM_USER;
+GRANT USAGE ON SCHEMA test1 TO :ROLE_4;
 
 -- mock hooks for OSM interaction with timescaledb
 CREATE OR REPLACE FUNCTION ts_setup_osm_hook( ) RETURNS VOID
@@ -455,6 +456,45 @@ SELECT _timescaledb_functions.attach_osm_table_chunk('ht_try', 'child_fdw_table'
 CREATE TABLE non_ht (time bigint, temp float);
 SELECT _timescaledb_functions.attach_osm_table_chunk('non_ht', 'child_fdw_table');
 
+-- TEST drop OSM chunk
+\c :TEST_DBNAME :ROLE_4
+-- We need the OSM chunk for other tests so we run the test in a single
+-- transaction so that we could roll it back in the end
+BEGIN;
+-- get OSM chunk id
+SELECT c.id as osm_chunk_id, c.table_name as osm_chunk_name, ds.id as osm_dimension_slice
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.hypertable ht ON ht.id = c.hypertable_id
+JOIN _timescaledb_catalog.chunk_constraint cc ON cc.chunk_id = c.id
+JOIN _timescaledb_catalog.dimension_slice ds ON ds.id = cc.dimension_slice_id
+WHERE ht.table_name = 'ht_try' AND osm_chunk = true \gset
+\echo :osm_chunk_id, :osm_chunk_name, :osm_dimension_slice
+
+-- drop OSM chunk
+SELECT _timescaledb_functions.drop_osm_chunk('ht_try');
+
+-- status should be 0 meaning hypertable doesn't have an OSM chunk
+SELECT status FROM _timescaledb_catalog.hypertable WHERE table_name = 'ht_try';
+
+-- chunk, chunk_constraint and dimension slice should have been cleaned up
+SELECT FROM _timescaledb_catalog.chunk WHERE id = :osm_chunk_id;
+SELECT FROM _timescaledb_catalog.chunk_constraint WHERE chunk_id = :osm_chunk_id;
+SELECT FROM _timescaledb_catalog.dimension_slice WHERE id = :osm_dimension_slice;
+
+-- foreign chunk no longer appears in the inheritance hierarchy
+\d+ ht_try
+
+-- verify that still can read from the table after catalog manipulations
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM ht_try;
+ROLLBACK;
+
+-- TEST error out when trying to drop an OSM chunk from a hypertable that
+-- doesn't have it
+SELECT _timescaledb_functions.drop_osm_chunk('test1.hyper1');
+
+-- TEST error out when trying to drop an OSM chunk from a regular table
+SELECT _timescaledb_functions.drop_osm_chunk('non_ht');
+
 \set ON_ERROR_STOP 1
 
 -- TEST drop the hypertable and make sure foreign chunks are dropped as well --
@@ -528,7 +568,10 @@ where conrelid = 'child_hyper_constr'::regclass ORDER BY 1;
 -- does not error out due to data in osm chunk
 \set ON_ERROR_STOP 0
 BEGIN;
+-- only show sqlstate here to hide constraint name difference
+\set VERBOSITY sqlstate
 DELETE FROM measure where id = 1;
+\set VERBOSITY terse
 ROLLBACK;
 \set ON_ERROR_STOP 1
 
@@ -650,6 +693,40 @@ SELECT indexname, tablename FROM pg_indexes WHERE indexname = 'hyper_constr_mid_
 DROP INDEX hyper_constr_mid_idx;
 
 \i include/chunk_utils_internal_orderedappend.sql
+
+--TEST hypertable with foreign key into it
+\c :TEST_DBNAME :ROLE_4
+CREATE TABLE hyper_fk(ts timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('hyper_fk', 'ts');
+
+INSERT INTO hyper_fk(ts, device, value) VALUES ('2020-01-01 00:00:00+00', 'd1', 1.0);
+\c postgres_fdw_db :ROLE_4
+CREATE TABLE fdw_hyper_fk(ts timestamptz NOT NULL, device text, value float);
+INSERT INTO fdw_hyper_fk VALUES( '2021-05-05 00:00:00+00', 'd2', 2.0);
+
+\c :TEST_DBNAME :ROLE_4
+-- this is a stand-in for the OSM table
+CREATE FOREIGN TABLE child_hyper_fk
+(ts timestamptz NOT NULL, device text, value float)
+ SERVER s3_server OPTIONS ( schema_name 'public', table_name 'fdw_hyper_fk');
+SELECT _timescaledb_functions.attach_osm_table_chunk('hyper_fk', 'child_hyper_fk');
+
+--create table with fk into hypertable
+CREATE TABLE event(ts timestamptz REFERENCES hyper_fk(ts) , info text);
+-- NOTE: current behavior is to allow inserts/deletes from PG tables when data
+-- references OSM table.
+--insert referencing OSM chunk
+INSERT INTO event VALUES( '2021-05-05 00:00:00+00' , 'osm_chunk_ts');
+--insert referencing non-existent value
+\set ON_ERROR_STOP 0
+INSERT INTO event VALUES( '2020-01-02 00:00:00+00' , 'does_not_exist_ts');
+\set ON_ERROR_STOP 1
+INSERT INTO event VALUES( '2020-01-01 00:00:00+00' , 'chunk_ts');
+SELECT * FROM event ORDER BY ts;
+
+DELETE FROM event WHERE  info = 'osm_chunk_ts';
+DELETE FROM event WHERE  info = 'chunk_ts';
+SELECT * FROM event ORDER BY ts;
 
 -- clean up databases created
 \c :TEST_DBNAME :ROLE_SUPERUSER
