@@ -314,7 +314,7 @@ arrow_cache_get_entry(ArrowTupleTableSlot *aslot)
  * are actually referenced in a query), so some returned arrays may be NULL
  * for this reason.
  */
-pg_attribute_always_inline ArrowArray **
+ArrowArray **
 arrow_column_cache_read_one(ArrowTupleTableSlot *aslot, AttrNumber attno)
 {
 	const int16 *attrs_offset_map = arrow_slot_get_attribute_offset_map(&aslot->base.base);

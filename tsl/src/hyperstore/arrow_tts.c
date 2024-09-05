@@ -446,32 +446,20 @@ is_compressed_col(const TupleDesc tupdesc, AttrNumber attno)
 	return coltypid == typinfo->type_oid;
 }
 
-static void
-set_attr_value(TupleTableSlot *slot, ArrowArray **arrow_arrays, const AttrNumber attnum)
+static pg_attribute_always_inline ArrowArray *
+set_attr_value(TupleTableSlot *slot, const int16 attoff)
 {
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
-	const int16 *attrs_offset_map = arrow_slot_get_attribute_offset_map(slot);
-	const int16 attoff = AttrNumberGetAttrOffset(attnum);
+	ArrowArray *arrow_array = NULL;
 
-	TS_DEBUG_LOG("attnum: %d, valid: %s, segmentby: %s, array: %s",
-				 attnum,
+	TS_DEBUG_LOG("attnum: %d, valid: %s, segmentby: %s",
+				 AttrOffsetGetAttrNumber(attoff),
 				 yes_no(aslot->valid_attrs[attoff]),
-				 yes_no(aslot->segmentby_attrs[attoff]),
-				 yes_no(arrow_arrays[attoff]));
-
-	/* Check if value is already set */
-	if (aslot->valid_attrs[attoff])
-		return;
-
-	/* Nothing to do for dropped attribute */
-	if (attrs_offset_map[attoff] == -1)
-	{
-		Assert(TupleDescAttr(slot->tts_tupleDescriptor, attoff)->attisdropped);
-		return;
-	}
+				 yes_no(aslot->segmentby_attrs[attoff]));
 
 	if (aslot->segmentby_attrs[attoff])
 	{
+		const int16 *attrs_offset_map = arrow_slot_get_attribute_offset_map(slot);
 		const int16 cattoff = attrs_offset_map[attoff]; /* offset in compressed tuple */
 		const AttrNumber cattnum = AttrOffsetGetAttrNumber(cattoff);
 
@@ -480,27 +468,37 @@ set_attr_value(TupleTableSlot *slot, ArrowArray **arrow_arrays, const AttrNumber
 		slot->tts_values[attoff] =
 			slot_getattr(aslot->child_slot, cattnum, &slot->tts_isnull[attoff]);
 	}
-	else if (arrow_arrays[attoff] == NULL)
-	{
-		/* Since the column is not the segment-by column, and there is no
-		 * decompressed data, the column must be NULL. Use the default
-		 * value. */
-		slot->tts_values[attoff] =
-			getmissingattr(slot->tts_tupleDescriptor, attnum, &slot->tts_isnull[attoff]);
-	}
 	else
 	{
-		/* Value is compressed, so get it from the decompressed arrow array. */
-		const Form_pg_attribute attr = TupleDescAttr(slot->tts_tupleDescriptor, attoff);
-		const Oid typid = attr->atttypid;
-		const int16 typlen = attr->attlen;
-		const NullableDatum datum =
-			arrow_get_datum(arrow_arrays[attoff], typid, typlen, aslot->tuple_index - 1);
-		slot->tts_values[attoff] = datum.value;
-		slot->tts_isnull[attoff] = datum.isnull;
+		const AttrNumber attnum = AttrOffsetGetAttrNumber(attoff);
+		ArrowArray **arrow_arrays = arrow_column_cache_read_one(aslot, attnum);
+
+		arrow_array = arrow_arrays[attoff];
+
+		if (arrow_array == NULL)
+		{
+			/* Since the column is not the segment-by column, and there is no
+			 * decompressed data, the column must be NULL. Use the default
+			 * value. */
+			slot->tts_values[attoff] =
+				getmissingattr(slot->tts_tupleDescriptor, attnum, &slot->tts_isnull[attoff]);
+		}
+		else
+		{
+			/* Value is compressed, so get it from the decompressed arrow array. */
+			const Form_pg_attribute attr = TupleDescAttr(slot->tts_tupleDescriptor, attoff);
+			const Oid typid = attr->atttypid;
+			const int16 typlen = attr->attlen;
+			const NullableDatum datum =
+				arrow_get_datum(arrow_arrays[attoff], typid, typlen, aslot->tuple_index - 1);
+			slot->tts_values[attoff] = datum.value;
+			slot->tts_isnull[attoff] = datum.isnull;
+		}
 	}
 
 	aslot->valid_attrs[attoff] = true;
+
+	return arrow_array;
 }
 
 static inline bool
@@ -545,30 +543,8 @@ tts_arrow_getsomeattrs(TupleTableSlot *slot, int natts)
 	/* Build the non-compressed tuple values array from the cached data. */
 	for (int attoff = slot->tts_nvalid; attoff < natts; attoff++)
 	{
-		const AttrNumber attno = AttrOffsetGetAttrNumber(attoff);
-
-		if (!aslot->valid_attrs[attoff])
-		{
-			/* Check if we can do a fast path for segmentby values and avoid a
-			 * decompression cache lookup */
-			if (aslot->segmentby_attrs[attoff])
-			{
-				const int16 *attrs_offset_map = arrow_slot_get_attribute_offset_map(slot);
-				const int16 cattoff = attrs_offset_map[attoff]; /* offset in compressed tuple */
-				const AttrNumber cattnum = AttrOffsetGetAttrNumber(cattoff);
-
-				/* Segment-by column. Value is not compressed so get directly from
-				 * child slot. */
-				slot->tts_values[attoff] =
-					slot_getattr(aslot->child_slot, cattnum, &slot->tts_isnull[attoff]);
-				aslot->valid_attrs[attoff] = true;
-			}
-			else if (is_used_attr(slot, attoff))
-			{
-				ArrowArray **arrow_arrays = arrow_column_cache_read_one(aslot, attno);
-				set_attr_value(slot, arrow_arrays, attno);
-			}
-		}
+		if (!aslot->valid_attrs[attoff] && is_used_attr(slot, attoff))
+			set_attr_value(slot, attoff);
 	}
 
 	slot->tts_nvalid = natts;
@@ -787,11 +763,10 @@ arrow_slot_get_array(TupleTableSlot *slot, AttrNumber attno)
 	if (!is_used_attr(slot, attoff))
 		return NULL;
 
-	arrow_arrays = arrow_column_cache_read_one(aslot, attno);
-
 	if (!aslot->valid_attrs[attoff])
-		set_attr_value(slot, arrow_arrays, attno);
+		return set_attr_value(slot, attoff);
 
+	arrow_arrays = arrow_column_cache_read_one(aslot, attno);
 	return arrow_arrays[attoff];
 }
 
