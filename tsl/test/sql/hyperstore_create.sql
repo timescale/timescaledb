@@ -6,6 +6,26 @@
 select setseed(0.3);
 
 -- Testing the basic API for creating a hyperstore
+
+-- This should just fail because you cannot create a plain table with
+-- hyperstore (yet).
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+create table test2(
+       created_at timestamp with time zone not null,
+       location_id int
+) using hyperstore;
+
+set default_table_access_method to 'hyperstore';
+create table test2(
+       created_at timestamp with time zone not null,
+       location_id int
+);
+
+reset default_table_access_method;
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
+
 CREATE TABLE test2(
 	   created_at timestamptz not null,
 	   location_id int,
