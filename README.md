@@ -127,7 +127,7 @@ To build from source, see [Building from source](https://github.com/timescale/ti
 
 ## Deployment
 
-You can deploy TimescaleDB on Elestio using one-click-deployment.
+You can deploy TimescaleDB Apache 2 Edition on Elestio using one-click-deployment.
 
 [![Deploy on Elestio](https://elest.io/images/logos/deploy-to-elestio-btn.png)](https://elest.io/open-source/timescaledb)
 
