@@ -59,6 +59,28 @@ select setseed(0.3);
 (1 row)
 
 -- Testing the basic API for creating a hyperstore
+-- This should just fail because you cannot create a plain table with
+-- hyperstore (yet).
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+create table test2(
+       created_at timestamp with time zone not null,
+       location_id int
+) using hyperstore;
+ERROR:  hyperstore access method not supported on "test2"
+DETAIL:  The hyperstore access method is only supported for hypertables.
+HINT:  Create a hypertable from a table using another access method (e.g., heap), then use "ALTER TABLE" to set the access method to hyperstore.
+set default_table_access_method to 'hyperstore';
+create table test2(
+       created_at timestamp with time zone not null,
+       location_id int
+);
+ERROR:  hyperstore access method not supported on "test2"
+DETAIL:  The hyperstore access method is only supported for hypertables.
+HINT:  It does not make sense to set the default access method for all tables to "hyperstore" since it is only supported for hypertables.
+reset default_table_access_method;
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
 CREATE TABLE test2(
 	   created_at timestamptz not null,
 	   location_id int,
