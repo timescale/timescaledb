@@ -1,1 +1,1 @@
-Fixes: #7230 Don't propagate fk constraints to osm chunk
+Fixes: #7230: Do not propagate the foreign key constraints to the `osm` chunk.
