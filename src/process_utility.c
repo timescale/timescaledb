@@ -37,6 +37,7 @@
 #include <tcop/utility.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
+#include <utils/elog.h>
 #include <utils/guc.h>
 #include <utils/inval.h>
 #include <utils/lsyscache.h>
@@ -4360,6 +4361,32 @@ process_create_table_as(ProcessUtilityArgs *args)
 	return DDL_CONTINUE;
 }
 
+#if PG15_GE
+static DDLResult
+process_create_stmt(ProcessUtilityArgs *args)
+{
+	CreateStmt *stmt = castNode(CreateStmt, args->parsetree);
+
+	if (stmt->accessMethod && strcmp(stmt->accessMethod, "hyperstore") == 0)
+		ereport(ERROR,
+				errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				errmsg("hyperstore access method not supported on \"%s\"", stmt->relation->relname),
+				errdetail("The hyperstore access method is only supported for hypertables."),
+				errhint("Create a hypertable from a table using another access method (e.g., heap),"
+						" then use \"ALTER TABLE\" to set the access method to hyperstore."));
+
+	if (default_table_access_method && strcmp(default_table_access_method, "hyperstore") == 0)
+		ereport(ERROR,
+				errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				errmsg("hyperstore access method not supported on \"%s\"", stmt->relation->relname),
+				errdetail("The hyperstore access method is only supported for hypertables."),
+				errhint("It does not make sense to set the default access method for all tables "
+						"to \"hyperstore\" since it is only supported for hypertables."));
+
+	return DDL_CONTINUE;
+}
+#endif
+
 static DDLResult
 process_refresh_mat_view_start(ProcessUtilityArgs *args)
 {
@@ -4480,6 +4507,12 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 		case T_CreateTableAsStmt:
 			handler = process_create_table_as;
 			break;
+#if PG15_GE
+		case T_CreateStmt:
+			handler = process_create_stmt;
+			break;
+#endif
+
 		case T_ExecuteStmt:
 			check_read_only = false;
 			handler = preprocess_execute;
