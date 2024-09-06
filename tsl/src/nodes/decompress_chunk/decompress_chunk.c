@@ -244,7 +244,7 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 	sort_info->required_compressed_pathkeys = required_compressed_pathkeys;
 }
 
-static DecompressChunkPath *
+DecompressChunkPath *
 copy_decompress_chunk_path(DecompressChunkPath *src)
 {
 	DecompressChunkPath *dst = palloc(sizeof(DecompressChunkPath));

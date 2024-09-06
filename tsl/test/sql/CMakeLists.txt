@@ -10,17 +10,18 @@ set(TEST_FILES
     cagg_deprecated_bucket_ng.sql
     cagg_errors.sql
     cagg_invalidation.sql
-    cagg_permissions.sql
     cagg_policy.sql
     cagg_query.sql
     cagg_refresh.sql
     cagg_utils.sql
+    cagg_watermark.sql
     compress_auto_sparse_index.sql
     compress_default.sql
     compress_dml_copy.sql
     compress_float8_corrupt.sql
     compressed_detoaster.sql
     compressed_collation.sql
+    compression.sql
     compression_create_compressed_table.sql
     compression_conflicts.sql
     compression_defaults.sql
@@ -40,7 +41,6 @@ set(TEST_FILES
     size_utils_tsl.sql
     skip_scan.sql
     transparent_decompression_join_index.sql
-    vector_agg_default.sql
     vector_agg_param.sql
     vectorized_aggregation.sql)
 
@@ -64,6 +64,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     chunk_api.sql
     chunk_merge.sql
     chunk_utils_compression.sql
+    chunk_utils_internal.sql
     compression_algos.sql
     compression_bgw.sql
     compression_ddl.sql
@@ -97,17 +98,10 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     license_tsl.sql
     fixed_schedules.sql
     recompress_chunk_segmentwise.sql
-    feature_flags.sql)
-
+    feature_flags.sql
+    vector_agg_default.sql
+    vector_agg_segmentby.sql)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
-
-if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
-  if(CMAKE_BUILD_TYPE MATCHES Debug)
-    list(APPEND TEST_FILES chunk_utils_internal.sql
-         compression_update_delete.sql)
-  endif()
-  list(APPEND TEST_FILES compression.sql compression_permissions.sql)
-endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
   if(CMAKE_BUILD_TYPE MATCHES Debug)
@@ -140,18 +134,15 @@ set(SOLO_TESTS
 
 set(TEST_TEMPLATES
     cagg_union_view.sql.in
-    cagg_watermark.sql.in
+    cagg_permissions.sql.in
     chunk_column_stats.sql.in
+    compression_permissions.sql.in
     compression_sorted_merge.sql.in
     merge_append_partially_compressed.sql.in
+    modify_exclusion.sql.in
     plan_skip_scan.sql.in
-    transparent_decompression_ordered_index.sql.in
-    transparent_decompression.sql.in)
-
-# This test runs only with PG version >= 14
-if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
-  set(TEST_FILES_ON_VERSION_GE_14 modify_exclusion.sql.in)
-endif()
+    transparent_decompression.sql.in
+    transparent_decompression_ordered_index.sql.in)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
@@ -163,6 +154,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_repair.sql.in
     cagg_usage.sql.in
     compression_errors.sql.in
+    compression_update_delete.sql.in
     continuous_aggs.sql.in)
   if(USE_TELEMETRY)
     list(APPEND TEST_FILES telemetry_stats.sql)
@@ -193,16 +185,6 @@ foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
                  COPYONLY)
   list(APPEND TEST_FILES ${TEST_FILE})
 endforeach(TEMPLATE_FILE)
-
-foreach(TEST_FILES_GE_14 ${TEST_FILES_ON_VERSION_GE_14})
-  string(LENGTH ${TEST_FILES_GE_14} TEST_FILES_GE_14_NAME_LEN)
-  math(EXPR TEST_FILES_GE_14_NAME_LEN ${TEST_FILES_GE_14_NAME_LEN}-7)
-  string(SUBSTRING ${TEST_FILES_GE_14} 0 ${TEST_FILES_GE_14_NAME_LEN} TEMPLATE)
-  set(TEST_FILE ${TEMPLATE}-${TEST_VERSION_SUFFIX}.sql)
-  configure_file(${TEST_FILES_GE_14} ${CMAKE_CURRENT_SOURCE_DIR}/${TEST_FILE}
-                 COPYONLY)
-  list(APPEND TEST_FILES ${TEST_FILE})
-endforeach(TEST_FILES_GE_14)
 
 if(NOT TEST_GROUP_SIZE)
   set(PARALLEL_GROUP_SIZE 10)

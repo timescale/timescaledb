@@ -92,7 +92,7 @@ SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, 
 FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
 WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id ORDER BY cc.chunk_id;
 -- ordered append should be possible as ranges do not overlap
-EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
+:EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
 SELECT * FROM test_chunkapp ORDER BY 1;
 -- but, insert should not be possible
 SELECT ts_setup_osm_hook();
@@ -103,23 +103,23 @@ SELECT ts_undo_osm_hook();
 -- reset range to infinity
 SELECT _timescaledb_functions.hypertable_osm_range_update('test_chunkapp',empty:=false);
 -- ordered append not possible because range is invalid and empty was not specified
-EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
+:EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
 SELECT * FROM test_chunkapp ORDER BY 1;
 SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
 WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id ORDER BY cc.chunk_id;
 -- but also, OSM chunk should be included in the scan, since range is invalid and chunk is not empty
-EXPLAIN SELECT * FROM test_chunkapp WHERE time < '2023-01-01' ORDER BY 1;
+:EXPLAIN SELECT * FROM test_chunkapp WHERE time < '2023-01-01' ORDER BY 1;
 SELECT * FROM test_chunkapp WHERE time < '2023-01-01' ORDER BY 1;
 -- now set empty to true, should ordered append
 \c postgres_fdw_db :ROLE_4;
 DELETE FROM test_chunkapp_fdw;
 \c :TEST_DBNAME :ROLE_4;
 SELECT _timescaledb_functions.hypertable_osm_range_update('test_chunkapp', NULL::timestamptz, NULL, empty => true);
-EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
+:EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
 SELECT * FROM test_chunkapp ORDER BY 1;
 -- should exclude the OSM chunk this time since it is empty
-EXPLAIN SELECT * FROM test_chunkapp WHERE time < '2023-01-01' ORDER BY 1;
+:EXPLAIN SELECT * FROM test_chunkapp WHERE time < '2023-01-01' ORDER BY 1;
 SELECT * FROM test_chunkapp WHERE time < '2023-01-01' ORDER BY 1;
 
 \set ON_ERROR_STOP 0

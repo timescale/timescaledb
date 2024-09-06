@@ -2035,8 +2035,8 @@ SELECT * FROM mat_m1;
 
 -- Merge Append
 EXPLAIN (COSTS OFF) SELECT * FROM mat_m1;
-                                                          QUERY PLAN                                                          
-------------------------------------------------------------------------------------------------------------------------------
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
  Merge Append
    Sort Key: _hyper_59_123_chunk.sum DESC
    ->  Merge Append
@@ -2047,15 +2047,20 @@ EXPLAIN (COSTS OFF) SELECT * FROM mat_m1;
                Index Cond: (time_bucket < 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
    ->  Sort
          Sort Key: (sum(_hyper_52_111_chunk.temperature)) DESC
-         ->  HashAggregate
-               Group Key: time_bucket('@ 7 days'::interval, _hyper_52_111_chunk.timec)
-               ->  Result
+         ->  Finalize GroupAggregate
+               Group Key: (time_bucket('@ 7 days'::interval, _hyper_52_111_chunk.timec))
+               ->  Sort
+                     Sort Key: (time_bucket('@ 7 days'::interval, _hyper_52_111_chunk.timec))
                      ->  Append
-                           ->  Index Scan Backward using _hyper_52_111_chunk_conditions_timec_idx on _hyper_52_111_chunk
-                                 Index Cond: (timec >= 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
-                           ->  Index Scan Backward using _hyper_52_125_chunk_conditions_timec_idx on _hyper_52_125_chunk
-                                 Index Cond: (timec >= 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
-(18 rows)
+                           ->  Partial GroupAggregate
+                                 Group Key: time_bucket('@ 7 days'::interval, _hyper_52_111_chunk.timec)
+                                 ->  Index Scan Backward using _hyper_52_111_chunk_conditions_timec_idx on _hyper_52_111_chunk
+                                       Index Cond: (timec >= 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
+                           ->  Partial GroupAggregate
+                                 Group Key: time_bucket('@ 7 days'::interval, _hyper_52_125_chunk.timec)
+                                 ->  Index Scan Backward using _hyper_52_125_chunk_conditions_timec_idx on _hyper_52_125_chunk
+                                       Index Cond: (timec >= 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
+(23 rows)
 
 -- Ordering by another column
 SELECT * FROM mat_m1 ORDER BY count;
@@ -2068,8 +2073,8 @@ SELECT * FROM mat_m1 ORDER BY count;
 (4 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM mat_m1 ORDER BY count;
-                                                             QUERY PLAN                                                             
-------------------------------------------------------------------------------------------------------------------------------------
+                                                             QUERY PLAN                                                              
+-------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Sort Key: _hyper_59_123_chunk.count
    ->  Merge Append
@@ -2082,15 +2087,20 @@ EXPLAIN (COSTS OFF) SELECT * FROM mat_m1 ORDER BY count;
                      Index Cond: (time_bucket < 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
          ->  Sort
                Sort Key: (sum(_hyper_52_111_chunk.temperature)) DESC
-               ->  HashAggregate
-                     Group Key: time_bucket('@ 7 days'::interval, _hyper_52_111_chunk.timec)
-                     ->  Result
+               ->  Finalize GroupAggregate
+                     Group Key: (time_bucket('@ 7 days'::interval, _hyper_52_111_chunk.timec))
+                     ->  Sort
+                           Sort Key: (time_bucket('@ 7 days'::interval, _hyper_52_111_chunk.timec))
                            ->  Append
-                                 ->  Index Scan Backward using _hyper_52_111_chunk_conditions_timec_idx on _hyper_52_111_chunk
-                                       Index Cond: (timec >= 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
-                                 ->  Index Scan Backward using _hyper_52_125_chunk_conditions_timec_idx on _hyper_52_125_chunk
-                                       Index Cond: (timec >= 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
-(20 rows)
+                                 ->  Partial GroupAggregate
+                                       Group Key: time_bucket('@ 7 days'::interval, _hyper_52_111_chunk.timec)
+                                       ->  Index Scan Backward using _hyper_52_111_chunk_conditions_timec_idx on _hyper_52_111_chunk
+                                             Index Cond: (timec >= 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
+                                 ->  Partial GroupAggregate
+                                       Group Key: time_bucket('@ 7 days'::interval, _hyper_52_125_chunk.timec)
+                                       ->  Index Scan Backward using _hyper_52_125_chunk_conditions_timec_idx on _hyper_52_125_chunk
+                                             Index Cond: (timec >= 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
+(25 rows)
 
 -- Change the type of cagg
 ALTER MATERIALIZED VIEW mat_m1 SET (timescaledb.materialized_only=true);

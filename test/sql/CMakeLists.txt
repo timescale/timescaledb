@@ -1,7 +1,6 @@
 include(GenerateTestSchedule)
 
 set(TEST_FILES
-    agg_bookends.sql
     alter.sql
     alternate_users.sql
     baserel_cache.sql
@@ -23,13 +22,11 @@ set(TEST_FILES
     debug_utils.sql
     drop_extension.sql
     drop_hypertable.sql
-    drop_owned.sql
     drop_rename_hypertable.sql
     drop_schema.sql
     dump_meta.sql
     extension_scripts.sql
     generated_as_identity.sql
-    grant_hypertable.sql
     hash.sql
     index.sql
     information_views.sql
@@ -37,7 +34,6 @@ set(TEST_FILES
     insert_single.sql
     insert_returning.sql
     lateral.sql
-    null_exclusion.sql
     partition.sql
     partitioning.sql
     pg_join.sql
@@ -63,10 +59,14 @@ set(TEST_FILES
     license.sql)
 
 set(TEST_TEMPLATES
+    agg_bookends.sql.in
     append.sql.in
     cluster.sql.in
+    drop_owned.sql.in
+    grant_hypertable.sql.in
     histogram_test.sql.in
     insert.sql.in
+    null_exclusion.sql.in
     plan_hashagg.sql.in
     rowsecurity.sql.in
     parallel.sql.in

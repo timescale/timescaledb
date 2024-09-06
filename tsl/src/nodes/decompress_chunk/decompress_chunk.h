@@ -61,3 +61,5 @@ void ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *rel, Hype
 										Chunk *chunk);
 
 extern bool ts_is_decompress_chunk_path(Path *path);
+
+DecompressChunkPath *copy_decompress_chunk_path(DecompressChunkPath *src);

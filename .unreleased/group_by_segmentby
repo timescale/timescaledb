@@ -1,0 +1,1 @@
+Implements: #7147 Vectorize partial aggregation for sum(int4) with grouping on segmentby columns.
