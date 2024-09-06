@@ -28,30 +28,6 @@
 ACCUM_CASE(PG_TYPE)
 return &FUNCTION_NAME(argdef);
 #else
-static void
-FUNCTION_NAME(const)(void *agg_state, Datum constvalue, bool constisnull, int n)
-{
-	if (constisnull)
-	{
-		return;
-	}
-	Assert(n != 0);
-
-	FloatAvgState *state = (FloatAvgState *) agg_state;
-	const double newN = n;
-	const double newSx = n * DATUM_TO_CTYPE(constvalue);
-
-	/*
-	 * Sxx = sum((X - sum(X) / N)^2) = 0 for equal values. Note that it should
-	 * be NaN if any of the inputs are infinite or NaN. This is checked by
-	 * float8_combine() even if it's not used for the actual calculations (e.g.
-	 * for avg()).
-	 */
-	const double newSxx = 0 * DATUM_TO_CTYPE(constvalue);
-
-	youngs_cramer_combine(&state->N, &state->Sx, &state->Sxx, newN, newSx, newSxx);
-}
-
 /*
  * Youngs-Cramer update for rows after the first.
  */
@@ -86,12 +62,10 @@ FUNCTION_NAME(update)(const uint64 *valid1, const uint64 *valid2, const CTYPE *v
 }
 
 static pg_attribute_always_inline void
-FUNCTION_NAME(vector_impl)(void *agg_state, const ArrowArray *vector, const uint64 *valid1,
+FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *valid1,
 						   const uint64 *valid2)
 {
 	FloatAvgState *state = (FloatAvgState *) agg_state;
-	const int rows = vector->length;
-	const CTYPE *values = vector->buffers[1];
 
 	int row = 0;
 
@@ -116,7 +90,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, const ArrowArray *vector, const uint
 	 */
 	for (int inner = 0; inner < UNROLL_SIZE; inner++)
 	{
-		for (; row < rows; row++)
+		for (; row < n; row++)
 		{
 			const CTYPE newval = values[row];
 			if (arrow_both_valid(valid1, valid2, row))
@@ -134,8 +108,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, const ArrowArray *vector, const uint
 	 * Scroll to the row that is a multiple of UNROLL_SIZE. This is the correct
 	 * row at which to enter the unrolled loop below.
 	 */
-	for (int inner = row % UNROLL_SIZE; inner > 0 && inner < UNROLL_SIZE && row < rows;
-		 inner++, row++)
+	for (int inner = row % UNROLL_SIZE; inner > 0 && inner < UNROLL_SIZE && row < n; inner++, row++)
 	{
 		FUNCTION_NAME(update)
 		(valid1, valid2, values, row, &Narray[inner], &Sxarray[inner], &Sxxarray[inner]);
@@ -145,8 +118,8 @@ FUNCTION_NAME(vector_impl)(void *agg_state, const ArrowArray *vector, const uint
 	/*
 	 * Unrolled loop.
 	 */
-	Assert(row % UNROLL_SIZE == 0 || row == rows);
-	for (; row < UNROLL_SIZE * (rows / UNROLL_SIZE); row += UNROLL_SIZE)
+	Assert(row % UNROLL_SIZE == 0 || row == n);
+	for (; row < UNROLL_SIZE * (n / UNROLL_SIZE); row += UNROLL_SIZE)
 	{
 		for (int inner = 0; inner < UNROLL_SIZE; inner++)
 		{
@@ -164,7 +137,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, const ArrowArray *vector, const uint
 	/*
 	 * Process the odd tail.
 	 */
-	for (; row < rows; row++)
+	for (; row < n; row++)
 	{
 		const int inner = row % UNROLL_SIZE;
 		FUNCTION_NAME(update)
@@ -191,6 +164,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, const ArrowArray *vector, const uint
 	youngs_cramer_combine(&state->N, &state->Sx, &state->Sxx, Narray[0], Sxarray[0], Sxxarray[0]);
 }
 
+#include "agg_const_helper.c"
 #include "agg_vector_validity_helper.c"
 
 static VectorAggFunctions FUNCTION_NAME(argdef) = { .state_bytes = sizeof(FloatAvgState),

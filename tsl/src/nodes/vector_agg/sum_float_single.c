@@ -17,8 +17,8 @@ FUNCTION_NAME(emit)(void *agg_state, Datum *out_result, bool *out_isnull)
 	*out_isnull = state->isnull;
 }
 
-static void
-FUNCTION_NAME(vector_impl)(void *agg_state, const ArrowArray *vector, const uint64 *valid1,
+static pg_attribute_always_inline void
+FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *valid1,
 						   const uint64 *valid2)
 {
 	/*
@@ -28,8 +28,6 @@ FUNCTION_NAME(vector_impl)(void *agg_state, const ArrowArray *vector, const uint
 
 	bool have_result = false;
 	double accu[UNROLL_SIZE] = { 0 };
-	const int n = vector->length;
-	const CTYPE *values = (CTYPE *) vector->buffers[1];
 	for (int outer = 0; outer < UNROLL_SIZE * (n / UNROLL_SIZE); outer += UNROLL_SIZE)
 	{
 		for (int inner = 0; inner < UNROLL_SIZE; inner++)
@@ -68,20 +66,8 @@ FUNCTION_NAME(vector_impl)(void *agg_state, const ArrowArray *vector, const uint
 	state->result += accu[0];
 }
 
+#include "agg_const_helper.c"
 #include "agg_vector_validity_helper.c"
-
-static void
-FUNCTION_NAME(const)(void *agg_state, Datum constvalue, bool constisnull, int n)
-{
-	FloatSumState *state = (FloatSumState *) agg_state;
-	if (constisnull)
-	{
-		return;
-	}
-
-	state->result += ((double) DATUM_TO_CTYPE(constvalue)) * n;
-	state->isnull = false;
-}
 
 static VectorAggFunctions FUNCTION_NAME(argdef) = {
 	.state_bytes = sizeof(FloatSumState),

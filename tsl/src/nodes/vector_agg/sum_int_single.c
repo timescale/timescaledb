@@ -9,14 +9,11 @@ case PG_AGG_OID_HELPER(AGG_NAME, PG_TYPE):
 	return &FUNCTION_NAME(argdef);
 #else
 
-static void
-FUNCTION_NAME(vector_impl)(void *agg_state, const ArrowArray *vector, const uint64 *valid1,
+static pg_attribute_always_inline void
+FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *valid1,
 						   const uint64 *valid2)
 {
 	IntSumState *state = (IntSumState *) agg_state;
-
-	Assert(vector != NULL);
-	Assert(vector->length > 0);
 
 	/*
 	 * We accumulate the sum as int64, so we can sum INT_MAX = 2^31 - 1
@@ -28,15 +25,13 @@ FUNCTION_NAME(vector_impl)(void *agg_state, const ArrowArray *vector, const uint
 	 * we don't need to check for overflows within the loop, which would
 	 * slow down the calculation.
 	 */
-	Assert(vector->length <= INT_MAX);
+	Assert(n <= INT_MAX);
 
 	/*
 	 * Note that we use a simplest loop here, there are many possibilities of
 	 * optimizing this function (for example, this loop is not unrolled by
 	 * clang-16).
 	 */
-	const int n = vector->length;
-	const CTYPE *values = (CTYPE *) vector->buffers[1];
 	int64 batch_sum = 0;
 	bool have_result = false;
 	for (int row = 0; row < n; row++)
@@ -57,35 +52,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, const ArrowArray *vector, const uint
 
 #include "agg_vector_validity_helper.c"
 
-static void
-FUNCTION_NAME(const)(void *agg_state, Datum constvalue, bool constisnull, int n)
-{
-	IntSumState *state = (IntSumState *) agg_state;
-
-	if (constisnull)
-	{
-		return;
-	}
-
-	const CTYPE intvalue = DATUM_TO_CTYPE(constvalue);
-	int64 batch_sum = 0;
-
-	/* Multiply the number of tuples with the actual value */
-	Assert(n > 0);
-	if (unlikely(pg_mul_s64_overflow(intvalue, n, &batch_sum)))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE), errmsg("bigint out of range")));
-	}
-
-	/* Add the value to our sum */
-	if (unlikely(pg_add_s64_overflow(state->result, batch_sum, &state->result)))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE), errmsg("bigint out of range")));
-	}
-	state->isnull = false;
-}
+#include "agg_const_helper.c"
 
 static VectorAggFunctions FUNCTION_NAME(argdef) = {
 	.state_bytes = sizeof(IntSumState),

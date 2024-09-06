@@ -11,22 +11,31 @@
  */
 
 static pg_noinline void
+FUNCTION_NAME(vector_impl_arrow)(void *agg_state, const ArrowArray *vector, const uint64 *valid1,
+								 const uint64 *valid2)
+{
+	const int n = vector->length;
+	const CTYPE *values = vector->buffers[1];
+	FUNCTION_NAME(vector_impl)(agg_state, n, values, valid1, valid2);
+}
+
+static pg_noinline void
 FUNCTION_NAME(vector_no_validity)(void *agg_state, const ArrowArray *vector)
 {
-	FUNCTION_NAME(vector_impl)(agg_state, vector, NULL, NULL);
+	FUNCTION_NAME(vector_impl_arrow)(agg_state, vector, NULL, NULL);
 }
 
 static pg_noinline void
 FUNCTION_NAME(vector_one_validity)(void *agg_state, const ArrowArray *vector, const uint64 *valid)
 {
-	FUNCTION_NAME(vector_impl)(agg_state, vector, valid, NULL);
+	FUNCTION_NAME(vector_impl_arrow)(agg_state, vector, valid, NULL);
 }
 
 static pg_noinline void
 FUNCTION_NAME(vector_two_validity)(void *agg_state, const ArrowArray *vector, const uint64 *valid1,
 								   const uint64 *valid2)
 {
-	FUNCTION_NAME(vector_impl)(agg_state, vector, valid1, valid2);
+	FUNCTION_NAME(vector_impl_arrow)(agg_state, vector, valid1, valid2);
 }
 
 static pg_attribute_always_inline void

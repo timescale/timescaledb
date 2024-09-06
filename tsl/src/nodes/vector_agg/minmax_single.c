@@ -8,39 +8,11 @@
 case PG_AGG_OID_HELPER(AGG_NAME, PG_TYPE):
 	return &FUNCTION_NAME(argdef);
 #else
-static void
-FUNCTION_NAME(const)(void *agg_state, Datum constvalue, bool constisnull, int n)
-{
-	MinMaxState *state = (MinMaxState *) agg_state;
-	if (constisnull)
-	{
-		return;
-	}
-
-	if (!state->isvalid)
-	{
-		state->isvalid = true;
-		state->value = constvalue;
-		return;
-	}
-
-	const CTYPE new = DATUM_TO_CTYPE(constvalue);
-	const CTYPE current = DATUM_TO_CTYPE(state->value);
-
-	/*
-	 * Note that we have to properly handle NaNs and Infinities for floats.
-	 */
-	const bool do_replace = PREDICATE(current, new) || isnan((double) new);
-	state->value = CTYPE_TO_DATUM(do_replace ? new : current);
-}
-
 static pg_attribute_always_inline void
-FUNCTION_NAME(vector_impl)(void *agg_state, const ArrowArray *vector, const uint64 *valid1,
+FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *valid1,
 						   const uint64 *valid2)
 {
 	MinMaxState *state = (MinMaxState *) agg_state;
-	const int n = vector->length;
-	const CTYPE *values = (CTYPE *) vector->buffers[1];
 
 	CTYPE outer_result = DATUM_TO_CTYPE(state->value);
 	bool outer_isvalid = state->isvalid;
@@ -64,6 +36,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, const ArrowArray *vector, const uint
 	state->isvalid = outer_isvalid;
 }
 
+#include "agg_const_helper.c"
 #include "agg_vector_validity_helper.c"
 
 static VectorAggFunctions FUNCTION_NAME(argdef) = { .state_bytes = sizeof(MinMaxState),
