@@ -10,6 +10,8 @@
 -- * attach_foreign_table_chunk
 -- * hypertable_osm_range_update
 
+\set EXPLAIN 'EXPLAIN (COSTS OFF)'
+
 CREATE OR REPLACE VIEW chunk_view AS
   SELECT
     ht.table_name AS hypertable_name,
@@ -375,7 +377,7 @@ SELECT * from ht_try WHERE timec > '2020-01-01 01:00' ORDER BY 1;
 -- test ordered append
 BEGIN;
 -- before updating the ranges
-EXPLAIN SELECT * FROM ht_try ORDER BY 1;
+:EXPLAIN SELECT * FROM ht_try ORDER BY 1;
 -- range before update
 SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
@@ -388,11 +390,11 @@ SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, 
 FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
 WHERE c.table_name = 'child_fdw_table' AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id;
 -- should be ordered append now
-EXPLAIN SELECT * FROM ht_try ORDER BY 1;
+:EXPLAIN SELECT * FROM ht_try ORDER BY 1;
 SELECT * FROM ht_try ORDER BY 1;
 -- test invalid range - should not be ordered append
 SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try');
-EXPLAIN SELECT * from ht_try ORDER BY 1;
+:EXPLAIN SELECT * from ht_try ORDER BY 1;
 SELECT * from ht_try ORDER BY 1;
 ROLLBACK;
 
@@ -408,14 +410,14 @@ SELECT * FROM hypertable_approximate_size('ht_try');
 
 --TEST GUC variable to enable/disable OSM chunk
 SET timescaledb.enable_tiered_reads=false;
-EXPLAIN (COSTS OFF) SELECT * from ht_try;
-EXPLAIN (COSTS OFF) SELECT * from ht_try WHERE timec > '2022-01-01 01:00';
-EXPLAIN (COSTS OFF) SELECT * from ht_try WHERE timec < '2023-01-01 01:00';
+:EXPLAIN SELECT * from ht_try;
+:EXPLAIN SELECT * from ht_try WHERE timec > '2022-01-01 01:00';
+:EXPLAIN SELECT * from ht_try WHERE timec < '2023-01-01 01:00';
 SET timescaledb.enable_tiered_reads=true;
-EXPLAIN (COSTS OFF) SELECT * from ht_try;
+:EXPLAIN SELECT * from ht_try;
 -- foreign chunk contains data from Jan 2020, so it is skipped during planning
-EXPLAIN (COSTS OFF) SELECT * from ht_try WHERE timec > '2022-01-01 01:00';
-EXPLAIN (COSTS OFF) SELECT * from ht_try WHERE timec < '2023-01-01 01:00';
+:EXPLAIN SELECT * from ht_try WHERE timec > '2022-01-01 01:00';
+:EXPLAIN SELECT * from ht_try WHERE timec < '2023-01-01 01:00';
 
 -- This test verifies that a bugfix regarding the way `ROWID_VAR`s are adjusted
 -- in the chunks' targetlists on DELETE/UPDATE works (including partially
@@ -428,7 +430,7 @@ DO $$
 DECLARE
     r RECORD;
 BEGIN
-	EXPLAIN UPDATE ht_try SET value = 2
+	EXPLAIN (COSTS OFF) UPDATE ht_try SET value = 2
 	WHERE acq_id = 10 AND timec > now() - '15 years'::interval INTO r;
 END
 $$ LANGUAGE plpgsql;

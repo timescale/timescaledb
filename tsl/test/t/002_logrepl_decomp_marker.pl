@@ -7,8 +7,6 @@ use warnings;
 use TimescaleNode;
 use Test::More;
 
-plan skip_all => "PostgreSQL version < 14" if $ENV{PG_VERSION_MAJOR} < 14;
-
 # This test checks the creation of logical replication messages
 # used to mark the start and end of activity happening as a result
 # compression/decompression.

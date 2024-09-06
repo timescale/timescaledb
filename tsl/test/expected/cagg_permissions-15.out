@@ -1,0 +1,321 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- initialize the bgw mock state to prevent the materialization workers from running
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- remove any default jobs, e.g., telemetry so bgw_job isn't polluted
+DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
+CREATE VIEW cagg_info AS
+WITH
+  caggs AS (
+    SELECT format('%I.%I', user_view_schema, user_view_name)::regclass AS user_view,
+           format('%I.%I', direct_view_schema, direct_view_name)::regclass AS direct_view,
+           format('%I.%I', partial_view_schema, partial_view_name)::regclass AS partial_view,
+           format('%I.%I', ht.schema_name, ht.table_name)::regclass AS mat_relid
+      FROM _timescaledb_catalog.hypertable ht,
+           _timescaledb_catalog.continuous_agg cagg
+     WHERE ht.id = cagg.mat_hypertable_id
+  )
+SELECT user_view,
+       (SELECT relacl FROM pg_class WHERE oid = user_view) AS user_view_perm,
+       relname AS mat_table,
+       (relacl) AS mat_table_perm,
+       direct_view,
+       (SELECT relacl FROM pg_class WHERE oid = direct_view) AS direct_view_perm,
+       partial_view,
+       (SELECT relacl FROM pg_class WHERE oid = partial_view) AS partial_view_perm
+  FROM pg_class JOIN caggs ON pg_class.oid = caggs.mat_relid;
+GRANT SELECT ON cagg_info TO PUBLIC;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE conditions (
+      timec       INT       NOT NULL,
+      location    TEXT              NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL,
+      lowp        double precision NULL,
+      highp       double precision null,
+      allnull     double precision null
+    );
+select table_name from create_hypertable( 'conditions', 'timec', chunk_time_interval=> 100);
+ table_name 
+------------
+ conditions
+(1 row)
+
+CREATE OR REPLACE FUNCTION integer_now_test1() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timec), 0) FROM conditions $$;
+SELECT set_integer_now_func('conditions', 'integer_now_test1');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+CREATE MATERIALIZED VIEW mat_refresh_test
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
+as
+select location, max(humidity)
+from conditions
+group by time_bucket(100, timec), location WITH NO DATA;
+-- Manually create index on CAgg
+CREATE INDEX cagg_idx on mat_refresh_test(location);
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE USER not_priv;
+\c :TEST_DBNAME not_priv
+-- A user with no ownership on the Cagg cannot create index on it. -- This should fail
+\set ON_ERROR_STOP 0
+CREATE INDEX cagg_idx on mat_refresh_test(humidity);
+ERROR:  must be owner of hypertable "_materialized_hypertable_2"
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP USER not_priv;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SELECT add_continuous_aggregate_policy('mat_refresh_test', NULL, -200::integer, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1000
+(1 row)
+
+insert into conditions
+select generate_series(0, 50, 10), 'NYC', 55, 75, 40, 70, NULL;
+CALL refresh_continuous_aggregate(' mat_refresh_test', NULL, NULL);
+SELECT id as cagg_job_id FROM _timescaledb_config.bgw_job order by id desc limit 1 \gset
+SELECT format('%I.%I', materialization_hypertable_schema, materialization_hypertable_name ) as materialization_hypertable
+FROM timescaledb_information.continuous_aggregates
+WHERE view_name = 'mat_refresh_test' \gset
+SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_refresh_test' \gset
+SELECT schema_name as mat_chunk_schema, table_name as mat_chunk_table
+FROM _timescaledb_catalog.chunk
+WHERE hypertable_id = :mat_hypertable_id
+ORDER BY id desc
+LIMIT 1 \gset
+CREATE TABLE conditions_for_perm_check (
+      timec       INT       NOT NULL,
+      location    TEXT              NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL,
+      lowp        double precision NULL,
+      highp       double precision null,
+      allnull     double precision null
+    );
+select table_name from create_hypertable('conditions_for_perm_check', 'timec', chunk_time_interval=> 100);
+        table_name         
+---------------------------
+ conditions_for_perm_check
+(1 row)
+
+CREATE OR REPLACE FUNCTION integer_now_test2() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timec), 0) FROM conditions_for_perm_check $$;
+SELECT set_integer_now_func('conditions_for_perm_check', 'integer_now_test2');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+CREATE TABLE conditions_for_perm_check_w_grant (
+      timec       INT       NOT NULL,
+      location    TEXT              NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL,
+      lowp        double precision NULL,
+      highp       double precision null,
+      allnull     double precision null
+    );
+select table_name from create_hypertable('conditions_for_perm_check_w_grant', 'timec', chunk_time_interval=> 100);
+            table_name             
+-----------------------------------
+ conditions_for_perm_check_w_grant
+(1 row)
+
+CREATE OR REPLACE FUNCTION integer_now_test3() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timec), 0) FROM conditions_for_perm_check_w_grant $$;
+SELECT set_integer_now_func('conditions_for_perm_check_w_grant', 'integer_now_test3');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+GRANT SELECT, TRIGGER ON conditions_for_perm_check_w_grant TO public;
+insert into conditions_for_perm_check_w_grant
+select generate_series(0, 30, 10), 'POR', 55, 75, 40, 70, NULL;
+--need both select and trigger permissions to create a materialized view on top of it.
+GRANT SELECT, TRIGGER ON conditions_for_perm_check_w_grant TO public;
+\c  :TEST_DBNAME :ROLE_SUPERUSER
+create schema custom_schema;
+CREATE FUNCTION get_constant() RETURNS INTEGER LANGUAGE SQL IMMUTABLE AS
+$BODY$
+    SELECT 10;
+$BODY$;
+REVOKE EXECUTE ON FUNCTION get_constant() FROM PUBLIC;
+\c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
+select from alter_job(:cagg_job_id, max_runtime => NULL);
+ERROR:  insufficient permissions to alter job 1000
+--make sure that commands fail
+ALTER MATERIALIZED VIEW mat_refresh_test SET(timescaledb.materialized_only = true);
+ERROR:  must be owner of continuous aggregate "mat_refresh_test"
+DROP MATERIALIZED VIEW mat_refresh_test;
+ERROR:  must be owner of view mat_refresh_test
+CALL refresh_continuous_aggregate('mat_refresh_test', NULL, NULL);
+ERROR:  must be owner of view mat_refresh_test
+SELECT * FROM mat_refresh_test;
+ERROR:  permission denied for view mat_refresh_test
+-- Test permissions also when the watermark is not constified and the ACL checks
+-- in ts_continuous_agg_watermark are executed
+SET timescaledb.enable_cagg_watermark_constify = OFF;
+SELECT * FROM mat_refresh_test;
+ERROR:  permission denied for materialized view mat_refresh_test
+RESET timescaledb.enable_cagg_watermark_constify;
+SELECT * FROM :materialization_hypertable;
+ERROR:  permission denied for table _materialized_hypertable_2
+SELECT * FROM :"mat_chunk_schema".:"mat_chunk_table";
+ERROR:  permission denied for table _hyper_2_2_chunk
+--cannot create a mat view without select and trigger grants
+CREATE MATERIALIZED VIEW mat_perm_view_test
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+as
+select location, max(humidity)
+from conditions_for_perm_check
+group by time_bucket(100, timec), location WITH NO DATA;
+ERROR:  permission denied for table conditions_for_perm_check
+--cannot create mat view in a schema without create privileges
+CREATE MATERIALIZED VIEW custom_schema.mat_perm_view_test
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+as
+select location, max(humidity)
+from conditions_for_perm_check_w_grant
+group by time_bucket(100, timec), location WITH NO DATA;
+ERROR:  permission denied for schema custom_schema
+--cannot use a function without EXECUTE privileges
+--you can create a VIEW but cannot refresh it
+CREATE MATERIALIZED VIEW mat_perm_view_test
+WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
+as
+select location, max(humidity), get_constant()
+from conditions_for_perm_check_w_grant
+group by time_bucket(100, timec), location WITH NO DATA;
+--this should fail
+CALL refresh_continuous_aggregate('mat_perm_view_test', NULL, NULL);
+ERROR:  permission denied for function get_constant
+DROP MATERIALIZED VIEW mat_perm_view_test;
+--can create a mat view on something with select and trigger grants
+CREATE MATERIALIZED VIEW mat_perm_view_test
+WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
+as
+select location, max(humidity)
+from conditions_for_perm_check_w_grant
+group by time_bucket(100, timec), location WITH NO DATA;
+CALL refresh_continuous_aggregate('mat_perm_view_test', NULL, NULL);
+SELECT * FROM mat_perm_view_test;
+ location | max 
+----------+-----
+ POR      |  75
+(1 row)
+
+\c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+--revoke select permissions from role with mat view
+REVOKE SELECT ON conditions_for_perm_check_w_grant FROM public;
+insert into conditions_for_perm_check_w_grant
+select generate_series(100, 130, 10), 'POR', 65, 85, 30, 90, NULL;
+\c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+--refresh mat view should now fail due to lack of permissions
+CALL refresh_continuous_aggregate('mat_perm_view_test', NULL, NULL);
+ERROR:  permission denied for table conditions_for_perm_check_w_grant
+--but the old data will still be there
+SELECT * FROM mat_perm_view_test;
+ location | max 
+----------+-----
+ POR      |  75
+(1 row)
+
+\set VERBOSITY default
+-- Test that grants and revokes are propagated to the implementation
+-- objects, that is, the user view, the partial view, the direct view,
+-- and the materialization table.
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE devices (
+   time TIMESTAMPTZ NOT NULL,
+   device INT,
+   temp DOUBLE PRECISION NULL,
+   PRIMARY KEY(time, device)
+);
+SELECT create_hypertable('devices', 'time');
+  create_hypertable   
+----------------------
+ (9,public,devices,t)
+(1 row)
+
+GRANT SELECT, TRIGGER ON devices TO :ROLE_DEFAULT_PERM_USER_2;
+INSERT INTO devices
+SELECT time, (random() * 30)::int, random() * 80
+FROM generate_series('2020-02-01 00:00:00'::timestamptz, '2020-03-01 00:00:00', '1 hour') AS time;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+CREATE MATERIALIZED VIEW devices_summary
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS SELECT time_bucket('1 day', time) AS bucket, device, MAX(temp)
+FROM devices GROUP BY bucket, device WITH NO DATA;
+\x on
+SELECT * FROM cagg_info WHERE user_view::text = 'devices_summary';
+-[ RECORD 1 ]-----+---------------------------------------
+user_view         | devices_summary
+user_view_perm    | 
+mat_table         | _materialized_hypertable_10
+mat_table_perm    | 
+direct_view       | _timescaledb_internal._direct_view_10
+direct_view_perm  | 
+partial_view      | _timescaledb_internal._partial_view_10
+partial_view_perm | 
+
+GRANT ALL ON devices_summary TO :ROLE_DEFAULT_PERM_USER;
+SELECT * FROM cagg_info WHERE user_view::text = 'devices_summary';
+-[ RECORD 1 ]-----+------------------------------------------------------------------------------------------------
+user_view         | devices_summary
+user_view_perm    | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=arwdDxt/default_perm_user_2}
+mat_table         | _materialized_hypertable_10
+mat_table_perm    | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=arwdDxt/default_perm_user_2}
+direct_view       | _timescaledb_internal._direct_view_10
+direct_view_perm  | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=arwdDxt/default_perm_user_2}
+partial_view      | _timescaledb_internal._partial_view_10
+partial_view_perm | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=arwdDxt/default_perm_user_2}
+
+REVOKE SELECT, UPDATE ON devices_summary FROM :ROLE_DEFAULT_PERM_USER;
+SELECT * FROM cagg_info WHERE user_view::text = 'devices_summary';
+-[ RECORD 1 ]-----+----------------------------------------------------------------------------------------------
+user_view         | devices_summary
+user_view_perm    | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=adDxt/default_perm_user_2}
+mat_table         | _materialized_hypertable_10
+mat_table_perm    | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=adDxt/default_perm_user_2}
+direct_view       | _timescaledb_internal._direct_view_10
+direct_view_perm  | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=adDxt/default_perm_user_2}
+partial_view      | _timescaledb_internal._partial_view_10
+partial_view_perm | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=adDxt/default_perm_user_2}
+
+\x off
+-- Check for default privilege permissions get propagated to the materialization hypertable
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE SCHEMA test_default_privileges;
+GRANT USAGE ON SCHEMA "test_default_privileges" TO :ROLE_DEFAULT_PERM_USER;
+ALTER DEFAULT PRIVILEGES IN SCHEMA "test_default_privileges" GRANT SELECT ON TABLES TO :ROLE_DEFAULT_PERM_USER;
+CREATE TABLE test_default_privileges.devices (
+   time TIMESTAMPTZ NOT NULL,
+   device INT,
+   temp DOUBLE PRECISION NULL,
+   PRIMARY KEY(time, device)
+);
+SELECT create_hypertable('test_default_privileges.devices', 'time');
+           create_hypertable            
+----------------------------------------
+ (11,test_default_privileges,devices,t)
+(1 row)
+
+CREATE MATERIALIZED VIEW test_default_privileges.devices_summary
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
+AS
+SELECT time_bucket('1 day', time) AS bucket, device, MAX(temp)
+FROM test_default_privileges.devices
+GROUP BY bucket, device
+WITH NO DATA;
+-- check if user view perms have been propagated to the mat-ht
+SELECT user_view_perm IS NOT DISTINCT FROM mat_table_perm
+FROM cagg_info
+WHERE user_view = 'test_default_privileges.devices_summary'::regclass;
+ ?column? 
+----------
+ t
+(1 row)
+

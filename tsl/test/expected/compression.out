@@ -1258,7 +1258,8 @@ SELECT create_hypertable('stattest', 'time');
 INSERT INTO stattest SELECT '2020/02/20 01:00'::TIMESTAMPTZ + ('1 hour'::interval * v), 250 * v FROM generate_series(0,25) v;
 SELECT table_name INTO TEMPORARY temptable FROM _timescaledb_catalog.chunk WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'stattest');
 \set statchunk '(select table_name from temptable)'
-SELECT * FROM pg_stats WHERE tablename = :statchunk;
+SELECT schemaname, tablename, attname, inherited, null_frac, avg_width, n_distinct, most_common_vals, most_common_freqs, histogram_bounds, correlation, most_common_elems, most_common_elem_freqs, elem_count_histogram
+FROM pg_stats WHERE tablename = :statchunk;
  schemaname | tablename | attname | inherited | null_frac | avg_width | n_distinct | most_common_vals | most_common_freqs | histogram_bounds | correlation | most_common_elems | most_common_elem_freqs | elem_count_histogram 
 ------------+-----------+---------+-----------+-----------+-----------+------------+------------------+-------------------+------------------+-------------+-------------------+------------------------+----------------------
 (0 rows)
