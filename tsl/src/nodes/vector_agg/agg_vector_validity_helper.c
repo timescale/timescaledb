@@ -12,52 +12,55 @@
 
 static pg_noinline void
 FUNCTION_NAME(vector_impl_arrow)(void *agg_state, const ArrowArray *vector, const uint64 *valid1,
-								 const uint64 *valid2)
+								 const uint64 *valid2, MemoryContext agg_extra_mctx)
 {
 	const int n = vector->length;
 	const CTYPE *values = vector->buffers[1];
-	FUNCTION_NAME(vector_impl)(agg_state, n, values, valid1, valid2);
+	FUNCTION_NAME(vector_impl)(agg_state, n, values, valid1, valid2, agg_extra_mctx);
 }
 
 static pg_noinline void
-FUNCTION_NAME(vector_no_validity)(void *agg_state, const ArrowArray *vector)
+FUNCTION_NAME(vector_no_validity)(void *agg_state, const ArrowArray *vector,
+								  MemoryContext agg_extra_mctx)
 {
-	FUNCTION_NAME(vector_impl_arrow)(agg_state, vector, NULL, NULL);
+	FUNCTION_NAME(vector_impl_arrow)(agg_state, vector, NULL, NULL, agg_extra_mctx);
 }
 
 static pg_noinline void
-FUNCTION_NAME(vector_one_validity)(void *agg_state, const ArrowArray *vector, const uint64 *valid)
+FUNCTION_NAME(vector_one_validity)(void *agg_state, const ArrowArray *vector, const uint64 *valid,
+								   MemoryContext agg_extra_mctx)
 {
-	FUNCTION_NAME(vector_impl_arrow)(agg_state, vector, valid, NULL);
+	FUNCTION_NAME(vector_impl_arrow)(agg_state, vector, valid, NULL, agg_extra_mctx);
 }
 
 static pg_noinline void
 FUNCTION_NAME(vector_two_validity)(void *agg_state, const ArrowArray *vector, const uint64 *valid1,
-								   const uint64 *valid2)
+								   const uint64 *valid2, MemoryContext agg_extra_mctx)
 {
-	FUNCTION_NAME(vector_impl_arrow)(agg_state, vector, valid1, valid2);
+	FUNCTION_NAME(vector_impl_arrow)(agg_state, vector, valid1, valid2, agg_extra_mctx);
 }
 
 static pg_attribute_always_inline void
-FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *vector, const uint64 *filter)
+FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *vector, const uint64 *filter,
+					  MemoryContext agg_extra_mctx)
 {
 	const uint64 *valid1 = vector->buffers[0];
 	const uint64 *valid2 = filter;
 
 	if (valid1 == NULL && valid2 == NULL)
 	{
-		FUNCTION_NAME(vector_no_validity)(agg_state, vector);
+		FUNCTION_NAME(vector_no_validity)(agg_state, vector, agg_extra_mctx);
 	}
 	else if (valid1 != NULL && valid2 == NULL)
 	{
-		FUNCTION_NAME(vector_one_validity)(agg_state, vector, valid1);
+		FUNCTION_NAME(vector_one_validity)(agg_state, vector, valid1, agg_extra_mctx);
 	}
 	else if (valid2 != NULL && valid1 == NULL)
 	{
-		FUNCTION_NAME(vector_one_validity)(agg_state, vector, valid2);
+		FUNCTION_NAME(vector_one_validity)(agg_state, vector, valid2, agg_extra_mctx);
 	}
 	else
 	{
-		FUNCTION_NAME(vector_two_validity)(agg_state, vector, valid1, valid2);
+		FUNCTION_NAME(vector_two_validity)(agg_state, vector, valid1, valid2, agg_extra_mctx);
 	}
 }

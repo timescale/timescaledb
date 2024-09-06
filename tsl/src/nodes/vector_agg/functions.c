@@ -40,7 +40,8 @@ count_emit(void *agg_state, Datum *out_result, bool *out_isnull)
 }
 
 static void
-count_star_const(void *agg_state, Datum constvalue, bool constisnull, int n)
+count_star_const(void *agg_state, Datum constvalue, bool constisnull, int n,
+				 MemoryContext agg_extra_mctx)
 {
 	CountState *state = (CountState *) agg_state;
 	state->count += n;
@@ -57,7 +58,8 @@ VectorAggFunctions count_star_agg = {
  * Aggregate function count(x).
  */
 static void
-count_any_const(void *agg_state, Datum constvalue, bool constisnull, int n)
+count_any_const(void *agg_state, Datum constvalue, bool constisnull, int n,
+				MemoryContext agg_extra_mctx)
 {
 	if (constisnull)
 	{
@@ -69,7 +71,8 @@ count_any_const(void *agg_state, Datum constvalue, bool constisnull, int n)
 }
 
 static void
-count_any_vector(void *agg_state, const ArrowArray *vector, const uint64 *filter)
+count_any_vector(void *agg_state, const ArrowArray *vector, const uint64 *filter,
+				 MemoryContext agg_extra_mctx)
 {
 	CountState *state = (CountState *) agg_state;
 	const int n = vector->length;

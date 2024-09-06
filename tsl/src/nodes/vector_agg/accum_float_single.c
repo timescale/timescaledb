@@ -63,7 +63,7 @@ FUNCTION_NAME(update)(const uint64 *valid1, const uint64 *valid2, const CTYPE *v
 
 static pg_attribute_always_inline void
 FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *valid1,
-						   const uint64 *valid2)
+						   const uint64 *valid2, MemoryContext agg_extra_mctx)
 {
 	FloatAvgState *state = (FloatAvgState *) agg_state;
 

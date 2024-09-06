@@ -19,7 +19,7 @@ FUNCTION_NAME(emit)(void *agg_state, Datum *out_result, bool *out_isnull)
 
 static pg_attribute_always_inline void
 FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *valid1,
-						   const uint64 *valid2)
+						   const uint64 *valid2, MemoryContext agg_extra_mctx)
 {
 	/*
 	 * Vector registers can be up to 512 bits wide.

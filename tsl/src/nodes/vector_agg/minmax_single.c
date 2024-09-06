@@ -10,7 +10,7 @@ case PG_AGG_OID_HELPER(AGG_NAME, PG_TYPE):
 #else
 static pg_attribute_always_inline void
 FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *valid1,
-						   const uint64 *valid2)
+						   const uint64 *valid2, MemoryContext agg_extra_mctx)
 {
 	MinMaxState *state = (MinMaxState *) agg_state;
 
@@ -32,8 +32,12 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 		outer_isvalid |= do_replace;
 	}
 
-	state->value = CTYPE_TO_DATUM(outer_result);
 	state->isvalid = outer_isvalid;
+
+	/* Note that float8 Datum is by-reference on 32-bit systems. */
+	MemoryContext old = MemoryContextSwitchTo(agg_extra_mctx);
+	state->value = CTYPE_TO_DATUM(outer_result);
+	MemoryContextSwitchTo(old);
 }
 
 #include "agg_const_helper.c"

@@ -30,6 +30,13 @@ typedef struct
 	bool *output_grouping_isnull;
 	bool partial_per_batch;
 	bool have_results;
+
+	/*
+	 * A memory context for aggregate functions to allocate additional data,
+	 * i.e. if they store strings or float8 datum on 32-bit systems. Valid until
+	 * the grouping policy is reset.
+	 */
+	MemoryContext agg_extra_mctx;
 } GroupingPolicyBatch;
 
 static const GroupingPolicy grouping_policy_batch_functions;
@@ -42,6 +49,8 @@ create_grouping_policy_batch(List *agg_defs, List *output_grouping_columns, bool
 	policy->funcs = grouping_policy_batch_functions;
 	policy->output_grouping_columns = output_grouping_columns;
 	policy->agg_defs = agg_defs;
+	policy->agg_extra_mctx =
+		AllocSetContextCreate(CurrentMemoryContext, "agg extra", ALLOCSET_DEFAULT_SIZES);
 	ListCell *lc;
 	foreach (lc, agg_defs)
 	{
@@ -55,6 +64,7 @@ create_grouping_policy_batch(List *agg_defs, List *output_grouping_columns, bool
 		(bool *) ((char *) policy->output_grouping_values +
 				  MAXALIGN(list_length(output_grouping_columns) * sizeof(Datum)));
 	policy->funcs.gp_reset(&policy->funcs);
+
 	return &policy->funcs;
 }
 
@@ -62,6 +72,9 @@ static void
 gp_batch_reset(GroupingPolicy *obj)
 {
 	GroupingPolicyBatch *policy = (GroupingPolicyBatch *) obj;
+
+	MemoryContextReset(policy->agg_extra_mctx);
+
 	const int naggs = list_length(policy->agg_defs);
 	for (int i = 0; i < naggs; i++)
 	{
@@ -81,7 +94,8 @@ gp_batch_reset(GroupingPolicy *obj)
 }
 
 static void
-compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_def, void *agg_state)
+compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_def, void *agg_state,
+						 MemoryContext agg_extra_mctx)
 {
 	ArrowArray *arg_arrow = NULL;
 	Datum arg_datum = 0;
@@ -115,7 +129,10 @@ compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_de
 	if (arg_arrow != NULL)
 	{
 		/* Arrow argument. */
-		agg_def->func->agg_vector(agg_state, arg_arrow, batch_state->vector_qual_result);
+		agg_def->func->agg_vector(agg_state,
+								  arg_arrow,
+								  batch_state->vector_qual_result,
+								  agg_extra_mctx);
 	}
 	else
 	{
@@ -132,7 +149,7 @@ compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_de
 		 */
 		Assert(n > 0);
 
-		agg_def->func->agg_const(agg_state, arg_datum, arg_isnull, n);
+		agg_def->func->agg_const(agg_state, arg_datum, arg_isnull, n, agg_extra_mctx);
 	}
 }
 
@@ -145,7 +162,7 @@ gp_batch_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 	{
 		VectorAggDef *agg_def = (VectorAggDef *) list_nth(policy->agg_defs, i);
 		void *agg_state = (void *) list_nth(policy->agg_states, i);
-		compute_single_aggregate(batch_state, agg_def, agg_state);
+		compute_single_aggregate(batch_state, agg_def, agg_state, policy->agg_extra_mctx);
 	}
 
 	const int ngrp = list_length(policy->output_grouping_columns);
