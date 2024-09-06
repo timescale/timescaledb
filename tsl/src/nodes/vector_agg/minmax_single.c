@@ -14,7 +14,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 {
 	MinMaxState *state = (MinMaxState *) agg_state;
 
-	CTYPE outer_result = DATUM_TO_CTYPE(state->value);
+	CTYPE outer_result = state->isvalid ? DATUM_TO_CTYPE(state->value) : 0;
 	bool outer_isvalid = state->isvalid;
 	for (int row = 0; row < n; row++)
 	{
