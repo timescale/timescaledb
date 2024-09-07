@@ -1697,6 +1697,9 @@ ts_makeaclitem(PG_FUNCTION_ARGS)
 		{ "SET", ACL_SET },
 		{ "ALTER SYSTEM", ACL_ALTER_SYSTEM },
 #endif
+#if PG17_GE
+		{ "MAINTAIN", ACL_MAINTAIN },
+#endif
 		{ "RULE", 0 }, /* ignore old RULE privileges */
 		{ NULL, 0 }
 	};

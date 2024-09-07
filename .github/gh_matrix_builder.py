@@ -188,7 +188,7 @@ m["include"].append(
             "snapshot": "snapshot",
             "tsdb_build_args": "-DEXPERIMENTAL=ON",
             # @TODO: those skipped tests should be revisited later
-            "skipped_tests": "repair 001_job_crash_log",
+            "skipped_tests": "001_job_crash_log",
         }
     )
 )
