@@ -1,5 +1,4 @@
 /continuous_aggs_compression-*.sql
-/constify_now-*.sql
 /gapfill-*.sql
 /generated_columns-*.sql
 /ordered_append-*.sql
