@@ -13,6 +13,7 @@
 /.vscode/
 /timescaledb.so
 *.bak
+*.backup
 typedef.list
 /test/testcluster
 /test/log
@@ -23,6 +24,7 @@ typedef.list
 **/GTAGS
 **/GRTAGS
 **/GSYMS
+tags
 /.vs
 /compile_commands.json
 /.DS_Store
