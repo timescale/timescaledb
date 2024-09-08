@@ -23,5 +23,4 @@
 /rowsecurity-*.sql
 /timestamp-*.sql
 /ts_merge-*.sql
-/update-*.sql
 /loader-*.sql
