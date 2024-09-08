@@ -2,7 +2,6 @@
 /alternate_users-*.sql
 /append-*.sql
 /cluster-*.sql
-/cursor-*.sql
 /ddl-*.sql
 /delete-*.sql
 /drop_owned-*.sql
