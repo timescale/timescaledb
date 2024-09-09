@@ -41,7 +41,7 @@ function(GET_PG_CONFIG var)
   # Only call pg_config if the variable didn't already have a value.
   if(NOT ${var})
     execute_process(
-      COMMAND ${PG_CONFIG} ${ARGN}
+      COMMAND ${CMAKE_COMMAND} -E env LC_MESSAGES=C ${PG_CONFIG} ${ARGN}
       OUTPUT_VARIABLE _temp
       OUTPUT_STRIP_TRAILING_WHITESPACE)
   endif()
