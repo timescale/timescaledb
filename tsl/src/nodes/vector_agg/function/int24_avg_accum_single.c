@@ -43,4 +43,3 @@ static VectorAggFunctions FUNCTION_NAME(argdef) = {
 #undef PG_TYPE
 #undef CTYPE
 #undef DATUM_TO_CTYPE
-#undef CTYPE_TO_DATUM

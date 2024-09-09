@@ -13,7 +13,7 @@
 
 #include "minmax_templates.c"
 
-#include "sum_int_templates.c"
+#include "int24_sum_templates.c"
 
 #include "sum_float_templates.c"
 

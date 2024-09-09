@@ -13,7 +13,7 @@ static pg_attribute_always_inline void
 FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *valid1,
 						   const uint64 *valid2, MemoryContext agg_extra_mctx)
 {
-	IntSumState *state = (IntSumState *) agg_state;
+	Int24SumState *state = (Int24SumState *) agg_state;
 
 	/*
 	 * We accumulate the sum as int64, so we can sum INT_MAX = 2^31 - 1
@@ -55,7 +55,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 #include "agg_const_helper.c"
 
 static VectorAggFunctions FUNCTION_NAME(argdef) = {
-	.state_bytes = sizeof(IntSumState),
+	.state_bytes = sizeof(Int24SumState),
 	.agg_init = int_sum_init,
 	.agg_emit = int_sum_emit,
 	.agg_const = FUNCTION_NAME(const),

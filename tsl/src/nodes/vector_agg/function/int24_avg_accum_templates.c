@@ -43,13 +43,11 @@ int24_avg_accum_emit(void *agg_state, Datum *out_result, bool *out_isnull)
 
 #define PG_TYPE INT2
 #define CTYPE int16
-#define CTYPE_TO_DATUM Int16GetDatum
 #define DATUM_TO_CTYPE DatumGetInt16
 #include "int24_avg_accum_single.c"
 
 #define PG_TYPE INT4
 #define CTYPE int32
-#define CTYPE_TO_DATUM Int32GetDatum
 #define DATUM_TO_CTYPE DatumGetInt32
 #include "int24_avg_accum_single.c"
 
