@@ -732,6 +732,20 @@ tts_arrow_copy_heap_tuple(TupleTableSlot *slot)
 		copy_slot_values(slot, aslot->noncompressed_slot, slot->tts_tupleDescriptor->natts);
 	}
 
+	/* If the non-compressed slot is empty, we are being called as if we are a
+	 * virtual TTS (from function `copyfrom` in src/copy.c), so in this case
+	 * we should copy the heap tuple from the "root" slot, which is
+	 * virtual.
+	 *
+	 * We already know that the "root" slot is not empty when this function is
+	 * being called.
+	 *
+	 * This does an extra memcpy() of the tts_values and tts_isnull, so might
+	 * be possible to optimize away.
+	 */
+	if (TTS_EMPTY(aslot->noncompressed_slot))
+		copy_slot_values(slot, aslot->noncompressed_slot, slot->tts_tupleDescriptor->natts);
+
 	/* Since this tuple is generated from a baserel, there are cases when PG
 	 * code expects the TID (t_self) to be set (e.g., during ANALYZE). But
 	 * this doesn't happen if the tuple is formed from values similar to a
