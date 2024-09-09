@@ -2,9 +2,6 @@
 /alternate_users-*.sql
 /append-*.sql
 /cluster-*.sql
-/cursor-*.sql
-/ddl-*.sql
-/delete-*.sql
 /drop_owned-*.sql
 /grant_hypertable-*.sql
 /histogram_test-*.sql
@@ -23,5 +20,4 @@
 /rowsecurity-*.sql
 /timestamp-*.sql
 /ts_merge-*.sql
-/update-*.sql
 /loader-*.sql

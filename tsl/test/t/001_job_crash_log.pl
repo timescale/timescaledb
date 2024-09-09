@@ -12,7 +12,7 @@ use Test::More tests => 5;
 # We cannot do that with a regression test because the server will not recover after
 # a crash in that case
 
-my $node = TimescaleNode->create();
+my $node = TimescaleNode->create('job_crash_log');
 
 # by default PostgresNode doesn't doesn't restart after a crash
 # taken from 013_crash_restart.pl

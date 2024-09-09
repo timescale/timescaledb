@@ -187,8 +187,6 @@ m["include"].append(
             "pg": "17",
             "snapshot": "snapshot",
             "tsdb_build_args": "-DEXPERIMENTAL=ON",
-            # @TODO: those skipped tests should be revisited later
-            "skipped_tests": "merge_compress merge_dml merge ts_merge-17 repair 001_job_crash_log",
         }
     )
 )

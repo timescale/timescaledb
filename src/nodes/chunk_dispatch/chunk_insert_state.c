@@ -75,7 +75,6 @@ chunk_dispatch_has_returning(const ChunkDispatch *dispatch)
 static List *
 chunk_dispatch_get_returning_clauses(const ChunkDispatch *dispatch)
 {
-	Assert(list_length(get_modifytable(dispatch)->returningLists) == 1);
 	return linitial(get_modifytable(dispatch)->returningLists);
 }
 

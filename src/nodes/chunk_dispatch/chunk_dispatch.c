@@ -253,11 +253,8 @@ chunk_dispatch_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *be
 	cscan->custom_scan_tlist = tlist;
 	cscan->scan.plan.targetlist = tlist;
 
-	/*
-	 * XXX mergeUseOuterJoin is gone in PG17, see 0294df2f1f84
-	 */
-#if ((PG15_GE) && (PG17_LT))
-	if (root->parse->mergeUseOuterJoin)
+#if (PG15_GE)
+	if (root->parse->commandType == CMD_MERGE)
 	{
 		/* replace expressions of ROWID_VAR */
 		tlist = ts_replace_rowid_vars(root, tlist, relopt->relid);
