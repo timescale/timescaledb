@@ -12,7 +12,8 @@ $$ LANGUAGE SQL;
 create table aggfns(t int, s int, ss int,
     cint2 int2, cint4 int4, cint8 int8,
     cfloat4 float4, cfloat8 float8,
-    cts timestamp, ctstz timestamptz);
+    cts timestamp, ctstz timestamptz,
+    cdate date);
 select create_hypertable('aggfns', 's', chunk_time_interval => :GROUPING_CARDINALITY / :CHUNKS);
 WARNING:  column type "timestamp without time zone" used for "cts" does not follow best practices
 NOTICE:  adding not-null constraint to column "s"
@@ -34,7 +35,8 @@ select s * 10000::int + t,
         else (mix(s + t + 4) * 100)::float4 end,
     (mix(s + t + 5) * 100)::float8,
     '2021-01-01 01:01:01'::timestamp + interval '1 second' * (s * 10000::int + t),
-    '2021-01-01 01:01:01'::timestamptz + interval '1 second' * (s * 10000::int + t)
+    '2021-01-01 01:01:01'::timestamptz + interval '1 second' * (s * 10000::int + t),
+    '2021-01-01 01:01:01'::timestamptz + interval '1 day' * (s * 10000::int + t)
 from
     generate_series(1::int, :CHUNK_ROWS * :CHUNKS / :GROUPING_CARDINALITY) t,
     generate_series(0::int, :GROUPING_CARDINALITY - 1::int) s(s)
@@ -72,7 +74,8 @@ from
         'cfloat4',
         'cfloat8',
         'cts',
-        'ctstz']) variable,
+        'ctstz',
+        'cdate']) variable,
     unnest(array[
         'min',
         'max',
@@ -102,10 +105,82 @@ where
         when condition = 'cint2 is null' then variable = 'cint2'
         when function = 'count' then variable in ('cfloat4', 's')
         when variable = 't' then function in ('min', 'max')
-        when variable in ('cts', 'ctstz') then function in ('min', 'max')
+        when variable in ('cts', 'ctstz', 'cdate') then function in ('min', 'max')
     else true end
 order by explain, condition.n, variable, function, grouping.n
 \gexec
+select max(cdate) from aggfns order by 1;
+    max     
+------------
+ 03-05-2322
+(1 row)
+
+select s, max(cdate) from aggfns group by s order by 1;
+ s |    max     
+---+------------
+ 0 | 10-05-2075
+ 1 | 02-21-2103
+ 2 | 07-09-2130
+ 3 | 11-24-2157
+ 4 | 04-11-2185
+ 5 | 08-28-2212
+ 6 | 01-14-2240
+ 7 | 06-01-2267
+ 8 | 10-17-2294
+ 9 | 03-05-2322
+(10 rows)
+
+select ss, max(cdate) from aggfns group by ss order by 1;
+ ss |    max     
+----+------------
+  0 | 10-05-2075
+  1 | 02-21-2103
+  2 | 07-09-2130
+  3 | 11-24-2157
+  4 | 04-11-2185
+  5 | 08-28-2212
+  6 | 01-14-2240
+  7 | 06-01-2267
+  8 | 10-17-2294
+  9 | 03-05-2322
+(10 rows)
+
+select min(cdate) from aggfns order by 1;
+    min     
+------------
+ 01-02-2021
+(1 row)
+
+select s, min(cdate) from aggfns group by s order by 1;
+ s |    min     
+---+------------
+ 0 | 01-02-2021
+ 1 | 05-20-2048
+ 2 | 10-06-2075
+ 3 | 02-22-2103
+ 4 | 07-10-2130
+ 5 | 11-25-2157
+ 6 | 04-12-2185
+ 7 | 08-29-2212
+ 8 | 01-15-2240
+ 9 | 06-02-2267
+(10 rows)
+
+select ss, min(cdate) from aggfns group by ss order by 1;
+ ss |    min     
+----+------------
+  0 | 01-02-2021
+  1 | 05-20-2048
+  2 | 10-06-2075
+  3 | 02-22-2103
+  4 | 07-10-2130
+  5 | 11-25-2157
+  6 | 04-12-2185
+  7 | 08-29-2212
+  8 | 01-15-2240
+  9 | 06-02-2267
+(10 rows)
+
 select avg(cfloat4) from aggfns order by 1;
  avg 
 -----
@@ -1652,6 +1727,78 @@ select ss, min(t) from aggfns group by ss order by 1;
   7 | 70001
   8 | 80001
   9 | 90001
+(10 rows)
+
+select max(cdate) from aggfns where cfloat8 > 0 order by 1;
+    max     
+------------
+ 03-05-2322
+(1 row)
+
+select s, max(cdate) from aggfns where cfloat8 > 0 group by s order by 1;
+ s |    max     
+---+------------
+ 0 | 10-04-2075
+ 1 | 02-21-2103
+ 2 | 07-08-2130
+ 3 | 11-22-2157
+ 4 | 04-11-2185
+ 5 | 08-27-2212
+ 6 | 01-14-2240
+ 7 | 05-31-2267
+ 8 | 10-15-2294
+ 9 | 03-05-2322
+(10 rows)
+
+select ss, max(cdate) from aggfns where cfloat8 > 0 group by ss order by 1;
+ ss |    max     
+----+------------
+  0 | 10-04-2075
+  1 | 02-21-2103
+  2 | 07-08-2130
+  3 | 11-22-2157
+  4 | 04-11-2185
+  5 | 08-27-2212
+  6 | 01-14-2240
+  7 | 05-31-2267
+  8 | 10-15-2294
+  9 | 03-05-2322
+(10 rows)
+
+select min(cdate) from aggfns where cfloat8 > 0 order by 1;
+    min     
+------------
+ 01-02-2021
+(1 row)
+
+select s, min(cdate) from aggfns where cfloat8 > 0 group by s order by 1;
+ s |    min     
+---+------------
+ 0 | 01-02-2021
+ 1 | 05-20-2048
+ 2 | 10-11-2075
+ 3 | 02-26-2103
+ 4 | 07-13-2130
+ 5 | 11-27-2157
+ 6 | 04-13-2185
+ 7 | 08-29-2212
+ 8 | 01-15-2240
+ 9 | 06-02-2267
+(10 rows)
+
+select ss, min(cdate) from aggfns where cfloat8 > 0 group by ss order by 1;
+ ss |    min     
+----+------------
+  0 | 01-02-2021
+  1 | 05-20-2048
+  2 | 10-11-2075
+  3 | 02-26-2103
+  4 | 07-13-2130
+  5 | 11-27-2157
+  6 | 04-13-2185
+  7 | 08-29-2212
+  8 | 01-15-2240
+  9 | 06-02-2267
 (10 rows)
 
 select avg(cfloat4) from aggfns where cfloat8 > 0 order by 1;
@@ -3202,6 +3349,78 @@ select ss, min(t) from aggfns where cfloat8 > 0 group by ss order by 1;
   9 | 90001
 (10 rows)
 
+select max(cdate) from aggfns where cfloat8 <= 0 order by 1;
+    max     
+------------
+ 03-04-2322
+(1 row)
+
+select s, max(cdate) from aggfns where cfloat8 <= 0 group by s order by 1;
+ s |    max     
+---+------------
+ 0 | 10-05-2075
+ 1 | 02-20-2103
+ 2 | 07-09-2130
+ 3 | 11-24-2157
+ 4 | 04-10-2185
+ 5 | 08-28-2212
+ 6 | 01-13-2240
+ 7 | 06-01-2267
+ 8 | 10-17-2294
+ 9 | 03-04-2322
+(10 rows)
+
+select ss, max(cdate) from aggfns where cfloat8 <= 0 group by ss order by 1;
+ ss |    max     
+----+------------
+  0 | 10-05-2075
+  1 | 02-20-2103
+  2 | 07-09-2130
+  3 | 11-24-2157
+  4 | 04-10-2185
+  5 | 08-28-2212
+  6 | 01-13-2240
+  7 | 06-01-2267
+  8 | 10-17-2294
+  9 | 03-04-2322
+(10 rows)
+
+select min(cdate) from aggfns where cfloat8 <= 0 order by 1;
+    min     
+------------
+ 01-04-2021
+(1 row)
+
+select s, min(cdate) from aggfns where cfloat8 <= 0 group by s order by 1;
+ s |    min     
+---+------------
+ 0 | 01-04-2021
+ 1 | 05-21-2048
+ 2 | 10-06-2075
+ 3 | 02-22-2103
+ 4 | 07-10-2130
+ 5 | 11-25-2157
+ 6 | 04-12-2185
+ 7 | 09-01-2212
+ 8 | 01-17-2240
+ 9 | 06-03-2267
+(10 rows)
+
+select ss, min(cdate) from aggfns where cfloat8 <= 0 group by ss order by 1;
+ ss |    min     
+----+------------
+  0 | 01-04-2021
+  1 | 05-21-2048
+  2 | 10-06-2075
+  3 | 02-22-2103
+  4 | 07-10-2130
+  5 | 11-25-2157
+  6 | 04-12-2185
+  7 | 09-01-2212
+  8 | 01-17-2240
+  9 | 06-03-2267
+(10 rows)
+
 select avg(cfloat4) from aggfns where cfloat8 <= 0 order by 1;
  avg 
 -----
@@ -4748,6 +4967,78 @@ select ss, min(t) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 | 70004
   8 | 80003
   9 | 90002
+(10 rows)
+
+select max(cdate) from aggfns where cfloat8 < 1000 order by 1;
+    max     
+------------
+ 03-05-2322
+(1 row)
+
+select s, max(cdate) from aggfns where cfloat8 < 1000 group by s order by 1;
+ s |    max     
+---+------------
+ 0 | 10-05-2075
+ 1 | 02-21-2103
+ 2 | 07-09-2130
+ 3 | 11-24-2157
+ 4 | 04-11-2185
+ 5 | 08-28-2212
+ 6 | 01-14-2240
+ 7 | 06-01-2267
+ 8 | 10-17-2294
+ 9 | 03-05-2322
+(10 rows)
+
+select ss, max(cdate) from aggfns where cfloat8 < 1000 group by ss order by 1;
+ ss |    max     
+----+------------
+  0 | 10-05-2075
+  1 | 02-21-2103
+  2 | 07-09-2130
+  3 | 11-24-2157
+  4 | 04-11-2185
+  5 | 08-28-2212
+  6 | 01-14-2240
+  7 | 06-01-2267
+  8 | 10-17-2294
+  9 | 03-05-2322
+(10 rows)
+
+select min(cdate) from aggfns where cfloat8 < 1000 order by 1;
+    min     
+------------
+ 01-02-2021
+(1 row)
+
+select s, min(cdate) from aggfns where cfloat8 < 1000 group by s order by 1;
+ s |    min     
+---+------------
+ 0 | 01-02-2021
+ 1 | 05-20-2048
+ 2 | 10-06-2075
+ 3 | 02-22-2103
+ 4 | 07-10-2130
+ 5 | 11-25-2157
+ 6 | 04-12-2185
+ 7 | 08-29-2212
+ 8 | 01-15-2240
+ 9 | 06-02-2267
+(10 rows)
+
+select ss, min(cdate) from aggfns where cfloat8 < 1000 group by ss order by 1;
+ ss |    min     
+----+------------
+  0 | 01-02-2021
+  1 | 05-20-2048
+  2 | 10-06-2075
+  3 | 02-22-2103
+  4 | 07-10-2130
+  5 | 11-25-2157
+  6 | 04-12-2185
+  7 | 08-29-2212
+  8 | 01-15-2240
+  9 | 06-02-2267
 (10 rows)
 
 select avg(cfloat4) from aggfns where cfloat8 < 1000 order by 1;
@@ -6297,6 +6588,38 @@ select ss, min(t) from aggfns where cfloat8 < 1000 group by ss order by 1;
   8 | 80001
   9 | 90001
 (10 rows)
+
+select max(cdate) from aggfns where cfloat8 > 1000 order by 1;
+ max 
+-----
+ 
+(1 row)
+
+select s, max(cdate) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | max 
+---+-----
+(0 rows)
+
+select ss, max(cdate) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | max 
+----+-----
+(0 rows)
+
+select min(cdate) from aggfns where cfloat8 > 1000 order by 1;
+ min 
+-----
+ 
+(1 row)
+
+select s, min(cdate) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | min 
+---+-----
+(0 rows)
+
+select ss, min(cdate) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | min 
+----+-----
+(0 rows)
 
 select avg(cfloat4) from aggfns where cfloat8 > 1000 order by 1;
  avg 

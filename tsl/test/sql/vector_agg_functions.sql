@@ -15,7 +15,8 @@ $$ LANGUAGE SQL;
 create table aggfns(t int, s int, ss int,
     cint2 int2, cint4 int4, cint8 int8,
     cfloat4 float4, cfloat8 float8,
-    cts timestamp, ctstz timestamptz);
+    cts timestamp, ctstz timestamptz,
+    cdate date);
 select create_hypertable('aggfns', 's', chunk_time_interval => :GROUPING_CARDINALITY / :CHUNKS);
 
 insert into aggfns
@@ -31,7 +32,8 @@ select s * 10000::int + t,
         else (mix(s + t + 4) * 100)::float4 end,
     (mix(s + t + 5) * 100)::float8,
     '2021-01-01 01:01:01'::timestamp + interval '1 second' * (s * 10000::int + t),
-    '2021-01-01 01:01:01'::timestamptz + interval '1 second' * (s * 10000::int + t)
+    '2021-01-01 01:01:01'::timestamptz + interval '1 second' * (s * 10000::int + t),
+    '2021-01-01 01:01:01'::timestamptz + interval '1 day' * (s * 10000::int + t)
 from
     generate_series(1::int, :CHUNK_ROWS * :CHUNKS / :GROUPING_CARDINALITY) t,
     generate_series(0::int, :GROUPING_CARDINALITY - 1::int) s(s)
@@ -69,7 +71,8 @@ from
         'cfloat4',
         'cfloat8',
         'cts',
-        'ctstz']) variable,
+        'ctstz',
+        'cdate']) variable,
     unnest(array[
         'min',
         'max',
@@ -99,7 +102,7 @@ where
         when condition = 'cint2 is null' then variable = 'cint2'
         when function = 'count' then variable in ('cfloat4', 's')
         when variable = 't' then function in ('min', 'max')
-        when variable in ('cts', 'ctstz') then function in ('min', 'max')
+        when variable in ('cts', 'ctstz', 'cdate') then function in ('min', 'max')
     else true end
 order by explain, condition.n, variable, function, grouping.n
 \gexec
