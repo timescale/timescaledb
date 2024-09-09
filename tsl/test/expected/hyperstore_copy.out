@@ -105,6 +105,11 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
  where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
  order by chunk2 asc
  limit 1 offset 1 \gset
+create view amrels as
+select cl.oid::regclass as rel, am.amname, inh.inhparent::regclass as relparent
+  from pg_class cl
+  inner join pg_am am on (cl.relam = am.oid)
+  left join pg_inherits inh on (inh.inhrelid = cl.oid);
 -- Compress the chunks and check that the counts are the same
 select location_id, count(*) into orig from :hypertable GROUP BY location_id;
 select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
@@ -209,3 +214,42 @@ select * from copy_test1 order by metric_id;
 -- load it again, but this statement fails.
 --
 -- select * into subset from :hypertable where device_id between 0 and 10;
+-- Testing copy into a table that has the access method set but has
+-- already existing (compressed) heap-chunks in the table.
+CREATE TABLE test1 (timec timestamptz , i integer, b bigint, t text);
+SELECT table_name from create_hypertable('test1', 'timec');
+NOTICE:  adding not-null constraint to column "timec"
+ table_name 
+------------
+ test1
+(1 row)
+
+INSERT INTO test1 SELECT q, 10, 11, 'hello'
+FROM generate_series( '2020-01-03 10:00:00-05', '2020-01-03 12:00:00-05' , '5 min'::interval) q;
+alter table test1 set (timescaledb.compress_segmentby = 'b', timescaledb.compress_orderby = 'timec DESC');
+SELECT compress_chunk(show_chunks('test1'));
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_5_15_chunk
+(1 row)
+
+select count(*) from test1;
+ count 
+-------
+    25
+(1 row)
+
+select * from amrels where relparent = 'test1'::regclass;
+                   rel                   | amname | relparent 
+-----------------------------------------+--------+-----------
+ _timescaledb_internal._hyper_5_15_chunk | heap   | test1
+(1 row)
+
+alter table test1 set access method hyperstore;
+copy test1 from stdin delimiter ',';
+select count(*) from test1;
+ count 
+-------
+    26
+(1 row)
+
