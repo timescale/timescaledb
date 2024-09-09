@@ -15,7 +15,6 @@
 #include "nodes/vector_agg/exec.h"
 
 #include "compression/arrow_c_data_interface.h"
-#include "functions.h"
 #include "guc.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/decompress_chunk/exec.h"

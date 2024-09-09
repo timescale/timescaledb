@@ -16,7 +16,6 @@
 #include "plan.h"
 
 #include "exec.h"
-#include "functions.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/vector_agg.h"
 #include "utils.h"

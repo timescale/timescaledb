@@ -14,13 +14,13 @@
 #define CTYPE float
 #define CTYPE_TO_DATUM Float4GetDatum
 #define DATUM_TO_CTYPE DatumGetFloat4
-#include "accum_float_single.c"
+#include "float48_accum_single.c"
 
 #define PG_TYPE FLOAT8
 #define CTYPE double
 #define CTYPE_TO_DATUM Float8GetDatum
 #define DATUM_TO_CTYPE DatumGetFloat8
-#include "accum_float_single.c"
+#include "float48_accum_single.c"
 
 #undef AGG_NAME
 #undef NEED_SXX
