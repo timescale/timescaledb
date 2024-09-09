@@ -11,8 +11,10 @@ $$ LANGUAGE SQL;
 \set GROUPING_CARDINALITY 10::int
 create table aggfns(t int, s int, ss int,
     cint2 int2, cint4 int4, cint8 int8,
-    cfloat4 float4, cfloat8 float8);
+    cfloat4 float4, cfloat8 float8,
+    cts timestamp, ctstz timestamptz);
 select create_hypertable('aggfns', 's', chunk_time_interval => :GROUPING_CARDINALITY / :CHUNKS);
+WARNING:  column type "timestamp without time zone" used for "cts" does not follow best practices
 NOTICE:  adding not-null constraint to column "s"
   create_hypertable  
 ---------------------
@@ -30,7 +32,9 @@ select s * 10000::int + t,
         when s = 2 and t = 1061 then '+inf'::float4
         when s = 3 and t = 1061 then '-inf'::float4
         else (mix(s + t + 4) * 100)::float4 end,
-    (mix(s + t + 5) * 100)::float8
+    (mix(s + t + 5) * 100)::float8,
+    '2021-01-01 01:01:01'::timestamp + interval '1 second' * (s * 10000::int + t),
+    '2021-01-01 01:01:01'::timestamptz + interval '1 second' * (s * 10000::int + t)
 from
     generate_series(1::int, :CHUNK_ROWS * :CHUNKS / :GROUPING_CARDINALITY) t,
     generate_series(0::int, :GROUPING_CARDINALITY - 1::int) s(s)
@@ -48,12 +52,16 @@ analyze aggfns;
 ---- on float4 due to different numeric stability in our and PG implementations.
 --set timescaledb.enable_vectorized_aggregation to off;
 select
-    format('select %s%s(%s) from aggfns%s%s order by 1;',
+    format('%sselect %s%s(%s) from aggfns%s%s order by 1;',
+            explain,
             grouping || ', ',
             function, variable,
             ' where ' || condition,
             ' group by ' || grouping )
 from
+    unnest(array[
+        'explain (costs off) ',
+        null]) explain,
     unnest(array[
         't',
         's',
@@ -62,7 +70,9 @@ from
         'cint4',
         'cint8',
         'cfloat4',
-        'cfloat8']) variable,
+        'cfloat8',
+        'cts',
+        'ctstz']) variable,
     unnest(array[
         'min',
         'max',
@@ -81,11 +91,20 @@ from
         null,
         's',
         'ss']) with ordinality as grouping(grouping, n)
-where case when condition = 'cint2 is null' then variable = 'cint2'
+where
+    case
+--        when explain is not null then condition is null and grouping = 's'
+        when explain is not null then false
+        when true then true
+    end
+    and
+    case
+        when condition = 'cint2 is null' then variable = 'cint2'
         when function = 'count' then variable in ('cfloat4', 's')
         when variable = 't' then function in ('min', 'max')
-        else true end
-order by condition.n, variable, function, grouping.n
+        when variable in ('cts', 'ctstz') then function in ('min', 'max')
+    else true end
+order by explain, condition.n, variable, function, grouping.n
 \gexec
 select avg(cfloat4) from aggfns order by 1;
  avg 
@@ -1021,6 +1040,150 @@ select ss, sum(cint8) from aggfns group by ss order by 1;
   7 | -56685387304
   8 | -56283868935
   9 | -56397158270
+(10 rows)
+
+select max(cts) from aggfns order by 1;
+           max            
+--------------------------
+ Sat Jan 02 07:34:21 2021
+(1 row)
+
+select s, max(cts) from aggfns group by s order by 1;
+ s |           max            
+---+--------------------------
+ 0 | Fri Jan 01 06:34:21 2021
+ 1 | Fri Jan 01 09:21:01 2021
+ 2 | Fri Jan 01 12:07:41 2021
+ 3 | Fri Jan 01 14:54:21 2021
+ 4 | Fri Jan 01 17:41:01 2021
+ 5 | Fri Jan 01 20:27:41 2021
+ 6 | Fri Jan 01 23:14:21 2021
+ 7 | Sat Jan 02 02:01:01 2021
+ 8 | Sat Jan 02 04:47:41 2021
+ 9 | Sat Jan 02 07:34:21 2021
+(10 rows)
+
+select ss, max(cts) from aggfns group by ss order by 1;
+ ss |           max            
+----+--------------------------
+  0 | Fri Jan 01 06:34:21 2021
+  1 | Fri Jan 01 09:21:01 2021
+  2 | Fri Jan 01 12:07:41 2021
+  3 | Fri Jan 01 14:54:21 2021
+  4 | Fri Jan 01 17:41:01 2021
+  5 | Fri Jan 01 20:27:41 2021
+  6 | Fri Jan 01 23:14:21 2021
+  7 | Sat Jan 02 02:01:01 2021
+  8 | Sat Jan 02 04:47:41 2021
+  9 | Sat Jan 02 07:34:21 2021
+(10 rows)
+
+select min(cts) from aggfns order by 1;
+           min            
+--------------------------
+ Fri Jan 01 01:01:02 2021
+(1 row)
+
+select s, min(cts) from aggfns group by s order by 1;
+ s |           min            
+---+--------------------------
+ 0 | Fri Jan 01 01:01:02 2021
+ 1 | Fri Jan 01 03:47:42 2021
+ 2 | Fri Jan 01 06:34:22 2021
+ 3 | Fri Jan 01 09:21:02 2021
+ 4 | Fri Jan 01 12:07:42 2021
+ 5 | Fri Jan 01 14:54:22 2021
+ 6 | Fri Jan 01 17:41:02 2021
+ 7 | Fri Jan 01 20:27:42 2021
+ 8 | Fri Jan 01 23:14:22 2021
+ 9 | Sat Jan 02 02:01:02 2021
+(10 rows)
+
+select ss, min(cts) from aggfns group by ss order by 1;
+ ss |           min            
+----+--------------------------
+  0 | Fri Jan 01 01:01:02 2021
+  1 | Fri Jan 01 03:47:42 2021
+  2 | Fri Jan 01 06:34:22 2021
+  3 | Fri Jan 01 09:21:02 2021
+  4 | Fri Jan 01 12:07:42 2021
+  5 | Fri Jan 01 14:54:22 2021
+  6 | Fri Jan 01 17:41:02 2021
+  7 | Fri Jan 01 20:27:42 2021
+  8 | Fri Jan 01 23:14:22 2021
+  9 | Sat Jan 02 02:01:02 2021
+(10 rows)
+
+select max(ctstz) from aggfns order by 1;
+             max              
+------------------------------
+ Sat Jan 02 07:34:21 2021 PST
+(1 row)
+
+select s, max(ctstz) from aggfns group by s order by 1;
+ s |             max              
+---+------------------------------
+ 0 | Fri Jan 01 06:34:21 2021 PST
+ 1 | Fri Jan 01 09:21:01 2021 PST
+ 2 | Fri Jan 01 12:07:41 2021 PST
+ 3 | Fri Jan 01 14:54:21 2021 PST
+ 4 | Fri Jan 01 17:41:01 2021 PST
+ 5 | Fri Jan 01 20:27:41 2021 PST
+ 6 | Fri Jan 01 23:14:21 2021 PST
+ 7 | Sat Jan 02 02:01:01 2021 PST
+ 8 | Sat Jan 02 04:47:41 2021 PST
+ 9 | Sat Jan 02 07:34:21 2021 PST
+(10 rows)
+
+select ss, max(ctstz) from aggfns group by ss order by 1;
+ ss |             max              
+----+------------------------------
+  0 | Fri Jan 01 06:34:21 2021 PST
+  1 | Fri Jan 01 09:21:01 2021 PST
+  2 | Fri Jan 01 12:07:41 2021 PST
+  3 | Fri Jan 01 14:54:21 2021 PST
+  4 | Fri Jan 01 17:41:01 2021 PST
+  5 | Fri Jan 01 20:27:41 2021 PST
+  6 | Fri Jan 01 23:14:21 2021 PST
+  7 | Sat Jan 02 02:01:01 2021 PST
+  8 | Sat Jan 02 04:47:41 2021 PST
+  9 | Sat Jan 02 07:34:21 2021 PST
+(10 rows)
+
+select min(ctstz) from aggfns order by 1;
+             min              
+------------------------------
+ Fri Jan 01 01:01:02 2021 PST
+(1 row)
+
+select s, min(ctstz) from aggfns group by s order by 1;
+ s |             min              
+---+------------------------------
+ 0 | Fri Jan 01 01:01:02 2021 PST
+ 1 | Fri Jan 01 03:47:42 2021 PST
+ 2 | Fri Jan 01 06:34:22 2021 PST
+ 3 | Fri Jan 01 09:21:02 2021 PST
+ 4 | Fri Jan 01 12:07:42 2021 PST
+ 5 | Fri Jan 01 14:54:22 2021 PST
+ 6 | Fri Jan 01 17:41:02 2021 PST
+ 7 | Fri Jan 01 20:27:42 2021 PST
+ 8 | Fri Jan 01 23:14:22 2021 PST
+ 9 | Sat Jan 02 02:01:02 2021 PST
+(10 rows)
+
+select ss, min(ctstz) from aggfns group by ss order by 1;
+ ss |             min              
+----+------------------------------
+  0 | Fri Jan 01 01:01:02 2021 PST
+  1 | Fri Jan 01 03:47:42 2021 PST
+  2 | Fri Jan 01 06:34:22 2021 PST
+  3 | Fri Jan 01 09:21:02 2021 PST
+  4 | Fri Jan 01 12:07:42 2021 PST
+  5 | Fri Jan 01 14:54:22 2021 PST
+  6 | Fri Jan 01 17:41:02 2021 PST
+  7 | Fri Jan 01 20:27:42 2021 PST
+  8 | Fri Jan 01 23:14:22 2021 PST
+  9 | Sat Jan 02 02:01:02 2021 PST
 (10 rows)
 
 select avg(s) from aggfns order by 1;
@@ -2427,6 +2590,150 @@ select ss, sum(cint8) from aggfns where cfloat8 > 0 group by ss order by 1;
   9 | -72170387501
 (10 rows)
 
+select max(cts) from aggfns where cfloat8 > 0 order by 1;
+           max            
+--------------------------
+ Sat Jan 02 07:34:21 2021
+(1 row)
+
+select s, max(cts) from aggfns where cfloat8 > 0 group by s order by 1;
+ s |           max            
+---+--------------------------
+ 0 | Fri Jan 01 06:34:20 2021
+ 1 | Fri Jan 01 09:21:01 2021
+ 2 | Fri Jan 01 12:07:40 2021
+ 3 | Fri Jan 01 14:54:19 2021
+ 4 | Fri Jan 01 17:41:01 2021
+ 5 | Fri Jan 01 20:27:40 2021
+ 6 | Fri Jan 01 23:14:21 2021
+ 7 | Sat Jan 02 02:01:00 2021
+ 8 | Sat Jan 02 04:47:39 2021
+ 9 | Sat Jan 02 07:34:21 2021
+(10 rows)
+
+select ss, max(cts) from aggfns where cfloat8 > 0 group by ss order by 1;
+ ss |           max            
+----+--------------------------
+  0 | Fri Jan 01 06:34:20 2021
+  1 | Fri Jan 01 09:21:01 2021
+  2 | Fri Jan 01 12:07:40 2021
+  3 | Fri Jan 01 14:54:19 2021
+  4 | Fri Jan 01 17:41:01 2021
+  5 | Fri Jan 01 20:27:40 2021
+  6 | Fri Jan 01 23:14:21 2021
+  7 | Sat Jan 02 02:01:00 2021
+  8 | Sat Jan 02 04:47:39 2021
+  9 | Sat Jan 02 07:34:21 2021
+(10 rows)
+
+select min(cts) from aggfns where cfloat8 > 0 order by 1;
+           min            
+--------------------------
+ Fri Jan 01 01:01:02 2021
+(1 row)
+
+select s, min(cts) from aggfns where cfloat8 > 0 group by s order by 1;
+ s |           min            
+---+--------------------------
+ 0 | Fri Jan 01 01:01:02 2021
+ 1 | Fri Jan 01 03:47:42 2021
+ 2 | Fri Jan 01 06:34:27 2021
+ 3 | Fri Jan 01 09:21:06 2021
+ 4 | Fri Jan 01 12:07:45 2021
+ 5 | Fri Jan 01 14:54:24 2021
+ 6 | Fri Jan 01 17:41:03 2021
+ 7 | Fri Jan 01 20:27:42 2021
+ 8 | Fri Jan 01 23:14:22 2021
+ 9 | Sat Jan 02 02:01:02 2021
+(10 rows)
+
+select ss, min(cts) from aggfns where cfloat8 > 0 group by ss order by 1;
+ ss |           min            
+----+--------------------------
+  0 | Fri Jan 01 01:01:02 2021
+  1 | Fri Jan 01 03:47:42 2021
+  2 | Fri Jan 01 06:34:27 2021
+  3 | Fri Jan 01 09:21:06 2021
+  4 | Fri Jan 01 12:07:45 2021
+  5 | Fri Jan 01 14:54:24 2021
+  6 | Fri Jan 01 17:41:03 2021
+  7 | Fri Jan 01 20:27:42 2021
+  8 | Fri Jan 01 23:14:22 2021
+  9 | Sat Jan 02 02:01:02 2021
+(10 rows)
+
+select max(ctstz) from aggfns where cfloat8 > 0 order by 1;
+             max              
+------------------------------
+ Sat Jan 02 07:34:21 2021 PST
+(1 row)
+
+select s, max(ctstz) from aggfns where cfloat8 > 0 group by s order by 1;
+ s |             max              
+---+------------------------------
+ 0 | Fri Jan 01 06:34:20 2021 PST
+ 1 | Fri Jan 01 09:21:01 2021 PST
+ 2 | Fri Jan 01 12:07:40 2021 PST
+ 3 | Fri Jan 01 14:54:19 2021 PST
+ 4 | Fri Jan 01 17:41:01 2021 PST
+ 5 | Fri Jan 01 20:27:40 2021 PST
+ 6 | Fri Jan 01 23:14:21 2021 PST
+ 7 | Sat Jan 02 02:01:00 2021 PST
+ 8 | Sat Jan 02 04:47:39 2021 PST
+ 9 | Sat Jan 02 07:34:21 2021 PST
+(10 rows)
+
+select ss, max(ctstz) from aggfns where cfloat8 > 0 group by ss order by 1;
+ ss |             max              
+----+------------------------------
+  0 | Fri Jan 01 06:34:20 2021 PST
+  1 | Fri Jan 01 09:21:01 2021 PST
+  2 | Fri Jan 01 12:07:40 2021 PST
+  3 | Fri Jan 01 14:54:19 2021 PST
+  4 | Fri Jan 01 17:41:01 2021 PST
+  5 | Fri Jan 01 20:27:40 2021 PST
+  6 | Fri Jan 01 23:14:21 2021 PST
+  7 | Sat Jan 02 02:01:00 2021 PST
+  8 | Sat Jan 02 04:47:39 2021 PST
+  9 | Sat Jan 02 07:34:21 2021 PST
+(10 rows)
+
+select min(ctstz) from aggfns where cfloat8 > 0 order by 1;
+             min              
+------------------------------
+ Fri Jan 01 01:01:02 2021 PST
+(1 row)
+
+select s, min(ctstz) from aggfns where cfloat8 > 0 group by s order by 1;
+ s |             min              
+---+------------------------------
+ 0 | Fri Jan 01 01:01:02 2021 PST
+ 1 | Fri Jan 01 03:47:42 2021 PST
+ 2 | Fri Jan 01 06:34:27 2021 PST
+ 3 | Fri Jan 01 09:21:06 2021 PST
+ 4 | Fri Jan 01 12:07:45 2021 PST
+ 5 | Fri Jan 01 14:54:24 2021 PST
+ 6 | Fri Jan 01 17:41:03 2021 PST
+ 7 | Fri Jan 01 20:27:42 2021 PST
+ 8 | Fri Jan 01 23:14:22 2021 PST
+ 9 | Sat Jan 02 02:01:02 2021 PST
+(10 rows)
+
+select ss, min(ctstz) from aggfns where cfloat8 > 0 group by ss order by 1;
+ ss |             min              
+----+------------------------------
+  0 | Fri Jan 01 01:01:02 2021 PST
+  1 | Fri Jan 01 03:47:42 2021 PST
+  2 | Fri Jan 01 06:34:27 2021 PST
+  3 | Fri Jan 01 09:21:06 2021 PST
+  4 | Fri Jan 01 12:07:45 2021 PST
+  5 | Fri Jan 01 14:54:24 2021 PST
+  6 | Fri Jan 01 17:41:03 2021 PST
+  7 | Fri Jan 01 20:27:42 2021 PST
+  8 | Fri Jan 01 23:14:22 2021 PST
+  9 | Sat Jan 02 02:01:02 2021 PST
+(10 rows)
+
 select avg(s) from aggfns where cfloat8 > 0 order by 1;
         avg         
 --------------------
@@ -3829,6 +4136,150 @@ select ss, sum(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 | 15631952491
   8 | 15773229231
   9 | 15773229231
+(10 rows)
+
+select max(cts) from aggfns where cfloat8 <= 0 order by 1;
+           max            
+--------------------------
+ Sat Jan 02 07:34:20 2021
+(1 row)
+
+select s, max(cts) from aggfns where cfloat8 <= 0 group by s order by 1;
+ s |           max            
+---+--------------------------
+ 0 | Fri Jan 01 06:34:21 2021
+ 1 | Fri Jan 01 09:21:00 2021
+ 2 | Fri Jan 01 12:07:41 2021
+ 3 | Fri Jan 01 14:54:21 2021
+ 4 | Fri Jan 01 17:41:00 2021
+ 5 | Fri Jan 01 20:27:41 2021
+ 6 | Fri Jan 01 23:14:20 2021
+ 7 | Sat Jan 02 02:01:01 2021
+ 8 | Sat Jan 02 04:47:41 2021
+ 9 | Sat Jan 02 07:34:20 2021
+(10 rows)
+
+select ss, max(cts) from aggfns where cfloat8 <= 0 group by ss order by 1;
+ ss |           max            
+----+--------------------------
+  0 | Fri Jan 01 06:34:21 2021
+  1 | Fri Jan 01 09:21:00 2021
+  2 | Fri Jan 01 12:07:41 2021
+  3 | Fri Jan 01 14:54:21 2021
+  4 | Fri Jan 01 17:41:00 2021
+  5 | Fri Jan 01 20:27:41 2021
+  6 | Fri Jan 01 23:14:20 2021
+  7 | Sat Jan 02 02:01:01 2021
+  8 | Sat Jan 02 04:47:41 2021
+  9 | Sat Jan 02 07:34:20 2021
+(10 rows)
+
+select min(cts) from aggfns where cfloat8 <= 0 order by 1;
+           min            
+--------------------------
+ Fri Jan 01 01:01:04 2021
+(1 row)
+
+select s, min(cts) from aggfns where cfloat8 <= 0 group by s order by 1;
+ s |           min            
+---+--------------------------
+ 0 | Fri Jan 01 01:01:04 2021
+ 1 | Fri Jan 01 03:47:43 2021
+ 2 | Fri Jan 01 06:34:22 2021
+ 3 | Fri Jan 01 09:21:02 2021
+ 4 | Fri Jan 01 12:07:42 2021
+ 5 | Fri Jan 01 14:54:22 2021
+ 6 | Fri Jan 01 17:41:02 2021
+ 7 | Fri Jan 01 20:27:45 2021
+ 8 | Fri Jan 01 23:14:24 2021
+ 9 | Sat Jan 02 02:01:03 2021
+(10 rows)
+
+select ss, min(cts) from aggfns where cfloat8 <= 0 group by ss order by 1;
+ ss |           min            
+----+--------------------------
+  0 | Fri Jan 01 01:01:04 2021
+  1 | Fri Jan 01 03:47:43 2021
+  2 | Fri Jan 01 06:34:22 2021
+  3 | Fri Jan 01 09:21:02 2021
+  4 | Fri Jan 01 12:07:42 2021
+  5 | Fri Jan 01 14:54:22 2021
+  6 | Fri Jan 01 17:41:02 2021
+  7 | Fri Jan 01 20:27:45 2021
+  8 | Fri Jan 01 23:14:24 2021
+  9 | Sat Jan 02 02:01:03 2021
+(10 rows)
+
+select max(ctstz) from aggfns where cfloat8 <= 0 order by 1;
+             max              
+------------------------------
+ Sat Jan 02 07:34:20 2021 PST
+(1 row)
+
+select s, max(ctstz) from aggfns where cfloat8 <= 0 group by s order by 1;
+ s |             max              
+---+------------------------------
+ 0 | Fri Jan 01 06:34:21 2021 PST
+ 1 | Fri Jan 01 09:21:00 2021 PST
+ 2 | Fri Jan 01 12:07:41 2021 PST
+ 3 | Fri Jan 01 14:54:21 2021 PST
+ 4 | Fri Jan 01 17:41:00 2021 PST
+ 5 | Fri Jan 01 20:27:41 2021 PST
+ 6 | Fri Jan 01 23:14:20 2021 PST
+ 7 | Sat Jan 02 02:01:01 2021 PST
+ 8 | Sat Jan 02 04:47:41 2021 PST
+ 9 | Sat Jan 02 07:34:20 2021 PST
+(10 rows)
+
+select ss, max(ctstz) from aggfns where cfloat8 <= 0 group by ss order by 1;
+ ss |             max              
+----+------------------------------
+  0 | Fri Jan 01 06:34:21 2021 PST
+  1 | Fri Jan 01 09:21:00 2021 PST
+  2 | Fri Jan 01 12:07:41 2021 PST
+  3 | Fri Jan 01 14:54:21 2021 PST
+  4 | Fri Jan 01 17:41:00 2021 PST
+  5 | Fri Jan 01 20:27:41 2021 PST
+  6 | Fri Jan 01 23:14:20 2021 PST
+  7 | Sat Jan 02 02:01:01 2021 PST
+  8 | Sat Jan 02 04:47:41 2021 PST
+  9 | Sat Jan 02 07:34:20 2021 PST
+(10 rows)
+
+select min(ctstz) from aggfns where cfloat8 <= 0 order by 1;
+             min              
+------------------------------
+ Fri Jan 01 01:01:04 2021 PST
+(1 row)
+
+select s, min(ctstz) from aggfns where cfloat8 <= 0 group by s order by 1;
+ s |             min              
+---+------------------------------
+ 0 | Fri Jan 01 01:01:04 2021 PST
+ 1 | Fri Jan 01 03:47:43 2021 PST
+ 2 | Fri Jan 01 06:34:22 2021 PST
+ 3 | Fri Jan 01 09:21:02 2021 PST
+ 4 | Fri Jan 01 12:07:42 2021 PST
+ 5 | Fri Jan 01 14:54:22 2021 PST
+ 6 | Fri Jan 01 17:41:02 2021 PST
+ 7 | Fri Jan 01 20:27:45 2021 PST
+ 8 | Fri Jan 01 23:14:24 2021 PST
+ 9 | Sat Jan 02 02:01:03 2021 PST
+(10 rows)
+
+select ss, min(ctstz) from aggfns where cfloat8 <= 0 group by ss order by 1;
+ ss |             min              
+----+------------------------------
+  0 | Fri Jan 01 01:01:04 2021 PST
+  1 | Fri Jan 01 03:47:43 2021 PST
+  2 | Fri Jan 01 06:34:22 2021 PST
+  3 | Fri Jan 01 09:21:02 2021 PST
+  4 | Fri Jan 01 12:07:42 2021 PST
+  5 | Fri Jan 01 14:54:22 2021 PST
+  6 | Fri Jan 01 17:41:02 2021 PST
+  7 | Fri Jan 01 20:27:45 2021 PST
+  8 | Fri Jan 01 23:14:24 2021 PST
+  9 | Sat Jan 02 02:01:03 2021 PST
 (10 rows)
 
 select avg(s) from aggfns where cfloat8 <= 0 order by 1;
@@ -5235,6 +5686,150 @@ select ss, sum(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1;
   9 | -56397158270
 (10 rows)
 
+select max(cts) from aggfns where cfloat8 < 1000 order by 1;
+           max            
+--------------------------
+ Sat Jan 02 07:34:21 2021
+(1 row)
+
+select s, max(cts) from aggfns where cfloat8 < 1000 group by s order by 1;
+ s |           max            
+---+--------------------------
+ 0 | Fri Jan 01 06:34:21 2021
+ 1 | Fri Jan 01 09:21:01 2021
+ 2 | Fri Jan 01 12:07:41 2021
+ 3 | Fri Jan 01 14:54:21 2021
+ 4 | Fri Jan 01 17:41:01 2021
+ 5 | Fri Jan 01 20:27:41 2021
+ 6 | Fri Jan 01 23:14:21 2021
+ 7 | Sat Jan 02 02:01:01 2021
+ 8 | Sat Jan 02 04:47:41 2021
+ 9 | Sat Jan 02 07:34:21 2021
+(10 rows)
+
+select ss, max(cts) from aggfns where cfloat8 < 1000 group by ss order by 1;
+ ss |           max            
+----+--------------------------
+  0 | Fri Jan 01 06:34:21 2021
+  1 | Fri Jan 01 09:21:01 2021
+  2 | Fri Jan 01 12:07:41 2021
+  3 | Fri Jan 01 14:54:21 2021
+  4 | Fri Jan 01 17:41:01 2021
+  5 | Fri Jan 01 20:27:41 2021
+  6 | Fri Jan 01 23:14:21 2021
+  7 | Sat Jan 02 02:01:01 2021
+  8 | Sat Jan 02 04:47:41 2021
+  9 | Sat Jan 02 07:34:21 2021
+(10 rows)
+
+select min(cts) from aggfns where cfloat8 < 1000 order by 1;
+           min            
+--------------------------
+ Fri Jan 01 01:01:02 2021
+(1 row)
+
+select s, min(cts) from aggfns where cfloat8 < 1000 group by s order by 1;
+ s |           min            
+---+--------------------------
+ 0 | Fri Jan 01 01:01:02 2021
+ 1 | Fri Jan 01 03:47:42 2021
+ 2 | Fri Jan 01 06:34:22 2021
+ 3 | Fri Jan 01 09:21:02 2021
+ 4 | Fri Jan 01 12:07:42 2021
+ 5 | Fri Jan 01 14:54:22 2021
+ 6 | Fri Jan 01 17:41:02 2021
+ 7 | Fri Jan 01 20:27:42 2021
+ 8 | Fri Jan 01 23:14:22 2021
+ 9 | Sat Jan 02 02:01:02 2021
+(10 rows)
+
+select ss, min(cts) from aggfns where cfloat8 < 1000 group by ss order by 1;
+ ss |           min            
+----+--------------------------
+  0 | Fri Jan 01 01:01:02 2021
+  1 | Fri Jan 01 03:47:42 2021
+  2 | Fri Jan 01 06:34:22 2021
+  3 | Fri Jan 01 09:21:02 2021
+  4 | Fri Jan 01 12:07:42 2021
+  5 | Fri Jan 01 14:54:22 2021
+  6 | Fri Jan 01 17:41:02 2021
+  7 | Fri Jan 01 20:27:42 2021
+  8 | Fri Jan 01 23:14:22 2021
+  9 | Sat Jan 02 02:01:02 2021
+(10 rows)
+
+select max(ctstz) from aggfns where cfloat8 < 1000 order by 1;
+             max              
+------------------------------
+ Sat Jan 02 07:34:21 2021 PST
+(1 row)
+
+select s, max(ctstz) from aggfns where cfloat8 < 1000 group by s order by 1;
+ s |             max              
+---+------------------------------
+ 0 | Fri Jan 01 06:34:21 2021 PST
+ 1 | Fri Jan 01 09:21:01 2021 PST
+ 2 | Fri Jan 01 12:07:41 2021 PST
+ 3 | Fri Jan 01 14:54:21 2021 PST
+ 4 | Fri Jan 01 17:41:01 2021 PST
+ 5 | Fri Jan 01 20:27:41 2021 PST
+ 6 | Fri Jan 01 23:14:21 2021 PST
+ 7 | Sat Jan 02 02:01:01 2021 PST
+ 8 | Sat Jan 02 04:47:41 2021 PST
+ 9 | Sat Jan 02 07:34:21 2021 PST
+(10 rows)
+
+select ss, max(ctstz) from aggfns where cfloat8 < 1000 group by ss order by 1;
+ ss |             max              
+----+------------------------------
+  0 | Fri Jan 01 06:34:21 2021 PST
+  1 | Fri Jan 01 09:21:01 2021 PST
+  2 | Fri Jan 01 12:07:41 2021 PST
+  3 | Fri Jan 01 14:54:21 2021 PST
+  4 | Fri Jan 01 17:41:01 2021 PST
+  5 | Fri Jan 01 20:27:41 2021 PST
+  6 | Fri Jan 01 23:14:21 2021 PST
+  7 | Sat Jan 02 02:01:01 2021 PST
+  8 | Sat Jan 02 04:47:41 2021 PST
+  9 | Sat Jan 02 07:34:21 2021 PST
+(10 rows)
+
+select min(ctstz) from aggfns where cfloat8 < 1000 order by 1;
+             min              
+------------------------------
+ Fri Jan 01 01:01:02 2021 PST
+(1 row)
+
+select s, min(ctstz) from aggfns where cfloat8 < 1000 group by s order by 1;
+ s |             min              
+---+------------------------------
+ 0 | Fri Jan 01 01:01:02 2021 PST
+ 1 | Fri Jan 01 03:47:42 2021 PST
+ 2 | Fri Jan 01 06:34:22 2021 PST
+ 3 | Fri Jan 01 09:21:02 2021 PST
+ 4 | Fri Jan 01 12:07:42 2021 PST
+ 5 | Fri Jan 01 14:54:22 2021 PST
+ 6 | Fri Jan 01 17:41:02 2021 PST
+ 7 | Fri Jan 01 20:27:42 2021 PST
+ 8 | Fri Jan 01 23:14:22 2021 PST
+ 9 | Sat Jan 02 02:01:02 2021 PST
+(10 rows)
+
+select ss, min(ctstz) from aggfns where cfloat8 < 1000 group by ss order by 1;
+ ss |             min              
+----+------------------------------
+  0 | Fri Jan 01 01:01:02 2021 PST
+  1 | Fri Jan 01 03:47:42 2021 PST
+  2 | Fri Jan 01 06:34:22 2021 PST
+  3 | Fri Jan 01 09:21:02 2021 PST
+  4 | Fri Jan 01 12:07:42 2021 PST
+  5 | Fri Jan 01 14:54:22 2021 PST
+  6 | Fri Jan 01 17:41:02 2021 PST
+  7 | Fri Jan 01 20:27:42 2021 PST
+  8 | Fri Jan 01 23:14:22 2021 PST
+  9 | Sat Jan 02 02:01:02 2021 PST
+(10 rows)
+
 select avg(s) from aggfns where cfloat8 < 1000 order by 1;
         avg         
 --------------------
@@ -6111,6 +6706,70 @@ select s, sum(cint8) from aggfns where cfloat8 > 1000 group by s order by 1;
 
 select ss, sum(cint8) from aggfns where cfloat8 > 1000 group by ss order by 1;
  ss | sum 
+----+-----
+(0 rows)
+
+select max(cts) from aggfns where cfloat8 > 1000 order by 1;
+ max 
+-----
+ 
+(1 row)
+
+select s, max(cts) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | max 
+---+-----
+(0 rows)
+
+select ss, max(cts) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | max 
+----+-----
+(0 rows)
+
+select min(cts) from aggfns where cfloat8 > 1000 order by 1;
+ min 
+-----
+ 
+(1 row)
+
+select s, min(cts) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | min 
+---+-----
+(0 rows)
+
+select ss, min(cts) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | min 
+----+-----
+(0 rows)
+
+select max(ctstz) from aggfns where cfloat8 > 1000 order by 1;
+ max 
+-----
+ 
+(1 row)
+
+select s, max(ctstz) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | max 
+---+-----
+(0 rows)
+
+select ss, max(ctstz) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | max 
+----+-----
+(0 rows)
+
+select min(ctstz) from aggfns where cfloat8 > 1000 order by 1;
+ min 
+-----
+ 
+(1 row)
+
+select s, min(ctstz) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | min 
+---+-----
+(0 rows)
+
+select ss, min(ctstz) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | min 
 ----+-----
 (0 rows)
 

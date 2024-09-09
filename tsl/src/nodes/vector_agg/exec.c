@@ -174,6 +174,12 @@ vector_agg_exec(CustomScanState *node)
 		return NULL;
 	}
 
+	/*
+	 * Have no more partial aggregation results and still have input, have to
+	 * reset the grouping policy and start a new cycle of partial aggregation.
+	 */
+	grouping->gp_reset(grouping);
+
 	DecompressChunkState *decompress_state =
 		(DecompressChunkState *) linitial(vector_agg_state->custom.custom_ps);
 

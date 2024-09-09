@@ -14,7 +14,8 @@ $$ LANGUAGE SQL;
 
 create table aggfns(t int, s int, ss int,
     cint2 int2, cint4 int4, cint8 int8,
-    cfloat4 float4, cfloat8 float8);
+    cfloat4 float4, cfloat8 float8,
+    cts timestamp, ctstz timestamptz);
 select create_hypertable('aggfns', 's', chunk_time_interval => :GROUPING_CARDINALITY / :CHUNKS);
 
 insert into aggfns
@@ -28,7 +29,9 @@ select s * 10000::int + t,
         when s = 2 and t = 1061 then '+inf'::float4
         when s = 3 and t = 1061 then '-inf'::float4
         else (mix(s + t + 4) * 100)::float4 end,
-    (mix(s + t + 5) * 100)::float8
+    (mix(s + t + 5) * 100)::float8,
+    '2021-01-01 01:01:01'::timestamp + interval '1 second' * (s * 10000::int + t),
+    '2021-01-01 01:01:01'::timestamptz + interval '1 second' * (s * 10000::int + t)
 from
     generate_series(1::int, :CHUNK_ROWS * :CHUNKS / :GROUPING_CARDINALITY) t,
     generate_series(0::int, :GROUPING_CARDINALITY - 1::int) s(s)
@@ -46,12 +49,16 @@ analyze aggfns;
 --set timescaledb.enable_vectorized_aggregation to off;
 
 select
-    format('select %s%s(%s) from aggfns%s%s order by 1;',
+    format('%sselect %s%s(%s) from aggfns%s%s order by 1;',
+            explain,
             grouping || ', ',
             function, variable,
             ' where ' || condition,
             ' group by ' || grouping )
 from
+    unnest(array[
+        'explain (costs off) ',
+        null]) explain,
     unnest(array[
         't',
         's',
@@ -60,7 +67,9 @@ from
         'cint4',
         'cint8',
         'cfloat4',
-        'cfloat8']) variable,
+        'cfloat8',
+        'cts',
+        'ctstz']) variable,
     unnest(array[
         'min',
         'max',
@@ -79,9 +88,18 @@ from
         null,
         's',
         'ss']) with ordinality as grouping(grouping, n)
-where case when condition = 'cint2 is null' then variable = 'cint2'
+where
+    case
+--        when explain is not null then condition is null and grouping = 's'
+        when explain is not null then false
+        when true then true
+    end
+    and
+    case
+        when condition = 'cint2 is null' then variable = 'cint2'
         when function = 'count' then variable in ('cfloat4', 's')
         when variable = 't' then function in ('min', 'max')
-        else true end
-order by condition.n, variable, function, grouping.n
+        when variable in ('cts', 'ctstz') then function in ('min', 'max')
+    else true end
+order by explain, condition.n, variable, function, grouping.n
 \gexec

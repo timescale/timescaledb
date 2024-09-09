@@ -158,7 +158,6 @@ avg_float_emit(void *agg_state, Datum *out_result, bool *out_isnull)
 	FloatAvgState *state = (FloatAvgState *) agg_state;
 
 	Datum transdatums[3] = {
-
 		Float8GetDatumFast(state->N),
 		Float8GetDatumFast(state->Sx),
 		Float8GetDatumFast(state->Sxx),

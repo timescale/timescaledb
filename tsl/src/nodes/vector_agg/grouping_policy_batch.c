@@ -63,7 +63,6 @@ create_grouping_policy_batch(List *agg_defs, List *output_grouping_columns, bool
 	policy->output_grouping_isnull =
 		(bool *) ((char *) policy->output_grouping_values +
 				  MAXALIGN(list_length(output_grouping_columns) * sizeof(Datum)));
-	policy->funcs.gp_reset(&policy->funcs);
 
 	return &policy->funcs;
 }
@@ -227,7 +226,10 @@ gp_batch_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 		aggregated_slot->tts_isnull[col->output_offset] = policy->output_grouping_isnull[i];
 	}
 
-	gp_batch_reset(gp);
+	/*
+	 * We only have one partial aggregation result for this policy.
+	 */
+	policy->have_results = false;
 
 	return true;
 }
