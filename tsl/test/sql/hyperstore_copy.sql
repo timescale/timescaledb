@@ -4,6 +4,12 @@
 
 \ir include/setup_hyperstore.sql
 
+create view amrels as
+select cl.oid::regclass as rel, am.amname, inh.inhparent::regclass as relparent
+  from pg_class cl
+  inner join pg_am am on (cl.relam = am.oid)
+  left join pg_inherits inh on (inh.inhrelid = cl.oid);
+
 -- Compress the chunks and check that the counts are the same
 select location_id, count(*) into orig from :hypertable GROUP BY location_id;
 select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
@@ -69,3 +75,23 @@ select * from copy_test1 order by metric_id;
 --
 -- select * into subset from :hypertable where device_id between 0 and 10;
 
+-- Testing copy into a table that has the access method set but has
+-- already existing (compressed) heap-chunks in the table.
+CREATE TABLE test1 (timec timestamptz , i integer, b bigint, t text);
+SELECT table_name from create_hypertable('test1', 'timec');
+INSERT INTO test1 SELECT q, 10, 11, 'hello'
+FROM generate_series( '2020-01-03 10:00:00-05', '2020-01-03 12:00:00-05' , '5 min'::interval) q;
+alter table test1 set (timescaledb.compress_segmentby = 'b', timescaledb.compress_orderby = 'timec DESC');
+SELECT compress_chunk(show_chunks('test1'));
+
+select count(*) from test1;
+
+select * from amrels where relparent = 'test1'::regclass;
+
+alter table test1 set access method hyperstore;
+
+copy test1 from stdin delimiter ',';
+2020-01-02 11:16:00-05,11,16,copy
+\.
+
+select count(*) from test1;
