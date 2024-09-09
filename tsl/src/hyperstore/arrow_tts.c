@@ -438,7 +438,13 @@ bool
 is_compressed_col(const TupleDesc tupdesc, AttrNumber attno)
 {
 	static CustomTypeInfo *typinfo = NULL;
-	Oid coltypid = tupdesc->attrs[AttrNumberGetAttrOffset(attno)].atttypid;
+	Oid coltypid;
+
+	/* Check if the column is, e.g., dropped */
+	if (attno == InvalidAttrNumber)
+		return false;
+
+	coltypid = tupdesc->attrs[AttrNumberGetAttrOffset(attno)].atttypid;
 
 	if (typinfo == NULL)
 		typinfo = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA);
@@ -501,15 +507,23 @@ set_attr_value(TupleTableSlot *slot, const int16 attoff)
 	return arrow_array;
 }
 
+/*
+ * Check if an attribute is actually used.
+ *
+ * If an attribute is not used in a query, it is not necessary to do the work
+ * to materialize it or detoast it into the tts_values Datum array.
+ *
+ * The decision is based on referenced attributes which is set by inspecting
+ * the query plan. If not set, all attributes are assumed necessary.
+ *
+ * Note that dropped attributes aren't excluded. When PostgreSQL evaluates
+ * some expressions that have no referenced attributes (e.g., count(*)), it
+ * expects dropped attributes to be set in the slot's tts_values Datum array.
+ */
 static inline bool
 is_used_attr(const TupleTableSlot *slot, const int16 attoff)
 {
 	const ArrowTupleTableSlot *aslot = (const ArrowTupleTableSlot *) slot;
-	const TupleDesc tupdesc = slot->tts_tupleDescriptor;
-
-	if (TupleDescAttr(tupdesc, attoff)->attisdropped)
-		return false;
-
 	return aslot->referenced_attrs == NULL || aslot->referenced_attrs[attoff];
 }
 
