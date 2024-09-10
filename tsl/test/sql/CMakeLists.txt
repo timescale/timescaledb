@@ -110,6 +110,10 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
   list(APPEND TEST_FILES merge_compress.sql)
 endif()
 
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
+  list(APPEND TEST_FILES privilege_maintain.sql)
+endif()
+
 set(SOLO_TESTS
     # This interferes with other tests since it reloads the config to increase
     # log level.
