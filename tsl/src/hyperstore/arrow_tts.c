@@ -638,39 +638,14 @@ tts_arrow_copyslot(TupleTableSlot *dstslot, TupleTableSlot *srcslot)
 
 	ExecClearTuple(dstslot);
 
-	/* Check if copying from another slot implementation */
+	/* Check if copying from another slot implementation. */
 	if (dstslot->tts_ops != srcslot->tts_ops)
 	{
+		/* If we are copying from another slot implementation to arrow slot,
+		   we always copy the data into the non-compressed slot. */
 		child_srcslot = srcslot;
-
-		/*
-		 * The source slot is not an Arrow slot so it is necessary to identify
-		 * which destination child slot to copy the source slot into. It
-		 * should normally be the non-compressed slot, but double check the
-		 * number of attributes to sure. If the source and the target tuple
-		 * descriptor has the same number of attributes, then it should a
-		 * non-compressed slot since the compressed slot has extra metadata
-		 * attributes. If the compressed table is changed in the future to not
-		 * have extra metadata attributes, this check needs to be updated.
-		 *
-		 * Note that it is not possible to use equalTupleDescs() because it
-		 * compares the tuple's composite ID. If the source slot is, e.g.,
-		 * virtual, with no connection to a physical relation, the composite
-		 * ID is often RECORDID while the arrow slot has the ID of the
-		 * relation.
-		 */
-		if (dstslot->tts_tupleDescriptor->natts == srcslot->tts_tupleDescriptor->natts)
-		{
-			/* non-compressed tuple slot */
-			child_dstslot = arrow_slot_get_noncompressed_slot(dstslot);
-			adstslot->tuple_index = InvalidTupleIndex;
-		}
-		else
-		{
-			child_dstslot = arrow_slot_get_compressed_slot(dstslot, srcslot->tts_tupleDescriptor);
-			/* compressed tuple slot */
-			adstslot->tuple_index = 1;
-		}
+		child_dstslot = arrow_slot_get_noncompressed_slot(dstslot);
+		adstslot->tuple_index = InvalidTupleIndex;
 	}
 	else
 	{
