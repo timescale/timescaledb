@@ -21,6 +21,10 @@
 
 #include "int24_avg_accum_templates.c"
 
+#ifdef HAVE_INT128
+#include "int128_accum_templates.c"
+#endif
+
 #undef FUNCTION_NAME
 #undef FUNCTION_NAME_HELPER
 #undef FUNCTION_NAME_HELPER2
