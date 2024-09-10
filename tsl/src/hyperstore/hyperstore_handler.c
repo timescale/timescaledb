@@ -574,7 +574,10 @@ static bool
 hyperstore_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTableSlot *slot)
 {
 	if (arrow_slot_try_getnext(slot, direction))
+	{
+		slot->tts_tableOid = RelationGetRelid(sscan->rs_rd);
 		return true;
+	}
 
 	HyperstoreScanDesc scan = (HyperstoreScanDesc) sscan;
 
@@ -609,6 +612,7 @@ hyperstore_getnextslot_noncompressed(HyperstoreScanDesc scan, ScanDirection dire
 	if (result)
 	{
 		scan->returned_noncompressed_count++;
+		slot->tts_tableOid = RelationGetRelid(relation);
 		ExecStoreArrowTuple(slot, InvalidTupleIndex);
 	}
 	else if (direction == BackwardScanDirection)
@@ -687,6 +691,7 @@ hyperstore_getnextslot_compressed(HyperstoreScanDesc scan, ScanDirection directi
 		ExecStorePreviousArrowTuple(slot);
 	}
 
+	slot->tts_tableOid = RelationGetRelid(scan->rs_base.rs_rd);
 	scan->returned_compressed_count++;
 	pgstat_count_hyperstore_getnext(scan->rs_base.rs_rd);
 	return true;
@@ -953,6 +958,7 @@ hyperstore_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer tid, 
 	if (is_segmentby_index && cscan->call_again)
 	{
 		ExecStoreNextArrowTuple(slot);
+		slot->tts_tableOid = RelationGetRelid(scan->rel);
 		cscan->call_again = !arrow_slot_is_last(slot);
 		*call_again = cscan->call_again || cscan->internal_call_again;
 		cscan->return_count++;
@@ -982,8 +988,8 @@ hyperstore_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer tid, 
 	{
 		/* Still in the same compressed tuple, so just update tuple index and
 		 * return the same Arrow slot */
-		Assert(slot->tts_tableOid == RelationGetRelid(scan->rel));
 		ExecStoreArrowTuple(slot, tuple_index);
+		slot->tts_tableOid = RelationGetRelid(scan->rel);
 		cscan->return_count++;
 		return true;
 	}
