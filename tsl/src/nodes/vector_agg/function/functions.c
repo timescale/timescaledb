@@ -12,6 +12,7 @@
 #include <utils/date.h>
 #include <utils/float.h>
 #include <utils/fmgroids.h>
+#include <utils/fmgrprotos.h>
 
 #include "functions.h"
 
