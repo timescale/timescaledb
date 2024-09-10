@@ -110,6 +110,7 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
  limit 1 offset 1 \gset
 -- Avoid parallel (index) scans to make test stable
 set max_parallel_workers_per_gather to 0;
+set enable_hashagg to off;
 -- Drop the device_id index and redefine it later with extra columns.
 drop index hypertable_device_id_idx;
 create view chunk_indexes as
@@ -409,59 +410,59 @@ select explain_analyze_anonymize(format($$
    select device_id, avg(temp) from %s where device_id between 10 and 20
    group by device_id
 $$, :'hypertable'));
-                                                explain_analyze_anonymize                                                 
---------------------------------------------------------------------------------------------------------------------------
- Finalize HashAggregate (actual rows=N loops=N)
-   Batches: 1 
-   ->  Append (actual rows=N loops=N)
-         ->  Partial HashAggregate (actual rows=N loops=N)
-               Batches: 1 
-               ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
-                     Vectorized Filter: ((device_id >= 10) AND (device_id <= 20))
-                     Rows Removed by Filter: 133
-         ->  Partial HashAggregate (actual rows=N loops=N)
-               Batches: 1 
-               ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
-                     Index Cond: ((device_id >= 10) AND (device_id <= 20))
-         ->  Partial HashAggregate (actual rows=N loops=N)
-               Batches: 1 
-               ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
-                     Index Cond: ((device_id >= 10) AND (device_id <= 20))
-         ->  Partial HashAggregate (actual rows=N loops=N)
-               Batches: 1 
-               ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
-                     Index Cond: ((device_id >= 10) AND (device_id <= 20))
-         ->  Partial HashAggregate (actual rows=N loops=N)
-               Batches: 1 
-               ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
-                     Index Cond: ((device_id >= 10) AND (device_id <= 20))
-         ->  Partial HashAggregate (actual rows=N loops=N)
-               Batches: 1 
-               ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
-                     Vectorized Filter: ((device_id >= 10) AND (device_id <= 20))
-                     Rows Removed by Filter: 234
+                                                   explain_analyze_anonymize                                                    
+--------------------------------------------------------------------------------------------------------------------------------
+ Finalize GroupAggregate (actual rows=N loops=N)
+   ->  Sort (actual rows=N loops=N)
+         Sort Key: _hyper_I_N_chunk.device_id
+         Sort Method: quicksort 
+         ->  Append (actual rows=N loops=N)
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     ->  Sort (actual rows=N loops=N)
+                           Sort Key: _hyper_I_N_chunk.device_id
+                           Sort Method: quicksort 
+                           ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
+                                 Vectorized Filter: ((device_id >= 10) AND (device_id <= 20))
+                                 Rows Removed by Filter: 133
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+                           Index Cond: ((device_id >= 10) AND (device_id <= 20))
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+                           Index Cond: ((device_id >= 10) AND (device_id <= 20))
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+                           Index Cond: ((device_id >= 10) AND (device_id <= 20))
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+                           Index Cond: ((device_id >= 10) AND (device_id <= 20))
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     ->  Sort (actual rows=N loops=N)
+                           Sort Key: _hyper_I_N_chunk.device_id
+                           Sort Method: quicksort 
+                           ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
+                                 Vectorized Filter: ((device_id >= 10) AND (device_id <= 20))
+                                 Rows Removed by Filter: 234
  Array Cache Hits: N
  Array Cache Misses: N
  Array Cache Evictions: N
  Array Decompressions: 578
-(33 rows)
+(35 rows)
 
 select explain_analyze_anonymize(format($$
     select device_id, avg(temp) from %s where device_id between 10 and 20
     group by device_id
 $$, :'chunk1'));
-                          explain_analyze_anonymize                           
-------------------------------------------------------------------------------
- HashAggregate (actual rows=N loops=N)
-   Batches: 1 
-   ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
-         Vectorized Filter: ((device_id >= 10) AND (device_id <= 20))
-         Rows Removed by Filter: 133
+                                          explain_analyze_anonymize                                           
+--------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=N loops=N)
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+         Index Cond: ((device_id >= 10) AND (device_id <= 20))
  Array Cache Hits: N
  Array Cache Misses: N
  Array Cache Evictions: N
- Array Decompressions: 83
-(9 rows)
+ Array Decompressions: 149
+(7 rows)
 
 -- Test index scan on segmentby column
 select explain_analyze_anonymize(format($$
@@ -651,41 +652,40 @@ select explain_analyze_anonymize(format($$
 $$, :'hypertable'));
                                                     explain_analyze_anonymize                                                     
 ----------------------------------------------------------------------------------------------------------------------------------
- Sort (actual rows=N loops=N)
-   Sort Key: _hyper_I_N_chunk.location_id
-   Sort Method: quicksort 
-   ->  Finalize HashAggregate (actual rows=N loops=N)
-         Batches: 1 
+ Finalize GroupAggregate (actual rows=N loops=N)
+   ->  Sort (actual rows=N loops=N)
+         Sort Key: _hyper_I_N_chunk.location_id
+         Sort Method: quicksort 
          ->  Append (actual rows=N loops=N)
-               ->  Partial HashAggregate (actual rows=N loops=N)
-                     Batches: 1 
-                     ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
-                           Scankey: ((location_id >= 5) AND (location_id <= 10))
-               ->  Partial HashAggregate (actual rows=N loops=N)
-                     Batches: 1 
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     ->  Sort (actual rows=N loops=N)
+                           Sort Key: _hyper_I_N_chunk.location_id
+                           Sort Method: quicksort 
+                           ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
+                                 Scankey: ((location_id >= 5) AND (location_id <= 10))
+               ->  Partial GroupAggregate (actual rows=N loops=N)
                      ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
                            Index Cond: ((location_id >= 5) AND (location_id <= 10))
-               ->  Partial HashAggregate (actual rows=N loops=N)
-                     Batches: 1 
+               ->  Partial GroupAggregate (actual rows=N loops=N)
                      ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
                            Index Cond: ((location_id >= 5) AND (location_id <= 10))
-               ->  Partial HashAggregate (actual rows=N loops=N)
-                     Batches: 1 
+               ->  Partial GroupAggregate (actual rows=N loops=N)
                      ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
                            Index Cond: ((location_id >= 5) AND (location_id <= 10))
-               ->  Partial HashAggregate (actual rows=N loops=N)
-                     Batches: 1 
+               ->  Partial GroupAggregate (actual rows=N loops=N)
                      ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
                            Index Cond: ((location_id >= 5) AND (location_id <= 10))
-               ->  Partial HashAggregate (actual rows=N loops=N)
-                     Batches: 1 
-                     ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
-                           Scankey: ((location_id >= 5) AND (location_id <= 10))
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     ->  Sort (actual rows=N loops=N)
+                           Sort Key: _hyper_I_N_chunk.location_id
+                           Sort Method: quicksort 
+                           ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
+                                 Scankey: ((location_id >= 5) AND (location_id <= 10))
  Array Cache Hits: N
  Array Cache Misses: N
  Array Cache Evictions: N
  Array Decompressions: 180
-(34 rows)
+(33 rows)
 
 select explain_analyze_anonymize(format($$
     select device_id, avg(humidity) from %s where device_id between 5 and 10
@@ -732,20 +732,17 @@ select explain_analyze_anonymize(format($$
     select location_id, avg(humidity) from %s where location_id between 5 and 10
     group by location_id order by location_id
 $$, :'chunk1'));
-                             explain_analyze_anonymize                              
-------------------------------------------------------------------------------------
- Sort (actual rows=N loops=N)
-   Sort Key: location_id
-   Sort Method: quicksort 
-   ->  HashAggregate (actual rows=N loops=N)
-         Batches: 1 
-         ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
-               Scankey: ((location_id >= 5) AND (location_id <= 10))
+                                                      explain_analyze_anonymize                                                       
+--------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=N loops=N)
+   ->  Index Only Scan using _hyper_I_N_chunk_hypertable_location_id_include_humidity_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+         Index Cond: ((location_id >= 5) AND (location_id <= 10))
+         Heap Fetches: N
  Array Cache Hits: N
  Array Cache Misses: N
  Array Cache Evictions: N
- Array Decompressions: 30
-(11 rows)
+ Array Decompressions: 0
+(8 rows)
 
 select explain_analyze_anonymize(format($$
     select device_id, avg(humidity) from %s where device_id between 5 and 10
