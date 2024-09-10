@@ -173,3 +173,32 @@ select * from :hypertable where location_id between 11 and 22
 order by location_id;
 
 drop table :hypertable;
+
+-- Check that we can write to a hyperstore table from another kind of
+-- slot even if we have dropped and added attributes.
+create table test2 (itime integer, b bigint, t text);
+select create_hypertable('test2', by_range('itime', 10));
+
+create table test2_source(itime integer, d int, t text);
+insert into test2_source values (9, '9', 90), (17, '17', 1700);
+
+
+-- this will create a single chunk.
+insert into test2 select t, 10,  'first'::text from generate_series(1, 7) t;
+
+alter table test2 drop column b;
+alter table test2 add column c int default -15;
+alter table test2 add column d int;
+
+-- Since we have chunk sizes of 10, this will create a second chunk
+-- with a second set of attributes where one is dropped.
+insert into test2 select t, 'second'::text, 120, 1 from generate_series(11, 15) t;
+
+alter table test2
+      set access method hyperstore,
+      set (timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'c, itime desc');
+
+select compress_chunk(show_chunks('test2'));
+
+-- Insert into both chunks using a select.
+insert into test2(itime ,t , d) select itime, t, d from test2_source;
