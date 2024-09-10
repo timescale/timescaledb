@@ -332,8 +332,13 @@ ExecVectorQual(VectorQualState *vqstate, ExprContext *econtext)
 static pg_attribute_always_inline bool
 getnextslot(TableScanDesc scandesc, ScanDirection direction, TupleTableSlot *slot)
 {
-	return arrow_slot_try_getnext(slot, direction) ||
-		   table_scan_getnextslot(scandesc, direction, slot);
+	if (arrow_slot_try_getnext(slot, direction))
+	{
+		slot->tts_tableOid = RelationGetRelid(scandesc->rs_rd);
+		return true;
+	}
+
+	return table_scan_getnextslot(scandesc, direction, slot);
 }
 
 static TupleTableSlot *
