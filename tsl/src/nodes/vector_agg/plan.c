@@ -429,6 +429,10 @@ try_insert_vector_agg_node(Plan *plan)
 	{
 		append_plans = castNode(Append, plan)->appendplans;
 	}
+	else if (IsA(plan, MergeAppend))
+	{
+		append_plans = castNode(MergeAppend, plan)->mergeplans;
+	}
 	else if (IsA(plan, CustomScan))
 	{
 		CustomScan *custom = castNode(CustomScan, plan);

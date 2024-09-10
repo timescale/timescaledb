@@ -1649,14 +1649,39 @@ SELECT count(*)
 FROM :TEST_TABLE
 GROUP BY device_id
 ORDER BY device_id;
-                                                                             QUERY PLAN                                                                              
----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize GroupAggregate (actual rows=5 loops=1)
    Group Key: _hyper_1_1_chunk.device_id
-   ->  Sort (actual rows=15 loops=1)
+   ->  Merge Append (actual rows=15 loops=1)
          Sort Key: _hyper_1_1_chunk.device_id
-         Sort Method: quicksort 
-         ->  Append (actual rows=15 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=5 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=3600 loops=1)
+                     ->  Index Scan using compress_hyper_5_15_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_5_15_chunk (actual rows=5 loops=1)
+         ->  Partial GroupAggregate (actual rows=5 loops=1)
+               Group Key: _hyper_1_2_chunk.device_id
+               ->  Sort (actual rows=3360 loops=1)
+                     Sort Key: _hyper_1_2_chunk.device_id
+                     Sort Method: quicksort 
+                     ->  Seq Scan on _hyper_1_2_chunk (actual rows=3360 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=5 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=1680 loops=1)
+                     ->  Index Scan using compress_hyper_5_16_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_5_16_chunk (actual rows=5 loops=1)
+(16 rows)
+
+-- test window functions with GROUP BY
+:PREFIX
+SELECT sum(count(*)) OVER ()
+FROM :TEST_TABLE
+GROUP BY device_id
+ORDER BY device_id;
+                                                                             QUERY PLAN                                                                              
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ WindowAgg (actual rows=5 loops=1)
+   ->  Finalize GroupAggregate (actual rows=5 loops=1)
+         Group Key: _hyper_1_1_chunk.device_id
+         ->  Merge Append (actual rows=15 loops=1)
+               Sort Key: _hyper_1_1_chunk.device_id
                ->  Custom Scan (VectorAgg) (actual rows=5 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=3600 loops=1)
                            ->  Index Scan using compress_hyper_5_15_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_5_15_chunk (actual rows=5 loops=1)
@@ -1669,36 +1694,7 @@ ORDER BY device_id;
                ->  Custom Scan (VectorAgg) (actual rows=5 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=1680 loops=1)
                            ->  Index Scan using compress_hyper_5_16_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_5_16_chunk (actual rows=5 loops=1)
-(18 rows)
-
--- test window functions with GROUP BY
-:PREFIX
-SELECT sum(count(*)) OVER ()
-FROM :TEST_TABLE
-GROUP BY device_id
-ORDER BY device_id;
-                                                                                QUERY PLAN                                                                                 
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- WindowAgg (actual rows=5 loops=1)
-   ->  Finalize GroupAggregate (actual rows=5 loops=1)
-         Group Key: _hyper_1_1_chunk.device_id
-         ->  Sort (actual rows=15 loops=1)
-               Sort Key: _hyper_1_1_chunk.device_id
-               Sort Method: quicksort 
-               ->  Append (actual rows=15 loops=1)
-                     ->  Custom Scan (VectorAgg) (actual rows=5 loops=1)
-                           ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=3600 loops=1)
-                                 ->  Index Scan using compress_hyper_5_15_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_5_15_chunk (actual rows=5 loops=1)
-                     ->  Partial GroupAggregate (actual rows=5 loops=1)
-                           Group Key: _hyper_1_2_chunk.device_id
-                           ->  Sort (actual rows=3360 loops=1)
-                                 Sort Key: _hyper_1_2_chunk.device_id
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on _hyper_1_2_chunk (actual rows=3360 loops=1)
-                     ->  Custom Scan (VectorAgg) (actual rows=5 loops=1)
-                           ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=1680 loops=1)
-                                 ->  Index Scan using compress_hyper_5_16_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_5_16_chunk (actual rows=5 loops=1)
-(19 rows)
+(17 rows)
 
 SET enable_hashagg = ON;
 -- test CTE
@@ -5642,14 +5638,58 @@ SELECT count(*)
 FROM :TEST_TABLE
 GROUP BY device_id
 ORDER BY device_id;
-                                                                             QUERY PLAN                                                                              
----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                           QUERY PLAN                                                                            
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize GroupAggregate (actual rows=5 loops=1)
    Group Key: _hyper_2_4_chunk.device_id
-   ->  Sort (actual rows=15 loops=1)
+   ->  Merge Append (actual rows=15 loops=1)
          Sort Key: _hyper_2_4_chunk.device_id
-         Sort Method: quicksort 
-         ->  Append (actual rows=15 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk (actual rows=720 loops=1)
+                     ->  Index Scan using compress_hyper_6_17_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_6_17_chunk (actual rows=1 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=3 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk (actual rows=2160 loops=1)
+                     ->  Index Scan using compress_hyper_6_18_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_6_18_chunk (actual rows=3 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk (actual rows=720 loops=1)
+                     ->  Index Scan using compress_hyper_6_19_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_6_19_chunk (actual rows=1 loops=1)
+         ->  Partial GroupAggregate (actual rows=1 loops=1)
+               Group Key: _hyper_2_7_chunk.device_id
+               ->  Index Only Scan Backward using _hyper_2_7_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_7_chunk (actual rows=672 loops=1)
+                     Heap Fetches: 0
+         ->  Partial GroupAggregate (actual rows=3 loops=1)
+               Group Key: _hyper_2_8_chunk.device_id
+               ->  Index Only Scan Backward using _hyper_2_8_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_8_chunk (actual rows=2016 loops=1)
+                     Heap Fetches: 0
+         ->  Partial GroupAggregate (actual rows=1 loops=1)
+               Group Key: _hyper_2_9_chunk.device_id
+               ->  Index Only Scan Backward using _hyper_2_9_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_9_chunk (actual rows=672 loops=1)
+                     Heap Fetches: 0
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk (actual rows=336 loops=1)
+                     ->  Index Scan using compress_hyper_6_20_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_6_20_chunk (actual rows=1 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=3 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk (actual rows=1008 loops=1)
+                     ->  Index Scan using compress_hyper_6_21_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_6_21_chunk (actual rows=3 loops=1)
+         ->  Partial GroupAggregate (actual rows=1 loops=1)
+               Group Key: _hyper_2_12_chunk.device_id
+               ->  Index Only Scan Backward using _hyper_2_12_chunk_metrics_space_device_id_device_id_peer_v0_v_2 on _hyper_2_12_chunk (actual rows=336 loops=1)
+                     Heap Fetches: 0
+(35 rows)
+
+-- test window functions with GROUP BY
+:PREFIX
+SELECT sum(count(*)) OVER ()
+FROM :TEST_TABLE
+GROUP BY device_id
+ORDER BY device_id;
+                                                                              QUERY PLAN                                                                               
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ WindowAgg (actual rows=5 loops=1)
+   ->  Finalize GroupAggregate (actual rows=5 loops=1)
+         Group Key: _hyper_2_4_chunk.device_id
+         ->  Merge Append (actual rows=15 loops=1)
+               Sort Key: _hyper_2_4_chunk.device_id
                ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk (actual rows=720 loops=1)
                            ->  Index Scan using compress_hyper_6_17_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_6_17_chunk (actual rows=1 loops=1)
@@ -5661,22 +5701,16 @@ ORDER BY device_id;
                            ->  Index Scan using compress_hyper_6_19_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_6_19_chunk (actual rows=1 loops=1)
                ->  Partial GroupAggregate (actual rows=1 loops=1)
                      Group Key: _hyper_2_7_chunk.device_id
-                     ->  Sort (actual rows=672 loops=1)
-                           Sort Key: _hyper_2_7_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_2_7_chunk (actual rows=672 loops=1)
+                     ->  Index Only Scan Backward using _hyper_2_7_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_7_chunk (actual rows=672 loops=1)
+                           Heap Fetches: 0
                ->  Partial GroupAggregate (actual rows=3 loops=1)
                      Group Key: _hyper_2_8_chunk.device_id
-                     ->  Sort (actual rows=2016 loops=1)
-                           Sort Key: _hyper_2_8_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_2_8_chunk (actual rows=2016 loops=1)
+                     ->  Index Only Scan Backward using _hyper_2_8_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_8_chunk (actual rows=2016 loops=1)
+                           Heap Fetches: 0
                ->  Partial GroupAggregate (actual rows=1 loops=1)
                      Group Key: _hyper_2_9_chunk.device_id
-                     ->  Sort (actual rows=672 loops=1)
-                           Sort Key: _hyper_2_9_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_2_9_chunk (actual rows=672 loops=1)
+                     ->  Index Only Scan Backward using _hyper_2_9_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_9_chunk (actual rows=672 loops=1)
+                           Heap Fetches: 0
                ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk (actual rows=336 loops=1)
                            ->  Index Scan using compress_hyper_6_20_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_6_20_chunk (actual rows=1 loops=1)
@@ -5685,67 +5719,9 @@ ORDER BY device_id;
                            ->  Index Scan using compress_hyper_6_21_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_6_21_chunk (actual rows=3 loops=1)
                ->  Partial GroupAggregate (actual rows=1 loops=1)
                      Group Key: _hyper_2_12_chunk.device_id
-                     ->  Sort (actual rows=336 loops=1)
-                           Sort Key: _hyper_2_12_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_2_12_chunk (actual rows=336 loops=1)
-(45 rows)
-
--- test window functions with GROUP BY
-:PREFIX
-SELECT sum(count(*)) OVER ()
-FROM :TEST_TABLE
-GROUP BY device_id
-ORDER BY device_id;
-                                                                                QUERY PLAN                                                                                 
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- WindowAgg (actual rows=5 loops=1)
-   ->  Finalize GroupAggregate (actual rows=5 loops=1)
-         Group Key: _hyper_2_4_chunk.device_id
-         ->  Sort (actual rows=15 loops=1)
-               Sort Key: _hyper_2_4_chunk.device_id
-               Sort Method: quicksort 
-               ->  Append (actual rows=15 loops=1)
-                     ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
-                           ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk (actual rows=720 loops=1)
-                                 ->  Index Scan using compress_hyper_6_17_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_6_17_chunk (actual rows=1 loops=1)
-                     ->  Custom Scan (VectorAgg) (actual rows=3 loops=1)
-                           ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk (actual rows=2160 loops=1)
-                                 ->  Index Scan using compress_hyper_6_18_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_6_18_chunk (actual rows=3 loops=1)
-                     ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
-                           ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk (actual rows=720 loops=1)
-                                 ->  Index Scan using compress_hyper_6_19_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_6_19_chunk (actual rows=1 loops=1)
-                     ->  Partial GroupAggregate (actual rows=1 loops=1)
-                           Group Key: _hyper_2_7_chunk.device_id
-                           ->  Sort (actual rows=672 loops=1)
-                                 Sort Key: _hyper_2_7_chunk.device_id
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on _hyper_2_7_chunk (actual rows=672 loops=1)
-                     ->  Partial GroupAggregate (actual rows=3 loops=1)
-                           Group Key: _hyper_2_8_chunk.device_id
-                           ->  Sort (actual rows=2016 loops=1)
-                                 Sort Key: _hyper_2_8_chunk.device_id
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on _hyper_2_8_chunk (actual rows=2016 loops=1)
-                     ->  Partial GroupAggregate (actual rows=1 loops=1)
-                           Group Key: _hyper_2_9_chunk.device_id
-                           ->  Sort (actual rows=672 loops=1)
-                                 Sort Key: _hyper_2_9_chunk.device_id
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on _hyper_2_9_chunk (actual rows=672 loops=1)
-                     ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
-                           ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk (actual rows=336 loops=1)
-                                 ->  Index Scan using compress_hyper_6_20_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_6_20_chunk (actual rows=1 loops=1)
-                     ->  Custom Scan (VectorAgg) (actual rows=3 loops=1)
-                           ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk (actual rows=1008 loops=1)
-                                 ->  Index Scan using compress_hyper_6_21_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_6_21_chunk (actual rows=3 loops=1)
-                     ->  Partial GroupAggregate (actual rows=1 loops=1)
-                           Group Key: _hyper_2_12_chunk.device_id
-                           ->  Sort (actual rows=336 loops=1)
-                                 Sort Key: _hyper_2_12_chunk.device_id
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on _hyper_2_12_chunk (actual rows=336 loops=1)
-(46 rows)
+                     ->  Index Only Scan Backward using _hyper_2_12_chunk_metrics_space_device_id_device_id_peer_v0_v_2 on _hyper_2_12_chunk (actual rows=336 loops=1)
+                           Heap Fetches: 0
+(36 rows)
 
 SET enable_hashagg = ON;
 -- test CTE
