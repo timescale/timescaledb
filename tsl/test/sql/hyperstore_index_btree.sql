@@ -10,6 +10,7 @@ set role :ROLE_DEFAULT_PERM_USER;
 
 -- Avoid parallel (index) scans to make test stable
 set max_parallel_workers_per_gather to 0;
+set enable_hashagg to off;
 
 -- Drop the device_id index and redefine it later with extra columns.
 drop index hypertable_device_id_idx;
