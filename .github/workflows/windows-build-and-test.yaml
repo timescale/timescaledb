@@ -56,13 +56,6 @@ jobs:
         tsl_ignores: ["compression_algos"]
         tsl_skips: ["bgw_db_scheduler bgw_db_scheduler_fixed"]
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
-        include:
-          - pg: 14
-            tsl_skips_version: telemetry_stats-14
-          - pg: 15
-            tsl_skips_version: telemetry_stats-15
-          - pg: 16
-            tsl_skips_version: telemetry_stats-16
     env:
       # PostgreSQL configuration
       PGPORT: 55432

@@ -642,3 +642,11 @@ SELECT * FROM ht;
 EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
 ROLLBACK;
 
+-- #7226
+-- test multi-column fk constraint where constraint column order is different from index column order
+CREATE TABLE i7226(time timestamptz, device_id int, PRIMARY KEY (device_id, time));
+SELECT create_hypertable('i7226', 'time');
+
+CREATE TABLE i7226_valid(time timestamptz NOT NULL,device_id int NOT NULL, FOREIGN KEY(time, device_id) REFERENCES i7226(time, device_id));
+INSERT INTO i7226 VALUES ('2024-08-29 12:00:00+00', 1);
+

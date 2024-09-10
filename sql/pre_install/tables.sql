@@ -502,6 +502,11 @@ CREATE TABLE _timescaledb_catalog.compression_chunk_size (
   CONSTRAINT compression_chunk_size_compressed_chunk_id_fkey FOREIGN KEY (compressed_chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE
 );
 
+-- Create index on the compressed_chunk_id to speed up maintainance
+-- operations during upgrades. This is mostly relevant for very large
+-- number of chunks.
+CREATE INDEX compression_chunk_size_idx ON _timescaledb_catalog.compression_chunk_size (compressed_chunk_id);
+
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_chunk_size', '');
 
 CREATE TABLE _timescaledb_catalog.continuous_agg_migrate_plan (

@@ -156,15 +156,15 @@ WITH foo AS (
   MERGE INTO target USING source ON (true)
   WHEN MATCHED THEN DELETE
 ) SELECT * FROM foo;
-psql:include/ts_merge_query.sql:58: ERROR:  MERGE not supported in WITH query
-LINE 1: WITH foo AS (
-             ^
+psql:include/ts_merge_query.sql:58: ERROR:  WITH query "foo" does not have a RETURNING clause
+LINE 4: ) SELECT * FROM foo;
+                        ^
 -- used in COPY
 COPY (
   MERGE INTO target USING source ON (true)
   WHEN MATCHED THEN DELETE
 ) TO stdout;
-psql:include/ts_merge_query.sql:63: ERROR:  MERGE not supported in COPY
+psql:include/ts_merge_query.sql:63: ERROR:  COPY query must have a RETURNING clause
 -- unsupported relation types
 -- view
 CREATE VIEW tv AS SELECT * FROM target;
@@ -173,8 +173,6 @@ USING source s
 ON t.tid = s.sid
 WHEN NOT MATCHED THEN
 	INSERT DEFAULT VALUES;
-psql:include/ts_merge_query.sql:72: ERROR:  cannot execute MERGE on relation "tv"
-DETAIL:  This operation is not supported for views.
 DROP VIEW tv;
 -- materialized view
 CREATE MATERIALIZED VIEW mv AS SELECT * FROM target;
@@ -845,9 +843,6 @@ WHEN NOT MATCHED THEN
 WHEN MATCHED AND tid < 2 THEN
 	DELETE
 RETURNING *;
-psql:include/ts_merge_query.sql:778: ERROR:  syntax error at or near "RETURNING"
-LINE 10: RETURNING *;
-         ^
 ROLLBACK;
 -- EXPLAIN
 CREATE TABLE ex_mtarget (a int, b int)
@@ -1440,15 +1435,15 @@ WITH foo AS (
   MERGE INTO target USING source ON (true)
   WHEN MATCHED THEN DELETE
 ) SELECT * FROM foo;
-psql:include/ts_merge_query.sql:58: ERROR:  MERGE not supported in WITH query
-LINE 1: WITH foo AS (
-             ^
+psql:include/ts_merge_query.sql:58: ERROR:  WITH query "foo" does not have a RETURNING clause
+LINE 4: ) SELECT * FROM foo;
+                        ^
 -- used in COPY
 COPY (
   MERGE INTO target USING source ON (true)
   WHEN MATCHED THEN DELETE
 ) TO stdout;
-psql:include/ts_merge_query.sql:63: ERROR:  MERGE not supported in COPY
+psql:include/ts_merge_query.sql:63: ERROR:  COPY query must have a RETURNING clause
 -- unsupported relation types
 -- view
 CREATE VIEW tv AS SELECT * FROM target;
@@ -1457,8 +1452,6 @@ USING source s
 ON t.tid = s.sid
 WHEN NOT MATCHED THEN
 	INSERT DEFAULT VALUES;
-psql:include/ts_merge_query.sql:72: ERROR:  cannot execute MERGE on relation "tv"
-DETAIL:  This operation is not supported for views.
 DROP VIEW tv;
 -- materialized view
 CREATE MATERIALIZED VIEW mv AS SELECT * FROM target;
@@ -2134,9 +2127,6 @@ WHEN NOT MATCHED THEN
 WHEN MATCHED AND tid < 2 THEN
 	DELETE
 RETURNING *;
-psql:include/ts_merge_query.sql:778: ERROR:  syntax error at or near "RETURNING"
-LINE 10: RETURNING *;
-         ^
 ROLLBACK;
 -- EXPLAIN
 CREATE TABLE ex_mtarget (a int, b int)
@@ -2549,3 +2539,16 @@ DROP USER regress_merge_privs;
 DROP USER regress_merge_no_privs;
 \o
 :DIFF_CMD
+--- Base pg table results
++++ Hyperatable results
+@@ -326,7 +326,9 @@
+ 
+  delta | sid | balance | tid | balance 
+ -------+-----+---------+-----+---------
+-(0 rows)
++   -10 |  -1 |      -1 |  -1 |     -11
++    10 |   1 |       0 |   1 |     100
++(2 rows)
+ 
+                             explain_merge                             
+ ----------------------------------------------------------------------

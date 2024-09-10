@@ -187,7 +187,6 @@ m["include"].append(
             "pg": "17",
             "snapshot": "snapshot",
             "tsdb_build_args": "-DEXPERIMENTAL=ON",
-            "skipped_tests": "merge_compress merge_dml merge size_utils ts_merge-17",
         }
     )
 )

@@ -1,4 +1,3 @@
-
 /*
  * This file and its contents are licensed under the Timescale License.
  * Please see the included NOTICE for copyright information and
@@ -156,7 +155,256 @@ vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk)
 	custom->scan.plan.extParam = bms_copy(agg->plan.extParam);
 	custom->scan.plan.allParam = bms_copy(agg->plan.allParam);
 
+	List *grouping_col_offsets = NIL;
+	for (int i = 0; i < agg->numCols; i++)
+	{
+		grouping_col_offsets =
+			lappend_int(grouping_col_offsets, AttrNumberGetAttrOffset(agg->grpColIdx[i]));
+	}
+	custom->custom_private = list_make1(grouping_col_offsets);
+
 	return (Plan *) custom;
+}
+
+/*
+ * Whether the expression can be used for vectorized processing: must be a Var
+ * that refers to either a bulk-decompressed or a segmentby column.
+ */
+static bool
+is_vector_var(CustomScan *custom, Expr *expr, bool *out_is_segmentby)
+{
+	if (!IsA(expr, Var))
+	{
+		/* Can aggregate only a bare decompressed column, not an expression. */
+		return false;
+	}
+
+	Var *aggregated_var = castNode(Var, expr);
+
+	/*
+	 * Check if this particular column is a segmentby or has bulk decompression
+	 * enabled. This hook is called after set_plan_refs, and at this stage the
+	 * output targetlist of the aggregation node uses OUTER_VAR references into
+	 * the child scan targetlist, so first we have to translate this.
+	 */
+	Assert(aggregated_var->varno == OUTER_VAR);
+	TargetEntry *decompressed_target_entry =
+		list_nth(custom->scan.plan.targetlist, AttrNumberGetAttrOffset(aggregated_var->varattno));
+
+	if (!IsA(decompressed_target_entry->expr, Var))
+	{
+		/*
+		 * Can only aggregate the plain Vars. Not sure if this is redundant with
+		 * the similar check above.
+		 */
+		return false;
+	}
+	Var *decompressed_var = castNode(Var, decompressed_target_entry->expr);
+
+	/*
+	 * Now, we have to translate the decompressed varno into the compressed
+	 * column index, to check if the column supports bulk decompression.
+	 */
+	List *decompression_map = list_nth(custom->custom_private, DCP_DecompressionMap);
+	List *is_segmentby_column = list_nth(custom->custom_private, DCP_IsSegmentbyColumn);
+	List *bulk_decompression_column = list_nth(custom->custom_private, DCP_BulkDecompressionColumn);
+	int compressed_column_index = 0;
+	for (; compressed_column_index < list_length(decompression_map); compressed_column_index++)
+	{
+		if (list_nth_int(decompression_map, compressed_column_index) == decompressed_var->varattno)
+		{
+			break;
+		}
+	}
+	Ensure(compressed_column_index < list_length(decompression_map), "compressed column not found");
+	Assert(list_length(decompression_map) == list_length(bulk_decompression_column));
+	const bool bulk_decompression_enabled_for_column =
+		list_nth_int(bulk_decompression_column, compressed_column_index);
+
+	/*
+	 * Bulk decompression can be disabled for all columns in the DecompressChunk
+	 * node settings, we can't do vectorized aggregation for compressed columns
+	 * in that case. For segmentby columns it's still possible.
+	 */
+	List *settings = linitial(custom->custom_private);
+	const bool bulk_decompression_enabled_globally =
+		list_nth_int(settings, DCS_EnableBulkDecompression);
+
+	/*
+	 * Check if this column is a segmentby.
+	 */
+	const bool is_segmentby = list_nth_int(is_segmentby_column, compressed_column_index);
+	if (out_is_segmentby)
+	{
+		*out_is_segmentby = is_segmentby;
+	}
+
+	/*
+	 * We support vectorized aggregation either for segmentby columns or for
+	 * columns with bulk decompression enabled.
+	 */
+	if (!is_segmentby &&
+		!(bulk_decompression_enabled_for_column && bulk_decompression_enabled_globally))
+	{
+		/* Vectorized aggregation not possible for this particular column. */
+		return false;
+	}
+
+	return true;
+}
+
+static bool
+can_vectorize_aggref(Aggref *aggref, CustomScan *custom)
+{
+	if (aggref->aggfilter != NULL)
+	{
+		/* Filter clause on aggregate is not supported. */
+		return false;
+	}
+
+	if (aggref->aggdirectargs != NIL)
+	{
+		/* Can't process ordered-set aggregates with direct arguments. */
+		return false;
+	}
+
+	if (aggref->aggorder != NIL)
+	{
+		/* Can't process aggregates with an ORDER BY clause. */
+		return false;
+	}
+
+	if (aggref->aggdistinct != NIL)
+	{
+		/* Can't process aggregates with DISTINCT clause. */
+		return false;
+	}
+
+	if (aggref->aggfilter != NULL)
+	{
+		/* Can't process aggregates with filter clause. */
+		return false;
+	}
+
+	if (get_vector_aggregate(aggref->aggfnoid) == NULL)
+	{
+		/*
+		 * We don't have a vectorized implementation for this particular
+		 * aggregate function.
+		 */
+		return false;
+	}
+
+	if (aggref->args == NIL)
+	{
+		/* This must be count(*), we can vectorize it. */
+		return true;
+	}
+
+	/* The function must have one argument, check it. */
+	Assert(list_length(aggref->args) == 1);
+	TargetEntry *argument = castNode(TargetEntry, linitial(aggref->args));
+	if (!is_vector_var(custom, argument->expr, NULL))
+	{
+		return false;
+	}
+
+	return true;
+}
+
+/*
+ * Whether we can perform vectorized aggregation with a given grouping.
+ * Currently supports either no grouping or grouping by segmentby columns.
+ */
+static bool
+can_vectorize_grouping(Agg *agg, CustomScan *custom)
+{
+	if (agg->numCols == 0)
+	{
+		return true;
+	}
+
+	for (int i = 0; i < agg->numCols; i++)
+	{
+		int offset = AttrNumberGetAttrOffset(agg->grpColIdx[i]);
+		TargetEntry *entry = list_nth(agg->plan.targetlist, offset);
+
+		bool is_segmentby = false;
+		if (!is_vector_var(custom, entry->expr, &is_segmentby))
+		{
+			return false;
+		}
+
+		if (!is_segmentby)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+/*
+ * Check if we have a vectorized aggregation node and the usual Postgres
+ * aggregation node in the plan tree. This is used for testing.
+ */
+bool
+has_vector_agg_node(Plan *plan, bool *has_normal_agg)
+{
+	if (IsA(plan, Agg))
+	{
+		*has_normal_agg = true;
+	}
+
+	if (plan->lefttree && has_vector_agg_node(plan->lefttree, has_normal_agg))
+	{
+		return true;
+	}
+
+	if (plan->righttree && has_vector_agg_node(plan->righttree, has_normal_agg))
+	{
+		return true;
+	}
+
+	CustomScan *custom = NULL;
+	List *append_plans = NIL;
+	if (IsA(plan, Append))
+	{
+		append_plans = castNode(Append, plan)->appendplans;
+	}
+	else if (IsA(plan, CustomScan))
+	{
+		custom = castNode(CustomScan, plan);
+		if (strcmp("ChunkAppend", custom->methods->CustomName) == 0)
+		{
+			append_plans = custom->custom_plans;
+		}
+	}
+
+	if (append_plans)
+	{
+		ListCell *lc;
+		foreach (lc, append_plans)
+		{
+			if (has_vector_agg_node(lfirst(lc), has_normal_agg))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	if (custom == NULL)
+	{
+		return false;
+	}
+
+	if (strcmp(VECTOR_AGG_NODE_NAME, custom->methods->CustomName) == 0)
+	{
+		return true;
+	}
+
+	return false;
 }
 
 /*
@@ -213,12 +461,18 @@ try_insert_vector_agg_node(Plan *plan)
 		return plan;
 	}
 
-	if (agg->aggstrategy != AGG_PLAIN && agg->aggstrategy != AGG_HASHED)
+	if (agg->groupingSets != NIL)
+	{
+		/* No GROUPING SETS support. */
+		return plan;
+	}
+
+	if (agg->plan.qual != NIL)
 	{
 		/*
-		 * The sorted grouping produces sorted output, and the above plan nodes
-		 * might rely on that. Vectorized aggregation uses hashing and cannot
-		 * provide sorted output.
+		 * No HAVING support. Probably we can't have it in this node in any case,
+		 * because we only replace the partial aggregation nodes which can't
+		 * check the HAVING clause.
 		 */
 		return plan;
 	}
@@ -255,112 +509,27 @@ try_insert_vector_agg_node(Plan *plan)
 		return plan;
 	}
 
-	if (agg->numCols != 0)
+	if (!can_vectorize_grouping(agg, custom))
 	{
 		/* No GROUP BY support for now. */
 		return plan;
 	}
 
-	if (agg->groupingSets != NIL)
+	/* Now check the aggregate functions themselves. */
+	ListCell *lc;
+	foreach (lc, agg->plan.targetlist)
 	{
-		/* No GROUPING SETS support. */
-		return plan;
-	}
-
-	if (agg->plan.qual != NIL)
-	{
-		/*
-		 * No HAVING support. Probably we can't have it in this node in any case,
-		 * because we only replace the partial aggregation nodes which can't
-		 * check the HAVING clause.
-		 */
-		return plan;
-	}
-
-	if (list_length(agg->plan.targetlist) != 1)
-	{
-		/* We currently handle only one agg function per node. */
-		return plan;
-	}
-
-	Node *expr_node = (Node *) castNode(TargetEntry, linitial(agg->plan.targetlist))->expr;
-	Assert(IsA(expr_node, Aggref));
-
-	Aggref *aggref = castNode(Aggref, expr_node);
-
-	if (aggref->aggfilter != NULL)
-	{
-		/* Filter clause on aggregate is not supported. */
-		return plan;
-	}
-
-	if (get_vector_aggregate(aggref->aggfnoid) == NULL)
-	{
-		return plan;
-	}
-
-	TargetEntry *argument = castNode(TargetEntry, linitial(aggref->args));
-	if (!IsA(argument->expr, Var))
-	{
-		/* Can aggregate only a bare decompressed column, not an expression. */
-		return plan;
-	}
-	Var *aggregated_var = castNode(Var, argument->expr);
-
-	/*
-	 * Check if this particular column is a segmentby or has bulk decompression
-	 * enabled. This hook is called after set_plan_refs, and at this stage the
-	 * output targetlist of the aggregation node uses OUTER_VAR references into
-	 * the child scan targetlist, so first we have to translate this.
-	 */
-	Assert(aggregated_var->varno == OUTER_VAR);
-	TargetEntry *decompressed_target_entry =
-		list_nth(custom->scan.plan.targetlist, AttrNumberGetAttrOffset(aggregated_var->varattno));
-
-	if (!IsA(decompressed_target_entry->expr, Var))
-	{
-		/*
-		 * Can only aggregate the plain Vars. Not sure if this is redundant with
-		 * the similar check above.
-		 */
-		return plan;
-	}
-	Var *decompressed_var = castNode(Var, decompressed_target_entry->expr);
-
-	/*
-	 * Now, we have to translate the decompressed varno into the compressed
-	 * column index, to check if the column supports bulk decompression.
-	 */
-	List *decompression_map = list_nth(custom->custom_private, DCP_DecompressionMap);
-	List *is_segmentby_column = list_nth(custom->custom_private, DCP_IsSegmentbyColumn);
-	List *bulk_decompression_column = list_nth(custom->custom_private, DCP_BulkDecompressionColumn);
-	int compressed_column_index = 0;
-	for (; compressed_column_index < list_length(decompression_map); compressed_column_index++)
-	{
-		if (list_nth_int(decompression_map, compressed_column_index) == decompressed_var->varattno)
+		TargetEntry *target_entry = castNode(TargetEntry, lfirst(lc));
+		if (!IsA(target_entry->expr, Aggref))
 		{
-			break;
+			continue;
 		}
-	}
-	Ensure(compressed_column_index < list_length(decompression_map), "compressed column not found");
-	Assert(list_length(decompression_map) == list_length(bulk_decompression_column));
-	const bool bulk_decompression_enabled_for_column =
-		list_nth_int(bulk_decompression_column, compressed_column_index);
 
-	/* Bulk decompression can also be disabled globally. */
-	List *settings = linitial(custom->custom_private);
-	const bool bulk_decompression_enabled_globally =
-		list_nth_int(settings, DCS_EnableBulkDecompression);
-
-	/*
-	 * We support vectorized aggregation either for segmentby columns or for
-	 * columns with bulk decompression enabled.
-	 */
-	if (!list_nth_int(is_segmentby_column, compressed_column_index) &&
-		!(bulk_decompression_enabled_for_column && bulk_decompression_enabled_globally))
-	{
-		/* Vectorized aggregation not possible for this particular column. */
-		return plan;
+		Aggref *aggref = castNode(Aggref, target_entry->expr);
+		if (!can_vectorize_aggref(aggref, custom))
+		{
+			return plan;
+		}
 	}
 
 	/*

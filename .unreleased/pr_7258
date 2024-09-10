@@ -1,0 +1,2 @@
+Fixes: #7258 Force English in the pg_config command executed by cmake to avoid unexpected building errors
+Thanks: @MiguelTubio for reporting and fixing a Windows build error

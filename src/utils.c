@@ -1026,6 +1026,9 @@ ts_try_relation_cached_size(Relation rel, bool verbose)
 	ForkNumber forkNum;
 	bool cached = true;
 
+	if (!RELKIND_HAS_STORAGE(rel->rd_rel->relkind))
+		return (int64) nblocks;
+
 	/* Get heap size, including FSM and VM */
 	for (forkNum = 0; forkNum <= MAX_FORKNUM; forkNum++)
 	{
@@ -1693,6 +1696,9 @@ ts_makeaclitem(PG_FUNCTION_ARGS)
 #if PG16_GE
 		{ "SET", ACL_SET },
 		{ "ALTER SYSTEM", ACL_ALTER_SYSTEM },
+#endif
+#if PG17_GE
+		{ "MAINTAIN", ACL_MAINTAIN },
 #endif
 		{ "RULE", 0 }, /* ignore old RULE privileges */
 		{ NULL, 0 }
