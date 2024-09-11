@@ -10,7 +10,7 @@
  * avoids branches so can be more easily vectorized.
  */
 
-static pg_noinline void
+static pg_attribute_always_inline void
 FUNCTION_NAME(vector_impl_arrow)(void *agg_state, const ArrowArray *vector, const uint64 *valid1,
 								 const uint64 *valid2, MemoryContext agg_extra_mctx)
 {
@@ -40,7 +40,7 @@ FUNCTION_NAME(vector_two_validity)(void *agg_state, const ArrowArray *vector, co
 	FUNCTION_NAME(vector_impl_arrow)(agg_state, vector, valid1, valid2, agg_extra_mctx);
 }
 
-static pg_attribute_always_inline void
+static void
 FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *vector, const uint64 *filter,
 					  MemoryContext agg_extra_mctx)
 {

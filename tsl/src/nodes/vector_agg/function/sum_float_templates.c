@@ -30,12 +30,14 @@ float_sum_init(void *agg_state)
 
 #define PG_TYPE FLOAT4
 #define CTYPE float
+#define MASKTYPE uint32
 #define CTYPE_TO_DATUM Float4GetDatum
 #define DATUM_TO_CTYPE DatumGetFloat4
 #include "sum_float_single.c"
 
 #define PG_TYPE FLOAT8
 #define CTYPE double
+#define MASKTYPE uint64
 #define CTYPE_TO_DATUM Float8GetDatum
 #define DATUM_TO_CTYPE DatumGetFloat8
 #include "sum_float_single.c"
