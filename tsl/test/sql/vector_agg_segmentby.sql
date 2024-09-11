@@ -6,6 +6,9 @@
 \set CHUNK_ROWS 100000::int
 \set GROUPING_CARDINALITY 10::int
 
+-- Uncomment to run this test with hypercore TAM
+--set timescaledb.default_hypercore_use_access_method=true;
+
 create table svagg(t int, f int, s int);
 select create_hypertable('svagg', 's', chunk_time_interval => :GROUPING_CARDINALITY / :CHUNKS);
 
