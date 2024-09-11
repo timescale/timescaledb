@@ -7,6 +7,18 @@
 /*
  * Vectorized implementation for int{2,4}_avg_accum transition functions.
  */
+
+#include <postgres.h>
+
+#include <catalog/pg_type_d.h>
+#include <utils/array.h>
+#include <utils/fmgroids.h>
+#include <utils/fmgrprotos.h>
+
+#include "functions.h"
+#include "template_helper.h"
+#include <compression/arrow_c_data_interface.h>
+
 #ifndef GENERATE_DISPATCH_TABLE
 typedef struct
 {

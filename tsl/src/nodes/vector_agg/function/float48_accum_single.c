@@ -25,6 +25,7 @@
 #define ACCUM_CASE(PG_TYPE) ACCUM_CASE_HELPER(PG_TYPE)
 
 #ifdef GENERATE_DISPATCH_TABLE
+extern VectorAggFunctions FUNCTION_NAME(argdef);
 ACCUM_CASE(PG_TYPE)
 return &FUNCTION_NAME(argdef);
 #else
@@ -167,11 +168,11 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 #include "agg_const_helper.c"
 #include "agg_vector_validity_helper.c"
 
-static VectorAggFunctions FUNCTION_NAME(argdef) = { .state_bytes = sizeof(Float48AccumState),
-													.agg_init = float48_accum_init,
-													.agg_emit = float48_accum_emit,
-													.agg_const = FUNCTION_NAME(const),
-													.agg_vector = FUNCTION_NAME(vector) };
+VectorAggFunctions FUNCTION_NAME(argdef) = { .state_bytes = sizeof(Float48AccumState),
+											 .agg_init = float48_accum_init,
+											 .agg_emit = float48_accum_emit,
+											 .agg_const = FUNCTION_NAME(const),
+											 .agg_vector = FUNCTION_NAME(vector) };
 #endif
 
 #undef PG_TYPE

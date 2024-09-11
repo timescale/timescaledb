@@ -7,6 +7,18 @@
 /*
  * Vectorized transition functions that use the Int128AggState transition state.
  */
+
+#include <postgres.h>
+
+#include <nodes/execnodes.h>
+#include <utils/fmgroids.h>
+#include <utils/fmgrprotos.h>
+
+#include "functions.h"
+#include "template_helper.h"
+#include <compression/arrow_c_data_interface.h>
+
+#ifdef HAVE_INT128
 #ifndef GENERATE_DISPATCH_TABLE
 /*
  * The PG aggregation state that we have to serialize. Copied from numeric.c.
@@ -68,3 +80,5 @@ typedef struct
 #define CTYPE int32
 #define DATUM_TO_CTYPE DatumGetInt32
 #include "int128_accum_single.c"
+
+#endif

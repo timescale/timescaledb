@@ -4,6 +4,17 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
+#include <postgres.h>
+
+#include <utils/date.h>
+#include <utils/fmgroids.h>
+#include <utils/fmgrprotos.h>
+#include <utils/timestamp.h>
+
+#include "functions.h"
+#include "template_helper.h"
+#include <compression/arrow_c_data_interface.h>
+
 /*
  * Common parts for vectorized min(), max().
  */

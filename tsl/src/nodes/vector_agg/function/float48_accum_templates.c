@@ -7,6 +7,19 @@
 /*
  * Common parts for aggregate functions that use the float{4,8}_accum transition.
  */
+
+#include <postgres.h>
+
+#include <catalog/pg_type_d.h>
+#include <utils/array.h>
+#include <utils/float.h>
+#include <utils/fmgroids.h>
+#include <utils/fmgrprotos.h>
+
+#include "functions.h"
+#include "template_helper.h"
+#include <compression/arrow_c_data_interface.h>
+
 #ifndef GENERATE_DISPATCH_TABLE
 /*
  * State of Youngs-Cramer algorithm, see the comments for float8_accum().

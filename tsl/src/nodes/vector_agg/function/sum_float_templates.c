@@ -7,6 +7,14 @@
 /*
  * Common parts for vectorized sum(float).
  */
+
+#include <postgres.h>
+#include "functions.h"
+#include "template_helper.h"
+#include <compression/arrow_c_data_interface.h>
+#include <utils/fmgroids.h>
+#include <utils/fmgrprotos.h>
+
 #ifndef GENERATE_DISPATCH_TABLE
 typedef struct
 {

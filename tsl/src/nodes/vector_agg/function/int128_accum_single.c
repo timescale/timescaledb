@@ -10,6 +10,7 @@
  * based on whether the sum of squares is needed.
  */
 #ifdef GENERATE_DISPATCH_TABLE
+extern VectorAggFunctions FUNCTION_NAME(argdef);
 AGG_CASES
 return &FUNCTION_NAME(argdef);
 #else
@@ -93,7 +94,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 #include "agg_const_helper.c"
 #include "agg_vector_validity_helper.c"
 
-static VectorAggFunctions FUNCTION_NAME(argdef) = {
+VectorAggFunctions FUNCTION_NAME(argdef) = {
 	.state_bytes = sizeof(FUNCTION_NAME(state)),
 	.agg_init = FUNCTION_NAME(init),
 	.agg_emit = FUNCTION_NAME(emit),

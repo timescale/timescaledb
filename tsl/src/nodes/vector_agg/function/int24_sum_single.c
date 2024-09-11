@@ -5,6 +5,7 @@
  */
 
 #ifdef GENERATE_DISPATCH_TABLE
+extern VectorAggFunctions FUNCTION_NAME(argdef);
 case PG_AGG_OID_HELPER(AGG_NAME, PG_TYPE):
 	return &FUNCTION_NAME(argdef);
 #else
@@ -50,11 +51,10 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 	state->isnull &= !have_result;
 }
 
+#include "agg_const_helper.c"
 #include "agg_vector_validity_helper.c"
 
-#include "agg_const_helper.c"
-
-static VectorAggFunctions FUNCTION_NAME(argdef) = {
+VectorAggFunctions FUNCTION_NAME(argdef) = {
 	.state_bytes = sizeof(Int24SumState),
 	.agg_init = int_sum_init,
 	.agg_emit = int_sum_emit,

@@ -7,6 +7,19 @@
 /*
  * Common parts for vectorized sum(int).
  */
+
+#include <limits.h>
+
+#include <postgres.h>
+
+#include <common/int.h>
+#include <utils/fmgroids.h>
+#include <utils/fmgrprotos.h>
+
+#include "functions.h"
+#include "template_helper.h"
+#include <compression/arrow_c_data_interface.h>
+
 #ifndef GENERATE_DISPATCH_TABLE
 typedef struct
 {

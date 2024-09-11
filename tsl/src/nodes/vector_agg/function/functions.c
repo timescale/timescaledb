@@ -118,8 +118,6 @@ VectorAggFunctions count_any_agg = {
 	.agg_vector = count_any_vector,
 };
 
-#include "function_templates.c"
-
 /*
  * Return the vector aggregate definition corresponding to the given
  * PG aggregate function Oid.
@@ -134,7 +132,12 @@ get_vector_aggregate(Oid aggfnoid)
 		case F_COUNT_ANY:
 			return &count_any_agg;
 #define GENERATE_DISPATCH_TABLE 1
-#include "function_templates.c"
+#include "float48_accum_templates.c"
+#include "int128_accum_templates.c"
+#include "int24_avg_accum_templates.c"
+#include "int24_sum_templates.c"
+#include "minmax_templates.c"
+#include "sum_float_templates.c"
 #undef GENERATE_DISPATCH_TABLE
 		default:
 			return NULL;
