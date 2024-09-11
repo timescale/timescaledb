@@ -1,1 +1,1 @@
-Fixes: #7229: Fix the foreign key constraints where the index and constraint columns' order differ.
+Fixes: #7229: Fix the foreign key constraints where the index and the constraint column order are different.
