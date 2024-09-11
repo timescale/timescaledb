@@ -31,13 +31,31 @@
 #include <nodes/hypertable_modify.h>
 #include <ts_catalog/array_utils.h>
 
-static struct decompress_batches_stats
-decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, Snapshot snapshot,
-						ScanKeyData *index_scankeys, int num_index_scankeys,
-						ScanKeyData *heap_scankeys, int num_heap_scankeys,
-						ScanKeyData *mem_scankeys, int num_mem_scankeys,
-						tuple_filtering_constraints *constraints, bool *skip_current_tuple,
-						bool delete_only, Bitmapset *null_columns, List *is_nulls);
+typedef struct DecompressBatchScanContext
+{
+	Relation in_rel;
+	Relation out_rel;
+	Relation index_rel;
+	Snapshot snapshot;
+	ScanKeyData *index_scankeys;
+	int num_index_scankeys;
+	ScanKeyData *heap_scankeys;
+	int num_heap_scankeys;
+	ScanKeyData *mem_scankeys;
+	int num_mem_scankeys;
+	tuple_filtering_constraints *constraints;
+	bool *skip_current_tuple;
+	bool delete_only;
+	Bitmapset *null_columns;
+	List *is_nulls;
+	bool (*filter)(struct DecompressBatchScanContext *context, TupleTableSlot *slot,
+				   HeapTuple *compressed_tuple);
+} DecompressBatchScanContext;
+
+static bool decompress_batch_filter(DecompressBatchScanContext *context, TupleTableSlot *slot,
+									HeapTuple *compressed_tuple);
+
+static struct decompress_batches_stats decompress_batches_scan(DecompressBatchScanContext *context);
 
 static bool batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
 						  tuple_filtering_constraints *constraints, bool *skip_current_tuple);
@@ -162,22 +180,25 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 	 * the index on the uncompressed chunks in order to do speculative insertion
 	 * which is always built from all tuples (even in higher levels of isolation).
 	 */
-	stats = decompress_batches_scan(in_rel,
-									out_rel,
-									index_rel,
-									GetLatestSnapshot(),
-									index_scankeys,
-									num_index_scankeys,
-									heap_scankeys,
-									num_heap_scankeys,
-									mem_scankeys,
-									num_mem_scankeys,
-									constraints,
-									&skip_current_tuple,
-									false,
-									null_columns, /* no null column check for non-segmentby
-											 columns */
-									NIL);
+	DecompressBatchScanContext context = { .in_rel = in_rel,
+										   .out_rel = out_rel,
+										   .index_rel = index_rel,
+										   .snapshot = GetLatestSnapshot(),
+										   .index_scankeys = index_scankeys,
+										   .num_index_scankeys = num_index_scankeys,
+										   .heap_scankeys = heap_scankeys,
+										   .num_heap_scankeys = num_heap_scankeys,
+										   .mem_scankeys = mem_scankeys,
+										   .num_mem_scankeys = num_mem_scankeys,
+										   .constraints = constraints,
+										   .skip_current_tuple = &skip_current_tuple,
+										   .delete_only = false,
+										   .null_columns = null_columns,
+										   .is_nulls = NIL,
+										   .filter = decompress_batch_filter };
+
+	stats = decompress_batches_scan(&context);
+
 	if (index_rel)
 		index_close(index_rel, AccessShareLock);
 
@@ -267,21 +288,24 @@ decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chu
 			build_index_scankeys(matching_index_rel, index_filters, &num_index_scankeys);
 	}
 
-	stats = decompress_batches_scan(comp_chunk_rel,
-									chunk_rel,
-									matching_index_rel,
-									GetTransactionSnapshot(),
-									index_scankeys,
-									num_index_scankeys,
-									scankeys,
-									num_scankeys,
-									mem_scankeys,
-									num_mem_scankeys,
-									NULL,
-									NULL,
-									delete_only,
-									null_columns,
-									is_null);
+	DecompressBatchScanContext context = { .in_rel = comp_chunk_rel,
+										   .out_rel = chunk_rel,
+										   .index_rel = matching_index_rel,
+										   .snapshot = GetTransactionSnapshot(),
+										   .index_scankeys = index_scankeys,
+										   .num_index_scankeys = num_index_scankeys,
+										   .heap_scankeys = scankeys,
+										   .num_heap_scankeys = num_scankeys,
+										   .mem_scankeys = mem_scankeys,
+										   .num_mem_scankeys = num_mem_scankeys,
+										   .constraints = NULL,
+										   .skip_current_tuple = NULL,
+										   .delete_only = delete_only,
+										   .null_columns = null_columns,
+										   .is_nulls = is_null,
+										   .filter = decompress_batch_filter };
+
+	stats = decompress_batches_scan(&context);
 
 	/* close the selected index */
 	if (matching_index_rel)
@@ -324,21 +348,31 @@ typedef struct DecompressBatchScanData
 typedef struct DecompressBatchScanData *DecompressBatchScanDesc;
 
 static DecompressBatchScanDesc
-decompress_batch_beginscan(Relation in_rel, Relation index_rel, Snapshot snapshot, int num_scankeys,
-						   ScanKeyData *scankeys)
+decompress_batch_beginscan(DecompressBatchScanContext *context)
 {
 	DecompressBatchScanDesc scan;
 	scan = (DecompressBatchScanDesc) palloc(sizeof(DecompressBatchScanData));
 
-	if (index_rel)
+	if (context->index_rel)
 	{
-		scan->index_scan = index_beginscan(in_rel, index_rel, snapshot, num_scankeys, 0);
-		index_rescan(scan->index_scan, scankeys, num_scankeys, NULL, 0);
+		scan->index_scan = index_beginscan(context->in_rel,
+										   context->index_rel,
+										   context->snapshot,
+										   context->num_index_scankeys,
+										   0);
+		index_rescan(scan->index_scan,
+					 context->index_scankeys,
+					 context->num_index_scankeys,
+					 NULL,
+					 0);
 		scan->scan = NULL;
 	}
 	else
 	{
-		scan->scan = table_beginscan(in_rel, snapshot, num_scankeys, scankeys);
+		scan->scan = table_beginscan(context->in_rel,
+									 context->snapshot,
+									 context->num_heap_scankeys,
+									 context->heap_scankeys);
 		scan->index_scan = NULL;
 	}
 
@@ -374,6 +408,72 @@ decompress_batch_endscan(DecompressBatchScanDesc scan)
 	pfree(scan);
 }
 
+static bool
+decompress_batch_filter(DecompressBatchScanContext *context, TupleTableSlot *slot,
+						HeapTuple *compressed_tuple)
+{
+	// Implement the default filtering logic here
+	// This should combine the logic from the various ScanKey checks
+	// Return true if the tuple should be processed, false otherwise
+	// ... implementation ...
+	bool valid = false;
+
+	/* Deconstruct the tuple */
+	Assert(slot->tts_ops->get_heap_tuple);
+	*compressed_tuple = slot->tts_ops->get_heap_tuple(slot);
+
+	if (context->index_rel && context->num_heap_scankeys)
+	{
+		/* filter tuple based on compress_orderby columns */
+		valid = false;
+#if PG16_LT
+		HeapKeyTest(*compressed_tuple,
+					RelationGetDescr(context->in_rel),
+					context->num_heap_scankeys,
+					context->heap_scankeys,
+					valid);
+#else
+		valid = HeapKeyTest(*compressed_tuple,
+							RelationGetDescr(context->in_rel),
+							context->num_heap_scankeys,
+							context->heap_scankeys);
+#endif
+		if (!valid)
+		{
+			return false;
+		}
+	}
+
+	int attrno = bms_next_member(context->null_columns, -1);
+	int pos = 0;
+	bool is_null_condition = 0;
+	bool seg_col_is_null = false;
+	valid = true;
+
+	/*
+	 * Since the heap scan API does not support SK_SEARCHNULL we have to check
+	 * for NULL values manually when those are part of the constraints.
+	 */
+	for (; attrno >= 0; attrno = bms_next_member(context->null_columns, attrno))
+	{
+		is_null_condition = context->is_nulls && list_nth_int(context->is_nulls, pos);
+		seg_col_is_null = slot_attisnull(slot, attrno);
+		if ((seg_col_is_null && !is_null_condition) || (!seg_col_is_null && is_null_condition))
+		{
+			/*
+			 * if segment by column in the scanned tuple has non null value
+			 * and IS NULL is specified, OR segment by column has null value
+			 * and IS NOT NULL is specified then skip this tuple
+			 */
+			valid = false;
+			break;
+		}
+		pos++;
+	}
+
+	return valid;
+}
+
 /*
  * This method will:
  *  1.Scan the index created with SEGMENT BY columns or the entire compressed chunk
@@ -385,17 +485,11 @@ decompress_batch_endscan(DecompressBatchScanDesc scan)
  *
  */
 static struct decompress_batches_stats
-decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, Snapshot snapshot,
-						ScanKeyData *index_scankeys, int num_index_scankeys,
-						ScanKeyData *heap_scankeys, int num_heap_scankeys,
-						ScanKeyData *mem_scankeys, int num_mem_scankeys,
-						tuple_filtering_constraints *constraints, bool *skip_current_tuple,
-						bool delete_only, Bitmapset *null_columns, List *is_nulls)
+decompress_batches_scan(DecompressBatchScanContext *context)
 {
 	HeapTuple compressed_tuple;
 	RowDecompressor decompressor;
 	bool decompressor_initialized = false;
-	bool valid = false;
 	int num_scanned_rows = 0;
 	int num_filtered_rows = 0;
 	TM_Result result;
@@ -404,77 +498,14 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 	struct decompress_batches_stats stats = { 0 };
 
 	/* TODO: Optimization by reusing the index scan while working on a single chunk */
-
-	if (index_rel)
-	{
-		scan = decompress_batch_beginscan(in_rel,
-										  index_rel,
-										  snapshot,
-										  num_index_scankeys,
-										  index_scankeys);
-	}
-	else
-	{
-		scan = decompress_batch_beginscan(in_rel, NULL, snapshot, num_heap_scankeys, heap_scankeys);
-	}
-	TupleTableSlot *slot = table_slot_create(in_rel, NULL);
+	scan = decompress_batch_beginscan(context);
+	TupleTableSlot *slot = table_slot_create(context->in_rel, NULL);
 
 	while (decompress_batch_scan_getnext_slot(scan, ForwardScanDirection, slot))
 	{
 		num_scanned_rows++;
 
-		/* Deconstruct the tuple */
-		Assert(slot->tts_ops->get_heap_tuple);
-		compressed_tuple = slot->tts_ops->get_heap_tuple(slot);
-
-		if (index_rel && num_heap_scankeys)
-		{
-			/* filter tuple based on compress_orderby columns */
-			valid = false;
-#if PG16_LT
-			HeapKeyTest(compressed_tuple,
-						RelationGetDescr(in_rel),
-						num_heap_scankeys,
-						heap_scankeys,
-						valid);
-#else
-			valid = HeapKeyTest(compressed_tuple,
-								RelationGetDescr(in_rel),
-								num_heap_scankeys,
-								heap_scankeys);
-#endif
-			if (!valid)
-			{
-				num_filtered_rows++;
-				continue;
-			}
-		}
-
-		int attrno = bms_next_member(null_columns, -1);
-		int pos = 0;
-		bool is_null_condition = 0;
-		bool seg_col_is_null = false;
-		valid = true;
-		/*
-		 * Since the heap scan API does not support SK_SEARCHNULL we have to check
-		 * for NULL values manually when those are part of the constraints.
-		 */
-		for (; attrno >= 0; attrno = bms_next_member(null_columns, attrno))
-		{
-			is_null_condition = is_nulls && list_nth_int(is_nulls, pos);
-			seg_col_is_null = slot_attisnull(slot, attrno);
-			if ((seg_col_is_null && !is_null_condition) || (!seg_col_is_null && is_null_condition))
-			{
-				/*
-				 * if segment by column in the scanned tuple has non null value
-				 * and IS NULL is specified, OR segment by column has null value
-				 * and IS NOT NULL is specified then skip this tuple
-				 */
-				valid = false;
-				break;
-			}
-			pos++;
-		}
+		bool valid = context->filter(context, slot, &compressed_tuple);
 
 		if (!valid)
 		{
@@ -484,8 +515,8 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 
 		if (!decompressor_initialized)
 		{
-			decompressor = build_decompressor(in_rel, out_rel);
-			decompressor.delete_only = delete_only;
+			decompressor = build_decompressor(context->in_rel, context->out_rel);
+			decompressor.delete_only = context->delete_only;
 			decompressor_initialized = true;
 		}
 
@@ -494,18 +525,18 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 						  decompressor.compressed_datums,
 						  decompressor.compressed_is_nulls);
 
-		if (num_mem_scankeys && !batch_matches(&decompressor,
-											   mem_scankeys,
-											   num_mem_scankeys,
-											   constraints,
-											   skip_current_tuple))
+		if (context->num_mem_scankeys && !batch_matches(&decompressor,
+														context->mem_scankeys,
+														context->num_mem_scankeys,
+														context->constraints,
+														context->skip_current_tuple))
 		{
 			row_decompressor_reset(&decompressor);
 			stats.batches_filtered++;
 			continue;
 		}
 
-		if (skip_current_tuple && *skip_current_tuple)
+		if (context->skip_current_tuple && *context->skip_current_tuple)
 		{
 			row_decompressor_close(&decompressor);
 			decompress_batch_endscan(scan);
@@ -513,7 +544,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 			return stats;
 		}
 		write_logical_replication_msg_decompression_start();
-		result = delete_compressed_tuple(&decompressor, snapshot, compressed_tuple);
+		result = delete_compressed_tuple(&decompressor, context->snapshot, compressed_tuple);
 		/* skip reporting error if isolation level is < Repeatable Read
 		 * since somebody decompressed the data concurrently, we need to take
 		 * that data into account as well when in Read Committed level
@@ -555,9 +586,9 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 		elog(INFO,
 			 "Number of compressed rows fetched from %s: %d. "
 			 "Number of compressed rows filtered%s: %d.",
-			 index_rel ? "index" : "table scan",
+			 context->index_rel ? "index" : "table scan",
 			 num_scanned_rows,
-			 index_rel ? " by heap filters" : "",
+			 context->index_rel ? " by heap filters" : "",
 			 num_filtered_rows);
 	}
 
