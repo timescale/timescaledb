@@ -1,1 +1,1 @@
-Fixes: #7187 Fix string literal length for compressed_data_info
+Fixes: #7187: Fix the string literal length for the `compressed_data_info` function.
