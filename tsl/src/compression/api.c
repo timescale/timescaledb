@@ -441,6 +441,10 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		EventTriggerAlterTableStart(create_dummy_query());
 		/* create compressed chunk and a new table */
 		compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, InvalidOid);
+		/* Associate compressed chunk with main chunk. Needed for Hyperstore
+		 * TAM to not recreate the compressed chunk again when the main chunk
+		 * rel is opened. */
+		ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id);
 		new_compressed_chunk = true;
 		ereport(LOG,
 				(errmsg("new compressed chunk \"%s.%s\" created",
@@ -501,7 +505,6 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		ts_chunk_column_stats_calculate(cxt.srcht, cxt.srcht_chunk);
 
 	cstat = compress_chunk(cxt.srcht_chunk->table_id, compress_ht_chunk->table_id, insert_options);
-
 	after_size = ts_relation_size_impl(compress_ht_chunk->table_id);
 
 	if (new_compressed_chunk)
@@ -520,7 +523,6 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		 */
 		ts_chunk_constraints_create(cxt.compress_ht, compress_ht_chunk);
 		ts_trigger_create_all_on_chunk(compress_ht_chunk);
-		ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id);
 	}
 	else
 	{

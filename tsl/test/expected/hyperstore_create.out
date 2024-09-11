@@ -219,8 +219,7 @@ alter table :chunk set access method hyperstore;
 ERROR:  hypertable "test3" is missing compression settings
 \set ON_ERROR_STOP 1
 -- Add compression settings
-alter table test3 set (timescaledb.compress_segmentby = 'device');
-NOTICE:  default order by for hypertable "test3" is set to ""time" DESC"
+alter table test3 set (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='');
 alter table :chunk set access method hyperstore;
 -- Check that chunk is using hyperstore
 select * from amrels where rel=:'chunk'::regclass;
@@ -231,7 +230,7 @@ select * from amrels where rel=:'chunk'::regclass;
 
 -- Try same thing with compress_chunk()
 alter table :chunk set access method heap;
-SELECT compress_chunk(:'chunk', compress_using => 'hyperstore');
+select compress_chunk(:'chunk', compress_using => 'hyperstore');
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_4_13_chunk
@@ -249,6 +248,14 @@ select relname, amname
 
 -- Test setting same access method again
 alter table :chunk set access method hyperstore;
+-- Test recompression after changing compression settings
+alter table test3 set (timescaledb.compress_segmentby='device');
+select compress_chunk(:'chunk', compress_using => 'hyperstore', recompress => true);
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_4_13_chunk
+(1 row)
+
 -- Create a second chunk
 insert into test3 values ('2022-08-01', 1, 1.0);
 -- The second chunk should not be a hyperstore chunk
@@ -256,7 +263,7 @@ select * from amrels where relparent='test3'::regclass;
                    rel                   |   amname   | relparent 
 -----------------------------------------+------------+-----------
  _timescaledb_internal._hyper_4_13_chunk | hyperstore | test3
- _timescaledb_internal._hyper_4_16_chunk | heap       | test3
+ _timescaledb_internal._hyper_4_17_chunk | heap       | test3
 (2 rows)
 
 -- Set hyperstore on hypertable
@@ -268,8 +275,8 @@ select * from amrels where relparent='test3'::regclass;
                    rel                   |   amname   | relparent 
 -----------------------------------------+------------+-----------
  _timescaledb_internal._hyper_4_13_chunk | hyperstore | test3
- _timescaledb_internal._hyper_4_16_chunk | heap       | test3
- _timescaledb_internal._hyper_4_17_chunk | hyperstore | test3
+ _timescaledb_internal._hyper_4_17_chunk | heap       | test3
+ _timescaledb_internal._hyper_4_18_chunk | hyperstore | test3
 (3 rows)
 
 -- Test that we can DDL on a hypertable that is not a Hyperstore but
@@ -298,14 +305,14 @@ alter table :chunk set access method hyperstore;
 select * from amrels where relparent='test4'::regclass;
                    rel                   |   amname   | relparent 
 -----------------------------------------+------------+-----------
- _timescaledb_internal._hyper_6_19_chunk | hyperstore | test4
- _timescaledb_internal._hyper_6_20_chunk | heap       | test4
+ _timescaledb_internal._hyper_6_20_chunk | hyperstore | test4
+ _timescaledb_internal._hyper_6_21_chunk | heap       | test4
 (2 rows)
 
 -- test that alter table on the hypertable works
 alter table test4 add column magic int;
 \d :chunk
-          Table "_timescaledb_internal._hyper_6_19_chunk"
+          Table "_timescaledb_internal._hyper_6_20_chunk"
  Column |           Type           | Collation | Nullable | Default 
 --------+--------------------------+-----------+----------+---------
  time   | timestamp with time zone |           | not null | 
@@ -313,7 +320,7 @@ alter table test4 add column magic int;
  temp   | double precision         |           |          | 
  magic  | integer                  |           |          | 
 Indexes:
-    "_hyper_6_19_chunk_test4_time_idx" btree ("time" DESC)
+    "_hyper_6_20_chunk_test4_time_idx" btree ("time" DESC)
 Check constraints:
     "constraint_10" CHECK ("time" >= 'Wed May 25 17:00:00 2022 PDT'::timestamp with time zone AND "time" < 'Wed Jun 01 17:00:00 2022 PDT'::timestamp with time zone)
 Inherits: test4
@@ -362,7 +369,7 @@ select * from compressed_rel_size_stats order by rel;
  _timescaledb_internal._hyper_1_9_chunk  | hyperstore | test2     |                       0 |                        0 |                          0
  _timescaledb_internal._hyper_1_11_chunk | hyperstore | test2     |                       0 |                        0 |                          0
  _timescaledb_internal._hyper_4_13_chunk | hyperstore | test3     |                       1 |                        1 |                          1
- _timescaledb_internal._hyper_4_17_chunk | hyperstore | test3     |                       0 |                        0 |                          0
+ _timescaledb_internal._hyper_4_18_chunk | hyperstore | test3     |                       0 |                        0 |                          0
 (8 rows)
 
 -- Decompress hyperstores to check that stats are removed
@@ -378,7 +385,7 @@ select decompress_chunk(rel)
  _timescaledb_internal._hyper_1_9_chunk
  _timescaledb_internal._hyper_1_11_chunk
  _timescaledb_internal._hyper_4_13_chunk
- _timescaledb_internal._hyper_4_17_chunk
+ _timescaledb_internal._hyper_4_18_chunk
 (8 rows)
 
 -- All stats should be removed
@@ -408,8 +415,8 @@ from show_chunks('test3') ch;
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_4_13_chunk
- _timescaledb_internal._hyper_4_16_chunk
  _timescaledb_internal._hyper_4_17_chunk
+ _timescaledb_internal._hyper_4_18_chunk
 (3 rows)
 
 -- Save the stats for later comparison. Exclude the amname column
@@ -432,8 +439,8 @@ select * from compressed_rel_size_stats order by rel;
  _timescaledb_internal._hyper_1_9_chunk  | hyperstore | test2     |                    2016 |                       10 |                         10
  _timescaledb_internal._hyper_1_11_chunk | hyperstore | test2     |                     373 |                       10 |                         10
  _timescaledb_internal._hyper_4_13_chunk | hyperstore | test3     |                       1 |                        1 |                          1
- _timescaledb_internal._hyper_4_16_chunk | hyperstore | test3     |                       1 |                        1 |                          1
  _timescaledb_internal._hyper_4_17_chunk | hyperstore | test3     |                       1 |                        1 |                          1
+ _timescaledb_internal._hyper_4_18_chunk | hyperstore | test3     |                       1 |                        1 |                          1
 (9 rows)
 
 -- Convert back to heap and compress the old way to compare
@@ -456,8 +463,8 @@ from show_chunks('test3') ch;
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_4_13_chunk
- _timescaledb_internal._hyper_4_16_chunk
  _timescaledb_internal._hyper_4_17_chunk
+ _timescaledb_internal._hyper_4_18_chunk
 (3 rows)
 
 select * from compressed_rel_size_stats order by rel;
@@ -470,8 +477,8 @@ select * from compressed_rel_size_stats order by rel;
  _timescaledb_internal._hyper_1_9_chunk  | heap   | test2     |                    2016 |                       10 |                         10
  _timescaledb_internal._hyper_1_11_chunk | heap   | test2     |                     373 |                       10 |                         10
  _timescaledb_internal._hyper_4_13_chunk | heap   | test3     |                       1 |                        1 |                          1
- _timescaledb_internal._hyper_4_16_chunk | heap   | test3     |                       1 |                        1 |                          1
  _timescaledb_internal._hyper_4_17_chunk | heap   | test3     |                       1 |                        1 |                          1
+ _timescaledb_internal._hyper_4_18_chunk | heap   | test3     |                       1 |                        1 |                          1
 (9 rows)
 
 -- Check that stats are the same for hyperstore and now with
@@ -888,14 +895,14 @@ insert into rides values
 select compress_chunk(ch, compress_using=>'hyperstore') from show_chunks('rides') ch;
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_8_43_chunk
+ _timescaledb_internal._hyper_8_44_chunk
 (1 row)
 
 select rel, amname from compressed_rel_size_stats
 where relparent::regclass = 'rides'::regclass;
                    rel                   |   amname   
 -----------------------------------------+------------
- _timescaledb_internal._hyper_8_43_chunk | hyperstore
+ _timescaledb_internal._hyper_8_44_chunk | hyperstore
 (1 row)
 
 -- Query to check everything is OK
@@ -907,8 +914,8 @@ select * from rides order by pickup_datetime;
                       QUERY PLAN                       
 -------------------------------------------------------
  Sort
-   Sort Key: _hyper_8_43_chunk.pickup_datetime
-   ->  Custom Scan (ColumnarScan) on _hyper_8_43_chunk
+   Sort Key: _hyper_8_44_chunk.pickup_datetime
+   ->  Custom Scan (ColumnarScan) on _hyper_8_44_chunk
 (3 rows)
 
 select * from rides order by pickup_datetime;

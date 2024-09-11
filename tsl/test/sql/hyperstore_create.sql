@@ -117,7 +117,7 @@ alter table :chunk set access method hyperstore;
 \set ON_ERROR_STOP 1
 
 -- Add compression settings
-alter table test3 set (timescaledb.compress_segmentby = 'device');
+alter table test3 set (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='');
 alter table :chunk set access method hyperstore;
 
 -- Check that chunk is using hyperstore
@@ -125,7 +125,7 @@ select * from amrels where rel=:'chunk'::regclass;
 
 -- Try same thing with compress_chunk()
 alter table :chunk set access method heap;
-SELECT compress_chunk(:'chunk', compress_using => 'hyperstore');
+select compress_chunk(:'chunk', compress_using => 'hyperstore');
 
 -- Check that chunk is using hyperstore
 select relname, amname
@@ -135,6 +135,10 @@ select relname, amname
 
 -- Test setting same access method again
 alter table :chunk set access method hyperstore;
+
+-- Test recompression after changing compression settings
+alter table test3 set (timescaledb.compress_segmentby='device');
+select compress_chunk(:'chunk', compress_using => 'hyperstore', recompress => true);
 
 -- Create a second chunk
 insert into test3 values ('2022-08-01', 1, 1.0);
