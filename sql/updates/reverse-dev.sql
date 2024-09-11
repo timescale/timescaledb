@@ -47,27 +47,4 @@ LANGUAGE C VOLATILE;
 
 DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression_execute(job_id INTEGER, htid INTEGER, lag ANYELEMENT, maxchunks INTEGER, verbose_log BOOLEAN, recompress_enabled  BOOLEAN, use_creation_time BOOLEAN, amname NAME);
 
-CREATE PROCEDURE
-_timescaledb_functions.policy_compression_execute(
-  job_id              INTEGER,
-  htid                INTEGER,
-  lag                 ANYELEMENT,
-  maxchunks           INTEGER,
-  verbose_log         BOOLEAN,
-  recompress_enabled  BOOLEAN,
-  use_creation_time   BOOLEAN)
-AS $$
-DECLARE
-BEGIN
-END;
-$$ LANGUAGE PLPGSQL;
-
 DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression(job_id INTEGER, config JSONB);
-
-CREATE PROCEDURE
-_timescaledb_functions.policy_compression(job_id INTEGER, config JSONB)
-AS $$
-DECLARE
-BEGIN
-END;
-$$ LANGUAGE PLPGSQL;
