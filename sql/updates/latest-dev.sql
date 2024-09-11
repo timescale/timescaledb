@@ -66,7 +66,6 @@ _timescaledb_functions.policy_compression_execute(
   use_creation_time   BOOLEAN,
   amname              NAME = NULL)
 AS $$
-DECLARE 
 BEGIN
 END;
 $$ LANGUAGE PLPGSQL;
@@ -76,7 +75,6 @@ DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression(job_id INTEGE
 CREATE PROCEDURE
 _timescaledb_functions.policy_compression(job_id INTEGER, config JSONB)
 AS $$
-DECLARE 
 BEGIN
 END;
 $$ LANGUAGE PLPGSQL;
