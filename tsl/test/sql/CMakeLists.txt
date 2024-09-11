@@ -180,7 +180,8 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
-  list(APPEND TEST_FILES cagg_planning.sql hypercore_parallel.sql)
+  list(APPEND TEST_FILES cagg_planning.sql hypercore_parallel.sql
+       hypercore_vectoragg.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
