@@ -46,7 +46,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 			 * infinities and NaNs.
 			 */
 #define INNER_LOOP                                                                                 \
-	const bool valid = arrow_both_valid(valid1, valid2, row);                                      \
+	const bool valid = arrow_row_both_valid(valid1, valid2, row);                                  \
 	union                                                                                          \
 	{                                                                                              \
 		CTYPE f;                                                                                   \

@@ -20,7 +20,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 	for (int row = 0; row < n; row++)
 	{
 		const CTYPE new_value = values[row];
-		const bool new_value_ok = arrow_both_valid(valid1, valid2, row);
+		const bool new_value_ok = arrow_row_both_valid(valid1, valid2, row);
 
 		/*
 		 * Note that we have to properly handle NaNs and Infinities for floats.

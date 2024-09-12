@@ -152,7 +152,7 @@ arrow_row_is_valid(const uint64 *bitmap, size_t row_number)
  * validity bitmap + filter result.
  */
 static pg_attribute_always_inline bool
-arrow_both_valid(const uint64 *bitmap1, const uint64 *bitmap2, size_t row_number)
+arrow_row_both_valid(const uint64 *bitmap1, const uint64 *bitmap2, size_t row_number)
 {
 	if (likely(bitmap1 == NULL))
 	{

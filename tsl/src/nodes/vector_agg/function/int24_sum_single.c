@@ -37,7 +37,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 	bool have_result = false;
 	for (int row = 0; row < n; row++)
 	{
-		const bool row_ok = arrow_both_valid(valid1, valid2, row);
+		const bool row_ok = arrow_row_both_valid(valid1, valid2, row);
 		batch_sum += values[row] * row_ok;
 		have_result |= row_ok;
 	}
