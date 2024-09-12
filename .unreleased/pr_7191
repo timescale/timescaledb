@@ -1,1 +1,1 @@
-Fixes: #7191 Fix creating default indexes on chunks when migrating data
+Fixes: #7191: Fix creating default indexes on chunks when migrating the data.

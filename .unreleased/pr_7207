@@ -1,1 +1,1 @@
-Implements: #7207 Refactor decompress_batches_scan functions
+Implements: #7207: Refactor the `decompress_batches_scan` functions for easier maintenance.

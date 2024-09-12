@@ -1,1 +1,1 @@
-Fixes: #7234 Release cache after accessing the cache entry
+Fixes: #7234: Release the cache after accessing the cache entry.
