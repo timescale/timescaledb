@@ -1,0 +1,1 @@
+Implement: #7200: Vectorize common aggregate functions like `min`, `max`, `sum`, `avg`, `stddev`, `variance` for arithmetic types, for no grouping and grouping on segmentby columns.
