@@ -73,11 +73,11 @@ FUNCTION_NAME(emit)(void *agg_state, Datum *out_result, bool *out_isnull)
 		 * checked by float8_combine even if it's not used for the actual
 		 * calculations.
 		 */
-		Float8GetDatumFast(0. * state->Sx
+		Float8GetDatum(0. * state->Sx
 #ifdef NEED_SXX
-						   + state->Sxx
+					   + state->Sxx
 #endif
-						   ),
+					   ),
 	};
 
 	ArrayType *result = construct_array(transdatums,
