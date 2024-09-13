@@ -2335,7 +2335,6 @@ hyperstore_index_build_callback(Relation index, ItemPointer tid, Datum *values, 
 								bool tupleIsAlive, void *state)
 {
 	IndexBuildCallbackState *icstate = state;
-	int32 num_rows = -1;
 	const TupleDesc tupdesc = RelationGetDescr(icstate->rel);
 	const Bitmapset *segmentby_cols = icstate->segmentby_cols;
 	/* We expect the compressed rel scan to produce a datum array that first
@@ -2346,6 +2345,10 @@ hyperstore_index_build_callback(Relation index, ItemPointer tid, Datum *values, 
 	 * column. The count column is appended directly after the index
 	 * attributes. */
 	const int32 num_actual_rows = DatumGetInt32(values[natts]);
+	int32 num_rows = num_actual_rows; /* Num rows to index. For segmentby
+									   * indexes, we might change this from
+									   * the actual number of rows to indexing
+									   * only one row per segment. */
 
 	/* Update ntuples for accurate statistics. When building the index, the
 	 * relation's reltuples is updated based on this count. */
@@ -2353,54 +2356,66 @@ hyperstore_index_build_callback(Relation index, ItemPointer tid, Datum *values, 
 		icstate->ntuples += num_actual_rows;
 
 	/*
-	 * Phase 1: Go through all attribute values and decompress segments into
-	 * multiple rows in columnar arrow array format.
+	 * Phase 1: Prepare to process the compressed segment.
+	 *
+	 * We need to figure out the number of rows in the segment, which is
+	 * usually given by the "count" column (num_actual_rows). But for
+	 * segmentby indexes, we only index whole segments (so num_rows = 1).
+	 *
+	 * For non-segmentby indexes, we need to go through all attribute values
+	 * and decompress segments into multiple rows in columnar arrow array
+	 * format.
 	 */
-	for (int i = 0; i < natts; i++)
+	if (icstate->is_segmentby_index)
 	{
-		const AttrNumber attno = icstate->index_info->ii_IndexAttrNumbers[i];
+		/* A segment index will index only the full segment. */
+		num_rows = 1;
 
-		if (bms_is_member(attno, segmentby_cols))
+#ifdef USE_ASSERT_CHECKING
+		/* A segment index can only index segmentby columns */
+		for (int i = 0; i < natts; i++)
 		{
-			/*
-			 * For a segmentby column, there is nothing to decompress, so just
-			 * return the non-compressed value.
-			 *
-			 * There's an opportunity to optimize index storage size for
-			 * "segmentby indexes", i.e., those indexes that cover all, or a
-			 * subset, of segmentby columns.
-			 *
-			 * In case of a segmentby index, index only one value (essentially
-			 * the compressed tuple), otherwise, index the non-compressed
-			 * values (the number of such values is indicated by "count"
-			 * metadata column).
-			 */
-			if (icstate->is_segmentby_index)
+			const AttrNumber attno = icstate->index_info->ii_IndexAttrNumbers[i];
+			Assert(bms_is_member(attno, segmentby_cols));
+		}
+#endif
+	}
+	else
+	{
+		for (int i = 0; i < natts; i++)
+		{
+			const AttrNumber attno = icstate->index_info->ii_IndexAttrNumbers[i];
+
+			if (bms_is_member(attno, segmentby_cols))
 			{
-				num_rows = 1;
+				/*
+				 * For a segmentby column, there is nothing to decompress, so just
+				 * return the non-compressed value.
+				 */
+			}
+			else if (!isnull[i])
+			{
+				const Form_pg_attribute attr =
+					TupleDescAttr(tupdesc, AttrNumberGetAttrOffset(attno));
+				icstate->arrow_columns[i] = arrow_from_compressed(values[i],
+																  attr->atttypid,
+																  CurrentMemoryContext,
+																  icstate->decompression_mcxt);
+
+				/* The number of elements in the arrow array should be the
+				 * same as the number of rows in the segment (count
+				 * column). */
+				Assert(num_rows == icstate->arrow_columns[i]->length);
 			}
 			else
 			{
-				Assert(num_rows == -1 || num_rows == num_actual_rows);
-				num_rows = num_actual_rows;
+				icstate->arrow_columns[i] = NULL;
 			}
-		}
-		else if (!isnull[i])
-		{
-			const Form_pg_attribute attr = TupleDescAttr(tupdesc, AttrNumberGetAttrOffset(attno));
-			icstate->arrow_columns[i] = arrow_from_compressed(values[i],
-															  attr->atttypid,
-															  CurrentMemoryContext,
-															  icstate->decompression_mcxt);
-
-			/* If "num_rows" was set previously by another column, the
-			 * value should be the same for this column */
-			Assert(num_rows == -1 || num_rows == icstate->arrow_columns[i]->length);
-			num_rows = icstate->arrow_columns[i]->length;
 		}
 	}
 
-	Assert(num_rows > 0);
+	Assert((!icstate->is_segmentby_index && num_rows > 0) ||
+		   (icstate->is_segmentby_index && num_rows == 1));
 
 	/*
 	 * Phase 2: Loop over all "unwrapped" rows in the arrow arrays, build
@@ -2429,7 +2444,7 @@ hyperstore_index_build_callback(Relation index, ItemPointer tid, Datum *values, 
 				/* Segmentby columns are not compressed, so the datum in the
 				 * values array is already set and valid */
 			}
-			else
+			else if (icstate->arrow_columns[colnum] != NULL)
 			{
 				const Form_pg_attribute attr =
 					TupleDescAttr(tupdesc, AttrNumberGetAttrOffset(attno));
@@ -2439,6 +2454,12 @@ hyperstore_index_build_callback(Relation index, ItemPointer tid, Datum *values, 
 													  rownum);
 				values[colnum] = datum.value;
 				isnull[colnum] = datum.isnull;
+			}
+			else
+			{
+				/* No arrow array so all values are NULL */
+				values[colnum] = 0;
+				isnull[colnum] = true;
 			}
 
 			/* Fill in the values in the table slot for predicate checks */
