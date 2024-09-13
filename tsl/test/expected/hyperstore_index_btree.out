@@ -901,3 +901,158 @@ DETAIL:  Key ("time")=(Mon Jan 01 00:00:00 2024 PST) already exists.
 create unique index ui1 on non_unique_metrics (time);
 drop table :hypertable cascade;
 NOTICE:  drop cascades to view chunk_indexes
+--------------------------------------------------
+-- Test that an index build handles null values --
+--------------------------------------------------
+create table nullvalues (eventid int, time timestamptz not null, device int, location int, value float, only_nulls text);
+select create_hypertable('nullvalues', 'time', create_default_indexes => false);
+    create_hypertable    
+-------------------------
+ (5,public,nullvalues,t)
+(1 row)
+
+insert into nullvalues values
+(1, '2024-01-01 00:01', 1, null, null, null),
+(2, '2024-01-02 00:01', 1, 1, 3.0, null),
+(3, '2024-01-03 00:01', 2, 2, null, null),
+(4, '2024-01-04 00:01', 2, 3, 4.0, null);
+alter table nullvalues set (timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='device');
+select format('%I.%I', chunk_schema, chunk_name)::regclass as nulls_chunk
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = 'nullvalues'::regclass
+ order by nulls_chunk asc
+ limit 1 offset 1 \gset
+create index nullvalues_location_idx on nullvalues (location);
+create index nullvalues_device_location_idx on nullvalues (device, location);
+create index nullvalues_value_idx on nullvalues (value);
+create index nullvalues_only_nulls_idx on nullvalues (only_nulls);
+explain (costs off) select * from nullvalues where location is not null;
+                                          QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
+ Append
+   ->  Index Scan using _hyper_5_15_chunk_nullvalues_device_location_idx on _hyper_5_15_chunk
+         Index Cond: (location IS NOT NULL)
+   ->  Index Scan using _hyper_5_16_chunk_nullvalues_device_location_idx on _hyper_5_16_chunk
+         Index Cond: (location IS NOT NULL)
+(5 rows)
+
+create table location_not_null as
+select * from nullvalues where location is not null;
+select * from location_not_null;
+ eventid |             time             | device | location | value | only_nulls 
+---------+------------------------------+--------+----------+-------+------------
+       2 | Tue Jan 02 00:01:00 2024 PST |      1 |        1 |     3 | 
+       3 | Wed Jan 03 00:01:00 2024 PST |      2 |        2 |       | 
+       4 | Thu Jan 04 00:01:00 2024 PST |      2 |        3 |     4 | 
+(3 rows)
+
+explain (costs off) select * from nullvalues where location is null;
+                                          QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
+ Append
+   ->  Index Scan using _hyper_5_15_chunk_nullvalues_location_idx on _hyper_5_15_chunk
+         Index Cond: (location IS NULL)
+   ->  Index Scan using _hyper_5_16_chunk_nullvalues_device_location_idx on _hyper_5_16_chunk
+         Index Cond: (location IS NULL)
+(5 rows)
+
+create table location_null as
+select * from nullvalues where location is null;
+select * from location_null;
+ eventid |             time             | device | location | value | only_nulls 
+---------+------------------------------+--------+----------+-------+------------
+       1 | Mon Jan 01 00:01:00 2024 PST |      1 |          |       | 
+(1 row)
+
+explain (costs off) select * from nullvalues where only_nulls is null;
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Append
+   ->  Index Scan using _hyper_5_15_chunk_nullvalues_only_nulls_idx on _hyper_5_15_chunk
+         Index Cond: (only_nulls IS NULL)
+   ->  Index Scan using _hyper_5_16_chunk_nullvalues_only_nulls_idx on _hyper_5_16_chunk
+         Index Cond: (only_nulls IS NULL)
+(5 rows)
+
+create table only_nulls_null as
+select * from nullvalues where only_nulls is null;
+select * from only_nulls_null;
+ eventid |             time             | device | location | value | only_nulls 
+---------+------------------------------+--------+----------+-------+------------
+       1 | Mon Jan 01 00:01:00 2024 PST |      1 |          |       | 
+       2 | Tue Jan 02 00:01:00 2024 PST |      1 |        1 |     3 | 
+       3 | Wed Jan 03 00:01:00 2024 PST |      2 |        2 |       | 
+       4 | Thu Jan 04 00:01:00 2024 PST |      2 |        3 |     4 | 
+(4 rows)
+
+-- Convert all chunks to hyperstore and run same queries
+select compress_chunk(ch, compress_using=>'hyperstore') from show_chunks('nullvalues') ch;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_5_15_chunk
+ _timescaledb_internal._hyper_5_16_chunk
+(2 rows)
+
+select c.relname, a.amname FROM pg_class c
+join pg_am a on (c.relam = a.oid)
+join show_chunks('nullvalues') ch on (ch = c.oid);
+      relname      |   amname   
+-------------------+------------
+ _hyper_5_15_chunk | hyperstore
+ _hyper_5_16_chunk | hyperstore
+(2 rows)
+
+-- The explains should be index scans and there should be no rows
+-- returned if the result is the same as before when the chunks where
+-- not hyperstores.
+explain (costs off) select * from nullvalues where location is not null;
+                                          QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
+ Append
+   ->  Index Scan using _hyper_5_15_chunk_nullvalues_device_location_idx on _hyper_5_15_chunk
+         Index Cond: (location IS NOT NULL)
+   ->  Index Scan using _hyper_5_16_chunk_nullvalues_device_location_idx on _hyper_5_16_chunk
+         Index Cond: (location IS NOT NULL)
+(5 rows)
+
+select * from nullvalues where location is not null
+except
+select * from location_not_null;
+ eventid | time | device | location | value | only_nulls 
+---------+------+--------+----------+-------+------------
+(0 rows)
+
+explain (costs off) select * from nullvalues where location is null;
+                                          QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
+ Append
+   ->  Index Scan using _hyper_5_15_chunk_nullvalues_location_idx on _hyper_5_15_chunk
+         Index Cond: (location IS NULL)
+   ->  Index Scan using _hyper_5_16_chunk_nullvalues_device_location_idx on _hyper_5_16_chunk
+         Index Cond: (location IS NULL)
+(5 rows)
+
+select * from nullvalues where location is null
+except
+select * from location_null;
+ eventid | time | device | location | value | only_nulls 
+---------+------+--------+----------+-------+------------
+(0 rows)
+
+explain (costs off) select * from nullvalues where only_nulls is null;
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Append
+   ->  Index Scan using _hyper_5_15_chunk_nullvalues_only_nulls_idx on _hyper_5_15_chunk
+         Index Cond: (only_nulls IS NULL)
+   ->  Index Scan using _hyper_5_16_chunk_nullvalues_only_nulls_idx on _hyper_5_16_chunk
+         Index Cond: (only_nulls IS NULL)
+(5 rows)
+
+select * from nullvalues where only_nulls is null
+except
+select * from only_nulls_null;
+ eventid | time | device | location | value | only_nulls 
+---------+------+--------+----------+-------+------------
+(0 rows)
+

@@ -330,3 +330,67 @@ insert into non_unique_metrics values ('2024-01-01', 1.0, 1);
 create unique index ui1 on non_unique_metrics (time);
 
 drop table :hypertable cascade;
+
+--------------------------------------------------
+-- Test that an index build handles null values --
+--------------------------------------------------
+create table nullvalues (eventid int, time timestamptz not null, device int, location int, value float, only_nulls text);
+select create_hypertable('nullvalues', 'time', create_default_indexes => false);
+insert into nullvalues values
+(1, '2024-01-01 00:01', 1, null, null, null),
+(2, '2024-01-02 00:01', 1, 1, 3.0, null),
+(3, '2024-01-03 00:01', 2, 2, null, null),
+(4, '2024-01-04 00:01', 2, 3, 4.0, null);
+alter table nullvalues set (timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='device');
+
+select format('%I.%I', chunk_schema, chunk_name)::regclass as nulls_chunk
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = 'nullvalues'::regclass
+ order by nulls_chunk asc
+ limit 1 offset 1 \gset
+
+create index nullvalues_location_idx on nullvalues (location);
+create index nullvalues_device_location_idx on nullvalues (device, location);
+create index nullvalues_value_idx on nullvalues (value);
+create index nullvalues_only_nulls_idx on nullvalues (only_nulls);
+
+explain (costs off) select * from nullvalues where location is not null;
+create table location_not_null as
+select * from nullvalues where location is not null;
+select * from location_not_null;
+
+explain (costs off) select * from nullvalues where location is null;
+create table location_null as
+select * from nullvalues where location is null;
+select * from location_null;
+
+explain (costs off) select * from nullvalues where only_nulls is null;
+create table only_nulls_null as
+select * from nullvalues where only_nulls is null;
+select * from only_nulls_null;
+
+-- Convert all chunks to hyperstore and run same queries
+select compress_chunk(ch, compress_using=>'hyperstore') from show_chunks('nullvalues') ch;
+
+select c.relname, a.amname FROM pg_class c
+join pg_am a on (c.relam = a.oid)
+join show_chunks('nullvalues') ch on (ch = c.oid);
+
+-- The explains should be index scans and there should be no rows
+-- returned if the result is the same as before when the chunks where
+-- not hyperstores.
+explain (costs off) select * from nullvalues where location is not null;
+select * from nullvalues where location is not null
+except
+select * from location_not_null;
+
+explain (costs off) select * from nullvalues where location is null;
+select * from nullvalues where location is null
+except
+select * from location_null;
+
+explain (costs off) select * from nullvalues where only_nulls is null;
+select * from nullvalues where only_nulls is null
+except
+select * from only_nulls_null;
+
