@@ -2539,16 +2539,3 @@ DROP USER regress_merge_privs;
 DROP USER regress_merge_no_privs;
 \o
 :DIFF_CMD
---- Base pg table results
-+++ Hyperatable results
-@@ -326,7 +326,9 @@
- 
-  delta | sid | balance | tid | balance 
- -------+-----+---------+-----+---------
--(0 rows)
-+   -10 |  -1 |      -1 |  -1 |     -11
-+    10 |   1 |       0 |   1 |     100
-+(2 rows)
- 
-                             explain_merge                             
- ----------------------------------------------------------------------
