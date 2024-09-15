@@ -1457,6 +1457,7 @@ build_decompressor(Relation in_rel, Relation out_rel)
 void
 row_decompressor_reset(RowDecompressor *decompressor)
 {
+	MemoryContextReset(decompressor->per_compressed_row_ctx);
 	decompressor->unprocessed_tuples = 0;
 	decompressor->batches_decompressed = 0;
 	decompressor->tuples_decompressed = 0;
@@ -1791,8 +1792,6 @@ row_decompressor_decompress_row_to_table(RowDecompressor *decompressor)
 	}
 
 	MemoryContextSwitchTo(old_ctx);
-	MemoryContextReset(decompressor->per_compressed_row_ctx);
-
 	row_decompressor_reset(decompressor);
 
 	return n_batch_rows;
@@ -1812,8 +1811,6 @@ row_decompressor_decompress_row_to_tuplesort(RowDecompressor *decompressor,
 	}
 
 	MemoryContextSwitchTo(old_ctx);
-	MemoryContextReset(decompressor->per_compressed_row_ctx);
-
 	row_decompressor_reset(decompressor);
 }
 
