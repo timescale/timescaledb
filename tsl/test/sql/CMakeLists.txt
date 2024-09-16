@@ -11,7 +11,6 @@ set(TEST_FILES
     cagg_errors.sql
     cagg_invalidation.sql
     cagg_policy.sql
-    cagg_query.sql
     cagg_refresh.sql
     cagg_utils.sql
     cagg_watermark.sql
@@ -45,6 +44,19 @@ set(TEST_FILES
     vector_agg_functions.sql
     vector_agg_param.sql
     vectorized_aggregation.sql)
+
+set(TEST_TEMPLATES
+    cagg_query.sql.in
+    cagg_union_view.sql.in
+    cagg_permissions.sql.in
+    chunk_column_stats.sql.in
+    compression_permissions.sql.in
+    compression_sorted_merge.sql.in
+    merge_append_partially_compressed.sql.in
+    modify_exclusion.sql.in
+    plan_skip_scan.sql.in
+    transparent_decompression.sql.in
+    transparent_decompression_ordered_index.sql.in)
 
 if(USE_TELEMETRY)
   list(APPEND TEST_FILES bgw_telemetry.sql)
@@ -103,6 +115,22 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     feature_flags.sql
     vector_agg_default.sql
     vector_agg_segmentby.sql)
+
+  list(
+    APPEND
+    TEST_TEMPLATES
+    cagg_bgw.sql.in
+    cagg_ddl.sql.in
+    cagg_migrate_function.sql.in
+    cagg_repair.sql.in
+    cagg_usage.sql.in
+    compression_errors.sql.in
+    compression_update_delete.sql.in
+    continuous_aggs.sql.in)
+
+  if(USE_TELEMETRY)
+    list(APPEND TEST_FILES telemetry_stats.sql)
+  endif()
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
@@ -113,7 +141,6 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     APPEND
     TEST_FILES
     merge_compress.sql
-    cagg_query_using_merge.sql
     cagg_refresh_using_merge.sql
     hypercore.sql
     hypercore_columnar.sql
@@ -137,7 +164,8 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
-  list(APPEND TEST_FILES hypercore_parallel.sql)
+  list(APPEND TEST_FILES cagg_planning.sql hypercore_parallel.sql)
+  list(APPEND TEST_TEMPLATES cagg_query_using_merge.sql.in)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
@@ -165,35 +193,6 @@ set(SOLO_TESTS
     move
     reorder
     telemetry_stats)
-
-set(TEST_TEMPLATES
-    cagg_union_view.sql.in
-    cagg_permissions.sql.in
-    chunk_column_stats.sql.in
-    compression_permissions.sql.in
-    compression_sorted_merge.sql.in
-    merge_append_partially_compressed.sql.in
-    modify_exclusion.sql.in
-    plan_skip_scan.sql.in
-    transparent_decompression.sql.in
-    transparent_decompression_ordered_index.sql.in)
-
-if(CMAKE_BUILD_TYPE MATCHES Debug)
-  list(
-    APPEND
-    TEST_TEMPLATES
-    cagg_bgw.sql.in
-    cagg_ddl.sql.in
-    cagg_migrate_function.sql.in
-    cagg_repair.sql.in
-    cagg_usage.sql.in
-    compression_errors.sql.in
-    compression_update_delete.sql.in
-    continuous_aggs.sql.in)
-  if(USE_TELEMETRY)
-    list(APPEND TEST_FILES telemetry_stats.sql)
-  endif()
-endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 # Check if PostgreSQL was compiled with JIT support
 set(PG_CONFIG_H "${PG_INCLUDEDIR}/pg_config.h")

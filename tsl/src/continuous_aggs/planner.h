@@ -10,5 +10,6 @@
 #include "planner/planner.h"
 
 void constify_cagg_watermark(Query *parse);
+void cagg_sort_pushdown(Query *parse, int *cursor_opts);
 
 #endif

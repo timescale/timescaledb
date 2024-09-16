@@ -293,7 +293,7 @@ ts_tsl_loaded(PG_FUNCTION_ARGS)
 }
 
 static void
-preprocess_query_tsl_default_fn_community(Query *parse)
+preprocess_query_tsl_default_fn_community(Query *parse, int *cursor_opts)
 {
 	/* No op in community licensed code */
 }

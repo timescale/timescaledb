@@ -355,3 +355,108 @@ constify_cagg_watermark(Query *parse)
 	if (context.valid_query)
 		replace_watermark_with_const(&context);
 }
+
+/*
+ * Push down ORDER BY and LIMIT into subqueries of UNION for realtime
+ * continuous aggregates when sorting by time.
+ *
+ * This is only enabled on PG16 and above because the internal structure is different
+ * in previous versions.
+ */
+void
+cagg_sort_pushdown(Query *parse, int *cursor_opts)
+{
+	ListCell *lc;
+
+	/* We dont optimize aggregations on top of caggs for now. */
+	if (parse->groupClause)
+		return;
+
+	/* Nothing to do if we have no valid sort clause */
+	if (list_length(parse->rtable) != 1 || list_length(parse->sortClause) != 1 ||
+		!OidIsValid(linitial_node(SortGroupClause, parse->sortClause)->sortop))
+		return;
+
+	Cache *cache = ts_hypertable_cache_pin();
+
+	foreach (lc, parse->rtable)
+	{
+		RangeTblEntry *rte = lfirst(lc);
+
+		/*
+		 * Realtime cagg view will have 2 rtable entries, one for the materialized data and one for
+		 * the not yet materialized data.
+		 */
+		if (rte->rtekind != RTE_SUBQUERY || rte->relkind != RELKIND_VIEW ||
+			list_length(rte->subquery->rtable) != 2)
+			continue;
+
+		ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(rte->relid);
+
+		/*
+		 * This optimization only applies to realtime caggs.
+		 */
+		if (!cagg || !cagg->data.finalized || cagg->data.materialized_only)
+			continue;
+
+		Hypertable *ht = ts_hypertable_cache_get_entry_by_id(cache, cagg->data.mat_hypertable_id);
+		Dimension const *dim = hyperspace_get_open_dimension(ht->space, 0);
+
+		/* We should only encounter hypertables with an open dimension */
+		if (!dim)
+			continue;
+
+		SortGroupClause *sort = linitial_node(SortGroupClause, parse->sortClause);
+		TargetEntry *tle = get_sortgroupref_tle(sort->tleSortGroupRef, parse->targetList);
+
+		/*
+		 * We only pushdown ORDER BY when it's single column
+		 * ORDER BY on the time column.
+		 */
+		AttrNumber time_col = dim->column_attno;
+		if (!IsA(tle->expr, Var) || castNode(Var, tle->expr)->varattno != time_col)
+			continue;
+
+		RangeTblEntry *mat_rte = linitial_node(RangeTblEntry, rte->subquery->rtable);
+		RangeTblEntry *rt_rte = lsecond_node(RangeTblEntry, rte->subquery->rtable);
+
+		mat_rte->subquery->sortClause = list_copy(parse->sortClause);
+		rt_rte->subquery->sortClause = list_copy(parse->sortClause);
+
+		TargetEntry *mat_tle = list_nth(mat_rte->subquery->targetList, time_col - 1);
+		TargetEntry *rt_tle = list_nth(rt_rte->subquery->targetList, time_col - 1);
+		linitial_node(SortGroupClause, mat_rte->subquery->sortClause)->tleSortGroupRef =
+			mat_tle->ressortgroupref;
+		linitial_node(SortGroupClause, rt_rte->subquery->sortClause)->tleSortGroupRef =
+			rt_tle->ressortgroupref;
+
+		SortGroupClause *cagg_group = linitial(rt_rte->subquery->groupClause);
+		cagg_group = list_nth(rt_rte->subquery->groupClause, rt_tle->ressortgroupref - 1);
+		cagg_group->sortop = sort->sortop;
+		cagg_group->nulls_first = sort->nulls_first;
+
+		Oid placeholder;
+		int16 strategy;
+		get_ordering_op_properties(sort->sortop, &placeholder, &placeholder, &strategy);
+
+		/*
+		 * If this is DESC order and the sortop is the commutator of the cagg_group sortop,
+		 * we can align the sortop of the cagg_group with the sortop of the sort clause, which
+		 * will allow us to have the GroupAggregate node to produce the correct order and avoid
+		 * having to resort.
+		 */
+		if (strategy == BTGreaterStrategyNumber)
+		{
+			rte->subquery->rtable = list_make2(rt_rte, mat_rte);
+		}
+
+		/*
+		 * We have to prevent parallelism when we do this optimization because
+		 * the subplans of the Append have to be processed sequentially.
+		 */
+		*cursor_opts = *cursor_opts & ~CURSOR_OPT_PARALLEL_OK;
+		parse->sortClause = NIL;
+		rte->subquery->sortClause = NIL;
+	}
+	ts_cache_release(cache);
+}
