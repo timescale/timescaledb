@@ -592,39 +592,34 @@ ORDER by 1;
 
 -- plan output
 :PREFIX SELECT * FROM mat_m1 ORDER BY 1;
-                                                                  QUERY PLAN                                                                   
------------------------------------------------------------------------------------------------------------------------------------------------
- Sort (actual rows=3 loops=1)
-   Sort Key: _hyper_9_15_chunk.time_bucket
-   Sort Method: quicksort 
-   ->  Append (actual rows=3 loops=1)
-         ->  Index Scan using _hyper_9_15_chunk__materialized_hypertable_9_time_bucket_idx on _hyper_9_15_chunk (actual rows=1 loops=1)
-               Index Cond: (time_bucket < 25)
-         ->  Finalize GroupAggregate (actual rows=2 loops=1)
-               Group Key: (time_bucket(5, _hyper_7_11_chunk.a))
-               Filter: ((sum(_hyper_7_11_chunk.c) > 50) AND ((avg(_hyper_7_11_chunk.b))::integer > 12))
-               Rows Removed by Filter: 1
-               ->  Sort (actual rows=3 loops=1)
-                     Sort Key: (time_bucket(5, _hyper_7_11_chunk.a))
-                     Sort Method: quicksort 
-                     ->  Append (actual rows=3 loops=1)
-                           ->  Partial GroupAggregate (actual rows=1 loops=1)
-                                 Group Key: time_bucket(5, _hyper_7_11_chunk.a)
-                                 ->  Index Scan Backward using _hyper_7_11_chunk_ht_intdata_a_idx on _hyper_7_11_chunk (actual rows=2 loops=1)
-                                       Index Cond: (a >= 25)
-                                       Filter: ((b < 16) AND (c > 20))
-                           ->  Partial GroupAggregate (actual rows=1 loops=1)
-                                 Group Key: time_bucket(5, _hyper_7_13_chunk.a)
-                                 ->  Index Scan Backward using _hyper_7_13_chunk_ht_intdata_a_idx on _hyper_7_13_chunk (actual rows=3 loops=1)
-                                       Index Cond: (a >= 25)
-                                       Filter: ((b < 16) AND (c > 20))
-                           ->  Partial GroupAggregate (actual rows=1 loops=1)
-                                 Group Key: time_bucket(5, _hyper_7_14_chunk.a)
-                                 ->  Index Scan Backward using _hyper_7_14_chunk_ht_intdata_a_idx on _hyper_7_14_chunk (actual rows=1 loops=1)
-                                       Index Cond: (a >= 25)
-                                       Filter: ((b < 16) AND (c > 20))
-                                       Rows Removed by Filter: 2
-(30 rows)
+                                                                QUERY PLAN                                                                 
+-------------------------------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=3 loops=1)
+   ->  Index Scan Backward using _hyper_9_15_chunk__materialized_hypertable_9_time_bucket_idx on _hyper_9_15_chunk (actual rows=1 loops=1)
+         Index Cond: (time_bucket < 25)
+   ->  Finalize GroupAggregate (actual rows=2 loops=1)
+         Group Key: (time_bucket(5, ht_intdata.a))
+         Filter: ((sum(ht_intdata.c) > 50) AND ((avg(ht_intdata.b))::integer > 12))
+         Rows Removed by Filter: 1
+         ->  Custom Scan (ChunkAppend) on ht_intdata (actual rows=3 loops=1)
+               Order: time_bucket(5, ht_intdata.a)
+               ->  Partial GroupAggregate (actual rows=1 loops=1)
+                     Group Key: time_bucket(5, _hyper_7_11_chunk.a)
+                     ->  Index Scan Backward using _hyper_7_11_chunk_ht_intdata_a_idx on _hyper_7_11_chunk (actual rows=2 loops=1)
+                           Index Cond: (a >= 25)
+                           Filter: ((b < 16) AND (c > 20))
+               ->  Partial GroupAggregate (actual rows=1 loops=1)
+                     Group Key: time_bucket(5, _hyper_7_13_chunk.a)
+                     ->  Index Scan Backward using _hyper_7_13_chunk_ht_intdata_a_idx on _hyper_7_13_chunk (actual rows=3 loops=1)
+                           Index Cond: (a >= 25)
+                           Filter: ((b < 16) AND (c > 20))
+               ->  Partial GroupAggregate (actual rows=1 loops=1)
+                     Group Key: time_bucket(5, _hyper_7_14_chunk.a)
+                     ->  Index Scan Backward using _hyper_7_14_chunk_ht_intdata_a_idx on _hyper_7_14_chunk (actual rows=1 loops=1)
+                           Index Cond: (a >= 25)
+                           Filter: ((b < 16) AND (c > 20))
+                           Rows Removed by Filter: 2
+(25 rows)
 
 -- Test caggs with different time types
 CREATE TABLE smallint_table (time smallint, value int);
