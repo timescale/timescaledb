@@ -3,6 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 SET search_path TO public, _timescaledb_functions;
+SET timezone TO PST8PDT;
 
 CREATE TABLE devices (
     id INTEGER,
@@ -112,6 +113,8 @@ CREATE OR REPLACE FUNCTION cagg_get_bucket_function(
     mat_hypertable_id INTEGER
 ) RETURNS regprocedure AS :MODULE_PATHNAME, 'ts_continuous_agg_get_bucket_function' LANGUAGE C STRICT VOLATILE;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+SET timezone TO PST8PDT;
 
 CREATE TABLE timestamp_ht (
   time timestamp NOT NULL,

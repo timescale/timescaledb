@@ -4,6 +4,8 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
+SET timezone TO PST8PDT;
+
 --
 -- Check that drop chunks with a unique constraint works as expected.
 --

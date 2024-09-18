@@ -5,6 +5,7 @@
 SET timescaledb.enable_chunk_append TO false;
 SET timescaledb.enable_constraint_aware_append TO false;
 SET timescaledb.current_timestamp_mock TO '1990-01-01';
+SET timezone TO PST8PDT;
 
 \set PREFIX 'EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)'
 

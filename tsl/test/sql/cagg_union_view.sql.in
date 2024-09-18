@@ -7,6 +7,8 @@
 SELECT _timescaledb_functions.stop_background_workers();
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
+SET timezone TO PST8PDT;
+
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
 
 CREATE TABLE metrics(f1 int, f2 int, time timestamptz NOT NULL, device_id int, value float);

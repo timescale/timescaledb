@@ -10,6 +10,8 @@
 #
 setup
 {
+  SET timezone TO PST8PDT;
+
   CREATE TABLE temperature (
     time timestamptz NOT NULL,
     value float

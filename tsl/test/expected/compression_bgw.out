@@ -7,6 +7,7 @@ CREATE ROLE NOLOGIN_ROLE WITH nologin noinherit;
 GRANT CREATE ON SCHEMA public TO NOLOGIN_ROLE;
 GRANT NOLOGIN_ROLE TO :ROLE_DEFAULT_PERM_USER WITH ADMIN OPTION;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET timezone TO PST8PDT;
 CREATE TABLE conditions (
       time        TIMESTAMPTZ       NOT NULL,
       location    TEXT              NOT NULL,
@@ -286,6 +287,7 @@ ERROR:  permission denied to start background process as role "nologin_role"
 DROP TABLE test_table_nologin;
 RESET ROLE;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET timezone TO PST8PDT;
 CREATE TABLE conditions(
     time TIMESTAMPTZ NOT NULL,
     device INTEGER,

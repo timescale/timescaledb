@@ -3,6 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
+SET timezone TO PST8PDT;
 --negative tests for query validation
 create table mat_t1( a integer, b integer,c TEXT);
 CREATE TABLE conditions (
