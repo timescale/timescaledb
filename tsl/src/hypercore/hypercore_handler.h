@@ -28,6 +28,7 @@ extern void hypercore_alter_access_method_finish(Oid relid, bool to_other_am);
 extern Datum hypercore_handler(PG_FUNCTION_ARGS);
 extern void hypercore_xact_event(XactEvent event, void *arg);
 extern bool hypercore_set_truncate_compressed(bool onoff);
+extern void hypercore_skip_compressed_data_for_relation(Oid relid);
 extern void hypercore_scan_set_skip_compressed(TableScanDesc scan);
 
 typedef struct ColumnCompressionSettings

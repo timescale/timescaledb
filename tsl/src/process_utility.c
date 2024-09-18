@@ -16,11 +16,83 @@
 
 #include "compression/create.h"
 #include "continuous_aggs/create.h"
+#include "guc.h"
 #include "hypercore/hypercore_handler.h"
 #include "hypercore/utils.h"
 #include "hypertable_cache.h"
 #include "process_utility.h"
 #include "ts_catalog/continuous_agg.h"
+
+static DDLResult
+process_copy(ProcessUtilityArgs *args)
+{
+	CopyStmt *stmt = castNode(CopyStmt, args->parsetree);
+
+	if (!stmt->relation || stmt->is_from)
+		return DDL_CONTINUE;
+
+	Oid relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+
+	if (!OidIsValid(relid))
+		return DDL_CONTINUE;
+
+	Oid amoid = ts_get_rel_am(relid);
+
+	if (ts_is_hypercore_am(amoid))
+	{
+		if (ts_guc_hypercore_copy_to_behavior == HYPERCORE_COPY_NO_COMPRESSED_DATA)
+		{
+			hypercore_skip_compressed_data_for_relation(relid);
+			ereport(NOTICE,
+					(errmsg("COPY: skipping compressed data for hypercore \"%s\"",
+							get_rel_name(relid)),
+					 errdetail(
+						 "Use timescaledb.hypercore_copy_to_behavior to change this behavior.")));
+		}
+	}
+	else if (ts_guc_hypercore_copy_to_behavior == HYPERCORE_COPY_ALL_DATA)
+	{
+		const Chunk *chunk = ts_chunk_get_by_relid(relid, false);
+
+		if (!chunk)
+			return DDL_CONTINUE;
+
+		const Chunk *parent = ts_chunk_get_compressed_chunk_parent(chunk);
+		Oid parent_amoid = ts_get_rel_am(parent->table_id);
+
+		if (parent && ts_is_hypercore_am(parent_amoid))
+		{
+			/* To avoid returning compressed data twice in a pg_dump, replace
+			 * the 'COPY <relation> TO' with 'COPY (select where false) TO' so
+			 * that the COPY on the internal compressed relation returns no
+			 * data. The data is instead returned in uncompressed form via the
+			 * parent hypercore relation. */
+			SelectStmt *select = makeNode(SelectStmt);
+			A_Const *aconst = makeNode(A_Const);
+#if PG15_LT
+			aconst->val.type = T_Integer;
+			aconst->val.val.ival = 0;
+#else
+			aconst->val.boolval.boolval = false;
+			aconst->val.boolval.type = T_Boolean;
+#endif
+			select->whereClause = (Node *) aconst;
+			stmt->relation = NULL;
+			stmt->attlist = NIL;
+			stmt->query = (Node *) select;
+			ereport(NOTICE,
+					(errmsg("COPY: skipping data for internal compression relation \"%s\"",
+							get_rel_name(chunk->table_id)),
+					 errdetail("Use COPY TO on hypercore relation \"%s\" to return data in "
+							   "uncompressed form"
+							   " or use timescaledb.hypercore_copy_to_behavior "
+							   "to change this behavior.",
+							   get_rel_name(parent->table_id))));
+		}
+	}
+
+	return DDL_CONTINUE;
+}
 
 DDLResult
 tsl_ddl_command_start(ProcessUtilityArgs *args)
@@ -98,6 +170,9 @@ tsl_ddl_command_start(ProcessUtilityArgs *args)
 				result = DDL_DONE;
 			break;
 		}
+		case T_CopyStmt:
+			result = process_copy(args);
+			break;
 		default:
 			break;
 	}

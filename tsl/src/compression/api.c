@@ -1138,7 +1138,10 @@ fetch_unmatched_uncompressed_chunk_into_tuplesort(Tuplesortstate *segment_tuples
 	TableScanDesc scan;
 	TupleTableSlot *slot = table_slot_create(uncompressed_chunk_rel, NULL);
 	Snapshot snapshot = GetLatestSnapshot();
+
 	scan = table_beginscan(uncompressed_chunk_rel, snapshot, 0, NULL);
+	/* If scan is using Hypercore, configure the scan to only return
+	 * compressed data */
 	hypercore_scan_set_skip_compressed(scan);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
@@ -1206,11 +1209,12 @@ fetch_matching_uncompressed_chunk_into_tuplesort(Tuplesortstate *segment_tupleso
 	}
 
 	snapshot = GetLatestSnapshot();
-	/* Let compression TAM know it should only return tuples from the
-	 * non-compressed relation. */
 
 	scan = table_beginscan(uncompressed_chunk_rel, snapshot, nsegbycols_nonnull, scankey);
+	/* Let Hypercore TAM know it should only return tuples from the
+	 * non-compressed relation. */
 	hypercore_scan_set_skip_compressed(scan);
+
 	TupleTableSlot *slot = table_slot_create(uncompressed_chunk_rel, NULL);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
