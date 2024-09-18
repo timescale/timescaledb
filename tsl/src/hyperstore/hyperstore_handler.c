@@ -828,7 +828,11 @@ hyperstore_index_fetch_reset(IndexFetchTableData *scan)
 	IndexFetchComprData *cscan = (IndexFetchComprData *) scan;
 	Relation rel = scan->rel;
 
+	/* There is no need to reset segindex since there is no change in indexes
+	 * used for the index scan when resetting the scan, but we need to reset
+	 * the tid since we are restarting an index scan. */
 	ItemPointerSetInvalid(&cscan->tid);
+
 	cscan->compr_rel->rd_tableam->index_fetch_reset(cscan->compr_hscan);
 
 	const TableAmRoutine *oldtam = switch_to_heapam(rel);
@@ -853,41 +857,53 @@ hyperstore_index_fetch_end(IndexFetchTableData *scan)
 }
 
 /*
- * Check if a scan is on a segmentby index.
+ * Check if the index scan is only on segmentby columns.
  *
- * To identify a segmentby index, it is necessary to know the columns
- * (attributes) indexed by the index. Unfortunately, the TAM does not have
- * access to information about the index being scanned, so this information is
- * instead captured at the start of the scan (using the executor start hook)
- * and stored in the ArrowTupleTableSlot.
+ * To identify a segmentby index scan (an index scan only using segmentby
+ * columns), it is necessary to know the columns (attributes) indexed by the
+ * index. Unfortunately, the TAM does not have access to information about the
+ * index being scanned, so this information is instead captured at the start
+ * of the scan (using the executor start hook) and stored in the
+ * ArrowTupleTableSlot.
  *
  * For EXPLAINs (without ANALYZE), the index attributes in the slot might not
  * be set because the index is never really opened. For such a case, when
  * nothing is actually scanned, it is OK to return "false" even though the
  * query is using a segmentby index.
+ *
+ * Since the columns scanned by an index scan does not change during a scan,
+ * we cache this information to avoid re-computing it each time.
  */
 static inline bool
 is_segmentby_index_scan(IndexFetchComprData *cscan, TupleTableSlot *slot)
 {
-	if (cscan->segindex == SEGMENTBY_INDEX_UNKNOWN)
+	enum SegmentbyIndexStatus segindex = cscan->segindex;
+	if (segindex == SEGMENTBY_INDEX_UNKNOWN)
 	{
 		ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
 		const HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(cscan->h_base.rel);
 		int16 attno = -1;
 
 		if (bms_is_empty(aslot->index_attrs))
-			return false;
-
-		while ((attno = bms_next_member(aslot->index_attrs, attno)) >= 0)
+			segindex = SEGMENTBY_INDEX_FALSE;
+		else
 		{
-			if (!hsinfo->columns[AttrNumberGetAttrOffset(attno)].is_segmentby)
-				return false;
+			/* True unless we discover that there is one attribute in the index
+			 * that is not on a segment-by */
+			segindex = SEGMENTBY_INDEX_TRUE;
+			while ((attno = bms_next_member(aslot->index_attrs, attno)) >= 0)
+				if (!hsinfo->columns[AttrNumberGetAttrOffset(attno)].is_segmentby)
+				{
+					segindex = SEGMENTBY_INDEX_FALSE;
+					break;
+				}
 		}
-
-		return true;
+		cscan->segindex = segindex;
 	}
 
-	return false;
+	/* To avoid a warning, we compare with the enum value. */
+	Assert(segindex == SEGMENTBY_INDEX_TRUE || segindex == SEGMENTBY_INDEX_FALSE);
+	return (segindex == SEGMENTBY_INDEX_TRUE);
 }
 
 /*
