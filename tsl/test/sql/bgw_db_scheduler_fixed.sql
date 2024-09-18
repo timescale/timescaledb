@@ -6,6 +6,9 @@
 -- Setup
 --
 \c :TEST_DBNAME :ROLE_SUPERUSER
+
+SET timezone TO PST8PDT;
+
 -- this mock_start_time doesnt seem to be used anywhere
 CREATE OR REPLACE FUNCTION ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(timeout INT = -1, mock_start_time INT = 0) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
@@ -108,6 +111,8 @@ TRUNCATE _timescaledb_internal.bgw_job_stat;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
+SET timezone TO PST8PDT;
+
 CREATE TABLE public.bgw_log(
     msg_no INT,
     mock_time BIGINT,
@@ -197,6 +202,8 @@ SELECT insert_job('test_job_1', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '10
 select * from _timescaledb_config.bgw_job;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
+SET timezone TO PST8PDT;
+
 --Tests that the scheduler start a job right away if it's the first time and there is no job_stat entry for it
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
@@ -233,6 +240,8 @@ DELETE FROM _timescaledb_config.bgw_job;
 -- schedule_interval, max_runtime, retry_period
 SELECT insert_job('test_job_2', 'bgw_test_job_2_error', INTERVAL '800ms', INTERVAL '100s', INTERVAL '200ms');
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+SET timezone TO PST8PDT;
 
 --Run the first time and error
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
@@ -538,6 +547,8 @@ SELECT _timescaledb_functions.start_background_workers();
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT _timescaledb_functions.stop_background_workers();
+
+SET timezone TO PST8PDT;
 
 CREATE OR REPLACE FUNCTION ts_test_job_refresh() RETURNS TABLE(
 id INTEGER,

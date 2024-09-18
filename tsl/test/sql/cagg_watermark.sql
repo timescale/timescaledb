@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+SET timezone TO PST8PDT;
+
 \set EXPLAIN_ANALYZE 'EXPLAIN (analyze,costs off,timing off,summary off)'
 
 CREATE TABLE continuous_agg_test(time int, data int);
@@ -43,6 +45,8 @@ SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (1, 15);
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+SET timezone TO PST8PDT;
 
 INSERT INTO continuous_agg_test VALUES (10, 1), (11, 2), (21, 3), (22, 4);
 
@@ -182,6 +186,8 @@ UPDATE _timescaledb_catalog.continuous_aggs_invalidation_threshold
 SET watermark = 2
 WHERE hypertable_id = 5;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+SET timezone TO PST8PDT;
 
 INSERT INTO ts_continuous_test VALUES (1, 1);
 

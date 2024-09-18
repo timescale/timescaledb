@@ -2,6 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
+SET timezone TO PST8PDT;
 -- hypertable creation
 SHOW timescaledb.enable_hypertable_create;
  timescaledb.enable_hypertable_create 

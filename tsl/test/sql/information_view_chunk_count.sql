@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+SET timezone TO PST8PDT;
+
 CREATE TABLE sensor_data(
 time timestamptz not null,
 sensor_id integer not null,

@@ -2,6 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
+SET timezone TO PST8PDT;
 CREATE PROCEDURE _timescaledb_internal.cagg_try_repair (
     cagg_view REGCLASS,
     force_rebuild BOOLEAN

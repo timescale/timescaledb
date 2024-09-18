@@ -3,6 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 SET timescaledb.enable_transparent_decompression to OFF;
+SET timezone TO PST8PDT;
 
 \set PREFIX 'EXPLAIN (analyze, verbose, costs off, timing off, summary off)'
 
@@ -629,6 +630,8 @@ SET reltuples = 0, relpages = 0
   WHERE ht.table_name = 'stattest2' AND ch.hypertable_id = ht.id
         AND ch.compressed_chunk_id > 0 );
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+SET timezone TO PST8PDT;
 
 -- reltuples is initially -1 on PG14 before VACUUM/ANALYZE has been run
 SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, relpages, relallvisible FROM pg_class

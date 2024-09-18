@@ -5,6 +5,8 @@
 -- Connect as superuser to use SET ROLE later
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 
+SET timezone TO PST8PDT;
+
 -- Run tests with default role
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
