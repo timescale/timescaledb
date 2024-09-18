@@ -5,9 +5,9 @@
  */
 
 /*
- * Vectorized implementation of a float{4,8}_accum() transition function for a
- * single type. They use the same Youngs-Cramer state, but for AVG we can skip
- * calculating the Sxx variable.
+ * Vectorized implementation of a Postgres float{4,8}_accum() transition
+ * function for a single type. They use the same Youngs-Cramer state, but for
+ * AVG we can skip calculating the Sxx variable.
  */
 
 #ifdef GENERATE_DISPATCH_TABLE
@@ -42,7 +42,8 @@ return &FUNCTION_NAME(argdef);
 #else
 
 /*
- * State of Youngs-Cramer algorithm, see the comments for float8_accum().
+ * State of Youngs-Cramer algorithm, see the comments for float8_accum()
+ * Postgres function.
  */
 typedef struct
 {
@@ -110,16 +111,19 @@ FUNCTION_NAME(update)(const uint64 *valid1, const uint64 *valid2, const CTYPE *v
 	}
 
 	/*
-	 * This code follows float8_accum(), see the comments there.
+	 * This code follows the Postgres float8_accum() transition function, see
+	 * the comments there.
 	 */
+	const double newN = *N + 1.0;
+	const double newSx = *Sx + newval;
 #ifdef NEED_SXX
 	Assert(*N > 0.0);
-	const double tmp = newval * (*N + 1.0) - (*Sx + newval);
-	*Sxx += tmp * tmp / (*N * (*N + 1.0));
+	const double tmp = newval * newN - newSx;
+	*Sxx += tmp * tmp / (*N * newN);
 #endif
 
-	*N = *N + 1.0;
-	*Sx = *Sx + newval;
+	*N = newN;
+	*Sx = newSx;
 }
 
 /*

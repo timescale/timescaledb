@@ -20,8 +20,8 @@ FUNCTION_NAME(vector_impl_arrow)(void *agg_state, const ArrowArray *vector, cons
 }
 
 static pg_noinline void
-FUNCTION_NAME(vector_no_validity)(void *agg_state, const ArrowArray *vector,
-								  MemoryContext agg_extra_mctx)
+FUNCTION_NAME(vector_all_valid)(void *agg_state, const ArrowArray *vector,
+								MemoryContext agg_extra_mctx)
 {
 	FUNCTION_NAME(vector_impl_arrow)(agg_state, vector, NULL, NULL, agg_extra_mctx);
 }
@@ -44,23 +44,29 @@ static void
 FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *vector, const uint64 *filter,
 					  MemoryContext agg_extra_mctx)
 {
-	const uint64 *valid1 = vector->buffers[0];
-	const uint64 *valid2 = filter;
+	const uint64 *row_validity = vector->buffers[0];
 
-	if (valid1 == NULL && valid2 == NULL)
+	if (row_validity == NULL && filter == NULL)
 	{
-		FUNCTION_NAME(vector_no_validity)(agg_state, vector, agg_extra_mctx);
+		/* All rows are valid and we don't have to check any validity bitmaps. */
+		FUNCTION_NAME(vector_all_valid)(agg_state, vector, agg_extra_mctx);
 	}
-	else if (valid1 != NULL && valid2 == NULL)
+	else if (row_validity != NULL && filter == NULL)
 	{
-		FUNCTION_NAME(vector_one_validity)(agg_state, vector, valid1, agg_extra_mctx);
+		/* Have to check only one bitmap -- row validity bitmap. */
+		FUNCTION_NAME(vector_one_validity)(agg_state, vector, row_validity, agg_extra_mctx);
 	}
-	else if (valid2 != NULL && valid1 == NULL)
+	else if (filter != NULL && row_validity == NULL)
 	{
-		FUNCTION_NAME(vector_one_validity)(agg_state, vector, valid2, agg_extra_mctx);
+		/* Have to check only one bitmap -- results of the vectorized filter. */
+		FUNCTION_NAME(vector_one_validity)(agg_state, vector, filter, agg_extra_mctx);
 	}
 	else
 	{
-		FUNCTION_NAME(vector_two_validity)(agg_state, vector, valid1, valid2, agg_extra_mctx);
+		/*
+		 * Have to check both the row validity bitmap and the results of the
+		 * vectorized filter.
+		 */
+		FUNCTION_NAME(vector_two_validity)(agg_state, vector, row_validity, filter, agg_extra_mctx);
 	}
 }
