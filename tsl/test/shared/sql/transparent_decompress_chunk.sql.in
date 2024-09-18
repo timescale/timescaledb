@@ -7,8 +7,10 @@
 \set PREFIX_NO_ANALYZE 'EXPLAIN (verbose, costs off)'
 \set PREFIX_NO_VERBOSE 'EXPLAIN (costs off)'
 
+-- Some tweaks to get less flaky test
 SET parallel_leader_participation TO off;
 SET min_parallel_table_scan_size TO '0';
+SET enable_incremental_sort TO off;
 
 SELECT show_chunks('metrics_compressed') AS "TEST_TABLE" ORDER BY 1::text LIMIT 1 \gset
 
@@ -345,4 +347,3 @@ SELECT queryid, lag(total_exec_time) OVER (PARTITION BY queryid) FROM (SELECT * 
 
 DROP TABLE i6925_t1;
 DROP TABLE i6925_t2;
-

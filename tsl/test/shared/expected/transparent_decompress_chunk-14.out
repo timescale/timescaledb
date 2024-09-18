@@ -5,8 +5,10 @@
 \set PREFIX_VERBOSE 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
 \set PREFIX_NO_ANALYZE 'EXPLAIN (verbose, costs off)'
 \set PREFIX_NO_VERBOSE 'EXPLAIN (costs off)'
+-- Some tweaks to get less flaky test
 SET parallel_leader_participation TO off;
 SET min_parallel_table_scan_size TO '0';
+SET enable_incremental_sort TO off;
 SELECT show_chunks('metrics_compressed') AS "TEST_TABLE" ORDER BY 1::text LIMIT 1 \gset
 -- this should use DecompressChunk node
 :PREFIX_VERBOSE
@@ -812,22 +814,18 @@ ORDER BY m1.time,
 LIMIT 100;
 QUERY PLAN
  Limit
-   ->  Incremental Sort
+   ->  Sort
          Sort Key: m1."time", m1.device_id, m2."time", m2.device_id
-         Presorted Key: m1."time", m1.device_id
-         ->  Merge Left Join
-               Merge Cond: (m1."time" = m2."time")
+         ->  Hash Left Join
+               Hash Cond: (m1."time" = m2."time")
                Join Filter: (m1.device_id = 1)
-               ->  Sort
-                     Sort Key: m1."time", m1.device_id
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
-                           ->  Seq Scan on compress_hyper_X_X_chunk
-               ->  Sort
-                     Sort Key: m2."time"
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
+                     ->  Seq Scan on compress_hyper_X_X_chunk
+               ->  Hash
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
                                  Index Cond: (device_id = 2)
-(16 rows)
+(12 rows)
 
 -- test implicit self-join
 :PREFIX_NO_VERBOSE
@@ -842,20 +840,16 @@ ORDER BY m1.time,
 LIMIT 20;
 QUERY PLAN
  Limit
-   ->  Incremental Sort
+   ->  Sort
          Sort Key: m1."time", m1.device_id, m2.device_id
-         Presorted Key: m1."time", m1.device_id
-         ->  Merge Join
-               Merge Cond: (m1."time" = m2."time")
-               ->  Sort
-                     Sort Key: m1."time", m1.device_id
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
-                           ->  Seq Scan on compress_hyper_X_X_chunk
-               ->  Sort
-                     Sort Key: m2."time"
+         ->  Hash Join
+               Hash Cond: (m1."time" = m2."time")
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
+                     ->  Seq Scan on compress_hyper_X_X_chunk
+               ->  Hash
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2
                            ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
-(14 rows)
+(10 rows)
 
 -- test self-join with sub-query
 :PREFIX_NO_VERBOSE
@@ -872,20 +866,16 @@ ORDER BY m1.time,
 LIMIT 10;
 QUERY PLAN
  Limit
-   ->  Incremental Sort
+   ->  Sort
          Sort Key: m1."time", m1.device_id, m2.device_id
-         Presorted Key: m1."time", m1.device_id
-         ->  Merge Join
-               Merge Cond: (m1."time" = m2."time")
-               ->  Sort
-                     Sort Key: m1."time", m1.device_id
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
-                           ->  Seq Scan on compress_hyper_X_X_chunk
-               ->  Sort
-                     Sort Key: m2."time"
+         ->  Hash Join
+               Hash Cond: (m1."time" = m2."time")
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
+                     ->  Seq Scan on compress_hyper_X_X_chunk
+               ->  Hash
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2
                            ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
-(14 rows)
+(10 rows)
 
 RESET parallel_leader_participation;
 :PREFIX
