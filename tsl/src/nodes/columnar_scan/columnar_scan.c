@@ -13,6 +13,7 @@
 #include <nodes/execnodes.h>
 #include <nodes/extensible.h>
 #include <nodes/nodeFuncs.h>
+#include <nodes/parsenodes.h>
 #include <nodes/pathnodes.h>
 #include <nodes/pg_list.h>
 #include <optimizer/cost.h>
@@ -29,6 +30,7 @@
 #include "columnar_scan.h"
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
+#include "guc.h"
 #include "hypercore/arrow_tts.h"
 #include "hypercore/hypercore_handler.h"
 #include "import/ts_explain.h"
@@ -52,6 +54,7 @@ typedef struct ColumnarScanState
 	List *scankey_quals;
 	List *vectorized_quals_orig;
 	SimpleProjInfo sprojinfo;
+	bool only_scan;
 } ColumnarScanState;
 
 static bool
@@ -425,6 +428,10 @@ columnar_scan_exec(CustomScanState *state)
 								   cstate->nscankeys,
 								   cstate->scankeys);
 		state->ss.ss_currentScanDesc = scandesc;
+
+		if (cstate->only_scan &&
+			(ts_guc_hypercore_copy_to_behavior == HYPERCORE_COPY_NO_COMPRESSED_DATA))
+			hypercore_scan_set_skip_compressed(scandesc);
 	}
 
 	/*
@@ -836,6 +843,7 @@ columnar_scan_state_create(CustomScan *cscan)
 #if PG16_GE
 	cstate->css.slotOps = &TTSOpsArrowTuple;
 #endif
+	cstate->only_scan = linitial_int(cscan->custom_private);
 
 	return (Node *) cstate;
 }
@@ -897,6 +905,8 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_p
 	columnar_scan_plan->methods = &columnar_scan_plan_methods;
 	columnar_scan_plan->scan.scanrelid = rel->relid;
 
+	bool only_scan = (rel->reloptkind == RELOPT_BASEREL) && !ts_rte_is_marked_for_expansion(rte);
+	columnar_scan_plan->custom_private = list_make1_int(only_scan);
 	/* output target list */
 	columnar_scan_plan->scan.plan.targetlist = tlist;
 
@@ -989,6 +999,15 @@ columnar_scan_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Hypertable *h
 {
 	ColumnarScanPath *cspath;
 	Relids required_outer;
+	RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
+
+	/* If the rel is NOT marked for expansion, it means this is a SELECT *
+	 * FROM ONLY query and it is necessary to always do a ColumnarScan even if
+	 * it is disabled. Only ColumnarScan has the functionality to tell the TAM
+	 * to only return non-compressed data. */
+	if (!ts_guc_enable_columnarscan && rel->reloptkind != RELOPT_BASEREL &&
+		!ts_rte_is_marked_for_expansion(rte))
+		return;
 
 	/*
 	 * We don't support pushing join clauses into the quals of a seqscan, but
