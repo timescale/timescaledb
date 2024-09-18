@@ -29,6 +29,7 @@ extern Datum hypercore_handler(PG_FUNCTION_ARGS);
 extern void hypercore_xact_event(XactEvent event, void *arg);
 extern bool hypercore_set_truncate_compressed(bool onoff);
 extern void hypercore_scan_set_skip_compressed(TableScanDesc scan, bool skip);
+extern void hypercore_skip_compressed_data_for_relation(Oid relid);
 
 typedef struct ColumnCompressionSettings
 {

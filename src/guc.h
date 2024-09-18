@@ -124,6 +124,25 @@ extern TSDLLEXPORT bool ts_guc_debug_require_batch_sorted_merge;
 extern TSDLLEXPORT bool ts_guc_debug_allow_cagg_with_deprecated_funcs;
 extern TSDLLEXPORT char *ts_guc_hypercore_indexam_whitelist;
 
+/*
+ * Defines the behavior of COPY TO when used on a Hypercore table.
+ *
+ * If set to COPY_ALL_DATA, all data is copied from a Hypercore table,
+ * including compressed data (but in uncompressed form) from the internal
+ * compressed relation. When doing a COPY TO on the internal compressed
+ * relation, no data is returned.
+ *
+ * If set to COPY_NO_COMPRESSED_DATA, then only uncompressed data is copied
+ * (if any). This behavior is compatible with compression without hypercore.
+ */
+typedef enum HypercoreCopyToBehavior
+{
+	HYPERCORE_COPY_NO_COMPRESSED_DATA,
+	HYPERCORE_COPY_ALL_DATA,
+} HypercoreCopyToBehavior;
+
+extern TSDLLEXPORT HypercoreCopyToBehavior ts_guc_hypercore_copy_to_behavior;
+
 void _guc_init(void);
 
 typedef enum
