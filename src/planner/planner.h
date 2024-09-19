@@ -9,7 +9,9 @@
 #include <nodes/parsenodes.h>
 #include <nodes/pathnodes.h>
 #include <nodes/pg_list.h>
+#include <parser/parsetree.h>
 
+#include "chunk.h"
 #include "export.h"
 #include "guc.h"
 #include "hypertable.h"
@@ -108,3 +110,43 @@ extern TSDLLEXPORT void ts_add_baserel_cache_entry_for_chunk(Oid chunk_reloid,
 															 Hypertable *hypertable);
 TsRelType TSDLLEXPORT ts_classify_relation(const PlannerInfo *root, const RelOptInfo *rel,
 										   Hypertable **ht);
+
+/*
+ * Chunk-equivalent of planner_rt_fetch(), but returns the corresponding chunk
+ * instead of range table entry.
+ *
+ * Returns NULL if this rel is not a chunk.
+ *
+ * This cache should be pre-warmed by hypertable expansion, but it
+ * doesn't run in the following cases:
+ *
+ * 1. if it was a direct query on the chunk;
+ *
+ * 2. if it is not a SELECT QUERY.
+ */
+static inline const Chunk *
+ts_planner_chunk_fetch(const PlannerInfo *root, RelOptInfo *rel)
+{
+	TimescaleDBPrivate *rel_private;
+
+	/* The rel can only be a chunk if it is part of a hypertable expansion
+	 * (RELOPT_OTHER_MEMBER_REL) or a directly query on the chunk
+	 * (RELOPT_BASEREL) */
+	if (rel->reloptkind != RELOPT_OTHER_MEMBER_REL && rel->reloptkind != RELOPT_BASEREL)
+		return NULL;
+
+	/* The rel_private entry should have been created as part of classifying
+	 * the relation in timescaledb_get_relation_info_hook(). Therefore,
+	 * ts_get_private_reloptinfo() asserts that it is already set but falls
+	 * back to creating rel_private in release builds for safety. */
+	rel_private = ts_get_private_reloptinfo(rel);
+
+	if (NULL == rel_private->cached_chunk_struct)
+	{
+		RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
+		rel_private->cached_chunk_struct =
+			ts_chunk_get_by_relid(rte->relid, /* fail_if_not_found = */ true);
+	}
+
+	return rel_private->cached_chunk_struct;
+}

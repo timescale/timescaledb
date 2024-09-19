@@ -1419,12 +1419,9 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 				(type == TS_REL_CHUNK_CHILD) && IS_UPDL_CMD(query);
 			if (use_transparent_decompression && (is_standalone_chunk || is_child_chunk_in_update))
 			{
-				TimescaleDBPrivate *fdw_private = (TimescaleDBPrivate *) rel->fdw_private;
-				Assert(fdw_private->cached_chunk_struct == NULL);
-				fdw_private->cached_chunk_struct =
-					ts_chunk_get_by_relid(rte->relid, /* fail_if_not_found = */ true);
-				if (!ts_chunk_is_partial(fdw_private->cached_chunk_struct) &&
-					ts_chunk_is_compressed(fdw_private->cached_chunk_struct))
+				const Chunk *chunk = ts_planner_chunk_fetch(root, rel);
+
+				if (!ts_chunk_is_partial(chunk) && ts_chunk_is_compressed(chunk))
 				{
 					rel->indexlist = NIL;
 				}
