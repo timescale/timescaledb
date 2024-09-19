@@ -67,10 +67,11 @@ static DecompressChunkPath *decompress_chunk_path_create(PlannerInfo *root, Comp
 														 int parallel_workers,
 														 Path *compressed_path);
 
-static void decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk *chunk,
-											 RelOptInfo *chunk_rel, bool needs_sequence_num);
+static void decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info,
+											 const Chunk *chunk, RelOptInfo *chunk_rel,
+											 bool needs_sequence_num);
 
-static SortInfo build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info,
+static SortInfo build_sortinfo(const Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info,
 							   List *pathkeys);
 
 static bool
@@ -254,7 +255,8 @@ copy_decompress_chunk_path(DecompressChunkPath *src)
 }
 
 static CompressionInfo *
-build_compressioninfo(PlannerInfo *root, Hypertable *ht, Chunk *chunk, RelOptInfo *chunk_rel)
+build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chunk,
+					  RelOptInfo *chunk_rel)
 {
 	AppendRelInfo *appinfo;
 	CompressionInfo *info = palloc0(sizeof(CompressionInfo));
@@ -510,7 +512,7 @@ cost_batch_sorted_merge(PlannerInfo *root, CompressionInfo *compression_info,
  * compatible and the optimization can be used.
  */
 static MergeBatchResult
-can_batch_sorted_merge(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
+can_batch_sorted_merge(PlannerInfo *root, CompressionInfo *info, const Chunk *chunk)
 {
 	PathKey *pk;
 	Var *var;
@@ -620,8 +622,8 @@ can_batch_sorted_merge(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
  * To save planning time, we therefore refrain from adding them.
  */
 static void
-add_chunk_sorted_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hypertable *ht, Index ht_relid,
-					   Path *path, Path *compressed_path)
+add_chunk_sorted_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const Hypertable *ht,
+					   Index ht_relid, Path *path, Path *compressed_path)
 {
 	if (root->query_pathkeys == NIL)
 		return;
@@ -681,8 +683,8 @@ add_chunk_sorted_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hypertable *ht,
 #define IS_UPDL_CMD(parse)                                                                         \
 	((parse)->commandType == CMD_UPDATE || (parse)->commandType == CMD_DELETE)
 void
-ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hypertable *ht,
-								   Chunk *chunk)
+ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const Hypertable *ht,
+								   const Chunk *chunk)
 {
 	RelOptInfo *compressed_rel;
 	ListCell *lc;
@@ -1650,7 +1652,7 @@ compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *inf
  * and add it to PlannerInfo
  */
 static void
-decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk *chunk,
+decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Chunk *chunk,
 								 RelOptInfo *chunk_rel, bool needs_sequence_num)
 {
 	Index compressed_index = root->simple_rel_array_size;
@@ -2012,7 +2014,7 @@ find_const_segmentby(RelOptInfo *chunk_rel, CompressionInfo *info)
  * If query pathkeys is shorter than segmentby + compress_orderby pushdown can still be done
  */
 static SortInfo
-build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List *pathkeys)
+build_sortinfo(const Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List *pathkeys)
 {
 	int pk_index;
 	PathKey *pk;

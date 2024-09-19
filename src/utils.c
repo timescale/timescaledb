@@ -1748,3 +1748,77 @@ ts_update_placeholder(PG_FUNCTION_ARGS)
 	elog(ERROR, "this stub function is used only as placeholder during extension updates");
 	PG_RETURN_NULL();
 }
+
+/*
+ * Get relation information from the syscache in one call.
+ *
+ * Returns relkind and access method used. Both are non-optional.
+ */
+void
+ts_get_rel_info(Oid relid, Oid *amoid, char *relkind)
+{
+	HeapTuple tuple;
+	Form_pg_class cform;
+
+	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for relation %u", relid);
+
+	cform = (Form_pg_class) GETSTRUCT(tuple);
+	*amoid = cform->relam;
+	*relkind = cform->relkind;
+	ReleaseSysCache(tuple);
+}
+
+/*
+ * Get relation information from the syscache in one call.
+ *
+ * Returns relid, relkind and access method used. All are non-optional.
+ */
+void
+ts_get_rel_info_by_name(const char *relnamespace, const char *relname, Oid *relid, Oid *amoid,
+						char *relkind)
+{
+	HeapTuple tuple;
+	Form_pg_class cform;
+	Oid namespaceoid = get_namespace_oid(relnamespace, false);
+
+	tuple = SearchSysCache2(RELNAMENSP, PointerGetDatum(relname), ObjectIdGetDatum(namespaceoid));
+
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for relation %s.%s", relnamespace, relname);
+
+	cform = (Form_pg_class) GETSTRUCT(tuple);
+	*relid = cform->oid;
+	*amoid = cform->relam;
+	*relkind = cform->relkind;
+	ReleaseSysCache(tuple);
+}
+
+static Oid hypercore_amoid = InvalidOid;
+
+bool
+ts_is_hypercore_am(Oid amoid)
+{
+	/* Can't use InvalidOid as an indication of non-cached value since
+	   get_am_oid() will return InvalidOid when the access method does not
+	   exist and we will do the lookup every time this query is called. This
+	   boolean can be removed once we know that there should exist an access
+	   method with the given name. */
+	static bool iscached = false;
+
+	if (!iscached && !OidIsValid(hypercore_amoid))
+	{
+		hypercore_amoid = get_am_oid("hypercore", true);
+		iscached = true;
+	}
+
+	if (!OidIsValid(hypercore_amoid))
+		return false;
+
+	/* Shouldn't get here for now */
+	Assert(false);
+
+	return amoid == hypercore_amoid;
+}
