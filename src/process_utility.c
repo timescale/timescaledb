@@ -1070,8 +1070,9 @@ process_truncate(ProcessUtilityArgs *args)
 						 * the truncated region. */
 						if (ts_continuous_agg_hypertable_status(ht->fd.id) == HypertableIsRawTable)
 							ts_continuous_agg_invalidate_chunk(ht, chunk);
-						/* Truncate the compressed chunk too. */
-						if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+						/* Truncate the compressed chunk too, unless it is a hypercore table. */
+						if (!ts_is_hypercore_am(chunk->amoid) &&
+							chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
 						{
 							Chunk *compressed_chunk =
 								ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
