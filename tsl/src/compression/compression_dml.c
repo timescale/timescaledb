@@ -332,12 +332,20 @@ decompress_batch_beginscan(Relation in_rel, Relation index_rel, Snapshot snapsho
 
 	if (index_rel)
 	{
+		if (ts_guc_debug_compression_path_info)
+		{
+			elog(INFO, "Using index scan for DML decompression");
+		}
 		scan->index_scan = index_beginscan(in_rel, index_rel, snapshot, num_scankeys, 0);
 		index_rescan(scan->index_scan, scankeys, num_scankeys, NULL, 0);
 		scan->scan = NULL;
 	}
 	else
 	{
+		if (ts_guc_debug_compression_path_info)
+		{
+			elog(INFO, "Using table scan for DML decompression");
+		}
 		scan->scan = table_beginscan(in_rel, snapshot, num_scankeys, scankeys);
 		scan->index_scan = NULL;
 	}
