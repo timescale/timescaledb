@@ -1,0 +1,102 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+-- Disable incremental sort to make tests stable
+set enable_incremental_sort = false;
+select setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+create table readings(
+       time timestamptz unique,
+       location int,
+       device int,
+       temp numeric(4,1),
+       humidity float,
+       jdata jsonb
+);
+select create_hypertable('readings', by_range('time', '1d'::interval));
+NOTICE:  adding not-null constraint to column "time"
+ create_hypertable 
+-------------------
+ (1,t)
+(1 row)
+
+alter table readings
+      set (timescaledb.compress_orderby = 'time',
+	   timescaledb.compress_segmentby = 'device');
+insert into readings (time, location, device, temp, humidity, jdata)
+select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100, '{"a":1,"b":2}'::jsonb
+from generate_series('2022-06-01'::timestamptz, '2022-06-04'::timestamptz, '5m') t;
+select compress_chunk(show_chunks('readings'), compress_using => 'hyperstore');
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+(4 rows)
+
+-- Insert some extra data to get some non-compressed data as well.
+insert into readings (time, location, device, temp, humidity, jdata)
+select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100, '{"a":1,"b":2}'::jsonb
+from generate_series('2022-06-01 00:01:00'::timestamptz, '2022-06-04'::timestamptz, '5m') t;
+select chunk, amname from chunk_info where hypertable = 'readings'::regclass;
+                 chunk                  |   amname   
+----------------------------------------+------------
+ _timescaledb_internal._hyper_1_1_chunk | hyperstore
+ _timescaledb_internal._hyper_1_2_chunk | hyperstore
+ _timescaledb_internal._hyper_1_3_chunk | hyperstore
+ _timescaledb_internal._hyper_1_4_chunk | hyperstore
+(4 rows)
+
+-- Pick a chunk to truncate that is not the first chunk. This is
+-- mostly a precaution to make sure that there is no bias towards the
+-- first chunk and we could just as well pick the first chunk.
+select chunk from show_chunks('readings') x(chunk) limit 1 offset 3 \gset
+-- Check that the number of bytes in the table before and after the
+-- truncate.
+--
+-- Note that a table with a toastable attribute will always have a
+-- toast table assigned, so pg_table_size() shows one page allocated
+-- since this includes the toast table.
+select pg_table_size(chunk) as chunk_size,
+       pg_table_size(compressed_chunk) as compressed_chunk_size
+  from chunk_info
+ where chunk = :'chunk'::regclass;
+ chunk_size | compressed_chunk_size 
+------------+-----------------------
+      40960 |                 57344
+(1 row)
+
+truncate :chunk;
+select pg_table_size(chunk) as chunk_size,
+       pg_table_size(compressed_chunk) as compressed_chunk_size
+  from chunk_info
+ where chunk = :'chunk'::regclass;
+ chunk_size | compressed_chunk_size 
+------------+-----------------------
+          0 |                  8192
+(1 row)
+
+-- We test TRUNCATE on a hypertable as well, but truncating a
+-- hypertable is done by deleting all chunks, not by truncating each
+-- chunk.
+select (select count(*) from readings) tuples,
+       (select count(*) from show_chunks('readings')) chunks;
+ tuples | chunks 
+--------+--------
+   1560 |      4
+(1 row)
+
+truncate readings;
+select (select count(*) from readings) tuples,
+       (select count(*) from show_chunks('readings')) chunks;
+ tuples | chunks 
+--------+--------
+      0 |      0
+(1 row)
+

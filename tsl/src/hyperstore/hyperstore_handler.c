@@ -90,6 +90,15 @@ get_chunk_id_from_relid(Oid relid)
 	return chunk_id;
 }
 
+static int32
+chunk_get_compressed_chunk_relid(Oid relid)
+{
+	FormData_chunk fd;
+	if (!ts_chunk_simple_scan_by_reloid(relid, &fd, true))
+		return InvalidOid;
+	return ts_chunk_get_relid(fd.compressed_chunk_id, true);
+}
+
 static const TableAmRoutine *
 switch_to_heapam(Relation rel)
 {
@@ -1767,18 +1776,47 @@ hyperstore_relation_set_new_filelocator(Relation rel, const RelFileLocator *newr
 										MultiXactId *minmulti)
 {
 	const TableAmRoutine *oldtam = switch_to_heapam(rel);
+#if PG16_GE
 	rel->rd_tableam->relation_set_new_filelocator(rel,
 												  newrlocator,
 												  persistence,
 												  freezeXid,
 												  minmulti);
+#else
+	rel->rd_tableam->relation_set_new_filenode(rel, newrlocator, persistence, freezeXid, minmulti);
+#endif
 	rel->rd_tableam = oldtam;
+
+	/* If the chunk has a compressed chunk associated with it, then we need to
+	 * change the rel file number for it as well. This can happen if you, for
+	 * example, execute a transactional TRUNCATE. */
+	Oid compressed_relid = chunk_get_compressed_chunk_relid(RelationGetRelid(rel));
+	if (OidIsValid(compressed_relid))
+	{
+		Relation compressed_rel = table_open(compressed_relid, AccessExclusiveLock);
+#if PG16_GE
+		RelationSetNewRelfilenumber(compressed_rel, compressed_rel->rd_rel->relpersistence);
+#else
+		RelationSetNewRelfilenode(compressed_rel, compressed_rel->rd_rel->relpersistence);
+#endif
+		table_close(compressed_rel, NoLock);
+	}
 }
 
 static void
 hyperstore_relation_nontransactional_truncate(Relation rel)
 {
-	RelationTruncate(rel, 0);
+	const TableAmRoutine *oldtam = switch_to_heapam(rel);
+	rel->rd_tableam->relation_nontransactional_truncate(rel);
+	rel->rd_tableam = oldtam;
+
+	Oid compressed_relid = chunk_get_compressed_chunk_relid(RelationGetRelid(rel));
+	if (OidIsValid(compressed_relid))
+	{
+		Relation crel = table_open(compressed_relid, AccessShareLock);
+		crel->rd_tableam->relation_nontransactional_truncate(crel);
+		table_close(crel, NoLock);
+	}
 }
 
 static void

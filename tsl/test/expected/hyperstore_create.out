@@ -438,7 +438,7 @@ select * from compressed_rel_size_stats order by rel;
  _timescaledb_internal._hyper_1_7_chunk  | hyperstore | test2     |                    2016 |                       10 |                         10
  _timescaledb_internal._hyper_1_9_chunk  | hyperstore | test2     |                    2016 |                       10 |                         10
  _timescaledb_internal._hyper_1_11_chunk | hyperstore | test2     |                     373 |                       10 |                         10
- _timescaledb_internal._hyper_4_13_chunk | hyperstore | test3     |                       1 |                        1 |                          1
+ _timescaledb_internal._hyper_4_13_chunk | hyperstore | test3     |                       0 |                        0 |                          0
  _timescaledb_internal._hyper_4_17_chunk | hyperstore | test3     |                       1 |                        1 |                          1
  _timescaledb_internal._hyper_4_18_chunk | hyperstore | test3     |                       1 |                        1 |                          1
 (9 rows)
@@ -476,7 +476,7 @@ select * from compressed_rel_size_stats order by rel;
  _timescaledb_internal._hyper_1_7_chunk  | heap   | test2     |                    2016 |                       10 |                         10
  _timescaledb_internal._hyper_1_9_chunk  | heap   | test2     |                    2016 |                       10 |                         10
  _timescaledb_internal._hyper_1_11_chunk | heap   | test2     |                     373 |                       10 |                         10
- _timescaledb_internal._hyper_4_13_chunk | heap   | test3     |                       1 |                        1 |                          1
+ _timescaledb_internal._hyper_4_13_chunk | heap   | test3     |                       0 |                        0 |                          0
  _timescaledb_internal._hyper_4_17_chunk | heap   | test3     |                       1 |                        1 |                          1
  _timescaledb_internal._hyper_4_18_chunk | heap   | test3     |                       1 |                        1 |                          1
 (9 rows)
