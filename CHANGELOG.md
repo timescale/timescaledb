@@ -14,7 +14,7 @@ available opportunity.
 
 **Features**
 * #6882: Allow DELETE on the compressed chunks without decompression.
-* #7033 Use MERGE statement on CAgg Refresh
+* #7033: Use MERGE statement on Continuous Aggregates Refresh.
 * #7126: Add functions to show the compression information.
 * #7147: Vectorize partial aggregation for `sum(int4)` with grouping on `segment by` columns.
 * #7204: Track additional extensions in telemetry.
@@ -30,11 +30,11 @@ available opportunity.
 * #7229: Fix the foreign key constraints where the index and the constraint column order are different.
 * #7230: Do not propagate the foreign key constraints to the `osm` chunk.
 * #7234: Release the cache after accessing the cache entry.
-* #7258 Force English in the pg_config command executed by cmake to avoid unexpected building errors
-* #7270 Fix memory leak in compressed DML batch filtering
+* #7258: Force English in the `pg_config` command executed by `cmake` to avoid the unexpected building errors.
+* #7270: Fix the memory leak in compressed DML batch filtering.
 
 **Thanks**
-* @MiguelTubio for reporting and fixing a Windows build error
+* @MiguelTubio for reporting and fixing the Windows build error.
 * @posuch for reporting the misleading extension description in the generic loader packages.
 
 ## 2.16.1 (2024-08-06)
