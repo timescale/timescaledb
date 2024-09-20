@@ -25,6 +25,7 @@ endif()
 # other dependent tests to fail. Hence running this test in solo
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
   list(APPEND SOLO_TESTS merge_dml.sql)
+  list(APPEND TEST_FILES_SHARED compression_nulls_not_distinct.sql)
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)

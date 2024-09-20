@@ -769,6 +769,7 @@ get_batch_keys_for_unique_constraints(const ChunkInsertState *cis, Relation rela
 {
 	tuple_filtering_constraints *constraints = palloc0(sizeof(tuple_filtering_constraints));
 	constraints->on_conflict = ONCONFLICT_UPDATE;
+	constraints->nullsnotdistinct = false;
 	ListCell *lc;
 
 	/* Fast path if definitely no indexes */
@@ -832,6 +833,12 @@ get_batch_keys_for_unique_constraints(const ChunkInsertState *cis, Relation rela
 			constraints->key_columns = bms_intersect(idx_attrs, constraints->key_columns);
 			constraints->covered = false;
 		}
+
+#if PG15_GE
+		/* If any of the unique indexes have NULLS NOT DISTINCT set, we proceed
+		 * with checking the constraints with decompression */
+		constraints->nullsnotdistinct |= indexDesc->rd_index->indnullsnotdistinct;
+#endif
 
 		/* When multiple unique indexes are present, in theory there could be no shared
 		 * columns even though that is very unlikely as they will probably at least share
