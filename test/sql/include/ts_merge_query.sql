@@ -778,6 +778,74 @@ WHEN MATCHED AND tid < 2 THEN
 RETURNING *;
 ROLLBACK;
 
+-- PG17-specific tests for views, returning and merge_action. These throw syntax errors for previous versions of Postgres.
+-- However, since the error is the same for both hypertables and regular tables, this test should still pass for previous versions.
+
+-- RETURNING
+
+INSERT INTO source(sid, delta) VALUES(1, 40), (5, 50);
+
+BEGIN;
+MERGE INTO target t
+USING source s
+ON t.tid = s.sid
+WHEN MATCHED AND tid > 2 THEN
+	UPDATE set balance = balance + s.delta
+WHEN MATCHED THEN
+	DELETE
+WHEN NOT MATCHED THEN
+	INSERT (tid, balance) VALUES (sid, delta);
+SELECT * from target;
+ROLLBACK;
+
+BEGIN;
+MERGE INTO target t
+USING source s
+ON t.tid = s.sid
+WHEN MATCHED AND tid > 1 THEN
+	UPDATE set balance = balance + s.delta
+WHEN MATCHED THEN
+	DELETE
+WHEN NOT MATCHED THEN
+	INSERT (tid, balance) VALUES (sid, delta)
+RETURNING merge_action(), t.*;
+ROLLBACK;
+
+-- Views
+CREATE VIEW tv AS SELECT * FROM target;
+
+BEGIN;
+MERGE INTO tv t
+USING source s
+ON t.tid = s.sid
+WHEN MATCHED AND tid > 2 THEN
+	UPDATE set balance = balance + s.delta
+WHEN MATCHED THEN
+	DELETE
+WHEN NOT MATCHED THEN
+	INSERT (tid, balance) VALUES (sid, delta);
+SELECT * from tv;
+SELECT * from target; -- should also update the underlying table
+ROLLBACK;
+
+BEGIN;
+MERGE INTO tv t
+USING source s
+ON t.tid = s.sid
+WHEN MATCHED AND tid > 2 THEN
+	UPDATE set balance = balance + s.delta
+WHEN MATCHED THEN
+	DELETE
+WHEN NOT MATCHED THEN
+	INSERT (tid, balance) VALUES (sid, delta)
+RETURNING merge_action(), t.*;
+ROLLBACK;
+
+DROP VIEW tv;
+
+DELETE FROM source where sid in (1, 5);
+
+
 -- EXPLAIN
 CREATE TABLE ex_mtarget (a int, b int)
   WITH (autovacuum_enabled=off);
@@ -871,6 +939,17 @@ USING v
 ON tid = sid AND (SELECT count(*) > 0 FROM sq_target)
 WHEN MATCHED THEN
     UPDATE SET balance = 42;
+SELECT * FROM sq_target WHERE tid = 1;
+ROLLBACK;
+
+--  Test RETURNING with subqueries
+BEGIN;
+MERGE INTO sq_target t
+USING v
+ON tid = sid AND (SELECT count(*) > 0 FROM sq_target)
+WHEN MATCHED THEN
+    UPDATE SET balance = 42
+RETURNING *;
 SELECT * FROM sq_target WHERE tid = 1;
 ROLLBACK;
 
