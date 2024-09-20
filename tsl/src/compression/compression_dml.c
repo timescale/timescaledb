@@ -157,6 +157,16 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 	if (index_rel)
 		null_columns = NULL;
 
+	if (ts_guc_debug_compression_path_info)
+	{
+		elog(INFO,
+			 "Using %s scan with scan keys: index %d, heap %d, memory %d. ",
+			 index_rel ? "index" : "table",
+			 num_index_scankeys,
+			 num_heap_scankeys,
+			 num_mem_scankeys);
+	}
+
 	/*
 	 * Using latest snapshot to scan the heap since we are doing this to build
 	 * the index on the uncompressed chunks in order to do speculative insertion
@@ -332,20 +342,12 @@ decompress_batch_beginscan(Relation in_rel, Relation index_rel, Snapshot snapsho
 
 	if (index_rel)
 	{
-		if (ts_guc_debug_compression_path_info)
-		{
-			elog(INFO, "Using index scan for DML decompression");
-		}
 		scan->index_scan = index_beginscan(in_rel, index_rel, snapshot, num_scankeys, 0);
 		index_rescan(scan->index_scan, scankeys, num_scankeys, NULL, 0);
 		scan->scan = NULL;
 	}
 	else
 	{
-		if (ts_guc_debug_compression_path_info)
-		{
-			elog(INFO, "Using table scan for DML decompression");
-		}
 		scan->scan = table_beginscan(in_rel, snapshot, num_scankeys, scankeys);
 		scan->index_scan = NULL;
 	}
