@@ -15,7 +15,7 @@ git fetch --all
 
 NEW_PATCH_VERSION="0"
 NEW_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
-RELEASE_BRANCH=$(echo "${NEW_VERSION/%.$NEW_PATCH_VERSION/.x}")
+RELEASE_BRANCH="${NEW_VERSION/%.$NEW_PATCH_VERSION/.x}"
 CURRENT_VERSION=$(tail -1 version.config | cut -d ' ' -f 3)
 cd sql/updates
 LAST_VERSION=$(ls |grep $CURRENT_VERSION.sql |cut -d '-' -f 1)
@@ -38,6 +38,7 @@ LAST_DOWNGRADE_FILE="$CURRENT_VERSION--$LAST_VERSION.sql"
 echo "---- Creating release branch $RELEASE_PR_BRANCH from $RELEASE_BRANCH, on the fork ----"
 
 git checkout -b "$RELEASE_PR_BRANCH" upstream/"$RELEASE_BRANCH"
+#git checkout -b "$RELEASE_PR_BRANCH" upstream/main
 git branch
 git pull && git diff HEAD
 
