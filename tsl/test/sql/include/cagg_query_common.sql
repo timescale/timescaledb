@@ -888,6 +888,28 @@ CREATE MATERIALIZED VIEW cagg_1_week_offset
     FROM cagg_1_hour_offset
     GROUP BY 1 ORDER BY 1;
 
+-- Cagg with NULL offset on top of cagg with non-NULL offset
+\set VERBOSITY default
+CREATE MATERIALIZED VIEW cagg_1_week_null_offset
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 week', hour_bucket, "offset"=>NULL::interval) AS week_bucket, max(max_value) AS max_value
+    FROM cagg_1_hour_offset
+    GROUP BY 1 ORDER BY 1;
+
+-- Cagg with non-NULL offset on top of cagg with NULL offset
+CREATE MATERIALIZED VIEW cagg_1_hour_null_offset
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 hour', time, "offset"=>NULL::interval) AS hour_bucket, max(value) AS max_value
+    FROM temperature
+    GROUP BY 1 ORDER BY 1;
+
+CREATE MATERIALIZED VIEW cagg_1_week_non_null_offset
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 week', hour_bucket, "offset"=>'35m'::interval) AS week_bucket, max(max_value) AS max_value
+    FROM cagg_1_hour_null_offset
+    GROUP BY 1 ORDER BY 1;
+\set VERBOSITY terse
+
 -- Different integer offset
 CREATE MATERIALIZED VIEW cagg_int_offset_5
     WITH (timescaledb.continuous, timescaledb.materialized_only=false)
