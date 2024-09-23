@@ -413,7 +413,7 @@ ht_ExecMergeMatched(ModifyTableContext * context, ResultRelInfo * resultRelInfo,
 {
 
 	ModifyTableState *mtstate = context->mtstate;
-	TupleTableSlot *newslot;
+	TupleTableSlot *newslot = NULL;
 	EState	       *estate = context->estate;
 	ExprContext    *econtext = mtstate->ps.ps_ExprContext;
 	bool		isNull;
@@ -814,6 +814,8 @@ if (TransactionIdIsCurrentTransactionId(context->tmfd.xmax))
 		switch (commandType)
 		{
 			case CMD_UPDATE:
+				/* Variable newslot should be set for CMD_UPDATE above */
+				Assert(newslot != NULL);
 				rslot = ExecProcessReturning(resultRelInfo, newslot,
 											 context->planSlot);
 				break;
