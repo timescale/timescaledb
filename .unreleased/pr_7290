@@ -1,0 +1,2 @@
+Fixes: #7290 Add check for NULL offset for caggs built on top of caggs
+Thanks: @snyrkill for discovering and reporting the issue

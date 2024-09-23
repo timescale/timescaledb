@@ -2368,26 +2368,51 @@ CREATE MATERIALIZED VIEW cagg_1_week_offset
     FROM cagg_1_hour_offset
     GROUP BY 1 ORDER BY 1;
 psql:include/cagg_query_common.sql:889: ERROR:  cannot create continuous aggregate with different bucket offset values
+-- Cagg with NULL offset on top of cagg with non-NULL offset
+\set VERBOSITY default
+CREATE MATERIALIZED VIEW cagg_1_week_null_offset
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 week', hour_bucket, "offset"=>NULL::interval) AS week_bucket, max(max_value) AS max_value
+    FROM cagg_1_hour_offset
+    GROUP BY 1 ORDER BY 1;
+psql:include/cagg_query_common.sql:897: ERROR:  cannot create continuous aggregate with different bucket offset values
+DETAIL:  Time origin of "public.cagg_1_week_null_offset" [NULL] and "public.cagg_1_hour_offset" [@ 30 mins] should be the same.
+-- Cagg with non-NULL offset on top of cagg with NULL offset
+CREATE MATERIALIZED VIEW cagg_1_hour_null_offset
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 hour', time, "offset"=>NULL::interval) AS hour_bucket, max(value) AS max_value
+    FROM temperature
+    GROUP BY 1 ORDER BY 1;
+psql:include/cagg_query_common.sql:904: NOTICE:  refreshing continuous aggregate "cagg_1_hour_null_offset"
+HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+CREATE MATERIALIZED VIEW cagg_1_week_non_null_offset
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 week', hour_bucket, "offset"=>'35m'::interval) AS week_bucket, max(max_value) AS max_value
+    FROM cagg_1_hour_null_offset
+    GROUP BY 1 ORDER BY 1;
+psql:include/cagg_query_common.sql:910: ERROR:  cannot create continuous aggregate with different bucket offset values
+DETAIL:  Time origin of "public.cagg_1_week_non_null_offset" [@ 35 mins] and "public.cagg_1_hour_null_offset" [NULL] should be the same.
+\set VERBOSITY terse
 -- Different integer offset
 CREATE MATERIALIZED VIEW cagg_int_offset_5
     WITH (timescaledb.continuous, timescaledb.materialized_only=false)
     AS SELECT time_bucket('10', time, "offset"=>5) AS time, SUM(data) AS value
         FROM table_int
         GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:896: NOTICE:  refreshing continuous aggregate "cagg_int_offset_5"
+psql:include/cagg_query_common.sql:918: NOTICE:  refreshing continuous aggregate "cagg_int_offset_5"
 CREATE MATERIALIZED VIEW cagg_int_offset_10
     WITH (timescaledb.continuous, timescaledb.materialized_only=false)
     AS SELECT time_bucket('10', time, "offset"=>10) AS time, SUM(value) AS value
         FROM cagg_int_offset_5
         GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:902: ERROR:  cannot create continuous aggregate with different bucket offset values
+psql:include/cagg_query_common.sql:924: ERROR:  cannot create continuous aggregate with different bucket offset values
 \set ON_ERROR_STOP 1
 DROP MATERIALIZED VIEW cagg_1_hour_origin;
-psql:include/cagg_query_common.sql:906: NOTICE:  drop cascades to 2 other objects
+psql:include/cagg_query_common.sql:928: NOTICE:  drop cascades to 2 other objects
 DROP MATERIALIZED VIEW cagg_1_hour_offset;
-psql:include/cagg_query_common.sql:907: NOTICE:  drop cascades to 2 other objects
+psql:include/cagg_query_common.sql:929: NOTICE:  drop cascades to 2 other objects
 DROP MATERIALIZED VIEW cagg_int_offset_5;
-psql:include/cagg_query_common.sql:908: NOTICE:  drop cascades to 3 other objects
+psql:include/cagg_query_common.sql:930: NOTICE:  drop cascades to 3 other objects
 ---
 -- CAGGs on CAGGs tests
 ---
@@ -2396,7 +2421,7 @@ CREATE MATERIALIZED VIEW cagg_1_hour_offset
   SELECT time_bucket('1 hour', time, origin=>'2000-01-02 01:00:00 PST'::timestamptz) AS hour_bucket, max(value) AS max_value
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:917: NOTICE:  refreshing continuous aggregate "cagg_1_hour_offset"
+psql:include/cagg_query_common.sql:939: NOTICE:  refreshing continuous aggregate "cagg_1_hour_offset"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_1_hour_offset';
  user_view_schema |   user_view_name   |                                  bucket_func                                   | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+--------------------+--------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
@@ -2408,7 +2433,7 @@ CREATE MATERIALIZED VIEW cagg_1_week_offset
   SELECT time_bucket('1 week', hour_bucket, origin=>'2000-01-02 01:00:00 PST'::timestamptz) AS week_bucket, max(max_value) AS max_value
     FROM cagg_1_hour_offset
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:924: NOTICE:  refreshing continuous aggregate "cagg_1_week_offset"
+psql:include/cagg_query_common.sql:946: NOTICE:  refreshing continuous aggregate "cagg_1_week_offset"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_1_week_offset';
  user_view_schema |   user_view_name   |                                  bucket_func                                   | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+--------------------+--------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------

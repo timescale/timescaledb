@@ -1044,13 +1044,15 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 		if (bucket_info.bf->bucket_time_offset != NULL ||
 			bucket_info_parent.bf->bucket_time_offset != NULL)
 		{
+			bool bucket_offset_isnull = bucket_info.bf->bucket_time_offset == NULL;
+			bool bucket_offset_parent_isnull = bucket_info_parent.bf->bucket_time_offset == NULL;
+
 			Datum offset_datum = IntervalPGetDatum(bucket_info.bf->bucket_time_offset);
 			Datum offset_datum_parent =
 				IntervalPGetDatum(bucket_info_parent.bf->bucket_time_offset);
 
 			bool both_buckets_are_equal = false;
-			bool both_buckets_have_offset = (bucket_info.bf->bucket_time_offset != NULL) &&
-											(bucket_info_parent.bf->bucket_time_offset != NULL);
+			bool both_buckets_have_offset = !bucket_offset_isnull && !bucket_offset_parent_isnull;
 
 			if (both_buckets_have_offset)
 			{
@@ -1060,9 +1062,14 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 
 			if (!both_buckets_are_equal)
 			{
-				char *offset = DatumGetCString(DirectFunctionCall1(interval_out, offset_datum));
+				char *offset =
+					!bucket_offset_isnull ?
+						DatumGetCString(DirectFunctionCall1(interval_out, offset_datum)) :
+						"NULL";
 				char *offset_parent =
-					DatumGetCString(DirectFunctionCall1(interval_out, offset_datum_parent));
+					!bucket_offset_parent_isnull ?
+						DatumGetCString(DirectFunctionCall1(interval_out, offset_datum_parent)) :
+						"NULL";
 
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
