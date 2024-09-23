@@ -800,7 +800,7 @@ ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job, int32 consecutive_f
 		/* Update the errors table regarding the crash */
 		if (!ts_flags_are_set_32(jobstat->fd.flags, LAST_CRASH_REPORTED))
 		{
-			ts_bgw_job_stat_mark_crash_reported(job, JOB_FAILURE);
+			ts_bgw_job_stat_mark_crash_reported(job, JOB_FAILURE_IN_EXECUTION);
 		}
 
 		return calculate_next_start_on_crash(jobstat->fd.consecutive_crashes, job);

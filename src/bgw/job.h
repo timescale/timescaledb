@@ -27,6 +27,14 @@ typedef struct BgwJob
 	BgwJobHistory job_history;
 } BgwJob;
 
+/* Positive result numbers reserved for success */
+typedef enum JobResult
+{
+	JOB_FAILURE_TO_START = -1,
+	JOB_FAILURE_IN_EXECUTION = 0,
+	JOB_SUCCESS = 1,
+} JobResult;
+
 typedef bool job_main_func(void);
 typedef bool (*scheduler_test_hook_type)(BgwJob *job);
 
@@ -59,7 +67,7 @@ extern TSDLLEXPORT void ts_bgw_job_permission_check(BgwJob *job, const char *cmd
 
 extern TSDLLEXPORT void ts_bgw_job_validate_job_owner(Oid owner);
 
-extern bool ts_bgw_job_execute(BgwJob *job);
+extern JobResult ts_bgw_job_execute(BgwJob *job);
 extern TSDLLEXPORT void ts_bgw_job_run_config_check(Oid check, int32 job_id, Jsonb *config);
 
 extern TSDLLEXPORT Datum ts_bgw_job_entrypoint(PG_FUNCTION_ARGS);
