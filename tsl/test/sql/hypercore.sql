@@ -14,7 +14,8 @@ CREATE TABLE readings(
        device int,
        temp numeric(4,1),
        humidity float,
-       jdata jsonb
+       jdata jsonb,
+       temp_far float8 generated always as (9 * temp / 5 + 32) stored
 );
 
 SELECT create_hypertable('readings', by_range('time', '1d'::interval));
@@ -117,56 +118,56 @@ SET enable_indexscan = false;
 -- Columnar scan with qual on segmentby where filtering should be
 -- turned into scankeys
 EXPLAIN (costs off, timing off, summary off)
-SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
-SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
 
 -- Show with indexscan
 SET enable_indexscan = true;
 SET enable_seqscan = false;
 SET timescaledb.enable_columnarscan = false;
 EXPLAIN (costs off, timing off, summary off)
-SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
-SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
 SET enable_indexscan = false;
 
 -- Compare the output to transparent decompression. Heap output is
 -- shown further down.
 SET timescaledb.enable_transparent_decompression TO 'hypercore';
 EXPLAIN (costs off, timing off, summary off)
-SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
-SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
 SET timescaledb.enable_transparent_decompression TO false;
 
 -- Qual on compressed column with index
 SET timescaledb.enable_columnarscan = true;
 EXPLAIN (costs off, timing off, summary off)
-SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
-SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
 
 -- With index scan
 SET enable_indexscan = true;
 SET timescaledb.enable_columnarscan = false;
 EXPLAIN (costs off, timing off, summary off)
-SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
-SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
 SET enable_indexscan = false;
 SET enable_seqscan = true;
 SET timescaledb.enable_columnarscan = true;
 
 -- With transparent decompression
 SET timescaledb.enable_transparent_decompression TO 'hypercore';
-SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
 SET timescaledb.enable_transparent_decompression TO false;
 
 -- Ordering on compressed column that has index
 SET enable_indexscan = true;
 EXPLAIN (costs off, timing off, summary off)
-SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
-SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk ORDER BY location ASC LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk ORDER BY location ASC LIMIT 5;
 
 -- Show with transparent decompression
 SET timescaledb.enable_transparent_decompression TO 'hypercore';
-SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk ORDER BY location ASC LIMIT 5;
 SET timescaledb.enable_transparent_decompression TO false;
 
 -- We should be able to change it back to heap.
@@ -201,6 +202,10 @@ SELECT count(*) FROM _timescaledb_catalog.compression_chunk_size ccs
 INNER JOIN _timescaledb_catalog.chunk c ON (c.id = ccs.chunk_id)
 WHERE format('%I.%I', c.schema_name, c.table_name)::regclass = :'chunk'::regclass;
 
+-- Check that the generated columns contain the correct data before
+-- compression.
+select temp, temp_far from :chunk where temp_far != 9 * temp / 5 + 32;
+
 SELECT compress_chunk(:'chunk');
 
 -- A new compressed chunk should be created
@@ -209,8 +214,12 @@ FROM _timescaledb_catalog.chunk c1
 INNER JOIN _timescaledb_catalog.chunk c2
 ON (c1.compressed_chunk_id = c2.id);
 
+-- Check that the generated columns contain the correct data after
+-- compression.
+select temp, temp_far from :chunk where temp_far != 9 * temp / 5 + 32;
+
 -- Show same output as first query above but for heap
-SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
 
 -- Show access method used on chunk
 SELECT c.relname, a.amname FROM pg_class c
@@ -238,6 +247,9 @@ ON (c1.compressed_chunk_id = c2.id) LIMIT 1 \gset
 SELECT range_start, range_end
 FROM timescaledb_information.chunks
 WHERE format('%I.%I', chunk_schema, chunk_name)::regclass = :'chunk'::regclass;
+
+-- Drop the generated column to make tests below easier.
+alter table readings drop column temp_far;
 
 --
 -- ADD COLUMN
@@ -285,14 +297,14 @@ EXPLAIN (verbose, costs off)
 SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
 SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
 
--- Drop column and add again
+-- Drop column and add again, with a default this time
 ALTER TABLE readings DROP COLUMN pressure;
 
 EXPLAIN (verbose, costs off)
 SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
 SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
 
-ALTER TABLE readings ADD COLUMN pressure float;
+ALTER TABLE readings ADD COLUMN pressure float default 1.0;
 
 EXPLAIN (verbose, costs off)
 SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
