@@ -650,3 +650,31 @@ SELECT create_hypertable('i7226', 'time');
 CREATE TABLE i7226_valid(time timestamptz NOT NULL,device_id int NOT NULL, FOREIGN KEY(time, device_id) REFERENCES i7226(time, device_id));
 INSERT INTO i7226 VALUES ('2024-08-29 12:00:00+00', 1);
 
+-- test foreign key constraints that have been created before hypertable conversion
+create table converted_pk(time timestamptz, id int, unique(time, id));
+create table converted_fk(time timestamptz, id int, foreign key (time, id) references converted_pk(time, id));
+
+select table_name FROM create_hypertable ('converted_pk', 'time');
+
+\set ON_ERROR_STOP 0
+-- should fail
+INSERT INTO converted_fk SELECT '2020-01-01', 1;
+\set ON_ERROR_STOP 1
+
+INSERT INTO converted_pk SELECT '2020-01-01 0:01', 1;
+
+\set ON_ERROR_STOP 0
+-- should still fail
+INSERT INTO converted_fk SELECT '2020-01-01', 1;
+\set ON_ERROR_STOP 1
+INSERT INTO converted_fk SELECT '2020-01-01 0:01', 1;
+
+\set ON_ERROR_STOP 0
+-- should fail
+DELETE FROM converted_pk WHERE time = '2020-01-01 0:01';
+TRUNCATE converted_pk;
+\set ON_ERROR_STOP 1
+
+DELETE FROM converted_fk;
+DELETE FROM converted_pk WHERE time = '2020-01-01 0:01';
+

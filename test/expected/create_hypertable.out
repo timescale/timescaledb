@@ -1054,7 +1054,6 @@ select * from tidrangescan_test where time > '2023-02-12 00:00:00+02:40'::timest
 (3 rows)
 
 drop table tidrangescan_test;
-\set ON_ERROR_STOP 0
 \set VERBOSITY default
 set client_min_messages = WARNING;
 -- test creating a hypertable from table referenced by a foreign key fails with
@@ -1065,6 +1064,13 @@ create table test_schema.fk_child(
   id int,
   foreign key (time, id) references test_schema.fk_parent(time, id)
 );
+select create_hypertable ('test_schema.fk_child', 'time');
+      create_hypertable      
+-----------------------------
+ (23,test_schema,fk_child,t)
+(1 row)
+
+\set ON_ERROR_STOP 0
 select create_hypertable ('test_schema.fk_parent', 'time');
 ERROR:  cannot have FOREIGN KEY constraints to hypertable "fk_parent"
 HINT:  Remove all FOREIGN KEY constraints to table "fk_parent" before making it a hypertable.
@@ -1088,8 +1094,8 @@ SELECT * FROM test.show_indexes('test') ORDER BY 1;
 SELECT * FROM show_chunks('test') ch, LATERAL test.show_indexes(ch) ORDER BY 1, 2;
                     ch                    |                         Index                          | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
 ------------------------------------------+--------------------------------------------------------+---------+------+--------+---------+-----------+------------
- _timescaledb_internal._hyper_23_23_chunk | _timescaledb_internal._hyper_23_23_chunk_test_val_idx  | {val}   |      | f      | f       | f         | 
- _timescaledb_internal._hyper_23_23_chunk | _timescaledb_internal._hyper_23_23_chunk_test_time_idx | {time}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_24_23_chunk | _timescaledb_internal._hyper_24_23_chunk_test_val_idx  | {val}   |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_24_23_chunk | _timescaledb_internal._hyper_24_23_chunk_test_time_idx | {time}  |      | f      | f       | f         | 
 (2 rows)
 
 DROP TABLE test;
@@ -1112,6 +1118,6 @@ SELECT * FROM test.show_indexes('test') ORDER BY 1;
 SELECT * FROM show_chunks('test') ch, LATERAL test.show_indexes(ch) ORDER BY 1, 2;
                     ch                    |                         Index                         | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
 ------------------------------------------+-------------------------------------------------------+---------+------+--------+---------+-----------+------------
- _timescaledb_internal._hyper_24_24_chunk | _timescaledb_internal._hyper_24_24_chunk_test_val_idx | {val}   |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_25_24_chunk | _timescaledb_internal._hyper_25_24_chunk_test_val_idx | {val}   |      | f      | f       | f         | 
 (1 row)
 

@@ -1319,7 +1319,10 @@ hypertable_validate_constraints(Oid relid)
 	{
 		Form_pg_constraint form = (Form_pg_constraint) GETSTRUCT(tuple);
 
-		if (form->contype == CONSTRAINT_FOREIGN)
+		/*
+		 * Hypertable <-> hypertable foreign keys are not supported.
+		 */
+		if (form->contype == CONSTRAINT_FOREIGN && ts_hypertable_relid_to_id(form->conrelid) != -1)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
 					 errmsg("cannot have FOREIGN KEY constraints to hypertable \"%s\"",
