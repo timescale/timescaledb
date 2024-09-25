@@ -632,7 +632,6 @@ select * from tidrangescan_test where time > '2023-02-12 00:00:00+02:40'::timest
 
 drop table tidrangescan_test;
 
-\set ON_ERROR_STOP 0
 \set VERBOSITY default
 set client_min_messages = WARNING;
 -- test creating a hypertable from table referenced by a foreign key fails with
@@ -643,6 +642,8 @@ create table test_schema.fk_child(
   id int,
   foreign key (time, id) references test_schema.fk_parent(time, id)
 );
+select create_hypertable ('test_schema.fk_child', 'time');
+\set ON_ERROR_STOP 0
 select create_hypertable ('test_schema.fk_parent', 'time');
 \set ON_ERROR_STOP 1
 
