@@ -11,17 +11,26 @@ This release contains performance improvements and bug fixes since
 the 2.16.1 release. We recommend that you upgrade at the next
 available opportunity.
 
+In addition, it includes these noteworthy features:
+
+* Full PostgreSQL 17 support for all existing features
+
+
+**PostgreSQL 14 deprecation announcement**
+We will continue supporting PostgreSQL 14 until April 2025. Sooner to that time, we will announce the specific version of TimescaleDB in which PostgreSQL 14 support will not be included going forward.
 
 **Features**
-* #6882: Allow DELETE on the compressed chunks without decompression.
-* #7033: Use MERGE statement on Continuous Aggregates Refresh.
+* #6882: Allow delete on the compressed chunks without decompression.
+* #7033: Use `merge` statement on continuous aggregates refresh.
 * #7126: Add functions to show the compression information.
 * #7147: Vectorize partial aggregation for `sum(int4)` with grouping on `segment by` columns.
 * #7204: Track additional extensions in telemetry.
 * #7207: Refactor the `decompress_batches_scan` functions for easier maintenance.
 * #7209: Add a function to drop the `osm` chunk.
+* #7275: Add support for the `returning` clause for `merge`.
+* #7295: Support `alter table set access method` on the hypertable.
 
-**Bugfixes**
+**Bug fixes**
 * #7187: Fix the string literal length for the `compressed_data_info` function.
 * #7191: Fix creating default indexes on chunks when migrating the data.
 * #7195: Fix the `segment by` and `order by` checks when dropping a column from a compressed hypertable.
@@ -32,6 +41,7 @@ available opportunity.
 * #7234: Release the cache after accessing the cache entry.
 * #7258: Force English in the `pg_config` command executed by `cmake` to avoid the unexpected building errors.
 * #7270: Fix the memory leak in compressed DML batch filtering.
+* #7286: Fix the index column check while searching for the index.
 
 **Thanks**
 * @MiguelTubio for reporting and fixing the Windows build error.
