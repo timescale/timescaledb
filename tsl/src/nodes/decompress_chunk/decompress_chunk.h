@@ -57,8 +57,8 @@ typedef struct DecompressChunkPath
 	bool batch_sorted_merge;
 } DecompressChunkPath;
 
-void ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
-										Chunk *chunk);
+void ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *rel, const Hypertable *ht,
+										const Chunk *chunk);
 
 extern bool ts_is_decompress_chunk_path(Path *path);
 

@@ -20,6 +20,7 @@ GRANT USAGE ON SCHEMA
       _timescaledb_internal,
       _timescaledb_config,
       timescaledb_information,
-      timescaledb_experimental
+      timescaledb_experimental,
+      _timescaledb_debug
 TO PUBLIC;
 

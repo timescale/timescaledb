@@ -169,13 +169,14 @@ typedef enum
 	TOAST_STORAGE_EXTENDED
 } CompressionStorage;
 
+typedef DecompressionIterator *(*DecompressionInitializer)(Datum, Oid);
 typedef ArrowArray *(*DecompressAllFunction)(Datum compressed, Oid element_type,
 											 MemoryContext dest_mctx);
 
 typedef struct CompressionAlgorithmDefinition
 {
-	DecompressionIterator *(*iterator_init_forward)(Datum, Oid element_type);
-	DecompressionIterator *(*iterator_init_reverse)(Datum, Oid element_type);
+	DecompressionInitializer iterator_init_forward;
+	DecompressionInitializer iterator_init_reverse;
 	DecompressAllFunction decompress_all;
 	void (*compressed_data_send)(CompressedDataHeader *, StringInfo);
 	Datum (*compressed_data_recv)(StringInfo);
@@ -268,6 +269,10 @@ typedef struct RowCompressor
 	bool first_iteration;
 	/* the heap insert options */
 	int insert_options;
+
+	/* Callback called on every flush. The ntuples argument is the number of
+	 * tuples flushed. Typically used for progress reporting. */
+	void (*on_flush)(struct RowCompressor *rowcompress, uint64 ntuples);
 } RowCompressor;
 
 /*
@@ -359,6 +364,8 @@ extern void compress_chunk_populate_sort_info_for_column(CompressionSettings *se
 														 const char *attname, AttrNumber *att_nums,
 														 Oid *sort_operator, Oid *collation,
 														 bool *nulls_first);
+extern Tuplesortstate *compression_create_tuplesort_state(CompressionSettings *settings,
+														  Relation rel);
 extern void row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor,
 								Relation uncompressed_table, Relation compressed_table,
 								int16 num_columns_in_compressed_table, bool need_bistate,

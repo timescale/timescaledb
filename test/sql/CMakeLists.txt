@@ -18,8 +18,8 @@ set(TEST_FILES
     ddl.sql
     ddl_errors.sql
     ddl_extra.sql
-    delete.sql
     debug_utils.sql
+    delete.sql
     drop_extension.sql
     drop_hypertable.sql
     drop_rename_hypertable.sql
@@ -118,7 +118,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
-  list(APPEND TEST_FILES merge.sql)
+  list(APPEND TEST_FILES merge.sql tableam_alter.sql)
   list(APPEND TEST_TEMPLATES ts_merge.sql.in)
 endif()
 

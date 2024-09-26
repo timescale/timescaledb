@@ -2,6 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 -- test conflict handling on compressed hypertables with unique constraints
+set timescaledb.debug_compression_path_info to on;
 -- test 1: single column primary key
 CREATE TABLE comp_conflicts_1(time timestamptz, device text, value float, PRIMARY KEY(time));
 SELECT table_name FROM create_hypertable('comp_conflicts_1','time');
@@ -36,6 +37,7 @@ INSERT INTO comp_conflicts_1 VALUES
 ROLLBACK;
 SELECT compress_chunk(c) AS "CHUNK" FROM show_chunks('comp_conflicts_1') c
 \gset
+INFO:  compress_chunk_tuplesort_start
 -- after compression no data should be in uncompressed chunk
 SELECT count(*) FROM ONLY :CHUNK;
  count 
@@ -47,11 +49,13 @@ SELECT count(*) FROM ONLY :CHUNK;
 -- should fail due to multiple entries with same time value
 \set ON_ERROR_STOP 0
 INSERT INTO comp_conflicts_1 VALUES ('2020-01-01','d1',0.1);
+INFO:  Using table scan with scan keys: index 0, heap 2, memory 1. 
 ERROR:  duplicate key value violates unique constraint "1_1_comp_conflicts_1_pkey"
 INSERT INTO comp_conflicts_1 VALUES
 ('2020-01-01','d1',0.1),
 ('2020-01-01','d2',0.2),
 ('2020-01-01','d3',0.3);
+INFO:  Using table scan with scan keys: index 0, heap 2, memory 1. 
 ERROR:  duplicate key value violates unique constraint "1_1_comp_conflicts_1_pkey"
 \set ON_ERROR_STOP 1
 -- no data should be in uncompressed chunk since the inserts failed and their transaction rolled back
@@ -67,6 +71,12 @@ BEGIN;
   ('2020-01-01 0:00:01','d1',0.1),
   ('2020-01-01 0:00:02','d2',0.2),
   ('2020-01-01 0:00:03','d3',0.3);
+INFO:  Using table scan with scan keys: index 0, heap 2, memory 1. 
+INFO:  Number of compressed rows fetched from table scan: 0. Number of compressed rows filtered: 0.
+INFO:  Using table scan with scan keys: index 0, heap 2, memory 1. 
+INFO:  Number of compressed rows fetched from table scan: 0. Number of compressed rows filtered: 0.
+INFO:  Using table scan with scan keys: index 0, heap 2, memory 1. 
+INFO:  Number of compressed rows fetched from table scan: 0. Number of compressed rows filtered: 0.
   -- no data should have moved into uncompressed chunk for conflict check
   -- since we used metadata optimization to guarantee uniqueness
   SELECT count(*) FROM ONLY :CHUNK;
@@ -86,9 +96,11 @@ SELECT count(*) FROM ONLY :CHUNK;
 -- should fail since it conflicts with existing row
 \set ON_ERROR_STOP 0
 INSERT INTO comp_conflicts_1 VALUES ('2020-01-01','d1',0.1);
+INFO:  Using table scan with scan keys: index 0, heap 2, memory 1. 
 ERROR:  duplicate key value violates unique constraint "1_1_comp_conflicts_1_pkey"
 \set ON_ERROR_STOP 1
 INSERT INTO comp_conflicts_1 VALUES ('2020-01-01','d1',0.1) ON CONFLICT DO NOTHING;
+INFO:  Using table scan with scan keys: index 0, heap 2, memory 1. 
 -- data should have move into uncompressed chunk for conflict check
 SELECT count(*) FROM ONLY :CHUNK;
  count 
@@ -111,6 +123,7 @@ INSERT INTO comp_conflicts_2 VALUES ('2020-01-01','d1',0.1);
 INSERT INTO comp_conflicts_2 VALUES ('2020-01-01','d2',0.2);
 SELECT compress_chunk(c) AS "CHUNK" FROM show_chunks('comp_conflicts_2') c
 \gset
+INFO:  compress_chunk_tuplesort_start
 -- after compression no data should be in uncompressed chunk
 SELECT count(*) FROM ONLY :CHUNK;
  count 
@@ -121,13 +134,16 @@ SELECT count(*) FROM ONLY :CHUNK;
 -- should fail due to multiple entries with same time, device value
 \set ON_ERROR_STOP 0
 INSERT INTO comp_conflicts_2 VALUES ('2020-01-01','d1',0.1);
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 2. 
 ERROR:  duplicate key value violates unique constraint "3_2_comp_conflicts_2_time_device_key"
 INSERT INTO comp_conflicts_2 VALUES ('2020-01-01','d2',0.2);
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 2. 
 ERROR:  duplicate key value violates unique constraint "3_2_comp_conflicts_2_time_device_key"
 INSERT INTO comp_conflicts_2 VALUES
 ('2020-01-01','d1',0.1),
 ('2020-01-01','d2',0.2),
 ('2020-01-01','d3',0.3);
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 2. 
 ERROR:  duplicate key value violates unique constraint "3_2_comp_conflicts_2_time_device_key"
 \set ON_ERROR_STOP 1
 -- no data should be in uncompressed chunk since the inserts failed and their transaction rolled back
@@ -143,6 +159,12 @@ BEGIN;
   ('2020-01-01 0:00:01','d1',0.1),
   ('2020-01-01 0:00:01','d2',0.2),
   ('2020-01-01 0:00:01','d3',0.3);
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 2. 
+INFO:  Number of compressed rows fetched from table scan: 0. Number of compressed rows filtered: 0.
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 2. 
+INFO:  Number of compressed rows fetched from table scan: 0. Number of compressed rows filtered: 0.
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 2. 
+INFO:  Number of compressed rows fetched from table scan: 0. Number of compressed rows filtered: 0.
   -- no data should have move into uncompressed chunk for conflict check
   -- since we used metadata optimization to guarantee uniqueness
   SELECT count(*) FROM ONLY :CHUNK;
@@ -162,9 +184,11 @@ SELECT count(*) FROM ONLY :CHUNK;
 -- should fail since it conflicts with existing row
 \set ON_ERROR_STOP 0
 INSERT INTO comp_conflicts_2 VALUES ('2020-01-01','d1',0.1);
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 2. 
 ERROR:  duplicate key value violates unique constraint "3_2_comp_conflicts_2_time_device_key"
 \set ON_ERROR_STOP 1
 INSERT INTO comp_conflicts_2 VALUES ('2020-01-01','d1',0.1) ON CONFLICT DO NOTHING;
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 2. 
 -- data should have move into uncompressed chunk for conflict check
 SELECT count(*) FROM ONLY :CHUNK;
  count 
@@ -188,6 +212,7 @@ INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d2', 'label', 0.2);
 INSERT INTO comp_conflicts_3 VALUES ('2020-01-01',NULL, 'label', 0.3);
 SELECT compress_chunk(c) AS "CHUNK" FROM show_chunks('comp_conflicts_3') c
 \gset
+INFO:  compress_chunk_tuplesort_start
 -- after compression no data should be in uncompressed chunk
 SELECT count(*) FROM ONLY :CHUNK;
  count 
@@ -198,23 +223,28 @@ SELECT count(*) FROM ONLY :CHUNK;
 -- should fail due to multiple entries with same time, device value
 \set ON_ERROR_STOP 0
 INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
+INFO:  Using index scan with scan keys: index 2, heap 2, memory 1. 
 ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
 INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d2', 'label', 0.2);
+INFO:  Using index scan with scan keys: index 2, heap 2, memory 1. 
 ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
 INSERT INTO comp_conflicts_3 VALUES
 ('2020-01-01','d1', 'label', 0.1),
 ('2020-01-01','d2', 'label', 0.2),
 ('2020-01-01','d3', 'label', 0.3);
+INFO:  Using index scan with scan keys: index 2, heap 2, memory 1. 
 ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
 -- should work the same without the index present
 BEGIN;
   DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 1. 
 ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
 ROLLBACK;
 BEGIN;
   DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d2', 'label', 0.2);
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 1. 
 ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
 ROLLBACK;
 BEGIN;
@@ -223,16 +253,19 @@ BEGIN;
   ('2020-01-01','d1', 'label', 0.1),
   ('2020-01-01','d2', 'label', 0.2),
   ('2020-01-01','d3', 'label', 0.3);
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 1. 
 ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
 ROLLBACK;
 -- using superuser to create indexes on compressed chunks
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+set timescaledb.debug_compression_path_info to on;
 -- ignore matching partial index
 BEGIN;
   DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
   CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, label, _ts_meta_sequence_num)
 	WHERE label LIKE 'missing';
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 1. 
 ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
 ROLLBACK;
 -- ignore matching covering index
@@ -240,20 +273,23 @@ BEGIN;
   DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
   CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device) INCLUDE (label, _ts_meta_sequence_num);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
+INFO:  Using index scan with scan keys: index 1, heap 3, memory 1. 
 ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
 ROLLBACK;
--- ignore matching but out of order segmentby index
+-- out of order segmentby index, index is still usable
 BEGIN;
   DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
   CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (label, device, _ts_meta_sequence_num);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
+INFO:  Using index scan with scan keys: index 2, heap 2, memory 1. 
 ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
 ROLLBACK;
--- ignore index with sequence number in the middle
+-- index with sequence number in the middle, index should be usable with single index scan key
 BEGIN;
   DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
   CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, _ts_meta_sequence_num, label);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
+INFO:  Using index scan with scan keys: index 1, heap 3, memory 1. 
 ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
 ROLLBACK;
 -- ignore expression index
@@ -261,6 +297,7 @@ BEGIN;
   DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
   CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, lower(label), _ts_meta_sequence_num);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 1. 
 ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
 ROLLBACK;
 -- ignore non-btree index
@@ -268,10 +305,12 @@ BEGIN;
   DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
   CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk USING brin (device, label, _ts_meta_sequence_num);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 1. 
 ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
 ROLLBACK;
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+set timescaledb.debug_compression_path_info to on;
 -- no data should be in uncompressed chunk since the inserts failed and their transaction rolled back
 SELECT count(*) FROM ONLY :CHUNK;
  count 
@@ -308,6 +347,8 @@ ROLLBACK;
 -- should succeed since there are no conflicts in the values
 BEGIN;
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01 0:00:01','d1', 'label', 0.1);
+INFO:  Using index scan with scan keys: index 2, heap 2, memory 1. 
+INFO:  Number of compressed rows fetched from index: 1. Number of compressed rows filtered by heap filters: 1.
   -- no data should have move into uncompressed chunk for conflict check
   -- since we used metadata optimization to guarantee uniqueness
   SELECT count(*) FROM ONLY :CHUNK;
@@ -322,6 +363,8 @@ ROLLBACK;
 BEGIN;
   DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01 0:00:01','d1', 'label', 0.1);
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 1. 
+INFO:  Number of compressed rows fetched from table scan: 0. Number of compressed rows filtered: 0.
   -- no data should have move into uncompressed chunk for conflict check
   -- since we used metadata optimization to guarantee uniqueness
   SELECT count(*) FROM ONLY :CHUNK;
@@ -336,6 +379,12 @@ BEGIN;
   ('2020-01-01 0:00:01','d1', 'label', 0.1),
   ('2020-01-01 0:00:01','d2', 'label', 0.2),
   ('2020-01-01 0:00:01','d3', 'label', 0.3);
+INFO:  Using index scan with scan keys: index 2, heap 2, memory 1. 
+INFO:  Number of compressed rows fetched from index: 1. Number of compressed rows filtered by heap filters: 1.
+INFO:  Using index scan with scan keys: index 2, heap 2, memory 1. 
+INFO:  Number of compressed rows fetched from index: 1. Number of compressed rows filtered by heap filters: 1.
+INFO:  Using index scan with scan keys: index 2, heap 2, memory 1. 
+INFO:  Number of compressed rows fetched from index: 0. Number of compressed rows filtered by heap filters: 0.
   -- no data for should have move into uncompressed chunk for conflict check
   -- since we used metadata optimization to guarantee uniqueness
   SELECT count(*) FROM ONLY :CHUNK;
@@ -352,6 +401,12 @@ BEGIN;
   ('2020-01-01 0:00:01','d1', 'label', 0.1),
   ('2020-01-01 0:00:01','d2', 'label', 0.2),
   ('2020-01-01 0:00:01','d3', 'label', 0.3);
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 1. 
+INFO:  Number of compressed rows fetched from table scan: 0. Number of compressed rows filtered: 0.
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 1. 
+INFO:  Number of compressed rows fetched from table scan: 0. Number of compressed rows filtered: 0.
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 1. 
+INFO:  Number of compressed rows fetched from table scan: 0. Number of compressed rows filtered: 0.
   -- no data for should have move into uncompressed chunk for conflict check
   -- since we used metadata optimization to guarantee uniqueness
   SELECT count(*) FROM ONLY :CHUNK;
@@ -363,6 +418,8 @@ BEGIN;
 ROLLBACK;
 BEGIN;
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01 0:00:01','d3', 'label', 0.2);
+INFO:  Using index scan with scan keys: index 2, heap 2, memory 1. 
+INFO:  Number of compressed rows fetched from index: 0. Number of compressed rows filtered by heap filters: 0.
   -- count = 1 since no data should have move into uncompressed chunk for conflict check since d3 is new segment
   SELECT count(*) FROM ONLY :CHUNK;
  count 
@@ -381,9 +438,11 @@ SELECT count(*) FROM ONLY :CHUNK;
 -- should fail since it conflicts with existing row
 \set ON_ERROR_STOP 0
 INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
+INFO:  Using index scan with scan keys: index 2, heap 2, memory 1. 
 ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
 \set ON_ERROR_STOP 1
 INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1) ON CONFLICT DO NOTHING;
+INFO:  Using index scan with scan keys: index 2, heap 2, memory 1. 
 -- data should have move into uncompressed chunk for conflict check
 SELECT count(*) FROM ONLY :CHUNK;
  count 
@@ -406,6 +465,7 @@ INSERT INTO comp_conflicts_4 VALUES ('2020-01-01','d2',0.2);
 INSERT INTO comp_conflicts_4 VALUES ('2020-01-01',NULL,0.3);
 SELECT compress_chunk(c) AS "CHUNK" FROM show_chunks('comp_conflicts_4') c
 \gset
+INFO:  compress_chunk_tuplesort_start
 -- after compression no data should be in uncompressed chunk
 SELECT count(*) FROM ONLY :CHUNK;
  count 
@@ -429,6 +489,8 @@ ROLLBACK;
 -- should succeed since there are no conflicts in the values
 BEGIN;
   INSERT INTO comp_conflicts_4 VALUES ('2020-01-01 2:00:01','d1',0.1);
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 2. 
+INFO:  Number of compressed rows fetched from table scan: 0. Number of compressed rows filtered: 0.
   -- no data should have move into uncompressed chunk for conflict check
   -- since we used metadata optimization to guarantee uniqueness
   SELECT count(*) FROM ONLY :CHUNK;
@@ -443,6 +505,12 @@ BEGIN;
   ('2020-01-01 2:00:01','d1',0.1),
   ('2020-01-01 2:00:01','d2',0.2),
   ('2020-01-01 2:00:01','d3',0.3);
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 2. 
+INFO:  Number of compressed rows fetched from table scan: 0. Number of compressed rows filtered: 0.
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 2. 
+INFO:  Number of compressed rows fetched from table scan: 0. Number of compressed rows filtered: 0.
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 2. 
+INFO:  Number of compressed rows fetched from table scan: 0. Number of compressed rows filtered: 0.
   -- no data for should have move into uncompressed chunk for conflict check
   -- since we used metadata optimization to guarantee uniqueness
   SELECT count(*) FROM ONLY :CHUNK;
@@ -454,6 +522,8 @@ BEGIN;
 ROLLBACK;
 BEGIN;
   INSERT INTO comp_conflicts_4 VALUES ('2020-01-01 0:00:01','d3',0.2);
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 2. 
+INFO:  Number of compressed rows fetched from table scan: 0. Number of compressed rows filtered: 0.
   -- count = 1 since no data should have move into uncompressed chunk for conflict check since d3 is new segment
   SELECT count(*) FROM ONLY :CHUNK;
  count 
@@ -472,6 +542,7 @@ SELECT count(*) FROM ONLY :CHUNK;
 -- should fail since it conflicts with existing row
 \set ON_ERROR_STOP 0
 INSERT INTO comp_conflicts_4 VALUES ('2020-01-01','d1',0.1);
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 2. 
 ERROR:  duplicate key value violates unique constraint "7_4_comp_conflicts_4_time_device_key"
 \set ON_ERROR_STOP 1
 -- data not should have move into uncompressed chunk for conflict check
@@ -482,7 +553,9 @@ SELECT count(*) FROM ONLY :CHUNK;
 (1 row)
 
 INSERT INTO comp_conflicts_4 VALUES ('2020-01-01 0:00:01','d1',0.1) ON CONFLICT DO NOTHING;
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 2. 
 INSERT INTO comp_conflicts_4 VALUES ('2020-01-01 0:30:00','d1',0.1) ON CONFLICT DO NOTHING;
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 2. 
 -- data should have move into uncompressed chunk for conflict check
 -- 2 segments (count = 2000)
 SELECT count(*) FROM ONLY :CHUNK;
@@ -538,6 +611,9 @@ ALTER TABLE compressed_ht SET (
 );
 NOTICE:  default order by for hypertable "compressed_ht" is set to ""time" DESC"
 SELECT COMPRESS_CHUNK(SHOW_CHUNKS('compressed_ht'));
+INFO:  compress_chunk_tuplesort_start
+INFO:  compress_chunk_tuplesort_start
+INFO:  compress_chunk_tuplesort_start
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_9_9_chunk
@@ -567,6 +643,8 @@ SELECT COUNT(*) FROM compressed_ht WHERE name = 'ON CONFLICT DO UPDATE';
 INSERT INTO compressed_ht VALUES ('2017-12-28 01:10:28.192199+05:30', '1', 0.876, 4.123, 'new insert row')
   ON conflict(sensor_id, time)
 DO UPDATE SET sensor_id = excluded.sensor_id , name = 'ON CONFLICT DO UPDATE';
+INFO:  Using index scan with scan keys: index 1, heap 2, memory 1. 
+INFO:  Number of compressed rows fetched from index: 1. Number of compressed rows filtered by heap filters: 0.
 -- should report 1 row
 SELECT COUNT(*) FROM compressed_ht WHERE name = 'ON CONFLICT DO UPDATE';
  count 
@@ -589,6 +667,8 @@ WHERE hypertable_name = 'compressed_ht' ORDER BY chunk_name;
 INSERT INTO compressed_ht VALUES ('2022-01-24 01:10:28.192199+05:30', '6', 0.876, 4.123, 'new insert row')
   ON conflict(sensor_id, time)
 DO UPDATE SET sensor_id = excluded.sensor_id , name = 'ON CONFLICT DO UPDATE' RETURNING *;
+INFO:  Using index scan with scan keys: index 1, heap 2, memory 1. 
+INFO:  Number of compressed rows fetched from index: 1. Number of compressed rows filtered by heap filters: 0.
                 time                 | sensor_id |  cpu  | temperature |         name          
 -------------------------------------+-----------+-------+-------------+-----------------------
  Sun Jan 23 11:40:28.192199 2022 PST |         6 | 0.876 |       4.123 | ON CONFLICT DO UPDATE

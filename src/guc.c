@@ -88,6 +88,7 @@ static char *ts_guc_default_orderby_fn = NULL;
 TSDLLEXPORT bool ts_guc_enable_job_execution_logging = false;
 bool ts_guc_enable_tss_callbacks = true;
 TSDLLEXPORT bool ts_guc_enable_delete_after_compression = false;
+TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh = false;
 
 /* default value of ts_guc_max_open_chunks_per_insert and ts_guc_max_cached_chunks_per_hypertable
  * will be set as their respective boot-value when the GUC mechanism starts up */
@@ -566,6 +567,17 @@ _guc_init(void)
 							 "Enable constifying cagg watermark for real-time caggs",
 							 &ts_guc_enable_cagg_watermark_constify,
 							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_merge_on_cagg_refresh"),
+							 "Enable MERGE statement on cagg refresh",
+							 "Enable MERGE statement on cagg refresh",
+							 &ts_guc_enable_merge_on_cagg_refresh,
+							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,

@@ -1,6 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+SET timezone TO PST8PDT;
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_internal.alter_job_set_hypertable_id(0,0);
 WARNING:  function _timescaledb_internal.alter_job_set_hypertable_id(integer,regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.

@@ -3,6 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 -- test conflict handling on compressed hypertables with unique constraints
+set timescaledb.debug_compression_path_info to on;
 
 -- test 1: single column primary key
 CREATE TABLE comp_conflicts_1(time timestamptz, device text, value float, PRIMARY KEY(time));
@@ -177,6 +178,7 @@ ROLLBACK;
 
 -- using superuser to create indexes on compressed chunks
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+set timescaledb.debug_compression_path_info to on;
 -- ignore matching partial index
 BEGIN;
   DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
@@ -192,14 +194,14 @@ BEGIN;
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 
--- ignore matching but out of order segmentby index
+-- out of order segmentby index, index is still usable
 BEGIN;
   DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
   CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (label, device, _ts_meta_sequence_num);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 
--- ignore index with sequence number in the middle
+-- index with sequence number in the middle, index should be usable with single index scan key
 BEGIN;
   DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
   CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, _ts_meta_sequence_num, label);
@@ -221,6 +223,7 @@ BEGIN;
 ROLLBACK;
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+set timescaledb.debug_compression_path_info to on;
 
 -- no data should be in uncompressed chunk since the inserts failed and their transaction rolled back
 SELECT count(*) FROM ONLY :CHUNK;

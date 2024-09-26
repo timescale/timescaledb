@@ -70,8 +70,8 @@ compressor_for_type(Oid type)
 	return definitions[algorithm].compressor_for_type(type);
 }
 
-DecompressionIterator *(*tsl_get_decompression_iterator_init(CompressionAlgorithm algorithm,
-															 bool reverse))(Datum, Oid)
+DecompressionInitializer
+tsl_get_decompression_iterator_init(CompressionAlgorithm algorithm, bool reverse)
 {
 	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
@@ -535,18 +535,13 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	return cstat;
 }
 
-static Tuplesortstate *
-compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
+Tuplesortstate *
+compression_create_tuplesort_state(CompressionSettings *settings, Relation rel)
 {
-	TupleDesc tupDesc = RelationGetDescr(in_rel);
-	Tuplesortstate *tuplesortstate;
-	TableScanDesc scan;
-	TupleTableSlot *slot;
-
+	TupleDesc tupdesc = RelationGetDescr(rel);
 	int num_segmentby = ts_array_length(settings->fd.segmentby);
 	int num_orderby = ts_array_length(settings->fd.orderby);
 	int n_keys = num_segmentby + num_orderby;
-
 	AttrNumber *sort_keys = palloc(sizeof(*sort_keys) * n_keys);
 	Oid *sort_operators = palloc(sizeof(*sort_operators) * n_keys);
 	Oid *sort_collations = palloc(sizeof(*sort_collations) * n_keys);
@@ -568,7 +563,7 @@ compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
 			attname = ts_array_get_element_text(settings->fd.orderby, position);
 		}
 		compress_chunk_populate_sort_info_for_column(settings,
-													 RelationGetRelid(in_rel),
+													 RelationGetRelid(rel),
 													 attname,
 													 &sort_keys[n],
 													 &sort_operators[n],
@@ -576,16 +571,25 @@ compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
 													 &nulls_first[n]);
 	}
 
-	tuplesortstate = tuplesort_begin_heap(tupDesc,
-										  n_keys,
-										  sort_keys,
-										  sort_operators,
-										  sort_collations,
-										  nulls_first,
-										  maintenance_work_mem,
-										  NULL,
-										  false /*=randomAccess*/);
+	return tuplesort_begin_heap(tupdesc,
+								n_keys,
+								sort_keys,
+								sort_operators,
+								sort_collations,
+								nulls_first,
+								maintenance_work_mem,
+								NULL,
+								false /*=randomAccess*/);
+}
 
+static Tuplesortstate *
+compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
+{
+	Tuplesortstate *tuplesortstate;
+	TableScanDesc scan;
+	TupleTableSlot *slot;
+
+	tuplesortstate = compression_create_tuplesort_state(settings, in_rel);
 	scan = table_beginscan(in_rel, GetLatestSnapshot(), 0, (ScanKey) NULL);
 	slot = table_slot_create(in_rel, NULL);
 
@@ -1323,6 +1327,11 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 		row_compressor->compressed_values[compressed_col] = 0;
 		row_compressor->compressed_is_null[compressed_col] = true;
 	}
+
+	if (NULL != row_compressor->on_flush)
+		row_compressor->on_flush(row_compressor,
+								 row_compressor->rows_compressed_into_current_value);
+
 	row_compressor->rowcnt_pre_compression += row_compressor->rows_compressed_into_current_value;
 	row_compressor->num_compressed_rows++;
 	row_compressor->rows_compressed_into_current_value = 0;
@@ -1471,6 +1480,7 @@ build_decompressor(Relation in_rel, Relation out_rel)
 void
 row_decompressor_reset(RowDecompressor *decompressor)
 {
+	MemoryContextReset(decompressor->per_compressed_row_ctx);
 	decompressor->unprocessed_tuples = 0;
 	decompressor->batches_decompressed = 0;
 	decompressor->tuples_decompressed = 0;
@@ -1805,8 +1815,6 @@ row_decompressor_decompress_row_to_table(RowDecompressor *decompressor)
 	}
 
 	MemoryContextSwitchTo(old_ctx);
-	MemoryContextReset(decompressor->per_compressed_row_ctx);
-
 	row_decompressor_reset(decompressor);
 
 	return n_batch_rows;
@@ -1826,8 +1834,6 @@ row_decompressor_decompress_row_to_tuplesort(RowDecompressor *decompressor,
 	}
 
 	MemoryContextSwitchTo(old_ctx);
-	MemoryContextReset(decompressor->per_compressed_row_ctx);
-
 	row_decompressor_reset(decompressor);
 }
 
@@ -2010,7 +2016,7 @@ enum Anum_compressed_info
 extern Datum
 tsl_compressed_data_info(PG_FUNCTION_ARGS)
 {
-	const CompressedDataHeader *header = (CompressedDataHeader *) PG_GETARG_VARLENA_P(0);
+	const CompressedDataHeader *header = get_compressed_data_header(PG_GETARG_DATUM(0));
 	TupleDesc tupdesc;
 	HeapTuple tuple;
 	bool has_nulls = false;
@@ -2088,7 +2094,7 @@ compression_get_default_algorithm(Oid typeoid)
 
 		default:
 		{
-			/* use dictitionary if possible, otherwise use array */
+			/* use dictionary if possible, otherwise use array */
 			TypeCacheEntry *tentry =
 				lookup_type_cache(typeoid, TYPECACHE_EQ_OPR_FINFO | TYPECACHE_HASH_PROC_FINFO);
 			if (tentry->hash_proc_finfo.fn_addr == NULL || tentry->eq_opr_finfo.fn_addr == NULL)

@@ -4,6 +4,8 @@
 
 \set VERBOSITY default
 
+SET timezone TO PST8PDT;
+
 CREATE TABLE conditions(
   day TIMESTAMPTZ NOT NULL,
   city text NOT NULL,
@@ -576,6 +578,7 @@ SELECT * FROM conditions_by_day ORDER BY bucket, device, location;
 
 -- JOIN with a foreign table
 \c :TEST_DBNAME :ROLE_SUPERUSER
+
 SELECT current_setting('port') AS "PGPORT", current_database() AS "PGDATABASE" \gset
 CREATE EXTENSION postgres_fdw;
 CREATE SERVER loopback
@@ -589,6 +592,8 @@ ALTER USER MAPPING FOR :ROLE_DEFAULT_PERM_USER
    OPTIONS (ADD password_required 'false');
 GRANT USAGE ON FOREIGN SERVER loopback TO :ROLE_DEFAULT_PERM_USER;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER;
+
+SET timezone TO PST8PDT;
 
 CREATE FOREIGN TABLE devices_fdw (
    device_id int not null,

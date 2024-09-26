@@ -66,6 +66,7 @@ typedef struct Chunk
 	char relkind;
 	Oid table_id;
 	Oid hypertable_relid;
+	Oid amoid; /* Table access method used by chunk */
 
 	/*
 	 * The hypercube defines the chunks position in the N-dimensional space.

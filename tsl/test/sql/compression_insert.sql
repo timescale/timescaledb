@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+SET timezone TO PST8PDT;
+
 \set PREFIX 'EXPLAIN (costs off, summary off, timing off) '
 \set ANALYZE  'EXPLAIN (analyze, costs off, summary off, timing off) '
 CREATE TABLE test1 (timec timestamptz , i integer ,

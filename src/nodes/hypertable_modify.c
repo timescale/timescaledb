@@ -691,6 +691,31 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 		if (pstate->ps_ExprContext)
 			ResetExprContext(pstate->ps_ExprContext);
 
+#if PG17_GE
+		/*
+		 * If there is a pending MERGE ... WHEN NOT MATCHED [BY TARGET] action
+		 * to execute, do so now --- see the comments in ExecMerge().
+		 */
+		if (node->mt_merge_pending_not_matched != NULL)
+		{
+			context.planSlot = node->mt_merge_pending_not_matched;
+
+			slot = ht_ExecMergeNotMatched(&context, node->resultRelInfo, cds, node->canSetTag);
+
+			/* Clear the pending action */
+			node->mt_merge_pending_not_matched = NULL;
+
+			/*
+			 * If we got a RETURNING result, return it to the caller.  We'll
+			 * continue the work on next call.
+			 */
+			if (slot)
+				return slot;
+
+			continue; /* continue with the next tuple */
+		}
+#endif
+
 		context.planSlot = ExecProcNode(subplanstate);
 
 		if (cds && cds->rri && operation == CMD_INSERT && cds->skip_current_tuple)
@@ -736,8 +761,15 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 				if (operation == CMD_MERGE)
 				{
 					EvalPlanQualSetSlot(&node->mt_epqstate, context.planSlot);
-					ht_ExecMerge(&context, node->resultRelInfo, cds, NULL, node->canSetTag);
-					continue; /* no RETURNING support yet */
+					slot = ht_ExecMerge(&context,
+										node->resultRelInfo,
+										cds,
+										NULL,
+										NULL,
+										node->canSetTag);
+					if (slot)
+						return slot;
+					continue;
 				}
 #endif
 				elog(ERROR, "tableoid is NULL");
@@ -811,8 +843,15 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 					if (operation == CMD_MERGE)
 					{
 						EvalPlanQualSetSlot(&node->mt_epqstate, context.planSlot);
-						ht_ExecMerge(&context, node->resultRelInfo, cds, NULL, node->canSetTag);
-						continue; /* no RETURNING support yet */
+						slot = ht_ExecMerge(&context,
+											node->resultRelInfo,
+											cds,
+											NULL,
+											NULL,
+											node->canSetTag);
+						if (slot)
+							return slot;
+						continue;
 					}
 #endif
 					elog(ERROR, "ctid is NULL");
@@ -842,9 +881,29 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 			else if (AttributeNumberIsValid(resultRelInfo->ri_RowIdAttNo))
 			{
 				datum = ExecGetJunkAttribute(slot, resultRelInfo->ri_RowIdAttNo, &isNull);
+#if PG17_GE
+				if (isNull)
+				{
+					if (operation == CMD_MERGE)
+					{
+						EvalPlanQualSetSlot(&node->mt_epqstate, context.planSlot);
+						slot = ht_ExecMerge(&context,
+											node->resultRelInfo,
+											cds,
+											NULL,
+											NULL,
+											node->canSetTag);
+						if (slot)
+							return slot;
+						continue;
+					}
+					elog(ERROR, "wholerow is NULL");
+				}
+#else
 				/* shouldn't ever get a null result... */
 				if (isNull)
 					elog(ERROR, "wholerow is NULL");
+#endif
 
 				oldtupdata.t_data = DatumGetHeapTupleHeader(datum);
 				oldtupdata.t_len = HeapTupleHeaderGetDatumLength(oldtupdata.t_data);
@@ -918,7 +977,8 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 				break;
 #if PG15_GE
 			case CMD_MERGE:
-				slot = ht_ExecMerge(&context, resultRelInfo, cds, tupleid, node->canSetTag);
+				slot =
+					ht_ExecMerge(&context, resultRelInfo, cds, tupleid, oldtuple, node->canSetTag);
 				break;
 #endif
 			default:
@@ -1548,7 +1608,12 @@ ExecInsert(ModifyTableContext *context, ResultRelInfo *resultRelInfo, TupleTable
 		 */
 		if (mtstate->operation == CMD_UPDATE)
 			wco_kind = WCO_RLS_UPDATE_CHECK;
-#if PG15_GE
+#if PG17_GE
+		else if (mtstate->operation == CMD_MERGE)
+			wco_kind = (mtstate->mt_merge_action->mas_action->commandType == CMD_UPDATE) ?
+						   WCO_RLS_UPDATE_CHECK :
+						   WCO_RLS_INSERT_CHECK;
+#elif PG15_GE
 		else if (mtstate->operation == CMD_MERGE)
 			wco_kind = (context->relaction->mas_action->commandType == CMD_UPDATE) ?
 						   WCO_RLS_UPDATE_CHECK :

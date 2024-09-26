@@ -9,6 +9,7 @@
 #include <commands/extension.h>
 #include <foreign/fdwapi.h>
 #include <nodes/nodeFuncs.h>
+#include <nodes/parsenodes.h>
 #include <optimizer/paths.h>
 #include <parser/parsetree.h>
 
@@ -97,41 +98,59 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 	}
 }
 
+/*
+ * Check if a chunk should be decompressed via a DecompressChunk plan.
+ *
+ * Check first that it is a compressed chunk. Then, decompress unless it is
+ * SELECT * FROM ONLY <chunk>. We check if it is the ONLY case by calling
+ * ts_rte_is_marked_for_expansion. Respecting ONLY here is important to not
+ * break postgres tools like pg_dump.
+ */
+static inline bool
+use_decompress_chunk_node(const RelOptInfo *rel, const RangeTblEntry *rte, const Chunk *chunk)
+{
+	return ts_guc_enable_transparent_decompression &&
+		   /* Check that the chunk is actually compressed */
+		   chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID &&
+		   /* Check that it is _not_ SELECT FROM ONLY <chunk> */
+		   (rel->reloptkind != RELOPT_BASEREL || ts_rte_is_marked_for_expansion(rte));
+}
+
 void
 tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte,
 						   Hypertable *ht)
 {
-	/* We can get here via query on hypertable in that case reloptkind
-	 * will be RELOPT_OTHER_MEMBER_REL or via direct query on chunk
-	 * in that case reloptkind will be RELOPT_BASEREL.
-	 * If we get here via SELECT * FROM <chunk>, we decompress the chunk,
-	 * unless the query was SELECT * FROM ONLY <chunk>.
-	 * We check if it is the ONLY case by calling ts_rte_is_marked_for_expansion.
-	 * Respecting ONLY here is important to not break postgres tools like pg_dump.
-	 */
-	TimescaleDBPrivate *fdw_private = (TimescaleDBPrivate *) rel->fdw_private;
-	if (ts_guc_enable_transparent_decompression && ht &&
-		(rel->reloptkind == RELOPT_OTHER_MEMBER_REL ||
-		 (rel->reloptkind == RELOPT_BASEREL && ts_rte_is_marked_for_expansion(rte))) &&
-		TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
-	{
-		if (fdw_private->cached_chunk_struct == NULL)
-		{
-			/*
-			 * We can not have the cached Chunk struct,
-			 * 1) if it was a direct query on the chunk;
-			 * 2) if it is not a SELECT QUERY.
-			 * Caching is done by our hypertable expansion, which doesn't run in
-			 * these cases.
-			 */
-			fdw_private->cached_chunk_struct =
-				ts_chunk_get_by_relid(rte->relid, /* fail_if_not_found = */ true);
-		}
+	/* Only interested in queries on relations that are part of hypertables
+	 * with compression enabled, so quick exit if not this case. */
+	if (ht == NULL || !TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+		return;
 
-		if (fdw_private->cached_chunk_struct->fd.compressed_chunk_id != INVALID_CHUNK_ID)
-		{
-			ts_decompress_chunk_generate_paths(root, rel, ht, fdw_private->cached_chunk_struct);
-		}
+	/*
+	 * For a chunk, we can get here via a query on the hypertable that expands
+	 * to the chunk or by direct query on the chunk. In the former case,
+	 * reloptkind will be RELOPT_OTHER_MEMBER_REL (nember of hypertable) or in
+	 * the latter case reloptkind will be RELOPT_BASEREL (standalone rel).
+	 *
+	 * These two cases are checked in ts_planner_chunk_fetch().
+	 */
+	const Chunk *chunk = ts_planner_chunk_fetch(root, rel);
+
+	if (chunk == NULL)
+		return;
+
+	if (use_decompress_chunk_node(rel, rte, chunk))
+	{
+		ts_decompress_chunk_generate_paths(root, rel, ht, chunk);
+	}
+	/*
+	 * If using our own access method on the chunk, we might want to add
+	 * alternative paths. This should not be compatible with transparent
+	 * decompression, so only add if we didn't add decompression paths above.
+	 */
+	else if (ts_is_hypercore_am(chunk->amoid))
+	{
+		/* To be implemented */
+		Assert(false);
 	}
 }
 

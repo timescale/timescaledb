@@ -187,16 +187,15 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 		TsRelType reltype = ts_classify_relation(root, child_rel, &ht);
 		if (reltype == TS_REL_CHUNK_CHILD && !TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
 		{
-			TimescaleDBPrivate *fdw_private = (TimescaleDBPrivate *) child_rel->fdw_private;
+			const Chunk *chunk = ts_planner_chunk_fetch(root, child_rel);
 
 			/*
 			 * This function is called only in tandem with our own hypertable
 			 * expansion, so the Chunk struct must be initialized already.
 			 */
-			Assert(fdw_private->cached_chunk_struct != NULL);
+			Assert(chunk != NULL);
 
-			if (!ts_chunk_is_partial(fdw_private->cached_chunk_struct) &&
-				ts_chunk_is_compressed(fdw_private->cached_chunk_struct))
+			if (!ts_chunk_is_partial(chunk) && ts_chunk_is_compressed(chunk))
 			{
 				child_rel->indexlist = NIL;
 			}

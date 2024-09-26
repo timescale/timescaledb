@@ -606,6 +606,8 @@ WHERE user_view_name = 'mat_drop_test'
 \gset
 
 SET client_min_messages TO NOTICE;
+SET timezone TO PST8PDT;
+
 CALL refresh_continuous_aggregate('mat_drop_test', NULL, NULL);
 
 --force invalidation

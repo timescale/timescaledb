@@ -322,9 +322,11 @@ build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel, Relation 
 			AttrNumber idx_attnum = AttrOffsetGetAttrNumber(i);
 			AttrNumber in_attnum = index_rel->rd_index->indkey.values[i];
 			const NameData *attname = attnumAttName(in_rel, in_attnum);
+			AttrNumber column_attno =
+				get_attnum(out_rel->rd_id, NameStr(*attname)) - FirstLowInvalidHeapAttributeNumber;
 
 			/* Make sure we find columns in key columns in order to select the right index */
-			if (!bms_is_member(get_attnum(out_rel->rd_id, NameStr(*attname)), key_columns))
+			if (!bms_is_member(column_attno, key_columns))
 			{
 				break;
 			}
@@ -335,6 +337,7 @@ build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel, Relation 
 
 			if (isnull)
 			{
+				*index_columns = bms_add_member(*index_columns, column_attno);
 				ScanKeyEntryInitialize(&scankeys[(*num_scan_keys)++],
 									   SK_ISNULL | SK_SEARCHNULL,
 									   idx_attnum,
@@ -375,6 +378,7 @@ build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel, Relation 
 			Ensure(OidIsValid(opcode),
 				   "no opcode found for column operator of a hypertable column");
 
+			*index_columns = bms_add_member(*index_columns, column_attno);
 			ScanKeyEntryInitialize(&scankeys[(*num_scan_keys)++],
 								   0, /* flags */
 								   idx_attnum,
