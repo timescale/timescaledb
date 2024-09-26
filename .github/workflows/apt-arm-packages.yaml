@@ -19,8 +19,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [ "debian:10-slim", "debian:11-slim", "debian:12-slim", "ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04" ]
-        pg: [ 14, 15, 16 ]
+        image: [ "debian:12-slim" ]
+        pg: [ 16 ]
+#        image: [ "debian:10-slim", "debian:11-slim", "debian:12-slim", "ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04" ]
+#        pg: [ 14, 15, 16 ]
 
     steps:
     - name: Setup emulation
@@ -45,7 +47,15 @@ jobs:
         cat <<"EOF" | docker exec -i arm_container bash
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             timescaledb-2-postgresql-${{ matrix.pg }} timescaledb-tools
-          timescaledb-tune --quiet --yes
+          echo "versions"
+          timescaledb-tune --version
+          pg_config --version
+        EOF
+
+    - name: Debug
+      run: |
+        cat <<"EOF" | docker exec -i arm_container bash
+          timescaledb-tune --yes
         EOF
 
     - name: List available versions
