@@ -10,7 +10,7 @@
 
 #include <nodes/execnodes.h>
 
-#include "functions.h"
+#include "function/functions.h"
 #include "grouping_policy.h"
 
 typedef struct
