@@ -55,7 +55,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
-      pg16_latest: ${{ steps.setter.outputs.PG16_LATEST }}
     steps:
     - name: Checkout source code
       uses: actions/checkout@v4

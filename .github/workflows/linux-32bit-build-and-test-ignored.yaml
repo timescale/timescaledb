@@ -39,7 +39,7 @@ jobs:
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
         build_type: [ Debug ]
         include:
-          - pg: ${{ fromJson(needs.config.outputs.pg16_latest) }}
+          - pg: ${{ fromJson(needs.config.outputs.pg17_latest) }}
             build_type: Debug
     steps:
       - run: |
