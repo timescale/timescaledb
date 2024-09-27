@@ -92,6 +92,7 @@ extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_vector_agg;
 #endif
 
 extern TSDLLEXPORT bool ts_guc_debug_compression_path_info;
+extern TSDLLEXPORT bool ts_guc_enable_rowlevel_compression_locking;
 
 extern TSDLLEXPORT bool ts_guc_debug_require_batch_sorted_merge;
 

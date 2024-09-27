@@ -266,8 +266,16 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	 * a RowExclusive lock, and let other operations read and write this table
 	 * as we work. However, we currently compress each table as a oneshot, so
 	 * we're taking the stricter lock to prevent accidents.
+	 *
+	 * Putting RowExclusiveMode behind a GUC so we can try this out with
+	 * rollups during compression.
 	 */
-	Relation out_rel = relation_open(out_table, ExclusiveLock);
+	int out_rel_lockmode = ExclusiveLock;
+	if (ts_guc_enable_rowlevel_compression_locking)
+	{
+		out_rel_lockmode = RowExclusiveLock;
+	}
+	Relation out_rel = relation_open(out_table, out_rel_lockmode);
 
 	/* Sanity check we are dealing with relations */
 	Ensure(in_rel->rd_rel->relkind == RELKIND_RELATION, "compress_chunk called on non-relation");
