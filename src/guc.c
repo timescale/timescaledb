@@ -125,6 +125,7 @@ DebugRequireOption ts_guc_debug_require_vector_agg = DRO_Allow;
 #endif
 
 bool ts_guc_debug_compression_path_info = false;
+bool ts_guc_enable_rowlevel_compression_locking = false;
 
 static bool ts_guc_enable_hypertable_create = true;
 static bool ts_guc_enable_hypertable_compression = true;
@@ -825,6 +826,17 @@ _guc_init(void)
 							 /* short_desc= */ "show various compression-related debug info",
 							 /* long_desc= */ "this is for debugging/information purposes",
 							 /* valueAddr= */ &ts_guc_debug_compression_path_info,
+							 /* bootValue= */ false,
+							 /* context= */ PGC_USERSET,
+							 /* flags= */ 0,
+							 /* check_hook= */ NULL,
+							 /* assign_hook= */ NULL,
+							 /* show_hook= */ NULL);
+
+	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("enable_rowlevel_compression_locking"),
+							 /* short_desc= */ "Use rowlevel locking during compression",
+							 /* long_desc= */ "Use only if you know what you are doing",
+							 /* valueAddr= */ &ts_guc_enable_rowlevel_compression_locking,
 							 /* bootValue= */ false,
 							 /* context= */ PGC_USERSET,
 							 /* flags= */ 0,

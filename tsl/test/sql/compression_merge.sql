@@ -307,3 +307,21 @@ BEGIN;
   -- should be rolled up
   SELECT hypertable_name, range_start, range_end FROM timescaledb_information.chunks WHERE hypertable_name = 'test9' ORDER BY 2;
 ROLLBACK;
+
+-- Test RowExclusiveLock on compressed chunk during chunk rollup using a GUC
+CREATE TABLE test10 ("Time" timestamptz, i integer, value integer);
+SELECT table_name from create_hypertable('test10', 'Time', chunk_time_interval=> INTERVAL '1 hour');
+
+INSERT INTO test10
+SELECT t, i, gen_rand_minstd()
+FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-02 3:59', '10 minutes') t
+CROSS JOIN generate_series(1, 3, 1) i;
+
+ALTER TABLE test10 set (timescaledb.compress, timescaledb.compress_segmentby='i', timescaledb.compress_orderby='"Time"', timescaledb.compress_chunk_time_interval='2 hours');
+SHOW timescaledb.enable_rowlevel_compression_locking;
+SET timescaledb.enable_rowlevel_compression_locking to on;
+
+SELECT compress_chunk(show_chunks('test10'));
+
+RESET timescaledb.enable_rowlevel_compression_locking;
+DROP TABLE test10;
