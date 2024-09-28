@@ -322,41 +322,44 @@ SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t 
 
 :PREFIX
 SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
-                                                                              QUERY PLAN                                                                               
------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
  Limit (actual rows=2 loops=1)
-   Output: testtable2.timecustom, (min(testtable2.series_0))
-   ->  Finalize GroupAggregate (actual rows=2 loops=1)
-         Output: testtable2.timecustom, min(testtable2.series_0)
-         Group Key: testtable2.timecustom
-         ->  Custom Scan (ChunkAppend) on public.testtable2 (actual rows=3 loops=1)
-               Output: testtable2.timecustom, (PARTIAL min(testtable2.series_0))
-               Order: testtable2.timecustom DESC NULLS LAST
-               Startup Exclusion: false
-               Runtime Exclusion: false
-               ->  Partial GroupAggregate (actual rows=1 loops=1)
-                     Output: _hyper_3_7_chunk.timecustom, PARTIAL min(_hyper_3_7_chunk.series_0)
-                     Group Key: _hyper_3_7_chunk.timecustom
-                     ->  Index Scan using _hyper_3_7_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_7_chunk (actual rows=2 loops=1)
-                           Output: _hyper_3_7_chunk.timecustom, _hyper_3_7_chunk.series_0
-               ->  Partial GroupAggregate (actual rows=1 loops=1)
-                     Output: _hyper_3_6_chunk.timecustom, PARTIAL min(_hyper_3_6_chunk.series_0)
-                     Group Key: _hyper_3_6_chunk.timecustom
-                     ->  Index Scan using _hyper_3_6_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_6_chunk (actual rows=1 loops=1)
-                           Output: _hyper_3_6_chunk.timecustom, _hyper_3_6_chunk.series_0
-               ->  Merge Append (actual rows=1 loops=1)
-                     Sort Key: _hyper_3_8_chunk.timecustom DESC NULLS LAST
-                     ->  Partial GroupAggregate (actual rows=1 loops=1)
+   Output: _hyper_3_7_chunk.timecustom, (min(_hyper_3_7_chunk.series_0))
+   ->  Sort (actual rows=2 loops=1)
+         Output: _hyper_3_7_chunk.timecustom, (min(_hyper_3_7_chunk.series_0))
+         Sort Key: _hyper_3_7_chunk.timecustom DESC NULLS LAST
+         Sort Method: top-N heapsort 
+         ->  Finalize HashAggregate (actual rows=6 loops=1)
+               Output: _hyper_3_7_chunk.timecustom, min(_hyper_3_7_chunk.series_0)
+               Group Key: _hyper_3_7_chunk.timecustom
+               Batches: 1 
+               ->  Append (actual rows=7 loops=1)
+                     ->  Partial HashAggregate (actual rows=1 loops=1)
+                           Output: _hyper_3_7_chunk.timecustom, PARTIAL min(_hyper_3_7_chunk.series_0)
+                           Group Key: _hyper_3_7_chunk.timecustom
+                           Batches: 1 
+                           ->  Seq Scan on _timescaledb_internal._hyper_3_7_chunk (actual rows=2 loops=1)
+                                 Output: _hyper_3_7_chunk.timecustom, _hyper_3_7_chunk.series_0
+                     ->  Partial HashAggregate (actual rows=1 loops=1)
+                           Output: _hyper_3_6_chunk.timecustom, PARTIAL min(_hyper_3_6_chunk.series_0)
+                           Group Key: _hyper_3_6_chunk.timecustom
+                           Batches: 1 
+                           ->  Seq Scan on _timescaledb_internal._hyper_3_6_chunk (actual rows=1 loops=1)
+                                 Output: _hyper_3_6_chunk.timecustom, _hyper_3_6_chunk.series_0
+                     ->  Partial HashAggregate (actual rows=1 loops=1)
                            Output: _hyper_3_8_chunk.timecustom, PARTIAL min(_hyper_3_8_chunk.series_0)
                            Group Key: _hyper_3_8_chunk.timecustom
-                           ->  Index Scan using _hyper_3_8_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_8_chunk (actual rows=1 loops=1)
+                           Batches: 1 
+                           ->  Seq Scan on _timescaledb_internal._hyper_3_8_chunk (actual rows=1 loops=1)
                                  Output: _hyper_3_8_chunk.timecustom, _hyper_3_8_chunk.series_0
-                     ->  Partial GroupAggregate (actual rows=1 loops=1)
+                     ->  Partial HashAggregate (actual rows=4 loops=1)
                            Output: _hyper_3_5_chunk.timecustom, PARTIAL min(_hyper_3_5_chunk.series_0)
                            Group Key: _hyper_3_5_chunk.timecustom
-                           ->  Index Scan using _hyper_3_5_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_5_chunk (actual rows=4 loops=1)
+                           Batches: 1 
+                           ->  Seq Scan on _timescaledb_internal._hyper_3_5_chunk (actual rows=7 loops=1)
                                  Output: _hyper_3_5_chunk.timecustom, _hyper_3_5_chunk.series_0
-(32 rows)
+(35 rows)
 
 -- Force parallel query
 SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
@@ -376,58 +379,61 @@ SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t 
 
 :PREFIX
 SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
-                                                                                 QUERY PLAN                                                                                  
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
  Gather (actual rows=2 loops=1)
-   Output: testtable2.timecustom, (min(testtable2.series_0))
+   Output: _hyper_3_7_chunk.timecustom, (min(_hyper_3_7_chunk.series_0))
    Workers Planned: 1
    Workers Launched: 1
    Single Copy: true
    ->  Limit (actual rows=2 loops=1)
-         Output: testtable2.timecustom, (min(testtable2.series_0))
+         Output: _hyper_3_7_chunk.timecustom, (min(_hyper_3_7_chunk.series_0))
          Worker 0:  actual rows=2 loops=1
-         ->  Finalize GroupAggregate (actual rows=2 loops=1)
-               Output: testtable2.timecustom, min(testtable2.series_0)
-               Group Key: testtable2.timecustom
+         ->  Sort (actual rows=2 loops=1)
+               Output: _hyper_3_7_chunk.timecustom, (min(_hyper_3_7_chunk.series_0))
+               Sort Key: _hyper_3_7_chunk.timecustom DESC NULLS LAST
                Worker 0:  actual rows=2 loops=1
-               ->  Custom Scan (ChunkAppend) on public.testtable2 (actual rows=3 loops=1)
-                     Output: testtable2.timecustom, (PARTIAL min(testtable2.series_0))
-                     Order: testtable2.timecustom DESC NULLS LAST
-                     Startup Exclusion: false
-                     Runtime Exclusion: false
-                     Worker 0:  actual rows=3 loops=1
-                     ->  Partial GroupAggregate (actual rows=1 loops=1)
-                           Output: _hyper_3_7_chunk.timecustom, PARTIAL min(_hyper_3_7_chunk.series_0)
-                           Group Key: _hyper_3_7_chunk.timecustom
-                           Worker 0:  actual rows=1 loops=1
-                           ->  Index Scan using _hyper_3_7_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_7_chunk (actual rows=2 loops=1)
-                                 Output: _hyper_3_7_chunk.timecustom, _hyper_3_7_chunk.series_0
-                                 Worker 0:  actual rows=2 loops=1
-                     ->  Partial GroupAggregate (actual rows=1 loops=1)
-                           Output: _hyper_3_6_chunk.timecustom, PARTIAL min(_hyper_3_6_chunk.series_0)
-                           Group Key: _hyper_3_6_chunk.timecustom
-                           Worker 0:  actual rows=1 loops=1
-                           ->  Index Scan using _hyper_3_6_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_6_chunk (actual rows=1 loops=1)
-                                 Output: _hyper_3_6_chunk.timecustom, _hyper_3_6_chunk.series_0
+                 Sort Method: top-N heapsort 
+               ->  Finalize HashAggregate (actual rows=6 loops=1)
+                     Output: _hyper_3_7_chunk.timecustom, min(_hyper_3_7_chunk.series_0)
+                     Group Key: _hyper_3_7_chunk.timecustom
+                     Worker 0:  actual rows=6 loops=1
+                       Batches: 1 
+                     ->  Append (actual rows=7 loops=1)
+                           Worker 0:  actual rows=7 loops=1
+                           ->  Partial HashAggregate (actual rows=1 loops=1)
+                                 Output: _hyper_3_7_chunk.timecustom, PARTIAL min(_hyper_3_7_chunk.series_0)
+                                 Group Key: _hyper_3_7_chunk.timecustom
                                  Worker 0:  actual rows=1 loops=1
-                     ->  Merge Append (actual rows=1 loops=1)
-                           Sort Key: _hyper_3_8_chunk.timecustom DESC NULLS LAST
-                           Worker 0:  actual rows=1 loops=1
-                           ->  Partial GroupAggregate (actual rows=1 loops=1)
+                                   Batches: 1 
+                                 ->  Seq Scan on _timescaledb_internal._hyper_3_7_chunk (actual rows=2 loops=1)
+                                       Output: _hyper_3_7_chunk.timecustom, _hyper_3_7_chunk.series_0
+                                       Worker 0:  actual rows=2 loops=1
+                           ->  Partial HashAggregate (actual rows=1 loops=1)
+                                 Output: _hyper_3_6_chunk.timecustom, PARTIAL min(_hyper_3_6_chunk.series_0)
+                                 Group Key: _hyper_3_6_chunk.timecustom
+                                 Worker 0:  actual rows=1 loops=1
+                                   Batches: 1 
+                                 ->  Seq Scan on _timescaledb_internal._hyper_3_6_chunk (actual rows=1 loops=1)
+                                       Output: _hyper_3_6_chunk.timecustom, _hyper_3_6_chunk.series_0
+                                       Worker 0:  actual rows=1 loops=1
+                           ->  Partial HashAggregate (actual rows=1 loops=1)
                                  Output: _hyper_3_8_chunk.timecustom, PARTIAL min(_hyper_3_8_chunk.series_0)
                                  Group Key: _hyper_3_8_chunk.timecustom
                                  Worker 0:  actual rows=1 loops=1
-                                 ->  Index Scan using _hyper_3_8_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_8_chunk (actual rows=1 loops=1)
+                                   Batches: 1 
+                                 ->  Seq Scan on _timescaledb_internal._hyper_3_8_chunk (actual rows=1 loops=1)
                                        Output: _hyper_3_8_chunk.timecustom, _hyper_3_8_chunk.series_0
                                        Worker 0:  actual rows=1 loops=1
-                           ->  Partial GroupAggregate (actual rows=1 loops=1)
+                           ->  Partial HashAggregate (actual rows=4 loops=1)
                                  Output: _hyper_3_5_chunk.timecustom, PARTIAL min(_hyper_3_5_chunk.series_0)
                                  Group Key: _hyper_3_5_chunk.timecustom
-                                 Worker 0:  actual rows=1 loops=1
-                                 ->  Index Scan using _hyper_3_5_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_5_chunk (actual rows=4 loops=1)
+                                 Worker 0:  actual rows=4 loops=1
+                                   Batches: 1 
+                                 ->  Seq Scan on _timescaledb_internal._hyper_3_5_chunk (actual rows=7 loops=1)
                                        Output: _hyper_3_5_chunk.timecustom, _hyper_3_5_chunk.series_0
-                                       Worker 0:  actual rows=4 loops=1
-(49 rows)
+                                       Worker 0:  actual rows=7 loops=1
+(52 rows)
 
 -- Test that we don't process groupingSets
 :PREFIX
