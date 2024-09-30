@@ -104,15 +104,15 @@ tts_arrow_init(TupleTableSlot *slot)
 	 * the compressed child slot until the tuple descriptor is known.
 	 */
 	aslot->compressed_slot = NULL;
-	TS_WITH_MEMORY_CONTEXT(slot->tts_mcxt, {
-		aslot->noncompressed_slot =
-			MakeSingleTupleTableSlot(slot->tts_tupleDescriptor, &TTSOpsBufferHeapTuple);
-		aslot->child_slot = aslot->noncompressed_slot;
-		aslot->valid_attrs = palloc0(sizeof(bool) * slot->tts_tupleDescriptor->natts);
-		aslot->segmentby_attrs = palloc0(sizeof(bool) * slot->tts_tupleDescriptor->natts);
-		/* Note that aslot->referenced_attrs is initialized on demand, and not
-		 * here, because NULL is a valid state for referenced_attrs. */
-	});
+	MemoryContext oldmcxt = MemoryContextSwitchTo(slot->tts_mcxt);
+	aslot->noncompressed_slot =
+		MakeSingleTupleTableSlot(slot->tts_tupleDescriptor, &TTSOpsBufferHeapTuple);
+	aslot->child_slot = aslot->noncompressed_slot;
+	aslot->valid_attrs = palloc0(sizeof(bool) * slot->tts_tupleDescriptor->natts);
+	aslot->segmentby_attrs = palloc0(sizeof(bool) * slot->tts_tupleDescriptor->natts);
+	/* Note that aslot->referenced_attrs is initialized on demand, and not
+	 * here, because NULL is a valid state for referenced_attrs. */
+	MemoryContextSwitchTo(oldmcxt);
 	ItemPointerSetInvalid(&slot->tts_tid);
 
 	arrow_column_cache_init(&aslot->arrow_cache, slot->tts_mcxt);
@@ -798,10 +798,9 @@ arrow_slot_set_referenced_attrs(TupleTableSlot *slot, Bitmapset *attrs)
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
 	if (aslot->referenced_attrs == NULL)
 	{
-		TS_WITH_MEMORY_CONTEXT(aslot->arrow_cache.mcxt, {
-			aslot->referenced_attrs = palloc0(sizeof(bool) * slot->tts_tupleDescriptor->natts);
-		});
-
+		aslot->referenced_attrs =
+			MemoryContextAlloc(aslot->arrow_cache.mcxt,
+							   sizeof(bool) * slot->tts_tupleDescriptor->natts);
 		for (int i = 0; i < slot->tts_tupleDescriptor->natts; i++)
 			aslot->referenced_attrs[i] = bms_is_member(AttrOffsetGetAttrNumber(i), attrs);
 	}
@@ -813,7 +812,9 @@ arrow_slot_set_index_attrs(TupleTableSlot *slot, Bitmapset *attrs)
 	Assert(TTS_IS_ARROWTUPLE(slot));
 
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
-	TS_WITH_MEMORY_CONTEXT(aslot->arrow_cache.mcxt, { aslot->index_attrs = bms_copy(attrs); });
+	MemoryContext oldmcxt = MemoryContextSwitchTo(aslot->arrow_cache.mcxt);
+	aslot->index_attrs = bms_copy(attrs);
+	MemoryContextSwitchTo(oldmcxt);
 }
 
 const TupleTableSlotOps TTSOpsArrowTuple = { .base_slot_size = sizeof(ArrowTupleTableSlot),

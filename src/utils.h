@@ -22,17 +22,6 @@
 
 #include "compat/compat.h"
 
-/* Convenience macro to execute a simple or complex statement inside a memory
- * context */
-#define TS_WITH_MEMORY_CONTEXT(MCXT, STMT)                                                         \
-	do                                                                                             \
-	{                                                                                              \
-		MemoryContext _oldmcxt = MemoryContextSwitchTo((MCXT));                                    \
-		do                                                                                         \
-			STMT while (0);                                                                        \
-		MemoryContextSwitchTo(_oldmcxt);                                                           \
-	} while (0)
-
 /*
  * Macro for debug messages that should *only* be present in debug builds but
  * which should be removed in release builds. This is typically used for
