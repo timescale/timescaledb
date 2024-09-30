@@ -205,8 +205,9 @@ if not pull_request:
     # add debug test for first supported PG16 version
     m["include"].append(build_debug_config({"pg": PG16_EARLIEST}))
 
-    # add debug test for first supported PG16 version
-    m["include"].append(build_debug_config({"pg": PG17_EARLIEST}))
+    # add debug test for first supported PG17 version
+    if PG17_EARLIEST != PG17_LATEST:
+        m["include"].append(build_debug_config({"pg": PG17_EARLIEST}))
 
     # add debug tests for timescaledb on latest postgres release in MacOS
     m["include"].append(build_debug_config(macos_config({"pg": PG15_LATEST})))
