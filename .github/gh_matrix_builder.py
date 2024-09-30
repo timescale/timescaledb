@@ -32,6 +32,7 @@ from ci_settings import (
     PG15_LATEST,
     PG16_EARLIEST,
     PG16_LATEST,
+    PG17_EARLIEST,
     PG17_LATEST,
     PG_LATEST,
 )
