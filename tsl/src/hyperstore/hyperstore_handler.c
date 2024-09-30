@@ -777,10 +777,10 @@ hyperstore_multi_insert(Relation relation, TupleTableSlot **slots, int ntuples, 
 	relation->rd_tableam->multi_insert(relation, slots, ntuples, cid, options, bistate);
 	relation->rd_tableam = oldtam;
 
-	TS_WITH_MEMORY_CONTEXT(CurTransactionContext, {
-		partially_compressed_relids =
-			list_append_unique_oid(partially_compressed_relids, RelationGetRelid(relation));
-	});
+	MemoryContext oldmcxt = MemoryContextSwitchTo(CurTransactionContext);
+	partially_compressed_relids =
+		list_append_unique_oid(partially_compressed_relids, RelationGetRelid(relation));
+	MemoryContextSwitchTo(oldmcxt);
 }
 
 enum SegmentbyIndexStatus
@@ -1405,10 +1405,10 @@ hyperstore_tuple_insert(Relation relation, TupleTableSlot *slot, CommandId cid, 
 	relation->rd_tableam->tuple_insert(relation, slot, cid, options, bistate);
 	relation->rd_tableam = oldtam;
 
-	TS_WITH_MEMORY_CONTEXT(CurTransactionContext, {
-		partially_compressed_relids =
-			list_append_unique_oid(partially_compressed_relids, RelationGetRelid(relation));
-	});
+	MemoryContext oldmcxt = MemoryContextSwitchTo(CurTransactionContext);
+	partially_compressed_relids =
+		list_append_unique_oid(partially_compressed_relids, RelationGetRelid(relation));
+	MemoryContextSwitchTo(oldmcxt);
 }
 
 static void
@@ -3352,8 +3352,9 @@ convert_from_hyperstore(Oid relid)
 	ts_compression_chunk_size_delete(chunk_id);
 
 	/* Need to truncate the compressed relation after converting from Hyperstore */
-	TS_WITH_MEMORY_CONTEXT(CurTransactionContext,
-						   { cleanup_relids = lappend_oid(cleanup_relids, relid); });
+	MemoryContext oldmcxt = MemoryContextSwitchTo(CurTransactionContext);
+	cleanup_relids = lappend_oid(cleanup_relids, relid);
+	MemoryContextSwitchTo(oldmcxt);
 }
 
 void
