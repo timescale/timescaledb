@@ -13,6 +13,11 @@
 
 typedef struct tuple_filtering_constraints
 {
+	/*
+	 * All key column heap attribute numbers on uncompressed chunk.
+	 * We shouldn't be dealing with system columns so no need to
+	 * add/subtract FirstLowInvalidHeapAttributeNumber from these.
+	 */
 	Bitmapset *key_columns;
 	/*
 	 * The covered flag is set to true if we have a single constraint that is covered
