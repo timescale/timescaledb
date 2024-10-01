@@ -23,7 +23,7 @@ We recommend that you upgrade at the next available opportunity.
   This update can decrease dramatically the amount of data that must be written on the continuous aggregate in the
   presence of a small number of changes, reduce the `i/o` cost of refreshing a continuous aggregate, and generate less
   `wal`.
-  Overall, continuous aggregate policies will be more lightweight, use less system resources and complete faster.
+  Overall, continuous aggregate policies will be more lightweight, use less system resources, and complete faster.
 
 * Increased performance for real-time analytical queries over compressed hypertables:
   We are excited to introduce vectorized query execution (`simd` optimizations) to our engine by supporting vectorized
