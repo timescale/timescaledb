@@ -161,15 +161,15 @@ INSERT INTO comp_conflicts_3 VALUES
 ('2020-01-01','d3', 'label', 0.3);
 -- should work the same without the index present
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d2', 'label', 0.2);
 ROLLBACK;
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
   INSERT INTO comp_conflicts_3 VALUES
   ('2020-01-01','d1', 'label', 0.1),
   ('2020-01-01','d2', 'label', 0.2),
@@ -181,44 +181,44 @@ ROLLBACK;
 set timescaledb.debug_compression_path_info to on;
 -- ignore matching partial index
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
-  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, label, _ts_meta_sequence_num)
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
+  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, label, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC)
 	WHERE label LIKE 'missing';
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 
 -- ignore matching covering index
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
-  CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device) INCLUDE (label, _ts_meta_sequence_num);
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
+  CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device) INCLUDE (label, _ts_meta_min_1, _ts_meta_max_1);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 
 -- out of order segmentby index, index is still usable
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
-  CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (label, device, _ts_meta_sequence_num);
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
+  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk (label, device, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 
 -- index with sequence number in the middle, index should be usable with single index scan key
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
-  CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, _ts_meta_sequence_num, label);
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
+  CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC, label);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 
 -- ignore expression index
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
-  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, lower(label), _ts_meta_sequence_num);
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
+  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, lower(label), _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 
 -- ignore non-btree index
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
-  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk USING brin (device, label, _ts_meta_sequence_num);
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
+  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk USING brin (device, label, _ts_meta_min_1, _ts_meta_max_1);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 \set ON_ERROR_STOP 1
@@ -240,7 +240,7 @@ ROLLBACK;
 
 -- check if NULL handling works the same with the compressed index dropped
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01',NULL, 'label', 0.3);
 
   -- data for 1 segment (count = 1 value + 1 inserted) should be present in uncompressed chunk
@@ -263,7 +263,7 @@ ROLLBACK;
 -- should succeed since there are no conflicts in the values
 BEGIN;
 
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01 0:00:01','d1', 'label', 0.1);
 
   -- no data should have move into uncompressed chunk for conflict check
@@ -285,7 +285,7 @@ ROLLBACK;
 
 -- same as above but no index
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
   INSERT INTO comp_conflicts_3 VALUES
   ('2020-01-01 0:00:01','d1', 'label', 0.1),
   ('2020-01-01 0:00:01','d2', 'label', 0.2),

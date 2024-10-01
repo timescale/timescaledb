@@ -14,8 +14,8 @@ SET work_mem TO '50MB';
 SET enable_incremental_sort TO off;
 SET timezone TO PST8PDT;
 
--- disable memoize node to make EXPLAIN output comparable between PG14 and previous versions
-SELECT CASE WHEN current_setting('server_version_num')::int/10000 >= 14 THEN set_config('enable_memoize','off',false) ELSE 'off' END AS enable_memoize;
+-- disable memoize node to avoid flaky results
+SET enable_memoize TO 'off';
 
 CREATE TABLE metrics (
     filler_1 int,

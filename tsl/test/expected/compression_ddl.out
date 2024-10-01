@@ -196,7 +196,7 @@ FROM pg_tables WHERE tablespace = 'tablespace1';
 (0 rows)
 
 \set ON_ERROR_STOP 0
-SELECT move_chunk(chunk=>:'COMPRESSED_CHUNK_NAME', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1',  reorder_index=>'_timescaledb_internal."compress_hyper_2_28_chunk_b__ts_meta_sequence_num_idx"');
+SELECT move_chunk(chunk=>:'COMPRESSED_CHUNK_NAME', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1',  reorder_index=>'_timescaledb_internal."compress_hyper_2_28_chunk_b__ts_meta_min_1__ts_meta_max_1_idx"');
 ERROR:  cannot directly move internal compression data
 \set ON_ERROR_STOP 1
 -- ensure that both compressed and uncompressed chunks moved
@@ -1453,7 +1453,7 @@ ORDER BY device_id;
          ->  Append
                ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
-                           ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_111_chunk
+                           ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
                ->  Partial GroupAggregate
                      Group Key: _hyper_31_110_chunk.device_id
                      ->  Index Only Scan using _hyper_31_110_chunk_compression_insert_device_id_time_idx on _hyper_31_110_chunk
@@ -1537,10 +1537,10 @@ ORDER BY device_id;
          ->  Append
                ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
-                           ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_111_chunk
+                           ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
                ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
-                           ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_113_chunk
+                           ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
                ->  Partial GroupAggregate
                      Group Key: _hyper_31_112_chunk.device_id
                      ->  Index Only Scan using _hyper_31_112_chunk_compression_insert_device_id_time_idx on _hyper_31_112_chunk
@@ -1624,13 +1624,13 @@ ORDER BY device_id;
          ->  Append
                ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
-                           ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_111_chunk
+                           ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
                ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
-                           ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_113_chunk
+                           ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
                ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_114_chunk
-                           ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_115_chunk
+                           ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_115_chunk
                ->  Partial GroupAggregate
                      Group Key: _hyper_31_114_chunk.device_id
                      ->  Index Only Scan using _hyper_31_114_chunk_compression_insert_device_id_time_idx on _hyper_31_114_chunk
@@ -1714,16 +1714,16 @@ ORDER BY device_id;
          ->  Append
                ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
-                           ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_111_chunk
+                           ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
                ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
-                           ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_113_chunk
+                           ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
                ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_114_chunk
-                           ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_115_chunk
+                           ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_115_chunk
                ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_116_chunk
-                           ->  Index Scan using compress_hyper_32_117_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_117_chunk
+                           ->  Index Scan using compress_hyper_32_117_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_117_chunk
                ->  Partial GroupAggregate
                      Group Key: _hyper_31_116_chunk.device_id
                      ->  Index Only Scan using _hyper_31_116_chunk_compression_insert_device_id_time_idx on _hyper_31_116_chunk
@@ -1807,19 +1807,19 @@ ORDER BY device_id;
          ->  Append
                ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
-                           ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_111_chunk
+                           ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
                ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
-                           ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_113_chunk
+                           ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
                ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_114_chunk
-                           ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_115_chunk
+                           ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_115_chunk
                ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_116_chunk
-                           ->  Index Scan using compress_hyper_32_117_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_117_chunk
+                           ->  Index Scan using compress_hyper_32_117_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_117_chunk
                ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_118_chunk
-                           ->  Index Scan using compress_hyper_32_119_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_119_chunk
+                           ->  Index Scan using compress_hyper_32_119_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_119_chunk
                ->  Partial GroupAggregate
                      Group Key: _hyper_31_118_chunk.device_id
                      ->  Index Only Scan using _hyper_31_118_chunk_compression_insert_device_id_time_idx on _hyper_31_118_chunk
@@ -1903,47 +1903,47 @@ SELECT compress_chunk(show_chunks('test_partials'));
 
 -- fully compressed
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
-                                   QUERY PLAN                                   
---------------------------------------------------------------------------------
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
    ->  Custom Scan (DecompressChunk) on _hyper_33_120_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_123_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_123_chunk._ts_meta_min_1, compress_hyper_34_123_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_123_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_33_121_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_124_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_124_chunk._ts_meta_min_1, compress_hyper_34_124_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_124_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_33_122_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_125_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_125_chunk._ts_meta_min_1, compress_hyper_34_125_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_125_chunk
 (14 rows)
 
 -- test P, F, F
 INSERT INTO test_partials VALUES ('2020-01-01 00:03', 1, 2);
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
    ->  Merge Append
          Sort Key: _hyper_33_120_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_33_120_chunk
                ->  Sort
-                     Sort Key: compress_hyper_34_123_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_34_123_chunk._ts_meta_min_1, compress_hyper_34_123_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_34_123_chunk
          ->  Sort
                Sort Key: _hyper_33_120_chunk."time"
                ->  Seq Scan on _hyper_33_120_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_33_121_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_124_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_124_chunk._ts_meta_min_1, compress_hyper_34_124_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_124_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_33_122_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_125_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_125_chunk._ts_meta_min_1, compress_hyper_34_125_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_125_chunk
 (19 rows)
 
@@ -1965,15 +1965,15 @@ SELECT * FROM test_partials ORDER BY time;
 -- P, P, F
 INSERT INTO test_partials VALUES ('2021-01-01 00:03', 1, 2);
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
    ->  Merge Append
          Sort Key: _hyper_33_120_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_33_120_chunk
                ->  Sort
-                     Sort Key: compress_hyper_34_123_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_34_123_chunk._ts_meta_min_1, compress_hyper_34_123_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_34_123_chunk
          ->  Sort
                Sort Key: _hyper_33_120_chunk."time"
@@ -1982,14 +1982,14 @@ EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
          Sort Key: _hyper_33_121_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_33_121_chunk
                ->  Sort
-                     Sort Key: compress_hyper_34_124_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_34_124_chunk._ts_meta_min_1, compress_hyper_34_124_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_34_124_chunk
          ->  Sort
                Sort Key: _hyper_33_121_chunk."time"
                ->  Seq Scan on _hyper_33_121_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_33_122_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_125_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_125_chunk._ts_meta_min_1, compress_hyper_34_125_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_125_chunk
 (24 rows)
 
@@ -2013,15 +2013,15 @@ SELECT * FROM test_partials ORDER BY time;
 INSERT INTO test_partials VALUES ('2022-01-01 00:03', 1, 2);
 INSERT INTO test_partials VALUES ('2023-01-01 00:03', 1, 2);
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
-                                            QUERY PLAN                                             
----------------------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
    ->  Merge Append
          Sort Key: _hyper_33_120_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_33_120_chunk
                ->  Sort
-                     Sort Key: compress_hyper_34_123_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_34_123_chunk._ts_meta_min_1, compress_hyper_34_123_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_34_123_chunk
          ->  Sort
                Sort Key: _hyper_33_120_chunk."time"
@@ -2030,7 +2030,7 @@ EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
          Sort Key: _hyper_33_121_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_33_121_chunk
                ->  Sort
-                     Sort Key: compress_hyper_34_124_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_34_124_chunk._ts_meta_min_1, compress_hyper_34_124_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_34_124_chunk
          ->  Sort
                Sort Key: _hyper_33_121_chunk."time"
@@ -2039,7 +2039,7 @@ EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
          Sort Key: _hyper_33_122_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_33_122_chunk
                ->  Sort
-                     Sort Key: compress_hyper_34_125_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_34_125_chunk._ts_meta_min_1, compress_hyper_34_125_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_34_125_chunk
          ->  Sort
                Sort Key: _hyper_33_122_chunk."time"
@@ -2064,23 +2064,23 @@ END
 $$;
 INSERT INTO test_partials VALUES ('2022-01-01 00:02', 1, 2);
 EXPLAIN (COSTS OFF) SELECT * FROM test_partials ORDER BY time;
-                                            QUERY PLAN                                             
----------------------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
    ->  Custom Scan (DecompressChunk) on _hyper_33_120_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_127_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_127_chunk._ts_meta_min_1, compress_hyper_34_127_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_127_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_33_121_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_128_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_128_chunk._ts_meta_min_1, compress_hyper_34_128_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_128_chunk
    ->  Merge Append
          Sort Key: _hyper_33_122_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_33_122_chunk
                ->  Sort
-                     Sort Key: compress_hyper_34_129_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_34_129_chunk._ts_meta_min_1, compress_hyper_34_129_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_34_129_chunk
          ->  Sort
                Sort Key: _hyper_33_122_chunk."time"
@@ -2098,34 +2098,34 @@ SELECT compress_chunk(c) FROM show_chunks('test_partials', newer_than => '2022-0
 (2 rows)
 
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
    ->  Custom Scan (DecompressChunk) on _hyper_33_120_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_127_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_127_chunk._ts_meta_min_1, compress_hyper_34_127_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_127_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_33_121_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_128_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_128_chunk._ts_meta_min_1, compress_hyper_34_128_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_128_chunk
    ->  Merge Append
          Sort Key: _hyper_33_122_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_33_122_chunk
                ->  Sort
-                     Sort Key: compress_hyper_34_129_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_34_129_chunk._ts_meta_min_1, compress_hyper_34_129_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_34_129_chunk
          ->  Sort
                Sort Key: _hyper_33_122_chunk."time"
                ->  Seq Scan on _hyper_33_122_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_33_126_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_131_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_131_chunk._ts_meta_min_1, compress_hyper_34_131_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_131_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_33_130_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_132_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_132_chunk._ts_meta_min_1, compress_hyper_34_132_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_132_chunk
 (27 rows)
 
@@ -2195,22 +2195,22 @@ SELECT add_dimension('space_part', 'a', number_partitions => 5);
 
 -- plan is still the same
 EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on space_part
    Order: space_part."time"
    ->  Merge Append
          Sort Key: _hyper_35_133_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_135_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_36_135_chunk._ts_meta_min_1, compress_hyper_36_135_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_135_chunk
          ->  Sort
                Sort Key: _hyper_35_133_chunk."time"
                ->  Seq Scan on _hyper_35_133_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_35_134_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_136_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_36_136_chunk._ts_meta_min_1, compress_hyper_36_136_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_136_chunk
 (15 rows)
 
@@ -2223,22 +2223,22 @@ INSERT INTO space_part VALUES
 ('2022-01-01 00:03', 2, 1, 1);
 -- plan still ok
 EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
-                                              QUERY PLAN                                              
-------------------------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on space_part
    Order: space_part."time"
    ->  Merge Append
          Sort Key: _hyper_35_133_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_135_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_36_135_chunk._ts_meta_min_1, compress_hyper_36_135_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_135_chunk
          ->  Sort
                Sort Key: _hyper_35_133_chunk."time"
                ->  Seq Scan on _hyper_35_133_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_35_134_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_136_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_36_136_chunk._ts_meta_min_1, compress_hyper_36_136_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_136_chunk
    ->  Merge Append
          Sort Key: _hyper_35_137_chunk."time"
@@ -2259,27 +2259,27 @@ NOTICE:  chunk "_hyper_35_134_chunk" is already compressed
 
 -- plan still ok
 EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on space_part
    Order: space_part."time"
    ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_139_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_36_139_chunk._ts_meta_min_1, compress_hyper_36_139_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_139_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_35_134_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_136_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_36_136_chunk._ts_meta_min_1, compress_hyper_36_136_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_136_chunk
    ->  Merge Append
          Sort Key: _hyper_35_137_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_35_137_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_140_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_36_140_chunk._ts_meta_min_1, compress_hyper_36_140_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_140_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_35_138_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_141_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_36_141_chunk._ts_meta_min_1, compress_hyper_36_141_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_141_chunk
 (20 rows)
 
@@ -2288,27 +2288,27 @@ insert into space_part values
 ('2022-01-01 00:02', 2, 1, 1),
 ('2022-01-01 00:02', 2, 1, 1);
 EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on space_part
    Order: space_part."time"
    ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_139_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_36_139_chunk._ts_meta_min_1, compress_hyper_36_139_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_139_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_35_134_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_136_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_36_136_chunk._ts_meta_min_1, compress_hyper_36_136_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_136_chunk
    ->  Merge Append
          Sort Key: _hyper_35_137_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_35_137_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_140_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_36_140_chunk._ts_meta_min_1, compress_hyper_36_140_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_140_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_35_138_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_141_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_36_141_chunk._ts_meta_min_1, compress_hyper_36_141_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_141_chunk
          ->  Sort
                Sort Key: _hyper_35_138_chunk."time"
@@ -2319,30 +2319,30 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
 INSERT INTO space_part VALUES
 ('2022-01-01 00:02', 1, 1, 1);
 EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on space_part
    Order: space_part."time"
    ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_139_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_36_139_chunk._ts_meta_min_1, compress_hyper_36_139_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_139_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_35_134_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_136_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_36_136_chunk._ts_meta_min_1, compress_hyper_36_136_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_136_chunk
    ->  Merge Append
          Sort Key: _hyper_35_137_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_35_137_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_140_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_36_140_chunk._ts_meta_min_1, compress_hyper_36_140_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_140_chunk
          ->  Sort
                Sort Key: _hyper_35_137_chunk."time"
                ->  Seq Scan on _hyper_35_137_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_35_138_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_141_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_36_141_chunk._ts_meta_min_1, compress_hyper_36_141_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_141_chunk
          ->  Sort
                Sort Key: _hyper_35_138_chunk."time"

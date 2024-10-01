@@ -376,3 +376,4 @@ extern TSDLLEXPORT void ts_get_rel_info_by_name(const char *relnamespace, const 
 												Oid *relid, Oid *amoid, char *relkind);
 extern TSDLLEXPORT void ts_get_rel_info(Oid relid, Oid *amoid, char *relkind);
 extern TSDLLEXPORT bool ts_is_hypercore_am(Oid amoid);
+extern TSDLLEXPORT Jsonb *ts_errdata_to_jsonb(ErrorData *edata, Name proc_schema, Name proc_name);

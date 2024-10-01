@@ -166,11 +166,43 @@ mark_job_as_started(ScheduledBgwJob *sjob)
 }
 
 static void
-mark_job_as_ended(ScheduledBgwJob *sjob, JobResult res)
+mark_job_as_ended(ScheduledBgwJob *sjob, JobResult res, Jsonb *edata)
 {
 	Assert(sjob->may_need_mark_end);
-	ts_bgw_job_stat_mark_end(&sjob->job, res, NULL);
+	ts_bgw_job_stat_mark_end(&sjob->job, res, edata);
 	sjob->may_need_mark_end = false;
+}
+
+static ErrorData *
+makeJobErrorData(ScheduledBgwJob *sjob, JobResult res)
+{
+	ErrorData *edata = (ErrorData *) palloc0(sizeof(ErrorData));
+	edata->elevel = ERROR;
+	edata->sqlerrcode = ERRCODE_INTERNAL_ERROR;
+	edata->hint = NULL;
+
+	Assert(res != JOB_SUCCESS);
+
+	switch (res)
+	{
+		case JOB_FAILURE_TO_START:
+			edata->message = "failed to start job";
+			edata->detail = psprintf("Job %d (\"%s\") failed to start",
+									 sjob->job.fd.id,
+									 NameStr(sjob->job.fd.application_name));
+			break;
+		case JOB_FAILURE_IN_EXECUTION:
+			edata->message = "failed to execute job";
+			edata->detail = psprintf("Job %d (\"%s\") failed to execute.",
+									 sjob->job.fd.id,
+									 NameStr(sjob->job.fd.application_name));
+			break;
+		default:
+			pg_unreachable();
+			break;
+	}
+
+	return edata;
 }
 
 static void
@@ -224,11 +256,14 @@ worker_state_cleanup(ScheduledBgwJob *sjob)
 			 * Usually the job process will mark the end, but if the job gets
 			 * a signal (cancel or terminate), it won't be able to so we
 			 * should.
-			 * TODO: Insert a record in the job_errors table informing of this failure
-			 * Currently the SIGTERM case is not handled, there might be other cases as well
 			 */
 			elog(LOG, "job %d failed", sjob->job.fd.id);
-			mark_job_as_ended(sjob, JOB_FAILURE);
+			ErrorData *edata = makeJobErrorData(sjob, JOB_FAILURE_IN_EXECUTION);
+			mark_job_as_ended(sjob,
+							  JOB_FAILURE_IN_EXECUTION,
+							  ts_errdata_to_jsonb(edata,
+												  &sjob->job.fd.proc_schema,
+												  &sjob->job.fd.proc_name));
 		}
 		else
 		{
@@ -357,7 +392,12 @@ on_failure_to_start_job(ScheduledBgwJob *sjob)
 		/* restore the original next_start to maintain priority (it is unset during mark_start) */
 		if (sjob->next_start != DT_NOBEGIN)
 			ts_bgw_job_stat_set_next_start(sjob->job.fd.id, sjob->next_start);
-		mark_job_as_ended(sjob, JOB_FAILURE_TO_START);
+		ErrorData *edata = makeJobErrorData(sjob, JOB_FAILURE_TO_START);
+		mark_job_as_ended(sjob,
+						  JOB_FAILURE_TO_START,
+						  ts_errdata_to_jsonb(edata,
+											  &sjob->job.fd.proc_schema,
+											  &sjob->job.fd.proc_name));
 	}
 	scheduled_bgw_job_transition_state_to(sjob, JOB_STATE_SCHEDULED);
 	CommitTransactionCommand();

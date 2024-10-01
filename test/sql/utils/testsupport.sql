@@ -339,3 +339,24 @@ BEGIN
     RETURN false;
 END
 $BODY$;
+
+-- Wait for job to run or fail
+CREATE OR REPLACE FUNCTION test.wait_for_job_to_run_or_fail(job_param_id INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS)
+RETURNS BOOLEAN LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR i in 1..spins
+    LOOP
+        SELECT total_runs FROM _timescaledb_internal.bgw_job_stat WHERE job_id=job_param_id INTO r;
+        IF (r.total_runs > 0) THEN
+            RETURN true;
+        ELSE
+            PERFORM pg_sleep(0.1);
+        END IF;
+    END LOOP;
+    RAISE INFO 'wait_for_job_to_run_or_fail: timeout after % tries', spins;
+    RETURN false;
+END
+$BODY$;
