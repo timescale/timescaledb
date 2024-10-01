@@ -21,14 +21,14 @@ We recommend that you upgrade at the next available opportunity.
 `merge` instead of deleting old materialized data and re-inserting.
 
   This update can decrease dramatically the amount of data that must be written on the continuous aggregate in the
-  presence of a small number of changes, reduce the `i/o` cost of refreshing a continuous aggregate, and generate less
-  `wal`.
+  presence of a small number of changes, reduce the `i/o` cost of refreshing a continuous aggregate, and generate fewer
+  Write-Ahead Logs (`WAL`).
   Overall, continuous aggregate policies will be more lightweight, use less system resources, and complete faster.
 
 * Increased performance for real-time analytical queries over compressed hypertables:
-  we are excited to introduce vectorized query execution (`simd` optimizations) to our engine by supporting vectorized
-  execution for queries that group by using the `segment_by` column(s) and aggregate using the basic aggregate
-  functions (`sum`, `count`, `avg`, `min`, `max`).
+  we are excited to introduce vectorized query execution Single instruction, multiple data (`SIMD`) optimizations to our
+  engine by supporting vectorized execution for queries that group by using the `segment_by` column(s) and
+  aggregate using the basic aggregate functions (`sum`, `count`, `avg`, `min`, `max`).
 
   Stay tuned for more to come in follow-up releases! Support for grouping on additional columns, filtered aggregation,
   vectorized expressions, and `time_bucket` is coming soon.
@@ -44,7 +44,7 @@ We recommend that you upgrade at the next available opportunity.
   version of TimescaleDB in which PostgreSQL 14 support will not be included going forward.
 
 **Features**
-* #6882: Allow delete of fully covered compressed batches on compressed chunks without decompression.
+* #6882: Allow delete of fully covered compressed batches on compressed chunks , i.e. delete full segments without decompression.
 * #7033: Use `merge` statement on continuous aggregates refresh.
 * #7126: Add functions to show the compression information.
 * #7147: Vectorize partial aggregation for `sum(int4)` with grouping on `segment by` columns.
