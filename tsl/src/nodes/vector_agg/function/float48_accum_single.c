@@ -194,7 +194,7 @@ FUNCTION_NAME(combine)(double *inout_N, double *inout_Sx,
 #endif
 
 static pg_attribute_always_inline void
-FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *valid1,
+FUNCTION_NAME(vector_impl)(void *agg_state, size_t n, const CTYPE *values, const uint64 *valid1,
 						   const uint64 *valid2, MemoryContext agg_extra_mctx)
 {
 	/*
@@ -212,7 +212,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 	double Sxxarray[UNROLL_SIZE] = { 0 };
 #endif
 
-	int row = 0;
+	size_t row = 0;
 
 #ifdef NEED_SXX
 	/*
@@ -220,7 +220,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 	 * to make the actual update function branchless, namely the computation of
 	 * Sxx which works differently for the first row.
 	 */
-	for (int inner = 0; inner < UNROLL_SIZE; inner++)
+	for (size_t inner = 0; inner < UNROLL_SIZE; inner++)
 	{
 		for (; row < n; row++)
 		{
@@ -240,7 +240,8 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 	 * Scroll to the row that is a multiple of UNROLL_SIZE. This is the correct
 	 * row at which to enter the unrolled loop below.
 	 */
-	for (int inner = row % UNROLL_SIZE; inner > 0 && inner < UNROLL_SIZE && row < n; inner++, row++)
+	for (size_t inner = row % UNROLL_SIZE; inner > 0 && inner < UNROLL_SIZE && row < n;
+		 inner++, row++)
 	{
 		UPDATE(valid1, valid2, values, row, &Narray[inner], &Sxarray[inner], &Sxxarray[inner]);
 	}
@@ -252,7 +253,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 	Assert(row % UNROLL_SIZE == 0 || row == n);
 	for (; row < UNROLL_SIZE * (n / UNROLL_SIZE); row += UNROLL_SIZE)
 	{
-		for (int inner = 0; inner < UNROLL_SIZE; inner++)
+		for (size_t inner = 0; inner < UNROLL_SIZE; inner++)
 		{
 			UPDATE(valid1,
 				   valid2,
@@ -269,7 +270,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 	 */
 	for (; row < n; row++)
 	{
-		const int inner = row % UNROLL_SIZE;
+		const size_t inner = row % UNROLL_SIZE;
 		UPDATE(valid1, valid2, values, row, &Narray[inner], &Sxarray[inner], &Sxxarray[inner]);
 	}
 
