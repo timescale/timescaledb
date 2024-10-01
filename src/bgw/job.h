@@ -84,3 +84,4 @@ extern TSDLLEXPORT bool ts_is_telemetry_job(BgwJob *job);
 ScanTupleResult ts_bgw_job_change_owner(TupleInfo *ti, void *data);
 
 extern TSDLLEXPORT Oid ts_bgw_job_get_funcid(BgwJob *job);
+extern TSDLLEXPORT const char *ts_bgw_job_function_call_string(BgwJob *job);

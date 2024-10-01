@@ -1067,7 +1067,7 @@ ts_bgw_job_get_funcid(BgwJob *job)
 	return LookupFuncWithArgs(OBJECT_ROUTINE, object, false);
 }
 
-static char *
+const char *
 ts_bgw_job_function_call_string(BgwJob *job)
 {
 	char prokind = get_func_prokind(ts_bgw_job_get_funcid(job));
@@ -1098,7 +1098,8 @@ ts_bgw_job_function_call_string(BgwJob *job)
 			break;
 		default:
 			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("unsupported function type")));
+					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					 errmsg("unsupported function type: %c", prokind)));
 			pg_unreachable();
 			break;
 	}
@@ -1263,7 +1264,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	if (!job_failed && ts_is_tss_enabled() && scheduler_test_hook == NULL)
 	{
-		char *stmt = ts_bgw_job_function_call_string(job);
+		const char *stmt = ts_bgw_job_function_call_string(job);
 		ts_end_tss_store_callback(stmt, -1, (int) strlen(stmt), 0, 0);
 	}
 
