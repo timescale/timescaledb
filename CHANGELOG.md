@@ -21,7 +21,7 @@ We recommend that you upgrade at the next available opportunity.
 `merge` instead of deleting old materialized data and re-inserting.
 
   This update can decrease dramatically the amount of data that must be written on the continuous aggregate in the
-  presence of a small number of changes, reduce the `i/o` cost of refreshing a continuous aggregate and generate less
+  presence of a small number of changes, reduce the `i/o` cost of refreshing a continuous aggregate, and generate less
   `wal`.
   Overall, continuous aggregate policies will be more lightweight, use less system resources and complete faster.
 
