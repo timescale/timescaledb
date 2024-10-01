@@ -13,7 +13,7 @@ We recommend that you upgrade at the next available opportunity.
 
 **Highlighted features in TimescaleDB v2.17.0**
 
-* Full PostgreSQL 17 support for all existing features. TimescaleDB v2.17 is available for PostgreSQL 14, 15, 16 and 17.
+* Full PostgreSQL 17 support for all existing features. TimescaleDB v2.17 is available for PostgreSQL 14, 15, 16, and 17.
 
   PostgreSQL 17 support for the Toolkit Extension will follow soon and will be announced on [Toolkit's release notes](https://github.com/timescale/timescaledb-toolkit/releases).
 
