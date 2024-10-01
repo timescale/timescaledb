@@ -380,7 +380,7 @@ ts_hypertable_relid_to_id(Oid relid)
 {
 	Cache *hcache;
 	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
-	int result = (ht == NULL) ? -1 : ht->fd.id;
+	int result = ht ? ht->fd.id : INVALID_HYPERTABLE_ID;
 
 	ts_cache_release(hcache);
 	return result;
@@ -1287,7 +1287,7 @@ hypertable_validate_constraints(Oid relid)
 
 		if (form->contype == CONSTRAINT_FOREIGN)
 		{
-			if (ts_hypertable_relid_to_id(form->confrelid) != -1)
+			if (ts_hypertable_relid_to_id(form->confrelid) != INVALID_HYPERTABLE_ID)
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("hypertables cannot be used as foreign key references of "
@@ -1322,7 +1322,8 @@ hypertable_validate_constraints(Oid relid)
 		/*
 		 * Hypertable <-> hypertable foreign keys are not supported.
 		 */
-		if (form->contype == CONSTRAINT_FOREIGN && ts_hypertable_relid_to_id(form->conrelid) != -1)
+		if (form->contype == CONSTRAINT_FOREIGN &&
+			ts_hypertable_relid_to_id(form->conrelid) != INVALID_HYPERTABLE_ID)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
 					 errmsg("cannot have FOREIGN KEY constraints to hypertable \"%s\"",
