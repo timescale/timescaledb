@@ -17,7 +17,7 @@ We recommend that you upgrade at the next available opportunity.
 
   PostgreSQL 17 support for the Toolkit Extension will follow soon and will be announced on [Toolkit's release notes](https://github.com/timescale/timescaledb-toolkit/releases).
 
-* Significant performance improvements for continuous aggregate policies: Continuous aggregate refresh is now using
+* Significant performance improvements for continuous aggregate policies: continuous aggregate refresh is now using
 `merge` instead of deleting old materialized data and re-inserting.
 
   This update can decrease dramatically the amount of data that must be written on the continuous aggregate in the
