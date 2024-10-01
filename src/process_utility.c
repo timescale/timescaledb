@@ -4606,7 +4606,7 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string, bool
 	 * We don't want to load the extension if we just got the command to alter
 	 * it.
 	 */
-	if (altering_timescaledb || !ts_extension_is_loaded())
+	if (altering_timescaledb || !ts_extension_is_loaded_and_not_upgrading())
 	{
 		prev_ProcessUtility(&args);
 		return;
@@ -4675,7 +4675,7 @@ ts_timescaledb_process_ddl_event(PG_FUNCTION_ARGS)
 	if (!CALLED_AS_EVENT_TRIGGER(fcinfo))
 		elog(ERROR, "not fired by event trigger manager");
 
-	if (!ts_extension_is_loaded())
+	if (!ts_extension_is_loaded_and_not_upgrading())
 		PG_RETURN_NULL();
 
 	if (strcmp("ddl_command_end", trigdata->event) == 0)

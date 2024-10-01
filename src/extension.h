@@ -13,6 +13,7 @@
 
 extern void ts_extension_invalidate(void);
 extern TSDLLEXPORT bool ts_extension_is_loaded(void);
+extern bool ts_extension_is_loaded_and_not_upgrading(void);
 extern void ts_extension_check_version(const char *so_version);
 extern void ts_extension_check_server_version(void);
 extern TSDLLEXPORT Oid ts_extension_schema_oid(void);

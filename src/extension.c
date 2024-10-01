@@ -288,17 +288,6 @@ ts_extension_invalidate(void)
 bool
 ts_extension_is_loaded(void)
 {
-	/* When restoring deactivate extension.
-	 *
-	 * We are using IsBinaryUpgrade (and ts_guc_restoring).  If a user set
-	 * `ts_guc_restoring` for a database, it will be stored in
-	 * `pg_db_role_settings` and be included in a dump, which will cause
-	 * `pg_upgrade` to fail.
-	 *
-	 * See dumpDatabaseConfig in pg_dump.c. */
-	if (ts_guc_restoring || IsBinaryUpgrade)
-		return false;
-
 	if (EXTENSION_STATE_UNKNOWN == extstate || EXTENSION_STATE_TRANSITIONING == extstate)
 	{
 		/* status may have updated without a relcache invalidate event */
@@ -340,6 +329,23 @@ ts_extension_is_loaded(void)
 			elog(ERROR, "unknown state: %d", extstate);
 			return false;
 	}
+}
+
+bool
+ts_extension_is_loaded_and_not_upgrading(void)
+{
+	/* When restoring deactivate extension.
+	 *
+	 * We are using IsBinaryUpgrade (and ts_guc_restoring).  If a user set
+	 * `ts_guc_restoring` for a database, it will be stored in
+	 * `pg_db_role_settings` and be included in a dump, which will cause
+	 * `pg_upgrade` to fail.
+	 *
+	 * See dumpDatabaseConfig in pg_dump.c. */
+	if (ts_guc_restoring || IsBinaryUpgrade)
+		return false;
+
+	return ts_extension_is_loaded();
 }
 
 const char *
