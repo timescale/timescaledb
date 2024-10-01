@@ -15,8 +15,6 @@ We recommend that you upgrade at the next available opportunity.
 
 * Full PostgreSQL 17 support for all existing features. TimescaleDB v2.17 is available for PostgreSQL 14, 15, 16, and 17.
 
-  PostgreSQL 17 support for the Toolkit Extension will follow soon and will be announced on [Toolkit's release notes](https://github.com/timescale/timescaledb-toolkit/releases).
-
 * Significant performance improvements for continuous aggregate policies: continuous aggregate refresh is now using
 `merge` instead of deleting old materialized data and re-inserting.
 
@@ -35,8 +33,8 @@ We recommend that you upgrade at the next available opportunity.
 
 * Improved performance of deletes on compressed hypertables when a large amount of data is affected.
 
-  This improvement speeds up operations that delete everything for a specific segment or when whole compressed
-  batches can be deleted (of up to 1000 continuous records when ordered by time or the `order_by`).
+  This improvement speeds up operations that delete whole segments by skipping the decompression step.
+  It is enabled for all deletes that filter by the `segment_by` column(s).
 
 **PostgreSQL 14 deprecation announcement**
 
@@ -44,7 +42,7 @@ We recommend that you upgrade at the next available opportunity.
   version of TimescaleDB in which PostgreSQL 14 support will not be included going forward.
 
 **Features**
-* #6882: Allow delete of fully covered compressed batches on compressed chunks , i.e. delete full segments without decompression.
+* #6882: Allow delete of full segments on compressed chunks without decompression.
 * #7033: Use `merge` statement on continuous aggregates refresh.
 * #7126: Add functions to show the compression information.
 * #7147: Vectorize partial aggregation for `sum(int4)` with grouping on `segment by` columns.
