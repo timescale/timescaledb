@@ -222,6 +222,7 @@ chunk_relation_index_create(Relation htrel, Relation template_indexrel, Relation
 		ts_adjust_indexinfo_attnos(indexinfo, htrel->rd_id, chunkrel);
 
 	hypertable_id = ts_hypertable_relid_to_id(htrel->rd_id);
+	Assert(hypertable_id != INVALID_HYPERTABLE_ID);
 
 	return ts_chunk_index_create_post_adjustment(hypertable_id,
 												 template_indexrel,
