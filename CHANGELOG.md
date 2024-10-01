@@ -26,7 +26,7 @@ We recommend that you upgrade at the next available opportunity.
   Overall, continuous aggregate policies will be more lightweight, use less system resources, and complete faster.
 
 * Increased performance for real-time analytical queries over compressed hypertables:
-  We are excited to introduce vectorized query execution (`simd` optimizations) to our engine by supporting vectorized
+  we are excited to introduce vectorized query execution (`simd` optimizations) to our engine by supporting vectorized
   execution for queries that group by using the `segment_by` column(s) and aggregate using the basic aggregate
   functions (`sum`, `count`, `avg`, `min`, `max`).
 
