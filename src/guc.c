@@ -258,7 +258,7 @@ static bool
 check_segmentby_func(char **newval, void **extra, GucSource source)
 {
 	/* if the extension doesn't exist you can't check for the function, have to take it on faith */
-	if (ts_extension_is_loaded())
+	if (ts_extension_is_loaded_and_not_upgrading())
 	{
 		Oid segment_func_oid = get_segmentby_func(*newval);
 
@@ -300,7 +300,7 @@ static bool
 check_orderby_func(char **newval, void **extra, GucSource source)
 {
 	/* if the extension doesn't exist you can't check for the function, have to take it on faith */
-	if (ts_extension_is_loaded())
+	if (ts_extension_is_loaded_and_not_upgrading())
 	{
 		Oid func_oid = get_orderby_func(*newval);
 
