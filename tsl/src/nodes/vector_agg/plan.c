@@ -327,8 +327,6 @@ can_vectorize_grouping(Agg *agg, CustomScan *custom)
 	{
 		int offset = AttrNumberGetAttrOffset(agg->grpColIdx[0]);
 		TargetEntry *entry = list_nth(agg->plan.targetlist, offset);
-		fprintf(stderr, "target entry:\n");
-		my_print(entry);
 
 		bool is_segmentby = false;
 		if (is_vector_var(custom, entry->expr, &is_segmentby))

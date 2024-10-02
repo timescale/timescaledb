@@ -72,6 +72,8 @@ typedef struct
 	uint64 aggstate_bytes_per_key;
 	uint64 allocated_aggstate_rows;
 	List *per_agg_states;
+
+	uint64 stat_input_valid_rows;
 } GroupingPolicyHash;
 
 static const GroupingPolicy grouping_policy_hash_functions;
@@ -116,6 +118,8 @@ gp_hash_reset(GroupingPolicy *obj)
 
 	h_reset(policy->table);
 	policy->have_null_key = false;
+
+	policy->stat_input_valid_rows = 0;
 }
 
 static void
@@ -236,6 +240,8 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 		}
 	}
 
+	policy->stat_input_valid_rows += arrow_num_valid(key_validity, batch_state->total_batch_rows);
+
 	ListCell *aggdeflc;
 	ListCell *aggstatelc;
 
@@ -278,10 +284,11 @@ static bool
 gp_hash_should_emit(GroupingPolicy *gp)
 {
 	GroupingPolicyHash *policy = (GroupingPolicyHash *) gp;
-	if (policy->table->members + policy->have_null_key > 0)
-	{
-		return true;
-	}
+	(void) policy;
+//	if (policy->table->members + policy->have_null_key > 0)
+//	{
+//		return true;
+//	}
 	return false;
 }
 
@@ -295,6 +302,9 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 		/* FIXME doesn't work on final result emission w/o should_emit. */
 		policy->returning_results = true;
 		h_start_iterate(policy->table, &policy->iter);
+//		fprintf(stderr, "spill after %ld input rows, %d keys, %f ratio\n",
+//			policy->stat_input_valid_rows, policy->table->members + policy->have_null_key,
+//				policy->stat_input_valid_rows / (float) (policy->table->members + policy->have_null_key));
 	}
 
 	HashEntry null_key_entry = { .agg_state_index = 1 };
