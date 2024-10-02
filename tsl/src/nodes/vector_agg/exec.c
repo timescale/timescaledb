@@ -129,7 +129,8 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 			(GroupingColumn *) linitial(vector_agg_state->output_grouping_columns);
 		DecompressContext *dcontext = &decompress_state->decompress_context;
 		CompressionColumnDescription *desc = &dcontext->compressed_chunk_columns[col->input_offset];
-		if (desc->type == COMPRESSED_COLUMN)
+		if (desc->type == COMPRESSED_COLUMN && desc->by_value && desc->value_bytes > 0 &&
+			(size_t) desc->value_bytes <= sizeof(Datum))
 		{
 			vector_agg_state->grouping =
 				create_grouping_policy_hash(vector_agg_state->agg_defs,

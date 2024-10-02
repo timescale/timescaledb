@@ -5,7 +5,7 @@
  */
 
 static void
-FUNCTION_NAME(many)(void *restrict agg_states, int32 *restrict offsets, const ArrowArray *vector,
+FUNCTION_NAME(many)(void *restrict agg_states, uint32 *restrict offsets, const ArrowArray *vector,
 					MemoryContext agg_extra_mctx)
 {
 	MemoryContext old = MemoryContextSwitchTo(agg_extra_mctx);
@@ -14,6 +14,9 @@ FUNCTION_NAME(many)(void *restrict agg_states, int32 *restrict offsets, const Ar
 	const uint64 *valid = vector->buffers[0];
 	for (int row = 0; row < n; row++)
 	{
+		FUNCTION_NAME(state) *state = (offsets[row] + (FUNCTION_NAME(state) *) agg_states);
+		CTYPE value = values[row];
+
 		if (offsets[row] == 0)
 		{
 			continue;
@@ -24,8 +27,7 @@ FUNCTION_NAME(many)(void *restrict agg_states, int32 *restrict offsets, const Ar
 			continue;
 		}
 
-		FUNCTION_NAME(state) *state = (offsets[row] + (FUNCTION_NAME(state) *) agg_states);
-		FUNCTION_NAME(one)(state, values[row]);
+		FUNCTION_NAME(one)(state, value);
 	}
 	MemoryContextSwitchTo(old);
 }
