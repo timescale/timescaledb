@@ -28,7 +28,6 @@ typedef struct
 	List *output_grouping_columns;
 	Datum *output_grouping_values;
 	bool *output_grouping_isnull;
-	bool partial_per_batch;
 	bool have_results;
 
 	/*
@@ -42,10 +41,9 @@ typedef struct
 static const GroupingPolicy grouping_policy_batch_functions;
 
 GroupingPolicy *
-create_grouping_policy_batch(List *agg_defs, List *output_grouping_columns, bool partial_per_batch)
+create_grouping_policy_batch(List *agg_defs, List *output_grouping_columns)
 {
 	GroupingPolicyBatch *policy = palloc0(sizeof(GroupingPolicyBatch));
-	policy->partial_per_batch = partial_per_batch;
 	policy->funcs = grouping_policy_batch_functions;
 	policy->output_grouping_columns = output_grouping_columns;
 	policy->agg_defs = agg_defs;
@@ -180,7 +178,6 @@ gp_batch_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 		 * means we're grouping by segmentby, and these values will be valid
 		 * until the next call to the vector agg node.
 		 */
-		Assert(policy->partial_per_batch);
 		policy->output_grouping_values[i] = *values->output_value;
 		policy->output_grouping_isnull[i] = *values->output_isnull;
 	}
@@ -192,7 +189,11 @@ static bool
 gp_batch_should_emit(GroupingPolicy *gp)
 {
 	GroupingPolicyBatch *policy = (GroupingPolicyBatch *) gp;
-	return policy->partial_per_batch && policy->have_results;
+	/*
+	 * If we're grouping by segmentby columns, we have to output partials for
+	 * every batch.
+	 */
+	return policy->output_grouping_columns != NIL && policy->have_results;
 }
 
 static bool

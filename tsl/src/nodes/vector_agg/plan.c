@@ -154,13 +154,13 @@ vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk)
 	custom->scan.plan.extParam = bms_copy(agg->plan.extParam);
 	custom->scan.plan.allParam = bms_copy(agg->plan.allParam);
 
-	List *grouping_col_offsets = NIL;
+	List *grouping_child_output_offsets = NIL;
 	for (int i = 0; i < agg->numCols; i++)
 	{
-		grouping_col_offsets =
-			lappend_int(grouping_col_offsets, AttrNumberGetAttrOffset(agg->grpColIdx[i]));
+		grouping_child_output_offsets =
+			lappend_int(grouping_child_output_offsets, AttrNumberGetAttrOffset(agg->grpColIdx[i]));
 	}
-	custom->custom_private = list_make1(grouping_col_offsets);
+	custom->custom_private = list_make1(grouping_child_output_offsets);
 
 	return (Plan *) custom;
 }
@@ -321,6 +321,27 @@ can_vectorize_grouping(Agg *agg, CustomScan *custom)
 	if (agg->numCols == 0)
 	{
 		return true;
+	}
+
+	if (agg->numCols == 1)
+	{
+		int offset = AttrNumberGetAttrOffset(agg->grpColIdx[0]);
+		TargetEntry *entry = list_nth(agg->plan.targetlist, offset);
+		fprintf(stderr, "target entry:\n");
+		my_print(entry);
+
+		bool is_segmentby = false;
+		if (is_vector_var(custom, entry->expr, &is_segmentby))
+		{
+			Var *var = castNode(Var, entry->expr);
+			int16 typlen;
+			bool typbyval;
+			get_typlenbyval(var->vartype, &typlen, &typbyval);
+			if (typbyval && typlen > 0 && (size_t) typlen <= sizeof(Datum))
+			{
+				return true;
+			}
+		}
 	}
 
 	for (int i = 0; i < agg->numCols; i++)

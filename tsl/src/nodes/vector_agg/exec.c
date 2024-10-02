@@ -122,11 +122,27 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		}
 	}
 
-	List *grouping_column_offsets = linitial(cscan->custom_private);
-	vector_agg_state->grouping =
-		create_grouping_policy_batch(vector_agg_state->agg_defs,
-									 vector_agg_state->output_grouping_columns,
-									 /* partial_per_batch = */ grouping_column_offsets != NIL);
+	///	List *grouping_child_output_offsets = linitial(cscan->custom_private);
+	if (list_length(vector_agg_state->output_grouping_columns) == 1)
+	{
+		GroupingColumn *col =
+			(GroupingColumn *) linitial(vector_agg_state->output_grouping_columns);
+		DecompressContext *dcontext = &decompress_state->decompress_context;
+		CompressionColumnDescription *desc = &dcontext->compressed_chunk_columns[col->input_offset];
+		if (desc->type == COMPRESSED_COLUMN)
+		{
+			vector_agg_state->grouping =
+				create_grouping_policy_hash(vector_agg_state->agg_defs,
+											vector_agg_state->output_grouping_columns);
+		}
+	}
+
+	if (vector_agg_state->grouping == NULL)
+	{
+		vector_agg_state->grouping =
+			create_grouping_policy_batch(vector_agg_state->agg_defs,
+										 vector_agg_state->output_grouping_columns);
+	}
 }
 
 static void

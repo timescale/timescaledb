@@ -110,12 +110,36 @@ count_any_vector(void *agg_state, const ArrowArray *vector, const uint64 *filter
 	}
 }
 
+static void
+count_any_many(void *restrict agg_states, int32 *restrict offsets, const ArrowArray *vector,
+			   MemoryContext agg_extra_mctx)
+{
+	const int n = vector->length;
+	const uint64 *valid = vector->buffers[0];
+	for (int row = 0; row < n; row++)
+	{
+		if (offsets[row] == 0)
+		{
+			continue;
+		}
+
+		if (!arrow_row_is_valid(valid, row))
+		{
+			continue;
+		}
+
+		CountState *state = (offsets[row] + (CountState *) agg_states);
+		state->count++;
+	}
+}
+
 VectorAggFunctions count_any_agg = {
 	.state_bytes = sizeof(CountState),
 	.agg_init = count_init,
 	.agg_emit = count_emit,
 	.agg_const = count_any_const,
 	.agg_vector = count_any_vector,
+	.agg_many = count_any_many,
 };
 
 /*

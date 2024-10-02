@@ -51,7 +51,18 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 	state->isnull &= !have_result;
 }
 
+static pg_attribute_always_inline void
+FUNCTION_NAME(one)(void *restrict agg_state, const CTYPE value)
+{
+	Int24SumState *state = (Int24SumState *) agg_state;
+	state->result += value;
+	state->isnull = false;
+}
+
+typedef Int24SumState FUNCTION_NAME(state);
+
 #include "agg_const_helper.c"
+#include "agg_many_helper.c"
 #include "agg_vector_validity_helper.c"
 
 VectorAggFunctions FUNCTION_NAME(argdef) = {
@@ -60,6 +71,7 @@ VectorAggFunctions FUNCTION_NAME(argdef) = {
 	.agg_emit = int_sum_emit,
 	.agg_const = FUNCTION_NAME(const),
 	.agg_vector = FUNCTION_NAME(vector),
+	.agg_many = FUNCTION_NAME(many),
 };
 #endif
 
