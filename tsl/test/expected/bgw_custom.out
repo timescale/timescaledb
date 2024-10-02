@@ -1077,26 +1077,30 @@ SELECT delete_job(:job_proc);
 SELECT add_job('custom_func', '1h', config => '{"type":"function"}'::jsonb) AS job_func \gset
 SELECT add_job('custom_proc', '1h', config => '{"type":"procedure"}'::jsonb) AS job_proc \gset
 SELECT ts_test_bgw_job_function_call_string(:job_func);
-             ts_test_bgw_job_function_call_string              
----------------------------------------------------------------
- SELECT public.custom_func('1020', "{""type"": ""function""}")
+           ts_test_bgw_job_function_call_string            
+-----------------------------------------------------------
+ SELECT public.custom_func('1020', '{"type": "function"}')
 (1 row)
 
 SELECT ts_test_bgw_job_function_call_string(:job_proc);
-             ts_test_bgw_job_function_call_string             
---------------------------------------------------------------
- CALL public.custom_proc('1021', "{""type"": ""procedure""}")
+           ts_test_bgw_job_function_call_string           
+----------------------------------------------------------
+ CALL public.custom_proc('1021', '{"type": "procedure"}')
+(1 row)
+
+-- Remove the procedure and let's check it fallingback to PROKIND_FUNCTION
+DROP PROCEDURE custom_proc(jobid int, args jsonb);
+SELECT ts_test_bgw_job_function_call_string(:job_proc);
+            ts_test_bgw_job_function_call_string            
+------------------------------------------------------------
+ SELECT public.custom_proc('1021', '{"type": "procedure"}')
 (1 row)
 
 \set ON_ERROR_STOP 0
--- Check for on existing function
-DROP FUNCTION custom_func(jobid int, args jsonb);
-SELECT ts_test_bgw_job_function_call_string(:job_func);
-ERROR:  function public.custom_func(integer, jsonb) does not exist
 -- Mess with pg catalog to don't identify the PROKIND
 BEGIN;
-UPDATE pg_catalog.pg_proc SET prokind = 'X' WHERE oid = 'custom_proc(int,jsonb)'::regprocedure;
-SELECT ts_test_bgw_job_function_call_string(:job_proc);
+UPDATE pg_catalog.pg_proc SET prokind = 'X' WHERE oid = 'custom_func(int,jsonb)'::regprocedure;
+SELECT ts_test_bgw_job_function_call_string(:job_func);
 ERROR:  unsupported function type: X
 ROLLBACK;
 \set ON_ERROR_STOP 1

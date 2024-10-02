@@ -67,7 +67,7 @@ SELECT pg_reload_conf();
 
 -- test the retention job
 SELECT next_start FROM alter_job(3, next_start => '2060-01-01 00:00:00+00'::timestamptz);
-TRUNCATE TABLE _timescaledb_internal.bgw_job_stat_history;
+DELETE FROM _timescaledb_internal.bgw_job_stat_history;
 INSERT INTO _timescaledb_internal.bgw_job_stat_history(job_id, pid, succeeded, execution_start, execution_finish, data)
 VALUES (123, 12345, false, '2000-01-01 00:00:00+00'::timestamptz, '2000-01-01 00:00:10+00'::timestamptz, '{}'),
 (456, 45678, false, '2000-01-01 00:00:20+00'::timestamptz, '2000-01-01 00:00:40+00'::timestamptz, '{}'),
@@ -87,9 +87,14 @@ FROM _timescaledb_internal.bgw_job_stat_history
 WHERE succeeded IS FALSE;
 
 -- test failure when starting jobs
-TRUNCATE _timescaledb_internal.bgw_job_stat;
-TRUNCATE _timescaledb_internal.bgw_job_stat_history;
-TRUNCATE _timescaledb_config.bgw_job CASCADE;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT _timescaledb_functions.stop_background_workers();
+
+DELETE FROM _timescaledb_internal.bgw_job_stat;
+DELETE FROM _timescaledb_internal.bgw_job_stat_history;
+DELETE FROM _timescaledb_config.bgw_job CASCADE;
+
+SELECT _timescaledb_functions.start_background_workers();
 
 \set VERBOSITY default
 -- Setup Jobs

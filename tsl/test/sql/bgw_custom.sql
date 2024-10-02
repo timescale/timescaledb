@@ -692,15 +692,15 @@ SELECT add_job('custom_proc', '1h', config => '{"type":"procedure"}'::jsonb) AS 
 SELECT ts_test_bgw_job_function_call_string(:job_func);
 SELECT ts_test_bgw_job_function_call_string(:job_proc);
 
-\set ON_ERROR_STOP 0
--- Check for on existing function
-DROP FUNCTION custom_func(jobid int, args jsonb);
-SELECT ts_test_bgw_job_function_call_string(:job_func);
+-- Remove the procedure and let's check it fallingback to PROKIND_FUNCTION
+DROP PROCEDURE custom_proc(jobid int, args jsonb);
+SELECT ts_test_bgw_job_function_call_string(:job_proc);
 
+\set ON_ERROR_STOP 0
 -- Mess with pg catalog to don't identify the PROKIND
 BEGIN;
-UPDATE pg_catalog.pg_proc SET prokind = 'X' WHERE oid = 'custom_proc(int,jsonb)'::regprocedure;
-SELECT ts_test_bgw_job_function_call_string(:job_proc);
+UPDATE pg_catalog.pg_proc SET prokind = 'X' WHERE oid = 'custom_func(int,jsonb)'::regprocedure;
+SELECT ts_test_bgw_job_function_call_string(:job_func);
 ROLLBACK;
 \set ON_ERROR_STOP 1
 

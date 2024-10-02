@@ -1056,7 +1056,7 @@ zero_guc(const char *guc_name)
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("could not set \"%s\" guc", guc_name)));
 }
 
-extern Oid
+Oid
 ts_bgw_job_get_funcid(BgwJob *job)
 {
 	ObjectWithArgs *object = makeNode(ObjectWithArgs);
@@ -1064,18 +1064,21 @@ ts_bgw_job_get_funcid(BgwJob *job)
 								 makeString(NameStr(job->fd.proc_name)));
 	object->objargs = list_make2(SystemTypeName("int4"), SystemTypeName("jsonb"));
 
-	return LookupFuncWithArgs(OBJECT_ROUTINE, object, false);
+	/* Return InvalidOid if don't found */
+	return LookupFuncWithArgs(OBJECT_ROUTINE, object, true);
 }
 
 const char *
 ts_bgw_job_function_call_string(BgwJob *job)
 {
-	char prokind = get_func_prokind(ts_bgw_job_get_funcid(job));
+	Oid funcid = ts_bgw_job_get_funcid(job);
+	/* If do not found the function or procedure then fallback to PROKIND_FUNCTION */
+	char prokind = OidIsValid(funcid) ? get_func_prokind(funcid) : PROKIND_FUNCTION;
 	StringInfo stmt = makeStringInfo();
 	char *jsonb_str = "NULL";
 
 	if (job->fd.config)
-		jsonb_str = (char *) quote_identifier(
+		jsonb_str = quote_literal_cstr(
 			JsonbToCString(NULL, &job->fd.config->root, VARSIZE(job->fd.config)));
 
 	switch (prokind)
@@ -1100,7 +1103,6 @@ ts_bgw_job_function_call_string(BgwJob *job)
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 					 errmsg("unsupported function type: %c", prokind)));
-			pg_unreachable();
 			break;
 	}
 
