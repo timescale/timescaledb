@@ -51,6 +51,8 @@ We recommend that you upgrade at the next available opportunity.
 * #7209: Add a function to drop the `osm` chunk.
 * #7275: Add support for the `returning` clause for `merge`.
 * #7295: Support `alter table set access method` on the hypertable.
+* #7200: Vectorize common aggregate functions like `min`, `max`, `sum`, `avg`, `stddev`, `variance` for compressed columns
+  of arithmetic types , when there is grouping on `segment by` columns or no grouping.
 
 **Bug fixes**
 * #7187: Fix the string literal length for the `compressed_data_info` function.
@@ -64,10 +66,13 @@ We recommend that you upgrade at the next available opportunity.
 * #7258: Force English in the `pg_config` command executed by `cmake` to avoid the unexpected building errors.
 * #7270: Fix the memory leak in compressed DML batch filtering.
 * #7286: Fix the index column check while searching for the index.
+* #7290: Add check for null offset for continuous aggregates built on top of continuous aggregates.
+* #7301: Make foreign key behaviour for hypertables consistent.
 
 **Thanks**
 * @MiguelTubio for reporting and fixing the Windows build error.
 * @posuch for reporting the misleading extension description in the generic loader packages.
+* @snyrkill for discovering and reporting the issue with continuous aggregates built on top of continuous aggregates.
 
 ## 2.16.1 (2024-08-06)
 
