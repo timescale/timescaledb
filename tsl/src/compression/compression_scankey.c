@@ -45,10 +45,9 @@ build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *settings, Relati
 
 	scankeys = palloc(sizeof(ScanKeyData) * bms_num_members(constraints->key_columns));
 
-	int i = -1;
-	while ((i = bms_next_member(constraints->key_columns, i)) > 0)
+	AttrNumber attno = -1;
+	while ((attno = bms_next_member(constraints->key_columns, attno)) > 0)
 	{
-		AttrNumber attno = i + FirstLowInvalidHeapAttributeNumber;
 		bool isnull;
 
 		/*
@@ -125,10 +124,9 @@ build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 	if (!bms_is_empty(key_columns))
 	{
 		scankeys = palloc0(bms_num_members(key_columns) * 2 * sizeof(ScanKeyData));
-		int i = -1;
-		while ((i = bms_next_member(key_columns, i)) > 0)
+		AttrNumber attno = -1;
+		while ((attno = bms_next_member(key_columns, attno)) > 0)
 		{
-			AttrNumber attno = i + FirstLowInvalidHeapAttributeNumber;
 			char *attname = get_attname(out_rel->rd_id, attno, false);
 			bool isnull;
 			AttrNumber ht_attno = get_attnum(hypertable_relid, attname);
@@ -322,8 +320,7 @@ build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel, Relation 
 			AttrNumber idx_attnum = AttrOffsetGetAttrNumber(i);
 			AttrNumber in_attnum = index_rel->rd_index->indkey.values[i];
 			const NameData *attname = attnumAttName(in_rel, in_attnum);
-			AttrNumber column_attno =
-				get_attnum(out_rel->rd_id, NameStr(*attname)) - FirstLowInvalidHeapAttributeNumber;
+			AttrNumber column_attno = get_attnum(out_rel->rd_id, NameStr(*attname));
 
 			/* Make sure we find columns in key columns in order to select the right index */
 			if (!bms_is_member(column_attno, key_columns))

@@ -791,6 +791,17 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 
 	pgstat_report_activity(STATE_RUNNING, NULL);
 
+	/* If we are restoring or upgrading, don't schedule anything. Just
+	 * exit. */
+	if (ts_guc_restoring || IsBinaryUpgrade)
+	{
+		elog(LOG,
+			 "scheduler for database %u exiting since the database is restoring or upgrading",
+			 MyDatabaseId);
+		terminate_all_jobs_and_release_workers();
+		goto scheduler_exit;
+	}
+
 	/* txn to read the list of jobs from the DB */
 	StartTransactionCommand();
 	scheduled_jobs = ts_update_scheduled_jobs_list(scheduled_jobs, scheduler_mctx);
@@ -862,10 +873,12 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 		elog(WARNING, "bgw scheduler stopped due to shutdown_bgw guc");
 #endif
 
+scheduler_exit:
 	CHECK_FOR_INTERRUPTS();
 
 	wait_for_all_jobs_to_shutdown();
 	check_for_stopped_and_timed_out_jobs();
+	scheduled_jobs = NIL;
 }
 
 static void

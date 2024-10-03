@@ -51,8 +51,8 @@ ts_get_tss_store_hook(void)
 	return NULL;
 }
 
-static bool
-is_tss_enabled(void)
+bool
+ts_is_tss_enabled(void)
 {
 	if (ts_guc_enable_tss_callbacks)
 	{
@@ -83,7 +83,7 @@ is_tss_enabled(void)
 void
 ts_begin_tss_store_callback(void)
 {
-	if (!is_tss_enabled())
+	if (!ts_is_tss_enabled())
 		return;
 
 	tss_callback_start_bufusage = pgBufferUsage;
@@ -100,7 +100,7 @@ ts_end_tss_store_callback(const char *query, int query_location, int query_len, 
 	WalUsage walusage;
 	tss_store_hook_type hook;
 
-	if (!is_tss_enabled())
+	if (!ts_is_tss_enabled())
 		return;
 
 	hook = ts_get_tss_store_hook();

@@ -805,12 +805,13 @@ get_batch_keys_for_unique_constraints(const ChunkInsertState *cis, Relation rela
 		 */
 		for (int i = 0; i < indexDesc->rd_index->indnkeyatts; i++)
 		{
-			int attno = indexDesc->rd_index->indkey.values[i];
+			AttrNumber attno = indexDesc->rd_index->indkey.values[i];
 			/* We are not interested in expression columns which will have attno = 0 */
 			if (!attno)
 				continue;
 
-			idx_attrs = bms_add_member(idx_attrs, attno - FirstLowInvalidHeapAttributeNumber);
+			Assert(AttrNumberIsForUserDefinedAttr(attno));
+			idx_attrs = bms_add_member(idx_attrs, attno);
 		}
 		index_close(indexDesc, AccessShareLock);
 
@@ -1351,11 +1352,9 @@ key_column_is_null(tuple_filtering_constraints *constraints, Relation chunk_rel,
 	if (!constraints->covered || constraints->nullsnotdistinct)
 		return false;
 
-	int i = -1;
-	while ((i = bms_next_member(constraints->key_columns, i)) > 0)
+	AttrNumber chunk_attno = -1;
+	while ((chunk_attno = bms_next_member(constraints->key_columns, chunk_attno)) > 0)
 	{
-		AttrNumber chunk_attno = i + FirstLowInvalidHeapAttributeNumber;
-
 		/*
 		 * slot has the physical layout of the hypertable, so we need to
 		 * get the attribute number of the hypertable for the column.
