@@ -50,7 +50,6 @@ We recommend that you upgrade at the next available opportunity.
 * #7207: Refactor the `decompress_batches_scan` functions for easier maintenance.
 * #7209: Add a function to drop the `osm` chunk.
 * #7275: Add support for the `returning` clause for `merge`.
-* #7295: Support `alter table set access method` on the hypertable.
 * #7200: Vectorize common aggregate functions like `min`, `max`, `sum`, `avg`, `stddev`, `variance` for compressed columns
   of arithmetic types , when there is grouping on `segment by` columns or no grouping.
 
