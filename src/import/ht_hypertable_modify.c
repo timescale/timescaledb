@@ -380,7 +380,8 @@ ExecProcessReturning(ResultRelInfo *resultRelInfo, TupleTableSlot *tupleSlot,
 #if PG15_GE
 
 TupleTableSlot *ExecInsert(ModifyTableContext * context, ResultRelInfo * resultRelInfo,
-			   TupleTableSlot * slot, bool canSetTag);
+						   ChunkDispatchState* cds,
+						   TupleTableSlot * slot, bool canSetTag);
 
 static TupleTableSlot * mergeGetUpdateNewTuple(ResultRelInfo * relinfo, TupleTableSlot * planSlot,
 		    TupleTableSlot * oldSlot, MergeActionState * relaction);
@@ -943,14 +944,15 @@ ht_ExecMergeNotMatched(ModifyTableContext * context, ResultRelInfo * resultRelIn
 												MakeSingleTupleTableSlot(chunktupdesc,
 																		&TTSOpsVirtual));
 				rslot =  ExecInsert(context,
-									cds->rri,
+									resultRelInfo,
+									cds,
 									(chunk_slot ? chunk_slot : newslot),
 									canSetTag);
 				if (chunk_slot)
 					ExecDropSingleTupleTableSlot(chunk_slot);
 			}
 			else
-				rslot = ExecInsert(context, cds->rri, newslot, canSetTag);
+				rslot = ExecInsert(context, resultRelInfo, cds, newslot, canSetTag);
 			mtstate->mt_merge_inserted = 1;
 			break;
 		case CMD_NOTHING:
