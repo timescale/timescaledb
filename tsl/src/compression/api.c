@@ -34,6 +34,7 @@
 #include <utils/syscache.h>
 
 #include "compat/compat.h"
+#include "annotations.h"
 #include "api.h"
 #include "cache.h"
 #include "chunk.h"
@@ -777,6 +778,87 @@ set_access_method(Oid relid, const char *amname)
 	return relid;
 }
 
+enum UseAccessMethod
+{
+	USE_AM_FALSE,
+	USE_AM_TRUE,
+	USE_AM_NULL,
+};
+
+static enum UseAccessMethod
+parse_use_access_method(const char *compress_using)
+{
+	if (compress_using == NULL)
+		return USE_AM_NULL;
+
+	if (strcmp(compress_using, "heap") == 0)
+		return USE_AM_FALSE;
+	else if (strcmp(compress_using, "hyperstore") == 0)
+		return USE_AM_TRUE;
+
+	ereport(ERROR,
+			(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+			 errmsg("can only compress using \"heap\" or \"hyperstore\"")));
+
+	pg_unreachable();
+}
+
+/*
+ * When using compress_chunk() with hyperstore, there are three cases to
+ * handle:
+ *
+ * 1. Convert from (uncompressed) heap to hyperstore
+ *
+ * 2. Convert from compressed heap to hyperstore
+ *
+ * 3. Recompress a hyperstore
+ */
+static Oid
+compress_hyperstore(Chunk *chunk, bool rel_is_hyperstore, enum UseAccessMethod useam,
+					bool if_not_compressed, bool recompress)
+{
+	Oid relid = InvalidOid;
+
+	/* Either the chunk is already a hyperstore (and in that case recompress),
+	 * or it is being converted to one */
+	Assert(rel_is_hyperstore || useam == USE_AM_TRUE);
+
+	if (ts_chunk_is_compressed(chunk) && !rel_is_hyperstore)
+	{
+		Assert(useam == USE_AM_TRUE);
+		/* Do quick migration to hyperstore of already compressed data by
+		 * simply changing the access method to hyperstore in pg_am. */
+		hyperstore_set_am(chunk->table_id);
+		return chunk->table_id;
+	}
+
+	switch (useam)
+	{
+		case USE_AM_FALSE:
+			elog(NOTICE,
+				 "cannot compress hyperstore \"%s\" using heap, recompressing instead",
+				 get_rel_name(chunk->table_id));
+			TS_FALLTHROUGH;
+		case USE_AM_NULL:
+			Assert(rel_is_hyperstore);
+			relid = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
+			break;
+		case USE_AM_TRUE:
+			if (rel_is_hyperstore)
+				relid = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
+			else
+			{
+				/* Convert to a compressed hyperstore by simply calling ALTER TABLE
+				 * <chunk> SET ACCESS METHOD hyperstore */
+				set_access_method(chunk->table_id, "hyperstore");
+				relid = chunk->table_id;
+			}
+			break;
+	}
+
+	return relid;
+}
+
 Datum
 tsl_compress_chunk(PG_FUNCTION_ARGS)
 {
@@ -789,64 +871,14 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
-	bool rel_is_hyperstore =
-		(get_table_am_oid("hyperstore", false) == ts_get_rel_am(uncompressed_chunk_id));
-	bool arg_is_heap = false;
-	bool arg_is_hyperstore = false;
-	bool is_hyperstore_recompression = false;
+	bool rel_is_hyperstore = get_table_am_oid("hyperstore", false) == chunk->amoid;
+	enum UseAccessMethod useam = parse_use_access_method(compress_using);
 
-	if (compress_using != NULL)
-	{
-		if (strcmp(compress_using, "heap") == 0)
-			arg_is_heap = true;
-		else if (strcmp(compress_using, "hyperstore") == 0)
-			arg_is_hyperstore = true;
-	}
-
-	if (ts_chunk_is_compressed(chunk) && !rel_is_hyperstore && arg_is_hyperstore)
-	{
-		/* Do quick migration to hyperstore of already compressed data by
-		 * simply changing the access method to hyperstore in pg_am. */
-		hyperstore_set_am(uncompressed_chunk_id);
-		PG_RETURN_OID(uncompressed_chunk_id);
-	}
-
-	/* Check for recompression of hyperstore */
-	if (rel_is_hyperstore && arg_is_heap)
-	{
-		/*
-		 * If the chunk is already a hyperstore we recompress it even if
-		 * compress_using=>heap.
-		 */
-		elog(NOTICE,
-			 "cannot compress hyperstore \"%s\" using heap, recompressing instead",
-			 get_rel_name(uncompressed_chunk_id));
-		is_hyperstore_recompression = true;
-	}
-	else if (rel_is_hyperstore && (arg_is_hyperstore || NULL == compress_using))
-		is_hyperstore_recompression = true;
-
-	if (compress_using == NULL || arg_is_heap || is_hyperstore_recompression)
-	{
-		/* If compress_chunk() is called on an already compressed heap, or, a
-		 * hyperstore with compress_using=>'hyperstore', then this is a
-		 * recompression. */
-		uncompressed_chunk_id = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
-	}
-	else if (arg_is_hyperstore)
-	{
-		if (!if_not_compressed && rel_is_hyperstore)
-			ereport(ERROR,
-					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-					 errmsg("chunk \"%s\" is already a hyperstore",
-							get_rel_name(uncompressed_chunk_id))));
-
-		set_access_method(uncompressed_chunk_id, compress_using);
-	}
+	if (rel_is_hyperstore || useam == USE_AM_TRUE)
+		uncompressed_chunk_id =
+			compress_hyperstore(chunk, rel_is_hyperstore, useam, if_not_compressed, recompress);
 	else
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("can only compress using \"heap\" or \"hyperstore\"")));
+		uncompressed_chunk_id = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
 
 	PG_RETURN_OID(uncompressed_chunk_id);
 }
