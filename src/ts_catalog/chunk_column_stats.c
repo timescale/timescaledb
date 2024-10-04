@@ -1071,7 +1071,6 @@ ts_chunk_column_stats_get_chunk_ids_by_scan(DimensionRestrictInfo *dri)
 	ScanIterator it;
 	List *chunkids = NIL;
 	DimensionRestrictInfoOpen *open;
-	bool check_both = false;
 
 	Assert(dri && dri->dimension->type == DIMENSION_TYPE_STATS);
 
@@ -1081,25 +1080,6 @@ ts_chunk_column_stats_get_chunk_ids_by_scan(DimensionRestrictInfo *dri)
 	it.ctx.tuplock = NULL;
 
 	open = (DimensionRestrictInfoOpen *) dri;
-
-	/*
-	 * Since we need to find chunks with overlapping ranges. We use checks on both the
-	 * lower_bound and the upper_bound.
-	 */
-	if (open->upper_strategy != InvalidStrategy && open->lower_strategy != InvalidStrategy)
-		check_both = true;
-
-	if (open->upper_strategy == InvalidStrategy)
-	{
-		open->upper_strategy = open->lower_strategy;
-		open->upper_bound = open->lower_bound;
-	}
-
-	if (open->lower_strategy == InvalidStrategy)
-	{
-		open->lower_strategy = open->upper_strategy;
-		open->lower_bound = open->upper_bound;
-	}
 
 	/*
 	 * We need to get all chunks matching the hypertable ID and the column name.
@@ -1144,18 +1124,6 @@ ts_chunk_column_stats_get_chunk_ids_by_scan(DimensionRestrictInfo *dri)
 		}
 
 		/*
-		 * If both upper and lower bounds have been specified then we need to check
-		 * if that range overlaps (subset, superset, intersect) with the current fd entry
-		 * values
-		 */
-		if (check_both)
-		{
-			/* range is before or after our fd range_start/range_end values */
-			if (open->upper_bound < fd->range_start || open->lower_bound > fd->range_end)
-				goto done;
-		}
-
-		/*
 		 * All data is in int8 format so we do regular comparisons. Also, it's an OR
 		 * check so prepare to short circuit if one evaluates to true.
 		 *
@@ -1166,78 +1134,37 @@ ts_chunk_column_stats_get_chunk_ids_by_scan(DimensionRestrictInfo *dri)
 		{
 			case BTLessEqualStrategyNumber: /* e.g: id <= 90 */
 			{
-				/* range_end is exclusive, so check accordingly */
-				if ((fd->range_end - 1) <= open->upper_bound)
-					matched = check_both ? false : true;
+				matched = fd->range_start <= open->upper_bound;
 			}
 			break;
 			case BTLessStrategyNumber: /* e.g: id < 90 */
 			{
-				/* range_end is exclusive, so check accordingly */
-				if ((fd->range_end - 1) < open->upper_bound)
-					matched = check_both ? false : true;
-			}
-			break;
-			case BTGreaterEqualStrategyNumber: /* e.g: id >= 90 */
-			{
-				/* range_end is exclusive, so check accordingly */
-				if ((fd->range_end - 1) >= open->upper_bound)
-					matched = check_both ? false : true;
-			}
-			break;
-			case BTGreaterStrategyNumber: /* e.g: id > 9 */
-			{
-				/* range_end is exclusive, so check accordingly */
-				if ((fd->range_end - 1) > open->upper_bound)
-					matched = check_both ? false : true;
-			}
-			break;
-			case BTEqualStrategyNumber: /* e.g: id == 9 */
-			{
-				/* need to check for both range_start and range_end */
-				if (fd->range_start <= open->lower_bound &&
-					(fd->range_end - 1) >= open->upper_bound)
-					matched = true;
+				matched = fd->range_start < open->upper_bound;
 			}
 			break;
 			default:
-				/* unsupported strategy */
+				open->upper_strategy = InvalidStrategy;
 				break;
 		}
 
-		if (matched)
+		if (open->upper_strategy != InvalidStrategy && !matched)
 			goto done;
 
 		/* range_end checks didn't match, check for range_start now */
 		switch (open->lower_strategy)
 		{
-			case BTLessEqualStrategyNumber:
-			{
-				if (fd->range_start <= open->lower_bound)
-					matched = true;
-			}
-			break;
-			case BTLessStrategyNumber:
-			{
-				if (fd->range_start < open->lower_bound)
-					matched = true;
-			}
-			break;
 			case BTGreaterEqualStrategyNumber:
 			{
-				if (fd->range_start >= open->lower_bound)
-					matched = true;
+				/* range_end is exclusive */
+				matched = (fd->range_end - 1) >= open->lower_bound;
 			}
 			break;
 			case BTGreaterStrategyNumber:
 			{
-				/* range_start is inclusive */
-				if (fd->range_start >= open->lower_bound)
-					matched = true;
+				/* range_end is exclusive */
+				matched = (fd->range_end - 1) > open->lower_bound;
 			}
 			break;
-			case BTEqualStrategyNumber:
-				/* already handled above with upper_strategy */
 			default:
 				/* unsupported strategy */
 				break;

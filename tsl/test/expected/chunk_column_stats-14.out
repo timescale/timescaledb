@@ -205,11 +205,35 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 
 -- A query using a WHERE clause on "sensor_id" column will scan the proper chunk
 -- due to chunk exclusion using min/max ranges calculated above
-:PREFIX SELECT * FROM sample_table WHERE sensor_id > 9;
+-- First chunk has [start,end) values of [1,9), here we confirm that its being
+-- filtered out when we are not hitting that range.
+-- Query ranges outside of chunk stats, should not include first chunk.
+:PREFIX SELECT * FROM sample_table WHERE sensor_id < 1;
           QUERY PLAN          
 ------------------------------
  Seq Scan on _hyper_1_2_chunk
-   Filter: (sensor_id > 9)
+   Filter: (sensor_id < 1)
+(2 rows)
+
+:PREFIX SELECT * FROM sample_table WHERE sensor_id <= 0;
+          QUERY PLAN          
+------------------------------
+ Seq Scan on _hyper_1_2_chunk
+   Filter: (sensor_id <= 0)
+(2 rows)
+
+:PREFIX SELECT * FROM sample_table WHERE sensor_id > 8;
+          QUERY PLAN          
+------------------------------
+ Seq Scan on _hyper_1_2_chunk
+   Filter: (sensor_id > 8)
+(2 rows)
+
+:PREFIX SELECT * FROM sample_table WHERE sensor_id >= 9;
+          QUERY PLAN          
+------------------------------
+ Seq Scan on _hyper_1_2_chunk
+   Filter: (sensor_id >= 9)
 (2 rows)
 
 :PREFIX SELECT * FROM sample_table WHERE sensor_id = 10;
@@ -218,6 +242,118 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
  Seq Scan on _hyper_1_2_chunk
    Filter: (sensor_id = 10)
 (2 rows)
+
+-- Query intersecting ranges, should include chunk.
+:PREFIX SELECT * FROM sample_table WHERE sensor_id = 7;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+               Index Cond: (sensor_id = 7)
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: (sensor_id = 7)
+(6 rows)
+
+:PREFIX SELECT * FROM sample_table WHERE sensor_id < 2;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+               Index Cond: (sensor_id < 2)
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: (sensor_id < 2)
+(6 rows)
+
+:PREFIX SELECT * FROM sample_table WHERE sensor_id > 3;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+               Index Cond: (sensor_id > 3)
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: (sensor_id > 3)
+(6 rows)
+
+:PREFIX SELECT * FROM sample_table WHERE sensor_id <= 1;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+               Index Cond: (sensor_id <= 1)
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: (sensor_id <= 1)
+(6 rows)
+
+:PREFIX SELECT * FROM sample_table WHERE sensor_id >= 8;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+               Index Cond: (sensor_id >= 8)
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: (sensor_id >= 8)
+(6 rows)
+
+:PREFIX SELECT * FROM sample_table WHERE sensor_id >= 8 AND sensor_id <= 10;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+               Index Cond: ((sensor_id >= 8) AND (sensor_id <= 10))
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: ((sensor_id >= 8) AND (sensor_id <= 10))
+(6 rows)
+
+:PREFIX SELECT * FROM sample_table WHERE sensor_id <= 4 AND sensor_id > -5;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+               Index Cond: ((sensor_id <= 4) AND (sensor_id > '-5'::integer))
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: ((sensor_id <= 4) AND (sensor_id > '-5'::integer))
+(6 rows)
+
+:PREFIX SELECT * FROM sample_table WHERE sensor_id > 6 AND sensor_id < 10;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+               Index Cond: ((sensor_id > 6) AND (sensor_id < 10))
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: ((sensor_id > 6) AND (sensor_id < 10))
+(6 rows)
+
+:PREFIX SELECT * FROM sample_table WHERE sensor_id <= 5 AND sensor_id > -1;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+               Index Cond: ((sensor_id <= 5) AND (sensor_id > '-1'::integer))
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: ((sensor_id <= 5) AND (sensor_id > '-1'::integer))
+(6 rows)
+
+-- Query chunk superset ranges, should include chunk.
+:PREFIX SELECT * FROM sample_table WHERE sensor_id > -2;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+               Index Cond: (sensor_id > '-2'::integer)
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: (sensor_id > '-2'::integer)
+(6 rows)
 
 :PREFIX SELECT * FROM sample_table WHERE sensor_id < 11;
                                                         QUERY PLAN                                                        
@@ -230,22 +366,86 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
          Filter: (sensor_id < 11)
 (6 rows)
 
-:PREFIX SELECT * FROM sample_table WHERE sensor_id > 9 and sensor_id < 20;
-                    QUERY PLAN                    
---------------------------------------------------
- Seq Scan on _hyper_1_2_chunk
-   Filter: ((sensor_id > 9) AND (sensor_id < 20))
-(2 rows)
-
-:PREFIX SELECT * FROM sample_table WHERE sensor_id > 1 and sensor_id < 7;
+:PREFIX SELECT * FROM sample_table WHERE sensor_id >= 1 AND sensor_id <= 8;
                                                         QUERY PLAN                                                        
 --------------------------------------------------------------------------------------------------------------------------
  Append
    ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
          ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
-               Index Cond: ((sensor_id > 1) AND (sensor_id < 7))
+               Index Cond: ((sensor_id >= 1) AND (sensor_id <= 8))
    ->  Seq Scan on _hyper_1_2_chunk
-         Filter: ((sensor_id > 1) AND (sensor_id < 7))
+         Filter: ((sensor_id >= 1) AND (sensor_id <= 8))
+(6 rows)
+
+:PREFIX SELECT * FROM sample_table WHERE sensor_id > 0 AND sensor_id < 9;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+               Index Cond: ((sensor_id > 0) AND (sensor_id < 9))
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: ((sensor_id > 0) AND (sensor_id < 9))
+(6 rows)
+
+-- Query chunk subset ranges, should include chunk.
+:PREFIX SELECT * FROM sample_table WHERE sensor_id > 2 AND sensor_id < 7;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+               Index Cond: ((sensor_id > 2) AND (sensor_id < 7))
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: ((sensor_id > 2) AND (sensor_id < 7))
+(6 rows)
+
+:PREFIX SELECT * FROM sample_table WHERE sensor_id >= 3 AND sensor_id <= 6;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+               Index Cond: ((sensor_id >= 3) AND (sensor_id <= 6))
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: ((sensor_id >= 3) AND (sensor_id <= 6))
+(6 rows)
+
+:PREFIX SELECT * FROM sample_table WHERE sensor_id > 4 AND sensor_id <= 5;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+               Index Cond: ((sensor_id > 4) AND (sensor_id <= 5))
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: ((sensor_id > 4) AND (sensor_id <= 5))
+(6 rows)
+
+:PREFIX SELECT * FROM sample_table WHERE sensor_id >= 6 AND sensor_id < 8;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+               Index Cond: ((sensor_id >= 6) AND (sensor_id < 8))
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: ((sensor_id >= 6) AND (sensor_id < 8))
+(6 rows)
+
+-- Query ranges with OR clause will not work properly due to the way
+-- hypertable expansion works as of now. Once we fix that, it should
+-- fix the issue here too.
+-- Should not include but it does.
+:PREFIX SELECT * FROM sample_table WHERE sensor_id < 1 OR sensor_id > 8;
+                         QUERY PLAN                         
+------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Seq Scan on compress_hyper_2_3_chunk
+               Filter: ((sensor_id < 1) OR (sensor_id > 8))
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: ((sensor_id < 1) OR (sensor_id > 8))
 (6 rows)
 
 -- Executor startup time exclusion will also use these ranges appropriately
