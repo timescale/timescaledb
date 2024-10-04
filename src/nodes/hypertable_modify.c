@@ -4,6 +4,8 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/tupdesc.h>
+#include <catalog/pg_attribute.h>
 #include <catalog/pg_type.h>
 #include <executor/execPartition.h>
 #include <executor/nodeModifyTable.h>
@@ -12,6 +14,7 @@
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <nodes/pg_list.h>
 #include <nodes/plannodes.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/plancat.h>
