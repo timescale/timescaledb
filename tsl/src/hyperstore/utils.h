@@ -7,4 +7,4 @@
 
 #include <postgres.h>
 
-extern void hyperstore_set_am(Oid relid);
+extern void hyperstore_set_am(const RangeVar *rv);
