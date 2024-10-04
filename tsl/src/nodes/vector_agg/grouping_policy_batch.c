@@ -52,8 +52,8 @@ create_grouping_policy_batch(List *agg_defs, List *output_grouping_columns)
 	ListCell *lc;
 	foreach (lc, agg_defs)
 	{
-		VectorAggDef *def = lfirst(lc);
-		policy->agg_states = lappend(policy->agg_states, palloc0(def->func->state_bytes));
+		VectorAggDef *agg_def = lfirst(lc);
+		policy->agg_states = lappend(policy->agg_states, palloc0(agg_def->func.state_bytes));
 	}
 	policy->output_grouping_values =
 		(Datum *) palloc0(MAXALIGN(list_length(output_grouping_columns) * sizeof(Datum)) +
@@ -77,7 +77,7 @@ gp_batch_reset(GroupingPolicy *obj)
 	{
 		VectorAggDef *agg_def = (VectorAggDef *) list_nth(policy->agg_defs, i);
 		void *agg_state = (void *) list_nth(policy->agg_states, i);
-		agg_def->func->agg_init(agg_state, 1);
+		agg_def->func.agg_init(agg_state, 1);
 	}
 
 	const int ngrp = list_length(policy->output_grouping_columns);
@@ -126,10 +126,10 @@ compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_de
 	if (arg_arrow != NULL)
 	{
 		/* Arrow argument. */
-		agg_def->func->agg_vector(agg_state,
-								  arg_arrow,
-								  batch_state->vector_qual_result,
-								  agg_extra_mctx);
+		agg_def->func.agg_vector(agg_state,
+								 arg_arrow,
+								 batch_state->vector_qual_result,
+								 agg_extra_mctx);
 	}
 	else
 	{
@@ -146,7 +146,7 @@ compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_de
 		 */
 		Assert(n > 0);
 
-		agg_def->func->agg_const(agg_state, arg_datum, arg_isnull, n, agg_extra_mctx);
+		agg_def->func.agg_const(agg_state, arg_datum, arg_isnull, n, agg_extra_mctx);
 	}
 }
 
@@ -211,9 +211,9 @@ gp_batch_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 	{
 		VectorAggDef *agg_def = (VectorAggDef *) list_nth(policy->agg_defs, i);
 		void *agg_state = (void *) list_nth(policy->agg_states, i);
-		agg_def->func->agg_emit(agg_state,
-								&aggregated_slot->tts_values[agg_def->output_offset],
-								&aggregated_slot->tts_isnull[agg_def->output_offset]);
+		agg_def->func.agg_emit(agg_state,
+							   &aggregated_slot->tts_values[agg_def->output_offset],
+							   &aggregated_slot->tts_isnull[agg_def->output_offset]);
 	}
 
 	const int ngrp = list_length(policy->output_grouping_columns);

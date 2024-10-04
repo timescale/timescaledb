@@ -105,12 +105,12 @@ create_grouping_policy_hash(List *agg_defs, List *output_grouping_columns)
 	ListCell *lc;
 	foreach (lc, agg_defs)
 	{
-		VectorAggDef *def = lfirst(lc);
-		policy->aggstate_bytes_per_key += def->func->state_bytes;
+		VectorAggDef *agg_def = lfirst(lc);
+		policy->aggstate_bytes_per_key += agg_def->func.state_bytes;
 
 		policy->per_agg_states =
 			lappend(policy->per_agg_states,
-					palloc0(def->func->state_bytes * policy->allocated_aggstate_rows));
+					palloc0(agg_def->func.state_bytes * policy->allocated_aggstate_rows));
 	}
 
 	policy->table = h_create(CurrentMemoryContext, 1000, NULL);
@@ -172,7 +172,7 @@ compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_de
 	if (arg_arrow != NULL)
 	{
 		/* Arrow argument. */
-		agg_def->func->agg_many(agg_states, offsets, arg_arrow, agg_extra_mctx);
+		agg_def->func.agg_many(agg_states, offsets, arg_arrow, agg_extra_mctx);
 	}
 	else
 	{
@@ -180,14 +180,14 @@ compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_de
 		 * Scalar argument, or count(*). The latter has an optimized
 		 * implementation for this case.
 		 */
-		if (agg_def->func->agg_many_scalar != NULL)
+		if (agg_def->func.agg_many_scalar != NULL)
 		{
-			agg_def->func->agg_many_scalar(agg_states,
-										   offsets,
-										   batch_state->total_batch_rows,
-										   arg_datum,
-										   arg_isnull,
-										   agg_extra_mctx);
+			agg_def->func.agg_many_scalar(agg_states,
+										  offsets,
+										  batch_state->total_batch_rows,
+										  arg_datum,
+										  arg_isnull,
+										  agg_extra_mctx);
 		}
 		else
 		{
@@ -198,8 +198,8 @@ compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_de
 					continue;
 				}
 
-				void *state = (offsets[i] * agg_def->func->state_bytes + (char *) agg_states);
-				agg_def->func->agg_const(state, arg_datum, arg_isnull, 1, agg_extra_mctx);
+				void *state = (offsets[i] * agg_def->func.state_bytes + (char *) agg_states);
+				agg_def->func.agg_const(state, arg_datum, arg_isnull, 1, agg_extra_mctx);
 			}
 		}
 	}
@@ -421,19 +421,19 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 			policy->allocated_aggstate_rows = policy->allocated_aggstate_rows * 2 + 1;
 			forboth (aggdeflc, policy->agg_defs, aggstatelc, policy->per_agg_states)
 			{
-				VectorAggDef *def = lfirst(aggdeflc);
+				VectorAggDef *agg_def = lfirst(aggdeflc);
 				lfirst(aggstatelc) =
 					repalloc(lfirst(aggstatelc),
-							 policy->allocated_aggstate_rows * def->func->state_bytes);
+							 policy->allocated_aggstate_rows * agg_def->func.state_bytes);
 			}
 		}
 
 		forboth (aggdeflc, policy->agg_defs, aggstatelc, policy->per_agg_states)
 		{
-			const VectorAggDef *def = lfirst(aggdeflc);
-			def->func->agg_init(def->func->state_bytes * last_initialized_state_index +
-									(char *) lfirst(aggstatelc),
-								next_unused_state_index - last_initialized_state_index);
+			const VectorAggDef *agg_def = lfirst(aggdeflc);
+			agg_def->func.agg_init(agg_def->func.state_bytes * last_initialized_state_index +
+									   (char *) lfirst(aggstatelc),
+								   next_unused_state_index - last_initialized_state_index);
 		}
 	}
 
@@ -480,11 +480,12 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 		/* FIXME doesn't work on final result emission w/o should_emit. */
 		policy->returning_results = true;
 		h_start_iterate(policy->table, &policy->iter);
-		//				fprintf(stderr, "spill after %ld input rows, %d keys, %f ratio, %ld aggctx bytes,
-		//%ld aggstate bytes\n", 				policy->stat_input_valid_rows, policy->table->members
+		//				fprintf(stderr, "spill after %ld input rows, %d keys, %f ratio, %ld aggctx
+		//bytes, %ld aggstate bytes\n", 				policy->stat_input_valid_rows,
+		//policy->table->members
 		//+ 		policy->have_null_key, 				policy->stat_input_valid_rows / (float)
-		//(policy->table->members + 																 policy->have_null_key),
-		//						MemoryContextMemAllocated(policy->table->ctx, false),
+		//(policy->table->members +
+		//policy->have_null_key), 						MemoryContextMemAllocated(policy->table->ctx, false),
 		//						MemoryContextMemAllocated(policy->agg_extra_mctx, false));
 	}
 
@@ -509,10 +510,10 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 	{
 		VectorAggDef *agg_def = (VectorAggDef *) list_nth(policy->agg_defs, i);
 		void *agg_states = list_nth(policy->per_agg_states, i);
-		void *agg_state = entry->agg_state_index * agg_def->func->state_bytes + (char *) agg_states;
-		agg_def->func->agg_emit(agg_state,
-								&aggregated_slot->tts_values[agg_def->output_offset],
-								&aggregated_slot->tts_isnull[agg_def->output_offset]);
+		void *agg_state = entry->agg_state_index * agg_def->func.state_bytes + (char *) agg_states;
+		agg_def->func.agg_emit(agg_state,
+							   &aggregated_slot->tts_values[agg_def->output_offset],
+							   &aggregated_slot->tts_isnull[agg_def->output_offset]);
 	}
 
 	Assert(list_length(policy->output_grouping_columns) == 1);

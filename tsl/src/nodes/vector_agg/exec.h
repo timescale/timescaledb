@@ -15,7 +15,7 @@
 
 typedef struct
 {
-	VectorAggFunctions *func;
+	VectorAggFunctions func;
 	int input_offset;
 	int output_offset;
 } VectorAggDef;
