@@ -826,9 +826,12 @@ compress_hyperstore(Chunk *chunk, bool rel_is_hyperstore, enum UseAccessMethod u
 	if (ts_chunk_is_compressed(chunk) && !rel_is_hyperstore)
 	{
 		Assert(useam == USE_AM_TRUE);
+		char *relname = get_rel_name(chunk->table_id);
+		char *relschema = get_namespace_name(get_rel_namespace(chunk->table_id));
+		const RangeVar *rv = makeRangeVar(relschema, relname, -1);
 		/* Do quick migration to hyperstore of already compressed data by
 		 * simply changing the access method to hyperstore in pg_am. */
-		hyperstore_set_am(chunk->table_id);
+		hyperstore_set_am(rv);
 		return chunk->table_id;
 	}
 
