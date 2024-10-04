@@ -28,11 +28,14 @@ typedef struct
 } Int24SumState;
 
 static void
-int_sum_init(void *agg_state)
+int_sum_init(void *restrict agg_states, int n)
 {
-	Int24SumState *state = (Int24SumState *) agg_state;
-	state->result = 0;
-	state->isnull = true;
+	Int24SumState *states = (Int24SumState *) agg_states;
+	for (int i = 0; i < n; i++)
+	{
+		states[i].result = 0;
+		states[i].isnull = true;
+	}
 }
 
 static void

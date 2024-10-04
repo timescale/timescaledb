@@ -77,7 +77,7 @@ gp_batch_reset(GroupingPolicy *obj)
 	{
 		VectorAggDef *agg_def = (VectorAggDef *) list_nth(policy->agg_defs, i);
 		void *agg_state = (void *) list_nth(policy->agg_states, i);
-		agg_def->func->agg_init(agg_state);
+		agg_def->func->agg_init(agg_state, 1);
 	}
 
 	const int ngrp = list_length(policy->output_grouping_columns);

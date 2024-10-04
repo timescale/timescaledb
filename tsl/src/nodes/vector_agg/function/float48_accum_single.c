@@ -55,10 +55,13 @@ typedef struct
 } FUNCTION_NAME(state);
 
 static void
-FUNCTION_NAME(init)(void *agg_state)
+FUNCTION_NAME(init)(void *restrict agg_states, int n)
 {
-	FUNCTION_NAME(state) *state = (FUNCTION_NAME(state) *) agg_state;
-	*state = (FUNCTION_NAME(state)){ 0 };
+	FUNCTION_NAME(state) *states = (FUNCTION_NAME(state) *) agg_states;
+	for (int i = 0; i < n; i++)
+	{
+		states[i] = (FUNCTION_NAME(state)){ 0 };
+	}
 }
 
 static void

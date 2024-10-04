@@ -20,22 +20,35 @@
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
 
+#include <nmmintrin.h>
+
 typedef struct
 {
 	Datum key;
-	uint32 status;
 	uint32 agg_state_index;
 } HashEntry;
 
-static uint64_t
-hash64(uint64_t x)
+// static pg_attribute_always_inline uint64
+// hash64_1(uint64 x)
+//{
+//	x ^= x >> 30;
+//	x *= 0xbf58476d1ce4e5b9U;
+//	x ^= x >> 27;
+//	x *= 0x94d049bb133111ebU;
+//	x ^= x >> 31;
+//	return x;
+// }
+
+static pg_attribute_always_inline uint64
+hash64_crc(uint64 x)
 {
-	x ^= x >> 30;
-	x *= 0xbf58476d1ce4e5b9U;
-	x ^= x >> 27;
-	x *= 0x94d049bb133111ebU;
-	x ^= x >> 31;
-	return x;
+	return _mm_crc32_u64(~0ULL, x);
+}
+
+static pg_attribute_always_inline uint64
+hash64(uint64 x)
+{
+	return hash64_crc(x);
 }
 
 #define SH_PREFIX h
@@ -47,7 +60,8 @@ hash64(uint64_t x)
 #define SH_SCOPE static inline
 #define SH_DECLARE
 #define SH_DEFINE
-#include "lib/simplehash.h"
+#define SH_ENTRY_EMPTY(entry) (entry->agg_state_index == 0)
+#include "import/ts_simplehash.h"
 
 struct h_hash;
 
@@ -199,6 +213,7 @@ fill_offsets_impl(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
 	CompressedColumnValues column = batch_state->compressed_columns[key_column_index];
 	// Assert(gv->decompression_type == 8 /* lolwut */);
 	const uint64 *restrict filter = batch_state->vector_qual_result;
+	struct h_hash *restrict table = policy->table;
 	for (int row = 0; row < batch_state->total_batch_rows; row++)
 	{
 		bool key_valid = false;
@@ -213,7 +228,7 @@ fill_offsets_impl(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
 		if (key_valid)
 		{
 			bool found = false;
-			HashEntry *entry = h_insert(policy->table, key, &found);
+			HashEntry *restrict entry = h_insert(table, key, &found);
 			if (!found)
 			{
 				entry->agg_state_index = next_unused_state_index++;
@@ -415,12 +430,10 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 
 		forboth (aggdeflc, policy->agg_defs, aggstatelc, policy->per_agg_states)
 		{
-			VectorAggDef *def = lfirst(aggdeflc);
-			for (uint64 i = last_initialized_state_index; i < next_unused_state_index; i++)
-			{
-				void *aggstate = def->func->state_bytes * i + (char *) lfirst(aggstatelc);
-				def->func->agg_init(aggstate);
-			}
+			const VectorAggDef *def = lfirst(aggdeflc);
+			def->func->agg_init(def->func->state_bytes * last_initialized_state_index +
+									(char *) lfirst(aggstatelc),
+								next_unused_state_index - last_initialized_state_index);
 		}
 	}
 
@@ -443,6 +456,17 @@ gp_hash_should_emit(GroupingPolicy *gp)
 	//	{
 	//		return true;
 	//	}
+	/*
+	 * Don't grow the hash table cardinality too much, otherwise we become bound
+	 * by memory reads. In general, when this first stage of grouping doesn't
+	 * significantly reduce the cardinality, it becomes pure overhead and the
+	 * work will be done by the final Postgres aggregation, so we should bail
+	 * out early here.
+	 */
+	if (policy->table->members * sizeof(HashEntry) > 128 * 1024)
+	{
+		return true;
+	}
 	return false;
 }
 
@@ -456,10 +480,12 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 		/* FIXME doesn't work on final result emission w/o should_emit. */
 		policy->returning_results = true;
 		h_start_iterate(policy->table, &policy->iter);
-		//		fprintf(stderr, "spill after %ld input rows, %d keys, %f ratio\n",
-		//			policy->stat_input_valid_rows, policy->table->members + policy->have_null_key,
-		//				policy->stat_input_valid_rows / (float) (policy->table->members +
-		// policy->have_null_key));
+		//				fprintf(stderr, "spill after %ld input rows, %d keys, %f ratio, %ld aggctx bytes,
+		//%ld aggstate bytes\n", 				policy->stat_input_valid_rows, policy->table->members
+		//+ 		policy->have_null_key, 				policy->stat_input_valid_rows / (float)
+		//(policy->table->members + 																 policy->have_null_key),
+		//						MemoryContextMemAllocated(policy->table->ctx, false),
+		//						MemoryContextMemAllocated(policy->agg_extra_mctx, false));
 	}
 
 	HashEntry null_key_entry = { .agg_state_index = 1 };

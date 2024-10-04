@@ -27,10 +27,13 @@ typedef struct
 } CountState;
 
 static void
-count_init(void *agg_state)
+count_init(void *restrict agg_states, int n)
 {
-	CountState *state = (CountState *) agg_state;
-	state->count = 0;
+	CountState *states = (CountState *) agg_states;
+	for (int i = 0; i < n; i++)
+	{
+		states[i].count = 0;
+	}
 }
 
 static void

@@ -16,8 +16,8 @@ typedef struct
 	/* Size of the aggregate function state. */
 	size_t state_bytes;
 
-	/* Initialize the aggregate function state pointed to by agg_value and agg_isnull. */
-	void (*agg_init)(void *restrict agg_state);
+	/* Initialize the aggregate function states. */
+	void (*agg_init)(void *restrict agg_states, int n);
 
 	/* Aggregate a given arrow array. */
 	void (*agg_vector)(void *restrict agg_state, const ArrowArray *vector, const uint64 *filter,
