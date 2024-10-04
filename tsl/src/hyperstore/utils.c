@@ -11,6 +11,7 @@
 #include <catalog/pg_am.h>
 #include <catalog/pg_class.h>
 #include <commands/defrem.h>
+#include <nodes/makefuncs.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
@@ -24,9 +25,10 @@
  * using (non-hyperstore) compression.
  */
 void
-hyperstore_set_am(Oid relid)
+hyperstore_set_am(const RangeVar *rv)
 {
 	HeapTuple tp;
+	Oid relid = RangeVarGetRelid(rv, NoLock, false);
 
 	tp = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
 	if (HeapTupleIsValid(tp))
@@ -58,15 +60,18 @@ hyperstore_set_am(Oid relid)
 		 * On compressed tables, indexes only contain non-compressed data, so
 		 * need to rebuild indexes.
 		 */
-#if PG14_GE
 		ReindexParams params = {
 			.options = 0,
 			.tablespaceOid = InvalidOid,
 		};
 
-		reindex_relation(relid, 0, &params);
+#if PG17_GE
+		ReindexStmt stmt = { .kind = REINDEX_OBJECT_TABLE,
+							 .relation = (RangeVar *) rv,
+							 .params = NULL };
+		reindex_relation(&stmt, relid, 0, &params);
 #else
-		reindex_relation(relid, 0, 0);
+		reindex_relation(relid, 0, &params);
 #endif
 	}
 }

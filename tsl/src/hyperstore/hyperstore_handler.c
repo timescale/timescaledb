@@ -48,6 +48,7 @@
 #include <utils/memutils.h>
 #include <utils/palloc.h>
 #include <utils/rel.h>
+#include <utils/sampling.h>
 #include <utils/syscache.h>
 #include <utils/tuplesort.h>
 #include <utils/typcache.h>
@@ -63,12 +64,17 @@
 #include "debug_assert.h"
 #include "guc.h"
 #include "hyperstore_handler.h"
+#include "process_utility.h"
 #include "relstats.h"
 #include "trigger.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/compression_settings.h"
+
+#if PG17_GE
+#include "import/analyze.h"
+#endif
 
 static const TableAmRoutine hyperstore_methods;
 static void convert_to_hyperstore_finish(Oid relid);
@@ -352,6 +358,11 @@ typedef struct HyperstoreScanDescData
 	int32 compressed_row_count;
 	HyperstoreScanState hs_scan_state;
 	bool reset;
+#if PG17_GE
+	/* These fields are only used for ANALYZE */
+	ReadStream *canalyze_read_stream;
+	ReadStream *uanalyze_read_stream;
+#endif
 } HyperstoreScanDescData;
 
 typedef struct HyperstoreScanDescData *HyperstoreScanDesc;
@@ -360,6 +371,28 @@ static bool hyperstore_getnextslot_noncompressed(HyperstoreScanDesc scan, ScanDi
 												 TupleTableSlot *slot);
 static bool hyperstore_getnextslot_compressed(HyperstoreScanDesc scan, ScanDirection direction,
 											  TupleTableSlot *slot);
+
+#if PG17_GE
+static int
+compute_targrows(Relation rel)
+{
+	MemoryContext analyze_context =
+		AllocSetContextCreate(CurrentMemoryContext, "Hypercore Analyze", ALLOCSET_DEFAULT_SIZES);
+
+	VacAttrStats **vacattrstats;
+	int attr_cnt = hypercore_analyze_compute_vacattrstats(rel, &vacattrstats, analyze_context);
+	int targrows = 100;
+	for (int i = 0; i < attr_cnt; i++)
+	{
+		if (targrows < vacattrstats[i]->minrows)
+		{
+			targrows = vacattrstats[i]->minrows;
+		}
+	}
+	MemoryContextDelete(analyze_context);
+	return targrows;
+}
+#endif
 
 /*
  * Initialization common for beginscan and rescan.
@@ -506,16 +539,13 @@ hyperstore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey ke
 
 	ParallelTableScanDesc cptscan =
 		parallel_scan ? (ParallelTableScanDesc) &cpscan->cpscandesc : NULL;
-	if (scan->compressed_rel)
-	{
-		Relation crel = scan->compressed_rel;
-		scan->cscan_desc = crel->rd_tableam->scan_begin(crel,
-														snapshot,
-														scan->rs_base.rs_nkeys,
-														scan->rs_base.rs_key,
-														cptscan,
-														flags);
-	}
+
+	scan->cscan_desc = scan->compressed_rel->rd_tableam->scan_begin(scan->compressed_rel,
+																	snapshot,
+																	scan->rs_base.rs_nkeys,
+																	scan->rs_base.rs_key,
+																	cptscan,
+																	flags);
 
 	return &scan->rs_base;
 }
@@ -549,6 +579,12 @@ hyperstore_endscan(TableScanDesc sscan)
 		table_endscan(scan->cscan_desc);
 	if (scan->compressed_rel)
 		table_close(scan->compressed_rel, AccessShareLock);
+#if PG17_GE
+	if (scan->canalyze_read_stream)
+		read_stream_end(scan->canalyze_read_stream);
+	if (scan->uanalyze_read_stream)
+		read_stream_end(scan->uanalyze_read_stream);
+#endif
 
 	Relation relation = sscan->rs_rd;
 
@@ -2215,21 +2251,41 @@ hyperstore_vacuum_rel(Relation rel, VacuumParams *params, BufferAccessStrategy b
  *
  * The underlying ANALYZE functionality that calls this function samples
  * blocks in the relation. To be able to analyze all the blocks across both
- * the non-compressed and the compressed relations, this function relies on
- * the TAM giving the impression that the total number of blocks is the sum of
- * compressed and non-compressed blocks. This is done by returning the sum of
- * the total number of blocks across both relations in the relation_size() TAM
- * callback.
+ * the non-compressed and the compressed relations, we need to make sure that
+ * both underlying relations are sampled.
+ *
+ * For versions before PG17, this function relies on the TAM giving the
+ * impression that the total number of blocks is the sum of compressed and
+ * non-compressed blocks. This is done by returning the sum of the total
+ * number of blocks across both relations in the relation_size() TAM callback.
  *
  * The non-compressed relation is sampled first, and, only once the blockno
  * increases beyond the number of blocks in the non-compressed relation, the
  * compressed relation is sampled.
+ *
+ * For versions starting with PG17 a new interface was introduced based on a
+ * ReadStream API, which allows blocks to be read from the relation using a
+ * dedicated set of functions.
+ *
+ * The ReadStream is usually set up in beginscan for the table access method,
+ * but for the ANALYZE command there is an exception and it sets up the
+ * ReadStream itself and uses that when scanning the blocks. The relation
+ * used is the default relation, which is the uncompressed relation, but we
+ * need a read stream for the compressed relation as well.
+ *
+ * When returning blocks, we can first sample the uncompressed relation and then
+ * continue with sampling the compressed relation when we have exhausted the
+ * uncompressed relation.
  */
+#if PG17_LT
 static bool
 hyperstore_scan_analyze_next_block(TableScanDesc scan, BlockNumber blockno,
 								   BufferAccessStrategy bstrategy)
 {
 	HyperstoreScanDescData *cscan = (HyperstoreScanDescData *) scan;
+#if PG17_GE
+	HeapScanDesc chscan = (HeapScanDesc) cscan->cscan_desc;
+#endif
 	HeapScanDesc uhscan = (HeapScanDesc) cscan->uscan_desc;
 
 	/* If blockno is past the blocks in the non-compressed relation, we should
@@ -2251,6 +2307,91 @@ hyperstore_scan_analyze_next_block(TableScanDesc scan, BlockNumber blockno,
 
 	return result;
 }
+#else
+static ReadStream *
+hyperstore_setup_read_stream(Relation rel, BufferAccessStrategy bstrategy)
+{
+	Assert(rel != NULL);
+	BlockSampler block_sampler = palloc(sizeof(BlockSamplerData));
+	const BlockNumber totalblocks = RelationGetNumberOfBlocks(rel);
+	const uint32 randseed = pg_prng_uint32(&pg_global_prng_state);
+	const int targrows = compute_targrows(rel);
+	const BlockNumber nblocks = BlockSampler_Init(block_sampler, totalblocks, targrows, randseed);
+	pgstat_progress_update_param(PROGRESS_ANALYZE_BLOCKS_TOTAL, nblocks);
+
+	TS_DEBUG_LOG("set up ReadStream for %s (%d), filenode: %d, pages: %d",
+				 RelationGetRelationName(rel),
+				 RelationGetRelid(rel),
+				 rel->rd_rel->relfilenode,
+				 rel->rd_rel->relpages);
+
+	return read_stream_begin_relation(READ_STREAM_MAINTENANCE,
+									  bstrategy,
+									  rel,
+									  MAIN_FORKNUM,
+									  hypercore_block_sampling_read_stream_next,
+									  block_sampler,
+									  0);
+}
+
+static bool
+hyperstore_scan_analyze_next_block(TableScanDesc scan, ReadStream *stream)
+{
+	HyperstoreScanDescData *cscan = (HyperstoreScanDescData *) scan;
+	HeapScanDesc uhscan = (HeapScanDesc) cscan->uscan_desc;
+	HeapScanDesc chscan = (HeapScanDesc) cscan->cscan_desc;
+
+	/* We do not analyze parent table of hypertables. There is no data there. */
+	if (ts_is_hypertable(scan->rs_rd->rd_id))
+		return false;
+
+	BufferAccessStrategy bstrategy;
+	BlockNumber blockno = read_stream_next_block(stream, &bstrategy);
+	TS_DEBUG_LOG("blockno %d, uhscan->rs_nblocks: %d, chscan->rs_nblocks: %d",
+				 blockno,
+				 uhscan->rs_nblocks,
+				 chscan->rs_nblocks);
+
+	if (!cscan->canalyze_read_stream)
+	{
+		Assert(cscan->compressed_rel);
+		cscan->canalyze_read_stream =
+			hyperstore_setup_read_stream(cscan->compressed_rel, bstrategy);
+	}
+
+	if (!cscan->uanalyze_read_stream)
+	{
+		const TableAmRoutine *oldtam = switch_to_heapam(scan->rs_rd);
+		cscan->uanalyze_read_stream = hyperstore_setup_read_stream(scan->rs_rd, bstrategy);
+		scan->rs_rd->rd_tableam = oldtam;
+	}
+
+	/*
+	 * If the block number is above the number of block in the uncompressed
+	 * relation, we need to fetch a block from the compressed relation.
+	 *
+	 * Note that we have a different readstream for the compressed relation,
+	 * so we are not sampling the block that is provided to the function, but
+	 * we sample the correct number of blocks in for each relation.
+	 */
+	if (blockno >= uhscan->rs_nblocks)
+	{
+		TS_DEBUG_LOG("reading block %d from compressed relation", blockno);
+		return cscan->compressed_rel->rd_tableam
+			->scan_analyze_next_block(cscan->cscan_desc, cscan->canalyze_read_stream);
+	}
+
+	TS_DEBUG_LOG("reading block %d from non-compressed relation", blockno - chscan->rs_nblocks);
+	Assert(blockno < uhscan->rs_nblocks + chscan->rs_nblocks);
+
+	Relation rel = scan->rs_rd;
+	const TableAmRoutine *oldtam = switch_to_heapam(rel);
+	bool result =
+		rel->rd_tableam->scan_analyze_next_block(cscan->uscan_desc, cscan->uanalyze_read_stream);
+	rel->rd_tableam = oldtam;
+	return result;
+}
+#endif
 
 /*
  * Get the next tuple to sample during ANALYZE.

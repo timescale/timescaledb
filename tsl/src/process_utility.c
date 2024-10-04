@@ -66,7 +66,7 @@ tsl_ddl_command_start(ProcessUtilityArgs *args)
 							/* Check if we can do quick migration */
 							if (!is_hyperstore && ts_chunk_is_compressed(chunk))
 							{
-								hyperstore_set_am(relid);
+								hyperstore_set_am(stmt->relation);
 								/* Skip this command in the alter table
 								 * statement since we process it via quick
 								 * migration */

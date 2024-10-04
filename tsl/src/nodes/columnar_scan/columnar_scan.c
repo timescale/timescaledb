@@ -664,9 +664,11 @@ columnar_scan_end(CustomScanState *state)
 	TableScanDesc scandesc = state->ss.ss_currentScanDesc;
 
 	/*
-	 * Free the exprcontext
+	 * Free the exprcontext. Not needed for PG17.
 	 */
+#if PG17_LT
 	ExecFreeExprContext(&state->ss.ps);
+#endif
 
 	/*
 	 * clean out the tuple table

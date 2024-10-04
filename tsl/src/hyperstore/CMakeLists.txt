@@ -8,4 +8,7 @@ set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/hsproxy.c
     ${CMAKE_CURRENT_SOURCE_DIR}/relstats.c
     ${CMAKE_CURRENT_SOURCE_DIR}/utils.c)
+if(PG_VERSION VERSION_GREATER_EQUAL "17.0")
+  list(APPEND SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/import/analyze.c)
+endif()
 target_sources(${TSL_LIBRARY_NAME} PRIVATE ${SOURCES})

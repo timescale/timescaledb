@@ -75,15 +75,7 @@ collect_references(List *clauses, struct CaptureAttributesContext *context)
 {
 	ListCell *cell;
 	foreach (cell, clauses)
-	{
-		Node *qual = lfirst(cell);
-#ifdef TS_DEBUG
-		char *exprstr = deparse_expression(qual, context->deparse_cxt, false, false);
-		TS_DEBUG_LOG("qualifier %s", exprstr);
-		pfree(exprstr);
-#endif
-		capture_expr(qual, context);
-	}
+		capture_expr(lfirst(cell), context);
 }
 
 static void
