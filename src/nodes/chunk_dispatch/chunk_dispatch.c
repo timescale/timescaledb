@@ -438,6 +438,32 @@ chunk_dispatch_exec(CustomScanState *node)
 
 	MemoryContextSwitchTo(old);
 
+	/*
+	 * Save away the insert state for using it in ExecInsert().
+	 *
+	 * We need to return the original slot from the subplan since otherwise
+	 * the slot might not match what is expected. The expected slot should
+	 * contain a tuple with the same definition as the parent hypertable while
+	 * the slot in the chunk insert state is a slot matching the chunk
+	 * definition.
+	 *
+	 * If columns have been dropped from the parent hypertable, new chunks
+	 * will not have these dropped attributes, which will cause problems later
+	 * in the insert execution (see ExecGetInsertNewTuple()).
+	 *
+	 * We can probably improve this code by removing ChunkDispatch. See
+	 * hypertable_modify.c for more information.
+	 */
+	state->cis = cis;
+
+	return slot;
+}
+
+TupleTableSlot *
+ts_chunk_dispatch_prepare_tuple_routing(ChunkDispatchState *state, TupleTableSlot *slot)
+{
+	ChunkInsertState *cis = state->cis;
+
 	/* Convert the tuple to the chunk's rowtype, if necessary */
 	if (cis->hyper_to_chunk_map != NULL && state->is_dropped_attr_exists == false)
 		slot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, slot, cis->slot);
