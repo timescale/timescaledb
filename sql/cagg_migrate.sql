@@ -166,9 +166,31 @@ BEGIN
     _sql := format (
         $$
         WITH boundaries AS (
-            SELECT min(%1$I), max(%1$I), %1$L AS bucket_column_name, %2$L AS bucket_column_type, %3$L AS cagg_name_new
-            FROM %4$I.%5$I
-            WHERE %1$I < CAST(%6$L AS %2$s)
+            SELECT
+                CASE WHEN %2$L LIKE '%time%'
+                    THEN min(timescaledb_information.chunks.range_start)
+                    ELSE min(timescaledb_information.chunks.range_start_integer)
+                END AS min,
+                CASE WHEN %2$L LIKE '%time%'
+                    THEN max(timescaledb_information.chunks.range_end)
+                    ELSE max(timescaledb_information.chunks.range_end_integer)
+                END AS max,
+                %1$L AS bucket_column_name,
+                %2$L AS bucket_column_type,
+                %3$L AS cagg_name_new
+            FROM timescaledb_information.continuous_aggregates
+            JOIN timescaledb_information.chunks
+                ON timescaledb_information.continuous_aggregates.materialization_hypertable_schema = timescaledb_information.chunks.hypertable_schema
+                AND timescaledb_information.continuous_aggregates.materialization_hypertable_name = timescaledb_information.chunks.hypertable_name
+            WHERE
+                timescaledb_information.continuous_aggregates.view_schema = %4$L
+                AND timescaledb_information.continuous_aggregates.view_name = %5$L
+                AND (
+                    CASE WHEN %2$L LIKE '%time%'
+                        THEN timescaledb_information.chunks.range_end < CAST(%6$L AS %2$s)
+                        ELSE timescaledb_information.chunks.range_end_integer < CAST(%6$L AS %2$s)
+                    END   
+                )
         )
         INSERT INTO
             _timescaledb_catalog.continuous_agg_migrate_plan_step (mat_hypertable_id, type, config)
