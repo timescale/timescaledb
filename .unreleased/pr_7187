@@ -1,1 +1,0 @@
-Fixes: #7187: Fix the string literal length for the `compressed_data_info` function.
