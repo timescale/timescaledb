@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\ir include/hyperstore_helpers.sql
+\ir include/hypercore_helpers.sql
 
 create table readings(
        metric_id serial,
@@ -34,7 +34,7 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk
  where format('%I.%I', hypertable_schema, hypertable_name)::regclass = 'readings'::regclass
  limit 1 \gset
 
-alter table :chunk set access method hyperstore;
+alter table :chunk set access method hypercore;
 
 -- Test that filtering is not removed on ColumnarScan when it includes
 -- columns that cannot be scankeys.

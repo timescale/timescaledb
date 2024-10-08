@@ -4,15 +4,15 @@
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER;
 
-\ir include/setup_hyperstore.sql
+\ir include/setup_hypercore.sql
 
 -- Disable merge and hash join to avoid flaky test.
 set enable_mergejoin to false;
 set enable_hashjoin to false;
 
 -- There are already tests to merge into uncompressed tables, so just
--- compress all chunks using Hyperstore.
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+-- compress all chunks using Hypercore.
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
 
 create table source_data (
        created_at timestamptz not null,
@@ -62,7 +62,7 @@ select * from :hypertable where not _timescaledb_debug.is_compressed_tid(ctid);
 
 -- Recompress all and try to insert the same rows again. This there
 -- should be no rows inserted.
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
 
 \x on
 select * from :hypertable where not _timescaledb_debug.is_compressed_tid(ctid);

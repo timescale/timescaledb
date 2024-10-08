@@ -63,7 +63,7 @@
 #include "compression/create.h"
 #include "debug_assert.h"
 #include "guc.h"
-#include "hyperstore_handler.h"
+#include "hypercore_handler.h"
 #include "process_utility.h"
 #include "relstats.h"
 #include "trigger.h"
@@ -76,14 +76,14 @@
 #include "import/analyze.h"
 #endif
 
-static const TableAmRoutine hyperstore_methods;
-static void convert_to_hyperstore_finish(Oid relid);
+static const TableAmRoutine hypercore_methods;
+static void convert_to_hypercore_finish(Oid relid);
 static List *partially_compressed_relids = NIL; /* Relids that needs to have
 												 * updated status set at end of
 												 * transaction */
 
-#define HYPERSTORE_AM_INFO_SIZE(natts)                                                             \
-	(sizeof(HyperstoreInfo) + (sizeof(ColumnCompressionSettings) * (natts)))
+#define HYPERCORE_AM_INFO_SIZE(natts)                                                              \
+	(sizeof(HypercoreInfo) + (sizeof(ColumnCompressionSettings) * (natts)))
 
 static int32
 get_chunk_id_from_relid(Oid relid)
@@ -109,7 +109,7 @@ static const TableAmRoutine *
 switch_to_heapam(Relation rel)
 {
 	const TableAmRoutine *tableam = rel->rd_tableam;
-	Assert(tableam == hyperstore_routine());
+	Assert(tableam == hypercore_routine());
 	rel->rd_tableam = GetHeapamTableAmRoutine();
 	return tableam;
 }
@@ -127,9 +127,9 @@ create_proxy_vacuum_index(Relation rel, Oid compressed_relid)
 	};
 	IndexStmt stmt = {
 		.type = T_IndexStmt,
-		.accessMethod = "hsproxy",
-		.idxcomment = "Hyperstore vacuum proxy index",
-		.idxname = psprintf("%s_ts_hsproxy_idx", compressed_relname),
+		.accessMethod = "hypercore_proxy",
+		.idxcomment = "Hypercore vacuum proxy index",
+		.idxname = psprintf("%s_ts_hypercore_proxy_idx", compressed_relname),
 		.indexParams = list_make1(&elem),
 		.relation = makeRangeVar(compressed_namespace, compressed_relname, -1),
 	};
@@ -163,20 +163,20 @@ create_compression_relation_size_stats(int32 chunk_id, Oid relid, int32 compress
 										  num_rows_frozen);
 }
 
-static HyperstoreInfo *
-lazy_build_hyperstore_info_cache(Relation rel, bool create_chunk_constraints,
-								 bool *compressed_relation_created)
+static HypercoreInfo *
+lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
+								bool *compressed_relation_created)
 {
 	Assert(OidIsValid(rel->rd_id) && !ts_is_hypertable(rel->rd_id));
 
-	HyperstoreInfo *hsinfo;
+	HypercoreInfo *hsinfo;
 	CompressionSettings *settings;
 	TupleDesc tupdesc = RelationGetDescr(rel);
 
 	/* Anything put in rel->rd_amcache must be a single memory chunk
 	 * palloc'd in CacheMemoryContext since PostgreSQL expects to be able
 	 * to free it with a single pfree(). */
-	hsinfo = MemoryContextAllocZero(CacheMemoryContext, HYPERSTORE_AM_INFO_SIZE(tupdesc->natts));
+	hsinfo = MemoryContextAllocZero(CacheMemoryContext, HYPERCORE_AM_INFO_SIZE(tupdesc->natts));
 	hsinfo->relation_id = get_chunk_id_from_relid(rel->rd_id);
 	hsinfo->compressed_relid = InvalidOid;
 	hsinfo->num_columns = tupdesc->natts;
@@ -276,21 +276,21 @@ lazy_build_hyperstore_info_cache(Relation rel, bool create_chunk_constraints,
 	return hsinfo;
 }
 
-HyperstoreInfo *
-RelationGetHyperstoreInfo(Relation rel)
+HypercoreInfo *
+RelationGetHypercoreInfo(Relation rel)
 {
 	if (NULL == rel->rd_amcache)
-		rel->rd_amcache = lazy_build_hyperstore_info_cache(rel,
-														   true /* create constraints */,
-														   NULL /* compressed rel created */);
+		rel->rd_amcache = lazy_build_hypercore_info_cache(rel,
+														  true /* create constraints */,
+														  NULL /* compressed rel created */);
 
-	Assert(rel->rd_amcache && OidIsValid(((HyperstoreInfo *) rel->rd_amcache)->compressed_relid));
+	Assert(rel->rd_amcache && OidIsValid(((HypercoreInfo *) rel->rd_amcache)->compressed_relid));
 
 	return rel->rd_amcache;
 }
 
 static void
-build_segment_and_orderby_bms(const HyperstoreInfo *hsinfo, Bitmapset **segmentby,
+build_segment_and_orderby_bms(const HypercoreInfo *hsinfo, Bitmapset **segmentby,
 							  Bitmapset **orderby)
 {
 	*segmentby = NULL;
@@ -309,11 +309,11 @@ build_segment_and_orderby_bms(const HyperstoreInfo *hsinfo, Bitmapset **segmentb
 }
 
 /* ------------------------------------------------------------------------
- * Slot related callbacks for Hyperstore
+ * Slot related callbacks for Hypercore
  * ------------------------------------------------------------------------
  */
 static const TupleTableSlotOps *
-hyperstore_slot_callbacks(Relation relation)
+hypercore_slot_callbacks(Relation relation)
 {
 	return &TTSOpsArrowTuple;
 }
@@ -321,33 +321,33 @@ hyperstore_slot_callbacks(Relation relation)
 #define FEATURE_NOT_SUPPORTED                                                                      \
 	ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("%s not supported", __func__)))
 
-#define pgstat_count_hyperstore_scan(rel) pgstat_count_heap_scan(rel)
+#define pgstat_count_hypercore_scan(rel) pgstat_count_heap_scan(rel)
 
-#define pgstat_count_hyperstore_getnext(rel) pgstat_count_heap_getnext(rel)
+#define pgstat_count_hypercore_getnext(rel) pgstat_count_heap_getnext(rel)
 
-typedef struct HyperstoreParallelScanDescData
+typedef struct HypercoreParallelScanDescData
 {
 	ParallelBlockTableScanDescData pscandesc;
 	ParallelBlockTableScanDescData cpscandesc;
-} HyperstoreParallelScanDescData;
+} HypercoreParallelScanDescData;
 
-typedef struct HyperstoreParallelScanDescData *HyperstoreParallelScanDesc;
+typedef struct HypercoreParallelScanDescData *HypercoreParallelScanDesc;
 
-typedef enum HyperstoreScanState
+typedef enum HypercoreScanState
 {
-	HYPERSTORE_SCAN_START,
-	HYPERSTORE_SCAN_COMPRESSED = HYPERSTORE_SCAN_START,
-	HYPERSTORE_SCAN_NON_COMPRESSED,
-	HYPERSTORE_SCAN_DONE,
-} HyperstoreScanState;
+	HYPERCORE_SCAN_START,
+	HYPERCORE_SCAN_COMPRESSED = HYPERCORE_SCAN_START,
+	HYPERCORE_SCAN_NON_COMPRESSED,
+	HYPERCORE_SCAN_DONE,
+} HypercoreScanState;
 
 const char *scan_state_name[] = {
-	[HYPERSTORE_SCAN_COMPRESSED] = "COMPRESSED",
-	[HYPERSTORE_SCAN_NON_COMPRESSED] = "NON_COMPRESSED",
-	[HYPERSTORE_SCAN_DONE] = "DONE",
+	[HYPERCORE_SCAN_COMPRESSED] = "COMPRESSED",
+	[HYPERCORE_SCAN_NON_COMPRESSED] = "NON_COMPRESSED",
+	[HYPERCORE_SCAN_DONE] = "DONE",
 };
 
-typedef struct HyperstoreScanDescData
+typedef struct HypercoreScanDescData
 {
 	TableScanDescData rs_base;
 	TableScanDesc uscan_desc; /* scan descriptor for non-compressed relation */
@@ -356,21 +356,21 @@ typedef struct HyperstoreScanDescData
 	int64 returned_noncompressed_count;
 	int64 returned_compressed_count;
 	int32 compressed_row_count;
-	HyperstoreScanState hs_scan_state;
+	HypercoreScanState hs_scan_state;
 	bool reset;
 #if PG17_GE
 	/* These fields are only used for ANALYZE */
 	ReadStream *canalyze_read_stream;
 	ReadStream *uanalyze_read_stream;
 #endif
-} HyperstoreScanDescData;
+} HypercoreScanDescData;
 
-typedef struct HyperstoreScanDescData *HyperstoreScanDesc;
+typedef struct HypercoreScanDescData *HypercoreScanDesc;
 
-static bool hyperstore_getnextslot_noncompressed(HyperstoreScanDesc scan, ScanDirection direction,
-												 TupleTableSlot *slot);
-static bool hyperstore_getnextslot_compressed(HyperstoreScanDesc scan, ScanDirection direction,
-											  TupleTableSlot *slot);
+static bool hypercore_getnextslot_noncompressed(HypercoreScanDesc scan, ScanDirection direction,
+												TupleTableSlot *slot);
+static bool hypercore_getnextslot_compressed(HypercoreScanDesc scan, ScanDirection direction,
+											 TupleTableSlot *slot);
 
 #if PG17_GE
 static int
@@ -398,7 +398,7 @@ compute_targrows(Relation rel)
  * Initialization common for beginscan and rescan.
  */
 static void
-initscan(HyperstoreScanDesc scan, ScanKey keys, int nkeys)
+initscan(HypercoreScanDesc scan, ScanKey keys, int nkeys)
 {
 	int nvalidkeys = 0;
 
@@ -416,7 +416,7 @@ initscan(HyperstoreScanDesc scan, ScanKey keys, int nkeys)
 	 */
 	if (NULL != keys && nkeys > 0)
 	{
-		const HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(scan->rs_base.rs_rd);
+		const HypercoreInfo *hsinfo = RelationGetHypercoreInfo(scan->rs_base.rs_rd);
 
 		for (int i = 0; i < nkeys; i++)
 		{
@@ -443,7 +443,7 @@ initscan(HyperstoreScanDesc scan, ScanKey keys, int nkeys)
 
 	/* Use the TableScanDescData's scankeys to store the transformed compression scan keys */
 	if (scan->rs_base.rs_flags & SO_TYPE_SEQSCAN)
-		pgstat_count_hyperstore_scan(scan->rs_base.rs_rd);
+		pgstat_count_hypercore_scan(scan->rs_base.rs_rd);
 }
 
 #ifdef TS_DEBUG
@@ -469,11 +469,11 @@ get_scan_type(uint32 flags)
 #endif
 
 static TableScanDesc
-hyperstore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey keys,
-					 ParallelTableScanDesc parallel_scan, uint32 flags)
+hypercore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey keys,
+					ParallelTableScanDesc parallel_scan, uint32 flags)
 {
-	HyperstoreScanDesc scan;
-	HyperstoreParallelScanDesc cpscan = (HyperstoreParallelScanDesc) parallel_scan;
+	HypercoreScanDesc scan;
+	HypercoreParallelScanDesc cpscan = (HypercoreParallelScanDesc) parallel_scan;
 
 	RelationIncrementReferenceCount(relation);
 
@@ -482,7 +482,7 @@ hyperstore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey ke
 				 RelationGetRelationName(relation),
 				 parallel_scan);
 
-	scan = palloc0(sizeof(HyperstoreScanDescData));
+	scan = palloc0(sizeof(HypercoreScanDescData));
 	scan->rs_base.rs_rd = relation;
 	scan->rs_base.rs_snapshot = snapshot;
 	scan->rs_base.rs_nkeys = nkeys;
@@ -497,11 +497,11 @@ hyperstore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey ke
 	if (ts_is_hypertable(relation->rd_id))
 	{
 		/* If this is a hypertable, there is nothing for us to scan */
-		scan->hs_scan_state = HYPERSTORE_SCAN_DONE;
+		scan->hs_scan_state = HYPERCORE_SCAN_DONE;
 		return &scan->rs_base;
 	}
 
-	HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(relation);
+	HypercoreInfo *hsinfo = RelationGetHypercoreInfo(relation);
 	scan->compressed_rel = table_open(hsinfo->compressed_relid, AccessShareLock);
 
 	if ((ts_guc_enable_transparent_decompression == 2) ||
@@ -514,7 +514,7 @@ hyperstore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey ke
 		 * Transparent decompression reads compressed data itself, directly
 		 * from the compressed chunk, so avoid reading it again here.
 		 */
-		scan->hs_scan_state = HYPERSTORE_SCAN_NON_COMPRESSED;
+		scan->hs_scan_state = HYPERCORE_SCAN_NON_COMPRESSED;
 	}
 
 	initscan(scan, keys, nkeys);
@@ -551,14 +551,14 @@ hyperstore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey ke
 }
 
 static void
-hyperstore_rescan(TableScanDesc sscan, ScanKey key, bool set_params, bool allow_strat,
-				  bool allow_sync, bool allow_pagemode)
+hypercore_rescan(TableScanDesc sscan, ScanKey key, bool set_params, bool allow_strat,
+				 bool allow_sync, bool allow_pagemode)
 {
-	HyperstoreScanDesc scan = (HyperstoreScanDesc) sscan;
+	HypercoreScanDesc scan = (HypercoreScanDesc) sscan;
 
 	initscan(scan, key, scan->rs_base.rs_nkeys);
 	scan->reset = true;
-	scan->hs_scan_state = HYPERSTORE_SCAN_START;
+	scan->hs_scan_state = HYPERCORE_SCAN_START;
 
 	table_rescan(scan->cscan_desc, key);
 
@@ -570,9 +570,9 @@ hyperstore_rescan(TableScanDesc sscan, ScanKey key, bool set_params, bool allow_
 }
 
 static void
-hyperstore_endscan(TableScanDesc sscan)
+hypercore_endscan(TableScanDesc sscan)
 {
-	HyperstoreScanDesc scan = (HyperstoreScanDesc) sscan;
+	HypercoreScanDesc scan = (HypercoreScanDesc) sscan;
 
 	RelationDecrementReferenceCount(sscan->rs_rd);
 	if (scan->cscan_desc)
@@ -609,7 +609,7 @@ hyperstore_endscan(TableScanDesc sscan)
 }
 
 static bool
-hyperstore_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTableSlot *slot)
+hypercore_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTableSlot *slot)
 {
 	if (arrow_slot_try_getnext(slot, direction))
 	{
@@ -617,7 +617,7 @@ hyperstore_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTableS
 		return true;
 	}
 
-	HyperstoreScanDesc scan = (HyperstoreScanDesc) sscan;
+	HypercoreScanDesc scan = (HypercoreScanDesc) sscan;
 
 	TS_DEBUG_LOG("relid: %d, relation: %s, reset: %s, scan_state: %s",
 				 sscan->rs_rd->rd_id,
@@ -627,19 +627,19 @@ hyperstore_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTableS
 
 	switch (scan->hs_scan_state)
 	{
-		case HYPERSTORE_SCAN_DONE:
+		case HYPERCORE_SCAN_DONE:
 			return false; /* Nothing more to scan */
-		case HYPERSTORE_SCAN_NON_COMPRESSED:
-			return hyperstore_getnextslot_noncompressed(scan, direction, slot);
-		case HYPERSTORE_SCAN_COMPRESSED:
-			return hyperstore_getnextslot_compressed(scan, direction, slot);
+		case HYPERCORE_SCAN_NON_COMPRESSED:
+			return hypercore_getnextslot_noncompressed(scan, direction, slot);
+		case HYPERCORE_SCAN_COMPRESSED:
+			return hypercore_getnextslot_compressed(scan, direction, slot);
 	}
 	return false; /* To keep compiler happy */
 }
 
 static bool
-hyperstore_getnextslot_noncompressed(HyperstoreScanDesc scan, ScanDirection direction,
-									 TupleTableSlot *slot)
+hypercore_getnextslot_noncompressed(HypercoreScanDesc scan, ScanDirection direction,
+									TupleTableSlot *slot)
 {
 	TupleTableSlot *child_slot = arrow_slot_get_noncompressed_slot(slot);
 	Relation relation = scan->rs_base.rs_rd;
@@ -655,8 +655,8 @@ hyperstore_getnextslot_noncompressed(HyperstoreScanDesc scan, ScanDirection dire
 	}
 	else if (direction == BackwardScanDirection)
 	{
-		scan->hs_scan_state = HYPERSTORE_SCAN_COMPRESSED;
-		return hyperstore_getnextslot(&scan->rs_base, direction, slot);
+		scan->hs_scan_state = HYPERCORE_SCAN_COMPRESSED;
+		return hypercore_getnextslot(&scan->rs_base, direction, slot);
 	}
 
 	return result;
@@ -689,8 +689,8 @@ should_read_new_compressed_slot(TupleTableSlot *slot, ScanDirection direction)
 }
 
 static bool
-hyperstore_getnextslot_compressed(HyperstoreScanDesc scan, ScanDirection direction,
-								  TupleTableSlot *slot)
+hypercore_getnextslot_compressed(HypercoreScanDesc scan, ScanDirection direction,
+								 TupleTableSlot *slot)
 {
 	TupleTableSlot *child_slot =
 		arrow_slot_get_compressed_slot(slot, RelationGetDescr(scan->compressed_rel));
@@ -705,8 +705,8 @@ hyperstore_getnextslot_compressed(HyperstoreScanDesc scan, ScanDirection directi
 
 			if (direction == ForwardScanDirection)
 			{
-				scan->hs_scan_state = HYPERSTORE_SCAN_NON_COMPRESSED;
-				return hyperstore_getnextslot(&scan->rs_base, direction, slot);
+				scan->hs_scan_state = HYPERCORE_SCAN_NON_COMPRESSED;
+				return hypercore_getnextslot(&scan->rs_base, direction, slot);
 			}
 			else
 			{
@@ -731,14 +731,14 @@ hyperstore_getnextslot_compressed(HyperstoreScanDesc scan, ScanDirection directi
 
 	slot->tts_tableOid = RelationGetRelid(scan->rs_base.rs_rd);
 	scan->returned_compressed_count++;
-	pgstat_count_hyperstore_getnext(scan->rs_base.rs_rd);
+	pgstat_count_hypercore_getnext(scan->rs_base.rs_rd);
 	return true;
 }
 
 static Size
-hyperstore_parallelscan_estimate(Relation rel)
+hypercore_parallelscan_estimate(Relation rel)
 {
-	return sizeof(HyperstoreParallelScanDescData);
+	return sizeof(HypercoreParallelScanDescData);
 }
 
 /*
@@ -747,10 +747,10 @@ hyperstore_parallelscan_estimate(Relation rel)
  * relation.
  */
 static Size
-hyperstore_parallelscan_initialize(Relation rel, ParallelTableScanDesc pscan)
+hypercore_parallelscan_initialize(Relation rel, ParallelTableScanDesc pscan)
 {
-	HyperstoreParallelScanDesc cpscan = (HyperstoreParallelScanDesc) pscan;
-	HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(rel);
+	HypercoreParallelScanDesc cpscan = (HypercoreParallelScanDesc) pscan;
+	HypercoreInfo *hsinfo = RelationGetHypercoreInfo(rel);
 
 	const TableAmRoutine *oldtam = switch_to_heapam(rel);
 	table_block_parallelscan_initialize(rel, (ParallelTableScanDesc) &cpscan->pscandesc);
@@ -760,7 +760,7 @@ hyperstore_parallelscan_initialize(Relation rel, ParallelTableScanDesc pscan)
 	table_block_parallelscan_initialize(crel, (ParallelTableScanDesc) &cpscan->cpscandesc);
 	table_close(crel, NoLock);
 
-	return sizeof(HyperstoreParallelScanDescData);
+	return sizeof(HypercoreParallelScanDescData);
 }
 
 /*
@@ -768,10 +768,10 @@ hyperstore_parallelscan_initialize(Relation rel, ParallelTableScanDesc pscan)
  * when `pscan` was initialized by parallelscan_initialize.
  */
 static void
-hyperstore_parallelscan_reinitialize(Relation rel, ParallelTableScanDesc pscan)
+hypercore_parallelscan_reinitialize(Relation rel, ParallelTableScanDesc pscan)
 {
-	HyperstoreParallelScanDesc cpscan = (HyperstoreParallelScanDesc) pscan;
-	HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(rel);
+	HypercoreParallelScanDesc cpscan = (HypercoreParallelScanDesc) pscan;
+	HypercoreInfo *hsinfo = RelationGetHypercoreInfo(rel);
 
 	const TableAmRoutine *oldtam = switch_to_heapam(rel);
 	table_block_parallelscan_reinitialize(rel, (ParallelTableScanDesc) &cpscan->pscandesc);
@@ -783,17 +783,17 @@ hyperstore_parallelscan_reinitialize(Relation rel, ParallelTableScanDesc pscan)
 }
 
 static void
-hyperstore_get_latest_tid(TableScanDesc sscan, ItemPointer tid)
+hypercore_get_latest_tid(TableScanDesc sscan, ItemPointer tid)
 {
-	HyperstoreScanDesc scan = (HyperstoreScanDesc) sscan;
+	HypercoreScanDesc scan = (HypercoreScanDesc) sscan;
 
 	if (is_compressed_tid(tid))
 	{
 		ItemPointerData decoded_tid;
-		uint16 tuple_index = hyperstore_tid_decode(&decoded_tid, tid);
+		uint16 tuple_index = hypercore_tid_decode(&decoded_tid, tid);
 		const Relation rel = scan->cscan_desc->rs_rd;
 		rel->rd_tableam->tuple_get_latest_tid(scan->cscan_desc, &decoded_tid);
-		hyperstore_tid_encode(tid, &decoded_tid, tuple_index);
+		hypercore_tid_encode(tid, &decoded_tid, tuple_index);
 	}
 	else
 	{
@@ -805,8 +805,8 @@ hyperstore_get_latest_tid(TableScanDesc sscan, ItemPointer tid)
 }
 
 static void
-hyperstore_multi_insert(Relation relation, TupleTableSlot **slots, int ntuples, CommandId cid,
-						int options, BulkInsertStateData *bistate)
+hypercore_multi_insert(Relation relation, TupleTableSlot **slots, int ntuples, CommandId cid,
+					   int options, BulkInsertStateData *bistate)
 {
 	/* Inserts only supported in non-compressed relation, so simply forward to the heap AM */
 	const TableAmRoutine *oldtam = switch_to_heapam(relation);
@@ -842,14 +842,14 @@ typedef struct IndexFetchComprData
 } IndexFetchComprData;
 
 /* ------------------------------------------------------------------------
- * Index Scan Callbacks for Hyperstore
+ * Index Scan Callbacks for Hypercore
  * ------------------------------------------------------------------------
  */
 static IndexFetchTableData *
-hyperstore_index_fetch_begin(Relation rel)
+hypercore_index_fetch_begin(Relation rel)
 {
 	IndexFetchComprData *cscan = palloc0(sizeof(IndexFetchComprData));
-	HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(rel);
+	HypercoreInfo *hsinfo = RelationGetHypercoreInfo(rel);
 
 	Relation crel = table_open(hsinfo->compressed_relid, AccessShareLock);
 	cscan->segindex = SEGMENTBY_INDEX_UNKNOWN;
@@ -868,7 +868,7 @@ hyperstore_index_fetch_begin(Relation rel)
 }
 
 static void
-hyperstore_index_fetch_reset(IndexFetchTableData *scan)
+hypercore_index_fetch_reset(IndexFetchTableData *scan)
 {
 	IndexFetchComprData *cscan = (IndexFetchComprData *) scan;
 	Relation rel = scan->rel;
@@ -886,7 +886,7 @@ hyperstore_index_fetch_reset(IndexFetchTableData *scan)
 }
 
 static void
-hyperstore_index_fetch_end(IndexFetchTableData *scan)
+hypercore_index_fetch_end(IndexFetchTableData *scan)
 {
 	IndexFetchComprData *cscan = (IndexFetchComprData *) scan;
 	Relation rel = scan->rel;
@@ -926,7 +926,7 @@ is_segmentby_index_scan(IndexFetchComprData *cscan, TupleTableSlot *slot)
 	if (segindex == SEGMENTBY_INDEX_UNKNOWN)
 	{
 		ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
-		const HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(cscan->h_base.rel);
+		const HypercoreInfo *hsinfo = RelationGetHypercoreInfo(cscan->h_base.rel);
 		int16 attno = -1;
 
 		if (bms_is_empty(aslot->index_attrs))
@@ -967,8 +967,8 @@ is_segmentby_index_scan(IndexFetchComprData *cscan, TupleTableSlot *slot)
  * returned. This "unwrapping" only happens in the case of segmentby indexes.
  */
 static bool
-hyperstore_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer tid, Snapshot snapshot,
-							 TupleTableSlot *slot, bool *call_again, bool *all_dead)
+hypercore_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer tid, Snapshot snapshot,
+							TupleTableSlot *slot, bool *call_again, bool *all_dead)
 {
 	IndexFetchComprData *cscan = (IndexFetchComprData *) scan;
 	TupleTableSlot *child_slot;
@@ -1020,7 +1020,7 @@ hyperstore_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer tid, 
 	}
 
 	/* Recreate the original TID for the compressed table */
-	uint16 tuple_index = hyperstore_tid_decode(&decoded_tid, tid);
+	uint16 tuple_index = hypercore_tid_decode(&decoded_tid, tid);
 	Assert(tuple_index != InvalidTupleIndex);
 	child_slot = arrow_slot_get_compressed_slot(slot, RelationGetDescr(cscan->compr_rel));
 
@@ -1077,13 +1077,13 @@ hyperstore_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer tid, 
 }
 
 /* ------------------------------------------------------------------------
- * Callbacks for non-modifying operations on individual tuples for Hyperstore
+ * Callbacks for non-modifying operations on individual tuples for Hypercore
  * ------------------------------------------------------------------------
  */
 
 static bool
-hyperstore_fetch_row_version(Relation relation, ItemPointer tid, Snapshot snapshot,
-							 TupleTableSlot *slot)
+hypercore_fetch_row_version(Relation relation, ItemPointer tid, Snapshot snapshot,
+							TupleTableSlot *slot)
 {
 	bool result;
 	uint16 tuple_index = InvalidTupleIndex;
@@ -1105,12 +1105,12 @@ hyperstore_fetch_row_version(Relation relation, ItemPointer tid, Snapshot snapsh
 	else
 	{
 		ItemPointerData decoded_tid;
-		HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(relation);
+		HypercoreInfo *hsinfo = RelationGetHypercoreInfo(relation);
 		Relation child_rel = table_open(hsinfo->compressed_relid, AccessShareLock);
 		TupleTableSlot *child_slot =
 			arrow_slot_get_compressed_slot(slot, RelationGetDescr(child_rel));
 
-		tuple_index = hyperstore_tid_decode(&decoded_tid, tid);
+		tuple_index = hypercore_tid_decode(&decoded_tid, tid);
 		result = table_tuple_fetch_row_version(child_rel, &decoded_tid, snapshot, child_slot);
 		table_close(child_rel, NoLock);
 	}
@@ -1125,9 +1125,9 @@ hyperstore_fetch_row_version(Relation relation, ItemPointer tid, Snapshot snapsh
 }
 
 static bool
-hyperstore_tuple_tid_valid(TableScanDesc scan, ItemPointer tid)
+hypercore_tuple_tid_valid(TableScanDesc scan, ItemPointer tid)
 {
-	HyperstoreScanDescData *cscan = (HyperstoreScanDescData *) scan;
+	HypercoreScanDescData *cscan = (HypercoreScanDescData *) scan;
 	ItemPointerData ctid;
 
 	if (!is_compressed_tid(tid))
@@ -1139,14 +1139,14 @@ hyperstore_tuple_tid_valid(TableScanDesc scan, ItemPointer tid)
 		return valid;
 	}
 
-	(void) hyperstore_tid_decode(&ctid, tid);
+	(void) hypercore_tid_decode(&ctid, tid);
 	return cscan->compressed_rel->rd_tableam->tuple_tid_valid(cscan->cscan_desc, &ctid);
 }
 
 static bool
-hyperstore_tuple_satisfies_snapshot(Relation rel, TupleTableSlot *slot, Snapshot snapshot)
+hypercore_tuple_satisfies_snapshot(Relation rel, TupleTableSlot *slot, Snapshot snapshot)
 {
-	HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(rel);
+	HypercoreInfo *hsinfo = RelationGetHypercoreInfo(rel);
 	bool result;
 
 	if (is_compressed_tid(&slot->tts_tid))
@@ -1172,7 +1172,7 @@ hyperstore_tuple_satisfies_snapshot(Relation rel, TupleTableSlot *slot, Snapshot
  * The Index AM asks the Table AM about which given index tuples (as
  * referenced by TID) are safe to delete. Given that the array of TIDs to
  * delete ("delTIDs") may reference either the compressed or non-compressed
- * relation within Hyperstore, it is necessary to split the information in the
+ * relation within Hypercore, it is necessary to split the information in the
  * TM_IndexDeleteOp in two: one for each relation. Then the operation can be
  * relayed to the standard heapAM method to do the heavy lifting for each
  * relation.
@@ -1192,11 +1192,11 @@ hyperstore_tuple_satisfies_snapshot(Relation rel, TupleTableSlot *slot, Snapshot
  * to delete.
  */
 static TransactionId
-hyperstore_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
+hypercore_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 {
 	TM_IndexDeleteOp noncompr_delstate = *delstate;
 	TM_IndexDeleteOp compr_delstate = *delstate;
-	HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(rel);
+	HypercoreInfo *hsinfo = RelationGetHypercoreInfo(rel);
 	/* Hash table setup for TID deduplication */
 	typedef struct TidEntry
 	{
@@ -1255,7 +1255,7 @@ hyperstore_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 			TidEntry *tidentry;
 			uint16 tuple_index;
 
-			tuple_index = hyperstore_tid_decode(&decoded_tid, &deltid->tid);
+			tuple_index = hypercore_tid_decode(&decoded_tid, &deltid->tid);
 			tidentry = hash_search(tidhash, &decoded_tid, HASH_ENTER, &found);
 
 			if (status->knowndeletable)
@@ -1370,7 +1370,7 @@ hyperstore_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 				if (status_compr->knowndeletable)
 					status->knowndeletable = true;
 
-				hyperstore_tid_encode(&deltid->tid, &deltid_compr->tid, tuple_index);
+				hypercore_tid_encode(&deltid->tid, &deltid_compr->tid, tuple_index);
 				delstate->ndeltids++;
 			}
 		}
@@ -1406,7 +1406,7 @@ hyperstore_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 }
 
 /* ----------------------------------------------------------------------------
- *  Functions for manipulations of physical tuples for Hyperstore.
+ *  Functions for manipulations of physical tuples for Hypercore.
  * ----------------------------------------------------------------------------
  */
 
@@ -1420,8 +1420,8 @@ typedef struct ConversionState
 static ConversionState *conversionstate = NULL;
 
 static void
-hyperstore_tuple_insert(Relation relation, TupleTableSlot *slot, CommandId cid, int options,
-						BulkInsertStateData *bistate)
+hypercore_tuple_insert(Relation relation, TupleTableSlot *slot, CommandId cid, int options,
+					   BulkInsertStateData *bistate)
 {
 	if (conversionstate)
 	{
@@ -1448,8 +1448,8 @@ hyperstore_tuple_insert(Relation relation, TupleTableSlot *slot, CommandId cid, 
 }
 
 static void
-hyperstore_tuple_insert_speculative(Relation relation, TupleTableSlot *slot, CommandId cid,
-									int options, BulkInsertStateData *bistate, uint32 specToken)
+hypercore_tuple_insert_speculative(Relation relation, TupleTableSlot *slot, CommandId cid,
+								   int options, BulkInsertStateData *bistate, uint32 specToken)
 {
 	const TableAmRoutine *oldtam = switch_to_heapam(relation);
 	relation->rd_tableam
@@ -1458,8 +1458,8 @@ hyperstore_tuple_insert_speculative(Relation relation, TupleTableSlot *slot, Com
 }
 
 static void
-hyperstore_tuple_complete_speculative(Relation relation, TupleTableSlot *slot, uint32 specToken,
-									  bool succeeded)
+hypercore_tuple_complete_speculative(Relation relation, TupleTableSlot *slot, uint32 specToken,
+									 bool succeeded)
 {
 	const TableAmRoutine *oldtam = switch_to_heapam(relation);
 	relation->rd_tableam->tuple_complete_speculative(relation, slot, specToken, succeeded);
@@ -1528,7 +1528,7 @@ whole_segment_delete_callback(void *arg)
  * which is a good point to check that delete invariants hold.
  */
 static WholeSegmentDeleteState *
-whole_segment_delete_state_create(const HyperstoreInfo *hinfo, Relation crel, CommandId cid,
+whole_segment_delete_state_create(const HypercoreInfo *hinfo, Relation crel, CommandId cid,
 								  ItemPointer ctid)
 {
 	WholeSegmentDeleteState *state;
@@ -1593,7 +1593,7 @@ whole_segment_delete_state_add_row(WholeSegmentDeleteState *state, uint16 tuple_
  * Returns true if the whole segment has been deleted, otherwise false.
  */
 static bool
-is_whole_segment_delete(const HyperstoreInfo *hinfo, Relation crel, CommandId cid, ItemPointer ctid,
+is_whole_segment_delete(const HypercoreInfo *hinfo, Relation crel, CommandId cid, ItemPointer ctid,
 						uint16 tuple_index)
 {
 	if (delete_state == NULL)
@@ -1628,7 +1628,7 @@ is_whole_segment_delete(const HyperstoreInfo *hinfo, Relation crel, CommandId ci
  * rows in it should be deleted.
  *
  * It is tempting to simply disallow deletes directly on compressed
- * data. However, Hyperstore needs to support such deletes in some cases, for
+ * data. However, Hypercore needs to support such deletes in some cases, for
  * example, to support foreign key cascading deletes.
  *
  * Fortunately, some deletes of compressed data can be supported as long as
@@ -1638,17 +1638,17 @@ is_whole_segment_delete(const HyperstoreInfo *hinfo, Relation crel, CommandId ci
  * violated.
  */
 static TM_Result
-hyperstore_tuple_delete(Relation relation, ItemPointer tid, CommandId cid, Snapshot snapshot,
-						Snapshot crosscheck, bool wait, TM_FailureData *tmfd, bool changingPart)
+hypercore_tuple_delete(Relation relation, ItemPointer tid, CommandId cid, Snapshot snapshot,
+					   Snapshot crosscheck, bool wait, TM_FailureData *tmfd, bool changingPart)
 {
 	TM_Result result = TM_Ok;
 
 	if (is_compressed_tid(tid))
 	{
-		HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(relation);
+		HypercoreInfo *caminfo = RelationGetHypercoreInfo(relation);
 		Relation crel = table_open(caminfo->compressed_relid, RowExclusiveLock);
 		ItemPointerData decoded_tid;
-		uint16 tuple_index = hyperstore_tid_decode(&decoded_tid, tid);
+		uint16 tuple_index = hypercore_tid_decode(&decoded_tid, tid);
 
 		/*
 		 * It is only possible to delete the compressed segment if all rows in
@@ -1696,9 +1696,9 @@ typedef bool TU_UpdateIndexes;
 #endif
 
 static TM_Result
-hyperstore_tuple_update(Relation relation, ItemPointer otid, TupleTableSlot *slot, CommandId cid,
-						Snapshot snapshot, Snapshot crosscheck, bool wait, TM_FailureData *tmfd,
-						LockTupleMode *lockmode, TU_UpdateIndexes *update_indexes)
+hypercore_tuple_update(Relation relation, ItemPointer otid, TupleTableSlot *slot, CommandId cid,
+					   Snapshot snapshot, Snapshot crosscheck, bool wait, TM_FailureData *tmfd,
+					   LockTupleMode *lockmode, TU_UpdateIndexes *update_indexes)
 {
 	if (!is_compressed_tid(otid))
 	{
@@ -1728,15 +1728,15 @@ hyperstore_tuple_update(Relation relation, ItemPointer otid, TupleTableSlot *slo
 }
 
 static TM_Result
-hyperstore_tuple_lock(Relation relation, ItemPointer tid, Snapshot snapshot, TupleTableSlot *slot,
-					  CommandId cid, LockTupleMode mode, LockWaitPolicy wait_policy, uint8 flags,
-					  TM_FailureData *tmfd)
+hypercore_tuple_lock(Relation relation, ItemPointer tid, Snapshot snapshot, TupleTableSlot *slot,
+					 CommandId cid, LockTupleMode mode, LockWaitPolicy wait_policy, uint8 flags,
+					 TM_FailureData *tmfd)
 {
 	TM_Result result;
 
 	if (is_compressed_tid(tid))
 	{
-		HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(relation);
+		HypercoreInfo *hsinfo = RelationGetHypercoreInfo(relation);
 		/* SELECT FOR UPDATE takes RowShareLock, so assume this
 		 * lockmode. Another option to consider is take same lock as currently
 		 * held on the non-compressed relation */
@@ -1744,7 +1744,7 @@ hyperstore_tuple_lock(Relation relation, ItemPointer tid, Snapshot snapshot, Tup
 		TupleTableSlot *child_slot = arrow_slot_get_compressed_slot(slot, RelationGetDescr(crel));
 		ItemPointerData decoded_tid;
 
-		uint16 tuple_index = hyperstore_tid_decode(&decoded_tid, tid);
+		uint16 tuple_index = hypercore_tid_decode(&decoded_tid, tid);
 		result = crel->rd_tableam->tuple_lock(crel,
 											  &decoded_tid,
 											  snapshot,
@@ -1789,14 +1789,14 @@ hyperstore_tuple_lock(Relation relation, ItemPointer tid, Snapshot snapshot, Tup
 }
 
 static void
-hyperstore_finish_bulk_insert(Relation rel, int options)
+hypercore_finish_bulk_insert(Relation rel, int options)
 {
 	if (conversionstate)
-		convert_to_hyperstore_finish(RelationGetRelid(rel));
+		convert_to_hypercore_finish(RelationGetRelid(rel));
 }
 
 /* ------------------------------------------------------------------------
- * DDL related callbacks for Hyperstore.
+ * DDL related callbacks for Hypercore.
  * ------------------------------------------------------------------------
  */
 
@@ -1807,9 +1807,9 @@ typedef RelFileNode RelFileLocator;
 #endif
 
 static void
-hyperstore_relation_set_new_filelocator(Relation rel, const RelFileLocator *newrlocator,
-										char persistence, TransactionId *freezeXid,
-										MultiXactId *minmulti)
+hypercore_relation_set_new_filelocator(Relation rel, const RelFileLocator *newrlocator,
+									   char persistence, TransactionId *freezeXid,
+									   MultiXactId *minmulti)
 {
 	const TableAmRoutine *oldtam = switch_to_heapam(rel);
 #if PG16_GE
@@ -1840,7 +1840,7 @@ hyperstore_relation_set_new_filelocator(Relation rel, const RelFileLocator *newr
 }
 
 static void
-hyperstore_relation_nontransactional_truncate(Relation rel)
+hypercore_relation_nontransactional_truncate(Relation rel)
 {
 	const TableAmRoutine *oldtam = switch_to_heapam(rel);
 	rel->rd_tableam->relation_nontransactional_truncate(rel);
@@ -1856,7 +1856,7 @@ hyperstore_relation_nontransactional_truncate(Relation rel)
 }
 
 static void
-hyperstore_relation_copy_data(Relation rel, const RelFileLocator *newrlocator)
+hypercore_relation_copy_data(Relation rel, const RelFileLocator *newrlocator)
 {
 	FEATURE_NOT_SUPPORTED;
 }
@@ -1881,7 +1881,7 @@ static Oid
 compress_and_swap_heap(Relation rel, Tuplesortstate *tuplesort, TransactionId *xid_cutoff,
 					   MultiXactId *multi_cutoff)
 {
-	const HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(rel);
+	const HypercoreInfo *hsinfo = RelationGetHypercoreInfo(rel);
 	TupleDesc tupdesc = RelationGetDescr(rel);
 	Oid old_compressed_relid = hsinfo->compressed_relid;
 	CompressionSettings *settings = ts_compression_settings_get(old_compressed_relid);
@@ -1963,14 +1963,14 @@ compress_and_swap_heap(Relation rel, Tuplesortstate *tuplesort, TransactionId *x
  * and performs a heap swap/rewrite. The code is based on the heap's
  * copy_for_cluster(), with changes to handle two heaps and compressed tuples.
  *
- * For Hyperstore, two heap swaps are performed: one on the non-compressed
+ * For Hypercore, two heap swaps are performed: one on the non-compressed
  * (user-visible) relation, which is managed by PostgreSQL and passed on to
  * this callback, and one on the compressed relation that is implemented
  * within the callback.
  *
- * The Hyperstore implementation of copy_for_cluster() is similar to the one
+ * The Hypercore implementation of copy_for_cluster() is similar to the one
  * for Heap. However, instead of "rewriting" tuples into the new heap (while
- * at the same time handling freezing and visibility), Hyperstore will
+ * at the same time handling freezing and visibility), Hypercore will
  * compress all the data and write it to a new compressed relation. Since the
  * compression is based on the previous compression implementation, visibility
  * of recently deleted tuples and freezing of tuples is not correctly handled,
@@ -1985,14 +1985,14 @@ compress_and_swap_heap(Relation rel, Tuplesortstate *tuplesort, TransactionId *x
  * tuples if all rows it compresses are also frozen.
  */
 static void
-hyperstore_relation_copy_for_cluster(Relation OldHyperstore, Relation NewCompression,
-									 Relation OldIndex, bool use_sort, TransactionId OldestXmin,
-									 TransactionId *xid_cutoff, MultiXactId *multi_cutoff,
-									 double *num_tuples, double *tups_vacuumed,
-									 double *tups_recently_dead)
+hypercore_relation_copy_for_cluster(Relation OldHypercore, Relation NewCompression,
+									Relation OldIndex, bool use_sort, TransactionId OldestXmin,
+									TransactionId *xid_cutoff, MultiXactId *multi_cutoff,
+									double *num_tuples, double *tups_vacuumed,
+									double *tups_recently_dead)
 {
-	const HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(OldHyperstore);
-	HyperstoreScanDesc cscan;
+	const HypercoreInfo *hsinfo = RelationGetHypercoreInfo(OldHypercore);
+	HypercoreScanDesc cscan;
 	HeapScanDesc chscan;
 	HeapScanDesc uhscan;
 	Tuplesortstate *tuplesort;
@@ -2004,7 +2004,7 @@ hyperstore_relation_copy_for_cluster(Relation OldHyperstore, Relation NewCompres
 	BlockNumber startblock;
 	BlockNumber nblocks;
 
-	if (ts_is_hypertable(RelationGetRelid(OldHyperstore)))
+	if (ts_is_hypertable(RelationGetRelid(OldHypercore)))
 		return;
 
 	/* Error out if this is a CLUSTER. It would be possible to CLUSTER only
@@ -2013,22 +2013,22 @@ hyperstore_relation_copy_for_cluster(Relation OldHyperstore, Relation NewCompres
 	if (OldIndex != NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot cluster a hyperstore table"),
-				 errdetail("A hyperstore table is already ordered by compression.")));
+				 errmsg("cannot cluster a hypercore table"),
+				 errdetail("A hypercore table is already ordered by compression.")));
 
 	CompressionSettings *settings = ts_compression_settings_get(hsinfo->compressed_relid);
-	tuplesort = compression_create_tuplesort_state(settings, OldHyperstore);
+	tuplesort = compression_create_tuplesort_state(settings, OldHypercore);
 
 	/* In scan-and-sort mode and also VACUUM FULL, set phase */
 	pgstat_progress_update_param(PROGRESS_CLUSTER_PHASE, PROGRESS_CLUSTER_PHASE_SEQ_SCAN_HEAP);
 
-	/* This will scan via the Hyperstore callbacks, getting tuples from both
+	/* This will scan via the Hypercore callbacks, getting tuples from both
 	 * compressed and non-compressed relations */
-	tscan = table_beginscan(OldHyperstore, SnapshotAny, 0, (ScanKey) NULL);
-	cscan = (HyperstoreScanDesc) tscan;
+	tscan = table_beginscan(OldHypercore, SnapshotAny, 0, (ScanKey) NULL);
+	cscan = (HypercoreScanDesc) tscan;
 	chscan = (HeapScanDesc) cscan->cscan_desc;
 	uhscan = (HeapScanDesc) cscan->uscan_desc;
-	slot = table_slot_create(OldHyperstore, NULL);
+	slot = table_slot_create(OldHypercore, NULL);
 	startblock = chscan->rs_startblock + uhscan->rs_startblock;
 	nblocks = chscan->rs_nblocks + uhscan->rs_nblocks;
 
@@ -2092,7 +2092,7 @@ hyperstore_relation_copy_for_cluster(Relation OldHyperstore, Relation NewCompres
 				isdead = true;
 				break;
 			case HEAPTUPLE_RECENTLY_DEAD:
-				/* Note: This case is treated as "dead" in Hyperstore,
+				/* Note: This case is treated as "dead" in Hypercore,
 				 * although some of these tuples might still be visible to
 				 * some transactions. For strict correctness, recently dead
 				 * tuples should be transferred to the new heap if they are
@@ -2113,12 +2113,12 @@ hyperstore_relation_copy_for_cluster(Relation OldHyperstore, Relation NewCompres
 				 * only way to see this is if it was inserted earlier in our
 				 * own transaction.  However, it can happen in system
 				 * catalogs, since we tend to release write lock before commit
-				 * there. Still, system catalogs don't use Hyperstore.
+				 * there. Still, system catalogs don't use Hypercore.
 				 */
 				if (!TransactionIdIsCurrentTransactionId(HeapTupleHeaderGetXmin(tuple->t_data)))
 					elog(WARNING,
 						 "concurrent insert in progress within table \"%s\"",
-						 RelationGetRelationName(OldHyperstore));
+						 RelationGetRelationName(OldHypercore));
 				/* treat as live */
 				isdead = false;
 				break;
@@ -2131,8 +2131,8 @@ hyperstore_relation_copy_for_cluster(Relation OldHyperstore, Relation NewCompres
 						HeapTupleHeaderGetUpdateXid(tuple->t_data)))
 					elog(WARNING,
 						 "concurrent delete in progress within table \"%s\"",
-						 RelationGetRelationName(OldHyperstore));
-				/* Note: This case is treated as "dead" in Hyperstore,
+						 RelationGetRelationName(OldHypercore));
+				/* Note: This case is treated as "dead" in Hypercore,
 				 * although this is "recently dead" in heap */
 				isdead = true;
 				break;
@@ -2180,41 +2180,41 @@ hyperstore_relation_copy_for_cluster(Relation OldHyperstore, Relation NewCompres
 	/* Report that we are now writing new heap */
 	pgstat_progress_update_param(PROGRESS_CLUSTER_PHASE, PROGRESS_CLUSTER_PHASE_WRITE_NEW_HEAP);
 
-	compress_and_swap_heap(OldHyperstore, tuplesort, xid_cutoff, multi_cutoff);
+	compress_and_swap_heap(OldHypercore, tuplesort, xid_cutoff, multi_cutoff);
 	tuplesort_end(tuplesort);
 }
 
 /*
  * VACUUM (not VACUUM FULL).
  *
- * Vacuum the hyperstore by calling vacuum on both the non-compressed and
+ * Vacuum the hypercore by calling vacuum on both the non-compressed and
  * compressed relations.
  *
  * Indexes on a heap are normally vacuumed as part of vacuuming the
- * heap. However, a hyperstore index is defined on the non-compressed relation
+ * heap. However, a hypercore index is defined on the non-compressed relation
  * and contains tuples from both the non-compressed and compressed relations
  * and therefore dead tuples vacuumed on the compressed relation won't be
- * removed from a hyperstore index by default. The vacuuming of dead
- * compressed tuples from the hyperstore index therefore requires special
- * handling, which is triggered via a proxy index (hsproxy) that relays the
- * clean up to the "correct" hyperstore indexes. (See hsproxy.c)
+ * removed from a hypercore index by default. The vacuuming of dead
+ * compressed tuples from the hypercore index therefore requires special
+ * handling, which is triggered via a proxy index (hypercore_proxy) that relays the
+ * clean up to the "correct" hypercore indexes. (See hypercore_proxy.c)
  *
  * For future: It would make sense to (re-)compress all non-compressed data as
  * part of vacuum since (re-)compression is a kind of cleanup but also leaves
  * a lot of garbage.
  */
 static void
-hyperstore_vacuum_rel(Relation rel, VacuumParams *params, BufferAccessStrategy bstrategy)
+hypercore_vacuum_rel(Relation rel, VacuumParams *params, BufferAccessStrategy bstrategy)
 {
 	Oid relid = RelationGetRelid(rel);
-	HyperstoreInfo *hsinfo;
+	HypercoreInfo *hsinfo;
 	RelStats relstats;
 
 	if (ts_is_hypertable(relid))
 		return;
 
 	relstats_fetch(relid, &relstats);
-	hsinfo = RelationGetHyperstoreInfo(rel);
+	hsinfo = RelationGetHypercoreInfo(rel);
 
 	LOCKMODE lmode =
 		(params->options & VACOPT_FULL) ? AccessExclusiveLock : ShareUpdateExclusiveLock;
@@ -2279,10 +2279,10 @@ hyperstore_vacuum_rel(Relation rel, VacuumParams *params, BufferAccessStrategy b
  */
 #if PG17_LT
 static bool
-hyperstore_scan_analyze_next_block(TableScanDesc scan, BlockNumber blockno,
-								   BufferAccessStrategy bstrategy)
+hypercore_scan_analyze_next_block(TableScanDesc scan, BlockNumber blockno,
+								  BufferAccessStrategy bstrategy)
 {
-	HyperstoreScanDescData *cscan = (HyperstoreScanDescData *) scan;
+	HypercoreScanDescData *cscan = (HypercoreScanDescData *) scan;
 #if PG17_GE
 	HeapScanDesc chscan = (HeapScanDesc) cscan->cscan_desc;
 #endif
@@ -2309,7 +2309,7 @@ hyperstore_scan_analyze_next_block(TableScanDesc scan, BlockNumber blockno,
 }
 #else
 static ReadStream *
-hyperstore_setup_read_stream(Relation rel, BufferAccessStrategy bstrategy)
+hypercore_setup_read_stream(Relation rel, BufferAccessStrategy bstrategy)
 {
 	Assert(rel != NULL);
 	BlockSampler block_sampler = palloc(sizeof(BlockSamplerData));
@@ -2335,9 +2335,9 @@ hyperstore_setup_read_stream(Relation rel, BufferAccessStrategy bstrategy)
 }
 
 static bool
-hyperstore_scan_analyze_next_block(TableScanDesc scan, ReadStream *stream)
+hypercore_scan_analyze_next_block(TableScanDesc scan, ReadStream *stream)
 {
-	HyperstoreScanDescData *cscan = (HyperstoreScanDescData *) scan;
+	HypercoreScanDescData *cscan = (HypercoreScanDescData *) scan;
 	HeapScanDesc uhscan = (HeapScanDesc) cscan->uscan_desc;
 	HeapScanDesc chscan = (HeapScanDesc) cscan->cscan_desc;
 
@@ -2355,14 +2355,13 @@ hyperstore_scan_analyze_next_block(TableScanDesc scan, ReadStream *stream)
 	if (!cscan->canalyze_read_stream)
 	{
 		Assert(cscan->compressed_rel);
-		cscan->canalyze_read_stream =
-			hyperstore_setup_read_stream(cscan->compressed_rel, bstrategy);
+		cscan->canalyze_read_stream = hypercore_setup_read_stream(cscan->compressed_rel, bstrategy);
 	}
 
 	if (!cscan->uanalyze_read_stream)
 	{
 		const TableAmRoutine *oldtam = switch_to_heapam(scan->rs_rd);
-		cscan->uanalyze_read_stream = hyperstore_setup_read_stream(scan->rs_rd, bstrategy);
+		cscan->uanalyze_read_stream = hypercore_setup_read_stream(scan->rs_rd, bstrategy);
 		scan->rs_rd->rd_tableam = oldtam;
 	}
 
@@ -2415,10 +2414,10 @@ hyperstore_scan_analyze_next_block(TableScanDesc scan, ReadStream *stream)
  * for compressed tuples.
  */
 static bool
-hyperstore_scan_analyze_next_tuple(TableScanDesc scan, TransactionId OldestXmin, double *liverows,
-								   double *deadrows, TupleTableSlot *slot)
+hypercore_scan_analyze_next_tuple(TableScanDesc scan, TransactionId OldestXmin, double *liverows,
+								  double *deadrows, TupleTableSlot *slot)
 {
-	HyperstoreScanDescData *cscan = (HyperstoreScanDescData *) scan;
+	HypercoreScanDescData *cscan = (HypercoreScanDescData *) scan;
 	HeapScanDesc chscan = (HeapScanDesc) cscan->cscan_desc;
 	uint16 tuple_index;
 	bool result;
@@ -2512,7 +2511,7 @@ typedef struct IndexBuildCallbackState
 /*
  * Callback for index builds on compressed relation.
  *
- * See hyperstore_index_build_range_scan() for general overview.
+ * See hypercore_index_build_range_scan() for general overview.
  *
  * When building an index, this function is called once for every compressed
  * tuple. To build an index over the original (non-compressed) values, it is
@@ -2526,8 +2525,8 @@ typedef struct IndexBuildCallbackState
  * scanning instead.
  */
 static void
-hyperstore_index_build_callback(Relation index, ItemPointer tid, Datum *values, bool *isnull,
-								bool tupleIsAlive, void *state)
+hypercore_index_build_callback(Relation index, ItemPointer tid, Datum *values, bool *isnull,
+							   bool tupleIsAlive, void *state)
 {
 	IndexBuildCallbackState *icstate = state;
 	const TupleDesc tupdesc = RelationGetDescr(icstate->rel);
@@ -2663,7 +2662,7 @@ hyperstore_index_build_callback(Relation index, ItemPointer tid, Datum *values, 
 		}
 
 		ItemPointerData index_tid;
-		hyperstore_tid_encode(&index_tid, tid, rownum + 1);
+		hypercore_tid_encode(&index_tid, tid, rownum + 1);
 		Assert(!icstate->is_segmentby_index || rownum == 0);
 
 		/*
@@ -2684,13 +2683,13 @@ hyperstore_index_build_callback(Relation index, ItemPointer tid, Datum *values, 
 }
 
 /*
- * Build an index over a Hyperstore table.
+ * Build an index over a Hypercore table.
  *
  * The task of this function is to scan all tuples in the table and then,
  * after visibility and predicate checks, pass the tuple to the "index build
  * callback" to have it indexed.
  *
- * Since a Hyperstore table technically consists of two heaps: one
+ * Since a Hypercore table technically consists of two heaps: one
  * non-compressed and one compressed, it is necessary to scan both of them. To
  * avoid rewriting/copying the heap code, we make use of the heap AM's
  * machinery. However, that comes with some complications when dealing with
@@ -2710,13 +2709,13 @@ hyperstore_index_build_callback(Relation index, ItemPointer tid, Datum *values, 
  * from those values in order to do the predicate check.
  */
 static double
-hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, IndexInfo *indexInfo,
-								  bool allow_sync, bool anyvisible, bool progress,
-								  BlockNumber start_blockno, BlockNumber numblocks,
-								  IndexBuildCallback callback, void *callback_state,
-								  TableScanDesc scan)
+hypercore_index_build_range_scan(Relation relation, Relation indexRelation, IndexInfo *indexInfo,
+								 bool allow_sync, bool anyvisible, bool progress,
+								 BlockNumber start_blockno, BlockNumber numblocks,
+								 IndexBuildCallback callback, void *callback_state,
+								 TableScanDesc scan)
 {
-	HyperstoreInfo *hsinfo;
+	HypercoreInfo *hsinfo;
 	TransactionId OldestXmin;
 	bool need_unregister_snapshot = false;
 	Snapshot snapshot;
@@ -2764,12 +2763,12 @@ hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, Ind
 		}
 	}
 
-	hsinfo = RelationGetHyperstoreInfo(relation);
+	hsinfo = RelationGetHypercoreInfo(relation);
 
 	/*
 	 * In accordance with the heapam implementation, setup the scan
 	 * descriptor. Do it here instead of letting the heapam handler do it
-	 * since we want a hyperstore scan descriptor that includes the state for
+	 * since we want a hypercore scan descriptor that includes the state for
 	 * both the non-compressed and compressed relations.
 	 *
 	 * Prepare for scan of the base relation. In a normal index build, we use
@@ -2778,7 +2777,7 @@ hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, Ind
 	 * concurrent build, or during bootstrap, we take a regular MVCC snapshot
 	 * and index whatever's live according to that.
 	 *
-	 * Hyperstore is not used during bootstrap so skip that check.
+	 * Hypercore is not used during bootstrap so skip that check.
 	 */
 	OldestXmin = InvalidTransactionId;
 
@@ -2828,7 +2827,7 @@ hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, Ind
 		snapshot = scan->rs_snapshot;
 	}
 
-	HyperstoreScanDescData *hscan = (HyperstoreScanDescData *) scan;
+	HypercoreScanDescData *hscan = (HypercoreScanDescData *) scan;
 	EState *estate = CreateExecutorState();
 	Relation crel = hscan->compressed_rel;
 	IndexBuildCallbackState icstate = {
@@ -2935,7 +2934,7 @@ hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, Ind
 		}
 
 		/* Can't evaluate predicates on compressed tuples. This is done in
-		 * hyperstore_index_build_callback instead. */
+		 * hypercore_index_build_callback instead. */
 		compress_iinfo.ii_Predicate = NULL;
 
 		/* Set final number of index attributes. Includes original number of
@@ -2969,7 +2968,7 @@ hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, Ind
 											 progress,
 											 start_blockno,
 											 numblocks,
-											 hyperstore_index_build_callback,
+											 hypercore_index_build_callback,
 											 &icstate,
 											 hscan->cscan_desc);
 
@@ -3016,31 +3015,31 @@ hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, Ind
  * Used for concurrent index builds.
  */
 static void
-hyperstore_index_validate_scan(Relation compressionRelation, Relation indexRelation,
-							   IndexInfo *indexInfo, Snapshot snapshot, ValidateIndexState *state)
+hypercore_index_validate_scan(Relation compressionRelation, Relation indexRelation,
+							  IndexInfo *indexInfo, Snapshot snapshot, ValidateIndexState *state)
 {
 	FEATURE_NOT_SUPPORTED;
 }
 
 /* ------------------------------------------------------------------------
- * Miscellaneous callbacks for the Hyperstore
+ * Miscellaneous callbacks for the Hypercore
  * ------------------------------------------------------------------------
  */
 static bool
-hyperstore_relation_needs_toast_table(Relation rel)
+hypercore_relation_needs_toast_table(Relation rel)
 {
 	return false;
 }
 
 static Oid
-hyperstore_relation_toast_am(Relation rel)
+hypercore_relation_toast_am(Relation rel)
 {
 	FEATURE_NOT_SUPPORTED;
 	return InvalidOid;
 }
 
 /* ------------------------------------------------------------------------
- * Planner related callbacks for the Hyperstore
+ * Planner related callbacks for the Hypercore
  * ------------------------------------------------------------------------
  */
 
@@ -3058,7 +3057,7 @@ hyperstore_relation_toast_am(Relation rel)
  * to use switch_to_heapam() and bypass the TAM callbacks.
  */
 static uint64
-hyperstore_relation_size(Relation rel, ForkNumber forkNumber)
+hypercore_relation_size(Relation rel, ForkNumber forkNumber)
 {
 	uint64 ubytes = table_block_relation_size(rel, forkNumber);
 	int32 hyper_id = ts_chunk_get_hypertable_id_by_reloid(rel->rd_id);
@@ -3066,7 +3065,7 @@ hyperstore_relation_size(Relation rel, ForkNumber forkNumber)
 	if (hyper_id == 0)
 		return ubytes;
 
-	HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(rel);
+	HypercoreInfo *hsinfo = RelationGetHypercoreInfo(rel);
 
 	/* For ANALYZE, need to return sum for both relations. */
 	Relation crel = try_relation_open(hsinfo->compressed_relid, AccessShareLock);
@@ -3106,7 +3105,7 @@ calc_allvisfrac(BlockNumber curpages, BlockNumber relallvisible)
 /*
  * Get the number of blocks on disk of a relation.
  *
- * Bypasses hyperstore_relation_size()/RelationGetNumberOfBlocks(), which
+ * Bypasses hypercore_relation_size()/RelationGetNumberOfBlocks(), which
  * return the aggregate size (compressed + non-compressed).
  */
 static BlockNumber
@@ -3117,7 +3116,7 @@ relation_number_of_disk_blocks(Relation rel)
 }
 
 /*
- * Estimate the size of a Hyperstore relation.
+ * Estimate the size of a Hypercore relation.
  *
  * For "heap", PostgreSQL estimates the number of tuples based on the
  * difference between the as-of-this-instant number of blocks on disk and the
@@ -3126,16 +3125,16 @@ relation_number_of_disk_blocks(Relation rel)
  * number of tuples can be extrapolated from the previous "tuple density" in
  * relstats (reltuples / relpages).
  *
- * However, this extrapolation doesn't work well for a Hyperstore since there
+ * However, this extrapolation doesn't work well for a Hypercore since there
  * are situations where a relation can shrink in terms of pages, but grow in
- * terms of data. For example, simply compressing a hyperstore (with no
+ * terms of data. For example, simply compressing a hypercore (with no
  * previous compressed data), will shrink the number of blocks significantly
  * while there was no change in number of tuples. The standard PostgreSQL
  * estimate will believe that a lot of data was deleted, thus vastly
  * underestimating the number of tuples. Conversely, decompression will lead
  * to overestimating since the number of pages increase drastically.
  *
- * Note that a hyperstore stores the aggregate stats (compressed +
+ * Note that a hypercore stores the aggregate stats (compressed +
  * non-compressed) in the non-compressed relation. So, reltuples is the actual
  * number of tuples as of the last ANALYZE (or similar operation that updates
  * relstats). Therefore, when estimating tuples, using the normal PG function,
@@ -3158,14 +3157,14 @@ relation_number_of_disk_blocks(Relation rel)
  *
  * However, until there's a better way to figure out whether data was actually
  * added, removed, or stayed the same, it is better to just return the current
- * stats, if they exist. Ideally, a hyperstore should not be mutated often and
+ * stats, if they exist. Ideally, a hypercore should not be mutated often and
  * be mostly (if not completely) compressed. When compressing or
  * decompressing, relstats should also be updated. Therefore, the relstats
  * should be quite accurate.
  */
 static void
-hyperstore_relation_estimate_size(Relation rel, int32 *attr_widths, BlockNumber *pages,
-								  double *tuples, double *allvisfrac)
+hypercore_relation_estimate_size(Relation rel, int32 *attr_widths, BlockNumber *pages,
+								 double *tuples, double *allvisfrac)
 {
 	/*
 	 * We can be called from ProcessUtility with a hypertable because we need
@@ -3183,7 +3182,7 @@ hyperstore_relation_estimate_size(Relation rel, int32 *attr_widths, BlockNumber 
 		return;
 	}
 
-	const HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(rel);
+	const HypercoreInfo *hsinfo = RelationGetHypercoreInfo(rel);
 	const Form_pg_class form = RelationGetForm(rel);
 	Size overhead_bytes_per_tuples = HEAP_OVERHEAD_BYTES_PER_TUPLE;
 	Relation crel = table_open(hsinfo->compressed_relid, AccessShareLock);
@@ -3236,7 +3235,7 @@ hyperstore_relation_estimate_size(Relation rel, int32 *attr_widths, BlockNumber 
 	 *
 	 * Note that this function gets the number of blocks of the relation in
 	 * order to extrapolate a new tuple count based on the "tuple
-	 * density". This works for the hyperstore relation because
+	 * density". This works for the hypercore relation because
 	 * RelationGetNumberOfBlocks() returns the aggregate block count of both
 	 * relations. Also note that using the attr_widths for the non-compressed
 	 * rel won't be very representative for mostly compressed data. Should
@@ -3262,45 +3261,45 @@ hyperstore_relation_estimate_size(Relation rel, int32 *attr_widths, BlockNumber 
 }
 
 static void
-hyperstore_fetch_toast_slice(Relation toastrel, Oid valueid, int32 attrsize, int32 sliceoffset,
-							 int32 slicelength, struct varlena *result)
+hypercore_fetch_toast_slice(Relation toastrel, Oid valueid, int32 attrsize, int32 sliceoffset,
+							int32 slicelength, struct varlena *result)
 {
 	FEATURE_NOT_SUPPORTED;
 }
 
 /* ------------------------------------------------------------------------
- * Executor related callbacks for the Hyperstore
+ * Executor related callbacks for the Hypercore
  * ------------------------------------------------------------------------
  */
 
 static bool
-hyperstore_scan_sample_next_block(TableScanDesc scan, SampleScanState *scanstate)
+hypercore_scan_sample_next_block(TableScanDesc scan, SampleScanState *scanstate)
 {
 	FEATURE_NOT_SUPPORTED;
 	return false;
 }
 
 static bool
-hyperstore_scan_sample_next_tuple(TableScanDesc scan, SampleScanState *scanstate,
-								  TupleTableSlot *slot)
+hypercore_scan_sample_next_tuple(TableScanDesc scan, SampleScanState *scanstate,
+								 TupleTableSlot *slot)
 {
 	FEATURE_NOT_SUPPORTED;
 	return false;
 }
 
 /*
- * Convert a table to Hyperstore.
+ * Convert a table to Hypercore.
  *
  * Need to setup the conversion state used to compress the data.
  */
 static void
-convert_to_hyperstore(Oid relid)
+convert_to_hypercore(Oid relid)
 {
 	Relation relation = table_open(relid, AccessShareLock);
 	bool compress_chunk_created;
-	HyperstoreInfo *hsinfo = lazy_build_hyperstore_info_cache(relation,
-															  false /* create constraints */,
-															  &compress_chunk_created);
+	HypercoreInfo *hsinfo = lazy_build_hypercore_info_cache(relation,
+															false /* create constraints */,
+															&compress_chunk_created);
 
 	if (!compress_chunk_created)
 	{
@@ -3326,7 +3325,7 @@ convert_to_hyperstore(Oid relid)
 
 /*
  * List of relation IDs used to clean up the compressed relation when
- * converting from Hyperstore to another TAM (typically heap).
+ * converting from Hypercore to another TAM (typically heap).
  */
 static List *cleanup_relids = NIL;
 
@@ -3355,7 +3354,7 @@ cleanup_compression_relations(void)
 }
 
 void
-hyperstore_xact_event(XactEvent event, void *arg)
+hypercore_xact_event(XactEvent event, void *arg)
 {
 	switch (event)
 	{
@@ -3369,11 +3368,11 @@ hyperstore_xact_event(XactEvent event, void *arg)
 			{
 				Oid relid = lfirst_oid(lc);
 				Relation rel = table_open(relid, AccessShareLock);
-				/* Calling RelationGetHyperstoreInfo() here will create the
+				/* Calling RelationGetHypercoreInfo() here will create the
 				 * compressed relation if not already created. */
-				HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(rel);
+				HypercoreInfo *hsinfo = RelationGetHypercoreInfo(rel);
 				Ensure(OidIsValid(hsinfo->compressed_relid),
-					   "hyperstore \"%s\" has no compressed data relation",
+					   "hypercore \"%s\" has no compressed data relation",
 					   get_rel_name(relid));
 				Chunk *chunk = ts_chunk_get_by_relid(relid, true);
 				ts_chunk_set_partial(chunk);
@@ -3411,7 +3410,7 @@ hyperstore_xact_event(XactEvent event, void *arg)
 }
 
 static void
-convert_to_hyperstore_finish(Oid relid)
+convert_to_hypercore_finish(Oid relid)
 {
 	if (!conversionstate)
 	{
@@ -3434,7 +3433,7 @@ convert_to_hyperstore_finish(Oid relid)
 
 	/*
 	 * The compressed chunk should have been created in
-	 * convert_to_hyperstore_start() if it didn't already exist.
+	 * convert_to_hypercore_start() if it didn't already exist.
 	 */
 	Chunk *c_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
 	Relation compressed_rel = table_open(c_chunk->table_id, RowExclusiveLock);
@@ -3483,40 +3482,40 @@ convert_to_hyperstore_finish(Oid relid)
 }
 
 /*
- * Convert the chunk away from Hyperstore to another table access method.
+ * Convert the chunk away from Hypercore to another table access method.
  * When this happens it is necessary to cleanup metadata.
  */
 static void
-convert_from_hyperstore(Oid relid)
+convert_from_hypercore(Oid relid)
 {
 	int32 chunk_id = get_chunk_id_from_relid(relid);
 	ts_compression_chunk_size_delete(chunk_id);
 
-	/* Need to truncate the compressed relation after converting from Hyperstore */
+	/* Need to truncate the compressed relation after converting from Hypercore */
 	MemoryContext oldmcxt = MemoryContextSwitchTo(CurTransactionContext);
 	cleanup_relids = lappend_oid(cleanup_relids, relid);
 	MemoryContextSwitchTo(oldmcxt);
 }
 
 void
-hyperstore_alter_access_method_begin(Oid relid, bool to_other_am)
+hypercore_alter_access_method_begin(Oid relid, bool to_other_am)
 {
 	if (to_other_am)
-		convert_from_hyperstore(relid);
+		convert_from_hypercore(relid);
 	else
-		convert_to_hyperstore(relid);
+		convert_to_hypercore(relid);
 }
 
 /*
  * Called at the end of converting a chunk to a table access method.
  */
 void
-hyperstore_alter_access_method_finish(Oid relid, bool to_other_am)
+hypercore_alter_access_method_finish(Oid relid, bool to_other_am)
 {
 	if (to_other_am)
 		cleanup_compression_relations();
 
-	/* Finishing the conversion to Hyperstore is handled in the
+	/* Finishing the conversion to Hypercore is handled in the
 	 * finish_bulk_insert callback */
 }
 
@@ -3527,13 +3526,13 @@ hyperstore_alter_access_method_finish(Oid relid, bool to_other_am)
  * Indexes on segmentby columns are optimized to store only one index
  * reference per segment instead of one per value in each segment. This relies
  * on "unwrapping" the segment during scanning. However, with an
- * IndexOnlyScan, Hyperstore's index_fetch_tuple() is not be called to fetch
+ * IndexOnlyScan, Hypercore's index_fetch_tuple() is not be called to fetch
  * the heap tuple (since the scan returns directly from the index), and there
  * is no opportunity to unwrap the tuple. Therefore, turn IndexOnlyScans into
  * regular IndexScans on segmentby indexes.
  */
 static void
-convert_index_only_scans(const HyperstoreInfo *hsinfo, List *pathlist)
+convert_index_only_scans(const HypercoreInfo *hsinfo, List *pathlist)
 {
 	ListCell *lc;
 
@@ -3570,30 +3569,30 @@ convert_index_only_scans(const HyperstoreInfo *hsinfo, List *pathlist)
 }
 
 void
-hyperstore_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht)
+hypercore_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht)
 {
 	const RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
 	Relation relation = table_open(rte->relid, AccessShareLock);
-	const HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(relation);
+	const HypercoreInfo *hsinfo = RelationGetHypercoreInfo(relation);
 	convert_index_only_scans(hsinfo, rel->pathlist);
 	convert_index_only_scans(hsinfo, rel->partial_pathlist);
 	table_close(relation, AccessShareLock);
 }
 
 /* ------------------------------------------------------------------------
- * Definition of the Hyperstore table access method.
+ * Definition of the Hypercore table access method.
  * ------------------------------------------------------------------------
  */
 
-static const TableAmRoutine hyperstore_methods = {
+static const TableAmRoutine hypercore_methods = {
 	.type = T_TableAmRoutine,
 
-	.slot_callbacks = hyperstore_slot_callbacks,
+	.slot_callbacks = hypercore_slot_callbacks,
 
-	.scan_begin = hyperstore_beginscan,
-	.scan_end = hyperstore_endscan,
-	.scan_rescan = hyperstore_rescan,
-	.scan_getnextslot = hyperstore_getnextslot,
+	.scan_begin = hypercore_beginscan,
+	.scan_end = hypercore_endscan,
+	.scan_rescan = hypercore_rescan,
+	.scan_getnextslot = hypercore_getnextslot,
 #if PG14_GE
 	/*-----------
 	 * Optional functions to provide scanning for ranges of ItemPointers.
@@ -3607,44 +3606,44 @@ static const TableAmRoutine hyperstore_methods = {
 	 * Parallel table scan related functions.
 	 * ------------------------------------------------------------------------
 	 */
-	.parallelscan_estimate = hyperstore_parallelscan_estimate,
-	.parallelscan_initialize = hyperstore_parallelscan_initialize,
-	.parallelscan_reinitialize = hyperstore_parallelscan_reinitialize,
+	.parallelscan_estimate = hypercore_parallelscan_estimate,
+	.parallelscan_initialize = hypercore_parallelscan_initialize,
+	.parallelscan_reinitialize = hypercore_parallelscan_reinitialize,
 
 	/* ------------------------------------------------------------------------
 	 * Index Scan Callbacks
 	 * ------------------------------------------------------------------------
 	 */
-	.index_fetch_begin = hyperstore_index_fetch_begin,
-	.index_fetch_reset = hyperstore_index_fetch_reset,
-	.index_fetch_end = hyperstore_index_fetch_end,
-	.index_fetch_tuple = hyperstore_index_fetch_tuple,
+	.index_fetch_begin = hypercore_index_fetch_begin,
+	.index_fetch_reset = hypercore_index_fetch_reset,
+	.index_fetch_end = hypercore_index_fetch_end,
+	.index_fetch_tuple = hypercore_index_fetch_tuple,
 
 	/* ------------------------------------------------------------------------
 	 * Manipulations of physical tuples.
 	 * ------------------------------------------------------------------------
 	 */
-	.tuple_insert = hyperstore_tuple_insert,
-	.tuple_insert_speculative = hyperstore_tuple_insert_speculative,
-	.tuple_complete_speculative = hyperstore_tuple_complete_speculative,
-	.multi_insert = hyperstore_multi_insert,
-	.tuple_delete = hyperstore_tuple_delete,
-	.tuple_update = hyperstore_tuple_update,
-	.tuple_lock = hyperstore_tuple_lock,
+	.tuple_insert = hypercore_tuple_insert,
+	.tuple_insert_speculative = hypercore_tuple_insert_speculative,
+	.tuple_complete_speculative = hypercore_tuple_complete_speculative,
+	.multi_insert = hypercore_multi_insert,
+	.tuple_delete = hypercore_tuple_delete,
+	.tuple_update = hypercore_tuple_update,
+	.tuple_lock = hypercore_tuple_lock,
 
-	.finish_bulk_insert = hyperstore_finish_bulk_insert,
+	.finish_bulk_insert = hypercore_finish_bulk_insert,
 
 	/* ------------------------------------------------------------------------
 	 * Callbacks for non-modifying operations on individual tuples
 	 * ------------------------------------------------------------------------
 	 */
-	.tuple_fetch_row_version = hyperstore_fetch_row_version,
+	.tuple_fetch_row_version = hypercore_fetch_row_version,
 
-	.tuple_get_latest_tid = hyperstore_get_latest_tid,
-	.tuple_tid_valid = hyperstore_tuple_tid_valid,
-	.tuple_satisfies_snapshot = hyperstore_tuple_satisfies_snapshot,
+	.tuple_get_latest_tid = hypercore_get_latest_tid,
+	.tuple_tid_valid = hypercore_tuple_tid_valid,
+	.tuple_satisfies_snapshot = hypercore_tuple_satisfies_snapshot,
 #if PG14_GE
-	.index_delete_tuples = hyperstore_index_delete_tuples,
+	.index_delete_tuples = hypercore_index_delete_tuples,
 #endif
 
 /* ------------------------------------------------------------------------
@@ -3652,33 +3651,33 @@ static const TableAmRoutine hyperstore_methods = {
  * ------------------------------------------------------------------------
  */
 #if PG16_GE
-	.relation_set_new_filelocator = hyperstore_relation_set_new_filelocator,
+	.relation_set_new_filelocator = hypercore_relation_set_new_filelocator,
 #else
-	.relation_set_new_filenode = hyperstore_relation_set_new_filelocator,
+	.relation_set_new_filenode = hypercore_relation_set_new_filelocator,
 #endif
-	.relation_nontransactional_truncate = hyperstore_relation_nontransactional_truncate,
-	.relation_copy_data = hyperstore_relation_copy_data,
-	.relation_copy_for_cluster = hyperstore_relation_copy_for_cluster,
-	.relation_vacuum = hyperstore_vacuum_rel,
-	.scan_analyze_next_block = hyperstore_scan_analyze_next_block,
-	.scan_analyze_next_tuple = hyperstore_scan_analyze_next_tuple,
-	.index_build_range_scan = hyperstore_index_build_range_scan,
-	.index_validate_scan = hyperstore_index_validate_scan,
+	.relation_nontransactional_truncate = hypercore_relation_nontransactional_truncate,
+	.relation_copy_data = hypercore_relation_copy_data,
+	.relation_copy_for_cluster = hypercore_relation_copy_for_cluster,
+	.relation_vacuum = hypercore_vacuum_rel,
+	.scan_analyze_next_block = hypercore_scan_analyze_next_block,
+	.scan_analyze_next_tuple = hypercore_scan_analyze_next_tuple,
+	.index_build_range_scan = hypercore_index_build_range_scan,
+	.index_validate_scan = hypercore_index_validate_scan,
 
 	/* ------------------------------------------------------------------------
 	 * Miscellaneous functions.
 	 * ------------------------------------------------------------------------
 	 */
-	.relation_size = hyperstore_relation_size,
-	.relation_needs_toast_table = hyperstore_relation_needs_toast_table,
-	.relation_toast_am = hyperstore_relation_toast_am,
-	.relation_fetch_toast_slice = hyperstore_fetch_toast_slice,
+	.relation_size = hypercore_relation_size,
+	.relation_needs_toast_table = hypercore_relation_needs_toast_table,
+	.relation_toast_am = hypercore_relation_toast_am,
+	.relation_fetch_toast_slice = hypercore_fetch_toast_slice,
 
 	/* ------------------------------------------------------------------------
 	 * Planner related functions.
 	 * ------------------------------------------------------------------------
 	 */
-	.relation_estimate_size = hyperstore_relation_estimate_size,
+	.relation_estimate_size = hypercore_relation_estimate_size,
 
 	/* ------------------------------------------------------------------------
 	 * Executor related functions.
@@ -3689,18 +3688,18 @@ static const TableAmRoutine hyperstore_methods = {
 	.scan_bitmap_next_block = NULL,
 	.scan_bitmap_next_tuple = NULL,
 
-	.scan_sample_next_block = hyperstore_scan_sample_next_block,
-	.scan_sample_next_tuple = hyperstore_scan_sample_next_tuple,
+	.scan_sample_next_block = hypercore_scan_sample_next_block,
+	.scan_sample_next_tuple = hypercore_scan_sample_next_tuple,
 };
 
 const TableAmRoutine *
-hyperstore_routine(void)
+hypercore_routine(void)
 {
-	return &hyperstore_methods;
+	return &hypercore_methods;
 }
 
 Datum
-hyperstore_handler(PG_FUNCTION_ARGS)
+hypercore_handler(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_POINTER(&hyperstore_methods);
+	PG_RETURN_POINTER(&hypercore_methods);
 }

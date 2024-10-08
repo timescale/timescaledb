@@ -25,15 +25,15 @@ select t, :the_generator
 from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
 \set ECHO all
 
--- Save away the table so that we can make sure that a hyperstore
+-- Save away the table so that we can make sure that a hypercore
 -- table and a heap table produce the same result.
 create table :saved_table as select * from :the_table;
 
--- Compress the rows in the hyperstore.
-select compress_chunk(show_chunks(:'the_table'), compress_using => 'hyperstore');
+-- Compress the rows in the hypercore.
+select compress_chunk(show_chunks(:'the_table'), compress_using => 'hypercore');
 
 -- This part of the include file will run a query with the aggregate
--- provided by the including file and test that using a hyperstore
+-- provided by the including file and test that using a hypercore
 -- with compressed rows and a normal table produces the same result
 -- for the query with the given aggregate.
 \set ECHO queries

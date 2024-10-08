@@ -4,12 +4,12 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
-\ir include/setup_hyperstore.sql
+\ir include/setup_hypercore.sql
 
 -- TODO(#1068) Parallel sequence scan does not work
 set max_parallel_workers_per_gather to 0;
 
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
 
 -- Check that all chunks are compressed
 select chunk_name, compression_status from chunk_compression_stats(:'hypertable');
@@ -71,7 +71,7 @@ commit;
 
 -- Test update of a segment-by column. The selection is to make sure
 -- that we have a mix of compressed and uncompressed tuples.
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
 
 select _timescaledb_debug.is_compressed_tid(ctid), metric_id, created_at
 from :hypertable
@@ -87,7 +87,7 @@ where (created_at, metric_id) in (select created_at, metric_id from to_update)
 order by metric_id;
 
 -- Compress all chunks again before testing RETURNING
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
 
 select _timescaledb_debug.is_compressed_tid(ctid), metric_id, created_at
 from :hypertable
@@ -102,7 +102,7 @@ returning _timescaledb_debug.is_compressed_tid(ctid), *;
 
 -- Test update of a segment-by column directly on the chunk. This
 -- should fail for compressed rows even for segment-by columns.
-select compress_chunk(:'chunk1', compress_using => 'hyperstore');
+select compress_chunk(:'chunk1', compress_using => 'hypercore');
 
 select metric_id from :chunk1 limit 1 \gset
 

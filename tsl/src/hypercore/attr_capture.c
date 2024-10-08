@@ -99,10 +99,10 @@ collect_targets(List *targetlist, struct CaptureAttributesContext *context)
 /*
  * Capture index attributes.
  *
- * The attributes referenced by an index is captured so that the hyperstore
+ * The attributes referenced by an index is captured so that the hypercore
  * TAM can later identify the index as a segmentby index (one that only
  * indexes compressed segments/tuples). When a segmentby index is identified
- * by hyperstore, it will "unwrap" the compressed tuples on-the-fly into
+ * by hypercore, it will "unwrap" the compressed tuples on-the-fly into
  * individual (uncompressed) tuples even though the index only references the
  * compressed segments.
  */

@@ -1,8 +1,8 @@
--- Hyperstore AM
-DROP ACCESS METHOD IF EXISTS hsproxy;
-DROP FUNCTION IF EXISTS ts_hsproxy_handler;
-DROP ACCESS METHOD IF EXISTS hyperstore;
-DROP FUNCTION IF EXISTS ts_hyperstore_handler;
+-- Hypercore AM
+DROP ACCESS METHOD IF EXISTS hypercore_proxy;
+DROP FUNCTION IF EXISTS ts_hypercore_proxy_handler;
+DROP ACCESS METHOD IF EXISTS hypercore;
+DROP FUNCTION IF EXISTS ts_hypercore_handler;
 DROP FUNCTION IF EXISTS _timescaledb_debug.is_compressed_tid;
 
 DROP FUNCTION IF EXISTS @extschema@.compress_chunk(uncompressed_chunk REGCLASS,	if_not_compressed BOOLEAN, recompress BOOLEAN, compress_using NAME);

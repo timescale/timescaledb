@@ -31,7 +31,7 @@ alter table readings
 insert into readings (time, location, device, temp, humidity, jdata)
 select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100, '{"a":1,"b":2}'::jsonb
 from generate_series('2022-06-01'::timestamptz, '2022-06-04'::timestamptz, '5m') t;
-select compress_chunk(show_chunks('readings'), compress_using => 'hyperstore');
+select compress_chunk(show_chunks('readings'), compress_using => 'hypercore');
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -45,12 +45,12 @@ insert into readings (time, location, device, temp, humidity, jdata)
 select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100, '{"a":1,"b":2}'::jsonb
 from generate_series('2022-06-01 00:01:00'::timestamptz, '2022-06-04'::timestamptz, '5m') t;
 select chunk, amname from chunk_info where hypertable = 'readings'::regclass;
-                 chunk                  |   amname   
-----------------------------------------+------------
- _timescaledb_internal._hyper_1_1_chunk | hyperstore
- _timescaledb_internal._hyper_1_2_chunk | hyperstore
- _timescaledb_internal._hyper_1_3_chunk | hyperstore
- _timescaledb_internal._hyper_1_4_chunk | hyperstore
+                 chunk                  |  amname   
+----------------------------------------+-----------
+ _timescaledb_internal._hyper_1_1_chunk | hypercore
+ _timescaledb_internal._hyper_1_2_chunk | hypercore
+ _timescaledb_internal._hyper_1_3_chunk | hypercore
+ _timescaledb_internal._hyper_1_4_chunk | hypercore
 (4 rows)
 
 -- Pick a chunk to truncate that is not the first chunk. This is

@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\ir include/setup_hyperstore.sql
+\ir include/setup_hypercore.sql
 
 -- Set parallel cost to zero to force parallel plans and avoid flaky test.
 set parallel_tuple_cost to 0;
@@ -12,7 +12,7 @@ set parallel_setup_cost to 0;
 -- will use the index.
 drop index hypertable_device_id_idx;
 
--- Show parallel plan and count on uncompressed (non-hyperstore)
+-- Show parallel plan and count on uncompressed (non-hypercore)
 -- hypertable
 set max_parallel_workers_per_gather=2;
 
@@ -27,9 +27,9 @@ select device_id, count(*) into orig from :hypertable group by device_id;
 select device_id, count(*) into orig_chunk from :chunk1 group by device_id;
 
 -----------------------
--- Enable hyperstore --
+-- Enable hypercore --
 -----------------------
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
 
 -- Show count without parallel plan and without ColumnarScan
 set timescaledb.enable_columnarscan=false;
@@ -71,7 +71,7 @@ select explain_anonymize(format($$
 $$, :'hypertable'));
 select owner_id, count(*) from :hypertable where owner_id=1 group by owner_id;
 
--- Parallel plan with hyperstore on single chunk
+-- Parallel plan with hypercore on single chunk
 select explain_anonymize(format($$
        select device_id, count(*) from %s where device_id=1 group by device_id
 $$, :'hypertable'));
@@ -82,8 +82,8 @@ select explain_anonymize(format($$
 $$, :'hypertable'));
 select owner_id, count(*) from :chunk1 where owner_id=1 group by owner_id;
 
--- Compare hyperstore per-location counts with original counts without
--- hyperstore
+-- Compare hypercore per-location counts with original counts without
+-- hypercore
 select device_id, count(*) into comp from :hypertable group by device_id;
 select * from orig join comp using (device_id) where orig.count != comp.count;
 

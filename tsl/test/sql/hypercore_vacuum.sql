@@ -19,7 +19,7 @@ from _timescaledb_catalog.chunk cpr_chunk
 inner join reg_chunk on (cpr_chunk.id = reg_chunk.compressed_chunk_id);
 
 -- Create two hypertables with same config and data, apart from one
--- having a hyperstore chunk (hystable). The regular table (regtable)
+-- having a hypercore chunk (hystable). The regular table (regtable)
 -- will be used as a reference.
 create table hystable(time timestamptz, location bigint, device smallint, temp float4);
 create table regtable(time timestamptz, location bigint, device smallint, temp float4);
@@ -34,9 +34,9 @@ values ('2022-06-01 00:01', 1, 1, 1.0),
 
 insert into hystable select * from regtable;
 
--- Make sure new chunks are hyperstore from the start, except
+-- Make sure new chunks are hypercore from the start, except
 -- obviously for the chunk that was already created.
-alter table hystable set access method hyperstore, set (
+alter table hystable set access method hypercore, set (
       timescaledb.compress_orderby = 'time',
       timescaledb.compress_segmentby = 'location'
 );
@@ -93,7 +93,7 @@ from pg_index i inner join pg_class c on (i.indexrelid=c.oid)
 where indrelid = :'hystable_chunk'::regclass
 and relname like '%hystable_location%' \gset
 
-alter table :hystable_chunk set access method hyperstore;
+alter table :hystable_chunk set access method hypercore;
 
 -- Show new access method on chunk
 select ch chunk, amname access_method
@@ -167,14 +167,14 @@ from generate_series('2022-06-01'::timestamptz, '2022-06-10', '60s') t;
 
 insert into hystable select * from regtable;
 
--- All new chunks should be hyperstores since we configured hyperstore
+-- All new chunks should be hypercores since we configured hypercore
 -- as default hypertable AM
 select ch, amname
 from show_chunks('hystable') ch
 inner join pg_class cl on (cl.oid = ch)
 inner join pg_am am on (cl.relam = am.oid);
 
--- All (new) compressed chunks should have a hsproxy index
+-- All (new) compressed chunks should have a hypercore_proxy index
 select indexrelid::regclass
 from pg_index i inner join
 compressed_rels crels on (i.indrelid = crels.compressed_relid);
@@ -215,7 +215,7 @@ create table hystable(time timestamptz, location int, device int, temp float);
 select create_hypertable('hystable', 'time', create_default_indexes => false);
 
 -- This time create the table without a segmentby column
-alter table hystable set access method hyperstore, set (
+alter table hystable set access method hypercore, set (
       timescaledb.compress_orderby = 'time'
 );
 
@@ -224,13 +224,13 @@ vacuum (index_cleanup on) hystable;
 
 insert into hystable select * from regtable;
 
--- All chunks should be hyperstores
+-- All chunks should be hypercores
 select ch, amname
 from show_chunks('hystable') ch
 inner join pg_class cl on (cl.oid = ch)
 inner join pg_am am on (cl.relam = am.oid);
 
--- All compressed chunks should have a hsproxy index
+-- All compressed chunks should have a hypercore_proxy index
 select indexrelid::regclass
 from pg_index i inner join
 compressed_rels crels on (i.indrelid = crels.compressed_relid);
@@ -254,7 +254,7 @@ select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
 from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') t;
 
 alter table readings
-      set access method hyperstore,
+      set access method hypercore,
       set (timescaledb.compress_orderby = 'time',
       	   timescaledb.compress_segmentby = 'device');
 

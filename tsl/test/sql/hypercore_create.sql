@@ -2,21 +2,21 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\ir include/hyperstore_helpers.sql
+\ir include/hypercore_helpers.sql
 select setseed(0.3);
 
--- Testing the basic API for creating a hyperstore
+-- Testing the basic API for creating a hypercore
 
 -- This should just fail because you cannot create a plain table with
--- hyperstore (yet).
+-- hypercore (yet).
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
 create table test2(
        created_at timestamp with time zone not null,
        location_id int
-) using hyperstore;
+) using hypercore;
 
-set default_table_access_method to 'hyperstore';
+set default_table_access_method to 'hypercore';
 create table test2(
        created_at timestamp with time zone not null,
        location_id int
@@ -37,7 +37,7 @@ CREATE TABLE test2(
 create index on test2(device_id, created_at);
 
 \set ON_ERROR_STOP 0
-alter table test2 set access method hyperstore;
+alter table test2 set access method hypercore;
 \set ON_ERROR_STOP 1
 
 select create_hypertable('test2', 'created_at');
@@ -45,34 +45,34 @@ select create_hypertable('test2', 'created_at');
 \set ON_ERROR_STOP 0
 -- Should show error since there is no namespace.
 alter table test2
-	  set access method hyperstore,
+	  set access method hypercore,
 	  set (compress_segmentby = 'location_id');
 \set ON_ERROR_STOP 1
 
 alter table test2
-	  set access method hyperstore,
+	  set access method hypercore,
 	  set (timescaledb.compress_segmentby = 'location_id');
 
--- Test altering hypertable to hyperstore again. It should be allowed
+-- Test altering hypertable to hypercore again. It should be allowed
 -- and be a no-op.
-alter table test2 set access method hyperstore;
+alter table test2 set access method hypercore;
 
 \set ON_ERROR_STOP 0
 -- This shows an error but the error is weird, we should probably get
 -- a better one.
 alter table test2
-	  set access method hyperstore,
+	  set access method hypercore,
 	  set (compress_segmentby = 'location_id');
 \set ON_ERROR_STOP 1
 
--- Create view for hyperstore rels
+-- Create view for hypercore rels
 create view amrels as
 select cl.oid::regclass as rel, am.amname, inh.inhparent::regclass as relparent
   from pg_class cl
   inner join pg_am am on (cl.relam = am.oid)
   left join pg_inherits inh on (inh.inhrelid = cl.oid);
 
--- Show that test2 is a hyperstore
+-- Show that test2 is a hypercore
 select rel, amname
 from amrels
 where rel='test2'::regclass;
@@ -85,11 +85,11 @@ from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') t;
 -- Save the count for test2 for later comparison
 select count(*) as orig_test2_count from test2 \gset
 
--- All chunks should use the hyperstore access method
+-- All chunks should use the hypercore access method
 select * from amrels
 where relparent='test2'::regclass;
 
--- Show compression settings for hyperstore across catalog and views
+-- Show compression settings for hypercore across catalog and views
 select * from _timescaledb_catalog.compression_settings;
 select * from timescaledb_information.compression_settings;
 select * from timescaledb_information.chunk_compression_settings;
@@ -106,57 +106,57 @@ insert into test3 values ('2022-06-01', 1, 1.0);
 -- save chunk as variable
 select ch as chunk from show_chunks('test3') ch limit 1 \gset
 
--- Check that chunk is NOT using hyperstore
+-- Check that chunk is NOT using hypercore
 select rel, amname
 from amrels
 where relparent='test3'::regclass;
 
 \set ON_ERROR_STOP 0
--- Cannot create hyperstore if missing compression settings
-alter table :chunk set access method hyperstore;
+-- Cannot create hypercore if missing compression settings
+alter table :chunk set access method hypercore;
 \set ON_ERROR_STOP 1
 
 -- Add compression settings
 alter table test3 set (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='');
-alter table :chunk set access method hyperstore;
+alter table :chunk set access method hypercore;
 
--- Check that chunk is using hyperstore
+-- Check that chunk is using hypercore
 select * from amrels where rel=:'chunk'::regclass;
 
 -- Try same thing with compress_chunk()
 alter table :chunk set access method heap;
-select compress_chunk(:'chunk', compress_using => 'hyperstore');
+select compress_chunk(:'chunk', compress_using => 'hypercore');
 
--- Check that chunk is using hyperstore
+-- Check that chunk is using hypercore
 select relname, amname
   from show_chunks('test3') as chunk
   join pg_class on (pg_class.oid = chunk)
   join pg_am on (relam = pg_am.oid);
 
 -- Test setting same access method again
-alter table :chunk set access method hyperstore;
+alter table :chunk set access method hypercore;
 
 -- Test recompression after changing compression settings
 alter table test3 set (timescaledb.compress_segmentby='device');
-select compress_chunk(:'chunk', compress_using => 'hyperstore', recompress => true);
+select compress_chunk(:'chunk', compress_using => 'hypercore', recompress => true);
 
 -- Create a second chunk
 insert into test3 values ('2022-08-01', 1, 1.0);
 
--- The second chunk should not be a hyperstore chunk
+-- The second chunk should not be a hypercore chunk
 select * from amrels where relparent='test3'::regclass;
 
--- Set hyperstore on hypertable
-alter table test3 set access method hyperstore;
+-- Set hypercore on hypertable
+alter table test3 set access method hypercore;
 
 -- Create a third chunk
 insert into test3 values ('2022-10-01', 1, 1.0);
 
--- The third chunk should be a hyperstore chunk
+-- The third chunk should be a hypercore chunk
 select * from amrels where relparent='test3'::regclass;
 
--- Test that we can DDL on a hypertable that is not a Hyperstore but
--- has one chunk that is a Hyperstore works.
+-- Test that we can DDL on a hypertable that is not a Hypercore but
+-- has one chunk that is a Hypercore works.
 create table test4 (time timestamptz not null, device int, temp float);
 select created from create_hypertable('test4', 'time');
 
@@ -166,7 +166,7 @@ select count(ch) from show_chunks('test4') ch;
 select ch as chunk from show_chunks('test4') ch limit 1 \gset
 
 alter table test4 set (timescaledb.compress);
-alter table :chunk set access method hyperstore;
+alter table :chunk set access method hypercore;
 select * from amrels where relparent='test4'::regclass;
 
 -- test that alter table on the hypertable works
@@ -174,7 +174,7 @@ alter table test4 add column magic int;
 
 \d :chunk
 
--- Test that dropping a table with one chunk being a hyperstore works.
+-- Test that dropping a table with one chunk being a hypercore works.
 drop table test4;
 
 -- Create view to see compression stats. Left join chunks with stats
@@ -199,29 +199,29 @@ inner join pg_inherits inh
 	  on (inh.inhrelid = cl.oid)
 where c.compressed_chunk_id is not null;
 
--- There should be no hyperstore chunks that lack compression size stats
+-- There should be no hypercore chunks that lack compression size stats
 select count(*) as num_stats_missing from compressed_rel_size_stats
-where amname = 'hyperstore' and numrows_pre_compression is null;
+where amname = 'hypercore' and numrows_pre_compression is null;
 
--- Show stats for hyperstore chunks. Note that many stats are 0 since
+-- Show stats for hypercore chunks. Note that many stats are 0 since
 -- chunks were created as a result of inserts and not really
 -- compressed
 select * from compressed_rel_size_stats order by rel;
 
--- Decompress hyperstores to check that stats are removed
+-- Decompress hypercores to check that stats are removed
 select decompress_chunk(rel)
   from compressed_rel_size_stats
-  where amname = 'hyperstore';
+  where amname = 'hypercore';
 
 -- All stats should be removed
 select count(*) as orphaned_stats
 from compressed_rel_size_stats;
 
--- Create hyperstores again and check that compression size stats are
+-- Create hypercores again and check that compression size stats are
 -- updated showing compressed data
-select compress_chunk(ch, compress_using => 'hyperstore')
+select compress_chunk(ch, compress_using => 'hypercore')
 from show_chunks('test2') ch;
-select compress_chunk(ch, compress_using => 'hyperstore')
+select compress_chunk(ch, compress_using => 'hypercore')
 from show_chunks('test3') ch;
 
 -- Save the stats for later comparison. Exclude the amname column
@@ -247,7 +247,7 @@ from show_chunks('test3') ch;
 
 select * from compressed_rel_size_stats order by rel;
 
--- Check that stats are the same for hyperstore and now with
+-- Check that stats are the same for hypercore and now with
 -- compression. Should return zero rows if they are the same.
 select
 	rel,
@@ -259,7 +259,7 @@ from compressed_rel_size_stats
 except
 select * from saved_stats;
 
--- Try migration to hyperstore directly from compressed heap. Run in a
+-- Try migration to hypercore directly from compressed heap. Run in a
 -- transaction block to make sure changes are visible to following
 -- commands.
 begin;
@@ -276,14 +276,14 @@ set client_min_messages=DEBUG1;
 with chunks as (
 	 select ch from show_chunks('test2') ch offset 1
 )
-select compress_chunk(ch, compress_using => 'hyperstore') from chunks;
+select compress_chunk(ch, compress_using => 'hypercore') from chunks;
 
 -- Test direct migration of the remaining chunk via SET ACCESS
 -- METHOD. Add some uncompressed data to test migration with partially
 -- compressed chunks.
 select ch as alter_chunk from show_chunks('test2') ch limit 1 \gset
 insert into :alter_chunk values ('2022-06-01 10:00', 4, 4, 4.0, 4.0);
-alter table :alter_chunk set access method hyperstore;
+alter table :alter_chunk set access method hypercore;
 
 reset client_min_messages;
 
@@ -294,9 +294,9 @@ from show_chunks('test2') ch
 join pg_depend dep on (ch = dep.objid)
 join pg_am am on (dep.refobjid = am.oid);
 
--- All chunks should use hyperstore and have rel_size_stats
+-- All chunks should use hypercore and have rel_size_stats
 select * from compressed_rel_size_stats
-where amname = 'hyperstore' order by rel;
+where amname = 'hypercore' order by rel;
 
 -- Check that query plan is now ColumnarScan and that all data, except
 -- the one uncompressed row, is still compressed after migration
@@ -313,57 +313,57 @@ select count(*)=(:orig_test2_count + 1) as count_as_expected from test2;
 commit;
 
 \set ON_ERROR_STOP 0
--- Trying to convert a hyperstore to a hyperstore should be an error
--- if if_not_compressed is false and the hyperstore is fully
+-- Trying to convert a hypercore to a hypercore should be an error
+-- if if_not_compressed is false and the hypercore is fully
 -- compressed.
-select compress_chunk(ch, compress_using => 'hyperstore', if_not_compressed => false)
+select compress_chunk(ch, compress_using => 'hypercore', if_not_compressed => false)
 from show_chunks('test2') ch;
 
--- Compressing using something different than "hyperstore" or "heap"
+-- Compressing using something different than "hypercore" or "heap"
 -- should not be allowed
 select compress_chunk(ch, compress_using => 'non_existing_am')
 from show_chunks('test2') ch;
 
 \set ON_ERROR_STOP 1
 
--- Compressing from hyperstore with compress_using=>heap should lead
--- to recompression of hyperstore with a notice.
+-- Compressing from hypercore with compress_using=>heap should lead
+-- to recompression of hypercore with a notice.
 select compress_chunk(ch, compress_using => 'heap')
 from show_chunks('test2') ch;
 
--- Compressing a hyperstore without specifying compress_using should
--- lead to recompression. First check that :chunk is a hyperstore.
+-- Compressing a hypercore without specifying compress_using should
+-- lead to recompression. First check that :chunk is a hypercore.
 select ch as chunk from show_chunks('test2') ch limit 1 \gset
 select * from compressed_rel_size_stats
-where amname = 'hyperstore' and rel = :'chunk'::regclass;
+where amname = 'hypercore' and rel = :'chunk'::regclass;
 insert into :chunk values ('2022-06-01 10:01', 6, 6, 6.0, 6.0);
 select ctid from :chunk where created_at = '2022-06-01 10:01' and device_id = 6;
 select compress_chunk(:'chunk');
 select ctid from :chunk where created_at = '2022-06-01 10:01' and device_id = 6;
--- Compressing a hyperstore with compress_using=>hyperstore should
+-- Compressing a hypercore with compress_using=>hypercore should
 -- also lead to recompression
 insert into :chunk values ('2022-06-01 11:02', 7, 7, 7.0, 7.0);
 select ctid from :chunk where created_at = '2022-06-01 11:02' and device_id = 7;
-select compress_chunk(:'chunk', compress_using => 'hyperstore');
+select compress_chunk(:'chunk', compress_using => 'hypercore');
 select ctid from :chunk where created_at = '2022-06-01 11:02' and device_id = 7;
 
--- Convert all hyperstores back to heap
+-- Convert all hypercores back to heap
 select decompress_chunk(rel) ch
   from compressed_rel_size_stats
-  where amname = 'hyperstore'
+  where amname = 'hypercore'
   order by ch;
 
--- Test that it is possible to convert multiple hyperstores in the
+-- Test that it is possible to convert multiple hypercores in the
 -- same transaction. The goal is to check that all the state is
 -- cleaned up between two or more commands in same transaction.
 select ch as chunk2 from show_chunks('test2') ch offset 1 limit 1 \gset
 start transaction;
-select compress_chunk(:'chunk', compress_using => 'hyperstore');
-select compress_chunk(:'chunk2', compress_using => 'hyperstore');
+select compress_chunk(:'chunk', compress_using => 'hypercore');
+select compress_chunk(:'chunk2', compress_using => 'hypercore');
 commit;
 
 select * from compressed_rel_size_stats
-where amname = 'hyperstore' and relparent = 'test2'::regclass
+where amname = 'hypercore' and relparent = 'test2'::regclass
 order by rel;
 
 -- Test that we can compress old way using compress_using=>heap
@@ -403,7 +403,7 @@ select * from only :chunk3;
 select * from :chunk3 where created_at = '2022-06-15 16:00' and device_id = 8;
 
 -- Test a more complicated schema from the NYC Taxi data set. This is
--- to test that compression using hyperstore works, since there was an
+-- to test that compression using hypercore works, since there was an
 -- issue with setting up the tuple sort state during compression.
 create table rides (
     vendor_id text,
@@ -439,7 +439,7 @@ insert into rides values
 (6,'2016-01-01 00:00:02','2016-01-01 00:11:55',1,1.20,-73.979423522949219,40.744613647460938,1,-73.992034912109375,40.753944396972656,2,9,0.5,0.5,0,0,0.3,10.3),
 (356,'2016-01-01 00:00:01','2016-01-01 00:11:55',1,1.20,-73.979423522949219,40.744613647460938,1,-73.992034912109375,40.753944396972656,2,9,0.5,0.5,0,0,0.3,10.3);
 -- Check that it is possible to compress
-select compress_chunk(ch, compress_using=>'hyperstore') from show_chunks('rides') ch;
+select compress_chunk(ch, compress_using=>'hypercore') from show_chunks('rides') ch;
 select rel, amname from compressed_rel_size_stats
 where relparent::regclass = 'rides'::regclass;
 

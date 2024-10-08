@@ -22,61 +22,61 @@
 #include <utils/regproc.h>
 
 #include <compat/compat.h>
-#include "hyperstore/arrow_tts.h"
-#include "hyperstore/hsproxy.h"
+#include "hypercore/arrow_tts.h"
+#include "hypercore/hypercore_proxy.h"
 #include <chunk.h>
 
 /**
- * Hyperstore proxy index AM (hsproxy).
+ * Hypercore proxy index AM (hypercore_proxy).
  *
- * The hsproxy index AM doesn't provide any indexing functionality itself. It
- * is only used to "proxy" vacuum calls between a hyperstore's internal
+ * The hypercore_proxy index AM doesn't provide any indexing functionality itself. It
+ * is only used to "proxy" vacuum calls between a hypercore's internal
  * compressed relation (holding compressed data) and the indexes defined on
- * the user-visible hyperstore relation (holding non-compressed data).
+ * the user-visible hypercore relation (holding non-compressed data).
  *
- * A hyperstore consists of two relations internally: the user-visible
- * "hyperstore" relation and the internal compressed relation and indexes on a
- * hyperstore encompass data from both these relations. This creates a
+ * A hypercore consists of two relations internally: the user-visible
+ * "hypercore" relation and the internal compressed relation and indexes on a
+ * hypercore encompass data from both these relations. This creates a
  * complication when vacuuming a relation because only he indexes defined on
- * the relation are vacuumed. Therefore, a vacuum on a hyperstore's
+ * the relation are vacuumed. Therefore, a vacuum on a hypercore's
  * non-compressed relation will vacuum pointers to non-compressed tuples from
  * the indexes, but not pointers to compressed tuples. A vacuum on the
  * compressed relation, on the other hand, will not vacuum anything from the
- * hyperstore indexes because they are defined on the non-compressed relation
+ * hypercore indexes because they are defined on the non-compressed relation
  * and only indexes defined directly on the internal compressed relation will
  * be vacuumed.
  *
- * The hsproxy index fixes this issue by relaying vacuum (bulkdelete calls)
+ * The hypercore_proxy index fixes this issue by relaying vacuum (bulkdelete calls)
  * from the compressed relation to all indexes defined on the non-compressed
- * relation. There needs to be only one hsproxy index defined on a compressed
+ * relation. There needs to be only one hypercore_proxy index defined on a compressed
  * relation to vacuum all indexes.
  *
- * The hsproxy index needs to be defined on at least one column on the
+ * The hypercore_proxy index needs to be defined on at least one column on the
  * compressed relation (it does not really matter which one). By default it
  * uses the "count" column of the compressed relation and when a set of
  * compressed tuples are vacuumed, its bulkdelete callback is called with
- * those tuples. The callback relays that call to the hyperstore indexes and
+ * those tuples. The callback relays that call to the hypercore indexes and
  * also decodes TIDs from the indexes to match the TIDs in the compressed
  * relation.
  */
 
 /*
- * Given the internal compressed relid, lookup the corresponding hyperstore
+ * Given the internal compressed relid, lookup the corresponding hypercore
  * relid.
  *
  * Currently, this relies on information in the "chunk" metadata
  * table. Ideally, the lookup should not have any dependencies on chunks and,
- * instead, the hyperstore mappings should be self-contained in compression
- * settings or a dedicated hyperstore settings table. Another idea is to keep
+ * instead, the hypercore mappings should be self-contained in compression
+ * settings or a dedicated hypercore settings table. Another idea is to keep
  * the mappings in index reloptions, but this does not handle relation name
  * changes well.
  */
 static Oid
-get_hyperstore_relid(Oid compress_relid)
+get_hypercore_relid(Oid compress_relid)
 {
 	Datum datid = DirectFunctionCall1(ts_chunk_id_from_relid, ObjectIdGetDatum(compress_relid));
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
-	Oid hyperstore_relid = InvalidOid;
+	Oid hypercore_relid = InvalidOid;
 
 	iterator.ctx.index =
 		catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_COMPRESSED_CHUNK_ID_INDEX);
@@ -96,18 +96,18 @@ get_hyperstore_relid(Oid compress_relid)
 
 		if (!isnull)
 		{
-			hyperstore_relid = ts_chunk_get_relid(DatumGetInt32(datum), true);
+			hypercore_relid = ts_chunk_get_relid(DatumGetInt32(datum), true);
 			break;
 		}
 	}
 
 	ts_scan_iterator_close(&iterator);
 
-	return hyperstore_relid;
+	return hypercore_relid;
 }
 
 static IndexBuildResult *
-hsproxy_build(Relation rel, Relation index, struct IndexInfo *indexInfo)
+hypercore_proxy_build(Relation rel, Relation index, struct IndexInfo *indexInfo)
 {
 	IndexBuildResult *result = palloc0(sizeof(IndexBuildResult));
 	result->heap_tuples = 0;
@@ -119,7 +119,7 @@ hsproxy_build(Relation rel, Relation index, struct IndexInfo *indexInfo)
  * HSProxy doesn't store any data, so buildempty() is a dummy.
  */
 static void
-hsproxy_buildempty(Relation index)
+hypercore_proxy_buildempty(Relation index)
 {
 }
 
@@ -132,13 +132,13 @@ typedef struct HSProxyCallbackState
 } HSProxyCallbackState;
 
 /*
- * IndexBulkDeleteCallback for determining if a hyperstore index entry (TID)
+ * IndexBulkDeleteCallback for determining if a hypercore index entry (TID)
  * can be deleted.
  *
  * The state pointer contains to original callback and state.
  */
 static bool
-hsproxy_can_delete_tid(ItemPointer tid, void *state)
+hypercore_proxy_can_delete_tid(ItemPointer tid, void *state)
 {
 	HSProxyCallbackState *delstate = state;
 	ItemPointerData decoded_tid;
@@ -149,7 +149,7 @@ hsproxy_can_delete_tid(ItemPointer tid, void *state)
 		return false;
 
 	/* Decode the TID into the original compressed relation TID */
-	hyperstore_tid_decode(&decoded_tid, tid);
+	hypercore_tid_decode(&decoded_tid, tid);
 
 	/* Check if this is the same TID as in the last call. This is a simple
 	 * optimization for when we are just traversing "compressed" TIDs that all
@@ -185,7 +185,7 @@ bulkdelete_one_index(Relation hsrel, Relation indexrel, IndexBulkDeleteResult *i
 	ivinfo.strategy = strategy;
 
 	IndexBulkDeleteResult *result =
-		index_bulk_delete(&ivinfo, istat, hsproxy_can_delete_tid, delstate);
+		index_bulk_delete(&ivinfo, istat, hypercore_proxy_can_delete_tid, delstate);
 
 	return result;
 }
@@ -208,15 +208,15 @@ typedef struct HSProxyVacuumState
  * calling the IndexBulkDeleteCallback function for every TID in the index to
  * ask whether it should be removed or not.
  *
- * In the hsproxy case, this call is simply relayed to all indexes on the
- * user-visible hyperstore relation, calling our own callback instead.
+ * In the hypercore_proxy case, this call is simply relayed to all indexes on the
+ * user-visible hypercore relation, calling our own callback instead.
  */
 static IndexBulkDeleteResult *
-hsproxy_bulkdelete(IndexVacuumInfo *info, IndexBulkDeleteResult *stats,
-				   IndexBulkDeleteCallback callback, void *callback_state)
+hypercore_proxy_bulkdelete(IndexVacuumInfo *info, IndexBulkDeleteResult *stats,
+						   IndexBulkDeleteCallback callback, void *callback_state)
 {
-	Oid hyperstore_relid = get_hyperstore_relid(info->index->rd_index->indrelid);
-	Relation hsrel = table_open(hyperstore_relid, ShareUpdateExclusiveLock);
+	Oid hypercore_relid = get_hypercore_relid(info->index->rd_index->indrelid);
+	Relation hsrel = table_open(hypercore_relid, ShareUpdateExclusiveLock);
 	HSProxyCallbackState delstate = {
 		.orig_callback = callback,
 		.orig_state = callback_state,
@@ -242,8 +242,8 @@ hsproxy_bulkdelete(IndexVacuumInfo *info, IndexBulkDeleteResult *stats,
 
 	for (int i = 0; i < nindexes; i++)
 	{
-		/* There should never be any hsproxy indexes that we proxy */
-		Assert(indrels[i]->rd_indam->ambuildempty != hsproxy_buildempty);
+		/* There should never be any hypercore_proxy indexes that we proxy */
+		Assert(indrels[i]->rd_indam->ambuildempty != hypercore_proxy_buildempty);
 		bulkdelete_one_index(hsrel, indrels[i], &vacstate->indstats[i], info->strategy, &delstate);
 	}
 
@@ -302,10 +302,10 @@ vacuumcleanup_one_index(Relation hsrel, Relation indexrel, IndexBulkDeleteResult
  * first. Therefore, we cannot always assume that vacstate has been created.
  */
 static IndexBulkDeleteResult *
-hsproxy_vacuumcleanup(IndexVacuumInfo *info, IndexBulkDeleteResult *stats)
+hypercore_proxy_vacuumcleanup(IndexVacuumInfo *info, IndexBulkDeleteResult *stats)
 {
-	Oid hyperstore_relid = get_hyperstore_relid(info->index->rd_index->indrelid);
-	Relation hsrel = table_open(hyperstore_relid, ShareUpdateExclusiveLock);
+	Oid hypercore_relid = get_hypercore_relid(info->index->rd_index->indrelid);
+	Relation hsrel = table_open(hypercore_relid, ShareUpdateExclusiveLock);
 	HSProxyVacuumState *vacstate = (HSProxyVacuumState *) stats;
 	Relation *indrels;
 	int nindexes = 0;
@@ -324,8 +324,8 @@ hsproxy_vacuumcleanup(IndexVacuumInfo *info, IndexBulkDeleteResult *stats)
 
 	for (int i = 0; i < nindexes; i++)
 	{
-		/* There should never be any hsproxy indexes that we proxy */
-		Assert(indrels[i]->rd_indam->ambuildempty != hsproxy_buildempty);
+		/* There should never be any hypercore_proxy indexes that we proxy */
+		Assert(indrels[i]->rd_indam->ambuildempty != hypercore_proxy_buildempty);
 		IndexBulkDeleteResult *result = vacuumcleanup_one_index(hsrel,
 																indrels[i],
 																&vacstate->indstats[i],
@@ -356,9 +356,10 @@ hsproxy_vacuumcleanup(IndexVacuumInfo *info, IndexBulkDeleteResult *stats)
  * make the cost so high that the index is effectively never used in a query.
  */
 static void
-hsproxy_costestimate(struct PlannerInfo *root, struct IndexPath *path, double loop_count,
-					 Cost *indexStartupCost, Cost *indexTotalCost, Selectivity *indexSelectivity,
-					 double *indexCorrelation, double *indexPages)
+hypercore_proxy_costestimate(struct PlannerInfo *root, struct IndexPath *path, double loop_count,
+							 Cost *indexStartupCost, Cost *indexTotalCost,
+							 Selectivity *indexSelectivity, double *indexCorrelation,
+							 double *indexPages)
 {
 	*indexTotalCost = *indexStartupCost = *indexCorrelation = INFINITY;
 	*indexSelectivity = 1;
@@ -367,13 +368,13 @@ hsproxy_costestimate(struct PlannerInfo *root, struct IndexPath *path, double lo
 
 /* parse index reloptions */
 static bytea *
-hsproxy_options(Datum reloptions, bool validate)
+hypercore_proxy_options(Datum reloptions, bool validate)
 {
 	return NULL;
 }
 
 static bool
-hsproxy_validate(Oid opclassoid)
+hypercore_proxy_validate(Oid opclassoid)
 {
 	/* Not really using opclass, so simply return true */
 	return true;
@@ -383,22 +384,22 @@ hsproxy_validate(Oid opclassoid)
  * Index insert.
  *
  * Currently needed as a dummy. Could be used to insert into all indexes on
- * the hyperstore rel when inserting data into the compressed rel during,
+ * the hypercore rel when inserting data into the compressed rel during,
  * e.g., recompression.
  */
 static bool
-hsproxy_insert(Relation indexRelation, Datum *values, bool *isnull, ItemPointer heap_tid,
-			   Relation heapRelation, IndexUniqueCheck checkUnique,
+hypercore_proxy_insert(Relation indexRelation, Datum *values, bool *isnull, ItemPointer heap_tid,
+					   Relation heapRelation, IndexUniqueCheck checkUnique,
 #if PG14_GE
-			   bool indexUnchanged,
+					   bool indexUnchanged,
 #endif
-			   struct IndexInfo *indexInfo)
+					   struct IndexInfo *indexInfo)
 {
 	return true;
 }
 
 Datum
-hsproxy_handler(PG_FUNCTION_ARGS)
+hypercore_proxy_handler(PG_FUNCTION_ARGS)
 {
 	IndexAmRoutine *amroutine = makeNode(IndexAmRoutine);
 
@@ -426,19 +427,19 @@ hsproxy_handler(PG_FUNCTION_ARGS)
 	amroutine->amkeytype = InvalidOid;
 
 	/* Callbacks */
-	amroutine->ambuild = hsproxy_build;
-	amroutine->ambuildempty = hsproxy_buildempty;
-	amroutine->ambulkdelete = hsproxy_bulkdelete;
-	amroutine->amvacuumcleanup = hsproxy_vacuumcleanup;
-	amroutine->amcostestimate = hsproxy_costestimate;
-	amroutine->amoptions = hsproxy_options;
+	amroutine->ambuild = hypercore_proxy_build;
+	amroutine->ambuildempty = hypercore_proxy_buildempty;
+	amroutine->ambulkdelete = hypercore_proxy_bulkdelete;
+	amroutine->amvacuumcleanup = hypercore_proxy_vacuumcleanup;
+	amroutine->amcostestimate = hypercore_proxy_costestimate;
+	amroutine->amoptions = hypercore_proxy_options;
 
 	/* Optional callbacks */
-	amroutine->aminsert = hsproxy_insert;
+	amroutine->aminsert = hypercore_proxy_insert;
 	amroutine->amcanreturn = NULL;
 	amroutine->amproperty = NULL;
 	amroutine->ambuildphasename = NULL;
-	amroutine->amvalidate = hsproxy_validate;
+	amroutine->amvalidate = hypercore_proxy_validate;
 #if PG14_GE
 	amroutine->amadjustmembers = NULL;
 #endif

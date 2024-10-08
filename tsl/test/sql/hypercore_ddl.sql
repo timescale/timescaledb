@@ -20,7 +20,7 @@ with
 	join pg_inherits inh on inh.inhrelid = cl.oid)
 select hypertable, chunk, compressed_chunk, amname from chunks join parents using (chunk);
 
-\ir include/hyperstore_helpers.sql
+\ir include/hypercore_helpers.sql
 \set ECHO all
 
 -- Disable incremental sort to make tests stable
@@ -46,7 +46,7 @@ insert into readings (time, location, device, temp, humidity, jdata)
 select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100, '{"a":1,"b":2}'::jsonb
 from generate_series('2022-06-01'::timestamptz, '2022-06-04'::timestamptz, '5m') t;
 
-select compress_chunk(show_chunks('readings'), compress_using => 'hyperstore');
+select compress_chunk(show_chunks('readings'), compress_using => 'hypercore');
 
 -- Insert some extra data to get some non-compressed data as well.
 insert into readings (time, location, device, temp, humidity, jdata)

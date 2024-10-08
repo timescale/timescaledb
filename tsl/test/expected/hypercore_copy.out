@@ -1,12 +1,12 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\ir include/setup_hyperstore.sql
+\ir include/setup_hypercore.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set hypertable readings
-\ir hyperstore_helpers.sql
+\ir hypercore_helpers.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
@@ -112,7 +112,7 @@ select cl.oid::regclass as rel, am.amname, inh.inhparent::regclass as relparent
   left join pg_inherits inh on (inh.inhrelid = cl.oid);
 -- Compress the chunks and check that the counts are the same
 select location_id, count(*) into orig from :hypertable GROUP BY location_id;
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -188,7 +188,7 @@ NOTICE:  adding not-null constraint to column "created_at"
  (3,public,copy_test1,t)
 (1 row)
 
-alter table copy_test1 set access method hyperstore;
+alter table copy_test1 set access method hypercore;
 WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "copy_test1" is set to ""
 NOTICE:  default order by for hypertable "copy_test1" is set to "created_at DESC"
@@ -245,7 +245,7 @@ select * from amrels where relparent = 'test1'::regclass;
  _timescaledb_internal._hyper_5_15_chunk | heap   | test1
 (1 row)
 
-alter table test1 set access method hyperstore;
+alter table test1 set access method hypercore;
 copy test1 from stdin delimiter ',';
 select count(*) from test1;
  count 
