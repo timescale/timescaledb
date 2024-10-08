@@ -19,14 +19,14 @@ setup {
 
 	alter table metrics set (timescaledb.compress, timescaledb.compress_segmentby='device_id');
 
-	-- Convert to hyperstore and give chunks predictible names
+	-- Convert to hypercore and give chunks predictible names
 	do $$
 	declare
 	   chunk regclass;
 	   count int = 1;
 	begin
 	   for chunk in select ch from show_chunks('metrics') ch loop
-		   execute format('alter table %s set access method hyperstore', chunk);
+		   execute format('alter table %s set access method hypercore', chunk);
 		   execute format('alter table %s rename to test_chunk_%s', chunk, count);
 		   count = count + 1;
 	   end loop;

@@ -98,7 +98,7 @@ extern TSDLLEXPORT bool ts_guc_enable_rowlevel_compression_locking;
 extern TSDLLEXPORT bool ts_guc_debug_require_batch_sorted_merge;
 
 extern TSDLLEXPORT bool ts_guc_debug_allow_cagg_with_deprecated_funcs;
-extern TSDLLEXPORT char *ts_guc_hyperstore_indexam_whitelist;
+extern TSDLLEXPORT char *ts_guc_hypercore_indexam_whitelist;
 
 void _guc_init(void);
 

@@ -1,12 +1,12 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\ir include/setup_hyperstore.sql
+\ir include/setup_hypercore.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set hypertable readings
-\ir hyperstore_helpers.sql
+\ir hypercore_helpers.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
@@ -172,7 +172,7 @@ $$, :'hypertable'));
 
 select location_id, count(*) into orig from :hypertable
 where location_id in (3,4,5) group by location_id;
-alter table :chunk2 set access method hyperstore;
+alter table :chunk2 set access method hypercore;
 --
 -- test that indexes work after updates
 --
@@ -222,7 +222,7 @@ select created_at, location_id, temp from :chunk2 where location_id=1 and temp=2
  Wed Jun 01 17:00:00 2022 PDT |           1 |    2
 (1 row)
 
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk

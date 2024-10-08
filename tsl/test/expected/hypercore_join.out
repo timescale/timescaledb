@@ -1,12 +1,12 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\ir include/setup_hyperstore.sql
+\ir include/setup_hypercore.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set hypertable readings
-\ir hyperstore_helpers.sql
+\ir hypercore_helpers.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
@@ -109,37 +109,37 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
 -- test for this.
 set timescaledb.enable_columnarscan to false;
 set enable_memoize to false;
--- Create a hyperstore with a few rows and use the big table to join
--- with it. This should put the hyperstore as the inner relation and
+-- Create a hypercore with a few rows and use the big table to join
+-- with it. This should put the hypercore as the inner relation and
 -- trigger rescans.
-create table the_hyperstore (
+create table the_hypercore (
        updated_at timestamptz not null unique,
        device_id int,
        height float
 );
-create index on the_hyperstore (device_id);
-select from create_hypertable('the_hyperstore', 'updated_at');
+create index on the_hypercore (device_id);
+select from create_hypertable('the_hypercore', 'updated_at');
 --
 (1 row)
 
 -- Fill the table with some data, but less than a single chunk, so
 -- that we will get it as an inner relation in the nested loop join.
-insert into the_hyperstore
+insert into the_hypercore
 select t, ceil(random()*5), random()*40
 from generate_series('2022-06-01'::timestamptz, '2022-06-10', '1 hour') t;
--- Run joins before making it a hyperstore to have something to
+-- Run joins before making it a hypercore to have something to
 -- compare with.
-select * into expected_inner from :chunk1 join the_hyperstore using (device_id);
+select * into expected_inner from :chunk1 join the_hypercore using (device_id);
 select created_at, updated_at, o.device_id, i.humidity, o.height
   into expected_left
-  from :chunk1 i left join the_hyperstore o
+  from :chunk1 i left join the_hypercore o
     on i.created_at = o.updated_at and i.device_id = o.device_id;
-alter table the_hyperstore set (
+alter table the_hypercore set (
       timescaledb.compress,
       timescaledb.compress_segmentby = '',
       timescaledb.compress_orderby = 'updated_at desc'
 );
-select compress_chunk(show_chunks('the_hyperstore'), compress_using => 'hyperstore');
+select compress_chunk(show_chunks('the_hypercore'), compress_using => 'hypercore');
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_3_7_chunk
@@ -147,14 +147,14 @@ select compress_chunk(show_chunks('the_hyperstore'), compress_using => 'hypersto
  _timescaledb_internal._hyper_3_9_chunk
 (3 rows)
 
-vacuum analyze the_hyperstore;
+vacuum analyze the_hypercore;
 -- Test a merge join. We explicitly set what join methods to enable
 -- and disable to avoid flaky tests.
 set enable_mergejoin to true;
 set enable_hashjoin to false;
 set enable_nestloop to false;
 \set jointype merge
-\ir include/hyperstore_join_test.sql
+\ir include/hypercore_join_test.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
@@ -162,17 +162,17 @@ set enable_nestloop to false;
 \set outer :jointype _outer_join
 -- Test inner join to make sure that it works.
 select explain_analyze_anonymize(format($$
-    select * from %s join the_hyperstore using (device_id)
+    select * from %s join the_hypercore using (device_id)
 $$, :'chunk1'));
-                                               explain_analyze_anonymize                                                
-------------------------------------------------------------------------------------------------------------------------
+                                               explain_analyze_anonymize                                               
+-----------------------------------------------------------------------------------------------------------------------
  Merge Join (actual rows=N loops=N)
    Merge Cond: (_hyper_I_N_chunk.device_id = _hyper_I_N_chunk.device_id)
    ->  Merge Append (actual rows=N loops=N)
          Sort Key: _hyper_I_N_chunk.device_id
-         ->  Index Scan using _hyper_I_N_chunk_the_hyperstore_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
-         ->  Index Scan using _hyper_I_N_chunk_the_hyperstore_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
-         ->  Index Scan using _hyper_I_N_chunk_the_hyperstore_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+         ->  Index Scan using _hyper_I_N_chunk_the_hypercore_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+         ->  Index Scan using _hyper_I_N_chunk_the_hypercore_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+         ->  Index Scan using _hyper_I_N_chunk_the_hypercore_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
    ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
  Array Cache Hits: N
  Array Cache Misses: N
@@ -181,7 +181,7 @@ $$, :'chunk1'));
 (12 rows)
 
 -- Check that it generates the right result
-select * into :inner from :chunk1 join the_hyperstore using (device_id);
+select * into :inner from :chunk1 join the_hypercore using (device_id);
 \x on
 select * from :inner r full join expected_inner e on row(r) = row(e)
 where r.device_id is null or e.device_id is null;
@@ -191,12 +191,12 @@ where r.device_id is null or e.device_id is null;
 -- Test outer join (left in this case) to make sure that it works.
 select explain_analyze_anonymize(format($$
 select created_at, updated_at, o.device_id, i.humidity, o.height
-  from :chunk1 i left join the_hyperstore o
+  from :chunk1 i left join the_hypercore o
     on i.created_at = o.updated_at and i.device_id = o.device_id;
 
 select created_at, updated_at, o.device_id, i.humidity, o.height
   into :outer
-  from :chunk1 i left join the_hyperstore o
+  from :chunk1 i left join the_hypercore o
     on i.created_at = o.updated_at and i.device_id = o.device_id;
 $$, :'chunk1'));
-psql:include/hyperstore_join_test.sql:31: ERROR:  syntax error at or near ":" at character 152
+psql:include/hypercore_join_test.sql:31: ERROR:  syntax error at or near ":" at character 152

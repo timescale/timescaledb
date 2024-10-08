@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\ir include/setup_hyperstore.sql
+\ir include/setup_hypercore.sql
 
 create view amrels as
 select cl.oid::regclass as rel, am.amname, inh.inhparent::regclass as relparent
@@ -12,7 +12,7 @@ select cl.oid::regclass as rel, am.amname, inh.inhparent::regclass as relparent
 
 -- Compress the chunks and check that the counts are the same
 select location_id, count(*) into orig from :hypertable GROUP BY location_id;
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
 select location_id, count(*) into comp from :hypertable GROUP BY location_id;
 select * from orig join comp using (location_id) where orig.count != comp.count;
 drop table orig, comp;
@@ -66,7 +66,7 @@ create table copy_test1(
        humidity float
 );
 select create_hypertable('copy_test1', 'created_at');
-alter table copy_test1 set access method hyperstore;
+alter table copy_test1 set access method hypercore;
 \copy copy_test1 from 'data/magic.csv' with csv header
 select * from copy_test1 order by metric_id;
 
@@ -88,7 +88,7 @@ select count(*) from test1;
 
 select * from amrels where relparent = 'test1'::regclass;
 
-alter table test1 set access method hyperstore;
+alter table test1 set access method hypercore;
 
 copy test1 from stdin delimiter ',';
 2020-01-02 11:16:00-05,11,16,copy

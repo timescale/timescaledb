@@ -41,7 +41,7 @@ bool
 ts_is_whitelisted_indexam(const char *amname)
 {
 	ListCell *cell;
-	char *rawname = pstrdup(ts_guc_hyperstore_indexam_whitelist);
+	char *rawname = pstrdup(ts_guc_hypercore_indexam_whitelist);
 
 	List *namelist;
 	if (!SplitIdentifierString(rawname, ',', &namelist))
@@ -85,21 +85,25 @@ static const struct config_enum_entry loglevel_options[] = {
  * Setting to enable or disable transparent decompression plans.
  *
  * The setting is an integer instead of boolean because it is possible to
- * enable transparent decompression plans also when using the Hyperstore table
+ * enable transparent decompression plans also when using the Hypercore table
  * access method. But this is not enabled by default. The options are as
  * follows:
  *
  * (0) = off, disabled completely.
  *
- * (1) = on, enabled for compressed tables but not tables using Hyperstore
+ * (1) = on, enabled for compressed tables but not tables using Hypercore
  *       TAM. This is the default setting.
  *
- * (2) = hyperstore, enabled for compressed tables and those using Hyperstore
+ * (2) = hypercore, enabled for compressed tables and those using Hypercore
  *       TAM. This is useful mostly for debugging/testing and as a fallback.
  */
 static const struct config_enum_entry transparent_decompression_options[] = {
-	{ "on", 1, false },	   { "true", 1, false },	   { "off", 0, false },
-	{ "false", 0, false }, { "hyperstore", 2, false }, { NULL, 0, false }
+	{ "on", 1, false },
+	{ "true", 1, false },
+	{ "off", 0, false },
+	{ "false", 0, false },
+	{ TS_HYPERCORE_TAM_NAME, 2, false },
+	{ NULL, 0, false }
 };
 
 bool ts_guc_enable_deprecation_warnings = true;
@@ -142,7 +146,7 @@ TSDLLEXPORT bool ts_guc_enable_job_execution_logging = false;
 bool ts_guc_enable_tss_callbacks = true;
 TSDLLEXPORT bool ts_guc_enable_delete_after_compression = false;
 TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh = false;
-TSDLLEXPORT char *ts_guc_hyperstore_indexam_whitelist;
+TSDLLEXPORT char *ts_guc_hypercore_indexam_whitelist;
 
 /* default value of ts_guc_max_open_chunks_per_insert and
  * ts_guc_max_cached_chunks_per_hypertable will be set as their respective boot-value when the
@@ -956,12 +960,12 @@ _guc_init(void)
 							   /* show_hook= */ NULL);
 #endif
 
-	DefineCustomStringVariable(MAKE_EXTOPTION("hyperstore_indexam_whitelist"),
+	DefineCustomStringVariable(MAKE_EXTOPTION("hypercore_indexam_whitelist"),
 							   gettext_noop(
-								   "Whitelist for index access methods supported by hyperstore."),
+								   "Whitelist for index access methods supported by hypercore."),
 							   gettext_noop(
-								   "List of index access method names supported by hyperstore."),
-							   /* valueAddr= */ &ts_guc_hyperstore_indexam_whitelist,
+								   "List of index access method names supported by hypercore."),
+							   /* valueAddr= */ &ts_guc_hypercore_indexam_whitelist,
 							   /* Value= */ "btree,hash",
 							   /* context= */ PGC_SIGHUP,
 							   /* flags= */ GUC_LIST_INPUT | GUC_SUPERUSER_ONLY,

@@ -16,8 +16,8 @@
 
 #include "compression/create.h"
 #include "continuous_aggs/create.h"
-#include "hyperstore/hyperstore_handler.h"
-#include "hyperstore/utils.h"
+#include "hypercore/hypercore_handler.h"
+#include "hypercore/utils.h"
 #include "hypertable_cache.h"
 #include "process_utility.h"
 #include "ts_catalog/continuous_agg.h"
@@ -44,29 +44,29 @@ tsl_ddl_command_start(ProcessUtilityArgs *args)
 					case AT_SetAccessMethod:
 					{
 						Oid relid = AlterTableLookupRelation(stmt, NoLock);
-						bool to_hyperstore = (strcmp(cmd->name, "hyperstore") == 0);
+						bool to_hypercore = (strcmp(cmd->name, TS_HYPERCORE_TAM_NAME) == 0);
 						Relation rel = RelationIdGetRelation(relid);
-						bool is_hyperstore = rel->rd_tableam == hyperstore_routine();
+						bool is_hypercore = rel->rd_tableam == hypercore_routine();
 						RelationClose(rel);
 
 						/* If neither the current tableam nor the desired
-						 * tableam is hyperstore, we do nothing. We also do
-						 * nothing if the table is already using hyperstore
-						 * and we are trying to convert to hyperstore
+						 * tableam is hypercore, we do nothing. We also do
+						 * nothing if the table is already using hypercore
+						 * and we are trying to convert to hypercore
 						 * again. */
-						if (is_hyperstore == to_hyperstore)
+						if (is_hypercore == to_hypercore)
 							break;
 						/* Here we know that we are either moving to or from a
-						 * hyperstore. Check that it is on a chunk or
+						 * hypercore. Check that it is on a chunk or
 						 * hypertable. */
 						Chunk *chunk = ts_chunk_get_by_relid(relid, false);
 
 						if (chunk)
 						{
 							/* Check if we can do quick migration */
-							if (!is_hyperstore && ts_chunk_is_compressed(chunk))
+							if (!is_hypercore && ts_chunk_is_compressed(chunk))
 							{
-								hyperstore_set_am(stmt->relation);
+								hypercore_set_am(stmt->relation);
 								/* Skip this command in the alter table
 								 * statement since we process it via quick
 								 * migration */
@@ -74,14 +74,14 @@ tsl_ddl_command_start(ProcessUtilityArgs *args)
 								continue;
 							}
 
-							hyperstore_alter_access_method_begin(relid, !to_hyperstore);
+							hypercore_alter_access_method_begin(relid, !to_hypercore);
 						}
 						else if (!ts_is_hypertable(relid))
 							ereport(ERROR,
 									errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-									errmsg("hyperstore access method not supported on \"%s\"",
+									errmsg("hypercore access method not supported on \"%s\"",
 										   stmt->relation->relname),
-									errdetail("Hyperstore access method is only supported on "
+									errdetail("Hypercore access method is only supported on "
 											  "hypertables and chunks."));
 
 						break;
@@ -187,8 +187,8 @@ tsl_ddl_command_end(EventTriggerData *command)
 					case AT_SetAccessMethod:
 					{
 						Oid relid = AlterTableLookupRelation(stmt, NoLock);
-						bool to_hyperstore = (strcmp(cmd->name, "hyperstore") == 0);
-						hyperstore_alter_access_method_finish(relid, !to_hyperstore);
+						bool to_hypercore = (strcmp(cmd->name, TS_HYPERCORE_TAM_NAME) == 0);
+						hypercore_alter_access_method_finish(relid, !to_hypercore);
 						break;
 					}
 #endif
