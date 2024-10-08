@@ -68,6 +68,7 @@ We recommend that you upgrade at the next available opportunity.
 * #7290: Add check for null offset for continuous aggregates built on top of continuous aggregates.
 * #7301: Make foreign key behaviour for hypertables consistent.
 * #7318: Fix chunk skipping range filtering.
+* #7320: Set the license specific extension comment in the install script.
 
 **Thanks**
 * @MiguelTubio for reporting and fixing the Windows build error.
