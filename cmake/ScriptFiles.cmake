@@ -79,6 +79,12 @@ list(APPEND SOURCE_FILES
 list(APPEND SOURCE_FILES
   bgw_startup.sql)
 
+if(APACHE_ONLY)
+  list(APPEND SOURCE_FILES comment_apache.sql)
+else()
+  list(APPEND SOURCE_FILES comment_tsl.sql)
+endif()
+
 # These files should be prepended to update scripts so that they are executed
 # before anything else during updates
 set(PRE_UPDATE_FILES updates/pre-version-change.sql updates/pre-update.sql)

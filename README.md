@@ -157,10 +157,8 @@ multiple workers.
 
 ### Releases & updates
 
- - [Timescale Release Notes & Future Plans](https://tsdb.co/GitHubTimescaleReleaseNotes): see planned and
-   in-progress updates and detailed information about current and past
-   releases. - [Subscribe to Timescale Release
-   Notes](https://tsdb.co/GitHubTimescaleGetReleaseNotes) to get
+ - [Timescale Release Notes](https://tsdb.co/GitHubTimescaleReleaseNotes): see detailed information about current and past
+   versions and subscribe to get
    notified about new releases, fixes, and early access/beta programs.
 
 ### Contributing
