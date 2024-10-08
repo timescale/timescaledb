@@ -2,11 +2,11 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\ir include/setup_hyperstore.sql
+\ir include/setup_hypercore.sql
 
 -- Compress the chunks and check that the counts are the same
 select location_id, count(*) into orig from :hypertable GROUP BY location_id;
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
 select location_id, count(*) into comp from :hypertable GROUP BY location_id;
 select * from orig join comp using (location_id) where orig.count != comp.count;
 drop table orig, comp;
@@ -174,7 +174,7 @@ order by location_id;
 
 drop table :hypertable;
 
--- Check that we can write to a hyperstore table from another kind of
+-- Check that we can write to a hypercore table from another kind of
 -- slot even if we have dropped and added attributes.
 create table test2 (itime integer, b bigint, t text);
 select create_hypertable('test2', by_range('itime', 10));
@@ -195,7 +195,7 @@ alter table test2 add column d int;
 insert into test2 select t, 'second'::text, 120, 1 from generate_series(11, 15) t;
 
 alter table test2
-      set access method hyperstore,
+      set access method hypercore,
       set (timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'c, itime desc');
 
 select compress_chunk(show_chunks('test2'));

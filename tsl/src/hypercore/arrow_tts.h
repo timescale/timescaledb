@@ -95,7 +95,7 @@ extern TupleTableSlot *ExecStoreArrowTuple(TupleTableSlot *slot, uint16 tuple_in
 #define TTS_IS_ARROWTUPLE(slot) ((slot)->tts_ops == &TTSOpsArrowTuple)
 
 /*
- * The encoded Hyperstore TID can address a specific value in a compressed tuple by
+ * The encoded Hypercore TID can address a specific value in a compressed tuple by
  * adding an extra "tuple index" to the TID, which is the index into the array of values
  * in the compressed tuple. The new encoding consists of the block number (CBLOCK) and offset
  * number (COFFSET) of the TID for the compressed row as block number and the
@@ -127,7 +127,7 @@ extern TupleTableSlot *ExecStoreArrowTuple(TupleTableSlot *slot, uint16 tuple_in
 #define OFFSET_MASK (OFFSET_LIMIT - 1)
 
 static inline void
-hyperstore_tid_encode(ItemPointerData *out_tid, const ItemPointerData *in_tid, uint16 tuple_index)
+hypercore_tid_encode(ItemPointerData *out_tid, const ItemPointerData *in_tid, uint16 tuple_index)
 {
 	const BlockNumber block = ItemPointerGetBlockNumber(in_tid);
 	const OffsetNumber offset = ItemPointerGetOffsetNumber(in_tid);
@@ -143,7 +143,7 @@ hyperstore_tid_encode(ItemPointerData *out_tid, const ItemPointerData *in_tid, u
 }
 
 static inline uint16
-hyperstore_tid_decode(ItemPointerData *out_tid, const ItemPointerData *in_tid)
+hypercore_tid_decode(ItemPointerData *out_tid, const ItemPointerData *in_tid)
 {
 	const uint64 encoded_tid = ~COMPRESSED_FLAG & ItemPointerGetBlockNumber(in_tid);
 	const uint16 tuple_index = ItemPointerGetOffsetNumber(in_tid);
@@ -158,7 +158,7 @@ hyperstore_tid_decode(ItemPointerData *out_tid, const ItemPointerData *in_tid)
 }
 
 static inline void
-hyperstore_tid_set_tuple_index(ItemPointerData *tid, uint32 tuple_index)
+hypercore_tid_set_tuple_index(ItemPointerData *tid, uint32 tuple_index)
 {
 	/* Assert that we do not overflow the increment: we only have 10 bits for the tuple index */
 	Assert(tuple_index < 1024);
@@ -166,10 +166,10 @@ hyperstore_tid_set_tuple_index(ItemPointerData *tid, uint32 tuple_index)
 }
 
 static inline void
-hyperstore_tid_increment(ItemPointerData *tid, uint16 increment)
+hypercore_tid_increment(ItemPointerData *tid, uint16 increment)
 {
 	/* Assert that we do not overflow the increment: we only have 10 bits for the tuple index */
-	hyperstore_tid_set_tuple_index(tid, ItemPointerGetOffsetNumber(tid) + increment);
+	hypercore_tid_set_tuple_index(tid, ItemPointerGetOffsetNumber(tid) + increment);
 }
 
 static inline bool
@@ -304,7 +304,7 @@ ExecIncrOrDecrArrowTuple(TupleTableSlot *slot, int32 amount)
 	}
 
 	Assert(tuple_index > 0 && tuple_index <= aslot->total_row_count);
-	hyperstore_tid_set_tuple_index(&slot->tts_tid, tuple_index);
+	hypercore_tid_set_tuple_index(&slot->tts_tid, tuple_index);
 	aslot->tuple_index = (uint16) tuple_index;
 	slot->tts_flags &= ~TTS_FLAG_EMPTY;
 	slot->tts_nvalid = 0;

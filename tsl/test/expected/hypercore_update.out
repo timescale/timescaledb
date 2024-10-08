@@ -2,12 +2,12 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
-\ir include/setup_hyperstore.sql
+\ir include/setup_hypercore.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set hypertable readings
-\ir hyperstore_helpers.sql
+\ir hypercore_helpers.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
@@ -108,7 +108,7 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
  limit 1 offset 1 \gset
 -- TODO(#1068) Parallel sequence scan does not work
 set max_parallel_workers_per_gather to 0;
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -135,14 +135,14 @@ select relname, amname
   from pg_class join pg_am on (relam = pg_am.oid)
  where pg_class.oid in (select show_chunks(:'hypertable'))
 order by relname;
-     relname      |   amname   
-------------------+------------
- _hyper_1_1_chunk | hyperstore
- _hyper_1_2_chunk | hyperstore
- _hyper_1_3_chunk | hyperstore
- _hyper_1_4_chunk | hyperstore
- _hyper_1_5_chunk | hyperstore
- _hyper_1_6_chunk | hyperstore
+     relname      |  amname   
+------------------+-----------
+ _hyper_1_1_chunk | hypercore
+ _hyper_1_2_chunk | hypercore
+ _hyper_1_3_chunk | hypercore
+ _hyper_1_4_chunk | hypercore
+ _hyper_1_5_chunk | hypercore
+ _hyper_1_6_chunk | hypercore
 (6 rows)
 
 -- Pick a random row to update
@@ -291,7 +291,7 @@ select * from :hypertable where humidity = 200.0 order by metric_id;
 commit;
 -- Test update of a segment-by column. The selection is to make sure
 -- that we have a mix of compressed and uncompressed tuples.
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -343,7 +343,7 @@ order by metric_id;
 (11 rows)
 
 -- Compress all chunks again before testing RETURNING
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -395,7 +395,7 @@ returning _timescaledb_debug.is_compressed_tid(ctid), *;
 
 -- Test update of a segment-by column directly on the chunk. This
 -- should fail for compressed rows even for segment-by columns.
-select compress_chunk(:'chunk1', compress_using => 'hyperstore');
+select compress_chunk(:'chunk1', compress_using => 'hypercore');
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk

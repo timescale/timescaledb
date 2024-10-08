@@ -7,4 +7,4 @@
 
 #include <postgres.h>
 
-extern void hyperstore_set_am(const RangeVar *rv);
+extern void hypercore_set_am(const RangeVar *rv);

@@ -24,7 +24,7 @@ setup {
       chunk regclass;
     begin
        for chunk in select ch from show_chunks('metrics') ch loop
-          execute format('alter table %s set access method hyperstore', chunk);
+          execute format('alter table %s set access method hypercore', chunk);
        end loop;
     end;
     $$;

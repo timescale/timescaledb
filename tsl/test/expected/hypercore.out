@@ -2,9 +2,9 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
-show timescaledb.hyperstore_indexam_whitelist;
- timescaledb.hyperstore_indexam_whitelist 
-------------------------------------------
+show timescaledb.hypercore_indexam_whitelist;
+ timescaledb.hypercore_indexam_whitelist 
+-----------------------------------------
  btree,hash
 (1 row)
 
@@ -89,16 +89,16 @@ WHERE location = 1;
 
 -- We should be able to set the table access method for a chunk, which
 -- will automatically compress the chunk.
-ALTER TABLE :chunk SET ACCESS METHOD hyperstore;
+ALTER TABLE :chunk SET ACCESS METHOD hypercore;
 SET timescaledb.enable_transparent_decompression TO false;
 vacuum analyze readings;
 -- Show access method used on chunk
 SELECT c.relname, a.amname FROM pg_class c
 INNER JOIN pg_am a ON (c.relam = a.oid)
 WHERE c.oid = :'chunk'::regclass;
-     relname      |   amname   
-------------------+------------
- _hyper_1_1_chunk | hyperstore
+     relname      |  amname   
+------------------+-----------
+ _hyper_1_1_chunk | hypercore
 (1 row)
 
 -- This should show the chunk as compressed
@@ -228,7 +228,7 @@ SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
 SET enable_indexscan = false;
 -- Compare the output to transparent decompression. Heap output is
 -- shown further down.
-SET timescaledb.enable_transparent_decompression TO 'hyperstore';
+SET timescaledb.enable_transparent_decompression TO 'hypercore';
 EXPLAIN (costs off, timing off, summary off)
 SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
                                 QUERY PLAN                                
@@ -305,7 +305,7 @@ SET enable_indexscan = false;
 SET enable_seqscan = true;
 SET timescaledb.enable_columnarscan = true;
 -- With transparent decompression
-SET timescaledb.enable_transparent_decompression TO 'hyperstore';
+SET timescaledb.enable_transparent_decompression TO 'hypercore';
 SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
              time             | location | device | temp |     humidity     |      jdata       
 ------------------------------+----------+--------+------+------------------+------------------
@@ -338,7 +338,7 @@ SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
 (5 rows)
 
 -- Show with transparent decompression
-SET timescaledb.enable_transparent_decompression TO 'hyperstore';
+SET timescaledb.enable_transparent_decompression TO 'hypercore';
 SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
              time             | location | device | temp |     humidity     |      jdata       
 ------------------------------+----------+--------+------+------------------+------------------
@@ -371,7 +371,7 @@ ON (c1.compressed_chunk_id = c2.id);
 (1 row)
 
 ALTER TABLE :chunk SET ACCESS METHOD heap;
-SET timescaledb.enable_transparent_decompression TO 'hyperstore';
+SET timescaledb.enable_transparent_decompression TO 'hypercore';
 -- The compressed chunk should no longer exist
 SELECT format('%I.%I', c2.schema_name, c2.table_name)::regclass AS cchunk
 FROM _timescaledb_catalog.chunk c1
@@ -444,9 +444,9 @@ FROM orig JOIN decomp USING (device) WHERE orig.count != decomp.count;
 --------+------------+--------------+------
 (0 rows)
 
--- Convert back to hyperstore to check that metadata was cleaned up
--- from last time this table used hyperstore
-ALTER TABLE :chunk SET ACCESS METHOD hyperstore;
+-- Convert back to hypercore to check that metadata was cleaned up
+-- from last time this table used hypercore
+ALTER TABLE :chunk SET ACCESS METHOD hypercore;
 SET timescaledb.enable_transparent_decompression TO false;
 -- Get the chunk's corresponding compressed chunk
 SELECT format('%I.%I', c2.schema_name, c2.table_name)::regclass AS cchunk

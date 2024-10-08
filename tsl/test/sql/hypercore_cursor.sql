@@ -2,12 +2,12 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\ir include/setup_hyperstore.sql
+\ir include/setup_hypercore.sql
 
 -- To generate plans consistently.
 set max_parallel_workers_per_gather to 0;
 
--- Create a function that uses a cursor to scan the the Hyperstore
+-- Create a function that uses a cursor to scan the the Hypercore
 -- table. This should work equivalent to a query on the same table.
 create function location_humidity_for(
        in p_owner integer,
@@ -40,7 +40,7 @@ end;
 $$
 language plpgsql;
 
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
 
 -- Compare executing the function with a cursor with a query fetching
 -- the same data directly from the hypertable.
@@ -107,7 +107,7 @@ create table backward_cursor (time timestamptz, location_id bigint, temp float8)
 select create_hypertable('backward_cursor', 'time', create_default_indexes=>false);
 alter table backward_cursor set (timescaledb.compress, timescaledb.compress_segmentby='location_id', timescaledb.compress_orderby='time asc');
 insert into backward_cursor values ('2024-01-01 01:00', 1, 1.0), ('2024-01-01 02:00', 1, 2.0), ('2024-01-01 03:00', 2, 3.0), ('2024-01-01 04:00', 2, 4.0);
-select compress_chunk(ch, compress_using=>'hyperstore') from show_chunks('backward_cursor') ch;
+select compress_chunk(ch, compress_using=>'hypercore') from show_chunks('backward_cursor') ch;
 insert into backward_cursor values ('2024-01-01 05:00', 3, 5.0), ('2024-01-01 06:00', 3, 6.0);
 
 begin;

@@ -18,7 +18,7 @@
 #include "chunkwise_agg.h"
 #include "continuous_aggs/planner.h"
 #include "guc.h"
-#include "hyperstore/hyperstore_handler.h"
+#include "hypercore/hypercore_handler.h"
 #include "hypertable.h"
 #include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
@@ -164,7 +164,7 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 		if (ts_guc_enable_columnarscan)
 			columnar_scan_set_rel_pathlist(root, rel, ht);
 
-		hyperstore_set_rel_pathlist(root, rel, ht);
+		hypercore_set_rel_pathlist(root, rel, ht);
 	}
 }
 
