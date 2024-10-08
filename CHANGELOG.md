@@ -5,7 +5,7 @@
 accidentally triggering the load of a previous DB version.**
 
 
-## 2.17.0 (2024-09-20)
+## 2.17.0 (2024-10-08)
 
 This release adds support for PostgreSQL 17, significantly improves the performance of continuous aggregate refreshes,
 and contains performance improvements for analytical queries and delete operations over compressed hypertables.
@@ -67,6 +67,7 @@ We recommend that you upgrade at the next available opportunity.
 * #7286: Fix the index column check while searching for the index.
 * #7290: Add check for null offset for continuous aggregates built on top of continuous aggregates.
 * #7301: Make foreign key behaviour for hypertables consistent.
+* #7318: Fix chunk skipping range filtering.
 
 **Thanks**
 * @MiguelTubio for reporting and fixing the Windows build error.
