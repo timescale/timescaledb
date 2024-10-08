@@ -4,6 +4,77 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+
+## 2.17.0 (2024-10-08)
+
+This release adds support for PostgreSQL 17, significantly improves the performance of continuous aggregate refreshes,
+and contains performance improvements for analytical queries and delete operations over compressed hypertables.
+We recommend that you upgrade at the next available opportunity.
+
+**Highlighted features in TimescaleDB v2.17.0**
+
+* Full PostgreSQL 17 support for all existing features. TimescaleDB v2.17 is available for PostgreSQL 14, 15, 16, and 17.
+
+* Significant performance improvements for continuous aggregate policies: continuous aggregate refresh is now using
+`merge` instead of deleting old materialized data and re-inserting.
+
+  This update can decrease dramatically the amount of data that must be written on the continuous aggregate in the
+  presence of a small number of changes, reduce the `i/o` cost of refreshing a continuous aggregate, and generate fewer
+  Write-Ahead Logs (`WAL`).
+  Overall, continuous aggregate policies will be more lightweight, use less system resources, and complete faster.
+
+* Increased performance for real-time analytical queries over compressed hypertables:
+  we are excited to introduce additional Single Instruction, Multiple Data (`SIMD`) vectorization optimization to our
+  engine by supporting vectorized execution for queries that group by using the `segment_by` column(s) and
+  aggregate using the basic aggregate functions (`sum`, `count`, `avg`, `min`, `max`).
+
+  Stay tuned for more to come in follow-up releases! Support for grouping on additional columns, filtered aggregation,
+  vectorized expressions, and `time_bucket` is coming soon.
+
+* Improved performance of deletes on compressed hypertables when a large amount of data is affected.
+
+  This improvement speeds up operations that delete whole segments by skipping the decompression step.
+  It is enabled for all deletes that filter by the `segment_by` column(s).
+
+**PostgreSQL 14 deprecation announcement**
+
+  We will continue supporting PostgreSQL 14 until April 2025. Closer to that time, we will announce the specific
+  version of TimescaleDB in which PostgreSQL 14 support will not be included going forward.
+
+**Features**
+* #6882: Allow delete of full segments on compressed chunks without decompression.
+* #7033: Use `merge` statement on continuous aggregates refresh.
+* #7126: Add functions to show the compression information.
+* #7147: Vectorize partial aggregation for `sum(int4)` with grouping on `segment by` columns.
+* #7204: Track additional extensions in telemetry.
+* #7207: Refactor the `decompress_batches_scan` functions for easier maintenance.
+* #7209: Add a function to drop the `osm` chunk.
+* #7275: Add support for the `returning` clause for `merge`.
+* #7200: Vectorize common aggregate functions like `min`, `max`, `sum`, `avg`, `stddev`, `variance` for compressed columns
+  of arithmetic types, when there is grouping on `segment by` columns or no grouping.
+
+**Bug fixes**
+* #7187: Fix the string literal length for the `compressed_data_info` function.
+* #7191: Fix creating default indexes on chunks when migrating the data.
+* #7195: Fix the `segment by` and `order by` checks when dropping a column from a compressed hypertable.
+* #7201: Use the generic extension description when building `apt` and `rpm` loader packages.
+* #7227: Add an index to the `compression_chunk_size` catalog table.
+* #7229: Fix the foreign key constraints where the index and the constraint column order are different.
+* #7230: Do not propagate the foreign key constraints to the `osm` chunk.
+* #7234: Release the cache after accessing the cache entry.
+* #7258: Force English in the `pg_config` command executed by `cmake` to avoid the unexpected building errors.
+* #7270: Fix the memory leak in compressed DML batch filtering.
+* #7286: Fix the index column check while searching for the index.
+* #7290: Add check for null offset for continuous aggregates built on top of continuous aggregates.
+* #7301: Make foreign key behavior for hypertables consistent.
+* #7318: Fix chunk skipping range filtering.
+* #7320: Set the license specific extension comment in the install script.
+
+**Thanks**
+* @MiguelTubio for reporting and fixing the Windows build error.
+* @posuch for reporting the misleading extension description in the generic loader packages.
+* @snyrkill for discovering and reporting the issue with continuous aggregates built on top of continuous aggregates.
+
 ## 2.16.1 (2024-08-06)
 
 This release contains bug fixes since the 2.16.0 release. We recommend
