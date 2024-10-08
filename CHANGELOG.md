@@ -51,7 +51,7 @@ We recommend that you upgrade at the next available opportunity.
 * #7209: Add a function to drop the `osm` chunk.
 * #7275: Add support for the `returning` clause for `merge`.
 * #7200: Vectorize common aggregate functions like `min`, `max`, `sum`, `avg`, `stddev`, `variance` for compressed columns
-  of arithmetic types , when there is grouping on `segment by` columns or no grouping.
+  of arithmetic types, when there is grouping on `segment by` columns or no grouping.
 
 **Bug fixes**
 * #7187: Fix the string literal length for the `compressed_data_info` function.
@@ -66,7 +66,7 @@ We recommend that you upgrade at the next available opportunity.
 * #7270: Fix the memory leak in compressed DML batch filtering.
 * #7286: Fix the index column check while searching for the index.
 * #7290: Add check for null offset for continuous aggregates built on top of continuous aggregates.
-* #7301: Make foreign key behaviour for hypertables consistent.
+* #7301: Make foreign key behavior for hypertables consistent.
 * #7318: Fix chunk skipping range filtering.
 * #7320: Set the license specific extension comment in the install script.
 
