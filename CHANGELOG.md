@@ -4,6 +4,48 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+
+## 2.17.0 (2024-10-08)
+
+This release contains performance improvements and bug fixes since
+the 2.16.1 release. We recommend that you upgrade at the next
+available opportunity.
+
+
+**Features**
+* #6882: Allow DELETE on the compressed chunks without decompression.
+* #7033 Use MERGE statement on CAgg Refresh
+* #7126: Add functions to show the compression information.
+* #7147: Vectorize partial aggregation for `sum(int4)` with grouping on `segment by` columns.
+* #7200: Vectorize common aggregate functions like `min`, `max`, `sum`, `avg`, `stddev`, `variance` for compressed columns of arithmetic types, when there is grouping on segmentby columns or no grouping.
+* #7204: Track additional extensions in telemetry.
+* #7207: Refactor the `decompress_batches_scan` functions for easier maintenance.
+* #7209: Add a function to drop the `osm` chunk.
+* #7275: Add support for RETURNING clause for MERGE
+* #7295 Support ALTER TABLE SET ACCESS METHOD on hypertable
+
+**Bugfixes**
+* #7187: Fix the string literal length for the `compressed_data_info` function.
+* #7191: Fix creating default indexes on chunks when migrating the data.
+* #7195: Fix the `segment by` and `order by` checks when dropping a column from a compressed hypertable.
+* #7201: Use the generic extension description when building `apt` and `rpm` loader packages.
+* #7227: Add an index to the `compression_chunk_size` catalog table.
+* #7229: Fix the foreign key constraints where the index and the constraint column order are different.
+* #7230: Do not propagate the foreign key constraints to the `osm` chunk.
+* #7234: Release the cache after accessing the cache entry.
+* #7258 Force English in the pg_config command executed by cmake to avoid unexpected building errors
+* #7270 Fix memory leak in compressed DML batch filtering
+* #7286: Fix index column check while searching for index
+* #7290 Add check for NULL offset for caggs built on top of caggs
+* #7301 Make foreign key behaviour for hypertables consistent
+* #7318: Fix chunk skipping range filtering
+* #7320 Set license specific extension comment in install script
+
+**Thanks**
+* @MiguelTubio for reporting and fixing a Windows build error
+* @posuch for reporting the misleading extension description in the generic loader packages.
+* @snyrkill for discovering and reporting the issue
+
 ## 2.16.1 (2024-08-06)
 
 This release contains bug fixes since the 2.16.0 release. We recommend
