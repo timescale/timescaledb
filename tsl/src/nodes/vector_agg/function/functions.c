@@ -53,11 +53,12 @@ count_star_const(void *agg_state, Datum constvalue, bool constisnull, int n,
 }
 
 static void
-count_star_many_scalar(void *restrict agg_states, uint32 *restrict offsets, int n, Datum constvalue,
-					   bool constisnull, MemoryContext agg_extra_mctx)
+count_star_many_scalar(void *restrict agg_states, uint32 *restrict offsets, int start_row,
+					   int end_row, Datum constvalue, bool constisnull,
+					   MemoryContext agg_extra_mctx)
 {
 	CountState *states = (CountState *) agg_states;
-	for (int row = 0; row < n; row++)
+	for (int row = start_row; row < end_row; row++)
 	{
 		if (offsets[row] == 0)
 		{
@@ -131,25 +132,19 @@ count_any_vector(void *agg_state, const ArrowArray *vector, const uint64 *filter
 }
 
 static void
-count_any_many(void *restrict agg_states, uint32 *restrict offsets, const ArrowArray *vector,
-			   MemoryContext agg_extra_mctx)
+count_any_many(void *restrict agg_states, uint32 *restrict offsets, int start_row, int end_row,
+			   const ArrowArray *vector, MemoryContext agg_extra_mctx)
 {
-	const int n = vector->length;
 	const uint64 *valid = vector->buffers[0];
-	for (int row = 0; row < n; row++)
+	for (int row = start_row; row < end_row; row++)
 	{
-		if (offsets[row] == 0)
-		{
-			continue;
-		}
-
-		if (!arrow_row_is_valid(valid, row))
-		{
-			continue;
-		}
-
 		CountState *state = (offsets[row] + (CountState *) agg_states);
-		state->count++;
+		const bool row_passes = (offsets[row] != 0);
+		const bool value_notnull = arrow_row_is_valid(valid, row);
+		if (row_passes && value_notnull)
+		{
+			state->count++;
+		}
 	}
 }
 

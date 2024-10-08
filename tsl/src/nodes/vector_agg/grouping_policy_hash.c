@@ -87,7 +87,11 @@ typedef struct
 	uint64 allocated_aggstate_rows;
 	List *per_agg_states;
 
+	uint64 stat_input_total_rows;
+
 	uint64 stat_input_valid_rows;
+
+	uint64 stat_bulk_filtered_rows;
 } GroupingPolicyHash;
 
 static const GroupingPolicy grouping_policy_hash_functions;
@@ -134,11 +138,14 @@ gp_hash_reset(GroupingPolicy *obj)
 	policy->have_null_key = false;
 
 	policy->stat_input_valid_rows = 0;
+	policy->stat_input_total_rows = 0;
+	policy->stat_bulk_filtered_rows = 0;
 }
 
 static void
-compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_def, void *agg_states,
-						 uint32 *offsets, MemoryContext agg_extra_mctx)
+compute_single_aggregate(DecompressBatchState *batch_state, int start_row, int end_row,
+						 VectorAggDef *agg_def, void *agg_states, uint32 *offsets,
+						 MemoryContext agg_extra_mctx)
 {
 	ArrowArray *arg_arrow = NULL;
 	Datum arg_datum = 0;
@@ -172,7 +179,7 @@ compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_de
 	if (arg_arrow != NULL)
 	{
 		/* Arrow argument. */
-		agg_def->func.agg_many(agg_states, offsets, arg_arrow, agg_extra_mctx);
+		agg_def->func.agg_many(agg_states, offsets, start_row, end_row, arg_arrow, agg_extra_mctx);
 	}
 	else
 	{
@@ -184,14 +191,15 @@ compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_de
 		{
 			agg_def->func.agg_many_scalar(agg_states,
 										  offsets,
-										  batch_state->total_batch_rows,
+										  start_row,
+										  end_row,
 										  arg_datum,
 										  arg_isnull,
 										  agg_extra_mctx);
 		}
 		else
 		{
-			for (int i = 0; i < batch_state->total_batch_rows; i++)
+			for (int i = start_row; i < end_row; i++)
 			{
 				if (offsets[i] == 0)
 				{
@@ -207,14 +215,15 @@ compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_de
 
 static pg_attribute_always_inline uint32
 fill_offsets_impl(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
-				  int key_column_index, uint32 next_unused_state_index, uint32 *restrict offsets,
+				  int key_column_index, uint32 next_unused_state_index, int start_row, int end_row,
+				  uint32 *restrict offsets,
 				  void (*get_key)(CompressedColumnValues column, int row, Datum *key, bool *valid))
 {
 	CompressedColumnValues column = batch_state->compressed_columns[key_column_index];
 	// Assert(gv->decompression_type == 8 /* lolwut */);
 	const uint64 *restrict filter = batch_state->vector_qual_result;
 	struct h_hash *restrict table = policy->table;
-	for (int row = 0; row < batch_state->total_batch_rows; row++)
+	for (int row = start_row; row < end_row; row++)
 	{
 		bool key_valid = false;
 		Datum key = { 0 };
@@ -242,8 +251,8 @@ fill_offsets_impl(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
 		}
 	}
 
-	policy->stat_input_valid_rows +=
-		arrow_num_valid(column.buffers[0], batch_state->total_batch_rows);
+	policy->stat_input_total_rows += batch_state->total_batch_rows;
+	policy->stat_input_valid_rows += arrow_num_valid(filter, batch_state->total_batch_rows);
 	return next_unused_state_index;
 }
 
@@ -300,51 +309,60 @@ get_key_scalar(CompressedColumnValues column, int row, Datum *restrict key, bool
 
 static pg_noinline uint32
 fill_offsets_arrow_fixed_8(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
-						   int key_column_index, uint32 next_unused_state_index,
-						   uint32 *restrict offsets)
+						   int key_column_index, uint32 next_unused_state_index, int start_row,
+						   int end_row, uint32 *restrict offsets)
 {
 	return fill_offsets_impl(policy,
 							 batch_state,
 							 key_column_index,
 							 next_unused_state_index,
+							 start_row,
+							 end_row,
 							 offsets,
 							 get_key_arrow_fixed_8);
 }
 
 static pg_noinline uint32
 fill_offsets_arrow_fixed_4(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
-						   int key_column_index, uint32 next_unused_state_index,
-						   uint32 *restrict offsets)
+						   int key_column_index, uint32 next_unused_state_index, int start_row,
+						   int end_row, uint32 *restrict offsets)
 {
 	return fill_offsets_impl(policy,
 							 batch_state,
 							 key_column_index,
 							 next_unused_state_index,
+							 start_row,
+							 end_row,
 							 offsets,
 							 get_key_arrow_fixed_4);
 }
 
 static pg_noinline uint32
 fill_offsets_arrow_fixed_2(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
-						   int key_column_index, uint32 next_unused_state_index,
-						   uint32 *restrict offsets)
+						   int key_column_index, uint32 next_unused_state_index, int start_row,
+						   int end_row, uint32 *restrict offsets)
 {
 	return fill_offsets_impl(policy,
 							 batch_state,
 							 key_column_index,
 							 next_unused_state_index,
+							 start_row,
+							 end_row,
 							 offsets,
 							 get_key_arrow_fixed_2);
 }
 
 static pg_noinline uint32
 fill_offsets_scalar(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
-					int key_column_index, uint32 next_unused_state_index, uint32 *restrict offsets)
+					int key_column_index, uint32 next_unused_state_index, int start_row,
+					int end_row, uint32 *restrict offsets)
 {
 	return fill_offsets_impl(policy,
 							 batch_state,
 							 key_column_index,
 							 next_unused_state_index,
+							 start_row,
+							 end_row,
 							 offsets,
 							 get_key_scalar);
 }
@@ -357,17 +375,6 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 	Assert(!policy->returning_results);
 
 	/*
-	 * State index zero is invalid, and state index one is for null key. We have
-	 * to initialize it at the first run.
-	 */
-	const uint32 last_initialized_state_index =
-		policy->table->members ? policy->table->members + 2 : 1;
-	uint32 next_unused_state_index = policy->table->members + 2;
-
-	uint32 offsets[1000] = { 0 };
-	Assert(batch_state->total_batch_rows <= 1000);
-
-	/*
 	 * For the partial aggregation node, the grouping columns are always in the
 	 * output, so we don't have to separately look at the list of the grouping
 	 * columns.
@@ -375,75 +382,130 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 	Assert(list_length(policy->output_grouping_columns) == 1);
 	GroupingColumn *g = linitial(policy->output_grouping_columns);
 	CompressedColumnValues *key_column = &batch_state->compressed_columns[g->input_offset];
+	// const uint64_t* restrict key_validity = key_column->buffers[0];
+	const uint64_t *restrict filter = batch_state->vector_qual_result;
 
-	switch ((int) key_column->decompression_type)
+	uint32 offsets[1000] = { 0 };
+
+	const int n = batch_state->total_batch_rows;
+	int start_row = 0;
+	int end_row = 0;
+
+	// for (int end_row = MIN(64, n); end_row <= n; end_row += 64)
+	for (start_row = 0; start_row < n; start_row = end_row)
 	{
-		case DT_Scalar:
-			next_unused_state_index = fill_offsets_scalar(policy,
-														  batch_state,
-														  g->input_offset,
-														  next_unused_state_index,
-														  offsets);
-			break;
-		case 8:
-			next_unused_state_index = fill_offsets_arrow_fixed_8(policy,
-																 batch_state,
-																 g->input_offset,
-																 next_unused_state_index,
-																 offsets);
-			break;
-		case 4:
-			next_unused_state_index = fill_offsets_arrow_fixed_4(policy,
-																 batch_state,
-																 g->input_offset,
-																 next_unused_state_index,
-																 offsets);
-			break;
-		case 2:
-			next_unused_state_index = fill_offsets_arrow_fixed_2(policy,
-																 batch_state,
-																 g->input_offset,
-																 next_unused_state_index,
-																 offsets);
-			break;
-		default:
-			Assert(false);
-			break;
-	}
-
-	ListCell *aggdeflc;
-	ListCell *aggstatelc;
-
-	if (next_unused_state_index > last_initialized_state_index)
-	{
-		if (next_unused_state_index > policy->allocated_aggstate_rows)
+		if (filter)
 		{
-			policy->allocated_aggstate_rows = policy->allocated_aggstate_rows * 2 + 1;
+			if (filter[start_row / 64] == 0)
+			{
+				end_row = MIN(start_row + 64, n);
+				policy->stat_bulk_filtered_rows += 64;
+				continue;
+			}
+
+			for (end_row = start_row; end_row < n; end_row = MIN(end_row + 64, n))
+			{
+				if (filter[end_row / 64] == 0)
+				{
+					break;
+				}
+			}
+		}
+		else
+		{
+			end_row = n;
+		}
+		Assert(start_row <= end_row);
+		Assert(end_row <= n);
+		/*
+		 * State index zero is invalid, and state index one is for null key. We have
+		 * to initialize it at the first run.
+		 */
+		uint32 last_initialized_state_index =
+			policy->table->members ? policy->table->members + 2 : 1;
+		uint32 next_unused_state_index = policy->table->members + 2;
+
+		Assert((size_t) end_row <= sizeof(offsets) / sizeof(*offsets));
+
+		switch ((int) key_column->decompression_type)
+		{
+			case DT_Scalar:
+				next_unused_state_index = fill_offsets_scalar(policy,
+															  batch_state,
+															  g->input_offset,
+															  next_unused_state_index,
+															  start_row,
+															  end_row,
+															  offsets);
+				break;
+			case 8:
+				next_unused_state_index = fill_offsets_arrow_fixed_8(policy,
+																	 batch_state,
+																	 g->input_offset,
+																	 next_unused_state_index,
+																	 start_row,
+																	 end_row,
+																	 offsets);
+				break;
+			case 4:
+				next_unused_state_index = fill_offsets_arrow_fixed_4(policy,
+																	 batch_state,
+																	 g->input_offset,
+																	 next_unused_state_index,
+																	 start_row,
+																	 end_row,
+																	 offsets);
+				break;
+			case 2:
+				next_unused_state_index = fill_offsets_arrow_fixed_2(policy,
+																	 batch_state,
+																	 g->input_offset,
+																	 next_unused_state_index,
+																	 start_row,
+																	 end_row,
+																	 offsets);
+				break;
+			default:
+				Assert(false);
+				break;
+		}
+
+		ListCell *aggdeflc;
+		ListCell *aggstatelc;
+
+		if (next_unused_state_index > last_initialized_state_index)
+		{
+			if (next_unused_state_index > policy->allocated_aggstate_rows)
+			{
+				policy->allocated_aggstate_rows = policy->allocated_aggstate_rows * 2 + 1;
+				forboth (aggdeflc, policy->agg_defs, aggstatelc, policy->per_agg_states)
+				{
+					VectorAggDef *agg_def = lfirst(aggdeflc);
+					lfirst(aggstatelc) =
+						repalloc(lfirst(aggstatelc),
+								 policy->allocated_aggstate_rows * agg_def->func.state_bytes);
+				}
+			}
+
 			forboth (aggdeflc, policy->agg_defs, aggstatelc, policy->per_agg_states)
 			{
-				VectorAggDef *agg_def = lfirst(aggdeflc);
-				lfirst(aggstatelc) =
-					repalloc(lfirst(aggstatelc),
-							 policy->allocated_aggstate_rows * agg_def->func.state_bytes);
+				const VectorAggDef *agg_def = lfirst(aggdeflc);
+				agg_def->func.agg_init(agg_def->func.state_bytes * last_initialized_state_index +
+										   (char *) lfirst(aggstatelc),
+									   next_unused_state_index - last_initialized_state_index);
 			}
 		}
 
 		forboth (aggdeflc, policy->agg_defs, aggstatelc, policy->per_agg_states)
 		{
-			const VectorAggDef *agg_def = lfirst(aggdeflc);
-			agg_def->func.agg_init(agg_def->func.state_bytes * last_initialized_state_index +
-									   (char *) lfirst(aggstatelc),
-								   next_unused_state_index - last_initialized_state_index);
+			compute_single_aggregate(batch_state,
+									 start_row,
+									 end_row,
+									 lfirst(aggdeflc),
+									 lfirst(aggstatelc),
+									 offsets,
+									 policy->agg_extra_mctx);
 		}
-	}
-
-	forboth (aggdeflc, policy->agg_defs, aggstatelc, policy->per_agg_states)
-	{
-		compute_single_aggregate(batch_state,
-								 lfirst(aggdeflc),
-								 lfirst(aggstatelc),
-								 offsets,
-								 policy->agg_extra_mctx);
 	}
 }
 
@@ -480,13 +542,14 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 		/* FIXME doesn't work on final result emission w/o should_emit. */
 		policy->returning_results = true;
 		h_start_iterate(policy->table, &policy->iter);
-		//				fprintf(stderr, "spill after %ld input rows, %d keys, %f ratio, %ld aggctx
-		//bytes, %ld aggstate bytes\n", 				policy->stat_input_valid_rows,
-		//policy->table->members
-		//+ 		policy->have_null_key, 				policy->stat_input_valid_rows / (float)
-		//(policy->table->members +
-		//policy->have_null_key), 						MemoryContextMemAllocated(policy->table->ctx, false),
-		//						MemoryContextMemAllocated(policy->agg_extra_mctx, false));
+		//		fprintf(stderr,
+		//				"spill after %ld input %ld valid %ld bulk filtered, %d keys, %f ratio, %ld aggctx
+		//bytes, %ld aggstate bytes\n", 				policy->stat_input_total_rows,
+		//policy->stat_input_valid_rows, policy->stat_bulk_filtered_rows, 				policy->table->members
+		//				+ 		policy->have_null_key, 				policy->stat_input_valid_rows /
+		//(float) 				(policy->table->members + 				 policy->have_null_key),
+		//MemoryContextMemAllocated(policy->table->ctx, 																						  false),
+		//MemoryContextMemAllocated(policy->agg_extra_mctx, false));
 	}
 
 	HashEntry null_key_entry = { .agg_state_index = 1 };

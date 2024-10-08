@@ -27,11 +27,12 @@ typedef struct
 	void (*agg_const)(void *restrict agg_state, Datum constvalue, bool constisnull, int n,
 					  MemoryContext agg_extra_mctx);
 
-	void (*agg_many)(void *restrict agg_states, uint32 *restrict offsets, const ArrowArray *vector,
-					 MemoryContext agg_extra_mctx);
+	void (*agg_many)(void *restrict agg_states, uint32 *restrict offsets, int start_row,
+					 int end_row, const ArrowArray *vector, MemoryContext agg_extra_mctx);
 
-	void (*agg_many_scalar)(void *restrict agg_states, uint32 *restrict offsets, int n,
-							Datum constvalue, bool constisnull, MemoryContext agg_extra_mctx);
+	void (*agg_many_scalar)(void *restrict agg_states, uint32 *restrict offsets, int start_row,
+							int end_row, Datum constvalue, bool constisnull,
+							MemoryContext agg_extra_mctx);
 
 	/* Emit a partial result. */
 	void (*agg_emit)(void *restrict agg_state, Datum *out_result, bool *out_isnull);
