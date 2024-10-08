@@ -1,12 +1,12 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\ir include/setup_hyperstore.sql
+\ir include/setup_hypercore.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set hypertable readings
-\ir hyperstore_helpers.sql
+\ir hypercore_helpers.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
@@ -105,7 +105,7 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
  where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
  order by chunk2 asc
  limit 1 offset 1 \gset
-alter table :chunk1 set access method hyperstore;
+alter table :chunk1 set access method hypercore;
 -- check that all chunks are compressed
 select chunk_name, compression_status from chunk_compression_stats(:'hypertable');
     chunk_name    | compression_status 
@@ -143,7 +143,7 @@ update :hypertable set temp=1.0 where location_id=1;
 cluster :chunk1;
 ERROR:  there is no previously clustered index for table "_hyper_1_1_chunk"
 cluster :hypertable using hypertable_location_id_idx;
-ERROR:  cannot cluster a hyperstore table
+ERROR:  cannot cluster a hypercore table
 \set ON_ERROR_STOP 1
 -- some, but not all, data decompressed
 select count(*) from :cchunk1;

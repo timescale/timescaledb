@@ -2,9 +2,9 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\ir include/setup_hyperstore.sql
+\ir include/setup_hypercore.sql
 
-alter table :chunk1 set access method hyperstore;
+alter table :chunk1 set access method hypercore;
 
 -- check that all chunks are compressed
 select chunk_name, compression_status from chunk_compression_stats(:'hypertable');

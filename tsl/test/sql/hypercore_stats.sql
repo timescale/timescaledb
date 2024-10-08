@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\ir include/setup_hyperstore.sql
+\ir include/setup_hypercore.sql
 
 -- To generate plans consistently.
 set max_parallel_workers_per_gather to 0;
@@ -59,14 +59,14 @@ select * from :chunk1 where location_id = 1;
 explain (analyze, costs off, timing off, summary off)
 select * from normaltable where location_id = 1;
 
--- Changing to hyperstore will update relstats since it process all
+-- Changing to hypercore will update relstats since it process all
 -- the data
-alter table :chunk1 set access method hyperstore;
+alter table :chunk1 set access method hypercore;
 -- Creating an index on normaltable will also update relstats
 create index normaltable_location_id_idx on normaltable (location_id);
 
 -- Relstats should be the same for both tables, except for pages since
--- a hyperstore is compressed. Column stats is not updated.
+-- a hypercore is compressed. Column stats is not updated.
 select * from relstats_compare;
 select * from attrstats_compare;
 
@@ -125,7 +125,7 @@ select * from attrstats_same;
 
 -- ANALYZE also via hypertable root and show that it will recurse to
 -- chunks. Make sure the chunk also has partially compressed data
-alter table :chunk2 set access method hyperstore;
+alter table :chunk2 set access method hypercore;
 update :hypertable set device_id = 2 where device_id = 1;
 select * from relstats where relid = :'chunk2'::regclass;
 select * from attrstats where relid = :'chunk2'::regclass;

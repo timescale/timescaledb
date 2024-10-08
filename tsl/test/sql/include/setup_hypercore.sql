@@ -4,7 +4,7 @@
 
 \set hypertable readings
 
-\ir hyperstore_helpers.sql
+\ir hypercore_helpers.sql
 
 create table :hypertable(
        metric_id serial,

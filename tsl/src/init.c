@@ -34,11 +34,11 @@
 #include "continuous_aggs/utils.h"
 #include "cross_module_fn.h"
 #include "export.h"
-#include "hyperstore/arrow_cache_explain.h"
-#include "hyperstore/arrow_tts.h"
-#include "hyperstore/attr_capture.h"
-#include "hyperstore/hsproxy.h"
-#include "hyperstore/hyperstore_handler.h"
+#include "hypercore/arrow_cache_explain.h"
+#include "hypercore/arrow_tts.h"
+#include "hypercore/attr_capture.h"
+#include "hypercore/hypercore_handler.h"
+#include "hypercore/hypercore_proxy.h"
 #include "hypertable.h"
 #include "license_guc.h"
 #include "nodes/columnar_scan/columnar_scan.h"
@@ -66,7 +66,7 @@ extern void PGDLLEXPORT _PG_init(void);
 static void
 tsl_xact_event(XactEvent event, void *arg)
 {
-	hyperstore_xact_event(event, arg);
+	hypercore_xact_event(event, arg);
 }
 
 /*
@@ -173,8 +173,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.decompress_chunk = tsl_decompress_chunk,
 	.decompress_batches_for_insert = decompress_batches_for_insert,
 	.decompress_target_segments = decompress_target_segments,
-	.hyperstore_handler = hyperstore_handler,
-	.hsproxy_handler = hsproxy_handler,
+	.hypercore_handler = hypercore_handler,
+	.hypercore_proxy_handler = hypercore_proxy_handler,
 	.is_compressed_tid = tsl_is_compressed_tid,
 	.ddl_command_start = tsl_ddl_command_start,
 	.ddl_command_end = tsl_ddl_command_end,

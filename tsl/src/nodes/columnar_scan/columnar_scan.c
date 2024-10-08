@@ -29,8 +29,8 @@
 #include "columnar_scan.h"
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
-#include "hyperstore/arrow_tts.h"
-#include "hyperstore/hyperstore_handler.h"
+#include "hypercore/arrow_tts.h"
+#include "hypercore/hypercore_handler.h"
 #include "import/ts_explain.h"
 #include "nodes/decompress_chunk/vector_quals.h"
 
@@ -140,7 +140,7 @@ vector_qual_state_init(VectorQualState *vqstate, ExprContext *econtext)
  * The scankey quals returned in pass 1 is used for EXPLAIN.
  */
 static List *
-process_scan_key_quals(const HyperstoreInfo *hsinfo, Index relid, const List *quals,
+process_scan_key_quals(const HypercoreInfo *hsinfo, Index relid, const List *quals,
 					   List **remaining_quals, ScanKey scankeys, unsigned scankeys_capacity)
 {
 	List *scankey_quals = NIL;
@@ -269,14 +269,14 @@ process_scan_key_quals(const HyperstoreInfo *hsinfo, Index relid, const List *qu
 }
 
 static List *
-extract_scankey_quals(const HyperstoreInfo *hsinfo, Index relid, const List *quals,
+extract_scankey_quals(const HypercoreInfo *hsinfo, Index relid, const List *quals,
 					  List **remaining_quals)
 {
 	return process_scan_key_quals(hsinfo, relid, quals, remaining_quals, NULL, 0);
 }
 
 static ScanKey
-create_scankeys_from_quals(const HyperstoreInfo *hsinfo, Index relid, const List *quals)
+create_scankeys_from_quals(const HypercoreInfo *hsinfo, Index relid, const List *quals)
 {
 	unsigned capacity = list_length(quals);
 	ScanKey scankeys = palloc0(sizeof(ScanKeyData) * capacity);
@@ -631,7 +631,7 @@ columnar_scan_begin(CustomScanState *state, EState *estate, int eflags)
 
 	if (cstate->nscankeys > 0)
 	{
-		const HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(state->ss.ss_currentRelation);
+		const HypercoreInfo *hsinfo = RelationGetHypercoreInfo(state->ss.ss_currentRelation);
 		Scan *scan = (Scan *) state->ss.ps.plan;
 		cstate->scankeys =
 			create_scankeys_from_quals(hsinfo, scan->scanrelid, cstate->scankey_quals);
@@ -845,11 +845,11 @@ static CustomScanMethods columnar_scan_plan_methods = {
 	.CreateCustomScanState = columnar_scan_state_create,
 };
 
-typedef struct VectorQualInfoHyperstore
+typedef struct VectorQualInfoHypercore
 {
 	VectorQualInfo vqinfo;
-	const HyperstoreInfo *hsinfo;
-} VectorQualInfoHyperstore;
+	const HypercoreInfo *hsinfo;
+} VectorQualInfoHypercore;
 
 static bool *
 columnar_scan_build_vector_attrs(const ColumnCompressionSettings *columns, int numcolumns)
@@ -877,14 +877,14 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_p
 	CustomScan *columnar_scan_plan = makeNode(CustomScan);
 	RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
 	Relation relation = RelationIdGetRelation(rte->relid);
-	HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(relation);
+	HypercoreInfo *hsinfo = RelationGetHypercoreInfo(relation);
 	List *vectorized_quals = NIL;
 	List *nonvectorized_quals = NIL;
 	List *scankey_quals = NIL;
 	List *remaining_quals = NIL;
 	ListCell *lc;
 
-	VectorQualInfoHyperstore vqih = {
+	VectorQualInfoHypercore vqih = {
 		.vqinfo = {
 			.rti = rel->relid,
 			.vector_attrs = columnar_scan_build_vector_attrs(hsinfo->columns, hsinfo->num_columns),

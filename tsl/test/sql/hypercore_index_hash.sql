@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\ir include/setup_hyperstore.sql
+\ir include/setup_hypercore.sql
 
 -- Set the number of parallel workers to zero to disable parallel
 -- plans. This differs between different PG versions.
@@ -35,7 +35,7 @@ $$, :'hypertable'));
 select location_id, count(*) into orig from :hypertable
 where location_id in (3,4,5) group by location_id;
 
-alter table :chunk2 set access method hyperstore;
+alter table :chunk2 set access method hypercore;
 
 --
 -- test that indexes work after updates
@@ -67,7 +67,7 @@ select explain_anonymize(format($$
 $$, :'chunk2'));
 select created_at, location_id, temp from :chunk2 where location_id=1 and temp=2.0;
 
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
 
 vacuum analyze :hypertable;
 

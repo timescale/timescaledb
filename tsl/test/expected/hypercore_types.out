@@ -1,7 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\ir include/hyperstore_helpers.sql
+\ir include/hypercore_helpers.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
@@ -65,7 +65,7 @@ select setseed(1);
 \set the_generator ceil(random()*10)
 \set the_aggregate sum(value)
 \set the_clause value > 0.5
-\ir include/hyperstore_type_table.sql
+\ir include/hypercore_type_table.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
@@ -93,11 +93,11 @@ select setseed(1);
 insert into test_float(created_at, value)
 select t, ceil(random()*10)
 from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
--- Save away the table so that we can make sure that a hyperstore
+-- Save away the table so that we can make sure that a hypercore
 -- table and a heap table produce the same result.
 create table :saved_table as select * from :the_table;
--- Compress the rows in the hyperstore.
-select compress_chunk(show_chunks(:'the_table'), compress_using => 'hyperstore');
+-- Compress the rows in the hypercore.
+select compress_chunk(show_chunks(:'the_table'), compress_using => 'hypercore');
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -106,7 +106,7 @@ select compress_chunk(show_chunks(:'the_table'), compress_using => 'hyperstore')
 (3 rows)
 
 -- This part of the include file will run a query with the aggregate
--- provided by the including file and test that using a hyperstore
+-- provided by the including file and test that using a hypercore
 -- with compressed rows and a normal table produces the same result
 -- for the query with the given aggregate.
 \set ECHO queries
@@ -137,7 +137,7 @@ drop table test_float_saved;
 \set the_generator ceil(random()*10)
 \set the_aggregate sum(value)
 \set the_clause value > 0.5
-\ir include/hyperstore_type_table.sql
+\ir include/hypercore_type_table.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
@@ -165,11 +165,11 @@ select setseed(1);
 insert into test_numeric(created_at, value)
 select t, ceil(random()*10)
 from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
--- Save away the table so that we can make sure that a hyperstore
+-- Save away the table so that we can make sure that a hypercore
 -- table and a heap table produce the same result.
 create table :saved_table as select * from :the_table;
--- Compress the rows in the hyperstore.
-select compress_chunk(show_chunks(:'the_table'), compress_using => 'hyperstore');
+-- Compress the rows in the hypercore.
+select compress_chunk(show_chunks(:'the_table'), compress_using => 'hypercore');
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_3_7_chunk
@@ -178,7 +178,7 @@ select compress_chunk(show_chunks(:'the_table'), compress_using => 'hyperstore')
 (3 rows)
 
 -- This part of the include file will run a query with the aggregate
--- provided by the including file and test that using a hyperstore
+-- provided by the including file and test that using a hypercore
 -- with compressed rows and a normal table produces the same result
 -- for the query with the given aggregate.
 \set ECHO queries
@@ -208,7 +208,7 @@ drop table test_numeric_saved;
 \set the_generator (random() > 0.5)
 \set the_aggregate count(value)
 \set the_clause value = true
-\ir include/hyperstore_type_table.sql
+\ir include/hypercore_type_table.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
@@ -236,11 +236,11 @@ select setseed(1);
 insert into test_bool(created_at, value)
 select t, (random()>0.5)
 from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
--- Save away the table so that we can make sure that a hyperstore
+-- Save away the table so that we can make sure that a hypercore
 -- table and a heap table produce the same result.
 create table :saved_table as select * from :the_table;
--- Compress the rows in the hyperstore.
-select compress_chunk(show_chunks(:'the_table'), compress_using => 'hyperstore');
+-- Compress the rows in the hypercore.
+select compress_chunk(show_chunks(:'the_table'), compress_using => 'hypercore');
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_5_13_chunk
@@ -249,7 +249,7 @@ select compress_chunk(show_chunks(:'the_table'), compress_using => 'hyperstore')
 (3 rows)
 
 -- This part of the include file will run a query with the aggregate
--- provided by the including file and test that using a hyperstore
+-- provided by the including file and test that using a hypercore
 -- with compressed rows and a normal table produces the same result
 -- for the query with the given aggregate.
 \set ECHO queries
@@ -281,7 +281,7 @@ drop table test_bool_saved;
 \set the_generator gen_random_uuid()::text
 \set the_aggregate count(*)
 \set the_clause value = :'my_uuid'
-\ir include/hyperstore_type_table.sql
+\ir include/hypercore_type_table.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
@@ -309,11 +309,11 @@ select setseed(1);
 insert into test_text(created_at, value)
 select t, gen_random_uuid()::text
 from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
--- Save away the table so that we can make sure that a hyperstore
+-- Save away the table so that we can make sure that a hypercore
 -- table and a heap table produce the same result.
 create table :saved_table as select * from :the_table;
--- Compress the rows in the hyperstore.
-select compress_chunk(show_chunks(:'the_table'), compress_using => 'hyperstore');
+-- Compress the rows in the hypercore.
+select compress_chunk(show_chunks(:'the_table'), compress_using => 'hypercore');
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_7_19_chunk
@@ -322,7 +322,7 @@ select compress_chunk(show_chunks(:'the_table'), compress_using => 'hyperstore')
 (3 rows)
 
 -- This part of the include file will run a query with the aggregate
--- provided by the including file and test that using a hyperstore
+-- provided by the including file and test that using a hypercore
 -- with compressed rows and a normal table produces the same result
 -- for the query with the given aggregate.
 \set ECHO queries
@@ -354,7 +354,7 @@ drop table test_text_saved;
 \set the_generator jsonb_build_object(:'a_name',round(random()*100))
 \set the_aggregate sum((value->:'a_name')::int)
 \set the_clause true
-\ir include/hyperstore_type_table.sql
+\ir include/hypercore_type_table.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
@@ -382,11 +382,11 @@ select setseed(1);
 insert into test_jsonb(created_at, value)
 select t, jsonb_build_object('temp',round(random()*100))
 from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
--- Save away the table so that we can make sure that a hyperstore
+-- Save away the table so that we can make sure that a hypercore
 -- table and a heap table produce the same result.
 create table :saved_table as select * from :the_table;
--- Compress the rows in the hyperstore.
-select compress_chunk(show_chunks(:'the_table'), compress_using => 'hyperstore');
+-- Compress the rows in the hypercore.
+select compress_chunk(show_chunks(:'the_table'), compress_using => 'hypercore');
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_9_25_chunk
@@ -395,7 +395,7 @@ select compress_chunk(show_chunks(:'the_table'), compress_using => 'hyperstore')
 (3 rows)
 
 -- This part of the include file will run a query with the aggregate
--- provided by the including file and test that using a hyperstore
+-- provided by the including file and test that using a hypercore
 -- with compressed rows and a normal table produces the same result
 -- for the query with the given aggregate.
 \set ECHO queries
@@ -428,7 +428,7 @@ drop table test_jsonb_saved;
 \set the_generator jsonb_build_object(:'a_name',round(random()*100))
 \set the_aggregate sum((value->:'a_name')::int)
 \set the_clause ((value->:'a_name')::numeric >= 0.5) and ((value->:'a_name')::numeric <= 0.6)
-\ir include/hyperstore_type_table.sql
+\ir include/hypercore_type_table.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
@@ -456,11 +456,11 @@ select setseed(1);
 insert into test_jsonb(created_at, value)
 select t, jsonb_build_object('temp',round(random()*100))
 from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
--- Save away the table so that we can make sure that a hyperstore
+-- Save away the table so that we can make sure that a hypercore
 -- table and a heap table produce the same result.
 create table :saved_table as select * from :the_table;
--- Compress the rows in the hyperstore.
-select compress_chunk(show_chunks(:'the_table'), compress_using => 'hyperstore');
+-- Compress the rows in the hypercore.
+select compress_chunk(show_chunks(:'the_table'), compress_using => 'hypercore');
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_11_31_chunk
@@ -469,7 +469,7 @@ select compress_chunk(show_chunks(:'the_table'), compress_using => 'hyperstore')
 (3 rows)
 
 -- This part of the include file will run a query with the aggregate
--- provided by the including file and test that using a hyperstore
+-- provided by the including file and test that using a hypercore
 -- with compressed rows and a normal table produces the same result
 -- for the query with the given aggregate.
 \set ECHO queries
@@ -502,7 +502,7 @@ drop table test_jsonb_saved;
 \set the_generator gen_random_uuid()::name
 \set the_aggregate count(*)
 \set the_clause value = :'my_uuid'
-\ir include/hyperstore_type_table.sql
+\ir include/hypercore_type_table.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
@@ -530,11 +530,11 @@ select setseed(1);
 insert into test_name(created_at, value)
 select t, gen_random_uuid()::name
 from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
--- Save away the table so that we can make sure that a hyperstore
+-- Save away the table so that we can make sure that a hypercore
 -- table and a heap table produce the same result.
 create table :saved_table as select * from :the_table;
--- Compress the rows in the hyperstore.
-select compress_chunk(show_chunks(:'the_table'), compress_using => 'hyperstore');
+-- Compress the rows in the hypercore.
+select compress_chunk(show_chunks(:'the_table'), compress_using => 'hypercore');
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_13_37_chunk
@@ -543,7 +543,7 @@ select compress_chunk(show_chunks(:'the_table'), compress_using => 'hyperstore')
 (3 rows)
 
 -- This part of the include file will run a query with the aggregate
--- provided by the including file and test that using a hyperstore
+-- provided by the including file and test that using a hypercore
 -- with compressed rows and a normal table produces the same result
 -- for the query with the given aggregate.
 \set ECHO queries

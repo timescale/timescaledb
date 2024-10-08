@@ -115,29 +115,29 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     merge_compress.sql
     cagg_query_using_merge.sql
     cagg_refresh_using_merge.sql
-    hyperstore.sql
-    hyperstore_columnar.sql
-    hyperstore_copy.sql
-    hyperstore_create.sql
-    hyperstore_cursor.sql
-    hyperstore_ddl.sql
-    hyperstore_delete.sql
-    hyperstore_index_btree.sql
-    hyperstore_index_hash.sql
-    hyperstore_insert.sql
-    hyperstore_join.sql
-    hyperstore_merge.sql
-    hyperstore_policy.sql
-    hyperstore_scans.sql
-    hyperstore_stats.sql
-    hyperstore_types.sql
-    hyperstore_update.sql
-    hyperstore_vacuum.sql
-    hyperstore_vacuum_full.sql)
+    hypercore.sql
+    hypercore_columnar.sql
+    hypercore_copy.sql
+    hypercore_create.sql
+    hypercore_cursor.sql
+    hypercore_ddl.sql
+    hypercore_delete.sql
+    hypercore_index_btree.sql
+    hypercore_index_hash.sql
+    hypercore_insert.sql
+    hypercore_join.sql
+    hypercore_merge.sql
+    hypercore_policy.sql
+    hypercore_scans.sql
+    hypercore_stats.sql
+    hypercore_types.sql
+    hypercore_update.sql
+    hypercore_vacuum.sql
+    hypercore_vacuum_full.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
-  list(APPEND TEST_FILES hyperstore_parallel.sql)
+  list(APPEND TEST_FILES hypercore_parallel.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))

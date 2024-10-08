@@ -44,9 +44,9 @@
 #include "debug_point.h"
 #include "error_utils.h"
 #include "errors.h"
+#include "hypercore/hypercore_handler.h"
+#include "hypercore/utils.h"
 #include "hypercube.h"
-#include "hyperstore/hyperstore_handler.h"
-#include "hyperstore/utils.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "scan_iterator.h"
@@ -448,7 +448,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		EventTriggerAlterTableStart(create_dummy_query());
 		/* create compressed chunk and a new table */
 		compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, InvalidOid);
-		/* Associate compressed chunk with main chunk. Needed for Hyperstore
+		/* Associate compressed chunk with main chunk. Needed for Hypercore
 		 * TAM to not recreate the compressed chunk again when the main chunk
 		 * rel is opened. */
 		ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id);
@@ -759,21 +759,21 @@ set_access_method(Oid relid, const char *amname)
 		.subtype = AT_SetAccessMethod,
 		.name = pstrdup(amname),
 	};
-	bool to_hyperstore = strcmp(amname, "hyperstore") == 0;
+	bool to_hypercore = strcmp(amname, TS_HYPERCORE_TAM_NAME) == 0;
 	Oid amoid = ts_get_rel_am(relid);
 
 	/* Setting the same access method is a no-op */
 	if (amoid == get_am_oid(amname, false))
 		return relid;
 
-	hyperstore_alter_access_method_begin(relid, !to_hyperstore);
+	hypercore_alter_access_method_begin(relid, !to_hypercore);
 	AlterTableInternal(relid, list_make1(&cmd), false);
-	hyperstore_alter_access_method_finish(relid, !to_hyperstore);
+	hypercore_alter_access_method_finish(relid, !to_hypercore);
 
 #else
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("compression using hyperstore is not supported")));
+			 errmsg("compression using hypercore is not supported")));
 #endif
 	return relid;
 }
@@ -793,45 +793,45 @@ parse_use_access_method(const char *compress_using)
 
 	if (strcmp(compress_using, "heap") == 0)
 		return USE_AM_FALSE;
-	else if (strcmp(compress_using, "hyperstore") == 0)
+	else if (strcmp(compress_using, TS_HYPERCORE_TAM_NAME) == 0)
 		return USE_AM_TRUE;
 
 	ereport(ERROR,
 			(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-			 errmsg("can only compress using \"heap\" or \"hyperstore\"")));
+			 errmsg("can only compress using \"heap\" or \"%s\"", TS_HYPERCORE_TAM_NAME)));
 
 	pg_unreachable();
 }
 
 /*
- * When using compress_chunk() with hyperstore, there are three cases to
+ * When using compress_chunk() with hypercore, there are three cases to
  * handle:
  *
- * 1. Convert from (uncompressed) heap to hyperstore
+ * 1. Convert from (uncompressed) heap to hypercore
  *
- * 2. Convert from compressed heap to hyperstore
+ * 2. Convert from compressed heap to hypercore
  *
- * 3. Recompress a hyperstore
+ * 3. Recompress a hypercore
  */
 static Oid
-compress_hyperstore(Chunk *chunk, bool rel_is_hyperstore, enum UseAccessMethod useam,
-					bool if_not_compressed, bool recompress)
+compress_hypercore(Chunk *chunk, bool rel_is_hypercore, enum UseAccessMethod useam,
+				   bool if_not_compressed, bool recompress)
 {
 	Oid relid = InvalidOid;
 
-	/* Either the chunk is already a hyperstore (and in that case recompress),
+	/* Either the chunk is already a hypercore (and in that case recompress),
 	 * or it is being converted to one */
-	Assert(rel_is_hyperstore || useam == USE_AM_TRUE);
+	Assert(rel_is_hypercore || useam == USE_AM_TRUE);
 
-	if (ts_chunk_is_compressed(chunk) && !rel_is_hyperstore)
+	if (ts_chunk_is_compressed(chunk) && !rel_is_hypercore)
 	{
 		Assert(useam == USE_AM_TRUE);
 		char *relname = get_rel_name(chunk->table_id);
 		char *relschema = get_namespace_name(get_rel_namespace(chunk->table_id));
 		const RangeVar *rv = makeRangeVar(relschema, relname, -1);
-		/* Do quick migration to hyperstore of already compressed data by
-		 * simply changing the access method to hyperstore in pg_am. */
-		hyperstore_set_am(rv);
+		/* Do quick migration to hypercore of already compressed data by
+		 * simply changing the access method to hypercore in pg_am. */
+		hypercore_set_am(rv);
 		return chunk->table_id;
 	}
 
@@ -839,21 +839,21 @@ compress_hyperstore(Chunk *chunk, bool rel_is_hyperstore, enum UseAccessMethod u
 	{
 		case USE_AM_FALSE:
 			elog(NOTICE,
-				 "cannot compress hyperstore \"%s\" using heap, recompressing instead",
+				 "cannot compress hypercore \"%s\" using heap, recompressing instead",
 				 get_rel_name(chunk->table_id));
 			TS_FALLTHROUGH;
 		case USE_AM_NULL:
-			Assert(rel_is_hyperstore);
+			Assert(rel_is_hypercore);
 			relid = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
 			break;
 		case USE_AM_TRUE:
-			if (rel_is_hyperstore)
+			if (rel_is_hypercore)
 				relid = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
 			else
 			{
-				/* Convert to a compressed hyperstore by simply calling ALTER TABLE
-				 * <chunk> SET ACCESS METHOD hyperstore */
-				set_access_method(chunk->table_id, "hyperstore");
+				/* Convert to a compressed hypercore by simply calling ALTER TABLE
+				 * <chunk> SET ACCESS METHOD hypercore */
+				set_access_method(chunk->table_id, TS_HYPERCORE_TAM_NAME);
 				relid = chunk->table_id;
 			}
 			break;
@@ -874,12 +874,12 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
-	bool rel_is_hyperstore = get_table_am_oid("hyperstore", false) == chunk->amoid;
+	bool rel_is_hypercore = get_table_am_oid(TS_HYPERCORE_TAM_NAME, false) == chunk->amoid;
 	enum UseAccessMethod useam = parse_use_access_method(compress_using);
 
-	if (rel_is_hyperstore || useam == USE_AM_TRUE)
+	if (rel_is_hypercore || useam == USE_AM_TRUE)
 		uncompressed_chunk_id =
-			compress_hyperstore(chunk, rel_is_hyperstore, useam, if_not_compressed, recompress);
+			compress_hypercore(chunk, rel_is_hypercore, useam, if_not_compressed, recompress);
 	else
 		uncompressed_chunk_id = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
 
@@ -1567,10 +1567,10 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 	/* changed chunk status, so invalidate any plans involving this chunk */
 	CacheInvalidateRelcacheByRelid(uncompressed_chunk_id);
 
-	/* Need to rebuild indexes if the relation is using hyperstore
+	/* Need to rebuild indexes if the relation is using hypercore
 	 * TAM. Alternatively, we could insert into indexes when inserting into
 	 * the compressed rel. */
-	if (uncompressed_chunk_rel->rd_tableam == hyperstore_routine())
+	if (uncompressed_chunk_rel->rd_tableam == hypercore_routine())
 	{
 		ReindexParams params = {
 			.options = 0,

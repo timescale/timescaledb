@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-show timescaledb.hyperstore_indexam_whitelist;
+show timescaledb.hypercore_indexam_whitelist;
 set role :ROLE_DEFAULT_PERM_USER;
 
 SET timescaledb.arrow_cache_maxsize = 4;
@@ -63,7 +63,7 @@ WHERE location = 1;
 
 -- We should be able to set the table access method for a chunk, which
 -- will automatically compress the chunk.
-ALTER TABLE :chunk SET ACCESS METHOD hyperstore;
+ALTER TABLE :chunk SET ACCESS METHOD hypercore;
 SET timescaledb.enable_transparent_decompression TO false;
 
 vacuum analyze readings;
@@ -131,7 +131,7 @@ SET enable_indexscan = false;
 
 -- Compare the output to transparent decompression. Heap output is
 -- shown further down.
-SET timescaledb.enable_transparent_decompression TO 'hyperstore';
+SET timescaledb.enable_transparent_decompression TO 'hypercore';
 EXPLAIN (costs off, timing off, summary off)
 SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
 SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
@@ -154,7 +154,7 @@ SET enable_seqscan = true;
 SET timescaledb.enable_columnarscan = true;
 
 -- With transparent decompression
-SET timescaledb.enable_transparent_decompression TO 'hyperstore';
+SET timescaledb.enable_transparent_decompression TO 'hypercore';
 SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
 SET timescaledb.enable_transparent_decompression TO false;
 
@@ -165,7 +165,7 @@ SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
 SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
 
 -- Show with transparent decompression
-SET timescaledb.enable_transparent_decompression TO 'hyperstore';
+SET timescaledb.enable_transparent_decompression TO 'hypercore';
 SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
 SET timescaledb.enable_transparent_decompression TO false;
 
@@ -182,7 +182,7 @@ FROM _timescaledb_catalog.chunk c1
 INNER JOIN _timescaledb_catalog.chunk c2
 ON (c1.compressed_chunk_id = c2.id);
 ALTER TABLE :chunk SET ACCESS METHOD heap;
-SET timescaledb.enable_transparent_decompression TO 'hyperstore';
+SET timescaledb.enable_transparent_decompression TO 'hypercore';
 
 -- The compressed chunk should no longer exist
 SELECT format('%I.%I', c2.schema_name, c2.table_name)::regclass AS cchunk
@@ -224,9 +224,9 @@ SELECT device, count(*) INTO decomp FROM readings GROUP BY device;
 SELECT device, orig.count AS orig_count, decomp.count AS decomp_count, (decomp.count - orig.count) AS diff
 FROM orig JOIN decomp USING (device) WHERE orig.count != decomp.count;
 
--- Convert back to hyperstore to check that metadata was cleaned up
--- from last time this table used hyperstore
-ALTER TABLE :chunk SET ACCESS METHOD hyperstore;
+-- Convert back to hypercore to check that metadata was cleaned up
+-- from last time this table used hypercore
+ALTER TABLE :chunk SET ACCESS METHOD hypercore;
 SET timescaledb.enable_transparent_decompression TO false;
 
 -- Get the chunk's corresponding compressed chunk

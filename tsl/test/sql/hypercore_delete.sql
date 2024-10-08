@@ -15,9 +15,9 @@ insert into metrics values ('2024-01-01', 1, 1, 1.0), ('2024-01-01', 2, 2, 2.0),
 alter table metrics add constraint device_fk foreign key (device) references devices (id) on delete cascade;
 alter table metrics set (timescaledb.compress_segmentby = 'device');
 
--- Make the one chunk a Hyperstore
+-- Make the one chunk a Hypercore
 select ch as chunk from show_chunks('metrics') ch limit 1 \gset
-alter table :chunk set access method hyperstore;
+alter table :chunk set access method hypercore;
 
 -- Show that all data is compressed
 select _timescaledb_debug.is_compressed_tid(ctid) as compressed, * from metrics order by time, device;

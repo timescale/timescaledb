@@ -2,12 +2,12 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER;
-\ir include/setup_hyperstore.sql
+\ir include/setup_hypercore.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set hypertable readings
-\ir hyperstore_helpers.sql
+\ir hypercore_helpers.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
@@ -110,8 +110,8 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
 set enable_mergejoin to false;
 set enable_hashjoin to false;
 -- There are already tests to merge into uncompressed tables, so just
--- compress all chunks using Hyperstore.
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+-- compress all chunks using Hypercore.
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -220,7 +220,7 @@ humidity    | 1
 \x off
 -- Recompress all and try to insert the same rows again. This there
 -- should be no rows inserted.
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
 NOTICE:  chunk "_hyper_1_2_chunk" is already compressed
 NOTICE:  chunk "_hyper_1_3_chunk" is already compressed
 NOTICE:  chunk "_hyper_1_4_chunk" is already compressed

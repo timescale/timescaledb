@@ -1,12 +1,12 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\ir include/setup_hyperstore.sql
+\ir include/setup_hypercore.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set hypertable readings
-\ir hyperstore_helpers.sql
+\ir hypercore_helpers.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
@@ -107,7 +107,7 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
  limit 1 offset 1 \gset
 -- To generate plans consistently.
 set max_parallel_workers_per_gather to 0;
--- Create a function that uses a cursor to scan the the Hyperstore
+-- Create a function that uses a cursor to scan the the Hypercore
 -- table. This should work equivalent to a query on the same table.
 create function location_humidity_for(
        in p_owner integer,
@@ -139,7 +139,7 @@ begin
 end;
 $$
 language plpgsql;
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -236,7 +236,7 @@ NOTICE:  adding not-null constraint to column "time"
 
 alter table backward_cursor set (timescaledb.compress, timescaledb.compress_segmentby='location_id', timescaledb.compress_orderby='time asc');
 insert into backward_cursor values ('2024-01-01 01:00', 1, 1.0), ('2024-01-01 02:00', 1, 2.0), ('2024-01-01 03:00', 2, 3.0), ('2024-01-01 04:00', 2, 4.0);
-select compress_chunk(ch, compress_using=>'hyperstore') from show_chunks('backward_cursor') ch;
+select compress_chunk(ch, compress_using=>'hypercore') from show_chunks('backward_cursor') ch;
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_3_13_chunk

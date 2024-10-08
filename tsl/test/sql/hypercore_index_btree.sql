@@ -6,7 +6,7 @@
 create extension pageinspect;
 set role :ROLE_DEFAULT_PERM_USER;
 
-\ir include/setup_hyperstore.sql
+\ir include/setup_hypercore.sql
 
 -- Avoid parallel (index) scans to make test stable
 set max_parallel_workers_per_gather to 0;
@@ -43,7 +43,7 @@ create index hypertable_device_id_idx on :hypertable (device_id) include (humidi
 create index hypertable_owner_idx on :hypertable (owner_id);
 create index hypertable_location_id_owner_id_idx on :hypertable (location_id, owner_id);
 
--- Save index size before switching to hyperstore so that we can
+-- Save index size before switching to hypercore so that we can
 -- compare sizes after. Don't show the actual sizes because it varies
 -- slightly on different platforms.
 create table index_sizes_before as
@@ -53,12 +53,12 @@ where chunk::regclass = :'chunk2'::regclass
 and (attname='location_id' or attname='device_id' or attname='owner_id');
 
 -- Drop some segmentby indexes and recreate them after converting to
--- hyperstore. This is to test having some created before conversion
+-- hypercore. This is to test having some created before conversion
 -- and some after.
 drop index hypertable_owner_idx;
 drop index hypertable_location_id_owner_id_idx;
 
-alter table :chunk2 set access method hyperstore;
+alter table :chunk2 set access method hypercore;
 
 -- count without indexes
 select owner_id, count(*) into owner_orig from :hypertable
@@ -77,7 +77,7 @@ select owner_id, count(*) into owner_comp from :hypertable
 where owner_id in (3,4,5) group by owner_id;
 select * from owner_orig join owner_comp using (owner_id) where owner_orig.count != owner_comp.count;
 
--- the indexes on segmentby columns should be smaller on hyperstore,
+-- the indexes on segmentby columns should be smaller on hypercore,
 -- except for the covering index on location_id (because it also
 -- includes the non-segmentby column humidity).  The device_id index
 -- should also remain the same size since it is not on a segmentby
@@ -131,7 +131,7 @@ select explain_anonymize(format($$
 $$, :'chunk2'));
 select created_at, location_id, temp from :chunk2 where location_id=1 and temp=2.0;
 
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
 
 vacuum analyze :hypertable;
 
@@ -191,9 +191,9 @@ select explain_analyze_anonymize(format($$
 $$, :'hypertable'));
 
 -- We just compare the counts here, not the full content.
-select heapam.count as heapam, hyperstore.count as hyperstore
+select heapam.count as heapam, hypercore.count as hypercore
   from (select count(location_id) from :hypertable where location_id between 5 and 10) heapam,
-       (select count(location_id) from :hypertable where location_id between 5 and 10) hyperstore;
+       (select count(location_id) from :hypertable where location_id between 5 and 10) hypercore;
 
 drop table saved_hypertable;
 
@@ -239,7 +239,7 @@ $$, :'chunk1'));
 \set VERBOSITY default
 
 ---
--- Test that building a UNIQUE index won't work on a hyperstore table
+-- Test that building a UNIQUE index won't work on a hypercore table
 -- that contains non-unique values.
 ---
 create table non_unique_metrics (time timestamptz, temp float, device int);
@@ -247,11 +247,11 @@ select create_hypertable('non_unique_metrics', 'time', create_default_indexes =>
 insert into non_unique_metrics values ('2024-01-01', 1.0, 1), ('2024-01-01', 2.0, 1), ('2024-01-02', 3.0, 2);
 select ch as non_unique_chunk from show_chunks('non_unique_metrics') ch limit 1 \gset
 alter table non_unique_metrics set (timescaledb.compress_segmentby = 'device', timescaledb.compress_orderby = 'time');
-alter table :non_unique_chunk set access method hyperstore;
+alter table :non_unique_chunk set access method hypercore;
 
 \set ON_ERROR_STOP 0
 ---
--- UNIQUE index creation on compressed hyperstore should fail due to
+-- UNIQUE index creation on compressed hypercore should fail due to
 -- non-unique values
 ---
 create unique index on non_unique_metrics (time);
@@ -369,8 +369,8 @@ create table only_nulls_null as
 select * from nullvalues where only_nulls is null;
 select * from only_nulls_null;
 
--- Convert all chunks to hyperstore and run same queries
-select compress_chunk(ch, compress_using=>'hyperstore') from show_chunks('nullvalues') ch;
+-- Convert all chunks to hypercore and run same queries
+select compress_chunk(ch, compress_using=>'hypercore') from show_chunks('nullvalues') ch;
 
 select c.relname, a.amname FROM pg_class c
 join pg_am a on (c.relam = a.oid)
@@ -378,7 +378,7 @@ join show_chunks('nullvalues') ch on (ch = c.oid);
 
 -- The explains should be index scans and there should be no rows
 -- returned if the result is the same as before when the chunks where
--- not hyperstores.
+-- not hypercores.
 explain (costs off) select * from nullvalues where location is not null;
 select * from nullvalues where location is not null
 except

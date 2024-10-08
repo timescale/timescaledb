@@ -16,16 +16,17 @@
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 
+#include "extension_constants.h"
 #include "utils.h"
 #include <src/utils.h>
 
 /*
- * Make a relation use hyperstore without rewriting any data, simply by
+ * Make a relation use hypercore without rewriting any data, simply by
  * updating the AM in pg_class. This only works if the relation is already
- * using (non-hyperstore) compression.
+ * using (non-hypercore) compression.
  */
 void
-hyperstore_set_am(const RangeVar *rv)
+hypercore_set_am(const RangeVar *rv)
 {
 	HeapTuple tp;
 	Oid relid = RangeVarGetRelid(rv, NoLock, false);
@@ -34,12 +35,12 @@ hyperstore_set_am(const RangeVar *rv)
 	if (HeapTupleIsValid(tp))
 	{
 		Form_pg_class reltup = (Form_pg_class) GETSTRUCT(tp);
-		Oid hyperstore_amoid = get_table_am_oid("hyperstore", false);
+		Oid hypercore_amoid = get_table_am_oid(TS_HYPERCORE_TAM_NAME, false);
 		Relation class_rel = table_open(RelationRelationId, RowExclusiveLock);
 
-		elog(DEBUG1, "migrating table \"%s\" to hyperstore", get_rel_name(relid));
+		elog(DEBUG1, "migrating table \"%s\" to hypercore", get_rel_name(relid));
 
-		reltup->relam = hyperstore_amoid;
+		reltup->relam = hypercore_amoid;
 		/* Set the new table access method */
 		CatalogTupleUpdate(class_rel, &tp->t_self, tp);
 		/* Also update pg_am dependency for the relation */
@@ -49,7 +50,7 @@ hyperstore_set_am(const RangeVar *rv)
 		};
 		ObjectAddress referenced = {
 			.classId = AccessMethodRelationId,
-			.objectId = hyperstore_amoid,
+			.objectId = hypercore_amoid,
 		};
 
 		recordDependencyOn(&depender, &referenced, DEPENDENCY_NORMAL);

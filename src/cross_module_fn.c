@@ -79,8 +79,8 @@ CROSSMODULE_WRAPPER(array_compressor_finish);
 CROSSMODULE_WRAPPER(create_compressed_chunk);
 CROSSMODULE_WRAPPER(compress_chunk);
 CROSSMODULE_WRAPPER(decompress_chunk);
-CROSSMODULE_WRAPPER(hyperstore_handler);
-CROSSMODULE_WRAPPER(hsproxy_handler);
+CROSSMODULE_WRAPPER(hypercore_handler);
+CROSSMODULE_WRAPPER(hypercore_proxy_handler);
 
 /* continuous aggregate */
 CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
@@ -99,7 +99,7 @@ CROSSMODULE_WRAPPER(chunk_create_empty_table);
 CROSSMODULE_WRAPPER(recompress_chunk_segmentwise);
 CROSSMODULE_WRAPPER(get_compressed_chunk_index_for_recompression);
 
-/* hyperstore */
+/* hypercore */
 CROSSMODULE_WRAPPER(is_compressed_tid);
 
 /*
@@ -120,7 +120,7 @@ error_no_default_fn_community(void)
 }
 
 static bytea *
-error_hsproxy_index_options(Datum reloptions, bool validate)
+error_hypercore_proxy_index_options(Datum reloptions, bool validate)
 {
 	error_no_default_fn_community();
 	return NULL;
@@ -133,14 +133,14 @@ error_hsproxy_index_options(Datum reloptions, bool validate)
  * parsing index options instead.
  */
 static Datum
-error_pg_community_hsproxy_handler(PG_FUNCTION_ARGS)
+error_pg_community_hypercore_proxy_handler(PG_FUNCTION_ARGS)
 {
 	IndexAmRoutine *amroutine = makeNode(IndexAmRoutine);
 
 	amroutine->amstrategies = 0;
 	amroutine->amsupport = 1;
 	amroutine->amoptsprocnum = 0;
-	amroutine->amoptions = error_hsproxy_index_options;
+	amroutine->amoptions = error_hypercore_proxy_index_options;
 
 	PG_RETURN_POINTER(amroutine);
 }
@@ -395,8 +395,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.dictionary_compressor_finish = error_no_default_fn_pg_community,
 	.array_compressor_append = error_no_default_fn_pg_community,
 	.array_compressor_finish = error_no_default_fn_pg_community,
-	.hyperstore_handler = error_no_default_fn_pg_community,
-	.hsproxy_handler = error_pg_community_hsproxy_handler,
+	.hypercore_handler = error_no_default_fn_pg_community,
+	.hypercore_proxy_handler = error_pg_community_hypercore_proxy_handler,
 	.is_compressed_tid = error_no_default_fn_pg_community,
 
 	.show_chunk = error_no_default_fn_pg_community,

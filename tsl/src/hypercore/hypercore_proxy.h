@@ -8,5 +8,5 @@
 #include <postgres.h>
 #include <fmgr.h>
 
-extern void _hsproxy_init(void);
-extern Datum hsproxy_handler(PG_FUNCTION_ARGS);
+extern void _hypercore_proxy_init(void);
+extern Datum hypercore_proxy_handler(PG_FUNCTION_ARGS);

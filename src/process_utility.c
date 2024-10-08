@@ -727,7 +727,7 @@ add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
 		makeVacuumRelation(chunk_range_var, chunk_relid, ctx->ht_vacuum_rel->va_cols);
 	ctx->chunk_rels = lappend(ctx->chunk_rels, chunk_vacuum_rel);
 
-	/* If we have a compressed chunk and the chunk is not using hyperstore
+	/* If we have a compressed chunk and the chunk is not using hypercore
 	 * access method, make sure to analyze it as well */
 	if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID && !ts_is_hypercore_am(chunk->amoid))
 	{
@@ -2531,11 +2531,11 @@ process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	hypertable_index_rel = index_open(info->obj.objectId, AccessShareLock);
 	indexinfo = BuildIndexInfo(hypertable_index_rel);
 
-	/* Hyperstore does not support arbitrary index, so abort if a non-approved
+	/* Hypercore does not support arbitrary index, so abort if a non-approved
 	 * index type is used.
 	 *
 	 * We are using a whitelist rather than a blacklist because supporting
-	 * indexes on Hyperstore requires special considerations given its
+	 * indexes on Hypercore requires special considerations given its
 	 * dual-heap implementation. */
 	if (ts_is_hypercore_am(chunk->amoid))
 	{
@@ -2545,7 +2545,7 @@ process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 			ereport(ERROR,
 					errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					errmsg("index access method \"%s\" not supported", amname),
-					errdetail("Available candidates: %s", ts_guc_hyperstore_indexam_whitelist));
+					errdetail("Available candidates: %s", ts_guc_hypercore_indexam_whitelist));
 	}
 
 	if (chunk_index_columns_changed(info->extended_options.n_ht_atts, RelationGetDescr(chunk_rel)))
@@ -3495,7 +3495,7 @@ process_set_access_method(AlterTableCmd *cmd, ProcessUtilityArgs *args)
 	Oid relid = AlterTableLookupRelation(stmt, NoLock);
 	Cache *hcache;
 	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
-	if (ht && (strcmp(cmd->name, "hyperstore") == 0))
+	if (ht && (strcmp(cmd->name, TS_HYPERCORE_TAM_NAME) == 0))
 	{
 		/* For hypertables, we automatically add command to set the
 		 * compression flag if we are setting the access method to be a
@@ -4369,21 +4369,23 @@ process_create_stmt(ProcessUtilityArgs *args)
 {
 	CreateStmt *stmt = castNode(CreateStmt, args->parsetree);
 
-	if (stmt->accessMethod && strcmp(stmt->accessMethod, "hyperstore") == 0)
+	if (stmt->accessMethod && strcmp(stmt->accessMethod, TS_HYPERCORE_TAM_NAME) == 0)
 		ereport(ERROR,
 				errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				errmsg("hyperstore access method not supported on \"%s\"", stmt->relation->relname),
-				errdetail("The hyperstore access method is only supported for hypertables."),
+				errmsg("hypercore access method not supported on \"%s\"", stmt->relation->relname),
+				errdetail("The hypercore access method is only supported for hypertables."),
 				errhint("Create a hypertable from a table using another access method (e.g., heap),"
-						" then use \"ALTER TABLE\" to set the access method to hyperstore."));
+						" then use \"ALTER TABLE\" to set the access method to hypercore."));
 
-	if (default_table_access_method && strcmp(default_table_access_method, "hyperstore") == 0)
+	if (default_table_access_method &&
+		strcmp(default_table_access_method, TS_HYPERCORE_TAM_NAME) == 0)
 		ereport(ERROR,
 				errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				errmsg("hyperstore access method not supported on \"%s\"", stmt->relation->relname),
-				errdetail("The hyperstore access method is only supported for hypertables."),
+				errmsg("hypercore access method not supported on \"%s\"", stmt->relation->relname),
+				errdetail("The hypercore access method is only supported for hypertables."),
 				errhint("It does not make sense to set the default access method for all tables "
-						"to \"hyperstore\" since it is only supported for hypertables."));
+						"to \"%s\" since it is only supported for hypertables.",
+						TS_HYPERCORE_TAM_NAME));
 
 	return DDL_CONTINUE;
 }

@@ -283,10 +283,10 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 	}
 
 	if (compress_using != NULL && strcmp(compress_using, "heap") != 0 &&
-		strcmp(compress_using, "hyperstore") != 0)
+		strcmp(compress_using, TS_HYPERCORE_TAM_NAME) != 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("can only compress using \"heap\" or \"hyperstore\"")));
+				 errmsg("can only compress using \"heap\" or \"%s\"", TS_HYPERCORE_TAM_NAME)));
 
 	/* insert a new job into jobs table */
 	namestrcpy(&application_name, "Compression Policy");

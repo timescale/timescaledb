@@ -36,7 +36,7 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk
   from timescaledb_information.chunks
  where format('%I.%I', hypertable_schema, hypertable_name)::regclass = 'readings'::regclass
  limit 1 \gset
-alter table :chunk set access method hyperstore;
+alter table :chunk set access method hypercore;
 --
 -- Check that TID scan works for both compressed and non-compressed
 -- rows.

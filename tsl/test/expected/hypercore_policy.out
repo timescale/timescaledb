@@ -32,7 +32,7 @@ set timezone to pst8pdt;
 select add_compression_policy('readings',
                               compress_after => '1000 years'::interval,
                               compress_using => 'foo');
-ERROR:  can only compress using "heap" or "hyperstore"
+ERROR:  can only compress using "heap" or "hypercore"
 \set ON_ERROR_STOP 1
 -- Check that compress_using is not part of the policy if not set. Use
 -- a large compress_after to ensure the policy doesn't do anything at
@@ -80,23 +80,23 @@ order by chunk;
 -- Check that compress_using is part of the policy config when non-NULL
 select add_compression_policy('readings',
                               compress_after => '1 day'::interval,
-                              compress_using => 'hyperstore')
+                              compress_using => 'hypercore')
 as compression_job \gset
 select config from timescaledb_information.jobs where job_id = :compression_job;
-                                      config                                       
------------------------------------------------------------------------------------
- {"hypertable_id": 1, "compress_after": "@ 1 day", "compress_using": "hyperstore"}
+                                      config                                      
+----------------------------------------------------------------------------------
+ {"hypertable_id": 1, "compress_after": "@ 1 day", "compress_using": "hypercore"}
 (1 row)
 
 -- Make sure the policy runs
 call run_job(:'compression_job');
--- After policy run all the chunks should be hyperstores
+-- After policy run all the chunks should be hypercores
 select * from chunk_info
 where hypertable = 'readings'
 order by chunk;
- hypertable |      chunk       |   amname   | is_compressed 
-------------+------------------+------------+---------------
- readings   | _hyper_1_1_chunk | hyperstore | t
+ hypertable |      chunk       |  amname   | is_compressed 
+------------+------------------+-----------+---------------
+ readings   | _hyper_1_1_chunk | hypercore | t
 (1 row)
 
 select remove_compression_policy('readings');
@@ -116,8 +116,8 @@ where time = '2022-06-01 10:14' and device = 1;
  f                 | Wed Jun 01 10:14:00 2022 PDT |      1 |    1
 (1 row)
 
--- Add a new policy that doesn't specify hyperstore. It should still
--- recompress hyperstores.
+-- Add a new policy that doesn't specify hypercore. It should still
+-- recompress hypercores.
 select add_compression_policy('readings',
                               compress_after => '1 day'::interval,
                               compress_using => 'heap')
@@ -157,31 +157,31 @@ select remove_compression_policy('readings');
  t
 (1 row)
 
--- Insert one value into existing hyperstore, also create a new non-hyperstore chunk
+-- Insert one value into existing hypercore, also create a new non-hypercore chunk
 insert into readings values ('2022-06-01 10:14', 1, 1.0), ('2022-07-01 10:14', 2, 2.0);
 -- The new chunk should be heap and not compressed
 select * from chunk_info
 where hypertable = 'readings'
 order by chunk;
- hypertable |      chunk       |   amname   | is_compressed 
-------------+------------------+------------+---------------
- readings   | _hyper_1_1_chunk | hyperstore | t
- readings   | _hyper_1_3_chunk | heap       | f
+ hypertable |      chunk       |  amname   | is_compressed 
+------------+------------------+-----------+---------------
+ readings   | _hyper_1_1_chunk | hypercore | t
+ readings   | _hyper_1_3_chunk | heap      | f
 (2 rows)
 
 select add_compression_policy('readings',
                               compress_after => '1 day'::interval)
 as compression_job \gset
--- Run the policy job to recompress hyperstores and compress the new
--- chunk using non-hyperstore compression
+-- Run the policy job to recompress hypercores and compress the new
+-- chunk using non-hypercore compression
 call run_job(:'compression_job');
 select * from chunk_info
 where hypertable = 'readings'
 order by chunk;
- hypertable |      chunk       |   amname   | is_compressed 
-------------+------------------+------------+---------------
- readings   | _hyper_1_1_chunk | hyperstore | t
- readings   | _hyper_1_3_chunk | heap       | t
+ hypertable |      chunk       |  amname   | is_compressed 
+------------+------------------+-----------+---------------
+ readings   | _hyper_1_1_chunk | hypercore | t
+ readings   | _hyper_1_3_chunk | heap      | t
 (2 rows)
 
 select remove_compression_policy('readings');
@@ -203,7 +203,7 @@ select timescaledb_experimental.add_policies('daily',
        refresh_start_offset => '8 days'::interval,
        refresh_end_offset => '1 day'::interval,
        compress_after => '9 days'::interval,
-       compress_using => 'hyperstore');
+       compress_using => 'hypercore');
  add_policies 
 --------------
  t
@@ -226,8 +226,8 @@ call run_job(:'cagg_compression_job');
 select * from chunk_info
 where hypertable = :'mathyper'
 order by chunk;
-         hypertable         |      chunk       |   amname   | is_compressed 
-----------------------------+------------------+------------+---------------
- _materialized_hypertable_3 | _hyper_3_5_chunk | hyperstore | t
+         hypertable         |      chunk       |  amname   | is_compressed 
+----------------------------+------------------+-----------+---------------
+ _materialized_hypertable_3 | _hyper_3_5_chunk | hypercore | t
 (1 row)
 
