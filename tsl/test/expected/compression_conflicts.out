@@ -37,7 +37,7 @@ INSERT INTO comp_conflicts_1 VALUES
 ROLLBACK;
 SELECT compress_chunk(c) AS "CHUNK" FROM show_chunks('comp_conflicts_1') c
 \gset
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
 -- after compression no data should be in uncompressed chunk
 SELECT count(*) FROM ONLY :CHUNK;
  count 
@@ -123,7 +123,7 @@ INSERT INTO comp_conflicts_2 VALUES ('2020-01-01','d1',0.1);
 INSERT INTO comp_conflicts_2 VALUES ('2020-01-01','d2',0.2);
 SELECT compress_chunk(c) AS "CHUNK" FROM show_chunks('comp_conflicts_2') c
 \gset
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_3_3_chunk" for compression
 -- after compression no data should be in uncompressed chunk
 SELECT count(*) FROM ONLY :CHUNK;
  count 
@@ -212,7 +212,7 @@ INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d2', 'label', 0.2);
 INSERT INTO comp_conflicts_3 VALUES ('2020-01-01',NULL, 'label', 0.3);
 SELECT compress_chunk(c) AS "CHUNK" FROM show_chunks('comp_conflicts_3') c
 \gset
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_5_5_chunk" for compression
 -- after compression no data should be in uncompressed chunk
 SELECT count(*) FROM ONLY :CHUNK;
  count 
@@ -465,7 +465,7 @@ INSERT INTO comp_conflicts_4 VALUES ('2020-01-01','d2',0.2);
 INSERT INTO comp_conflicts_4 VALUES ('2020-01-01',NULL,0.3);
 SELECT compress_chunk(c) AS "CHUNK" FROM show_chunks('comp_conflicts_4') c
 \gset
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_7_7_chunk" for compression
 -- after compression no data should be in uncompressed chunk
 SELECT count(*) FROM ONLY :CHUNK;
  count 
@@ -611,9 +611,9 @@ ALTER TABLE compressed_ht SET (
 );
 NOTICE:  default order by for hypertable "compressed_ht" is set to ""time" DESC"
 SELECT COMPRESS_CHUNK(SHOW_CHUNKS('compressed_ht'));
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_9_9_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_9_10_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_9_11_chunk" for compression
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_9_9_chunk
