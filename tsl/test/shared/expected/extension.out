@@ -256,6 +256,8 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  interpolate(smallint,record,record)
  last(anyelement,"any")
  locf(anyelement,anyelement,boolean)
+ merge_chunks(regclass,regclass)
+ merge_chunks(regclass[])
  move_chunk(regclass,name,name,regclass,boolean)
  recompress_chunk(regclass,boolean)
  refresh_continuous_aggregate(regclass,"any","any",boolean)

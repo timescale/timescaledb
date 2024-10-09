@@ -144,3 +144,12 @@ CREATE FUNCTION @extschema@.add_continuous_aggregate_policy(
 RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
 LANGUAGE C VOLATILE;
+
+-- Merge chunks
+CREATE PROCEDURE @extschema@.merge_chunks(
+    chunk1 REGCLASS, chunk2 REGCLASS
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
+
+CREATE PROCEDURE @extschema@.merge_chunks(
+    chunks REGCLASS[]
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';

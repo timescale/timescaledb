@@ -87,3 +87,7 @@ CREATE FUNCTION @extschema@.add_continuous_aggregate_policy(
 RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_add'
 LANGUAGE C VOLATILE;
+
+-- Merge chunks
+DROP PROCEDURE IF EXISTS @extschema@.merge_chunks(chunk1 REGCLASS, chunk2 REGCLASS);
+DROP PROCEDURE IF EXISTS @extschema@.merge_chunks(chunks REGCLASS[]);

@@ -959,3 +959,15 @@ RestrictSearchPath(void)
 				 constraintId)
 #endif
 
+#if PG17_LT
+/*
+ * Overflow-aware comparison functions to be used in qsort. Introduced in PG
+ * 17 and included here for older PG versions.
+ */
+static inline int
+pg_cmp_u32(uint32 a, uint32 b)
+{
+	return (a > b) - (a < b);
+}
+
+#endif
