@@ -10,6 +10,7 @@ set(TEST_FILES
     cagg_deprecated_bucket_ng.sql
     cagg_errors.sql
     cagg_invalidation.sql
+    cagg_planning.sql
     cagg_policy.sql
     cagg_query.sql
     cagg_refresh.sql

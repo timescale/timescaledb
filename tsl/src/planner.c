@@ -211,7 +211,7 @@ tsl_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
  * Run preprocess query optimizations
  */
 void
-tsl_preprocess_query(Query *parse)
+tsl_preprocess_query(Query *parse, int *cursor_opts)
 {
 	Assert(parse != NULL);
 
@@ -219,6 +219,12 @@ tsl_preprocess_query(Query *parse)
 	if (ts_guc_enable_cagg_watermark_constify)
 	{
 		constify_cagg_watermark(parse);
+	}
+
+	/* Push down ORDER BY and LIMIT for realtime cagg */
+	if (ts_guc_enable_cagg_sort_pushdown)
+	{
+		cagg_sort_pushdown(parse, cursor_opts);
 	}
 }
 
