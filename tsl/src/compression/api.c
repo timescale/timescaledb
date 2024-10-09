@@ -398,7 +398,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	compresschunkcxt_init(&cxt, hcache, hypertable_relid, chunk_relid);
 
 	/* acquire locks on src and compress hypertable and src chunk */
-	ereport(LOG,
+	ereport(DEBUG1,
 			(errmsg("acquiring locks for compressing \"%s.%s\"",
 					get_namespace_name(get_rel_namespace(chunk_relid)),
 					get_rel_name(chunk_relid))));
@@ -408,7 +408,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 
 	/* acquire locks on catalog tables to keep till end of txn */
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), RowExclusiveLock);
-	ereport(LOG,
+	ereport(DEBUG1,
 			(errmsg("locks acquired for compressing \"%s.%s\"",
 					get_namespace_name(get_rel_namespace(chunk_relid)),
 					get_rel_name(chunk_relid))));
@@ -441,7 +441,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		/* create compressed chunk and a new table */
 		compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, InvalidOid);
 		new_compressed_chunk = true;
-		ereport(LOG,
+		ereport(DEBUG1,
 				(errmsg("new compressed chunk \"%s.%s\" created",
 						NameStr(compress_ht_chunk->fd.schema_name),
 						NameStr(compress_ht_chunk->fd.table_name))));
@@ -452,7 +452,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		/* use an existing compressed chunk to compress into */
 		compress_ht_chunk = ts_chunk_get_by_id(mergable_chunk->fd.compressed_chunk_id, true);
 		result_chunk_id = mergable_chunk->table_id;
-		ereport(LOG,
+		ereport(DEBUG1,
 				(errmsg("merge into existing compressed chunk \"%s.%s\"",
 						NameStr(compress_ht_chunk->fd.schema_name),
 						NameStr(compress_ht_chunk->fd.table_name))));
@@ -590,7 +590,7 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	ts_chunk_validate_chunk_status_for_operation(uncompressed_chunk, CHUNK_DECOMPRESS, true);
 	compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
 
-	ereport(LOG,
+	ereport(DEBUG1,
 			(errmsg("acquiring locks for decompressing \"%s.%s\"",
 					NameStr(uncompressed_chunk->fd.schema_name),
 					NameStr(uncompressed_chunk->fd.table_name))));
@@ -617,7 +617,7 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 
 	/* acquire locks on catalog tables to keep till end of txn */
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), RowExclusiveLock);
-	ereport(LOG,
+	ereport(DEBUG1,
 			(errmsg("locks acquired for decompressing \"%s.%s\"",
 					NameStr(uncompressed_chunk->fd.schema_name),
 					NameStr(uncompressed_chunk->fd.table_name))));
@@ -1152,12 +1152,12 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 	 */
 	if (ts_chunk_clear_status(uncompressed_chunk,
 							  CHUNK_STATUS_COMPRESSED_UNORDERED | CHUNK_STATUS_COMPRESSED_PARTIAL))
-		ereport(LOG,
+		ereport(DEBUG1,
 				(errmsg("cleared chunk status for recompression: \"%s.%s\"",
 						NameStr(uncompressed_chunk->fd.schema_name),
 						NameStr(uncompressed_chunk->fd.table_name))));
 
-	ereport(LOG,
+	ereport(DEBUG1,
 			(errmsg("acquiring locks for recompression: \"%s.%s\"",
 					NameStr(uncompressed_chunk->fd.schema_name),
 					NameStr(uncompressed_chunk->fd.table_name))));
@@ -1279,7 +1279,7 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 
 	/* Index scan */
 	Relation index_rel = index_open(row_compressor.index_oid, ExclusiveLock);
-	ereport(LOG,
+	ereport(DEBUG1,
 			(errmsg("locks acquired for recompression: \"%s.%s\"",
 					NameStr(uncompressed_chunk->fd.schema_name),
 					NameStr(uncompressed_chunk->fd.table_name))));
