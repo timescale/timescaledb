@@ -442,18 +442,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	{
 		int64 nrows_processed = 0;
 
-		/*
-		 * even though we log the information below, this debug info
-		 * is still used for INFO messages to clients and our tests.
-		 */
-		if (ts_guc_debug_compression_path_info)
-		{
-			elog(INFO,
-				 "compress_chunk_indexscan_start matched index \"%s\"",
-				 get_rel_name(matched_index_rel->rd_id));
-		}
-
-		elog(LOG,
+		elog(ts_guc_debug_compression_path_info ? INFO : DEBUG1,
 			 "using index \"%s\" to scan rows for compression",
 			 get_rel_name(matched_index_rel->rd_id));
 
@@ -465,7 +454,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 		{
 			row_compressor_process_ordered_slot(&row_compressor, slot, mycid);
 			if ((++nrows_processed % report_reltuples) == 0)
-				elog(LOG,
+				elog(DEBUG2,
 					 "compressed " INT64_FORMAT " rows from \"%s\"",
 					 nrows_processed,
 					 RelationGetRelationName(in_rel));
@@ -474,7 +463,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 		if (row_compressor.rows_compressed_into_current_value > 0)
 			row_compressor_flush(&row_compressor, mycid, true);
 
-		elog(LOG,
+		elog(DEBUG1,
 			 "finished compressing " INT64_FORMAT " rows from \"%s\"",
 			 nrows_processed,
 			 RelationGetRelationName(in_rel));
@@ -485,16 +474,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	}
 	else
 	{
-		/*
-		 * even though we log the information below, this debug info
-		 * is still used for INFO messages to clients and our tests.
-		 */
-		if (ts_guc_debug_compression_path_info)
-		{
-			elog(INFO, "compress_chunk_tuplesort_start");
-		}
-
-		elog(LOG,
+		elog(ts_guc_debug_compression_path_info ? INFO : DEBUG1,
 			 "using tuplesort to scan rows from \"%s\" for compression",
 			 RelationGetRelationName(in_rel));
 
@@ -862,7 +842,7 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 	{
 		row_compressor_process_ordered_slot(row_compressor, slot, mycid);
 		if ((++nrows_processed % report_reltuples) == 0)
-			elog(LOG,
+			elog(DEBUG2,
 				 "compressed " INT64_FORMAT " rows from \"%s\"",
 				 nrows_processed,
 				 RelationGetRelationName(in_rel));
@@ -870,7 +850,7 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 
 	if (row_compressor->rows_compressed_into_current_value > 0)
 		row_compressor_flush(row_compressor, mycid, true);
-	elog(LOG,
+	elog(DEBUG1,
 		 "finished compressing " INT64_FORMAT " rows from \"%s\"",
 		 nrows_processed,
 		 RelationGetRelationName(in_rel));
@@ -1330,13 +1310,13 @@ decompress_chunk(Oid in_table, Oid out_table)
 		row_decompressor_decompress_row_to_table(&decompressor);
 
 		if ((++nrows_processed % report_reltuples) == 0)
-			elog(LOG,
+			elog(DEBUG2,
 				 "decompressed " INT64_FORMAT " rows from \"%s\"",
 				 nrows_processed,
 				 RelationGetRelationName(in_rel));
 	}
 
-	elog(LOG,
+	elog(DEBUG1,
 		 "finished decompressing " INT64_FORMAT " rows from \"%s\"",
 		 nrows_processed,
 		 RelationGetRelationName(in_rel));

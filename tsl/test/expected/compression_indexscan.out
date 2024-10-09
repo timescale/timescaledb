@@ -50,10 +50,10 @@ SELECT * FROM timescaledb_information.compression_settings;
 (2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_1_chunk_idx_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_2_chunk_idx_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_3_chunk_idx_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_4_chunk_idx_asc_null_first"
+INFO:  using index "_hyper_1_1_chunk_idx_asc_null_first" to scan rows for compression
+INFO:  using index "_hyper_1_2_chunk_idx_asc_null_first" to scan rows for compression
+INFO:  using index "_hyper_1_3_chunk_idx_asc_null_first" to scan rows for compression
+INFO:  using index "_hyper_1_4_chunk_idx_asc_null_first" to scan rows for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -82,10 +82,10 @@ SELECT * FROM timescaledb_information.compression_settings;
 (2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_2_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_3_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -114,10 +114,10 @@ SELECT * FROM timescaledb_information.compression_settings;
 (2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_2_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_3_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -147,10 +147,10 @@ SELECT * FROM timescaledb_information.compression_settings;
 (2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_2_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_3_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -181,10 +181,10 @@ SELECT * FROM timescaledb_information.compression_settings;
 (2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_2_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_3_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -213,10 +213,10 @@ SELECT * FROM timescaledb_information.compression_settings;
 (2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_1_chunk_idx_asc_null_last"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_2_chunk_idx_asc_null_last"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_3_chunk_idx_asc_null_last"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_4_chunk_idx_asc_null_last"
+INFO:  using index "_hyper_1_1_chunk_idx_asc_null_last" to scan rows for compression
+INFO:  using index "_hyper_1_2_chunk_idx_asc_null_last" to scan rows for compression
+INFO:  using index "_hyper_1_3_chunk_idx_asc_null_last" to scan rows for compression
+INFO:  using index "_hyper_1_4_chunk_idx_asc_null_last" to scan rows for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -245,10 +245,10 @@ SELECT * FROM timescaledb_information.compression_settings;
 (2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_2_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_3_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -278,10 +278,10 @@ SELECT * FROM timescaledb_information.compression_settings;
 (2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_2_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_3_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -312,10 +312,10 @@ SELECT * FROM timescaledb_information.compression_settings;
 (2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_2_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_3_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -344,10 +344,10 @@ SELECT * FROM timescaledb_information.compression_settings;
 (2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_2_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_3_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -376,10 +376,10 @@ SELECT * FROM timescaledb_information.compression_settings;
 (2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_1_chunk_idx_desc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_2_chunk_idx_desc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_3_chunk_idx_desc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_4_chunk_idx_desc_null_first"
+INFO:  using index "_hyper_1_1_chunk_idx_desc_null_first" to scan rows for compression
+INFO:  using index "_hyper_1_2_chunk_idx_desc_null_first" to scan rows for compression
+INFO:  using index "_hyper_1_3_chunk_idx_desc_null_first" to scan rows for compression
+INFO:  using index "_hyper_1_4_chunk_idx_desc_null_first" to scan rows for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -409,10 +409,10 @@ SELECT * FROM timescaledb_information.compression_settings;
 (2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_2_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_3_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -443,10 +443,10 @@ SELECT * FROM timescaledb_information.compression_settings;
 (2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_2_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_3_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -475,10 +475,10 @@ SELECT * FROM timescaledb_information.compression_settings;
 (2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_2_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_3_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -507,10 +507,10 @@ SELECT * FROM timescaledb_information.compression_settings;
 (2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_1_chunk_idx_desc_null_last"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_2_chunk_idx_desc_null_last"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_3_chunk_idx_desc_null_last"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_4_chunk_idx_desc_null_last"
+INFO:  using index "_hyper_1_1_chunk_idx_desc_null_last" to scan rows for compression
+INFO:  using index "_hyper_1_2_chunk_idx_desc_null_last" to scan rows for compression
+INFO:  using index "_hyper_1_3_chunk_idx_desc_null_last" to scan rows for compression
+INFO:  using index "_hyper_1_4_chunk_idx_desc_null_last" to scan rows for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -539,10 +539,10 @@ SELECT * FROM timescaledb_information.compression_settings;
 (2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_2_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_3_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -562,10 +562,10 @@ SELECT decompress_chunk(show_chunks('tab1'));
 
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'time');
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_1_chunk_tab1_time_idx"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_2_chunk_tab1_time_idx"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_3_chunk_tab1_time_idx"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_4_chunk_tab1_time_idx"
+INFO:  using index "_hyper_1_1_chunk_tab1_time_idx" to scan rows for compression
+INFO:  using index "_hyper_1_2_chunk_tab1_time_idx" to scan rows for compression
+INFO:  using index "_hyper_1_3_chunk_tab1_time_idx" to scan rows for compression
+INFO:  using index "_hyper_1_4_chunk_tab1_time_idx" to scan rows for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -595,10 +595,10 @@ SHOW timescaledb.enable_compression_indexscan;
 (1 row)
 
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_2_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_3_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -619,10 +619,10 @@ SELECT decompress_chunk(show_chunks('tab1'));
 --Test with this guc enabled
 SET timescaledb.enable_compression_indexscan = 'ON';
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_1_chunk_tab1_time_idx"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_2_chunk_tab1_time_idx"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_3_chunk_tab1_time_idx"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_4_chunk_tab1_time_idx"
+INFO:  using index "_hyper_1_1_chunk_tab1_time_idx" to scan rows for compression
+INFO:  using index "_hyper_1_2_chunk_tab1_time_idx" to scan rows for compression
+INFO:  using index "_hyper_1_3_chunk_tab1_time_idx" to scan rows for compression
+INFO:  using index "_hyper_1_4_chunk_tab1_time_idx" to scan rows for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -648,10 +648,10 @@ ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id'
 ALTER TABLE tab2 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time NULLS FIRST');
 RESET timescaledb.enable_compression_indexscan;
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_2_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_3_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -662,10 +662,10 @@ INFO:  compress_chunk_tuplesort_start
 
 SET timescaledb.enable_compression_indexscan = 'ON';
 SELECT compress_chunk(show_chunks('tab2'));
-INFO:  compress_chunk_indexscan_start matched index "_hyper_2_81_chunk_idx2_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_2_82_chunk_idx2_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_2_83_chunk_idx2_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_2_84_chunk_idx2_asc_null_first"
+INFO:  using index "_hyper_2_81_chunk_idx2_asc_null_first" to scan rows for compression
+INFO:  using index "_hyper_2_82_chunk_idx2_asc_null_first" to scan rows for compression
+INFO:  using index "_hyper_2_83_chunk_idx2_asc_null_first" to scan rows for compression
+INFO:  using index "_hyper_2_84_chunk_idx2_asc_null_first" to scan rows for compression
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_2_81_chunk
@@ -722,10 +722,10 @@ time;
 CREATE INDEX idx_asc_null_first ON tab3(name COLLATE "C", time ASC NULLS FIRST);
 ALTER TABLE tab3 SET(timescaledb.compress, timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'name, time NULLS FIRST');
 SELECT compress_chunk(show_chunks('tab3'));
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_5_93_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_5_94_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_5_95_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_5_96_chunk" for compression
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_5_93_chunk
@@ -745,10 +745,10 @@ SELECT decompress_chunk(show_chunks('tab3'));
 
 CREATE INDEX idxcol_asc_null_first ON tab3(name, time ASC NULLS FIRST);
 SELECT compress_chunk(show_chunks('tab3'));
-INFO:  compress_chunk_indexscan_start matched index "_hyper_5_93_chunk_idxcol_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_5_94_chunk_idxcol_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_5_95_chunk_idxcol_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_5_96_chunk_idxcol_asc_null_first"
+INFO:  using index "_hyper_5_93_chunk_idxcol_asc_null_first" to scan rows for compression
+INFO:  using index "_hyper_5_94_chunk_idxcol_asc_null_first" to scan rows for compression
+INFO:  using index "_hyper_5_95_chunk_idxcol_asc_null_first" to scan rows for compression
+INFO:  using index "_hyper_5_96_chunk_idxcol_asc_null_first" to scan rows for compression
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_5_93_chunk
@@ -772,10 +772,10 @@ DROP INDEX idxcol_asc_null_first;
 CREATE INDEX idx_asc_null_first ON tab3(name COLLATE "ucs_basic", time ASC NULLS FIRST);
 ALTER TABLE tab3 SET(timescaledb.compress, timescaledb.compress_segmentby = 'name', timescaledb.compress_orderby = 'time NULLS FIRST');
 SELECT compress_chunk(show_chunks('tab3'));
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_5_93_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_5_94_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_5_95_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_5_96_chunk" for compression
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_5_93_chunk
@@ -795,10 +795,10 @@ SELECT decompress_chunk(show_chunks('tab3'));
 
 CREATE INDEX idxcol_asc_null_first ON tab3(name, time ASC NULLS FIRST);
 SELECT compress_chunk(show_chunks('tab3'));
-INFO:  compress_chunk_indexscan_start matched index "_hyper_5_93_chunk_idxcol_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_5_94_chunk_idxcol_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_5_95_chunk_idxcol_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_5_96_chunk_idxcol_asc_null_first"
+INFO:  using index "_hyper_5_93_chunk_idxcol_asc_null_first" to scan rows for compression
+INFO:  using index "_hyper_5_94_chunk_idxcol_asc_null_first" to scan rows for compression
+INFO:  using index "_hyper_5_95_chunk_idxcol_asc_null_first" to scan rows for compression
+INFO:  using index "_hyper_5_96_chunk_idxcol_asc_null_first" to scan rows for compression
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_5_93_chunk
@@ -822,10 +822,10 @@ DROP INDEX idxcol_asc_null_first;
 CREATE INDEX idx_asc_null_first ON tab1(id, c1, time ASC NULLS FIRST);
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id, c1', timescaledb.compress_orderby = 'time NULLS FIRST');
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_1_chunk_idx_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_2_chunk_idx_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_3_chunk_idx_asc_null_first"
-INFO:  compress_chunk_indexscan_start matched index "_hyper_1_4_chunk_idx_asc_null_first"
+INFO:  using index "_hyper_1_1_chunk_idx_asc_null_first" to scan rows for compression
+INFO:  using index "_hyper_1_2_chunk_idx_asc_null_first" to scan rows for compression
+INFO:  using index "_hyper_1_3_chunk_idx_asc_null_first" to scan rows for compression
+INFO:  using index "_hyper_1_4_chunk_idx_asc_null_first" to scan rows for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -847,10 +847,10 @@ DROP INDEX idx_asc_null_first;
 CREATE INDEX idx_asc_null_first ON tab1(id, c1 DESC, time ASC NULLS FIRST);
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id, c1', timescaledb.compress_orderby = 'time NULLS FIRST');
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_2_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_3_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -874,10 +874,10 @@ DROP INDEX idx_asc_null_first;
 CREATE INDEX idx_asc_null_first ON tab1(id, c1, c2);
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id, c1', timescaledb.compress_orderby = 'time NULLS FIRST');
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_2_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_3_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -899,10 +899,10 @@ DROP INDEX idx_asc_null_first;
 --Index Column out of order
 CREATE INDEX idx_asc_null_first ON tab1(c1, id, time ASC NULLS FIRST);
 SELECT compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_2_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_3_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -930,10 +930,10 @@ select count(*) from tab1;
 (1 row)
 
 select compress_chunk(show_chunks('tab1'));
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_2_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_3_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -961,12 +961,7 @@ select count(*) from tab1;
 SET client_min_messages TO LOG;
 select compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
 LOG:  statement: select compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
-LOG:  acquiring locks for compressing "_timescaledb_internal._hyper_1_1_chunk"
-LOG:  locks acquired for compressing "_timescaledb_internal._hyper_1_1_chunk"
-LOG:  new compressed chunk "_timescaledb_internal.compress_hyper_3_133_chunk" created
-INFO:  compress_chunk_tuplesort_start
-LOG:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
-LOG:  finished compressing 13500 rows from "_hyper_1_1_chunk"
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -990,14 +985,7 @@ ANALYZE _timescaledb_internal._hyper_1_2_chunk;
 SET client_min_messages TO LOG;
 select compress_chunk('_timescaledb_internal._hyper_1_2_chunk');
 LOG:  statement: select compress_chunk('_timescaledb_internal._hyper_1_2_chunk');
-LOG:  acquiring locks for compressing "_timescaledb_internal._hyper_1_2_chunk"
-LOG:  locks acquired for compressing "_timescaledb_internal._hyper_1_2_chunk"
-LOG:  new compressed chunk "_timescaledb_internal.compress_hyper_3_134_chunk" created
-INFO:  compress_chunk_tuplesort_start
-LOG:  using tuplesort to scan rows from "_hyper_1_2_chunk" for compression
-LOG:  compressed 100000 rows from "_hyper_1_2_chunk"
-LOG:  compressed 200000 rows from "_hyper_1_2_chunk"
-LOG:  finished compressing 218400 rows from "_hyper_1_2_chunk"
+INFO:  using tuplesort to scan rows from "_hyper_1_2_chunk" for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_2_chunk
