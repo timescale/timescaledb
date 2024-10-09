@@ -12,6 +12,9 @@
 #include "hypertable.h"
 #include "import/ht_hypertable_modify.h"
 
+/* Forward declarations */
+struct ChunkDispatchState;
+
 typedef struct HypertableModifyPath
 {
 	CustomPath cpath;
@@ -41,4 +44,5 @@ extern Path *ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath
 extern List *ts_replace_rowid_vars(PlannerInfo *root, List *tlist, int varno);
 
 extern TupleTableSlot *ExecInsert(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
-								  TupleTableSlot *slot, bool canSetTag);
+								  struct ChunkDispatchState *cds, TupleTableSlot *slot,
+								  bool canSetTag);
