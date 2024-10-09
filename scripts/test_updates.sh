@@ -30,6 +30,7 @@ max_patch_version=$(echo "${MAX_VERSION}" | awk -F. '{print $3}')
 # PG 14 v8 2.5+
 # PG 15 v8 2.9+
 # PG 16 v8 2.13+
+# PG 17 v8 2.17+
 for version in ${ALL_VERSIONS}; do
   minor_version=$(echo "${version}" | awk -F. '{print $2}')
   patch_version=$(echo "${version}" | awk -F. '{print $3}')
