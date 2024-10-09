@@ -44,3 +44,6 @@ LANGUAGE C VOLATILE;
 DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression_execute(job_id INTEGER, htid INTEGER, lag ANYELEMENT, maxchunks INTEGER, verbose_log BOOLEAN, recompress_enabled  BOOLEAN, use_creation_time BOOLEAN, useam BOOLEAN);
 
 DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression(job_id INTEGER, config JSONB);
+
+-- Merge chunks
+DROP PROCEDURE IF EXISTS @extschema@.merge_chunks(variadic chunks REGCLASS[]);

@@ -20,6 +20,7 @@ list(
   cagg_multi_iso.spec
   cagg_concurrent_refresh.spec
   deadlock_drop_chunks_compress.spec
+  merge_chunks_concurrent.spec
   parallel_compression.spec
   osm_range_updates_iso.spec)
 

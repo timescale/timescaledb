@@ -44,6 +44,10 @@ CREATE OR REPLACE FUNCTION @extschema@.decompress_chunk(
     if_compressed BOOLEAN = true
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_decompress_chunk' LANGUAGE C STRICT VOLATILE;
 
+CREATE OR REPLACE PROCEDURE @extschema@.merge_chunks(
+    variadic chunks REGCLASS[]
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_merge_chunks';
+
 CREATE OR REPLACE FUNCTION _timescaledb_functions.recompress_chunk_segmentwise(
     uncompressed_chunk REGCLASS,
     if_compressed BOOLEAN = true

@@ -140,6 +140,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
   list(
     APPEND
     TEST_FILES
+    merge_chunks.sql
     merge_compress.sql
     cagg_refresh_using_merge.sql
     hypercore.sql
