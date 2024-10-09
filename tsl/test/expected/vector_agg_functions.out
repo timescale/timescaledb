@@ -314,7 +314,7 @@ select ss, min(cfloat4) from aggfns group by ss order by 1;
  ss |    min    
 ----+-----------
   0 |  -49.9756
-  1 |  -49.9756
+  1 |       NaN
   2 |  -49.9756
   3 | -Infinity
   4 |  -49.9756
@@ -2006,13 +2006,13 @@ select ss, sum(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |    sum    
 ----+-----------
   0 |  -5395.24
-  1 |  -5377.92
+  1 |  -5377.93
   2 |  -5382.66
   3 | -Infinity
   4 |  -5415.12
   5 |  -5415.12
-  6 |  -5447.29
-  7 |  -5447.29
+  6 |   -5447.3
+  7 |   -5447.3
   8 |  -5410.38
   9 |  -5439.41
 (10 rows)
@@ -3554,7 +3554,7 @@ select ss, min(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |   min    
 ----+----------
   0 | -49.9756
-  1 | -49.9756
+  1 |      NaN
   2 | -49.9756
   3 | -49.9756
   4 | -49.9756
@@ -3625,16 +3625,16 @@ select s, sum(cfloat4) from aggfns where cfloat8 <= 0 group by s order by 1;
 select ss, sum(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |   sum    
 ----+----------
-  0 |   2752.7
+  0 |  2752.71
   1 |      NaN
   2 | Infinity
-  3 |  2727.98
-  4 |  2764.68
-  5 |  2802.89
-  6 |  2807.59
+  3 |  2727.99
+  4 |  2764.69
+  5 |   2802.9
+  6 |   2807.6
   7 |  2826.29
-  8 |   2784.1
-  9 |   2784.1
+  8 |  2784.11
+  9 |  2784.11
 (10 rows)
 
 select avg(cfloat8) from aggfns where cfloat8 <= 0 order by 1;
@@ -5174,7 +5174,7 @@ select ss, min(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |    min    
 ----+-----------
   0 |  -49.9756
-  1 |  -49.9756
+  1 |       NaN
   2 |  -49.9756
   3 | -Infinity
   4 |  -49.9756

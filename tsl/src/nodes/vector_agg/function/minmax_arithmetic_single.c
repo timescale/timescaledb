@@ -41,14 +41,35 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 	MemoryContextSwitchTo(old);
 }
 
+typedef MinMaxState FUNCTION_NAME(state);
+
+static pg_attribute_always_inline void
+FUNCTION_NAME(one)(void *restrict agg_state, const CTYPE value)
+{
+	FUNCTION_NAME(state) *state = (FUNCTION_NAME(state) *) agg_state;
+	if (!state->isvalid || PREDICATE(DATUM_TO_CTYPE(state->value), value) || isnan((double) value))
+	{
+		/*
+		 * Note that float8 Datum is by-reference on 32-bit systems, and this
+		 * function is called in the extra aggregate data memory context.
+		 */
+		state->value = CTYPE_TO_DATUM(value);
+		state->isvalid = true;
+	}
+}
+
 #include "agg_const_helper.c"
+#include "agg_many_helper.c"
 #include "agg_vector_validity_helper.c"
 
-VectorAggFunctions FUNCTION_NAME(argdef) = { .state_bytes = sizeof(MinMaxState),
-											 .agg_init = minmax_init,
-											 .agg_emit = minmax_emit,
-											 .agg_const = FUNCTION_NAME(const),
-											 .agg_vector = FUNCTION_NAME(vector) };
+VectorAggFunctions FUNCTION_NAME(argdef) = {
+	.state_bytes = sizeof(MinMaxState),
+	.agg_init = minmax_init,
+	.agg_emit = minmax_emit,
+	.agg_const = FUNCTION_NAME(const),
+	.agg_vector = FUNCTION_NAME(vector),
+	.agg_many = FUNCTION_NAME(many),
+};
 #endif
 
 #undef PG_TYPE

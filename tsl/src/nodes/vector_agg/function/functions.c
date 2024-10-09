@@ -27,10 +27,13 @@ typedef struct
 } CountState;
 
 static void
-count_init(void *agg_state)
+count_init(void *restrict agg_states, int n)
 {
-	CountState *state = (CountState *) agg_state;
-	state->count = 0;
+	CountState *states = (CountState *) agg_states;
+	for (int i = 0; i < n; i++)
+	{
+		states[i].count = 0;
+	}
 }
 
 static void
@@ -49,11 +52,29 @@ count_star_const(void *agg_state, Datum constvalue, bool constisnull, int n,
 	state->count += n;
 }
 
+static void
+count_star_many_scalar(void *restrict agg_states, uint32 *restrict offsets, int start_row,
+					   int end_row, Datum constvalue, bool constisnull,
+					   MemoryContext agg_extra_mctx)
+{
+	CountState *states = (CountState *) agg_states;
+	for (int row = start_row; row < end_row; row++)
+	{
+		if (offsets[row] == 0)
+		{
+			continue;
+		}
+
+		states[offsets[row]].count++;
+	}
+}
+
 VectorAggFunctions count_star_agg = {
 	.state_bytes = sizeof(CountState),
 	.agg_init = count_init,
 	.agg_const = count_star_const,
 	.agg_emit = count_emit,
+	.agg_many_scalar = count_star_many_scalar,
 };
 
 /*
@@ -110,12 +131,30 @@ count_any_vector(void *agg_state, const ArrowArray *vector, const uint64 *filter
 	}
 }
 
+static void
+count_any_many(void *restrict agg_states, uint32 *restrict offsets, int start_row, int end_row,
+			   const ArrowArray *vector, MemoryContext agg_extra_mctx)
+{
+	const uint64 *valid = vector->buffers[0];
+	for (int row = start_row; row < end_row; row++)
+	{
+		CountState *state = (offsets[row] + (CountState *) agg_states);
+		const bool row_passes = (offsets[row] != 0);
+		const bool value_notnull = arrow_row_is_valid(valid, row);
+		if (row_passes && value_notnull)
+		{
+			state->count++;
+		}
+	}
+}
+
 VectorAggFunctions count_any_agg = {
 	.state_bytes = sizeof(CountState),
 	.agg_init = count_init,
 	.agg_emit = count_emit,
 	.agg_const = count_any_const,
 	.agg_vector = count_any_vector,
+	.agg_many = count_any_many,
 };
 
 /*

@@ -55,10 +55,13 @@ typedef struct
 } FUNCTION_NAME(state);
 
 static void
-FUNCTION_NAME(init)(void *agg_state)
+FUNCTION_NAME(init)(void *restrict agg_states, int n)
 {
-	FUNCTION_NAME(state) *state = (FUNCTION_NAME(state) *) agg_state;
-	*state = (FUNCTION_NAME(state)){ 0 };
+	FUNCTION_NAME(state) *states = (FUNCTION_NAME(state) *) agg_states;
+	for (int i = 0; i < n; i++)
+	{
+		states[i] = (FUNCTION_NAME(state)){ 0 };
+	}
 }
 
 static void
@@ -200,7 +203,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, size_t n, const CTYPE *values, const
 	/*
 	 * Vector registers can be up to 512 bits wide.
 	 */
-#define UNROLL_SIZE ((int) (512 / 8 / sizeof(CTYPE)))
+#define UNROLL_SIZE ((int) ((512 / 8) / sizeof(CTYPE)))
 
 	/*
 	 * Each inner iteration works with its own accumulators to avoid data
@@ -290,14 +293,44 @@ FUNCTION_NAME(vector_impl)(void *agg_state, size_t n, const CTYPE *values, const
 	COMBINE(&state->N, &state->Sx, &state->Sxx, Narray[0], Sxarray[0], Sxxarray[0]);
 }
 
+static pg_attribute_always_inline void
+FUNCTION_NAME(one)(void *restrict agg_state, const CTYPE value)
+{
+	FUNCTION_NAME(state) *state = (FUNCTION_NAME(state) *) agg_state;
+	/*
+	 * This code follows the Postgres float8_accum() transition function, see
+	 * the comments there.
+	 */
+	const double newN = state->N + 1.0;
+	const double newSx = state->Sx + value;
+#ifdef NEED_SXX
+	if (state->N > 0.0)
+	{
+		const double tmp = value * newN - newSx;
+		state->Sxx += tmp * tmp / (state->N * newN);
+	}
+	else
+	{
+		state->Sxx = 0 * value;
+	}
+#endif
+
+	state->N = newN;
+	state->Sx = newSx;
+}
+
 #include "agg_const_helper.c"
+#include "agg_many_helper.c"
 #include "agg_vector_validity_helper.c"
 
-VectorAggFunctions FUNCTION_NAME(argdef) = { .state_bytes = sizeof(FUNCTION_NAME(state)),
-											 .agg_init = FUNCTION_NAME(init),
-											 .agg_emit = FUNCTION_NAME(emit),
-											 .agg_const = FUNCTION_NAME(const),
-											 .agg_vector = FUNCTION_NAME(vector) };
+VectorAggFunctions FUNCTION_NAME(argdef) = {
+	.state_bytes = sizeof(FUNCTION_NAME(state)),
+	.agg_init = FUNCTION_NAME(init),
+	.agg_emit = FUNCTION_NAME(emit),
+	.agg_const = FUNCTION_NAME(const),
+	.agg_vector = FUNCTION_NAME(vector),
+	.agg_many = FUNCTION_NAME(many),
+};
 #undef UPDATE
 #undef COMBINE
 

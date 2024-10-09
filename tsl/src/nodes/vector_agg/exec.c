@@ -90,7 +90,7 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 			Aggref *aggref = castNode(Aggref, tlentry->expr);
 			VectorAggFunctions *func = get_vector_aggregate(aggref->aggfnoid);
 			Assert(func != NULL);
-			def->func = func;
+			def->func = *func;
 
 			if (list_length(aggref->args) > 0)
 			{
@@ -122,11 +122,28 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		}
 	}
 
-	List *grouping_column_offsets = linitial(cscan->custom_private);
-	vector_agg_state->grouping =
-		create_grouping_policy_batch(vector_agg_state->agg_defs,
-									 vector_agg_state->output_grouping_columns,
-									 /* partial_per_batch = */ grouping_column_offsets != NIL);
+	///	List *grouping_child_output_offsets = linitial(cscan->custom_private);
+	if (list_length(vector_agg_state->output_grouping_columns) == 1)
+	{
+		GroupingColumn *col =
+			(GroupingColumn *) linitial(vector_agg_state->output_grouping_columns);
+		DecompressContext *dcontext = &decompress_state->decompress_context;
+		CompressionColumnDescription *desc = &dcontext->compressed_chunk_columns[col->input_offset];
+		if (desc->type == COMPRESSED_COLUMN && desc->by_value && desc->value_bytes > 0 &&
+			(size_t) desc->value_bytes <= sizeof(Datum))
+		{
+			vector_agg_state->grouping =
+				create_grouping_policy_hash(vector_agg_state->agg_defs,
+											vector_agg_state->output_grouping_columns);
+		}
+	}
+
+	if (vector_agg_state->grouping == NULL)
+	{
+		vector_agg_state->grouping =
+			create_grouping_policy_batch(vector_agg_state->agg_defs,
+										 vector_agg_state->output_grouping_columns);
+	}
 }
 
 static void

@@ -25,14 +25,17 @@ typedef struct
 } FUNCTION_NAME(state);
 
 static void
-FUNCTION_NAME(init)(void *agg_state)
+FUNCTION_NAME(init)(void *restrict agg_states, int n)
 {
-	FUNCTION_NAME(state) *state = (FUNCTION_NAME(state) *) agg_state;
-	state->N = 0;
-	state->sumX = 0;
+	FUNCTION_NAME(state) *states = (FUNCTION_NAME(state) *) agg_states;
+	for (int i = 0; i < n; i++)
+	{
+		states[i].N = 0;
+		states[i].sumX = 0;
 #ifdef NEED_SUMX2
-	state->sumX2 = 0;
+		states[i].sumX2 = 0;
 #endif
+	}
 }
 
 static void
@@ -96,7 +99,19 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 #endif
 }
 
+static pg_attribute_always_inline void
+FUNCTION_NAME(one)(void *restrict agg_state, const CTYPE value)
+{
+	FUNCTION_NAME(state) *state = (FUNCTION_NAME(state) *) agg_state;
+	state->N++;
+	state->sumX += value;
+#ifdef NEED_SUMX2
+	state->sumX2 += ((int128) value) * ((int128) value);
+#endif
+}
+
 #include "agg_const_helper.c"
+#include "agg_many_helper.c"
 #include "agg_vector_validity_helper.c"
 
 VectorAggFunctions FUNCTION_NAME(argdef) = {
@@ -105,6 +120,7 @@ VectorAggFunctions FUNCTION_NAME(argdef) = {
 	.agg_emit = FUNCTION_NAME(emit),
 	.agg_const = FUNCTION_NAME(const),
 	.agg_vector = FUNCTION_NAME(vector),
+	.agg_many = FUNCTION_NAME(many),
 };
 
 #endif
