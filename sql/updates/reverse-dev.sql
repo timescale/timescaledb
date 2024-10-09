@@ -58,3 +58,6 @@ DROP VIEW timescaledb_information.hypertable_columnstore_settings;
 DROP VIEW timescaledb_information.chunk_columnstore_settings;
 
 DROP PROCEDURE IF EXISTS _timescaledb_functions.cagg_migrate_update_watermark(INTEGER);
+-- Merge chunks
+DROP PROCEDURE IF EXISTS @extschema@.merge_chunks(chunk1 REGCLASS, chunk2 REGCLASS);
+DROP PROCEDURE IF EXISTS @extschema@.merge_chunks(chunks REGCLASS[]);
