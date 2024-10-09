@@ -217,7 +217,8 @@ static pg_attribute_always_inline uint32
 fill_offsets_impl(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
 				  int key_column_index, uint32 next_unused_state_index, int start_row, int end_row,
 				  uint32 *restrict offsets,
-				  void (*get_key)(CompressedColumnValues column, int row, Datum *key, bool *valid))
+				  void (*get_key)(CompressedColumnValues column, int row, Datum *restrict key,
+								  bool *restrict valid))
 {
 	CompressedColumnValues column = batch_state->compressed_columns[key_column_index];
 	// Assert(gv->decompression_type == 8 /* lolwut */);
@@ -543,13 +544,14 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 		policy->returning_results = true;
 		h_start_iterate(policy->table, &policy->iter);
 		//		fprintf(stderr,
-		//				"spill after %ld input %ld valid %ld bulk filtered, %d keys, %f ratio, %ld aggctx
-		//bytes, %ld aggstate bytes\n", 				policy->stat_input_total_rows,
-		//policy->stat_input_valid_rows, policy->stat_bulk_filtered_rows, 				policy->table->members
+		//				"spill after %ld input %ld valid %ld bulk filtered, %d keys, %f ratio, %ld
+		//aggctx bytes, %ld aggstate bytes\n", 				policy->stat_input_total_rows,
+		// policy->stat_input_valid_rows, policy->stat_bulk_filtered_rows,
+		// policy->table->members
 		//				+ 		policy->have_null_key, 				policy->stat_input_valid_rows /
 		//(float) 				(policy->table->members + 				 policy->have_null_key),
-		//MemoryContextMemAllocated(policy->table->ctx, 																						  false),
-		//MemoryContextMemAllocated(policy->agg_extra_mctx, false));
+		// MemoryContextMemAllocated(policy->table->ctx,
+		// false), MemoryContextMemAllocated(policy->agg_extra_mctx, false));
 	}
 
 	HashEntry null_key_entry = { .agg_state_index = 1 };

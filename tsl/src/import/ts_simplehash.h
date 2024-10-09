@@ -109,8 +109,6 @@
 #define SH_RESET SH_MAKE_NAME(reset)
 #define SH_INSERT SH_MAKE_NAME(insert)
 #define SH_INSERT_HASH SH_MAKE_NAME(insert_hash)
-#define SH_DELETE_ITEM SH_MAKE_NAME(delete_item)
-#define SH_DELETE SH_MAKE_NAME(delete)
 #define SH_LOOKUP SH_MAKE_NAME(lookup)
 #define SH_LOOKUP_HASH SH_MAKE_NAME(lookup_hash)
 #define SH_GROW SH_MAKE_NAME(grow)
@@ -207,12 +205,6 @@ SH_SCOPE SH_ELEMENT_TYPE *SH_LOOKUP(SH_TYPE *tb, SH_KEY_TYPE key);
 
 /* <element> *<prefix>_lookup_hash(<prefix>_hash *tb, <key> key, uint32 hash) */
 SH_SCOPE SH_ELEMENT_TYPE *SH_LOOKUP_HASH(SH_TYPE *tb, SH_KEY_TYPE key, uint32 hash);
-
-/* void <prefix>_delete_item(<prefix>_hash *tb, <element> *entry) */
-SH_SCOPE void SH_DELETE_ITEM(SH_TYPE *tb, SH_ELEMENT_TYPE *entry);
-
-/* bool <prefix>_delete(<prefix>_hash *tb, <key> key) */
-SH_SCOPE bool SH_DELETE(SH_TYPE *tb, SH_KEY_TYPE key);
 
 /* void <prefix>_start_iterate(<prefix>_hash *tb, <prefix>_iterator *iter) */
 SH_SCOPE void SH_START_ITERATE(SH_TYPE *tb, SH_ITERATOR *iter);
@@ -1023,8 +1015,6 @@ SH_STAT(SH_TYPE *tb)
 #undef SH_RESET
 #undef SH_INSERT
 #undef SH_INSERT_HASH
-#undef SH_DELETE_ITEM
-#undef SH_DELETE
 #undef SH_LOOKUP
 #undef SH_LOOKUP_HASH
 #undef SH_GROW
