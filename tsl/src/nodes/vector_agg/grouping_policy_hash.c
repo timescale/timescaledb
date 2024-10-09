@@ -28,28 +28,25 @@ typedef struct
 	uint32 agg_state_index;
 } HashEntry;
 
-// static pg_attribute_always_inline uint64
-// hash64_1(uint64 x)
-//{
-//	x ^= x >> 30;
-//	x *= 0xbf58476d1ce4e5b9U;
-//	x ^= x >> 27;
-//	x *= 0x94d049bb133111ebU;
-//	x ^= x >> 31;
-//	return x;
-// }
-
+#ifdef USE_SSE42_CRC32C
 static pg_attribute_always_inline uint64
-hash64_crc(uint64 x)
+hash64(uint64 x)
 {
 	return _mm_crc32_u64(~0ULL, x);
 }
 
+#else
 static pg_attribute_always_inline uint64
 hash64(uint64 x)
 {
-	return hash64_crc(x);
+	x ^= x >> 30;
+	x *= 0xbf58476d1ce4e5b9U;
+	x ^= x >> 27;
+	x *= 0x94d049bb133111ebU;
+	x ^= x >> 31;
+	return x;
 }
+#endif
 
 #define SH_PREFIX h
 #define SH_ELEMENT_TYPE HashEntry
@@ -545,7 +542,7 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 		h_start_iterate(policy->table, &policy->iter);
 		//		fprintf(stderr,
 		//				"spill after %ld input %ld valid %ld bulk filtered, %d keys, %f ratio, %ld
-		//aggctx bytes, %ld aggstate bytes\n", 				policy->stat_input_total_rows,
+		// aggctx bytes, %ld aggstate bytes\n", 				policy->stat_input_total_rows,
 		// policy->stat_input_valid_rows, policy->stat_bulk_filtered_rows,
 		// policy->table->members
 		//				+ 		policy->have_null_key, 				policy->stat_input_valid_rows /
