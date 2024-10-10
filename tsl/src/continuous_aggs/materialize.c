@@ -61,6 +61,9 @@ static uint64 spi_insert_materializations(Hypertable *mat_ht, const ContinuousAg
 										  const NameData *time_column_name,
 										  TimeRange materialization_range,
 										  const char *const chunk_condition);
+static bool spi_exists_materializations(SchemaAndName materialization_table,
+										const NameData *time_column_name,
+										TimeRange materialization_range);
 static uint64 spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 										 SchemaAndName partial_view,
 										 SchemaAndName materialization_table,
@@ -295,7 +298,7 @@ build_merge_join_clause(List *column_names)
 
 		appendStringInfoString(ret, "P.");
 		appendStringInfoString(ret, quote_identifier(column));
-		appendStringInfoString(ret, " IS NOT DISTINCT FROM M.");
+		appendStringInfoString(ret, " = M.");
 		appendStringInfoString(ret, quote_identifier(column));
 	}
 
@@ -433,6 +436,43 @@ spi_update_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 	}
 }
 
+static bool
+spi_exists_materializations(SchemaAndName materialization_table, const NameData *time_column_name,
+							TimeRange materialization_range)
+{
+	int res;
+	StringInfo command = makeStringInfo();
+	Oid types[] = { materialization_range.type, materialization_range.type };
+	Datum values[] = { materialization_range.start, materialization_range.end };
+	char nulls[] = { false, false };
+
+	appendStringInfo(command,
+					 "SELECT 1 FROM %s.%s AS M "
+					 "WHERE M.%s >= $1 AND M.%s < $2 "
+					 "LIMIT 1;",
+					 quote_identifier(NameStr(*materialization_table.schema)),
+					 quote_identifier(NameStr(*materialization_table.name)),
+					 quote_identifier(NameStr(*time_column_name)),
+					 quote_identifier(NameStr(*time_column_name)));
+
+	elog(DEBUG2, "%s", command->data);
+	res = SPI_execute_with_args(command->data,
+								2,
+								types,
+								values,
+								nulls,
+								true /* read_only */,
+								0 /* count */);
+
+	if (res < 0)
+		elog(ERROR,
+			 "could not check the materialization table \"%s.%s\"",
+			 NameStr(*materialization_table.schema),
+			 NameStr(*materialization_table.name));
+
+	return (SPI_processed > 0);
+}
+
 static uint64
 spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 						   SchemaAndName partial_view, SchemaAndName materialization_table,
@@ -449,6 +489,24 @@ spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 					   materialization_range.start,
 					   materialization_range.end };
 	char nulls[] = { false, false, false, false };
+
+	/* Fallback to INSERT materializations if there's no rows to change on it */
+	if (!spi_exists_materializations(materialization_table,
+									 time_column_name,
+									 materialization_range))
+	{
+		elog(DEBUG2,
+			 "no rows to update on materialization table \"%s.%s\", falling back to INSERT",
+			 NameStr(*materialization_table.schema),
+			 NameStr(*materialization_table.name));
+		return spi_insert_materializations(mat_ht,
+										   cagg,
+										   partial_view,
+										   materialization_table,
+										   time_column_name,
+										   materialization_range,
+										   "" /* empty chunk condition for Finalized CAggs */);
+	}
 
 	List *grp_colnames = cagg_find_groupingcols((ContinuousAgg *) cagg, mat_ht);
 	List *agg_colnames = cagg_find_aggref_and_var_cols((ContinuousAgg *) cagg, mat_ht);
