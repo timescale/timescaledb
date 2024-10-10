@@ -74,7 +74,7 @@ gapfill_function_walker(Node *node, gapfill_walker_context *context)
 		context->count++;
 	}
 
-	return expression_tree_walker((Node *) node, gapfill_function_walker, context);
+	return expression_tree_walker(node, gapfill_function_walker, context);
 }
 
 /*
@@ -92,7 +92,7 @@ marker_function_walker(Node *node, gapfill_walker_context *context)
 		context->count++;
 	}
 
-	return expression_tree_walker((Node *) node, marker_function_walker, context);
+	return expression_tree_walker(node, marker_function_walker, context);
 }
 
 /*

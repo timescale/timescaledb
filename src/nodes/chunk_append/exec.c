@@ -389,7 +389,7 @@ perform_plan_init(ChunkAppendState *state, EState *estate, int eflags)
 		return;
 	}
 
-	state->subplanstates = palloc0(state->num_subplans * sizeof(PlanState *));
+	state->subplanstates = (PlanState **) palloc0(state->num_subplans * sizeof(PlanState *));
 
 	i = 0;
 	foreach (lc, state->filtered_subplans)
