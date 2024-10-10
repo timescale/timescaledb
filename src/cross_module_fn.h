@@ -75,6 +75,7 @@ typedef struct CrossModuleFunctions
 	void (*set_rel_pathlist_query)(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *,
 								   Hypertable *);
 	void (*set_rel_pathlist)(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
+	bool (*process_explain_def)(DefElem *def);
 
 	/* gapfill */
 	PGFunction gapfill_marker;
@@ -88,6 +89,9 @@ typedef struct CrossModuleFunctions
 
 	PGFunction reorder_chunk;
 	PGFunction move_chunk;
+
+	DDLResult (*ddl_command_start)(ProcessUtilityArgs *args);
+	void (*ddl_command_end)(EventTriggerData *trigdata);
 
 	/* Vectorized queries */
 	void (*tsl_postprocess_plan)(PlannedStmt *stmt);
@@ -143,6 +147,9 @@ typedef struct CrossModuleFunctions
 	PGFunction dictionary_compressor_finish;
 	PGFunction array_compressor_append;
 	PGFunction array_compressor_finish;
+	PGFunction hypercore_handler;
+	PGFunction hypercore_proxy_handler;
+	PGFunction is_compressed_tid;
 
 	PGFunction create_chunk;
 	PGFunction show_chunk;

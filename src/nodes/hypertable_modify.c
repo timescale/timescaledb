@@ -4,6 +4,8 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/tupdesc.h>
+#include <catalog/pg_attribute.h>
 #include <catalog/pg_type.h>
 #include <executor/execPartition.h>
 #include <executor/nodeModifyTable.h>
@@ -12,6 +14,7 @@
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <nodes/pg_list.h>
 #include <nodes/plannodes.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/plancat.h>
@@ -929,7 +932,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 				if (unlikely(!resultRelInfo->ri_projectNewInfoValid))
 					ExecInitInsertProjection(node, resultRelInfo);
 				slot = ExecGetInsertNewTuple(resultRelInfo, context.planSlot);
-				slot = ExecInsert(&context, cds->rri, slot, node->canSetTag);
+				slot = ExecInsert(&context, resultRelInfo, cds, slot, node->canSetTag);
 				break;
 			case CMD_UPDATE:
 				/* Initialize projection info if first time for this table */
@@ -1431,8 +1434,8 @@ ExecGetUpdateNewTuple(ResultRelInfo *relinfo, TupleTableSlot *planSlot, TupleTab
  * copied and modified version of ExecInsert from executor/nodeModifyTable.c
  */
 TupleTableSlot *
-ExecInsert(ModifyTableContext *context, ResultRelInfo *resultRelInfo, TupleTableSlot *slot,
-		   bool canSetTag)
+ExecInsert(ModifyTableContext *context, ResultRelInfo *resultRelInfo, ChunkDispatchState *cds,
+		   TupleTableSlot *slot, bool canSetTag)
 {
 	ModifyTableState *mtstate = context->mtstate;
 	EState *estate = context->estate;
@@ -1446,6 +1449,36 @@ ExecInsert(ModifyTableContext *context, ResultRelInfo *resultRelInfo, TupleTable
 	MemoryContext oldContext;
 
 	Assert(!mtstate->mt_partition_tuple_routing);
+
+	/*
+	 * Fetch the chunk dispatch state similar to how it is done in
+	 * nodeModifyTable.c. For us, this is stored in the chunk insert state,
+	 * which we add in to the chunk dispatch state in chunk_dispatch_exec().
+	 *
+	 * We can probably improve this code by removing ChunkDispatch. It is
+	 * currently the immediate child of ModifyTable and placed between
+	 * ModifyTable and the original subplan of ModifyTable. This was
+	 * previously necessary because we didn't have our own version of
+	 * ModifyTable, but since PG14 we have our own version of
+	 * ModifyTable. This means that we can move the logic to make a
+	 * partition/chunk lookup into a separate function similar to how
+	 * ExecPrepareTupleRouting() does it in nodeModifyTable.c.
+	 *
+	 *    if (proute)
+	 *    {
+	 *        ResultRelInfo *partRelInfo;
+	 *
+	 *        slot = ExecPrepareTupleRouting(mtstate, estate, proute,
+	 *                                       resultRelInfo, slot,
+	 *                                       &partRelInfo);
+	 *        resultRelInfo = partRelInfo;
+	 *  }
+	 *
+	 * The current approach is a quick fix to avoid changing too much code at
+	 * the same time and risk introducing a bug.
+	 */
+	slot = ts_chunk_dispatch_prepare_tuple_routing(cds, slot);
+	resultRelInfo = cds->rri;
 
 	ExecMaterializeSlot(slot);
 

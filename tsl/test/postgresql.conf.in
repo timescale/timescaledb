@@ -1,6 +1,6 @@
 # This section has to be equivalent to test/postgresql.conf
 
-autovacuum=false
+autovacuum=true
 datestyle='Postgres, MDY'
 hba_file='@TEST_PG_HBA_FILE@'
 log_destination='@TEST_PG_LOG_DESTINATION@'

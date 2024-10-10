@@ -1,6 +1,7 @@
 set(SOURCES)
 target_sources(${TSL_LIBRARY_NAME} PRIVATE ${SOURCES})
 add_subdirectory(decompress_chunk)
+add_subdirectory(columnar_scan)
 add_subdirectory(frozen_chunk_dml)
 add_subdirectory(gapfill)
 add_subdirectory(skip_scan)
