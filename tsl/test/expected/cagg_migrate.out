@@ -372,12 +372,12 @@ SELECT *
 FROM timescaledb_information.jobs
 WHERE hypertable_schema = :'MAT_SCHEMA_NAME'
 AND hypertable_name = :'MAT_TABLE_NAME'
-AND job_id >= 1000;
+AND job_id >= 1000 ORDER BY job_id;
  job_id |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule |                            config                             | next_start | initial_start |   hypertable_schema   |      hypertable_name       |      check_schema      |                check_name                 
 --------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+--------------------+-----------+----------------+---------------------------------------------------------------+------------+---------------+-----------------------+----------------------------+------------------------+-------------------------------------------
-   1002 | Compression Policy [1002]                  | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 3, "compress_after": 100}                   |            |               | _timescaledb_internal | _materialized_hypertable_3 | _timescaledb_functions | policy_compression_check
-   1001 | Refresh Continuous Aggregate Policy [1001] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": 1, "start_offset": 50, "mat_hypertable_id": 3} |            |               | _timescaledb_internal | _materialized_hypertable_3 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
    1000 | Retention Policy [1000]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              | {"drop_after": 400, "hypertable_id": 3}                       |            |               | _timescaledb_internal | _materialized_hypertable_3 | _timescaledb_functions | policy_retention_check
+   1001 | Refresh Continuous Aggregate Policy [1001] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": 1, "start_offset": 50, "mat_hypertable_id": 3} |            |               | _timescaledb_internal | _materialized_hypertable_3 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
+   1002 | Compression Policy [1002]                  | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 3, "compress_after": 100}                   |            |               | _timescaledb_internal | _materialized_hypertable_3 | _timescaledb_functions | policy_compression_check
 (3 rows)
 
 -- execute the migration
@@ -435,12 +435,12 @@ SELECT *
 FROM timescaledb_information.jobs
 WHERE hypertable_schema = :'NEW_MAT_SCHEMA_NAME'
 AND hypertable_name = :'NEW_MAT_TABLE_NAME'
-AND job_id >= 1000;
+AND job_id >= 1000 ORDER BY job_id;
  job_id |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule |                            config                             | next_start | initial_start |   hypertable_schema   |      hypertable_name       |      check_schema      |                check_name                 
 --------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+--------------------+-----------+----------------+---------------------------------------------------------------+------------+---------------+-----------------------+----------------------------+------------------------+-------------------------------------------
-   1005 | Compression Policy [1005]                  | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 7, "compress_after": 100}                   |            |               | _timescaledb_internal | _materialized_hypertable_7 | _timescaledb_functions | policy_compression_check
-   1004 | Refresh Continuous Aggregate Policy [1004] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": 1, "start_offset": 50, "mat_hypertable_id": 7} |            |               | _timescaledb_internal | _materialized_hypertable_7 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
    1003 | Retention Policy [1003]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              | {"drop_after": 400, "hypertable_id": 7}                       |            |               | _timescaledb_internal | _materialized_hypertable_7 | _timescaledb_functions | policy_retention_check
+   1004 | Refresh Continuous Aggregate Policy [1004] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": 1, "start_offset": 50, "mat_hypertable_id": 7} |            |               | _timescaledb_internal | _materialized_hypertable_7 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
+   1005 | Compression Policy [1005]                  | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 7, "compress_after": 100}                   |            |               | _timescaledb_internal | _materialized_hypertable_7 | _timescaledb_functions | policy_compression_check
 (3 rows)
 
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
@@ -448,7 +448,7 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
 -------------------+---------+----------+------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------
                  3 |       1 | FINISHED | SAVE WATERMARK   | {"watermark": "1008"}
                  3 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
-                 3 |       3 | FINISHED | DISABLE POLICIES | {"policies": [1002, 1000]}
+                 3 |       3 | FINISHED | DISABLE POLICIES | {"policies": [1000, 1002]}
                  3 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "1008", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "integer"}
                  3 |       5 | FINISHED | COPY DATA        | {"end_ts": "100", "start_ts": "0", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
                  3 |       6 | FINISHED | COPY DATA        | {"end_ts": "200", "start_ts": "100", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
@@ -460,10 +460,10 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
                  3 |      12 | FINISHED | COPY DATA        | {"end_ts": "800", "start_ts": "700", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
                  3 |      13 | FINISHED | COPY DATA        | {"end_ts": "900", "start_ts": "800", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
                  3 |      14 | FINISHED | COPY DATA        | {"end_ts": "1000", "start_ts": "900", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |      15 | FINISHED | COPY POLICIES    | {"policies": [1002, 1001, 1000], "cagg_name_new": "conditions_summary_daily_new"}
+                 3 |      15 | FINISHED | COPY POLICIES    | {"policies": [1000, 1001, 1002], "cagg_name_new": "conditions_summary_daily_new"}
                  3 |      16 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
                  3 |      17 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                 3 |      18 | FINISHED | ENABLE POLICIES  | {"policies": [1003, 1004, 1005, 1002, 1001, 1000]}
+                 3 |      18 | FINISHED | ENABLE POLICIES  | {"policies": [1003, 1004, 1005, 1000, 1001, 1002]}
 (18 rows)
 
 -- check migrated data. should return 0 (zero) rows
@@ -644,9 +644,9 @@ psql:include/cagg_migrate_common.sql:203: WARNING:  there was some uncertainty p
 psql:include/cagg_migrate_common.sql:203: NOTICE:  default segment by for hypertable "_materialized_hypertable_11" is set to ""
 psql:include/cagg_migrate_common.sql:203: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('1008' AS integer), NULL);"
 psql:include/cagg_migrate_common.sql:203: NOTICE:  drop cascades to 10 other objects
-psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1002 not found, skipping
-psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1001 not found, skipping
 psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1000 not found, skipping
+psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1001 not found, skipping
+psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1002 not found, skipping
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
                   View "public.conditions_summary_daily"
@@ -1233,12 +1233,12 @@ SELECT *
 FROM timescaledb_information.jobs
 WHERE hypertable_schema = :'MAT_SCHEMA_NAME'
 AND hypertable_name = :'MAT_TABLE_NAME'
-AND job_id >= 1000;
+AND job_id >= 1000 ORDER BY job_id;
  job_id |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule |                                     config                                     | next_start | initial_start |   hypertable_schema   |      hypertable_name       |      check_schema      |                check_name                 
 --------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+--------------------+-----------+----------------+--------------------------------------------------------------------------------+------------+---------------+-----------------------+----------------------------+------------------------+-------------------------------------------
-   1014 | Compression Policy [1014]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 7, "compress_after": "@ 45 days"}                            |            |               | _timescaledb_internal | _materialized_hypertable_7 | _timescaledb_functions | policy_compression_check
-   1013 | Refresh Continuous Aggregate Policy [1013] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 7} |            |               | _timescaledb_internal | _materialized_hypertable_7 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
    1012 | Retention Policy [1012]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              | {"drop_after": "@ 30 days", "hypertable_id": 7}                                |            |               | _timescaledb_internal | _materialized_hypertable_7 | _timescaledb_functions | policy_retention_check
+   1013 | Refresh Continuous Aggregate Policy [1013] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 7} |            |               | _timescaledb_internal | _materialized_hypertable_7 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
+   1014 | Compression Policy [1014]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 7, "compress_after": "@ 45 days"}                            |            |               | _timescaledb_internal | _materialized_hypertable_7 | _timescaledb_functions | policy_compression_check
 (3 rows)
 
 -- execute the migration
@@ -1296,12 +1296,12 @@ SELECT *
 FROM timescaledb_information.jobs
 WHERE hypertable_schema = :'NEW_MAT_SCHEMA_NAME'
 AND hypertable_name = :'NEW_MAT_TABLE_NAME'
-AND job_id >= 1000;
+AND job_id >= 1000 ORDER BY job_id;
  job_id |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule |                                     config                                      | next_start | initial_start |   hypertable_schema   |       hypertable_name       |      check_schema      |                check_name                 
 --------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+--------------------+-----------+----------------+---------------------------------------------------------------------------------+------------+---------------+-----------------------+-----------------------------+------------------------+-------------------------------------------
-   1017 | Compression Policy [1017]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 11, "compress_after": "@ 45 days"}                            |            |               | _timescaledb_internal | _materialized_hypertable_11 | _timescaledb_functions | policy_compression_check
-   1016 | Refresh Continuous Aggregate Policy [1016] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 11} |            |               | _timescaledb_internal | _materialized_hypertable_11 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
    1015 | Retention Policy [1015]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              | {"drop_after": "@ 30 days", "hypertable_id": 11}                                |            |               | _timescaledb_internal | _materialized_hypertable_11 | _timescaledb_functions | policy_retention_check
+   1016 | Refresh Continuous Aggregate Policy [1016] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 11} |            |               | _timescaledb_internal | _materialized_hypertable_11 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
+   1017 | Compression Policy [1017]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 11, "compress_after": "@ 45 days"}                            |            |               | _timescaledb_internal | _materialized_hypertable_11 | _timescaledb_functions | policy_compression_check
 (3 rows)
 
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
@@ -1309,7 +1309,7 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
 -------------------+---------+----------+------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
                  7 |       1 | FINISHED | SAVE WATERMARK   | {"watermark": "2023-01-01 00:00:00"}
                  7 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
-                 7 |       3 | FINISHED | DISABLE POLICIES | {"policies": [1014, 1012]}
+                 7 |       3 | FINISHED | DISABLE POLICIES | {"policies": [1012, 1014]}
                  7 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "2023-01-01 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "timestamp without time zone"}
                  7 |       5 | FINISHED | COPY DATA        | {"end_ts": "2022-03-11 00:00:00", "start_ts": "2021-12-31 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
                  7 |       6 | FINISHED | COPY DATA        | {"end_ts": "2022-05-20 00:00:00", "start_ts": "2022-03-11 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
@@ -1317,10 +1317,10 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
                  7 |       8 | FINISHED | COPY DATA        | {"end_ts": "2022-10-07 00:00:00", "start_ts": "2022-07-29 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
                  7 |       9 | FINISHED | COPY DATA        | {"end_ts": "2022-12-16 00:00:00", "start_ts": "2022-10-07 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
                  7 |      10 | FINISHED | COPY DATA        | {"end_ts": "2023-02-24 00:00:00", "start_ts": "2022-12-16 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 7 |      11 | FINISHED | COPY POLICIES    | {"policies": [1014, 1013, 1012], "cagg_name_new": "conditions_summary_daily_new"}
+                 7 |      11 | FINISHED | COPY POLICIES    | {"policies": [1012, 1013, 1014], "cagg_name_new": "conditions_summary_daily_new"}
                  7 |      12 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
                  7 |      13 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                 7 |      14 | FINISHED | ENABLE POLICIES  | {"policies": [1015, 1016, 1017, 1014, 1013, 1012]}
+                 7 |      14 | FINISHED | ENABLE POLICIES  | {"policies": [1015, 1016, 1017, 1012, 1013, 1014]}
 (14 rows)
 
 -- check migrated data. should return 0 (zero) rows
@@ -1493,9 +1493,9 @@ psql:include/cagg_migrate_common.sql:203: WARNING:  there was some uncertainty p
 psql:include/cagg_migrate_common.sql:203: NOTICE:  default segment by for hypertable "_materialized_hypertable_15" is set to ""
 psql:include/cagg_migrate_common.sql:203: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('2023-01-01 00:00:00' AS timestamp without time zone), NULL);"
 psql:include/cagg_migrate_common.sql:203: NOTICE:  drop cascades to 6 other objects
-psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1014 not found, skipping
-psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1013 not found, skipping
 psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1012 not found, skipping
+psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1013 not found, skipping
+psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1014 not found, skipping
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
                             View "public.conditions_summary_daily"
@@ -2073,12 +2073,12 @@ SELECT *
 FROM timescaledb_information.jobs
 WHERE hypertable_schema = :'MAT_SCHEMA_NAME'
 AND hypertable_name = :'MAT_TABLE_NAME'
-AND job_id >= 1000;
+AND job_id >= 1000 ORDER BY job_id;
  job_id |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule |                                     config                                      | next_start | initial_start |   hypertable_schema   |       hypertable_name       |      check_schema      |                check_name                 
 --------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+--------------------+-----------+----------------+---------------------------------------------------------------------------------+------------+---------------+-----------------------+-----------------------------+------------------------+-------------------------------------------
-   1026 | Compression Policy [1026]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 11, "compress_after": "@ 45 days"}                            |            |               | _timescaledb_internal | _materialized_hypertable_11 | _timescaledb_functions | policy_compression_check
-   1025 | Refresh Continuous Aggregate Policy [1025] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 11} |            |               | _timescaledb_internal | _materialized_hypertable_11 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
    1024 | Retention Policy [1024]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              | {"drop_after": "@ 30 days", "hypertable_id": 11}                                |            |               | _timescaledb_internal | _materialized_hypertable_11 | _timescaledb_functions | policy_retention_check
+   1025 | Refresh Continuous Aggregate Policy [1025] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 11} |            |               | _timescaledb_internal | _materialized_hypertable_11 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
+   1026 | Compression Policy [1026]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 11, "compress_after": "@ 45 days"}                            |            |               | _timescaledb_internal | _materialized_hypertable_11 | _timescaledb_functions | policy_compression_check
 (3 rows)
 
 -- execute the migration
@@ -2136,12 +2136,12 @@ SELECT *
 FROM timescaledb_information.jobs
 WHERE hypertable_schema = :'NEW_MAT_SCHEMA_NAME'
 AND hypertable_name = :'NEW_MAT_TABLE_NAME'
-AND job_id >= 1000;
+AND job_id >= 1000 ORDER BY job_id;
  job_id |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule |                                     config                                      | next_start | initial_start |   hypertable_schema   |       hypertable_name       |      check_schema      |                check_name                 
 --------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+--------------------+-----------+----------------+---------------------------------------------------------------------------------+------------+---------------+-----------------------+-----------------------------+------------------------+-------------------------------------------
-   1029 | Compression Policy [1029]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 21, "compress_after": "@ 45 days"}                            |            |               | _timescaledb_internal | _materialized_hypertable_21 | _timescaledb_functions | policy_compression_check
-   1028 | Refresh Continuous Aggregate Policy [1028] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 21} |            |               | _timescaledb_internal | _materialized_hypertable_21 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
    1027 | Retention Policy [1027]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              | {"drop_after": "@ 30 days", "hypertable_id": 21}                                |            |               | _timescaledb_internal | _materialized_hypertable_21 | _timescaledb_functions | policy_retention_check
+   1028 | Refresh Continuous Aggregate Policy [1028] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 21} |            |               | _timescaledb_internal | _materialized_hypertable_21 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
+   1029 | Compression Policy [1029]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 21, "compress_after": "@ 45 days"}                            |            |               | _timescaledb_internal | _materialized_hypertable_21 | _timescaledb_functions | policy_compression_check
 (3 rows)
 
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
@@ -2149,7 +2149,7 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
 -------------------+---------+----------+------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
                 11 |       1 | FINISHED | SAVE WATERMARK   | {"watermark": "2022-12-31 16:00:00-08"}
                 11 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
-                11 |       3 | FINISHED | DISABLE POLICIES | {"policies": [1026, 1024]}
+                11 |       3 | FINISHED | DISABLE POLICIES | {"policies": [1024, 1026]}
                 11 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "2022-12-31 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "timestamp with time zone"}
                 11 |       5 | FINISHED | COPY DATA        | {"end_ts": "2022-03-11 16:00:00-08", "start_ts": "2021-12-31 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
                 11 |       6 | FINISHED | COPY DATA        | {"end_ts": "2022-05-20 16:00:00-07", "start_ts": "2022-03-11 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
@@ -2157,10 +2157,10 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
                 11 |       8 | FINISHED | COPY DATA        | {"end_ts": "2022-10-07 16:00:00-07", "start_ts": "2022-07-29 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
                 11 |       9 | FINISHED | COPY DATA        | {"end_ts": "2022-12-16 16:00:00-08", "start_ts": "2022-10-07 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
                 11 |      10 | FINISHED | COPY DATA        | {"end_ts": "2023-02-24 16:00:00-08", "start_ts": "2022-12-16 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                11 |      11 | FINISHED | COPY POLICIES    | {"policies": [1026, 1025, 1024], "cagg_name_new": "conditions_summary_daily_new"}
+                11 |      11 | FINISHED | COPY POLICIES    | {"policies": [1024, 1025, 1026], "cagg_name_new": "conditions_summary_daily_new"}
                 11 |      12 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
                 11 |      13 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                11 |      14 | FINISHED | ENABLE POLICIES  | {"policies": [1027, 1028, 1029, 1026, 1025, 1024]}
+                11 |      14 | FINISHED | ENABLE POLICIES  | {"policies": [1027, 1028, 1029, 1024, 1025, 1026]}
 (14 rows)
 
 -- check migrated data. should return 0 (zero) rows
@@ -2333,9 +2333,9 @@ psql:include/cagg_migrate_common.sql:203: WARNING:  there was some uncertainty p
 psql:include/cagg_migrate_common.sql:203: NOTICE:  default segment by for hypertable "_materialized_hypertable_25" is set to ""
 psql:include/cagg_migrate_common.sql:203: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('2022-12-31 16:00:00-08' AS timestamp with time zone), NULL);"
 psql:include/cagg_migrate_common.sql:203: NOTICE:  drop cascades to 6 other objects
-psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1026 not found, skipping
-psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1025 not found, skipping
 psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1024 not found, skipping
+psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1025 not found, skipping
+psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1026 not found, skipping
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
                            View "public.conditions_summary_daily"
