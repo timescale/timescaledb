@@ -85,9 +85,7 @@ typedef struct
 	List *per_agg_states;
 
 	uint64 stat_input_total_rows;
-
 	uint64 stat_input_valid_rows;
-
 	uint64 stat_bulk_filtered_rows;
 } GroupingPolicyHash;
 
@@ -114,7 +112,7 @@ create_grouping_policy_hash(List *agg_defs, List *output_grouping_columns)
 					palloc0(agg_def->func.state_bytes * policy->allocated_aggstate_rows));
 	}
 
-	policy->table = h_create(CurrentMemoryContext, 1000, NULL);
+	policy->table = h_create(CurrentMemoryContext, policy->allocated_aggstate_rows, NULL);
 	policy->have_null_key = false;
 
 	policy->returning_results = false;
@@ -211,15 +209,13 @@ compute_single_aggregate(DecompressBatchState *batch_state, int start_row, int e
 }
 
 static pg_attribute_always_inline uint32
-fill_offsets_impl(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
-				  int key_column_index, uint32 next_unused_state_index, int start_row, int end_row,
-				  uint32 *restrict offsets,
+fill_offsets_impl_for_real(GroupingPolicyHash *policy,
+	CompressedColumnValues column, const uint64 *restrict filter,
+	uint32 next_unused_state_index, int start_row, int end_row,
+	uint32 *restrict offsets,
 				  void (*get_key)(CompressedColumnValues column, int row, Datum *restrict key,
 								  bool *restrict valid))
 {
-	CompressedColumnValues column = batch_state->compressed_columns[key_column_index];
-	// Assert(gv->decompression_type == 8 /* lolwut */);
-	const uint64 *restrict filter = batch_state->vector_qual_result;
 	struct h_hash *restrict table = policy->table;
 	for (int row = start_row; row < end_row; row++)
 	{
@@ -247,6 +243,44 @@ fill_offsets_impl(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
 			policy->have_null_key = true;
 			offsets[row] = 1;
 		}
+	}
+	return next_unused_state_index;
+}
+
+static pg_attribute_always_inline uint32
+fill_offsets_impl(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
+				  int key_column_index, uint32 next_unused_state_index, int start_row, int end_row,
+				  uint32 *restrict offsets,
+				  void (*get_key)(CompressedColumnValues column, int row, Datum *restrict key,
+								  bool *restrict valid))
+{
+	CompressedColumnValues column = batch_state->compressed_columns[key_column_index];
+	// Assert(gv->decompression_type == 8 /* lolwut */);
+	const uint64 *restrict filter = batch_state->vector_qual_result;
+
+	if (filter == NULL && column.buffers[0] == NULL)
+	{
+		next_unused_state_index = fill_offsets_impl_for_real(policy, column,
+															 filter, next_unused_state_index, start_row, end_row, offsets, get_key);
+	}
+	else if (filter != NULL && column.buffers[0] == NULL)
+	{
+		next_unused_state_index = fill_offsets_impl_for_real(policy, column,
+															 filter, next_unused_state_index, start_row, end_row, offsets, get_key);
+	}
+	else if (filter == NULL && column.buffers[0] != NULL)
+	{
+		next_unused_state_index = fill_offsets_impl_for_real(policy, column,
+															 filter, next_unused_state_index, start_row, end_row, offsets, get_key);
+	}
+	else if (filter != NULL && column.buffers[0] != NULL)
+	{
+		next_unused_state_index = fill_offsets_impl_for_real(policy, column,
+															 filter, next_unused_state_index, start_row, end_row, offsets, get_key);
+	}
+	else
+	{
+		Assert(false);
 	}
 
 	policy->stat_input_total_rows += batch_state->total_batch_rows;
@@ -383,8 +417,6 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 	// const uint64_t* restrict key_validity = key_column->buffers[0];
 	const uint64_t *restrict filter = batch_state->vector_qual_result;
 
-	uint32 offsets[1000] = { 0 };
-
 	const int n = batch_state->total_batch_rows;
 	int start_row = 0;
 	int end_row = 0;
@@ -392,6 +424,10 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 	// for (int end_row = MIN(64, n); end_row <= n; end_row += 64)
 	for (start_row = 0; start_row < n; start_row = end_row)
 	{
+		/*
+		 * If we have a highly selective filter, it's easy to skip the rows for
+		 * which the entire filter bitmap words are zero.
+		 */
 		if (filter)
 		{
 			if (filter[start_row / 64] == 0)
@@ -415,16 +451,22 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 		}
 		Assert(start_row <= end_row);
 		Assert(end_row <= n);
+
 		/*
-		 * State index zero is invalid, and state index one is for null key. We have
-		 * to initialize it at the first run.
+		 * Remember which aggregation states have already existed, and which we
+		 * have to initialize. State index zero is invalid, and state index one
+		 * is for null key. We have to initialize the null key state at the
+		 * first run.
 		 */
-		uint32 last_initialized_state_index =
+		const uint32 last_initialized_state_index =
 			policy->table->members ? policy->table->members + 2 : 1;
 		uint32 next_unused_state_index = policy->table->members + 2;
 
+		/*
+		 * Match rows to aggregation states using a hash table.
+		 */
+		uint32 offsets[1000] = { 0 };
 		Assert((size_t) end_row <= sizeof(offsets) / sizeof(*offsets));
-
 		switch ((int) key_column->decompression_type)
 		{
 			case DT_Scalar:
@@ -471,6 +513,9 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 		ListCell *aggdeflc;
 		ListCell *aggstatelc;
 
+		/*
+		 * Initialize the aggregate function states for the newly added keys.
+		 */
 		if (next_unused_state_index > last_initialized_state_index)
 		{
 			if (next_unused_state_index > policy->allocated_aggstate_rows)
@@ -494,6 +539,9 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 			}
 		}
 
+		/*
+		 * Update the aggregate function states.
+		 */
 		forboth (aggdeflc, policy->agg_defs, aggstatelc, policy->per_agg_states)
 		{
 			compute_single_aggregate(batch_state,
@@ -505,6 +553,7 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 									 policy->agg_extra_mctx);
 		}
 	}
+	Assert(end_row == n);
 }
 
 static bool

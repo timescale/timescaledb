@@ -571,14 +571,6 @@ SH_GROW(SH_TYPE *tb, uint64 newsize)
 static pg_attribute_always_inline SH_ELEMENT_TYPE *
 SH_INSERT_HASH_INTERNAL(SH_TYPE *restrict tb, SH_KEY_TYPE key, uint32 hash, bool *found)
 {
-	uint32 startelem;
-	uint32 curelem;
-	SH_ELEMENT_TYPE *restrict data;
-	uint32 insertdist;
-
-restart:
-	insertdist = 0;
-
 	/*
 	 * We do the grow check even if the key is actually present, to avoid
 	 * doing the check inside the loop. This also lets us avoid having to
@@ -600,15 +592,14 @@ restart:
 		/* SH_STAT(tb); */
 	}
 
+	SH_ELEMENT_TYPE *restrict data = tb->data;
+
 	/* perform insert, start bucket search at optimal location */
-	data = tb->data;
-	startelem = SH_INITIAL_BUCKET(tb, hash);
-	curelem = startelem;
+	const uint32 startelem = SH_INITIAL_BUCKET(tb, hash);
+	uint32 curelem = startelem;
+	uint32 insertdist = 0;
 	while (true)
 	{
-		uint32 curdist;
-		uint32 curhash;
-		uint32 curoptimal;
 		SH_ELEMENT_TYPE *entry = &data[curelem];
 
 		/* any empty bucket can directly be used */
@@ -638,76 +629,14 @@ restart:
 			return entry;
 		}
 
-		curhash = SH_ENTRY_HASH(tb, entry);
-		curoptimal = SH_INITIAL_BUCKET(tb, curhash);
-		curdist = SH_DISTANCE_FROM_OPTIMAL(tb, curoptimal, curelem);
+		const uint32 curhash = SH_ENTRY_HASH(tb, entry);
+		const uint32 curoptimal = SH_INITIAL_BUCKET(tb, curhash);
+		const uint32 curdist = SH_DISTANCE_FROM_OPTIMAL(tb, curoptimal, curelem);
 
 		if (insertdist > curdist)
 		{
-			SH_ELEMENT_TYPE *lastentry = entry;
-			uint32 emptyelem = curelem;
-			uint32 moveelem;
-			int32 emptydist = 0;
-
-			/* find next empty bucket */
-			while (true)
-			{
-				SH_ELEMENT_TYPE *emptyentry;
-
-				emptyelem = SH_NEXT(tb, emptyelem, startelem);
-				emptyentry = &data[emptyelem];
-
-				if (SH_ENTRY_EMPTY(emptyentry))
-				{
-					lastentry = emptyentry;
-					break;
-				}
-
-				/*
-				 * To avoid negative consequences from overly imbalanced
-				 * hashtables, grow the hashtable if collisions would require
-				 * us to move a lot of entries.  The most likely cause of such
-				 * imbalance is filling a (currently) small table, from a
-				 * currently big one, in hash-table order.  Don't grow if the
-				 * hashtable would be too empty, to prevent quick space
-				 * explosion for some weird edge cases.
-				 */
-				if (unlikely(++emptydist > SH_GROW_MAX_MOVE) &&
-					((double) tb->members / tb->size) >= SH_GROW_MIN_FILLFACTOR)
-				{
-					tb->grow_threshold = 0;
-					goto restart;
-				}
-			}
-
-			/* shift forward, starting at last occupied element */
-
-			/*
-			 * TODO: This could be optimized to be one memcpy in many cases,
-			 * excepting wrapping around at the end of ->data. Hasn't shown up
-			 * in profiles so far though.
-			 */
-			moveelem = emptyelem;
-			while (moveelem != curelem)
-			{
-				SH_ELEMENT_TYPE *moveentry;
-
-				moveelem = SH_PREV(tb, moveelem, startelem);
-				moveentry = &data[moveelem];
-
-				memcpy(lastentry, moveentry, sizeof(SH_ELEMENT_TYPE));
-				lastentry = moveentry;
-			}
-
-			/* and fill the now empty spot */
-			tb->members++;
-
-			entry->SH_KEY = key;
-#ifdef SH_STORE_HASH
-			SH_GET_HASH(tb, entry) = hash;
-#endif
-			*found = false;
-			return entry;
+			/* We're going to insert at this position. */
+			break;
 		}
 
 		curelem = SH_NEXT(tb, curelem, startelem);
@@ -724,10 +653,76 @@ restart:
 		if (unlikely(insertdist > SH_GROW_MAX_DIB) &&
 			((double) tb->members / tb->size) >= SH_GROW_MIN_FILLFACTOR)
 		{
-			tb->grow_threshold = 0;
-			goto restart;
+			SH_GROW(tb, tb->size * 2);
+			return SH_INSERT_HASH_INTERNAL(tb, key, hash, found);
 		}
 	}
+
+	/* Actually insert. */
+	SH_ELEMENT_TYPE *entry = &data[curelem];
+	SH_ELEMENT_TYPE *lastentry = entry;
+	uint32 emptyelem = curelem;
+	int32 emptydist = 0;
+
+	/* find next empty bucket */
+	while (true)
+	{
+		SH_ELEMENT_TYPE *emptyentry;
+
+		emptyelem = SH_NEXT(tb, emptyelem, startelem);
+		emptyentry = &data[emptyelem];
+
+		if (SH_ENTRY_EMPTY(emptyentry))
+		{
+			lastentry = emptyentry;
+			break;
+		}
+
+		/*
+		 * To avoid negative consequences from overly imbalanced
+		 * hashtables, grow the hashtable if collisions would require
+		 * us to move a lot of entries.  The most likely cause of such
+		 * imbalance is filling a (currently) small table, from a
+		 * currently big one, in hash-table order.  Don't grow if the
+		 * hashtable would be too empty, to prevent quick space
+		 * explosion for some weird edge cases.
+		 */
+		if (unlikely(++emptydist > SH_GROW_MAX_MOVE) &&
+			((double) tb->members / tb->size) >= SH_GROW_MIN_FILLFACTOR)
+		{
+			SH_GROW(tb, tb->size * 2);
+			return SH_INSERT_HASH_INTERNAL(tb, key, hash, found);
+		}
+	}
+
+	/* shift forward, starting at last occupied element */
+
+	/*
+	 * TODO: This could be optimized to be one memcpy in many cases,
+	 * excepting wrapping around at the end of ->data. Hasn't shown up
+	 * in profiles so far though.
+	 */
+	uint32 moveelem = emptyelem;
+	while (moveelem != curelem)
+	{
+		SH_ELEMENT_TYPE *moveentry;
+
+		moveelem = SH_PREV(tb, moveelem, startelem);
+		moveentry = &data[moveelem];
+
+		memcpy(lastentry, moveentry, sizeof(SH_ELEMENT_TYPE));
+		lastentry = moveentry;
+	}
+
+	/* and fill the now empty spot */
+	tb->members++;
+
+	entry->SH_KEY = key;
+#ifdef SH_STORE_HASH
+	SH_GET_HASH(tb, entry) = hash;
+#endif
+	*found = false;
+	return entry;
 }
 
 /*
