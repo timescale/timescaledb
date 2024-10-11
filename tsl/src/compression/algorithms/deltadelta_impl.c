@@ -12,7 +12,7 @@
 #define FUNCTION_NAME_HELPER(X, Y) X##_##Y
 #define FUNCTION_NAME(X, Y) FUNCTION_NAME_HELPER(X, Y)
 
-static ArrowArray *
+static pg_noinline ArrowArray *
 FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, MemoryContext dest_mctx)
 {
 	StringInfoData si = { .data = DatumGetPointer(compressed), .len = VARSIZE(compressed) };
@@ -44,12 +44,12 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	 * Pad the number of elements to multiple of 64 bytes if needed, so that we
 	 * can work in 64-byte blocks.
 	 */
+#define INNER_LOOP_SIZE_LOG2 3
+#define INNER_LOOP_SIZE (1 << INNER_LOOP_SIZE_LOG2)
 	const uint32 n_total = has_nulls ? nulls.num_elements : num_deltas;
-	const uint32 n_total_padded =
-		((n_total * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
+	const uint32 n_total_padded = pad_to_multiple(INNER_LOOP_SIZE, n_total);
 	const uint32 n_notnull = num_deltas;
-	const uint32 n_notnull_padded =
-		((n_notnull * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
+	const uint32 n_notnull_padded = pad_to_multiple(INNER_LOOP_SIZE, n_notnull);
 	Assert(n_total_padded >= n_total);
 	Assert(n_notnull_padded >= n_notnull);
 	Assert(n_total >= n_notnull);
@@ -57,7 +57,7 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 
 	/*
 	 * We need additional padding at the end of buffer, because the code that
-	 * converts the elements to postres Datum always reads in 8 bytes.
+	 * converts the elements to postgres Datum always reads in 8 bytes.
 	 */
 	const int buffer_bytes = n_total_padded * sizeof(ELEMENT_TYPE) + 8;
 	ELEMENT_TYPE *restrict decompressed_values = MemoryContextAlloc(dest_mctx, buffer_bytes);
@@ -75,17 +75,84 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	 * Also tried zig-zag decoding in a separate loop, seems to be slightly
 	 * slower, around the noise threshold.
 	 */
-#define INNER_LOOP_SIZE 8
 	Assert(n_notnull_padded % INNER_LOOP_SIZE == 0);
 	for (uint32 outer = 0; outer < n_notnull_padded; outer += INNER_LOOP_SIZE)
 	{
+		uint64 x[INNER_LOOP_SIZE];
 		for (uint32 inner = 0; inner < INNER_LOOP_SIZE; inner++)
 		{
-			current_delta += zig_zag_decode(deltas_zigzag[outer + inner]);
-			current_element += current_delta;
-			decompressed_values[outer + inner] = current_element;
+			x[inner] = zig_zag_decode(deltas_zigzag[outer + inner]);
 		}
+
+		x[0] += current_delta;
+
+		/* Now deltas of deltas, will make first-order deltas by prefix summation. */
+		for (int l = 0; l < INNER_LOOP_SIZE_LOG2; l++)
+		{
+//			for (int i = INNER_LOOP_SIZE - 1; i >= (1 << l); i--)
+//			{
+//				x[i] = x[i] + x[i - (1 << l)];
+//			}
+			uint64 xx[INNER_LOOP_SIZE];
+			for (int i = 0; i < INNER_LOOP_SIZE; i++)
+			{
+				xx[i] = (i >= (1 << l)) ? x[i - (1 << l)] : 0;
+			}
+			for (int i = 0; i < INNER_LOOP_SIZE; i++)
+			{
+				x[i] += xx[i];
+			}
+		}
+
+//		const uint64 new_delta = current_delta + x[INNER_LOOP_SIZE - 1];
+		const uint64 new_delta = x[INNER_LOOP_SIZE - 1];
+
+		x[0] += current_element;
+
+		/* Now first-order deltas, will make element values by prefix summation. */
+		for (int l = 0; l < INNER_LOOP_SIZE_LOG2; l++)
+		{
+//			for (int i = INNER_LOOP_SIZE - 1; i >= (1 << l); i--)
+//			{
+//				x[i] = x[i] + x[i - (1 << l)];
+//			}
+
+//			for (int i = INNER_LOOP_SIZE - 1; i >= 0; i--)
+//			{
+//				x[i] = x[i] + ((i >= (1 << l)) ? x[i - (1 << l)] : 0);
+//			}
+
+			uint64 xx[INNER_LOOP_SIZE];
+			for (int i = 0; i < INNER_LOOP_SIZE; i++)
+			{
+				xx[i] = (i >= (1 << l)) ? x[i - (1 << l)] : 0;
+			}
+			for (int i = 0; i < INNER_LOOP_SIZE; i++)
+			{
+				x[i] += xx[i];
+			}
+		}
+
+		/* Now element values. */
+//		uint64 xx[INNER_LOOP_SIZE];
+//		for (uint32 inner = 0; inner < INNER_LOOP_SIZE; inner++)
+//		{
+//			xx[inner] = current_element + (1 + inner) * current_delta;
+//		}
+//		for (uint32 inner = 0; inner < INNER_LOOP_SIZE; inner++)
+//		{
+//			x[inner] += xx[inner];
+//		}
+
+		for (uint32 inner = 0; inner < INNER_LOOP_SIZE; inner++)
+		{
+			decompressed_values[outer + inner] = x[inner];
+		}
+
+		current_element = x[INNER_LOOP_SIZE - 1];
+		current_delta = new_delta;
 	}
+#undef INNER_LOOP_SIZE_LOG2
 #undef INNER_LOOP_SIZE
 
 	uint64 *restrict validity_bitmap = NULL;
