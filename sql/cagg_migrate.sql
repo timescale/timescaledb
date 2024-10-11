@@ -142,7 +142,7 @@ BEGIN
     END IF;
 
     -- get all scheduled policies except the refresh
-    SELECT jsonb_build_object('policies', array_agg(id))
+    SELECT jsonb_build_object('policies', array_agg(id ORDER BY id))
     INTO _policies
     FROM _timescaledb_config.bgw_job
     WHERE hypertable_id = _cagg_data.mat_hypertable_id
@@ -192,7 +192,7 @@ BEGIN
     EXECUTE _sql;
 
     -- get all scheduled policies
-    SELECT jsonb_build_object('policies', array_agg(id))
+    SELECT jsonb_build_object('policies', array_agg(id ORDER BY id))
     INTO _policies
     FROM _timescaledb_config.bgw_job
     WHERE hypertable_id = _cagg_data.mat_hypertable_id
