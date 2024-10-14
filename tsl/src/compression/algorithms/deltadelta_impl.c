@@ -12,7 +12,7 @@
 #define FUNCTION_NAME_HELPER(X, Y) X##_##Y
 #define FUNCTION_NAME(X, Y) FUNCTION_NAME_HELPER(X, Y)
 
-static pg_noinline ArrowArray *
+static ArrowArray *
 FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, MemoryContext dest_mctx)
 {
 	StringInfoData si = { .data = DatumGetPointer(compressed), .len = VARSIZE(compressed) };
@@ -78,79 +78,12 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	Assert(n_notnull_padded % INNER_LOOP_SIZE == 0);
 	for (uint32 outer = 0; outer < n_notnull_padded; outer += INNER_LOOP_SIZE)
 	{
-		ELEMENT_TYPE x[INNER_LOOP_SIZE];
 		for (uint32 inner = 0; inner < INNER_LOOP_SIZE; inner++)
 		{
-			x[inner] = zig_zag_decode(deltas_zigzag[outer + inner]);
+			current_delta += zig_zag_decode(deltas_zigzag[outer + inner]);
+			current_element += current_delta;
+			decompressed_values[outer + inner] = current_element;
 		}
-
-		x[0] += current_delta;
-
-		/* Now deltas of deltas, will make first-order deltas by prefix summation. */
-		for (int l = 0; l < INNER_LOOP_SIZE_LOG2; l++)
-		{
-			for (int i = INNER_LOOP_SIZE - 1; i >= (1 << l); i--)
-			{
-				x[i] = x[i] + x[i - (1 << l)];
-			}
-//			ELEMENT_TYPE xx[INNER_LOOP_SIZE];
-//			for (int i = 0; i < INNER_LOOP_SIZE; i++)
-//			{
-//				xx[i] = (i >= (1 << l)) ? x[i - (1 << l)] : 0;
-//			}
-//			for (int i = 0; i < INNER_LOOP_SIZE; i++)
-//			{
-//				x[i] += xx[i];
-//			}
-		}
-
-//		const uint64 new_delta = current_delta + x[INNER_LOOP_SIZE - 1];
-		const ELEMENT_TYPE new_delta = x[INNER_LOOP_SIZE - 1];
-
-		x[0] += current_element;
-
-		/* Now first-order deltas, will make element values by prefix summation. */
-		for (int l = 0; l < INNER_LOOP_SIZE_LOG2; l++)
-		{
-			for (int i = INNER_LOOP_SIZE - 1; i >= (1 << l); i--)
-			{
-				x[i] = x[i] + x[i - (1 << l)];
-			}
-
-//			for (int i = INNER_LOOP_SIZE - 1; i >= 0; i--)
-//			{
-//				x[i] = x[i] + ((i >= (1 << l)) ? x[i - (1 << l)] : 0);
-//			}
-
-//			ELEMENT_TYPE xx[INNER_LOOP_SIZE];
-//			for (int i = 0; i < INNER_LOOP_SIZE; i++)
-//			{
-//				xx[i] = (i >= (1 << l)) ? x[i - (1 << l)] : 0;
-//			}
-//			for (int i = 0; i < INNER_LOOP_SIZE; i++)
-//			{
-//				x[i] += xx[i];
-//			}
-		}
-
-		/* Now element values. */
-//		uint64 xx[INNER_LOOP_SIZE];
-//		for (uint32 inner = 0; inner < INNER_LOOP_SIZE; inner++)
-//		{
-//			xx[inner] = current_element + (1 + inner) * current_delta;
-//		}
-//		for (uint32 inner = 0; inner < INNER_LOOP_SIZE; inner++)
-//		{
-//			x[inner] += xx[inner];
-//		}
-
-		for (uint32 inner = 0; inner < INNER_LOOP_SIZE; inner++)
-		{
-			decompressed_values[outer + inner] = x[inner];
-		}
-
-		current_element = x[INNER_LOOP_SIZE - 1];
-		current_delta = new_delta;
 	}
 #undef INNER_LOOP_SIZE_LOG2
 #undef INNER_LOOP_SIZE
