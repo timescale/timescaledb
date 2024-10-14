@@ -24,6 +24,10 @@ typedef struct
 {
 	int input_offset;
 	int output_offset;
+
+	Oid typid;
+	int16 value_bytes;
+	bool by_value;
 } GroupingColumn;
 
 typedef struct

@@ -64,11 +64,34 @@ struct h_hash;
 
 typedef struct
 {
+	void *(*create)(MemoryContext context, uint32 initial_rows, void *data);
+	void (*reset)(void *table);
+	uint32 (*get_num_keys)(void *table);
+	uint64 (*get_size_bytes)(void *table);
+} HashTableFunctions;
+
+static uint32
+get_num_keys(void *table)
+{
+	struct h_hash *hash = (struct h_hash *) table;
+	return hash->members;
+}
+
+static uint64
+get_size_bytes(void *table)
+{
+	struct h_hash *hash = (struct h_hash *) table;
+	return hash->members * sizeof(HashEntry);
+}
+
+typedef struct
+{
 	GroupingPolicy funcs;
 	List *agg_defs;
 	List *output_grouping_columns;
 	bool partial_per_batch;
-	struct h_hash *table;
+	void *table;
+	HashTableFunctions functions;
 	bool have_null_key;
 	struct h_iterator iter;
 	bool returning_results;
@@ -83,6 +106,10 @@ typedef struct
 	uint64 aggstate_bytes_per_key;
 	uint64 allocated_aggstate_rows;
 	List *per_agg_states;
+
+	uint64 key_bytes;
+	uint64 allocated_key_rows;
+	void *keys;
 
 	uint64 stat_input_total_rows;
 	uint64 stat_input_valid_rows;
@@ -112,7 +139,22 @@ create_grouping_policy_hash(List *agg_defs, List *output_grouping_columns)
 					palloc0(agg_def->func.state_bytes * policy->allocated_aggstate_rows));
 	}
 
-	policy->table = h_create(CurrentMemoryContext, policy->allocated_aggstate_rows, NULL);
+	Assert(list_length(policy->output_grouping_columns) == 1);
+	GroupingColumn *g = linitial(policy->output_grouping_columns);
+	policy->key_bytes = g->value_bytes;
+	Assert(policy->key_bytes > 0);
+	policy->allocated_key_rows = policy->allocated_aggstate_rows;
+	policy->keys = palloc0(policy->allocated_key_rows * policy->key_bytes);
+
+	policy->functions = (HashTableFunctions){
+		.create = (void *(*) (MemoryContext, uint32, void *) ) h_create,
+		.reset = (void (*)(void *)) h_reset,
+		.get_num_keys = get_num_keys,
+		.get_size_bytes = get_size_bytes,
+	};
+
+	policy->table =
+		policy->functions.create(CurrentMemoryContext, policy->allocated_aggstate_rows, NULL);
 	policy->have_null_key = false;
 
 	policy->returning_results = false;
@@ -129,7 +171,7 @@ gp_hash_reset(GroupingPolicy *obj)
 
 	policy->returning_results = false;
 
-	h_reset(policy->table);
+	policy->functions.reset(policy->table);
 	policy->have_null_key = false;
 
 	policy->stat_input_valid_rows = 0;
@@ -209,12 +251,11 @@ compute_single_aggregate(DecompressBatchState *batch_state, int start_row, int e
 }
 
 static pg_attribute_always_inline uint32
-fill_offsets_impl_for_real(GroupingPolicyHash *policy,
-	CompressedColumnValues column, const uint64 *restrict filter,
-	uint32 next_unused_state_index, int start_row, int end_row,
-	uint32 *restrict offsets,
-				  void (*get_key)(CompressedColumnValues column, int row, Datum *restrict key,
-								  bool *restrict valid))
+fill_offsets_impl_for_real(GroupingPolicyHash *policy, CompressedColumnValues column,
+						   const uint64 *restrict filter, uint32 next_unused_state_index,
+						   int start_row, int end_row, uint32 *restrict offsets,
+						   void (*get_key)(CompressedColumnValues column, int row,
+										   Datum *restrict key, bool *restrict valid))
 {
 	struct h_hash *restrict table = policy->table;
 	for (int row = start_row; row < end_row; row++)
@@ -260,23 +301,47 @@ fill_offsets_impl(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
 
 	if (filter == NULL && column.buffers[0] == NULL)
 	{
-		next_unused_state_index = fill_offsets_impl_for_real(policy, column,
-															 filter, next_unused_state_index, start_row, end_row, offsets, get_key);
+		next_unused_state_index = fill_offsets_impl_for_real(policy,
+															 column,
+															 filter,
+															 next_unused_state_index,
+															 start_row,
+															 end_row,
+															 offsets,
+															 get_key);
 	}
 	else if (filter != NULL && column.buffers[0] == NULL)
 	{
-		next_unused_state_index = fill_offsets_impl_for_real(policy, column,
-															 filter, next_unused_state_index, start_row, end_row, offsets, get_key);
+		next_unused_state_index = fill_offsets_impl_for_real(policy,
+															 column,
+															 filter,
+															 next_unused_state_index,
+															 start_row,
+															 end_row,
+															 offsets,
+															 get_key);
 	}
 	else if (filter == NULL && column.buffers[0] != NULL)
 	{
-		next_unused_state_index = fill_offsets_impl_for_real(policy, column,
-															 filter, next_unused_state_index, start_row, end_row, offsets, get_key);
+		next_unused_state_index = fill_offsets_impl_for_real(policy,
+															 column,
+															 filter,
+															 next_unused_state_index,
+															 start_row,
+															 end_row,
+															 offsets,
+															 get_key);
 	}
 	else if (filter != NULL && column.buffers[0] != NULL)
 	{
-		next_unused_state_index = fill_offsets_impl_for_real(policy, column,
-															 filter, next_unused_state_index, start_row, end_row, offsets, get_key);
+		next_unused_state_index = fill_offsets_impl_for_real(policy,
+															 column,
+															 filter,
+															 next_unused_state_index,
+															 start_row,
+															 end_row,
+															 offsets,
+															 get_key);
 	}
 	else
 	{
@@ -458,9 +523,9 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 		 * is for null key. We have to initialize the null key state at the
 		 * first run.
 		 */
-		const uint32 last_initialized_state_index =
-			policy->table->members ? policy->table->members + 2 : 1;
-		uint32 next_unused_state_index = policy->table->members + 2;
+		const uint32 hash_keys = policy->functions.get_num_keys(policy->table);
+		const uint32 last_initialized_state_index = hash_keys ? hash_keys + 2 : 1;
+		uint32 next_unused_state_index = hash_keys + 2;
 
 		/*
 		 * Match rows to aggregation states using a hash table.
@@ -572,7 +637,7 @@ gp_hash_should_emit(GroupingPolicy *gp)
 	 * work will be done by the final Postgres aggregation, so we should bail
 	 * out early here.
 	 */
-	if (policy->table->members * sizeof(HashEntry) > 128 * 1024)
+	if (policy->functions.get_size_bytes(policy->table) > 128 * 1024)
 	{
 		return true;
 	}

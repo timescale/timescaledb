@@ -119,6 +119,14 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 
 			Var *var = castNode(Var, tlentry->expr);
 			col->input_offset = get_input_offset(decompress_state, var);
+
+			DecompressContext *dcontext = &decompress_state->decompress_context;
+			CompressionColumnDescription *desc =
+				&dcontext->compressed_chunk_columns[col->input_offset];
+
+			col->typid = desc->typid;
+			col->value_bytes = desc->value_bytes;
+			col->by_value = desc->by_value;
 		}
 	}
 
