@@ -348,6 +348,7 @@ spi_update_watermark(Hypertable *mat_ht, SchemaAndName materialization_table,
 					 quote_identifier(NameStr(*time_column_name)),
 					 chunk_condition);
 
+	elog(DEBUG2, "%s: %s", __func__, command->data);
 	res = SPI_execute_with_args(command->data,
 								1,
 								types,
@@ -440,15 +441,9 @@ spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 {
 	int res;
 	StringInfo command = makeStringInfo();
-	Oid types[] = { materialization_range.type,
-					materialization_range.type,
-					materialization_range.type,
-					materialization_range.type };
-	Datum values[] = { materialization_range.start,
-					   materialization_range.end,
-					   materialization_range.start,
-					   materialization_range.end };
-	char nulls[] = { false, false, false, false };
+	Oid types[] = { materialization_range.type, materialization_range.type };
+	Datum values[] = { materialization_range.start, materialization_range.end };
+	char nulls[] = { false, false };
 
 	List *grp_colnames = cagg_find_groupingcols((ContinuousAgg *) cagg, mat_ht);
 	List *agg_colnames = cagg_find_aggref_and_var_cols((ContinuousAgg *) cagg, mat_ht);
@@ -480,7 +475,7 @@ spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 					 "  WHERE %s >= $1 AND %s < $2 "
 					 ") "
 					 "MERGE INTO %s.%s M "
-					 "USING partial P ON %s AND M.%s >= $3 AND M.%s < $4 "
+					 "USING partial P ON %s AND M.%s >= $1 AND M.%s < $2 "
 					 "  %s " /* UPDATE */
 					 "  WHEN NOT MATCHED THEN "
 					 "    INSERT (%s) VALUES (%s) ",
@@ -511,9 +506,9 @@ spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 					 build_merge_insert_columns(all_columns, ", ", NULL),
 					 build_merge_insert_columns(all_columns, ", ", "P."));
 
-	elog(DEBUG2, "%s", command->data);
+	elog(DEBUG2, "%s: %s", __func__, command->data);
 	res = SPI_execute_with_args(command->data,
-								4,
+								2,
 								types,
 								values,
 								nulls,
@@ -542,7 +537,7 @@ spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 					 "WHERE M.%s >= $1 AND M.%s < $2 "
 					 "AND NOT EXISTS ("
 					 " SELECT FROM %s.%s P "
-					 " WHERE %s AND P.%s >= $3 AND P.%s < $4) ",
+					 " WHERE %s AND P.%s >= $1 AND P.%s < $2) ",
 
 					 /* materialization hypertable */
 					 quote_identifier(NameStr(*materialization_table.schema)),
@@ -563,9 +558,9 @@ spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 					 quote_identifier(NameStr(*time_column_name)),
 					 quote_identifier(NameStr(*time_column_name)));
 
-	elog(DEBUG2, "%s", command->data);
+	elog(DEBUG2, "%s: %s", __func__, command->data);
 	res = SPI_execute_with_args(command->data,
-								4,
+								2,
 								types,
 								values,
 								nulls,
@@ -608,6 +603,7 @@ spi_delete_materializations(SchemaAndName materialization_table, const NameData 
 					 quote_identifier(NameStr(*time_column_name)),
 					 chunk_condition);
 
+	elog(DEBUG2, "%s: %s", __func__, command->data);
 	res = SPI_execute_with_args(command->data,
 								2,
 								types,
@@ -654,6 +650,7 @@ spi_insert_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 					 quote_identifier(NameStr(*time_column_name)),
 					 chunk_condition);
 
+	elog(DEBUG2, "%s: %s", __func__, command->data);
 	res = SPI_execute_with_args(command->data,
 								2,
 								types,
