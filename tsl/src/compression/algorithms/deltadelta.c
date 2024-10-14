@@ -27,7 +27,7 @@
 #include "simple8b_rle_bitmap.h"
 
 static uint64 zig_zag_encode(uint64 value);
-static int64 zig_zag_decode(uint64 value);
+static uint64 zig_zag_decode(uint64 value);
 
 typedef struct DeltaDeltaCompressed
 {
@@ -583,15 +583,15 @@ delta_delta_decompression_iterator_try_next_forward(DecompressionIterator *iter)
 #undef ELEMENT_TYPE
 
 /* Functions for bulk decompression. */
-#define ELEMENT_TYPE int16
+#define ELEMENT_TYPE uint16
 #include "deltadelta_impl.c"
 #undef ELEMENT_TYPE
 
-#define ELEMENT_TYPE int32
+#define ELEMENT_TYPE uint32
 #include "deltadelta_impl.c"
 #undef ELEMENT_TYPE
 
-#define ELEMENT_TYPE int64
+#define ELEMENT_TYPE uint64
 #include "deltadelta_impl.c"
 #undef ELEMENT_TYPE
 
@@ -603,12 +603,12 @@ delta_delta_decompress_all(Datum compressed_data, Oid element_type, MemoryContex
 		case INT8OID:
 		case TIMESTAMPOID:
 		case TIMESTAMPTZOID:
-			return delta_delta_decompress_all_int64(compressed_data, dest_mctx);
+			return delta_delta_decompress_all_uint64(compressed_data, dest_mctx);
 		case INT4OID:
 		case DATEOID:
-			return delta_delta_decompress_all_int32(compressed_data, dest_mctx);
+			return delta_delta_decompress_all_uint32(compressed_data, dest_mctx);
 		case INT2OID:
-			return delta_delta_decompress_all_int16(compressed_data, dest_mctx);
+			return delta_delta_decompress_all_uint16(compressed_data, dest_mctx);
 		default:
 			elog(ERROR,
 				 "type '%s' is not supported for deltadelta decompression",
@@ -747,7 +747,7 @@ zig_zag_encode(uint64 value)
 	return (value << 1) ^ (((int64) value) < 0 ? 0xFFFFFFFFFFFFFFFFULL : 0);
 }
 
-static pg_attribute_always_inline int64
+static pg_attribute_always_inline uint64
 zig_zag_decode(uint64 value)
 {
 	/* ZigZag turns negative numbers into odd ones, and positive numbers into even ones*/
