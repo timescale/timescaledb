@@ -25,6 +25,7 @@
 typedef struct
 {
 	Datum key;
+	uint32 status;
 	uint32 agg_state_index;
 } HashEntry;
 
@@ -58,7 +59,7 @@ hash64(uint64 x)
 #define SH_DECLARE
 #define SH_DEFINE
 #define SH_ENTRY_EMPTY(entry) (entry->agg_state_index == 0)
-#include "import/ts_simplehash.h"
+#include <lib/simplehash.h>
 
 struct h_hash;
 
