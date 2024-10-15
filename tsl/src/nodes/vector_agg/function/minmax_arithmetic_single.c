@@ -58,8 +58,8 @@ FUNCTION_NAME(one)(void *restrict agg_state, const CTYPE value)
 	}
 }
 
-#include "agg_const_helper.c"
-#include "agg_many_helper.c"
+#include "agg_scalar_helper.c"
+#include "agg_many_vector_helper.c"
 #include "agg_vector_validity_helper.c"
 
 VectorAggFunctions FUNCTION_NAME(argdef) = {
