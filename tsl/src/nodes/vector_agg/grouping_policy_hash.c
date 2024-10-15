@@ -19,7 +19,15 @@
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
 
+#ifdef USE_FLOAT8_BYVAL
 #define DEBUG_LOG(MSG, ...) elog(DEBUG3, MSG, __VA_ARGS__)
+#else
+/*
+ * On 32-bit platforms we'd have to use the cross-platform int width printf
+ * specifiers which are really unreadable.
+ */
+#define DEBUG_LOG(...)
+#endif
 
 /*
  * We can use crc32 as a hash function, it has bad properties but takes only one
