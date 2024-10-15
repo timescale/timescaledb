@@ -80,10 +80,11 @@ create_dummy_query()
 }
 
 void
-compression_chunk_size_catalog_insert(int32 src_chunk_id, const RelationSize *src_size,
-									  int32 compress_chunk_id, const RelationSize *compress_size,
-									  int64 rowcnt_pre_compression, int64 rowcnt_post_compression,
-									  int64 rowcnt_frozen)
+tsl_compression_chunk_size_catalog_insert(int32 src_chunk_id, const RelationSize *src_size,
+										  int32 compress_chunk_id,
+										  const RelationSize *compress_size,
+										  int64 rowcnt_pre_compression,
+										  int64 rowcnt_post_compression, int64 rowcnt_frozen)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -516,13 +517,13 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 
 	if (new_compressed_chunk)
 	{
-		compression_chunk_size_catalog_insert(cxt.srcht_chunk->fd.id,
-											  &before_size,
-											  compress_ht_chunk->fd.id,
-											  &after_size,
-											  cstat.rowcnt_pre_compression,
-											  cstat.rowcnt_post_compression,
-											  cstat.rowcnt_frozen);
+		tsl_compression_chunk_size_catalog_insert(cxt.srcht_chunk->fd.id,
+												  &before_size,
+												  compress_ht_chunk->fd.id,
+												  &after_size,
+												  cstat.rowcnt_pre_compression,
+												  cstat.rowcnt_post_compression,
+												  cstat.rowcnt_frozen);
 
 		/* Copy chunk constraints (including fkey) to compressed chunk.
 		 * Do this after compressing the chunk to avoid holding strong, unnecessary locks on the
@@ -728,13 +729,13 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	ts_trigger_create_all_on_chunk(compress_ht_chunk);
 
 	/* Insert empty stats to compression_chunk_size */
-	compression_chunk_size_catalog_insert(cxt.srcht_chunk->fd.id,
-										  &uncompressed_size,
-										  compress_ht_chunk->fd.id,
-										  &compressed_size,
-										  numrows_pre_compression,
-										  numrows_post_compression,
-										  0);
+	tsl_compression_chunk_size_catalog_insert(cxt.srcht_chunk->fd.id,
+											  &uncompressed_size,
+											  compress_ht_chunk->fd.id,
+											  &compressed_size,
+											  numrows_pre_compression,
+											  numrows_post_compression,
+											  0);
 
 	chunk_was_compressed = ts_chunk_is_compressed(cxt.srcht_chunk);
 	ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id);

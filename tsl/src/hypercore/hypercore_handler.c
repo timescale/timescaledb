@@ -154,13 +154,13 @@ create_compression_relation_size_stats(int32 chunk_id, Oid relid, int32 compress
 									   int64 num_rows_frozen)
 {
 	RelationSize after_size = ts_relation_size_impl(compress_relid);
-	compression_chunk_size_catalog_insert(chunk_id,
-										  before_size,
-										  compress_chunk_id,
-										  &after_size,
-										  num_rows_pre,
-										  num_rows_post,
-										  num_rows_frozen);
+	tsl_compression_chunk_size_catalog_insert(chunk_id,
+											  before_size,
+											  compress_chunk_id,
+											  &after_size,
+											  num_rows_pre,
+											  num_rows_post,
+											  num_rows_frozen);
 }
 
 static HypercoreInfo *
