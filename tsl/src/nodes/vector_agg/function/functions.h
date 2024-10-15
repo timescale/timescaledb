@@ -23,18 +23,26 @@ typedef struct
 	void (*agg_vector)(void *restrict agg_state, const ArrowArray *vector, const uint64 *filter,
 					   MemoryContext agg_extra_mctx);
 
-	/* Aggregate a constant (like segmentby or column with default value). */
-	void (*agg_const)(void *restrict agg_state, Datum constvalue, bool constisnull, int n,
-					  MemoryContext agg_extra_mctx);
+	/* Aggregate a scalar value, like segmentby or column with default value. */
+	void (*agg_scalar)(void *restrict agg_state, Datum constvalue, bool constisnull, int n,
+					   MemoryContext agg_extra_mctx);
 
-	void (*agg_many)(void *restrict agg_states, uint32 *restrict offsets, int start_row,
-					 int end_row, const ArrowArray *vector, MemoryContext agg_extra_mctx);
+	/*
+	 * Add the rows of the given arrow array to aggregate function states given
+	 * by the respecitve offsets.
+	 */
+	void (*agg_many_vector)(void *restrict agg_states, uint32 *restrict offsets, int start_row,
+							int end_row, const ArrowArray *vector, MemoryContext agg_extra_mctx);
 
+	/*
+	 * Same as above, but for a scalar argument. This is mostly important for
+	 * count(*) and can be NULL.
+	 */
 	void (*agg_many_scalar)(void *restrict agg_states, uint32 *restrict offsets, int start_row,
 							int end_row, Datum constvalue, bool constisnull,
 							MemoryContext agg_extra_mctx);
 
-	/* Emit a partial result. */
+	/* Emit a partial aggregation result. */
 	void (*agg_emit)(void *restrict agg_state, Datum *out_result, bool *out_isnull);
 } VectorAggFunctions;
 

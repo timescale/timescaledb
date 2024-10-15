@@ -61,17 +61,17 @@ FUNCTION_NAME(one)(void *restrict agg_state, const CTYPE value)
 
 typedef Int24SumState FUNCTION_NAME(state);
 
-#include "agg_scalar_helper.c"
 #include "agg_many_vector_helper.c"
+#include "agg_scalar_helper.c"
 #include "agg_vector_validity_helper.c"
 
 VectorAggFunctions FUNCTION_NAME(argdef) = {
 	.state_bytes = sizeof(Int24SumState),
 	.agg_init = int_sum_init,
 	.agg_emit = int_sum_emit,
-	.agg_const = FUNCTION_NAME(const),
+	.agg_scalar = FUNCTION_NAME(scalar),
 	.agg_vector = FUNCTION_NAME(vector),
-	.agg_many = FUNCTION_NAME(many),
+	.agg_many_vector = FUNCTION_NAME(many_vector),
 };
 #endif
 

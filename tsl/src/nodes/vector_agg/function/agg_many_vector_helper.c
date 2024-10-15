@@ -4,9 +4,15 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
+/*
+ * A generic implementation of adding the given batch to many aggregate function
+ * states with given offsets. Used for hash aggregation, and builds on the
+ * FUNCTION_NAME(one) function, which adds one passing non-null row to the given
+ * aggregate function state.
+ */
 static void
-FUNCTION_NAME(many)(void *restrict agg_states, uint32 *restrict offsets, int start_row, int end_row,
-					const ArrowArray *vector, MemoryContext agg_extra_mctx)
+FUNCTION_NAME(many_vector)(void *restrict agg_states, uint32 *restrict offsets, int start_row,
+						   int end_row, const ArrowArray *vector, MemoryContext agg_extra_mctx)
 {
 	MemoryContext old = MemoryContextSwitchTo(agg_extra_mctx);
 	const CTYPE *values = vector->buffers[1];
