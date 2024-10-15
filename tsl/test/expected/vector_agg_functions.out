@@ -9,7 +9,7 @@ $$ LANGUAGE SQL;
 \set CHUNKS 2::int
 \set CHUNK_ROWS 100000::int
 \set GROUPING_CARDINALITY 10::int
-create table aggfns(t int, s int, ss int,
+create table aggfns(t int, s int,
     cint2 int2, cint4 int4, cint8 int8,
     cfloat4 float4, cfloat8 float8,
     cts timestamp, ctstz timestamptz,
@@ -22,27 +22,47 @@ NOTICE:  adding not-null constraint to column "s"
  (1,public,aggfns,t)
 (1 row)
 
-insert into aggfns
-select s * 10000::int + t,
+create view source as
+select s * 10000::int + t as t,
     s,
-    s,
-    case when t % 1051 = 0 then null else (mix(s + t + 1) * 32767)::int2 end,
-    (mix(s + t + 2) * 32767 * 65536)::int4,
-    (mix(s + t + 3) * 32767 * 65536)::int8,
+    case when t % 1051 = 0 then null else (mix(s + t + 1) * 32767)::int2 end as cint2,
+    (mix(s + t + 2) * 32767 * 65536)::int4 as cint4,
+    (mix(s + t + 3) * 32767 * 65536)::int8 as cint8,
     case when s = 1 and t = 1061 then 'nan'::float4
         when s = 2 and t = 1061 then '+inf'::float4
         when s = 3 and t = 1061 then '-inf'::float4
-        else (mix(s + t + 4) * 100)::float4 end,
-    (mix(s + t + 5) * 100)::float8,
-    '2021-01-01 01:01:01'::timestamp + interval '1 second' * (s * 10000::int + t),
-    '2021-01-01 01:01:01'::timestamptz + interval '1 second' * (s * 10000::int + t),
-    '2021-01-01 01:01:01'::timestamptz + interval '1 day' * (s * 10000::int + t)
+        else (mix(s + t + 4) * 100)::float4 end as cfloat4,
+    (mix(s + t + 5) * 100)::float8 as cfloat8,
+    '2021-01-01 01:01:01'::timestamp + interval '1 second' * (s * 10000::int + t) as cts,
+    '2021-01-01 01:01:01'::timestamptz + interval '1 second' * (s * 10000::int + t) as ctstz,
+    '2021-01-01'::date + interval '1 day' * (s * 10000::int + t) as cdate
 from
     generate_series(1::int, :CHUNK_ROWS * :CHUNKS / :GROUPING_CARDINALITY) t,
     generate_series(0::int, :GROUPING_CARDINALITY - 1::int) s(s)
 ;
+insert into aggfns select * from source where s = 1;
 alter table aggfns set (timescaledb.compress, timescaledb.compress_orderby = 't',
     timescaledb.compress_segmentby = 's');
+select count(compress_chunk(x)) from show_chunks('aggfns') x;
+ count 
+-------
+     1
+(1 row)
+
+alter table aggfns add column ss int default 11;
+insert into aggfns
+select *,
+    case
+        -- null in entire batch
+        when s = 2 then null
+        -- null for some rows
+        when s = 3 and t % 1053 = 0 then null
+        -- for some rows same as default
+        when s = 4 and t % 1057 = 0 then 11
+        -- not null for entire batch
+        else s
+    end as ss
+from source where s != 1;
 select count(compress_chunk(x)) from show_chunks('aggfns') x;
  count 
 -------
@@ -75,7 +95,8 @@ from
         'cfloat8',
         'cts',
         'ctstz',
-        'cdate']) variable,
+        'cdate',
+        '*']) variable,
     unnest(array[
         'min',
         'max',
@@ -102,13 +123,50 @@ where
     end
     and
     case
+        when variable = '*' then function = 'count'
         when condition = 'cint2 is null' then variable = 'cint2'
-        when function = 'count' then variable in ('cfloat4', 's')
+        when function = 'count' then variable in ('cfloat4', 's', 'ss')
         when variable = 't' then function in ('min', 'max')
         when variable in ('cts', 'ctstz', 'cdate') then function in ('min', 'max')
     else true end
 order by explain, condition.n, variable, function, grouping.n
 \gexec
+select count(*) from aggfns order by 1;
+ count  
+--------
+ 200000
+(1 row)
+
+select s, count(*) from aggfns group by s order by 1;
+ s | count 
+---+-------
+ 0 | 20000
+ 1 | 20000
+ 2 | 20000
+ 3 | 20000
+ 4 | 20000
+ 5 | 20000
+ 6 | 20000
+ 7 | 20000
+ 8 | 20000
+ 9 | 20000
+(10 rows)
+
+select ss, count(*) from aggfns group by ss order by 1;
+ ss | count 
+----+-------
+  0 | 20000
+  3 | 19981
+  4 | 19981
+  5 | 20000
+  6 | 20000
+  7 | 20000
+  8 | 20000
+  9 | 20000
+ 11 | 40019
+    |    19
+(10 rows)
+
 select max(cdate) from aggfns order by 1;
     max     
 ------------
@@ -134,8 +192,6 @@ select ss, max(cdate) from aggfns group by ss order by 1;
  ss |    max     
 ----+------------
   0 | 10-05-2075
-  1 | 02-21-2103
-  2 | 07-09-2130
   3 | 11-24-2157
   4 | 04-11-2185
   5 | 08-28-2212
@@ -143,6 +199,8 @@ select ss, max(cdate) from aggfns group by ss order by 1;
   7 | 06-01-2267
   8 | 10-17-2294
   9 | 03-05-2322
+ 11 | 01-24-2183
+    | 07-03-2156
 (10 rows)
 
 select min(cdate) from aggfns order by 1;
@@ -170,8 +228,6 @@ select ss, min(cdate) from aggfns group by ss order by 1;
  ss |    min     
 ----+------------
   0 | 01-02-2021
-  1 | 05-20-2048
-  2 | 10-06-2075
   3 | 02-22-2103
   4 | 07-10-2130
   5 | 11-25-2157
@@ -179,6 +235,8 @@ select ss, min(cdate) from aggfns group by ss order by 1;
   7 | 08-29-2212
   8 | 01-15-2240
   9 | 06-02-2267
+ 11 | 05-20-2048
+    | 08-11-2104
 (10 rows)
 
 select avg(cfloat4) from aggfns order by 1;
@@ -206,15 +264,15 @@ select ss, avg(cfloat4) from aggfns group by ss order by 1;
  ss |        avg         
 ----+--------------------
   0 | -0.132126759885764
-  1 |                NaN
-  2 |           Infinity
   3 |          -Infinity
-  4 |  -0.13252146150968
+  4 | -0.124977103379316
   5 | -0.130611110996222
   6 | -0.131984978889441
   7 | -0.131050092529273
   8 | -0.131313872741675
   9 | -0.132765194868064
+ 11 |                NaN
+    |  -5.91588952823689
 (10 rows)
 
 select count(cfloat4) from aggfns order by 1;
@@ -242,15 +300,15 @@ select ss, count(cfloat4) from aggfns group by ss order by 1;
  ss | count 
 ----+-------
   0 | 20000
-  1 | 20000
-  2 | 20000
-  3 | 20000
-  4 | 20000
+  3 | 19981
+  4 | 19981
   5 | 20000
   6 | 20000
   7 | 20000
   8 | 20000
   9 | 20000
+ 11 | 40019
+    |    19
 (10 rows)
 
 select max(cfloat4) from aggfns order by 1;
@@ -275,18 +333,18 @@ select s, max(cfloat4) from aggfns group by s order by 1;
 (10 rows)
 
 select ss, max(cfloat4) from aggfns group by ss order by 1;
- ss |   max    
-----+----------
-  0 |  49.9977
-  1 |      NaN
-  2 | Infinity
-  3 |  49.9977
-  4 |  49.9977
-  5 |  49.9977
-  6 |  49.9977
-  7 |  49.9977
-  8 |  49.9977
-  9 |  49.9977
+ ss |   max   
+----+---------
+  0 | 49.9977
+  3 | 49.9977
+  4 | 49.9977
+  5 | 49.9977
+  6 | 49.9977
+  7 | 49.9977
+  8 | 49.9977
+  9 | 49.9977
+ 11 |     NaN
+    |  48.478
 (10 rows)
 
 select min(cfloat4) from aggfns order by 1;
@@ -314,8 +372,6 @@ select ss, min(cfloat4) from aggfns group by ss order by 1;
  ss |    min    
 ----+-----------
   0 |  -49.9756
-  1 |       NaN
-  2 |  -49.9756
   3 | -Infinity
   4 |  -49.9756
   5 |  -49.9756
@@ -323,6 +379,8 @@ select ss, min(cfloat4) from aggfns group by ss order by 1;
   7 |  -49.9756
   8 |  -49.9756
   9 |  -49.9756
+ 11 |       NaN
+    |  -46.7478
 (10 rows)
 
 select stddev(cfloat4) from aggfns order by 1;
@@ -350,15 +408,15 @@ select ss, stddev(cfloat4) from aggfns group by ss order by 1;
  ss |      stddev      
 ----+------------------
   0 | 28.8941380063427
-  1 |              NaN
-  2 |              NaN
   3 |              NaN
-  4 | 28.8948189281654
+  4 |   28.89302954083
   5 | 28.8951827753267
   6 | 28.8960531969495
   7 | 28.8959678301628
   8 | 28.8963276918371
   9 | 28.8968307405966
+ 11 |              NaN
+    | 27.2867943876683
 (10 rows)
 
 select sum(cfloat4) from aggfns order by 1;
@@ -386,15 +444,15 @@ select ss, sum(cfloat4) from aggfns group by ss order by 1;
  ss |    sum    
 ----+-----------
   0 |  -2642.54
-  1 |       NaN
-  2 |  Infinity
   3 | -Infinity
-  4 |  -2650.43
+  4 |  -2497.17
   5 |  -2612.22
   6 |   -2639.7
   7 |     -2621
   8 |  -2626.28
   9 |   -2655.3
+ 11 |       NaN
+    |  -112.402
 (10 rows)
 
 select avg(cfloat8) from aggfns order by 1;
@@ -422,15 +480,15 @@ select ss, avg(cfloat8) from aggfns group by ss order by 1;
  ss |        avg         
 ----+--------------------
   0 | -0.131261021163082
-  1 | -0.129096584053477
-  2 | -0.132733892038232
-  3 | -0.132521462687291
-  4 | -0.130611112199258
+  3 | -0.128550004763072
+  4 | -0.129264304572168
   5 | -0.131984980024863
   6 | -0.131050093692029
   7 |  -0.13131387403002
   8 | -0.132765196124092
   9 | -0.134423591727391
+ 11 | -0.131587538323368
+    |  -4.30903203025656
 (10 rows)
 
 select max(cfloat8) from aggfns order by 1;
@@ -455,18 +513,18 @@ select s, max(cfloat8) from aggfns group by s order by 1;
 (10 rows)
 
 select ss, max(cfloat8) from aggfns group by ss order by 1;
- ss |       max       
-----+-----------------
-  0 | 49.997744965367
-  1 | 49.997744965367
-  2 | 49.997744965367
-  3 | 49.997744965367
-  4 | 49.997744965367
-  5 | 49.997744965367
-  6 | 49.997744965367
-  7 | 49.997744965367
-  8 | 49.997744965367
-  9 | 49.997744965367
+ ss |       max        
+----+------------------
+  0 |  49.997744965367
+  3 |  49.997744965367
+  4 |  49.997744965367
+  5 |  49.997744965367
+  6 |  49.997744965367
+  7 |  49.997744965367
+  8 |  49.997744965367
+  9 |  49.997744965367
+ 11 |  49.997744965367
+    | 49.2015035590157
 (10 rows)
 
 select min(cfloat8) from aggfns order by 1;
@@ -494,8 +552,6 @@ select ss, min(cfloat8) from aggfns group by ss order by 1;
  ss |        min        
 ----+-------------------
   0 | -49.9755693599582
-  1 | -49.9755693599582
-  2 | -49.9755693599582
   3 | -49.9755693599582
   4 | -49.9755693599582
   5 | -49.9755693599582
@@ -503,6 +559,8 @@ select ss, min(cfloat8) from aggfns group by ss order by 1;
   7 | -49.9755693599582
   8 | -49.9755693599582
   9 | -49.9755693599582
+ 11 | -49.9755693599582
+    | -38.3512130472809
 (10 rows)
 
 select stddev(cfloat8) from aggfns order by 1;
@@ -530,15 +588,15 @@ select ss, stddev(cfloat8) from aggfns group by ss order by 1;
  ss |      stddev      
 ----+------------------
   0 |  28.893219634188
-  1 | 28.8952055755515
-  2 | 28.8950722121689
-  3 | 28.8948189369737
-  4 | 28.8951827840888
+  3 | 28.8988694216911
+  4 | 28.8937408619903
   5 | 28.8960532056265
   6 | 28.8959678388464
   7 | 28.8963277006942
   8 | 28.8968307494196
   9 | 28.8953209642426
+ 11 | 28.8954978116663
+    |  24.556507133269
 (10 rows)
 
 select sum(cfloat8) from aggfns order by 1;
@@ -566,15 +624,15 @@ select ss, sum(cfloat8) from aggfns group by ss order by 1;
  ss |        sum        
 ----+-------------------
   0 | -2625.22042326164
-  1 | -2581.93168106955
-  2 | -2654.67784076463
-  3 | -2650.42925374582
-  4 | -2612.22224398516
+  3 | -2568.55764517095
+  4 | -2582.83006965648
   5 | -2639.69960049726
   6 | -2621.00187384058
   7 |  -2626.2774806004
   8 | -2655.30392248183
   9 | -2688.47183454782
+ 11 | -5266.00169616286
+    | -81.8716085748747
 (10 rows)
 
 select avg(cint2) from aggfns order by 1;
@@ -599,18 +657,18 @@ select s, avg(cint2) from aggfns group by s order by 1;
 (10 rows)
 
 select ss, avg(cint2) from aggfns group by ss order by 1;
- ss |         avg          
-----+----------------------
-  0 | -42.2972824182973825
-  1 | -43.0287773384715480
-  2 | -40.9893899204244032
-  3 | -42.8851408838396477
-  4 | -42.0152144537310445
-  5 | -43.5287022671537961
-  6 | -41.7711325759471498
-  7 | -41.3288123717531655
-  8 | -40.6353035383614434
-  9 | -43.1119563585406136
+ ss |          avg          
+----+-----------------------
+  0 |  -42.2972824182973825
+  3 |  -42.6071034966436229
+  4 |  -40.0837090471896604
+  5 |  -43.5287022671537961
+  6 |  -41.7711325759471498
+  7 |  -41.3288123717531655
+  8 |  -40.6353035383614434
+  9 |  -43.1119563585406136
+ 11 |  -42.9734623946374528
+    | -335.0000000000000000
 (10 rows)
 
 select max(cint2) from aggfns order by 1;
@@ -638,8 +696,6 @@ select ss, max(cint2) from aggfns group by ss order by 1;
  ss |  max  
 ----+-------
   0 | 16383
-  1 | 16383
-  2 | 16383
   3 | 16383
   4 | 16383
   5 | 16383
@@ -647,6 +703,8 @@ select ss, max(cint2) from aggfns group by ss order by 1;
   7 | 16383
   8 | 16383
   9 | 16383
+ 11 | 16383
+    | 13720
 (10 rows)
 
 select min(cint2) from aggfns order by 1;
@@ -674,8 +732,6 @@ select ss, min(cint2) from aggfns group by ss order by 1;
  ss |  min   
 ----+--------
   0 | -16375
-  1 | -16375
-  2 | -16375
   3 | -16375
   4 | -16375
   5 | -16375
@@ -683,6 +739,8 @@ select ss, min(cint2) from aggfns group by ss order by 1;
   7 | -16375
   8 | -16375
   9 | -16375
+ 11 | -16375
+    | -15206
 (10 rows)
 
 select stddev(cint2) from aggfns order by 1;
@@ -710,15 +768,15 @@ select ss, stddev(cint2) from aggfns group by ss order by 1;
  ss |      stddev       
 ----+-------------------
   0 | 9468.854793575036
-  1 | 9468.590431229826
-  2 | 9469.116705177088
-  3 | 9466.421782354268
-  4 | 9467.442985677590
+  3 | 9466.351508971864
+  4 | 9469.021659499615
   5 | 9467.599133444078
   6 | 9468.362090451302
   7 | 9467.745653535755
   8 | 9466.743345080951
   9 | 9468.145452253715
+ 11 | 9467.946206136906
+    | 9796.780548277639
 (10 rows)
 
 select sum(cint2) from aggfns order by 1;
@@ -743,18 +801,18 @@ select s, sum(cint2) from aggfns group by s order by 1;
 (10 rows)
 
 select ss, sum(cint2) from aggfns group by ss order by 1;
- ss |   sum   
-----+---------
-  0 | -845142
-  1 | -859758
-  2 | -819009
-  3 | -856888
-  4 | -839506
-  5 | -869747
-  6 | -834629
-  7 | -825791
-  8 | -811934
-  9 | -861420
+ ss |   sum    
+----+----------
+  0 |  -845142
+  3 |  -850523
+  4 |  -800151
+  5 |  -869747
+  6 |  -834629
+  7 |  -825791
+  8 |  -811934
+  9 |  -861420
+ 11 | -1718122
+    |    -6365
 (10 rows)
 
 select avg(cint4) from aggfns order by 1;
@@ -782,15 +840,15 @@ select ss, avg(cint4) from aggfns group by ss order by 1;
  ss |          avg          
 ----+-----------------------
   0 | -2919248.121000000000
-  1 | -2836378.364750000000
-  2 | -2837313.994650000000
-  3 | -2818722.941500000000
-  4 | -2772243.427000000000
+  3 | -2682566.613082428307
+  4 | -2753845.761523447275
   5 | -2850351.637450000000
   6 | -2845789.891100000000
   7 | -2804766.678700000000
   8 | -2834269.365200000000
   9 | -2814193.446750000000
+ 11 | -2846001.238586671331
+    |   -146005017.57894737
 (10 rows)
 
 select max(cint4) from aggfns order by 1;
@@ -818,8 +876,6 @@ select ss, max(cint4) from aggfns group by ss order by 1;
  ss |    max     
 ----+------------
   0 | 1073660631
-  1 | 1073660631
-  2 | 1073660631
   3 | 1073660631
   4 | 1073660631
   5 | 1073660631
@@ -827,6 +883,8 @@ select ss, max(cint4) from aggfns group by ss order by 1;
   7 | 1073660631
   8 | 1073660631
   9 | 1073660631
+ 11 | 1073660631
+    |  978482473
 (10 rows)
 
 select min(cint4) from aggfns order by 1;
@@ -854,8 +912,6 @@ select ss, min(cint4) from aggfns group by ss order by 1;
  ss |     min     
 ----+-------------
   0 | -1073184428
-  1 | -1073184428
-  2 | -1073184428
   3 | -1073184428
   4 | -1073184428
   5 | -1073184428
@@ -863,6 +919,8 @@ select ss, min(cint4) from aggfns group by ss order by 1;
   7 | -1073184428
   8 | -1073184428
   9 | -1073184428
+ 11 | -1073184428
+    |  -960881516
 (10 rows)
 
 select stddev(cint4) from aggfns order by 1;
@@ -890,15 +948,15 @@ select ss, stddev(cint4) from aggfns group by ss order by 1;
  ss |  stddev   
 ----+-----------
   0 | 620497458
-  1 | 620477996
-  2 | 620477953
-  3 | 620458232
-  4 | 620500878
+  3 | 620502162
+  4 | 620460588
   5 | 620498014
   6 | 620492575
   7 | 620500389
   8 | 620519080
   9 | 620517247
+ 11 | 620490348
+    | 569369090
 (10 rows)
 
 select sum(cint4) from aggfns order by 1;
@@ -923,18 +981,18 @@ select s, sum(cint4) from aggfns group by s order by 1;
 (10 rows)
 
 select ss, sum(cint4) from aggfns group by ss order by 1;
- ss |     sum      
-----+--------------
-  0 | -58384962420
-  1 | -56727567295
-  2 | -56746279893
-  3 | -56374458830
-  4 | -55444868540
-  5 | -57007032749
-  6 | -56915797822
-  7 | -56095333574
-  8 | -56685387304
-  9 | -56283868935
+ ss |      sum      
+----+---------------
+  0 |  -58384962420
+  3 |  -53600363496
+  4 |  -55024592161
+  5 |  -57007032749
+  6 |  -56915797822
+  7 |  -56095333574
+  8 |  -56685387304
+  9 |  -56283868935
+ 11 | -113894123567
+    |   -2774095334
 (10 rows)
 
 select avg(cint8) from aggfns order by 1;
@@ -962,15 +1020,15 @@ select ss, avg(cint8) from aggfns group by ss order by 1;
  ss |          avg          
 ----+-----------------------
   0 | -2836378.364750000000
-  1 | -2837313.994650000000
-  2 | -2818722.941500000000
-  3 | -2772243.427000000000
-  4 | -2850351.637450000000
+  3 | -2653999.743206045743
+  4 | -3009394.583854661929
   5 | -2845789.891100000000
   6 | -2804766.678700000000
   7 | -2834269.365200000000
   8 | -2814193.446750000000
   9 | -2819857.913500000000
+ 11 | -2748620.862390364577
+    |   -127121035.31578947
 (10 rows)
 
 select max(cint8) from aggfns order by 1;
@@ -998,8 +1056,6 @@ select ss, max(cint8) from aggfns group by ss order by 1;
  ss |    max     
 ----+------------
   0 | 1073660631
-  1 | 1073660631
-  2 | 1073660631
   3 | 1073660631
   4 | 1073660631
   5 | 1073660631
@@ -1007,6 +1063,8 @@ select ss, max(cint8) from aggfns group by ss order by 1;
   7 | 1073660631
   8 | 1073660631
   9 | 1073660631
+ 11 | 1073660631
+    |  989667573
 (10 rows)
 
 select min(cint8) from aggfns order by 1;
@@ -1034,8 +1092,6 @@ select ss, min(cint8) from aggfns group by ss order by 1;
  ss |     min     
 ----+-------------
   0 | -1073184428
-  1 | -1073184428
-  2 | -1073184428
   3 | -1073184428
   4 | -1073184428
   5 | -1073184428
@@ -1043,6 +1099,8 @@ select ss, min(cint8) from aggfns group by ss order by 1;
   7 | -1073184428
   8 | -1073184428
   9 | -1073184428
+ 11 | -1073184428
+    |  -796158533
 (10 rows)
 
 select stddev(cint8) from aggfns order by 1;
@@ -1070,15 +1128,15 @@ select ss, stddev(cint8) from aggfns group by ss order by 1;
  ss |  stddev   
 ----+-----------
   0 | 620477996
-  1 | 620477953
-  2 | 620458232
-  3 | 620500878
-  4 | 620498014
+  3 | 620514804
+  4 | 620462299
   5 | 620492575
   6 | 620500389
   7 | 620519080
   8 | 620517247
   9 | 620524975
+ 11 | 620478168
+    | 609007799
 (10 rows)
 
 select sum(cint8) from aggfns order by 1;
@@ -1103,18 +1161,18 @@ select s, sum(cint8) from aggfns group by s order by 1;
 (10 rows)
 
 select ss, sum(cint8) from aggfns group by ss order by 1;
- ss |     sum      
-----+--------------
-  0 | -56727567295
-  1 | -56746279893
-  2 | -56374458830
-  3 | -55444868540
-  4 | -57007032749
-  5 | -56915797822
-  6 | -56095333574
-  7 | -56685387304
-  8 | -56283868935
-  9 | -56397158270
+ ss |      sum      
+----+---------------
+  0 |  -56727567295
+  3 |  -53029568869
+  4 |  -60130713180
+  5 |  -56915797822
+  6 |  -56095333574
+  7 |  -56685387304
+  8 |  -56283868935
+  9 |  -56397158270
+ 11 | -109997058292
+    |   -2415299671
 (10 rows)
 
 select max(cts) from aggfns order by 1;
@@ -1142,8 +1200,6 @@ select ss, max(cts) from aggfns group by ss order by 1;
  ss |           max            
 ----+--------------------------
   0 | Fri Jan 01 06:34:21 2021
-  1 | Fri Jan 01 09:21:01 2021
-  2 | Fri Jan 01 12:07:41 2021
   3 | Fri Jan 01 14:54:21 2021
   4 | Fri Jan 01 17:41:01 2021
   5 | Fri Jan 01 20:27:41 2021
@@ -1151,6 +1207,8 @@ select ss, max(cts) from aggfns group by ss order by 1;
   7 | Sat Jan 02 02:01:01 2021
   8 | Sat Jan 02 04:47:41 2021
   9 | Sat Jan 02 07:34:21 2021
+ 11 | Fri Jan 01 17:27:33 2021
+    | Fri Jan 01 14:45:52 2021
 (10 rows)
 
 select min(cts) from aggfns order by 1;
@@ -1178,8 +1236,6 @@ select ss, min(cts) from aggfns group by ss order by 1;
  ss |           min            
 ----+--------------------------
   0 | Fri Jan 01 01:01:02 2021
-  1 | Fri Jan 01 03:47:42 2021
-  2 | Fri Jan 01 06:34:22 2021
   3 | Fri Jan 01 09:21:02 2021
   4 | Fri Jan 01 12:07:42 2021
   5 | Fri Jan 01 14:54:22 2021
@@ -1187,6 +1243,8 @@ select ss, min(cts) from aggfns group by ss order by 1;
   7 | Fri Jan 01 20:27:42 2021
   8 | Fri Jan 01 23:14:22 2021
   9 | Sat Jan 02 02:01:02 2021
+ 11 | Fri Jan 01 03:47:42 2021
+    | Fri Jan 01 09:29:58 2021
 (10 rows)
 
 select max(ctstz) from aggfns order by 1;
@@ -1214,8 +1272,6 @@ select ss, max(ctstz) from aggfns group by ss order by 1;
  ss |             max              
 ----+------------------------------
   0 | Fri Jan 01 06:34:21 2021 PST
-  1 | Fri Jan 01 09:21:01 2021 PST
-  2 | Fri Jan 01 12:07:41 2021 PST
   3 | Fri Jan 01 14:54:21 2021 PST
   4 | Fri Jan 01 17:41:01 2021 PST
   5 | Fri Jan 01 20:27:41 2021 PST
@@ -1223,6 +1279,8 @@ select ss, max(ctstz) from aggfns group by ss order by 1;
   7 | Sat Jan 02 02:01:01 2021 PST
   8 | Sat Jan 02 04:47:41 2021 PST
   9 | Sat Jan 02 07:34:21 2021 PST
+ 11 | Fri Jan 01 17:27:33 2021 PST
+    | Fri Jan 01 14:45:52 2021 PST
 (10 rows)
 
 select min(ctstz) from aggfns order by 1;
@@ -1250,8 +1308,6 @@ select ss, min(ctstz) from aggfns group by ss order by 1;
  ss |             min              
 ----+------------------------------
   0 | Fri Jan 01 01:01:02 2021 PST
-  1 | Fri Jan 01 03:47:42 2021 PST
-  2 | Fri Jan 01 06:34:22 2021 PST
   3 | Fri Jan 01 09:21:02 2021 PST
   4 | Fri Jan 01 12:07:42 2021 PST
   5 | Fri Jan 01 14:54:22 2021 PST
@@ -1259,6 +1315,8 @@ select ss, min(ctstz) from aggfns group by ss order by 1;
   7 | Fri Jan 01 20:27:42 2021 PST
   8 | Fri Jan 01 23:14:22 2021 PST
   9 | Sat Jan 02 02:01:02 2021 PST
+ 11 | Fri Jan 01 03:47:42 2021 PST
+    | Fri Jan 01 09:29:58 2021 PST
 (10 rows)
 
 select avg(s) from aggfns order by 1;
@@ -1286,8 +1344,6 @@ select ss, avg(s) from aggfns group by ss order by 1;
  ss |            avg             
 ----+----------------------------
   0 | 0.000000000000000000000000
-  1 |     1.00000000000000000000
-  2 |         2.0000000000000000
   3 |         3.0000000000000000
   4 |         4.0000000000000000
   5 |         5.0000000000000000
@@ -1295,6 +1351,8 @@ select ss, avg(s) from aggfns group by ss order by 1;
   7 |         7.0000000000000000
   8 |         8.0000000000000000
   9 |         9.0000000000000000
+ 11 |         1.5011869362053025
+    |         3.0000000000000000
 (10 rows)
 
 select count(s) from aggfns order by 1;
@@ -1322,15 +1380,15 @@ select ss, count(s) from aggfns group by ss order by 1;
  ss | count 
 ----+-------
   0 | 20000
-  1 | 20000
-  2 | 20000
-  3 | 20000
-  4 | 20000
+  3 | 19981
+  4 | 19981
   5 | 20000
   6 | 20000
   7 | 20000
   8 | 20000
   9 | 20000
+ 11 | 40019
+    |    19
 (10 rows)
 
 select max(s) from aggfns order by 1;
@@ -1358,8 +1416,6 @@ select ss, max(s) from aggfns group by ss order by 1;
  ss | max 
 ----+-----
   0 |   0
-  1 |   1
-  2 |   2
   3 |   3
   4 |   4
   5 |   5
@@ -1367,6 +1423,8 @@ select ss, max(s) from aggfns group by ss order by 1;
   7 |   7
   8 |   8
   9 |   9
+ 11 |   4
+    |   3
 (10 rows)
 
 select min(s) from aggfns order by 1;
@@ -1394,8 +1452,6 @@ select ss, min(s) from aggfns group by ss order by 1;
  ss | min 
 ----+-----
   0 |   0
-  1 |   1
-  2 |   2
   3 |   3
   4 |   4
   5 |   5
@@ -1403,6 +1459,8 @@ select ss, min(s) from aggfns group by ss order by 1;
   7 |   7
   8 |   8
   9 |   9
+ 11 |   1
+    |   3
 (10 rows)
 
 select stddev(s) from aggfns order by 1;
@@ -1427,18 +1485,18 @@ select s, stddev(s) from aggfns group by s order by 1;
 (10 rows)
 
 select ss, stddev(s) from aggfns group by ss order by 1;
- ss | stddev 
-----+--------
-  0 |      0
-  1 |      0
-  2 |      0
-  3 |      0
-  4 |      0
-  5 |      0
-  6 |      0
-  7 |      0
-  8 |      0
-  9 |      0
+ ss |         stddev         
+----+------------------------
+  0 |                      0
+  3 |                      0
+  4 |                      0
+  5 |                      0
+  6 |                      0
+  7 |                      0
+  8 |                      0
+  9 |                      0
+ 11 | 0.50284545977155885187
+    |                      0
 (10 rows)
 
 select sum(s) from aggfns order by 1;
@@ -1466,31 +1524,31 @@ select ss, sum(s) from aggfns group by ss order by 1;
  ss |  sum   
 ----+--------
   0 |      0
-  1 |  20000
-  2 |  40000
-  3 |  60000
-  4 |  80000
+  3 |  59943
+  4 |  79924
   5 | 100000
   6 | 120000
   7 | 140000
   8 | 160000
   9 | 180000
+ 11 |  60076
+    |     57
 (10 rows)
 
 select avg(ss) from aggfns order by 1;
         avg         
 --------------------
- 4.5000000000000000
+ 6.4009880938689175
 (1 row)
 
 select s, avg(ss) from aggfns group by s order by 1;
  s |            avg             
 ---+----------------------------
  0 | 0.000000000000000000000000
- 1 |     1.00000000000000000000
- 2 |         2.0000000000000000
+ 1 |        11.0000000000000000
+ 2 |        11.0000000000000000
  3 |         3.0000000000000000
- 4 |         4.0000000000000000
+ 4 |         4.0066500000000000
  5 |         5.0000000000000000
  6 |         6.0000000000000000
  7 |         7.0000000000000000
@@ -1502,8 +1560,6 @@ select ss, avg(ss) from aggfns group by ss order by 1;
  ss |            avg             
 ----+----------------------------
   0 | 0.000000000000000000000000
-  1 |     1.00000000000000000000
-  2 |         2.0000000000000000
   3 |         3.0000000000000000
   4 |         4.0000000000000000
   5 |         5.0000000000000000
@@ -1511,22 +1567,60 @@ select ss, avg(ss) from aggfns group by ss order by 1;
   7 |         7.0000000000000000
   8 |         8.0000000000000000
   9 |         9.0000000000000000
+ 11 |        11.0000000000000000
+    |                           
+(10 rows)
+
+select count(ss) from aggfns order by 1;
+ count  
+--------
+ 199981
+(1 row)
+
+select s, count(ss) from aggfns group by s order by 1;
+ s | count 
+---+-------
+ 0 | 20000
+ 1 | 20000
+ 2 | 20000
+ 3 | 19981
+ 4 | 20000
+ 5 | 20000
+ 6 | 20000
+ 7 | 20000
+ 8 | 20000
+ 9 | 20000
+(10 rows)
+
+select ss, count(ss) from aggfns group by ss order by 1;
+ ss | count 
+----+-------
+  0 | 20000
+  3 | 19981
+  4 | 19981
+  5 | 20000
+  6 | 20000
+  7 | 20000
+  8 | 20000
+  9 | 20000
+ 11 | 40019
+    |     0
 (10 rows)
 
 select max(ss) from aggfns order by 1;
  max 
 -----
-   9
+  11
 (1 row)
 
 select s, max(ss) from aggfns group by s order by 1;
  s | max 
 ---+-----
  0 |   0
- 1 |   1
- 2 |   2
+ 1 |  11
+ 2 |  11
  3 |   3
- 4 |   4
+ 4 |  11
  5 |   5
  6 |   6
  7 |   7
@@ -1538,8 +1632,6 @@ select ss, max(ss) from aggfns group by ss order by 1;
  ss | max 
 ----+-----
   0 |   0
-  1 |   1
-  2 |   2
   3 |   3
   4 |   4
   5 |   5
@@ -1547,6 +1639,8 @@ select ss, max(ss) from aggfns group by ss order by 1;
   7 |   7
   8 |   8
   9 |   9
+ 11 |  11
+    |    
 (10 rows)
 
 select min(ss) from aggfns order by 1;
@@ -1559,8 +1653,8 @@ select s, min(ss) from aggfns group by s order by 1;
  s | min 
 ---+-----
  0 |   0
- 1 |   1
- 2 |   2
+ 1 |  11
+ 2 |  11
  3 |   3
  4 |   4
  5 |   5
@@ -1574,8 +1668,6 @@ select ss, min(ss) from aggfns group by ss order by 1;
  ss | min 
 ----+-----
   0 |   0
-  1 |   1
-  2 |   2
   3 |   3
   4 |   4
   5 |   5
@@ -1583,35 +1675,35 @@ select ss, min(ss) from aggfns group by ss order by 1;
   7 |   7
   8 |   8
   9 |   9
+ 11 |  11
+    |    
 (10 rows)
 
 select stddev(ss) from aggfns order by 1;
        stddev       
 --------------------
- 2.8722885039992502
+ 3.3528328280068652
 (1 row)
 
 select s, stddev(ss) from aggfns group by s order by 1;
- s | stddev 
----+--------
- 0 |      0
- 1 |      0
- 2 |      0
- 3 |      0
- 4 |      0
- 5 |      0
- 6 |      0
- 7 |      0
- 8 |      0
- 9 |      0
+ s |         stddev         
+---+------------------------
+ 0 |                      0
+ 1 |                      0
+ 2 |                      0
+ 3 |                      0
+ 4 | 0.21565737387148452722
+ 5 |                      0
+ 6 |                      0
+ 7 |                      0
+ 8 |                      0
+ 9 |                      0
 (10 rows)
 
 select ss, stddev(ss) from aggfns group by ss order by 1;
  ss | stddev 
 ----+--------
   0 |      0
-  1 |      0
-  2 |      0
   3 |      0
   4 |      0
   5 |      0
@@ -1619,22 +1711,24 @@ select ss, stddev(ss) from aggfns group by ss order by 1;
   7 |      0
   8 |      0
   9 |      0
+ 11 |      0
+    |       
 (10 rows)
 
 select sum(ss) from aggfns order by 1;
-  sum   
---------
- 900000
+   sum   
+---------
+ 1280076
 (1 row)
 
 select s, sum(ss) from aggfns group by s order by 1;
  s |  sum   
 ---+--------
  0 |      0
- 1 |  20000
- 2 |  40000
- 3 |  60000
- 4 |  80000
+ 1 | 220000
+ 2 | 220000
+ 3 |  59943
+ 4 |  80133
  5 | 100000
  6 | 120000
  7 | 140000
@@ -1646,15 +1740,15 @@ select ss, sum(ss) from aggfns group by ss order by 1;
  ss |  sum   
 ----+--------
   0 |      0
-  1 |  20000
-  2 |  40000
-  3 |  60000
-  4 |  80000
+  3 |  59943
+  4 |  79924
   5 | 100000
   6 | 120000
   7 | 140000
   8 | 160000
   9 | 180000
+ 11 | 440209
+    |       
 (10 rows)
 
 select max(t) from aggfns order by 1;
@@ -1682,8 +1776,6 @@ select ss, max(t) from aggfns group by ss order by 1;
  ss |  max   
 ----+--------
   0 |  20000
-  1 |  30000
-  2 |  40000
   3 |  50000
   4 |  60000
   5 |  70000
@@ -1691,6 +1783,8 @@ select ss, max(t) from aggfns group by ss order by 1;
   7 |  90000
   8 | 100000
   9 | 110000
+ 11 |  59192
+    |  49491
 (10 rows)
 
 select min(t) from aggfns order by 1;
@@ -1718,8 +1812,6 @@ select ss, min(t) from aggfns group by ss order by 1;
  ss |  min  
 ----+-------
   0 |     1
-  1 | 10001
-  2 | 20001
   3 | 30001
   4 | 40001
   5 | 50001
@@ -1727,6 +1819,44 @@ select ss, min(t) from aggfns group by ss order by 1;
   7 | 70001
   8 | 80001
   9 | 90001
+ 11 | 10001
+    | 30537
+(10 rows)
+
+select count(*) from aggfns where cfloat8 > 0 order by 1;
+ count 
+-------
+ 99430
+(1 row)
+
+select s, count(*) from aggfns where cfloat8 > 0 group by s order by 1;
+ s | count 
+---+-------
+ 0 |  9943
+ 1 |  9943
+ 2 |  9942
+ 3 |  9942
+ 4 |  9943
+ 5 |  9943
+ 6 |  9944
+ 7 |  9944
+ 8 |  9943
+ 9 |  9943
+(10 rows)
+
+select ss, count(*) from aggfns where cfloat8 > 0 group by ss order by 1;
+ ss | count 
+----+-------
+  0 |  9943
+  3 |  9934
+  4 |  9932
+  5 |  9943
+  6 |  9944
+  7 |  9944
+  8 |  9943
+  9 |  9943
+ 11 | 19896
+    |     8
 (10 rows)
 
 select max(cdate) from aggfns where cfloat8 > 0 order by 1;
@@ -1754,8 +1884,6 @@ select ss, max(cdate) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |    max     
 ----+------------
   0 | 10-04-2075
-  1 | 02-21-2103
-  2 | 07-08-2130
   3 | 11-22-2157
   4 | 04-11-2185
   5 | 08-27-2212
@@ -1763,6 +1891,8 @@ select ss, max(cdate) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 | 05-31-2267
   8 | 10-15-2294
   9 | 03-05-2322
+ 11 | 03-03-2180
+    | 07-03-2156
 (10 rows)
 
 select min(cdate) from aggfns where cfloat8 > 0 order by 1;
@@ -1790,8 +1920,6 @@ select ss, min(cdate) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |    min     
 ----+------------
   0 | 01-02-2021
-  1 | 05-20-2048
-  2 | 10-11-2075
   3 | 02-26-2103
   4 | 07-13-2130
   5 | 11-27-2157
@@ -1799,6 +1927,8 @@ select ss, min(cdate) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 | 08-29-2212
   8 | 01-15-2240
   9 | 06-02-2267
+ 11 | 05-20-2048
+    | 05-18-2110
 (10 rows)
 
 select avg(cfloat4) from aggfns where cfloat8 > 0 order by 1;
@@ -1826,15 +1956,15 @@ select ss, avg(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |        avg         
 ----+--------------------
   0 | -0.542617154225893
-  1 | -0.540875748760701
-  2 | -0.541406464808325
   3 |          -Infinity
-  4 | -0.544616367218129
+  4 | -0.545104747625541
   5 | -0.544616367218129
   6 | -0.547797322998719
   7 | -0.547797322998719
   8 | -0.544139963208192
   9 | -0.547059247380753
+ 11 | -0.540899217374597
+    |  -1.46971142292023
 (10 rows)
 
 select count(cfloat4) from aggfns where cfloat8 > 0 order by 1;
@@ -1862,15 +1992,15 @@ select ss, count(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss | count 
 ----+-------
   0 |  9943
-  1 |  9943
-  2 |  9942
-  3 |  9942
-  4 |  9943
+  3 |  9934
+  4 |  9932
   5 |  9943
   6 |  9944
   7 |  9944
   8 |  9943
   9 |  9943
+ 11 | 19896
+    |     8
 (10 rows)
 
 select max(cfloat4) from aggfns where cfloat8 > 0 order by 1;
@@ -1898,8 +2028,6 @@ select ss, max(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |   max   
 ----+---------
   0 | 49.9734
-  1 | 49.9734
-  2 | 49.9734
   3 | 49.9734
   4 | 49.9734
   5 | 49.9734
@@ -1907,6 +2035,8 @@ select ss, max(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 | 49.9734
   8 | 49.9734
   9 | 49.9734
+ 11 | 49.9734
+    | 24.3202
 (10 rows)
 
 select min(cfloat4) from aggfns where cfloat8 > 0 order by 1;
@@ -1934,8 +2064,6 @@ select ss, min(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |    min    
 ----+-----------
   0 |  -49.9722
-  1 |  -49.9722
-  2 |  -49.9722
   3 | -Infinity
   4 |  -49.9722
   5 |  -49.9722
@@ -1943,6 +2071,8 @@ select ss, min(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 |  -49.9722
   8 |  -49.9722
   9 |  -49.9722
+ 11 |  -49.9722
+    |   -45.111
 (10 rows)
 
 select stddev(cfloat4) from aggfns where cfloat8 > 0 order by 1;
@@ -1970,15 +2100,15 @@ select ss, stddev(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |      stddev      
 ----+------------------
   0 |  28.889048755135
-  1 | 28.8872257367626
-  2 | 28.8886301576555
   3 |              NaN
-  4 | 28.8889504423898
+  4 | 28.8896204728232
   5 | 28.8889504423898
   6 | 28.8892391773513
   7 | 28.8892391773513
   8 | 28.8883896891408
   9 | 28.8893600799806
+ 11 |  28.886867950284
+    | 23.0946953685783
 (10 rows)
 
 select sum(cfloat4) from aggfns where cfloat8 > 0 order by 1;
@@ -2006,15 +2136,15 @@ select ss, sum(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |    sum    
 ----+-----------
   0 |  -5395.24
-  1 |  -5377.93
-  2 |  -5382.66
   3 | -Infinity
-  4 |  -5415.12
+  4 |  -5413.98
   5 |  -5415.12
   6 |   -5447.3
   7 |   -5447.3
   8 |  -5410.38
   9 |  -5439.41
+ 11 |  -10761.7
+    |  -11.7577
 (10 rows)
 
 select avg(cfloat8) from aggfns where cfloat8 > 0 order by 1;
@@ -2042,15 +2172,15 @@ select ss, avg(cfloat8) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |       avg        
 ----+------------------
   0 | 25.0253254492148
-  1 | 25.0296791394684
-  2 | 25.0284447917954
-  3 | 25.0284447917954
-  4 | 25.0283891332554
+  3 | 25.0326248798677
+  4 | 25.0314280577154
   5 | 25.0283891332554
   6 | 25.0265337956144
   7 | 25.0265337956144
   8 | 25.0286117211772
   9 | 25.0252759158804
+ 11 | 25.0275446062773
+    | 19.8378204280743
 (10 rows)
 
 select max(cfloat8) from aggfns where cfloat8 > 0 order by 1;
@@ -2075,18 +2205,18 @@ select s, max(cfloat8) from aggfns where cfloat8 > 0 group by s order by 1;
 (10 rows)
 
 select ss, max(cfloat8) from aggfns where cfloat8 > 0 group by ss order by 1;
- ss |       max       
-----+-----------------
-  0 | 49.997744965367
-  1 | 49.997744965367
-  2 | 49.997744965367
-  3 | 49.997744965367
-  4 | 49.997744965367
-  5 | 49.997744965367
-  6 | 49.997744965367
-  7 | 49.997744965367
-  8 | 49.997744965367
-  9 | 49.997744965367
+ ss |       max        
+----+------------------
+  0 |  49.997744965367
+  3 |  49.997744965367
+  4 |  49.997744965367
+  5 |  49.997744965367
+  6 |  49.997744965367
+  7 |  49.997744965367
+  8 |  49.997744965367
+  9 |  49.997744965367
+ 11 |  49.997744965367
+    | 49.2015035590157
 (10 rows)
 
 select min(cfloat8) from aggfns where cfloat8 > 0 order by 1;
@@ -2114,8 +2244,6 @@ select ss, min(cfloat8) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |         min         
 ----+---------------------
   0 | 0.00456937123090029
-  1 | 0.00456937123090029
-  2 | 0.00456937123090029
   3 | 0.00456937123090029
   4 | 0.00456937123090029
   5 | 0.00456937123090029
@@ -2123,6 +2251,8 @@ select ss, min(cfloat8) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 | 0.00456937123090029
   8 | 0.00456937123090029
   9 | 0.00456937123090029
+ 11 | 0.00456937123090029
+    |  0.0712367007508874
 (10 rows)
 
 select stddev(cfloat8) from aggfns where cfloat8 > 0 order by 1;
@@ -2150,15 +2280,15 @@ select ss, stddev(cfloat8) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |      stddev      
 ----+------------------
   0 | 14.4393152148108
-  1 | 14.4397230124184
-  2 | 14.4399246592273
-  3 | 14.4399246592273
-  4 | 14.4391994993402
+  3 | 14.4385675470181
+  4 | 14.4418957208478
   5 | 14.4391994993402
   6 | 14.4396587086659
   7 | 14.4396587086659
   8 | 14.4388979969066
   9 | 14.4386334818319
+ 11 | 14.4381143863288
+    | 16.2202029568666
 (10 rows)
 
 select sum(cfloat8) from aggfns where cfloat8 > 0 order by 1;
@@ -2186,15 +2316,15 @@ select ss, sum(cfloat8) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |       sum        
 ----+------------------
   0 | 248826.810941542
-  1 | 248870.099683735
-  2 |  248832.79812003
-  3 |  248832.79812003
-  4 | 248857.273151958
+  3 | 248674.095556606
+  4 | 248612.143469229
   5 | 248857.273151958
   6 |  248863.85206359
   7 |  248863.85206359
   8 | 248859.486343665
   9 | 248826.318431599
+ 11 | 497948.027486494
+    | 158.702563424595
 (10 rows)
 
 select avg(cint2) from aggfns where cfloat8 > 0 order by 1;
@@ -2219,18 +2349,18 @@ select s, avg(cint2) from aggfns where cfloat8 > 0 group by s order by 1;
 (10 rows)
 
 select ss, avg(cint2) from aggfns where cfloat8 > 0 group by ss order by 1;
- ss |         avg         
-----+---------------------
-  0 | 62.5336219045701631
-  1 | 61.1402396053558844
-  2 | 64.7349239907379442
-  3 | 60.4202577527184857
-  4 | 58.4389090177133655
-  5 | 53.6134098459679855
-  6 | 59.4139909411172622
-  7 | 62.9917446894191080
-  8 | 57.2486665995773372
-  9 | 59.3958123615864707
+ ss |          avg          
+----+-----------------------
+  0 |   62.5336219045701631
+  3 |   59.2794236195082628
+  4 |   60.5569773299748111
+  5 |   53.6134098459679855
+  6 |   59.4139909411172622
+  7 |   62.9917446894191080
+  8 |   57.2486665995773372
+  9 |   59.3958123615864707
+ 11 |   61.8774966041153092
+    | 1475.6250000000000000
 (10 rows)
 
 select max(cint2) from aggfns where cfloat8 > 0 order by 1;
@@ -2258,8 +2388,6 @@ select ss, max(cint2) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |  max  
 ----+-------
   0 | 16377
-  1 | 16377
-  2 | 16377
   3 | 16377
   4 | 16377
   5 | 16377
@@ -2267,6 +2395,8 @@ select ss, max(cint2) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 | 16377
   8 | 16377
   9 | 16377
+ 11 | 16377
+    | 13720
 (10 rows)
 
 select min(cint2) from aggfns where cfloat8 > 0 order by 1;
@@ -2294,8 +2424,6 @@ select ss, min(cint2) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |  min   
 ----+--------
   0 | -16374
-  1 | -16374
-  2 | -16374
   3 | -16374
   4 | -16374
   5 | -16374
@@ -2303,6 +2431,8 @@ select ss, min(cint2) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 | -16374
   8 | -16374
   9 | -16374
+ 11 | -16374
+    | -12426
 (10 rows)
 
 select stddev(cint2) from aggfns where cfloat8 > 0 order by 1;
@@ -2330,15 +2460,15 @@ select ss, stddev(cint2) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |      stddev       
 ----+-------------------
   0 | 9396.868628954375
-  1 | 9397.478004684803
-  2 | 9396.003979674052
-  3 | 9395.588131506675
-  4 | 9395.667525723886
+  3 | 9395.145600532270
+  4 | 9398.818234815872
   5 | 9394.622668940645
   6 | 9397.336273737402
   7 | 9394.449892433625
   8 | 9394.534603851403
   9 | 9396.374239570388
+ 11 | 9394.931149048751
+    |    10506.43193392
 (10 rows)
 
 select sum(cint2) from aggfns where cfloat8 > 0 order by 1;
@@ -2363,18 +2493,18 @@ select s, sum(cint2) from aggfns where cfloat8 > 0 group by s order by 1;
 (10 rows)
 
 select ss, sum(cint2) from aggfns where cfloat8 > 0 group by ss order by 1;
- ss |  sum   
-----+--------
-  0 | 621209
-  1 | 607306
-  2 | 643012
-  3 | 600094
-  4 | 580649
-  5 | 532542
-  6 | 590278
-  7 | 625697
-  8 | 568880
-  9 | 590038
+ ss |   sum   
+----+---------
+  0 |  621209
+  3 |  588289
+  4 |  601028
+  5 |  532542
+  6 |  590278
+  7 |  625697
+  8 |  568880
+  9 |  590038
+ 11 | 1229939
+    |   11805
 (10 rows)
 
 select avg(cint4) from aggfns where cfloat8 > 0 order by 1;
@@ -2399,18 +2529,18 @@ select s, avg(cint4) from aggfns where cfloat8 > 0 group by s order by 1;
 (10 rows)
 
 select ss, avg(cint4) from aggfns where cfloat8 > 0 group by ss order by 1;
- ss |          avg          
-----+-----------------------
-  0 | -3230391.667404203963
-  1 | -3063702.023936437695
-  2 | -3067528.135686984510
-  3 | -3067528.135686984510
-  4 | -2963500.289651010761
-  5 | -2963500.289651010761
-  6 | -3033294.541331456154
-  7 | -3033294.541331456154
-  8 | -3023451.730664789299
-  9 | -2983069.716282812029
+ ss |          avg           
+----+------------------------
+  0 |  -3230391.667404203963
+  3 |  -2996690.484799677874
+  4 |  -3090966.561316955296
+  5 |  -2963500.289651010761
+  6 |  -3033294.541331456154
+  7 |  -3033294.541331456154
+  8 |  -3023451.730664789299
+  9 |  -2983069.716282812029
+ 11 |  -3001927.897165259349
+    | -91030181.125000000000
 (10 rows)
 
 select max(cint4) from aggfns where cfloat8 > 0 order by 1;
@@ -2438,8 +2568,6 @@ select ss, max(cint4) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |    max     
 ----+------------
   0 | 1073213373
-  1 | 1073213373
-  2 | 1073213373
   3 | 1073213373
   4 | 1073213373
   5 | 1073213373
@@ -2447,6 +2575,8 @@ select ss, max(cint4) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 | 1073213373
   8 | 1073213373
   9 | 1073213373
+ 11 | 1073213373
+    |  978482473
 (10 rows)
 
 select min(cint4) from aggfns where cfloat8 > 0 order by 1;
@@ -2474,8 +2604,6 @@ select ss, min(cint4) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |     min     
 ----+-------------
   0 | -1073053412
-  1 | -1073053412
-  2 | -1073053412
   3 | -1073053412
   4 | -1073053412
   5 | -1073053412
@@ -2483,6 +2611,8 @@ select ss, min(cint4) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 | -1073053412
   8 | -1073053412
   9 | -1073053412
+ 11 | -1073053412
+    |  -960881516
 (10 rows)
 
 select stddev(cint4) from aggfns where cfloat8 > 0 order by 1;
@@ -2510,15 +2640,15 @@ select ss, stddev(cint4) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |  stddev   
 ----+-----------
   0 | 622275017
-  1 | 622236051
-  2 | 622267230
-  3 | 622267230
-  4 | 622322391
+  3 | 622183925
+  4 | 622245451
   5 | 622322391
   6 | 622330015
   7 | 622330015
   8 | 622360538
   9 | 622356873
+ 11 | 622274449
+    | 762095534
 (10 rows)
 
 select sum(cint4) from aggfns where cfloat8 > 0 order by 1;
@@ -2546,15 +2676,15 @@ select ss, sum(cint4) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |     sum      
 ----+--------------
   0 | -32119784349
-  1 | -30462389224
-  2 | -30497364725
-  3 | -30497364725
-  4 | -29466083380
+  3 | -29769123276
+  4 | -30699479887
   5 | -29466083380
   6 | -30163080919
   7 | -30163080919
   8 | -30062180558
   9 | -29660662189
+ 11 | -59726357442
+    |   -728241449
 (10 rows)
 
 select avg(cint8) from aggfns where cfloat8 > 0 order by 1;
@@ -2582,15 +2712,15 @@ select ss, avg(cint8) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |          avg          
 ----+-----------------------
   0 | -7332793.526098762949
-  1 | -7334675.513225384693
-  2 | -7250229.067592033796
-  3 | -7250229.067592033796
-  4 | -7326050.594790304737
+  3 | -7271023.008153815180
+  4 | -7498519.579943616593
   5 | -7326050.594790304737
   6 | -7272459.754123089300
   7 | -7272459.754123089300
   8 | -7247017.818163532133
   9 | -7258411.696771598109
+ 11 | -7206377.192098914355
+    | 18570646.625000000000
 (10 rows)
 
 select max(cint8) from aggfns where cfloat8 > 0 order by 1;
@@ -2618,8 +2748,6 @@ select ss, max(cint8) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |    max     
 ----+------------
   0 | 1073659785
-  1 | 1073659785
-  2 | 1073659785
   3 | 1073659785
   4 | 1073659785
   5 | 1073659785
@@ -2627,6 +2755,8 @@ select ss, max(cint8) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 | 1073659785
   8 | 1073659785
   9 | 1073659785
+ 11 | 1073659785
+    |  969157980
 (10 rows)
 
 select min(cint8) from aggfns where cfloat8 > 0 order by 1;
@@ -2654,8 +2784,6 @@ select ss, min(cint8) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |     min     
 ----+-------------
   0 | -1073184428
-  1 | -1073184428
-  2 | -1073184428
   3 | -1073184428
   4 | -1073184428
   5 | -1073184428
@@ -2663,6 +2791,8 @@ select ss, min(cint8) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 | -1073184428
   8 | -1073184428
   9 | -1073184428
+ 11 | -1073184428
+    |  -672677796
 (10 rows)
 
 select stddev(cint8) from aggfns where cfloat8 > 0 order by 1;
@@ -2690,15 +2820,15 @@ select ss, stddev(cint8) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |  stddev   
 ----+-----------
   0 | 623613696
-  1 | 623613596
-  2 | 623588105
-  3 | 623588105
-  4 | 623602577
+  3 | 623600813
+  4 | 623575078
   5 | 623602577
   6 | 623594116
   7 | 623594116
   8 | 623620316
   9 | 623635702
+ 11 | 623598886
+    | 648969761
 (10 rows)
 
 select sum(cint8) from aggfns where cfloat8 > 0 order by 1;
@@ -2723,18 +2853,18 @@ select s, sum(cint8) from aggfns where cfloat8 > 0 group by s order by 1;
 (10 rows)
 
 select ss, sum(cint8) from aggfns where cfloat8 > 0 group by ss order by 1;
- ss |     sum      
-----+--------------
-  0 | -72909966030
-  1 | -72928678628
-  2 | -72081777390
-  3 | -72081777390
-  4 | -72842921064
-  5 | -72842921064
-  6 | -72317339795
-  7 | -72317339795
-  8 | -72057098166
-  9 | -72170387501
+ ss |      sum      
+----+---------------
+  0 |  -72909966030
+  3 |  -72230342563
+  4 |  -74475296468
+  5 |  -72842921064
+  6 |  -72317339795
+  7 |  -72317339795
+  8 |  -72057098166
+  9 |  -72170387501
+ 11 | -143378080614
+    |     148565173
 (10 rows)
 
 select max(cts) from aggfns where cfloat8 > 0 order by 1;
@@ -2762,8 +2892,6 @@ select ss, max(cts) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |           max            
 ----+--------------------------
   0 | Fri Jan 01 06:34:20 2021
-  1 | Fri Jan 01 09:21:01 2021
-  2 | Fri Jan 01 12:07:40 2021
   3 | Fri Jan 01 14:54:19 2021
   4 | Fri Jan 01 17:41:01 2021
   5 | Fri Jan 01 20:27:40 2021
@@ -2771,6 +2899,8 @@ select ss, max(cts) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 | Sat Jan 02 02:01:00 2021
   8 | Sat Jan 02 04:47:39 2021
   9 | Sat Jan 02 07:34:21 2021
+ 11 | Fri Jan 01 17:09:56 2021
+    | Fri Jan 01 14:45:52 2021
 (10 rows)
 
 select min(cts) from aggfns where cfloat8 > 0 order by 1;
@@ -2798,8 +2928,6 @@ select ss, min(cts) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |           min            
 ----+--------------------------
   0 | Fri Jan 01 01:01:02 2021
-  1 | Fri Jan 01 03:47:42 2021
-  2 | Fri Jan 01 06:34:27 2021
   3 | Fri Jan 01 09:21:06 2021
   4 | Fri Jan 01 12:07:45 2021
   5 | Fri Jan 01 14:54:24 2021
@@ -2807,6 +2935,8 @@ select ss, min(cts) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 | Fri Jan 01 20:27:42 2021
   8 | Fri Jan 01 23:14:22 2021
   9 | Sat Jan 02 02:01:02 2021
+ 11 | Fri Jan 01 03:47:42 2021
+    | Fri Jan 01 10:05:04 2021
 (10 rows)
 
 select max(ctstz) from aggfns where cfloat8 > 0 order by 1;
@@ -2834,8 +2964,6 @@ select ss, max(ctstz) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |             max              
 ----+------------------------------
   0 | Fri Jan 01 06:34:20 2021 PST
-  1 | Fri Jan 01 09:21:01 2021 PST
-  2 | Fri Jan 01 12:07:40 2021 PST
   3 | Fri Jan 01 14:54:19 2021 PST
   4 | Fri Jan 01 17:41:01 2021 PST
   5 | Fri Jan 01 20:27:40 2021 PST
@@ -2843,6 +2971,8 @@ select ss, max(ctstz) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 | Sat Jan 02 02:01:00 2021 PST
   8 | Sat Jan 02 04:47:39 2021 PST
   9 | Sat Jan 02 07:34:21 2021 PST
+ 11 | Fri Jan 01 17:09:56 2021 PST
+    | Fri Jan 01 14:45:52 2021 PST
 (10 rows)
 
 select min(ctstz) from aggfns where cfloat8 > 0 order by 1;
@@ -2870,8 +3000,6 @@ select ss, min(ctstz) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |             min              
 ----+------------------------------
   0 | Fri Jan 01 01:01:02 2021 PST
-  1 | Fri Jan 01 03:47:42 2021 PST
-  2 | Fri Jan 01 06:34:27 2021 PST
   3 | Fri Jan 01 09:21:06 2021 PST
   4 | Fri Jan 01 12:07:45 2021 PST
   5 | Fri Jan 01 14:54:24 2021 PST
@@ -2879,6 +3007,8 @@ select ss, min(ctstz) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 | Fri Jan 01 20:27:42 2021 PST
   8 | Fri Jan 01 23:14:22 2021 PST
   9 | Sat Jan 02 02:01:02 2021 PST
+ 11 | Fri Jan 01 03:47:42 2021 PST
+    | Fri Jan 01 10:05:04 2021 PST
 (10 rows)
 
 select avg(s) from aggfns where cfloat8 > 0 order by 1;
@@ -2906,8 +3036,6 @@ select ss, avg(s) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |          avg           
 ----+------------------------
   0 | 0.00000000000000000000
-  1 | 1.00000000000000000000
-  2 |     2.0000000000000000
   3 |     3.0000000000000000
   4 |     4.0000000000000000
   5 |     5.0000000000000000
@@ -2915,6 +3043,8 @@ select ss, avg(s) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 |     7.0000000000000000
   8 |     8.0000000000000000
   9 |     9.0000000000000000
+ 11 |     1.5013570566948130
+    |     3.0000000000000000
 (10 rows)
 
 select count(s) from aggfns where cfloat8 > 0 order by 1;
@@ -2942,15 +3072,15 @@ select ss, count(s) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss | count 
 ----+-------
   0 |  9943
-  1 |  9943
-  2 |  9942
-  3 |  9942
-  4 |  9943
+  3 |  9934
+  4 |  9932
   5 |  9943
   6 |  9944
   7 |  9944
   8 |  9943
   9 |  9943
+ 11 | 19896
+    |     8
 (10 rows)
 
 select max(s) from aggfns where cfloat8 > 0 order by 1;
@@ -2978,8 +3108,6 @@ select ss, max(s) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss | max 
 ----+-----
   0 |   0
-  1 |   1
-  2 |   2
   3 |   3
   4 |   4
   5 |   5
@@ -2987,6 +3115,8 @@ select ss, max(s) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 |   7
   8 |   8
   9 |   9
+ 11 |   4
+    |   3
 (10 rows)
 
 select min(s) from aggfns where cfloat8 > 0 order by 1;
@@ -3014,8 +3144,6 @@ select ss, min(s) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss | min 
 ----+-----
   0 |   0
-  1 |   1
-  2 |   2
   3 |   3
   4 |   4
   5 |   5
@@ -3023,6 +3151,8 @@ select ss, min(s) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 |   7
   8 |   8
   9 |   9
+ 11 |   1
+    |   3
 (10 rows)
 
 select stddev(s) from aggfns where cfloat8 > 0 order by 1;
@@ -3047,18 +3177,18 @@ select s, stddev(s) from aggfns where cfloat8 > 0 group by s order by 1;
 (10 rows)
 
 select ss, stddev(s) from aggfns where cfloat8 > 0 group by ss order by 1;
- ss | stddev 
-----+--------
-  0 |      0
-  1 |      0
-  2 |      0
-  3 |      0
-  4 |      0
-  5 |      0
-  6 |      0
-  7 |      0
-  8 |      0
-  9 |      0
+ ss |         stddev         
+----+------------------------
+  0 |                      0
+  3 |                      0
+  4 |                      0
+  5 |                      0
+  6 |                      0
+  7 |                      0
+  8 |                      0
+  9 |                      0
+ 11 | 0.50331713731225271878
+    |                      0
 (10 rows)
 
 select sum(s) from aggfns where cfloat8 > 0 order by 1;
@@ -3086,31 +3216,31 @@ select ss, sum(s) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |  sum  
 ----+-------
   0 |     0
-  1 |  9943
-  2 | 19884
-  3 | 29826
-  4 | 39772
+  3 | 29802
+  4 | 39728
   5 | 49715
   6 | 59664
   7 | 69608
   8 | 79544
   9 | 89487
+ 11 | 29871
+    |    24
 (10 rows)
 
 select avg(ss) from aggfns where cfloat8 > 0 order by 1;
         avg         
 --------------------
- 4.5000804586141004
+ 6.4010379996379071
 (1 row)
 
 select s, avg(ss) from aggfns where cfloat8 > 0 group by s order by 1;
  s |          avg           
 ---+------------------------
  0 | 0.00000000000000000000
- 1 | 1.00000000000000000000
- 2 |     2.0000000000000000
+ 1 |    11.0000000000000000
+ 2 |    11.0000000000000000
  3 |     3.0000000000000000
- 4 |     4.0000000000000000
+ 4 |     4.0077441416071608
  5 |     5.0000000000000000
  6 |     6.0000000000000000
  7 |     7.0000000000000000
@@ -3122,8 +3252,6 @@ select ss, avg(ss) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |          avg           
 ----+------------------------
   0 | 0.00000000000000000000
-  1 | 1.00000000000000000000
-  2 |     2.0000000000000000
   3 |     3.0000000000000000
   4 |     4.0000000000000000
   5 |     5.0000000000000000
@@ -3131,22 +3259,60 @@ select ss, avg(ss) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 |     7.0000000000000000
   8 |     8.0000000000000000
   9 |     9.0000000000000000
+ 11 |    11.0000000000000000
+    |                       
+(10 rows)
+
+select count(ss) from aggfns where cfloat8 > 0 order by 1;
+ count 
+-------
+ 99422
+(1 row)
+
+select s, count(ss) from aggfns where cfloat8 > 0 group by s order by 1;
+ s | count 
+---+-------
+ 0 |  9943
+ 1 |  9943
+ 2 |  9942
+ 3 |  9934
+ 4 |  9943
+ 5 |  9943
+ 6 |  9944
+ 7 |  9944
+ 8 |  9943
+ 9 |  9943
+(10 rows)
+
+select ss, count(ss) from aggfns where cfloat8 > 0 group by ss order by 1;
+ ss | count 
+----+-------
+  0 |  9943
+  3 |  9934
+  4 |  9932
+  5 |  9943
+  6 |  9944
+  7 |  9944
+  8 |  9943
+  9 |  9943
+ 11 | 19896
+    |     0
 (10 rows)
 
 select max(ss) from aggfns where cfloat8 > 0 order by 1;
  max 
 -----
-   9
+  11
 (1 row)
 
 select s, max(ss) from aggfns where cfloat8 > 0 group by s order by 1;
  s | max 
 ---+-----
  0 |   0
- 1 |   1
- 2 |   2
+ 1 |  11
+ 2 |  11
  3 |   3
- 4 |   4
+ 4 |  11
  5 |   5
  6 |   6
  7 |   7
@@ -3158,8 +3324,6 @@ select ss, max(ss) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss | max 
 ----+-----
   0 |   0
-  1 |   1
-  2 |   2
   3 |   3
   4 |   4
   5 |   5
@@ -3167,6 +3331,8 @@ select ss, max(ss) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 |   7
   8 |   8
   9 |   9
+ 11 |  11
+    |    
 (10 rows)
 
 select min(ss) from aggfns where cfloat8 > 0 order by 1;
@@ -3179,8 +3345,8 @@ select s, min(ss) from aggfns where cfloat8 > 0 group by s order by 1;
  s | min 
 ---+-----
  0 |   0
- 1 |   1
- 2 |   2
+ 1 |  11
+ 2 |  11
  3 |   3
  4 |   4
  5 |   5
@@ -3194,8 +3360,6 @@ select ss, min(ss) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss | min 
 ----+-----
   0 |   0
-  1 |   1
-  2 |   2
   3 |   3
   4 |   4
   5 |   5
@@ -3203,35 +3367,35 @@ select ss, min(ss) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 |   7
   8 |   8
   9 |   9
+ 11 |  11
+    |    
 (10 rows)
 
 select stddev(ss) from aggfns where cfloat8 > 0 order by 1;
        stddev       
 --------------------
- 2.8722957659869625
+ 3.3528295838273201
 (1 row)
 
 select s, stddev(ss) from aggfns where cfloat8 > 0 group by s order by 1;
- s | stddev 
----+--------
- 0 |      0
- 1 |      0
- 2 |      0
- 3 |      0
- 4 |      0
- 5 |      0
- 6 |      0
- 7 |      0
- 8 |      0
- 9 |      0
+ s |         stddev         
+---+------------------------
+ 0 |                      0
+ 1 |                      0
+ 2 |                      0
+ 3 |                      0
+ 4 | 0.23271112137690657933
+ 5 |                      0
+ 6 |                      0
+ 7 |                      0
+ 8 |                      0
+ 9 |                      0
 (10 rows)
 
 select ss, stddev(ss) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss | stddev 
 ----+--------
   0 |      0
-  1 |      0
-  2 |      0
   3 |      0
   4 |      0
   5 |      0
@@ -3239,42 +3403,44 @@ select ss, stddev(ss) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 |      0
   8 |      0
   9 |      0
+ 11 |      0
+    |       
 (10 rows)
 
 select sum(ss) from aggfns where cfloat8 > 0 order by 1;
   sum   
 --------
- 447443
+ 636404
 (1 row)
 
 select s, sum(ss) from aggfns where cfloat8 > 0 group by s order by 1;
- s |  sum  
----+-------
- 0 |     0
- 1 |  9943
- 2 | 19884
- 3 | 29826
- 4 | 39772
- 5 | 49715
- 6 | 59664
- 7 | 69608
- 8 | 79544
- 9 | 89487
+ s |  sum   
+---+--------
+ 0 |      0
+ 1 | 109373
+ 2 | 109362
+ 3 |  29802
+ 4 |  39849
+ 5 |  49715
+ 6 |  59664
+ 7 |  69608
+ 8 |  79544
+ 9 |  89487
 (10 rows)
 
 select ss, sum(ss) from aggfns where cfloat8 > 0 group by ss order by 1;
- ss |  sum  
-----+-------
-  0 |     0
-  1 |  9943
-  2 | 19884
-  3 | 29826
-  4 | 39772
-  5 | 49715
-  6 | 59664
-  7 | 69608
-  8 | 79544
-  9 | 89487
+ ss |  sum   
+----+--------
+  0 |      0
+  3 |  29802
+  4 |  39728
+  5 |  49715
+  6 |  59664
+  7 |  69608
+  8 |  79544
+  9 |  89487
+ 11 | 218856
+    |       
 (10 rows)
 
 select max(t) from aggfns where cfloat8 > 0 order by 1;
@@ -3302,8 +3468,6 @@ select ss, max(t) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |  max   
 ----+--------
   0 |  19999
-  1 |  30000
-  2 |  39999
   3 |  49998
   4 |  60000
   5 |  69999
@@ -3311,6 +3475,8 @@ select ss, max(t) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 |  89999
   8 |  99998
   9 | 110000
+ 11 |  58135
+    |  49491
 (10 rows)
 
 select min(t) from aggfns where cfloat8 > 0 order by 1;
@@ -3338,8 +3504,6 @@ select ss, min(t) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |  min  
 ----+-------
   0 |     1
-  1 | 10001
-  2 | 20006
   3 | 30005
   4 | 40004
   5 | 50003
@@ -3347,6 +3511,44 @@ select ss, min(t) from aggfns where cfloat8 > 0 group by ss order by 1;
   7 | 70001
   8 | 80001
   9 | 90001
+ 11 | 10001
+    | 32643
+(10 rows)
+
+select count(*) from aggfns where cfloat8 <= 0 order by 1;
+ count  
+--------
+ 100570
+(1 row)
+
+select s, count(*) from aggfns where cfloat8 <= 0 group by s order by 1;
+ s | count 
+---+-------
+ 0 | 10057
+ 1 | 10057
+ 2 | 10058
+ 3 | 10058
+ 4 | 10057
+ 5 | 10057
+ 6 | 10056
+ 7 | 10056
+ 8 | 10057
+ 9 | 10057
+(10 rows)
+
+select ss, count(*) from aggfns where cfloat8 <= 0 group by ss order by 1;
+ ss | count 
+----+-------
+  0 | 10057
+  3 | 10047
+  4 | 10049
+  5 | 10057
+  6 | 10056
+  7 | 10056
+  8 | 10057
+  9 | 10057
+ 11 | 20123
+    |    11
 (10 rows)
 
 select max(cdate) from aggfns where cfloat8 <= 0 order by 1;
@@ -3374,8 +3576,6 @@ select ss, max(cdate) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |    max     
 ----+------------
   0 | 10-05-2075
-  1 | 02-20-2103
-  2 | 07-09-2130
   3 | 11-24-2157
   4 | 04-10-2185
   5 | 08-28-2212
@@ -3383,6 +3583,8 @@ select ss, max(cdate) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 | 06-01-2267
   8 | 10-17-2294
   9 | 03-04-2322
+ 11 | 01-24-2183
+    | 08-15-2153
 (10 rows)
 
 select min(cdate) from aggfns where cfloat8 <= 0 order by 1;
@@ -3410,8 +3612,6 @@ select ss, min(cdate) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |    min     
 ----+------------
   0 | 01-04-2021
-  1 | 05-21-2048
-  2 | 10-06-2075
   3 | 02-22-2103
   4 | 07-10-2130
   5 | 11-25-2157
@@ -3419,6 +3619,8 @@ select ss, min(cdate) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 | 09-01-2212
   8 | 01-17-2240
   9 | 06-03-2267
+ 11 | 05-21-2048
+    | 08-11-2104
 (10 rows)
 
 select avg(cfloat4) from aggfns where cfloat8 <= 0 order by 1;
@@ -3446,15 +3648,15 @@ select ss, avg(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |        avg        
 ----+-------------------
   0 | 0.273710566446533
-  1 |               NaN
-  2 |          Infinity
-  3 | 0.271225418012403
-  4 | 0.274902188431565
+  3 | 0.281539709766287
+  4 | 0.290259015901558
   5 | 0.278701234893647
   6 | 0.279196201482741
   7 | 0.281055561785383
   8 | 0.276832673694496
   9 | 0.276832673694496
+ 11 |               NaN
+    | -9.14947360483083
 (10 rows)
 
 select count(cfloat4) from aggfns where cfloat8 <= 0 order by 1;
@@ -3482,15 +3684,15 @@ select ss, count(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss | count 
 ----+-------
   0 | 10057
-  1 | 10057
-  2 | 10058
-  3 | 10058
-  4 | 10057
+  3 | 10047
+  4 | 10049
   5 | 10057
   6 | 10056
   7 | 10056
   8 | 10057
   9 | 10057
+ 11 | 20123
+    |    11
 (10 rows)
 
 select max(cfloat4) from aggfns where cfloat8 <= 0 order by 1;
@@ -3515,18 +3717,18 @@ select s, max(cfloat4) from aggfns where cfloat8 <= 0 group by s order by 1;
 (10 rows)
 
 select ss, max(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1;
- ss |   max    
-----+----------
-  0 |  49.9977
-  1 |      NaN
-  2 | Infinity
-  3 |  49.9977
-  4 |  49.9977
-  5 |  49.9977
-  6 |  49.9977
-  7 |  49.9977
-  8 |  49.9977
-  9 |  49.9977
+ ss |   max   
+----+---------
+  0 | 49.9977
+  3 | 49.9977
+  4 | 49.9977
+  5 | 49.9977
+  6 | 49.9977
+  7 | 49.9977
+  8 | 49.9977
+  9 | 49.9977
+ 11 |     NaN
+    |  48.478
 (10 rows)
 
 select min(cfloat4) from aggfns where cfloat8 <= 0 order by 1;
@@ -3554,8 +3756,6 @@ select ss, min(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |   min    
 ----+----------
   0 | -49.9756
-  1 |      NaN
-  2 | -49.9756
   3 | -49.9756
   4 | -49.9756
   5 | -49.9756
@@ -3563,6 +3763,8 @@ select ss, min(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 | -49.9756
   8 | -49.9756
   9 | -49.9756
+ 11 |      NaN
+    | -46.7478
 (10 rows)
 
 select stddev(cfloat4) from aggfns where cfloat8 <= 0 order by 1;
@@ -3590,15 +3792,15 @@ select ss, stddev(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1
  ss |      stddev      
 ----+------------------
   0 | 28.8948722701767
-  1 |              NaN
-  2 |              NaN
-  3 | 28.8971947735822
-  4 | 28.8962786797298
+  3 | 28.8951497341689
+  4 | 28.8918331282339
   5 | 28.8969485514879
   6 |  28.898342825597
   7 | 28.8981465590944
   8 | 28.8998126918449
   9 | 28.8998126918449
+ 11 |              NaN
+    | 30.6521210689863
 (10 rows)
 
 select sum(cfloat4) from aggfns where cfloat8 <= 0 order by 1;
@@ -3626,15 +3828,15 @@ select ss, sum(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |   sum    
 ----+----------
   0 |  2752.71
-  1 |      NaN
-  2 | Infinity
-  3 |  2727.99
-  4 |  2764.69
+  3 |  2828.63
+  4 |  2916.81
   5 |   2802.9
   6 |   2807.6
   7 |  2826.29
   8 |  2784.11
   9 |  2784.11
+ 11 |      NaN
+    | -100.644
 (10 rows)
 
 select avg(cfloat8) from aggfns where cfloat8 <= 0 order by 1;
@@ -3662,15 +3864,15 @@ select ss, avg(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |        avg        
 ----+-------------------
   0 | -25.0026878159296
-  1 | -25.0026878159296
-  2 | -25.0037259853644
-  3 | -25.0033035766331
-  4 | -25.0044243209649
+  3 | -25.0067336719196
+  4 | -24.9970119951125
   5 | -25.0071564832908
   6 | -25.0084381401581
   7 | -25.0089627629465
   8 | -25.0089281362381
   9 | -25.0089281362381
+ 11 | -25.0069089689736
+    |  -21.870379272679
 (10 rows)
 
 select max(cfloat8) from aggfns where cfloat8 <= 0 order by 1;
@@ -3698,8 +3900,6 @@ select ss, max(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |          max          
 ----+-----------------------
   0 | -0.000542588531970978
-  1 | -0.000542588531970978
-  2 | -0.000542588531970978
   3 | -0.000542588531970978
   4 | -0.000542588531970978
   5 | -0.000542588531970978
@@ -3707,6 +3907,8 @@ select ss, max(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 | -0.000542588531970978
   8 | -0.000542588531970978
   9 | -0.000542588531970978
+ 11 | -0.000542588531970978
+    |     -4.53631093259901
 (10 rows)
 
 select min(cfloat8) from aggfns where cfloat8 <= 0 order by 1;
@@ -3734,8 +3936,6 @@ select ss, min(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |        min        
 ----+-------------------
   0 | -49.9755693599582
-  1 | -49.9755693599582
-  2 | -49.9755693599582
   3 | -49.9755693599582
   4 | -49.9755693599582
   5 | -49.9755693599582
@@ -3743,6 +3943,8 @@ select ss, min(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 | -49.9755693599582
   8 | -49.9755693599582
   9 | -49.9755693599582
+ 11 | -49.9755693599582
+    | -38.3512130472809
 (10 rows)
 
 select stddev(cfloat8) from aggfns where cfloat8 <= 0 order by 1;
@@ -3770,15 +3972,15 @@ select ss, stddev(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by 1
  ss |      stddev      
 ----+------------------
   0 | 14.4821730365752
-  1 | 14.4821730365752
-  2 | 14.4818272972739
-  3 | 14.4815478866618
-  4 |   14.48183169158
+  3 |  14.485819356309
+  4 | 14.4810339821535
   5 | 14.4805923063393
   6 | 14.4807418968606
   7 | 14.4812687827813
   8 | 14.4805491499824
   9 | 14.4805491499824
+ 11 | 14.4820374611522
+    | 9.77628724519737
 (10 rows)
 
 select sum(cfloat8) from aggfns where cfloat8 <= 0 order by 1;
@@ -3806,15 +4008,15 @@ select ss, sum(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |        sum        
 ----+-------------------
   0 | -251452.031364804
-  1 | -251452.031364804
-  2 | -251487.475960795
-  3 | -251483.227373776
-  4 | -251469.495395944
+  3 | -251242.653201777
+  4 | -251194.973538886
   5 | -251496.972752456
   6 |  -251484.85393743
   7 |  -251490.12954419
   8 | -251514.790266147
   9 | -251514.790266147
+ 11 | -503214.029182657
+    | -240.574171999469
 (10 rows)
 
 select avg(cint2) from aggfns where cfloat8 <= 0 order by 1;
@@ -3839,18 +4041,18 @@ select s, avg(cint2) from aggfns where cfloat8 <= 0 group by s order by 1;
 (10 rows)
 
 select ss, avg(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1;
- ss |          avg          
-----+-----------------------
-  0 | -145.9491390464815368
-  1 | -146.0055732484076433
-  2 | -145.5036823248407643
-  3 | -144.9877599761170266
-  4 | -141.3792931806869089
-  5 | -139.5590167197452229
-  6 | -141.8382440772446745
-  7 | -144.4554140127388535
-  8 | -137.4765033851055356
-  9 | -144.4668060117447994
+ ss |          avg           
+----+------------------------
+  0 |  -145.9491390464815368
+  3 |  -143.3365212193664077
+  4 |  -139.6013749128225565
+  5 |  -139.5590167197452229
+  6 |  -141.8382440772446745
+  7 |  -144.4554140127388535
+  8 |  -137.4765033851055356
+  9 |  -144.4668060117447994
+ 11 |  -146.6405192996418623
+    | -1651.8181818181818182
 (10 rows)
 
 select max(cint2) from aggfns where cfloat8 <= 0 order by 1;
@@ -3878,8 +4080,6 @@ select ss, max(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |  max  
 ----+-------
   0 | 16383
-  1 | 16383
-  2 | 16383
   3 | 16383
   4 | 16383
   5 | 16383
@@ -3887,6 +4087,8 @@ select ss, max(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 | 16383
   8 | 16383
   9 | 16383
+ 11 | 16383
+    | 10616
 (10 rows)
 
 select min(cint2) from aggfns where cfloat8 <= 0 order by 1;
@@ -3914,8 +4116,6 @@ select ss, min(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |  min   
 ----+--------
   0 | -16375
-  1 | -16375
-  2 | -16375
   3 | -16375
   4 | -16375
   5 | -16375
@@ -3923,6 +4123,8 @@ select ss, min(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 | -16375
   8 | -16375
   9 | -16375
+ 11 | -16375
+    | -15206
 (10 rows)
 
 select stddev(cint2) from aggfns where cfloat8 <= 0 order by 1;
@@ -3950,15 +4152,15 @@ select ss, stddev(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |      stddev       
 ----+-------------------
   0 | 9538.832178541630
-  1 | 9537.717255354464
-  2 | 9540.157933140146
-  3 | 9535.281475740805
-  4 | 9537.335027198989
+  3 | 9535.623908566148
+  4 | 9537.357537825379
   5 | 9538.686769657499
   6 | 9537.494931550558
   7 | 9538.995155888144
   8 | 9537.123911034158
   9 | 9537.962959664725
+ 11 | 9538.688016316899
+    | 9537.230025727405
 (10 rows)
 
 select sum(cint2) from aggfns where cfloat8 <= 0 order by 1;
@@ -3986,15 +4188,15 @@ select ss, sum(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |   sum    
 ----+----------
   0 | -1466351
-  1 | -1467064
-  2 | -1462021
-  3 | -1456982
-  4 | -1420155
+  3 | -1438812
+  4 | -1401179
   5 | -1402289
   6 | -1424907
   7 | -1451488
   8 | -1380814
   9 | -1451458
+ 11 | -2948061
+    |   -18170
 (10 rows)
 
 select avg(cint4) from aggfns where cfloat8 <= 0 order by 1;
@@ -4022,15 +4224,15 @@ select ss, avg(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |          avg          
 ----+-----------------------
   0 | -2611631.507507208909
-  1 | -2611631.507507208909
-  2 | -2609754.938158679658
-  3 | -2572787.244482004375
-  4 | -2583154.535149647012
+  3 | -2371975.736040609137
+  4 | -2420650.042193253060
   5 | -2738485.569155811872
   6 | -2660373.598150357995
   7 | -2578784.074681782021
   8 | -2647231.455304762852
   9 | -2647231.455304762852
+ 11 | -2691833.530040252447
+    |   -185986716.81818182
 (10 rows)
 
 select max(cint4) from aggfns where cfloat8 <= 0 order by 1;
@@ -4058,8 +4260,6 @@ select ss, max(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |    max     
 ----+------------
   0 | 1073660631
-  1 | 1073660631
-  2 | 1073660631
   3 | 1073660631
   4 | 1073660631
   5 | 1073660631
@@ -4067,6 +4267,8 @@ select ss, max(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 | 1073660631
   8 | 1073660631
   9 | 1073660631
+ 11 | 1073660631
+    |  556763469
 (10 rows)
 
 select min(cint4) from aggfns where cfloat8 <= 0 order by 1;
@@ -4094,8 +4296,6 @@ select ss, min(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |     min     
 ----+-------------
   0 | -1073184428
-  1 | -1073184428
-  2 | -1073184428
   3 | -1073184428
   4 | -1073184428
   5 | -1073184428
@@ -4103,6 +4303,8 @@ select ss, min(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 | -1073184428
   8 | -1073184428
   9 | -1073184428
+ 11 | -1073184428
+    |  -888962001
 (10 rows)
 
 select stddev(cint4) from aggfns where cfloat8 <= 0 order by 1;
@@ -4130,15 +4332,15 @@ select ss, stddev(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |  stddev   
 ----+-----------
   0 | 618765816
-  1 | 618765816
-  2 | 618735080
-  3 | 618695738
-  4 | 618725626
+  3 | 618865631
+  4 | 618722231
   5 | 618719952
   6 | 618701125
   7 | 618716683
   8 | 618723996
   9 | 618723996
+ 11 | 618736738
+    | 415688814
 (10 rows)
 
 select sum(cint4) from aggfns where cfloat8 <= 0 order by 1;
@@ -4166,15 +4368,15 @@ select ss, sum(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |     sum      
 ----+--------------
   0 | -26265178071
-  1 | -26265178071
-  2 | -26248915168
-  3 | -25877094105
-  4 | -25978785160
+  3 | -23831240220
+  4 | -24325112274
   5 | -27540949369
   6 | -26752716903
   7 | -25932252655
   8 | -26623206746
   9 | -26623206746
+ 11 | -54167766125
+    |  -2045853885
 (10 rows)
 
 select avg(cint8) from aggfns where cfloat8 <= 0 order by 1;
@@ -4202,15 +4404,15 @@ select ss, avg(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |         avg          
 ----+----------------------
   0 | 1609068.184846375659
-  1 | 1609068.184846375659
-  2 | 1561674.145953469875
-  3 | 1654097.121694173792
-  4 | 1574613.534354181167
+  3 | 1911095.221857270827
+  4 | 1427463.756393671012
   5 | 1583685.317888038182
   6 | 1613166.887529832936
   7 | 1554490.104514717582
   8 | 1568383.139206522820
   9 | 1568383.139206522820
+ 11 | 1658849.193559608408
+    |  -233078622.18181818
 (10 rows)
 
 select max(cint8) from aggfns where cfloat8 <= 0 order by 1;
@@ -4238,8 +4440,6 @@ select ss, max(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |    max     
 ----+------------
   0 | 1073660631
-  1 | 1073660631
-  2 | 1073660631
   3 | 1073660631
   4 | 1073660631
   5 | 1073660631
@@ -4247,6 +4447,8 @@ select ss, max(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 | 1073660631
   8 | 1073660631
   9 | 1073660631
+ 11 | 1073660631
+    |  989667573
 (10 rows)
 
 select min(cint8) from aggfns where cfloat8 <= 0 order by 1;
@@ -4274,8 +4476,6 @@ select ss, min(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |     min     
 ----+-------------
   0 | -1073053412
-  1 | -1073053412
-  2 | -1073053412
   3 | -1073053412
   4 | -1073053412
   5 | -1073053412
@@ -4283,6 +4483,8 @@ select ss, min(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 | -1073053412
   8 | -1073053412
   9 | -1073053412
+ 11 | -1073053412
+    |  -796158533
 (10 rows)
 
 select stddev(cint8) from aggfns where cfloat8 <= 0 order by 1;
@@ -4310,15 +4512,15 @@ select ss, stddev(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |  stddev   
 ----+-----------
   0 | 617360997
-  1 | 617360997
-  2 | 617348601
-  3 | 617433171
-  4 | 617412408
+  3 | 617445433
+  4 | 617369297
   5 | 617401473
   6 | 617425094
   7 | 617462874
   8 | 617433744
   9 | 617433744
+ 11 | 617360997
+    | 586053845
 (10 rows)
 
 select sum(cint8) from aggfns where cfloat8 <= 0 order by 1;
@@ -4346,15 +4548,15 @@ select ss, sum(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |     sum     
 ----+-------------
   0 | 16182398735
-  1 | 16182398735
-  2 | 15707318560
-  3 | 16636908850
-  4 | 15835888315
+  3 | 19200773694
+  4 | 14344583288
   5 | 15927123242
   6 | 16222006221
   7 | 15631952491
   8 | 15773229231
   9 | 15773229231
+ 11 | 33381022322
+    | -2563864844
 (10 rows)
 
 select max(cts) from aggfns where cfloat8 <= 0 order by 1;
@@ -4382,8 +4584,6 @@ select ss, max(cts) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |           max            
 ----+--------------------------
   0 | Fri Jan 01 06:34:21 2021
-  1 | Fri Jan 01 09:21:00 2021
-  2 | Fri Jan 01 12:07:41 2021
   3 | Fri Jan 01 14:54:21 2021
   4 | Fri Jan 01 17:41:00 2021
   5 | Fri Jan 01 20:27:41 2021
@@ -4391,6 +4591,8 @@ select ss, max(cts) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 | Sat Jan 02 02:01:01 2021
   8 | Sat Jan 02 04:47:41 2021
   9 | Sat Jan 02 07:34:20 2021
+ 11 | Fri Jan 01 17:27:33 2021
+    | Fri Jan 01 14:28:19 2021
 (10 rows)
 
 select min(cts) from aggfns where cfloat8 <= 0 order by 1;
@@ -4418,8 +4620,6 @@ select ss, min(cts) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |           min            
 ----+--------------------------
   0 | Fri Jan 01 01:01:04 2021
-  1 | Fri Jan 01 03:47:43 2021
-  2 | Fri Jan 01 06:34:22 2021
   3 | Fri Jan 01 09:21:02 2021
   4 | Fri Jan 01 12:07:42 2021
   5 | Fri Jan 01 14:54:22 2021
@@ -4427,6 +4627,8 @@ select ss, min(cts) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 | Fri Jan 01 20:27:45 2021
   8 | Fri Jan 01 23:14:24 2021
   9 | Sat Jan 02 02:01:03 2021
+ 11 | Fri Jan 01 03:47:43 2021
+    | Fri Jan 01 09:29:58 2021
 (10 rows)
 
 select max(ctstz) from aggfns where cfloat8 <= 0 order by 1;
@@ -4454,8 +4656,6 @@ select ss, max(ctstz) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |             max              
 ----+------------------------------
   0 | Fri Jan 01 06:34:21 2021 PST
-  1 | Fri Jan 01 09:21:00 2021 PST
-  2 | Fri Jan 01 12:07:41 2021 PST
   3 | Fri Jan 01 14:54:21 2021 PST
   4 | Fri Jan 01 17:41:00 2021 PST
   5 | Fri Jan 01 20:27:41 2021 PST
@@ -4463,6 +4663,8 @@ select ss, max(ctstz) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 | Sat Jan 02 02:01:01 2021 PST
   8 | Sat Jan 02 04:47:41 2021 PST
   9 | Sat Jan 02 07:34:20 2021 PST
+ 11 | Fri Jan 01 17:27:33 2021 PST
+    | Fri Jan 01 14:28:19 2021 PST
 (10 rows)
 
 select min(ctstz) from aggfns where cfloat8 <= 0 order by 1;
@@ -4490,8 +4692,6 @@ select ss, min(ctstz) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |             min              
 ----+------------------------------
   0 | Fri Jan 01 01:01:04 2021 PST
-  1 | Fri Jan 01 03:47:43 2021 PST
-  2 | Fri Jan 01 06:34:22 2021 PST
   3 | Fri Jan 01 09:21:02 2021 PST
   4 | Fri Jan 01 12:07:42 2021 PST
   5 | Fri Jan 01 14:54:22 2021 PST
@@ -4499,6 +4699,8 @@ select ss, min(ctstz) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 | Fri Jan 01 20:27:45 2021 PST
   8 | Fri Jan 01 23:14:24 2021 PST
   9 | Sat Jan 02 02:01:03 2021 PST
+ 11 | Fri Jan 01 03:47:43 2021 PST
+    | Fri Jan 01 09:29:58 2021 PST
 (10 rows)
 
 select avg(s) from aggfns where cfloat8 <= 0 order by 1;
@@ -4526,8 +4728,6 @@ select ss, avg(s) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |            avg             
 ----+----------------------------
   0 | 0.000000000000000000000000
-  1 |     1.00000000000000000000
-  2 |         2.0000000000000000
   3 |         3.0000000000000000
   4 |         4.0000000000000000
   5 |         5.0000000000000000
@@ -4535,6 +4735,8 @@ select ss, avg(s) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 |         7.0000000000000000
   8 |         8.0000000000000000
   9 |         9.0000000000000000
+ 11 |         1.5010187347810963
+    |         3.0000000000000000
 (10 rows)
 
 select count(s) from aggfns where cfloat8 <= 0 order by 1;
@@ -4562,15 +4764,15 @@ select ss, count(s) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss | count 
 ----+-------
   0 | 10057
-  1 | 10057
-  2 | 10058
-  3 | 10058
-  4 | 10057
+  3 | 10047
+  4 | 10049
   5 | 10057
   6 | 10056
   7 | 10056
   8 | 10057
   9 | 10057
+ 11 | 20123
+    |    11
 (10 rows)
 
 select max(s) from aggfns where cfloat8 <= 0 order by 1;
@@ -4598,8 +4800,6 @@ select ss, max(s) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss | max 
 ----+-----
   0 |   0
-  1 |   1
-  2 |   2
   3 |   3
   4 |   4
   5 |   5
@@ -4607,6 +4807,8 @@ select ss, max(s) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 |   7
   8 |   8
   9 |   9
+ 11 |   4
+    |   3
 (10 rows)
 
 select min(s) from aggfns where cfloat8 <= 0 order by 1;
@@ -4634,8 +4836,6 @@ select ss, min(s) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss | min 
 ----+-----
   0 |   0
-  1 |   1
-  2 |   2
   3 |   3
   4 |   4
   5 |   5
@@ -4643,6 +4843,8 @@ select ss, min(s) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 |   7
   8 |   8
   9 |   9
+ 11 |   1
+    |   3
 (10 rows)
 
 select stddev(s) from aggfns where cfloat8 <= 0 order by 1;
@@ -4667,18 +4869,18 @@ select s, stddev(s) from aggfns where cfloat8 <= 0 group by s order by 1;
 (10 rows)
 
 select ss, stddev(s) from aggfns where cfloat8 <= 0 group by ss order by 1;
- ss | stddev 
-----+--------
-  0 |      0
-  1 |      0
-  2 |      0
-  3 |      0
-  4 |      0
-  5 |      0
-  6 |      0
-  7 |      0
-  8 |      0
-  9 |      0
+ ss |         stddev         
+----+------------------------
+  0 |                      0
+  3 |                      0
+  4 |                      0
+  5 |                      0
+  6 |                      0
+  7 |                      0
+  8 |                      0
+  9 |                      0
+ 11 | 0.50239111765906328317
+    |                      0
 (10 rows)
 
 select sum(s) from aggfns where cfloat8 <= 0 order by 1;
@@ -4706,31 +4908,31 @@ select ss, sum(s) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |  sum  
 ----+-------
   0 |     0
-  1 | 10057
-  2 | 20116
-  3 | 30174
-  4 | 40228
+  3 | 30141
+  4 | 40196
   5 | 50285
   6 | 60336
   7 | 70392
   8 | 80456
   9 | 90513
+ 11 | 30205
+    |    33
 (10 rows)
 
 select avg(ss) from aggfns where cfloat8 <= 0 order by 1;
         avg         
 --------------------
- 4.4999204534155315
+ 6.4009387523742281
 (1 row)
 
 select s, avg(ss) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |            avg             
 ---+----------------------------
  0 | 0.000000000000000000000000
- 1 |     1.00000000000000000000
- 2 |         2.0000000000000000
+ 1 |        11.0000000000000000
+ 2 |        11.0000000000000000
  3 |         3.0000000000000000
- 4 |         4.0000000000000000
+ 4 |         4.0055682609127971
  5 |         5.0000000000000000
  6 |         6.0000000000000000
  7 |         7.0000000000000000
@@ -4742,8 +4944,6 @@ select ss, avg(ss) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |            avg             
 ----+----------------------------
   0 | 0.000000000000000000000000
-  1 |     1.00000000000000000000
-  2 |         2.0000000000000000
   3 |         3.0000000000000000
   4 |         4.0000000000000000
   5 |         5.0000000000000000
@@ -4751,22 +4951,60 @@ select ss, avg(ss) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 |         7.0000000000000000
   8 |         8.0000000000000000
   9 |         9.0000000000000000
+ 11 |        11.0000000000000000
+    |                           
+(10 rows)
+
+select count(ss) from aggfns where cfloat8 <= 0 order by 1;
+ count  
+--------
+ 100559
+(1 row)
+
+select s, count(ss) from aggfns where cfloat8 <= 0 group by s order by 1;
+ s | count 
+---+-------
+ 0 | 10057
+ 1 | 10057
+ 2 | 10058
+ 3 | 10047
+ 4 | 10057
+ 5 | 10057
+ 6 | 10056
+ 7 | 10056
+ 8 | 10057
+ 9 | 10057
+(10 rows)
+
+select ss, count(ss) from aggfns where cfloat8 <= 0 group by ss order by 1;
+ ss | count 
+----+-------
+  0 | 10057
+  3 | 10047
+  4 | 10049
+  5 | 10057
+  6 | 10056
+  7 | 10056
+  8 | 10057
+  9 | 10057
+ 11 | 20123
+    |     0
 (10 rows)
 
 select max(ss) from aggfns where cfloat8 <= 0 order by 1;
  max 
 -----
-   9
+  11
 (1 row)
 
 select s, max(ss) from aggfns where cfloat8 <= 0 group by s order by 1;
  s | max 
 ---+-----
  0 |   0
- 1 |   1
- 2 |   2
+ 1 |  11
+ 2 |  11
  3 |   3
- 4 |   4
+ 4 |  11
  5 |   5
  6 |   6
  7 |   7
@@ -4778,8 +5016,6 @@ select ss, max(ss) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss | max 
 ----+-----
   0 |   0
-  1 |   1
-  2 |   2
   3 |   3
   4 |   4
   5 |   5
@@ -4787,6 +5023,8 @@ select ss, max(ss) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 |   7
   8 |   8
   9 |   9
+ 11 |  11
+    |    
 (10 rows)
 
 select min(ss) from aggfns where cfloat8 <= 0 order by 1;
@@ -4799,8 +5037,8 @@ select s, min(ss) from aggfns where cfloat8 <= 0 group by s order by 1;
  s | min 
 ---+-----
  0 |   0
- 1 |   1
- 2 |   2
+ 1 |  11
+ 2 |  11
  3 |   3
  4 |   4
  5 |   5
@@ -4814,8 +5052,6 @@ select ss, min(ss) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss | min 
 ----+-----
   0 |   0
-  1 |   1
-  2 |   2
   3 |   3
   4 |   4
   5 |   5
@@ -4823,35 +5059,35 @@ select ss, min(ss) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 |   7
   8 |   8
   9 |   9
+ 11 |  11
+    |    
 (10 rows)
 
 select stddev(ss) from aggfns where cfloat8 <= 0 order by 1;
        stddev       
 --------------------
- 2.8722956022845549
+ 3.3528527058531930
 (1 row)
 
 select s, stddev(ss) from aggfns where cfloat8 <= 0 group by s order by 1;
- s | stddev 
----+--------
- 0 |      0
- 1 |      0
- 2 |      0
- 3 |      0
- 4 |      0
- 5 |      0
- 6 |      0
- 7 |      0
- 8 |      0
- 9 |      0
+ s |         stddev         
+---+------------------------
+ 0 |                      0
+ 1 |                      0
+ 2 |                      0
+ 3 |                      0
+ 4 | 0.19735930141067535100
+ 5 |                      0
+ 6 |                      0
+ 7 |                      0
+ 8 |                      0
+ 9 |                      0
 (10 rows)
 
 select ss, stddev(ss) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss | stddev 
 ----+--------
   0 |      0
-  1 |      0
-  2 |      0
   3 |      0
   4 |      0
   5 |      0
@@ -4859,42 +5095,44 @@ select ss, stddev(ss) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 |      0
   8 |      0
   9 |      0
+ 11 |      0
+    |       
 (10 rows)
 
 select sum(ss) from aggfns where cfloat8 <= 0 order by 1;
   sum   
 --------
- 452557
+ 643672
 (1 row)
 
 select s, sum(ss) from aggfns where cfloat8 <= 0 group by s order by 1;
- s |  sum  
----+-------
- 0 |     0
- 1 | 10057
- 2 | 20116
- 3 | 30174
- 4 | 40228
- 5 | 50285
- 6 | 60336
- 7 | 70392
- 8 | 80456
- 9 | 90513
+ s |  sum   
+---+--------
+ 0 |      0
+ 1 | 110627
+ 2 | 110638
+ 3 |  30141
+ 4 |  40284
+ 5 |  50285
+ 6 |  60336
+ 7 |  70392
+ 8 |  80456
+ 9 |  90513
 (10 rows)
 
 select ss, sum(ss) from aggfns where cfloat8 <= 0 group by ss order by 1;
- ss |  sum  
-----+-------
-  0 |     0
-  1 | 10057
-  2 | 20116
-  3 | 30174
-  4 | 40228
-  5 | 50285
-  6 | 60336
-  7 | 70392
-  8 | 80456
-  9 | 90513
+ ss |  sum   
+----+--------
+  0 |      0
+  3 |  30141
+  4 |  40196
+  5 |  50285
+  6 |  60336
+  7 |  70392
+  8 |  80456
+  9 |  90513
+ 11 | 221353
+    |       
 (10 rows)
 
 select max(t) from aggfns where cfloat8 <= 0 order by 1;
@@ -4922,8 +5160,6 @@ select ss, max(t) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |  max   
 ----+--------
   0 |  20000
-  1 |  29999
-  2 |  40000
   3 |  50000
   4 |  59999
   5 |  70000
@@ -4931,6 +5167,8 @@ select ss, max(t) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 |  90000
   8 | 100000
   9 | 109999
+ 11 |  59192
+    |  48438
 (10 rows)
 
 select min(t) from aggfns where cfloat8 <= 0 order by 1;
@@ -4958,8 +5196,6 @@ select ss, min(t) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |  min  
 ----+-------
   0 |     3
-  1 | 10002
-  2 | 20001
   3 | 30001
   4 | 40001
   5 | 50001
@@ -4967,6 +5203,44 @@ select ss, min(t) from aggfns where cfloat8 <= 0 group by ss order by 1;
   7 | 70004
   8 | 80003
   9 | 90002
+ 11 | 10002
+    | 30537
+(10 rows)
+
+select count(*) from aggfns where cfloat8 < 1000 order by 1;
+ count  
+--------
+ 200000
+(1 row)
+
+select s, count(*) from aggfns where cfloat8 < 1000 group by s order by 1;
+ s | count 
+---+-------
+ 0 | 20000
+ 1 | 20000
+ 2 | 20000
+ 3 | 20000
+ 4 | 20000
+ 5 | 20000
+ 6 | 20000
+ 7 | 20000
+ 8 | 20000
+ 9 | 20000
+(10 rows)
+
+select ss, count(*) from aggfns where cfloat8 < 1000 group by ss order by 1;
+ ss | count 
+----+-------
+  0 | 20000
+  3 | 19981
+  4 | 19981
+  5 | 20000
+  6 | 20000
+  7 | 20000
+  8 | 20000
+  9 | 20000
+ 11 | 40019
+    |    19
 (10 rows)
 
 select max(cdate) from aggfns where cfloat8 < 1000 order by 1;
@@ -4994,8 +5268,6 @@ select ss, max(cdate) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |    max     
 ----+------------
   0 | 10-05-2075
-  1 | 02-21-2103
-  2 | 07-09-2130
   3 | 11-24-2157
   4 | 04-11-2185
   5 | 08-28-2212
@@ -5003,6 +5275,8 @@ select ss, max(cdate) from aggfns where cfloat8 < 1000 group by ss order by 1;
   7 | 06-01-2267
   8 | 10-17-2294
   9 | 03-05-2322
+ 11 | 01-24-2183
+    | 07-03-2156
 (10 rows)
 
 select min(cdate) from aggfns where cfloat8 < 1000 order by 1;
@@ -5030,8 +5304,6 @@ select ss, min(cdate) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |    min     
 ----+------------
   0 | 01-02-2021
-  1 | 05-20-2048
-  2 | 10-06-2075
   3 | 02-22-2103
   4 | 07-10-2130
   5 | 11-25-2157
@@ -5039,6 +5311,8 @@ select ss, min(cdate) from aggfns where cfloat8 < 1000 group by ss order by 1;
   7 | 08-29-2212
   8 | 01-15-2240
   9 | 06-02-2267
+ 11 | 05-20-2048
+    | 08-11-2104
 (10 rows)
 
 select avg(cfloat4) from aggfns where cfloat8 < 1000 order by 1;
@@ -5066,15 +5340,15 @@ select ss, avg(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |        avg         
 ----+--------------------
   0 | -0.132126759885764
-  1 |                NaN
-  2 |           Infinity
   3 |          -Infinity
-  4 |  -0.13252146150968
+  4 | -0.124977103379316
   5 | -0.130611110996222
   6 | -0.131984978889441
   7 | -0.131050092529273
   8 | -0.131313872741675
   9 | -0.132765194868064
+ 11 |                NaN
+    |  -5.91588952823689
 (10 rows)
 
 select count(cfloat4) from aggfns where cfloat8 < 1000 order by 1;
@@ -5102,15 +5376,15 @@ select ss, count(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 
  ss | count 
 ----+-------
   0 | 20000
-  1 | 20000
-  2 | 20000
-  3 | 20000
-  4 | 20000
+  3 | 19981
+  4 | 19981
   5 | 20000
   6 | 20000
   7 | 20000
   8 | 20000
   9 | 20000
+ 11 | 40019
+    |    19
 (10 rows)
 
 select max(cfloat4) from aggfns where cfloat8 < 1000 order by 1;
@@ -5135,18 +5409,18 @@ select s, max(cfloat4) from aggfns where cfloat8 < 1000 group by s order by 1;
 (10 rows)
 
 select ss, max(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1;
- ss |   max    
-----+----------
-  0 |  49.9977
-  1 |      NaN
-  2 | Infinity
-  3 |  49.9977
-  4 |  49.9977
-  5 |  49.9977
-  6 |  49.9977
-  7 |  49.9977
-  8 |  49.9977
-  9 |  49.9977
+ ss |   max   
+----+---------
+  0 | 49.9977
+  3 | 49.9977
+  4 | 49.9977
+  5 | 49.9977
+  6 | 49.9977
+  7 | 49.9977
+  8 | 49.9977
+  9 | 49.9977
+ 11 |     NaN
+    |  48.478
 (10 rows)
 
 select min(cfloat4) from aggfns where cfloat8 < 1000 order by 1;
@@ -5174,8 +5448,6 @@ select ss, min(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |    min    
 ----+-----------
   0 |  -49.9756
-  1 |       NaN
-  2 |  -49.9756
   3 | -Infinity
   4 |  -49.9756
   5 |  -49.9756
@@ -5183,6 +5455,8 @@ select ss, min(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1;
   7 |  -49.9756
   8 |  -49.9756
   9 |  -49.9756
+ 11 |       NaN
+    |  -46.7478
 (10 rows)
 
 select stddev(cfloat4) from aggfns where cfloat8 < 1000 order by 1;
@@ -5210,15 +5484,15 @@ select ss, stddev(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by
  ss |      stddev      
 ----+------------------
   0 | 28.8941380063427
-  1 |              NaN
-  2 |              NaN
   3 |              NaN
-  4 | 28.8948189281654
+  4 |   28.89302954083
   5 | 28.8951827753267
   6 | 28.8960531969495
   7 | 28.8959678301628
   8 | 28.8963276918371
   9 | 28.8968307405966
+ 11 |              NaN
+    | 27.2867943876683
 (10 rows)
 
 select sum(cfloat4) from aggfns where cfloat8 < 1000 order by 1;
@@ -5246,15 +5520,15 @@ select ss, sum(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |    sum    
 ----+-----------
   0 |  -2642.54
-  1 |       NaN
-  2 |  Infinity
   3 | -Infinity
-  4 |  -2650.43
+  4 |  -2497.17
   5 |  -2612.22
   6 |   -2639.7
   7 |     -2621
   8 |  -2626.28
   9 |   -2655.3
+ 11 |       NaN
+    |  -112.402
 (10 rows)
 
 select avg(cfloat8) from aggfns where cfloat8 < 1000 order by 1;
@@ -5282,15 +5556,15 @@ select ss, avg(cfloat8) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |        avg         
 ----+--------------------
   0 | -0.131261021163082
-  1 | -0.129096584053477
-  2 | -0.132733892038232
-  3 | -0.132521462687291
-  4 | -0.130611112199258
+  3 | -0.128550004763072
+  4 | -0.129264304572168
   5 | -0.131984980024863
   6 | -0.131050093692029
   7 |  -0.13131387403002
   8 | -0.132765196124092
   9 | -0.134423591727391
+ 11 | -0.131587538323368
+    |  -4.30903203025656
 (10 rows)
 
 select max(cfloat8) from aggfns where cfloat8 < 1000 order by 1;
@@ -5315,18 +5589,18 @@ select s, max(cfloat8) from aggfns where cfloat8 < 1000 group by s order by 1;
 (10 rows)
 
 select ss, max(cfloat8) from aggfns where cfloat8 < 1000 group by ss order by 1;
- ss |       max       
-----+-----------------
-  0 | 49.997744965367
-  1 | 49.997744965367
-  2 | 49.997744965367
-  3 | 49.997744965367
-  4 | 49.997744965367
-  5 | 49.997744965367
-  6 | 49.997744965367
-  7 | 49.997744965367
-  8 | 49.997744965367
-  9 | 49.997744965367
+ ss |       max        
+----+------------------
+  0 |  49.997744965367
+  3 |  49.997744965367
+  4 |  49.997744965367
+  5 |  49.997744965367
+  6 |  49.997744965367
+  7 |  49.997744965367
+  8 |  49.997744965367
+  9 |  49.997744965367
+ 11 |  49.997744965367
+    | 49.2015035590157
 (10 rows)
 
 select min(cfloat8) from aggfns where cfloat8 < 1000 order by 1;
@@ -5354,8 +5628,6 @@ select ss, min(cfloat8) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |        min        
 ----+-------------------
   0 | -49.9755693599582
-  1 | -49.9755693599582
-  2 | -49.9755693599582
   3 | -49.9755693599582
   4 | -49.9755693599582
   5 | -49.9755693599582
@@ -5363,6 +5635,8 @@ select ss, min(cfloat8) from aggfns where cfloat8 < 1000 group by ss order by 1;
   7 | -49.9755693599582
   8 | -49.9755693599582
   9 | -49.9755693599582
+ 11 | -49.9755693599582
+    | -38.3512130472809
 (10 rows)
 
 select stddev(cfloat8) from aggfns where cfloat8 < 1000 order by 1;
@@ -5390,15 +5664,15 @@ select ss, stddev(cfloat8) from aggfns where cfloat8 < 1000 group by ss order by
  ss |      stddev      
 ----+------------------
   0 |  28.893219634188
-  1 | 28.8952055755515
-  2 | 28.8950722121689
-  3 | 28.8948189369737
-  4 | 28.8951827840888
+  3 | 28.8988694216911
+  4 | 28.8937408619903
   5 | 28.8960532056265
   6 | 28.8959678388464
   7 | 28.8963277006942
   8 | 28.8968307494196
   9 | 28.8953209642426
+ 11 | 28.8954978116663
+    |  24.556507133269
 (10 rows)
 
 select sum(cfloat8) from aggfns where cfloat8 < 1000 order by 1;
@@ -5426,15 +5700,15 @@ select ss, sum(cfloat8) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |        sum        
 ----+-------------------
   0 | -2625.22042326164
-  1 | -2581.93168106955
-  2 | -2654.67784076463
-  3 | -2650.42925374582
-  4 | -2612.22224398516
+  3 | -2568.55764517095
+  4 | -2582.83006965648
   5 | -2639.69960049726
   6 | -2621.00187384058
   7 |  -2626.2774806004
   8 | -2655.30392248183
   9 | -2688.47183454782
+ 11 | -5266.00169616286
+    | -81.8716085748747
 (10 rows)
 
 select avg(cint2) from aggfns where cfloat8 < 1000 order by 1;
@@ -5459,18 +5733,18 @@ select s, avg(cint2) from aggfns where cfloat8 < 1000 group by s order by 1;
 (10 rows)
 
 select ss, avg(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1;
- ss |         avg          
-----+----------------------
-  0 | -42.2972824182973825
-  1 | -43.0287773384715480
-  2 | -40.9893899204244032
-  3 | -42.8851408838396477
-  4 | -42.0152144537310445
-  5 | -43.5287022671537961
-  6 | -41.7711325759471498
-  7 | -41.3288123717531655
-  8 | -40.6353035383614434
-  9 | -43.1119563585406136
+ ss |          avg          
+----+-----------------------
+  0 |  -42.2972824182973825
+  3 |  -42.6071034966436229
+  4 |  -40.0837090471896604
+  5 |  -43.5287022671537961
+  6 |  -41.7711325759471498
+  7 |  -41.3288123717531655
+  8 |  -40.6353035383614434
+  9 |  -43.1119563585406136
+ 11 |  -42.9734623946374528
+    | -335.0000000000000000
 (10 rows)
 
 select max(cint2) from aggfns where cfloat8 < 1000 order by 1;
@@ -5498,8 +5772,6 @@ select ss, max(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |  max  
 ----+-------
   0 | 16383
-  1 | 16383
-  2 | 16383
   3 | 16383
   4 | 16383
   5 | 16383
@@ -5507,6 +5779,8 @@ select ss, max(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1;
   7 | 16383
   8 | 16383
   9 | 16383
+ 11 | 16383
+    | 13720
 (10 rows)
 
 select min(cint2) from aggfns where cfloat8 < 1000 order by 1;
@@ -5534,8 +5808,6 @@ select ss, min(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |  min   
 ----+--------
   0 | -16375
-  1 | -16375
-  2 | -16375
   3 | -16375
   4 | -16375
   5 | -16375
@@ -5543,6 +5815,8 @@ select ss, min(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1;
   7 | -16375
   8 | -16375
   9 | -16375
+ 11 | -16375
+    | -15206
 (10 rows)
 
 select stddev(cint2) from aggfns where cfloat8 < 1000 order by 1;
@@ -5570,15 +5844,15 @@ select ss, stddev(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1
  ss |      stddev       
 ----+-------------------
   0 | 9468.854793575036
-  1 | 9468.590431229826
-  2 | 9469.116705177088
-  3 | 9466.421782354268
-  4 | 9467.442985677590
+  3 | 9466.351508971864
+  4 | 9469.021659499615
   5 | 9467.599133444078
   6 | 9468.362090451302
   7 | 9467.745653535755
   8 | 9466.743345080951
   9 | 9468.145452253715
+ 11 | 9467.946206136906
+    | 9796.780548277639
 (10 rows)
 
 select sum(cint2) from aggfns where cfloat8 < 1000 order by 1;
@@ -5603,18 +5877,18 @@ select s, sum(cint2) from aggfns where cfloat8 < 1000 group by s order by 1;
 (10 rows)
 
 select ss, sum(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1;
- ss |   sum   
-----+---------
-  0 | -845142
-  1 | -859758
-  2 | -819009
-  3 | -856888
-  4 | -839506
-  5 | -869747
-  6 | -834629
-  7 | -825791
-  8 | -811934
-  9 | -861420
+ ss |   sum    
+----+----------
+  0 |  -845142
+  3 |  -850523
+  4 |  -800151
+  5 |  -869747
+  6 |  -834629
+  7 |  -825791
+  8 |  -811934
+  9 |  -861420
+ 11 | -1718122
+    |    -6365
 (10 rows)
 
 select avg(cint4) from aggfns where cfloat8 < 1000 order by 1;
@@ -5642,15 +5916,15 @@ select ss, avg(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |          avg          
 ----+-----------------------
   0 | -2919248.121000000000
-  1 | -2836378.364750000000
-  2 | -2837313.994650000000
-  3 | -2818722.941500000000
-  4 | -2772243.427000000000
+  3 | -2682566.613082428307
+  4 | -2753845.761523447275
   5 | -2850351.637450000000
   6 | -2845789.891100000000
   7 | -2804766.678700000000
   8 | -2834269.365200000000
   9 | -2814193.446750000000
+ 11 | -2846001.238586671331
+    |   -146005017.57894737
 (10 rows)
 
 select max(cint4) from aggfns where cfloat8 < 1000 order by 1;
@@ -5678,8 +5952,6 @@ select ss, max(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |    max     
 ----+------------
   0 | 1073660631
-  1 | 1073660631
-  2 | 1073660631
   3 | 1073660631
   4 | 1073660631
   5 | 1073660631
@@ -5687,6 +5959,8 @@ select ss, max(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1;
   7 | 1073660631
   8 | 1073660631
   9 | 1073660631
+ 11 | 1073660631
+    |  978482473
 (10 rows)
 
 select min(cint4) from aggfns where cfloat8 < 1000 order by 1;
@@ -5714,8 +5988,6 @@ select ss, min(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |     min     
 ----+-------------
   0 | -1073184428
-  1 | -1073184428
-  2 | -1073184428
   3 | -1073184428
   4 | -1073184428
   5 | -1073184428
@@ -5723,6 +5995,8 @@ select ss, min(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1;
   7 | -1073184428
   8 | -1073184428
   9 | -1073184428
+ 11 | -1073184428
+    |  -960881516
 (10 rows)
 
 select stddev(cint4) from aggfns where cfloat8 < 1000 order by 1;
@@ -5750,15 +6024,15 @@ select ss, stddev(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1
  ss |  stddev   
 ----+-----------
   0 | 620497458
-  1 | 620477996
-  2 | 620477953
-  3 | 620458232
-  4 | 620500878
+  3 | 620502162
+  4 | 620460588
   5 | 620498014
   6 | 620492575
   7 | 620500389
   8 | 620519080
   9 | 620517247
+ 11 | 620490348
+    | 569369090
 (10 rows)
 
 select sum(cint4) from aggfns where cfloat8 < 1000 order by 1;
@@ -5783,18 +6057,18 @@ select s, sum(cint4) from aggfns where cfloat8 < 1000 group by s order by 1;
 (10 rows)
 
 select ss, sum(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1;
- ss |     sum      
-----+--------------
-  0 | -58384962420
-  1 | -56727567295
-  2 | -56746279893
-  3 | -56374458830
-  4 | -55444868540
-  5 | -57007032749
-  6 | -56915797822
-  7 | -56095333574
-  8 | -56685387304
-  9 | -56283868935
+ ss |      sum      
+----+---------------
+  0 |  -58384962420
+  3 |  -53600363496
+  4 |  -55024592161
+  5 |  -57007032749
+  6 |  -56915797822
+  7 |  -56095333574
+  8 |  -56685387304
+  9 |  -56283868935
+ 11 | -113894123567
+    |   -2774095334
 (10 rows)
 
 select avg(cint8) from aggfns where cfloat8 < 1000 order by 1;
@@ -5822,15 +6096,15 @@ select ss, avg(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |          avg          
 ----+-----------------------
   0 | -2836378.364750000000
-  1 | -2837313.994650000000
-  2 | -2818722.941500000000
-  3 | -2772243.427000000000
-  4 | -2850351.637450000000
+  3 | -2653999.743206045743
+  4 | -3009394.583854661929
   5 | -2845789.891100000000
   6 | -2804766.678700000000
   7 | -2834269.365200000000
   8 | -2814193.446750000000
   9 | -2819857.913500000000
+ 11 | -2748620.862390364577
+    |   -127121035.31578947
 (10 rows)
 
 select max(cint8) from aggfns where cfloat8 < 1000 order by 1;
@@ -5858,8 +6132,6 @@ select ss, max(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |    max     
 ----+------------
   0 | 1073660631
-  1 | 1073660631
-  2 | 1073660631
   3 | 1073660631
   4 | 1073660631
   5 | 1073660631
@@ -5867,6 +6139,8 @@ select ss, max(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1;
   7 | 1073660631
   8 | 1073660631
   9 | 1073660631
+ 11 | 1073660631
+    |  989667573
 (10 rows)
 
 select min(cint8) from aggfns where cfloat8 < 1000 order by 1;
@@ -5894,8 +6168,6 @@ select ss, min(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |     min     
 ----+-------------
   0 | -1073184428
-  1 | -1073184428
-  2 | -1073184428
   3 | -1073184428
   4 | -1073184428
   5 | -1073184428
@@ -5903,6 +6175,8 @@ select ss, min(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1;
   7 | -1073184428
   8 | -1073184428
   9 | -1073184428
+ 11 | -1073184428
+    |  -796158533
 (10 rows)
 
 select stddev(cint8) from aggfns where cfloat8 < 1000 order by 1;
@@ -5930,15 +6204,15 @@ select ss, stddev(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1
  ss |  stddev   
 ----+-----------
   0 | 620477996
-  1 | 620477953
-  2 | 620458232
-  3 | 620500878
-  4 | 620498014
+  3 | 620514804
+  4 | 620462299
   5 | 620492575
   6 | 620500389
   7 | 620519080
   8 | 620517247
   9 | 620524975
+ 11 | 620478168
+    | 609007799
 (10 rows)
 
 select sum(cint8) from aggfns where cfloat8 < 1000 order by 1;
@@ -5963,18 +6237,18 @@ select s, sum(cint8) from aggfns where cfloat8 < 1000 group by s order by 1;
 (10 rows)
 
 select ss, sum(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1;
- ss |     sum      
-----+--------------
-  0 | -56727567295
-  1 | -56746279893
-  2 | -56374458830
-  3 | -55444868540
-  4 | -57007032749
-  5 | -56915797822
-  6 | -56095333574
-  7 | -56685387304
-  8 | -56283868935
-  9 | -56397158270
+ ss |      sum      
+----+---------------
+  0 |  -56727567295
+  3 |  -53029568869
+  4 |  -60130713180
+  5 |  -56915797822
+  6 |  -56095333574
+  7 |  -56685387304
+  8 |  -56283868935
+  9 |  -56397158270
+ 11 | -109997058292
+    |   -2415299671
 (10 rows)
 
 select max(cts) from aggfns where cfloat8 < 1000 order by 1;
@@ -6002,8 +6276,6 @@ select ss, max(cts) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |           max            
 ----+--------------------------
   0 | Fri Jan 01 06:34:21 2021
-  1 | Fri Jan 01 09:21:01 2021
-  2 | Fri Jan 01 12:07:41 2021
   3 | Fri Jan 01 14:54:21 2021
   4 | Fri Jan 01 17:41:01 2021
   5 | Fri Jan 01 20:27:41 2021
@@ -6011,6 +6283,8 @@ select ss, max(cts) from aggfns where cfloat8 < 1000 group by ss order by 1;
   7 | Sat Jan 02 02:01:01 2021
   8 | Sat Jan 02 04:47:41 2021
   9 | Sat Jan 02 07:34:21 2021
+ 11 | Fri Jan 01 17:27:33 2021
+    | Fri Jan 01 14:45:52 2021
 (10 rows)
 
 select min(cts) from aggfns where cfloat8 < 1000 order by 1;
@@ -6038,8 +6312,6 @@ select ss, min(cts) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |           min            
 ----+--------------------------
   0 | Fri Jan 01 01:01:02 2021
-  1 | Fri Jan 01 03:47:42 2021
-  2 | Fri Jan 01 06:34:22 2021
   3 | Fri Jan 01 09:21:02 2021
   4 | Fri Jan 01 12:07:42 2021
   5 | Fri Jan 01 14:54:22 2021
@@ -6047,6 +6319,8 @@ select ss, min(cts) from aggfns where cfloat8 < 1000 group by ss order by 1;
   7 | Fri Jan 01 20:27:42 2021
   8 | Fri Jan 01 23:14:22 2021
   9 | Sat Jan 02 02:01:02 2021
+ 11 | Fri Jan 01 03:47:42 2021
+    | Fri Jan 01 09:29:58 2021
 (10 rows)
 
 select max(ctstz) from aggfns where cfloat8 < 1000 order by 1;
@@ -6074,8 +6348,6 @@ select ss, max(ctstz) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |             max              
 ----+------------------------------
   0 | Fri Jan 01 06:34:21 2021 PST
-  1 | Fri Jan 01 09:21:01 2021 PST
-  2 | Fri Jan 01 12:07:41 2021 PST
   3 | Fri Jan 01 14:54:21 2021 PST
   4 | Fri Jan 01 17:41:01 2021 PST
   5 | Fri Jan 01 20:27:41 2021 PST
@@ -6083,6 +6355,8 @@ select ss, max(ctstz) from aggfns where cfloat8 < 1000 group by ss order by 1;
   7 | Sat Jan 02 02:01:01 2021 PST
   8 | Sat Jan 02 04:47:41 2021 PST
   9 | Sat Jan 02 07:34:21 2021 PST
+ 11 | Fri Jan 01 17:27:33 2021 PST
+    | Fri Jan 01 14:45:52 2021 PST
 (10 rows)
 
 select min(ctstz) from aggfns where cfloat8 < 1000 order by 1;
@@ -6110,8 +6384,6 @@ select ss, min(ctstz) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |             min              
 ----+------------------------------
   0 | Fri Jan 01 01:01:02 2021 PST
-  1 | Fri Jan 01 03:47:42 2021 PST
-  2 | Fri Jan 01 06:34:22 2021 PST
   3 | Fri Jan 01 09:21:02 2021 PST
   4 | Fri Jan 01 12:07:42 2021 PST
   5 | Fri Jan 01 14:54:22 2021 PST
@@ -6119,6 +6391,8 @@ select ss, min(ctstz) from aggfns where cfloat8 < 1000 group by ss order by 1;
   7 | Fri Jan 01 20:27:42 2021 PST
   8 | Fri Jan 01 23:14:22 2021 PST
   9 | Sat Jan 02 02:01:02 2021 PST
+ 11 | Fri Jan 01 03:47:42 2021 PST
+    | Fri Jan 01 09:29:58 2021 PST
 (10 rows)
 
 select avg(s) from aggfns where cfloat8 < 1000 order by 1;
@@ -6146,8 +6420,6 @@ select ss, avg(s) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |            avg             
 ----+----------------------------
   0 | 0.000000000000000000000000
-  1 |     1.00000000000000000000
-  2 |         2.0000000000000000
   3 |         3.0000000000000000
   4 |         4.0000000000000000
   5 |         5.0000000000000000
@@ -6155,6 +6427,8 @@ select ss, avg(s) from aggfns where cfloat8 < 1000 group by ss order by 1;
   7 |         7.0000000000000000
   8 |         8.0000000000000000
   9 |         9.0000000000000000
+ 11 |         1.5011869362053025
+    |         3.0000000000000000
 (10 rows)
 
 select count(s) from aggfns where cfloat8 < 1000 order by 1;
@@ -6182,15 +6456,15 @@ select ss, count(s) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss | count 
 ----+-------
   0 | 20000
-  1 | 20000
-  2 | 20000
-  3 | 20000
-  4 | 20000
+  3 | 19981
+  4 | 19981
   5 | 20000
   6 | 20000
   7 | 20000
   8 | 20000
   9 | 20000
+ 11 | 40019
+    |    19
 (10 rows)
 
 select max(s) from aggfns where cfloat8 < 1000 order by 1;
@@ -6218,8 +6492,6 @@ select ss, max(s) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss | max 
 ----+-----
   0 |   0
-  1 |   1
-  2 |   2
   3 |   3
   4 |   4
   5 |   5
@@ -6227,6 +6499,8 @@ select ss, max(s) from aggfns where cfloat8 < 1000 group by ss order by 1;
   7 |   7
   8 |   8
   9 |   9
+ 11 |   4
+    |   3
 (10 rows)
 
 select min(s) from aggfns where cfloat8 < 1000 order by 1;
@@ -6254,8 +6528,6 @@ select ss, min(s) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss | min 
 ----+-----
   0 |   0
-  1 |   1
-  2 |   2
   3 |   3
   4 |   4
   5 |   5
@@ -6263,6 +6535,8 @@ select ss, min(s) from aggfns where cfloat8 < 1000 group by ss order by 1;
   7 |   7
   8 |   8
   9 |   9
+ 11 |   1
+    |   3
 (10 rows)
 
 select stddev(s) from aggfns where cfloat8 < 1000 order by 1;
@@ -6287,18 +6561,18 @@ select s, stddev(s) from aggfns where cfloat8 < 1000 group by s order by 1;
 (10 rows)
 
 select ss, stddev(s) from aggfns where cfloat8 < 1000 group by ss order by 1;
- ss | stddev 
-----+--------
-  0 |      0
-  1 |      0
-  2 |      0
-  3 |      0
-  4 |      0
-  5 |      0
-  6 |      0
-  7 |      0
-  8 |      0
-  9 |      0
+ ss |         stddev         
+----+------------------------
+  0 |                      0
+  3 |                      0
+  4 |                      0
+  5 |                      0
+  6 |                      0
+  7 |                      0
+  8 |                      0
+  9 |                      0
+ 11 | 0.50284545977155885187
+    |                      0
 (10 rows)
 
 select sum(s) from aggfns where cfloat8 < 1000 order by 1;
@@ -6326,31 +6600,31 @@ select ss, sum(s) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |  sum   
 ----+--------
   0 |      0
-  1 |  20000
-  2 |  40000
-  3 |  60000
-  4 |  80000
+  3 |  59943
+  4 |  79924
   5 | 100000
   6 | 120000
   7 | 140000
   8 | 160000
   9 | 180000
+ 11 |  60076
+    |     57
 (10 rows)
 
 select avg(ss) from aggfns where cfloat8 < 1000 order by 1;
         avg         
 --------------------
- 4.5000000000000000
+ 6.4009880938689175
 (1 row)
 
 select s, avg(ss) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |            avg             
 ---+----------------------------
  0 | 0.000000000000000000000000
- 1 |     1.00000000000000000000
- 2 |         2.0000000000000000
+ 1 |        11.0000000000000000
+ 2 |        11.0000000000000000
  3 |         3.0000000000000000
- 4 |         4.0000000000000000
+ 4 |         4.0066500000000000
  5 |         5.0000000000000000
  6 |         6.0000000000000000
  7 |         7.0000000000000000
@@ -6362,8 +6636,6 @@ select ss, avg(ss) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |            avg             
 ----+----------------------------
   0 | 0.000000000000000000000000
-  1 |     1.00000000000000000000
-  2 |         2.0000000000000000
   3 |         3.0000000000000000
   4 |         4.0000000000000000
   5 |         5.0000000000000000
@@ -6371,22 +6643,60 @@ select ss, avg(ss) from aggfns where cfloat8 < 1000 group by ss order by 1;
   7 |         7.0000000000000000
   8 |         8.0000000000000000
   9 |         9.0000000000000000
+ 11 |        11.0000000000000000
+    |                           
+(10 rows)
+
+select count(ss) from aggfns where cfloat8 < 1000 order by 1;
+ count  
+--------
+ 199981
+(1 row)
+
+select s, count(ss) from aggfns where cfloat8 < 1000 group by s order by 1;
+ s | count 
+---+-------
+ 0 | 20000
+ 1 | 20000
+ 2 | 20000
+ 3 | 19981
+ 4 | 20000
+ 5 | 20000
+ 6 | 20000
+ 7 | 20000
+ 8 | 20000
+ 9 | 20000
+(10 rows)
+
+select ss, count(ss) from aggfns where cfloat8 < 1000 group by ss order by 1;
+ ss | count 
+----+-------
+  0 | 20000
+  3 | 19981
+  4 | 19981
+  5 | 20000
+  6 | 20000
+  7 | 20000
+  8 | 20000
+  9 | 20000
+ 11 | 40019
+    |     0
 (10 rows)
 
 select max(ss) from aggfns where cfloat8 < 1000 order by 1;
  max 
 -----
-   9
+  11
 (1 row)
 
 select s, max(ss) from aggfns where cfloat8 < 1000 group by s order by 1;
  s | max 
 ---+-----
  0 |   0
- 1 |   1
- 2 |   2
+ 1 |  11
+ 2 |  11
  3 |   3
- 4 |   4
+ 4 |  11
  5 |   5
  6 |   6
  7 |   7
@@ -6398,8 +6708,6 @@ select ss, max(ss) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss | max 
 ----+-----
   0 |   0
-  1 |   1
-  2 |   2
   3 |   3
   4 |   4
   5 |   5
@@ -6407,6 +6715,8 @@ select ss, max(ss) from aggfns where cfloat8 < 1000 group by ss order by 1;
   7 |   7
   8 |   8
   9 |   9
+ 11 |  11
+    |    
 (10 rows)
 
 select min(ss) from aggfns where cfloat8 < 1000 order by 1;
@@ -6419,8 +6729,8 @@ select s, min(ss) from aggfns where cfloat8 < 1000 group by s order by 1;
  s | min 
 ---+-----
  0 |   0
- 1 |   1
- 2 |   2
+ 1 |  11
+ 2 |  11
  3 |   3
  4 |   4
  5 |   5
@@ -6434,8 +6744,6 @@ select ss, min(ss) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss | min 
 ----+-----
   0 |   0
-  1 |   1
-  2 |   2
   3 |   3
   4 |   4
   5 |   5
@@ -6443,35 +6751,35 @@ select ss, min(ss) from aggfns where cfloat8 < 1000 group by ss order by 1;
   7 |   7
   8 |   8
   9 |   9
+ 11 |  11
+    |    
 (10 rows)
 
 select stddev(ss) from aggfns where cfloat8 < 1000 order by 1;
        stddev       
 --------------------
- 2.8722885039992502
+ 3.3528328280068652
 (1 row)
 
 select s, stddev(ss) from aggfns where cfloat8 < 1000 group by s order by 1;
- s | stddev 
----+--------
- 0 |      0
- 1 |      0
- 2 |      0
- 3 |      0
- 4 |      0
- 5 |      0
- 6 |      0
- 7 |      0
- 8 |      0
- 9 |      0
+ s |         stddev         
+---+------------------------
+ 0 |                      0
+ 1 |                      0
+ 2 |                      0
+ 3 |                      0
+ 4 | 0.21565737387148452722
+ 5 |                      0
+ 6 |                      0
+ 7 |                      0
+ 8 |                      0
+ 9 |                      0
 (10 rows)
 
 select ss, stddev(ss) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss | stddev 
 ----+--------
   0 |      0
-  1 |      0
-  2 |      0
   3 |      0
   4 |      0
   5 |      0
@@ -6479,22 +6787,24 @@ select ss, stddev(ss) from aggfns where cfloat8 < 1000 group by ss order by 1;
   7 |      0
   8 |      0
   9 |      0
+ 11 |      0
+    |       
 (10 rows)
 
 select sum(ss) from aggfns where cfloat8 < 1000 order by 1;
-  sum   
---------
- 900000
+   sum   
+---------
+ 1280076
 (1 row)
 
 select s, sum(ss) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |  sum   
 ---+--------
  0 |      0
- 1 |  20000
- 2 |  40000
- 3 |  60000
- 4 |  80000
+ 1 | 220000
+ 2 | 220000
+ 3 |  59943
+ 4 |  80133
  5 | 100000
  6 | 120000
  7 | 140000
@@ -6506,15 +6816,15 @@ select ss, sum(ss) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |  sum   
 ----+--------
   0 |      0
-  1 |  20000
-  2 |  40000
-  3 |  60000
-  4 |  80000
+  3 |  59943
+  4 |  79924
   5 | 100000
   6 | 120000
   7 | 140000
   8 | 160000
   9 | 180000
+ 11 | 440209
+    |       
 (10 rows)
 
 select max(t) from aggfns where cfloat8 < 1000 order by 1;
@@ -6542,8 +6852,6 @@ select ss, max(t) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |  max   
 ----+--------
   0 |  20000
-  1 |  30000
-  2 |  40000
   3 |  50000
   4 |  60000
   5 |  70000
@@ -6551,6 +6859,8 @@ select ss, max(t) from aggfns where cfloat8 < 1000 group by ss order by 1;
   7 |  90000
   8 | 100000
   9 | 110000
+ 11 |  59192
+    |  49491
 (10 rows)
 
 select min(t) from aggfns where cfloat8 < 1000 order by 1;
@@ -6578,8 +6888,6 @@ select ss, min(t) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |  min  
 ----+-------
   0 |     1
-  1 | 10001
-  2 | 20001
   3 | 30001
   4 | 40001
   5 | 50001
@@ -6587,7 +6895,25 @@ select ss, min(t) from aggfns where cfloat8 < 1000 group by ss order by 1;
   7 | 70001
   8 | 80001
   9 | 90001
+ 11 | 10001
+    | 30537
 (10 rows)
+
+select count(*) from aggfns where cfloat8 > 1000 order by 1;
+ count 
+-------
+     0
+(1 row)
+
+select s, count(*) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | count 
+---+-------
+(0 rows)
+
+select ss, count(*) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | count 
+----+-------
+(0 rows)
 
 select max(cdate) from aggfns where cfloat8 > 1000 order by 1;
  max 
@@ -7207,6 +7533,22 @@ select ss, avg(ss) from aggfns where cfloat8 > 1000 group by ss order by 1;
 ----+-----
 (0 rows)
 
+select count(ss) from aggfns where cfloat8 > 1000 order by 1;
+ count 
+-------
+     0
+(1 row)
+
+select s, count(ss) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | count 
+---+-------
+(0 rows)
+
+select ss, count(ss) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | count 
+----+-------
+(0 rows)
+
 select max(ss) from aggfns where cfloat8 > 1000 order by 1;
  max 
 -----
@@ -7302,6 +7644,41 @@ select ss, min(t) from aggfns where cfloat8 > 1000 group by ss order by 1;
 ----+-----
 (0 rows)
 
+select count(*) from aggfns where cint2 is null order by 1;
+ count 
+-------
+   190
+(1 row)
+
+select s, count(*) from aggfns where cint2 is null group by s order by 1;
+ s | count 
+---+-------
+ 0 |    19
+ 1 |    19
+ 2 |    19
+ 3 |    19
+ 4 |    19
+ 5 |    19
+ 6 |    19
+ 7 |    19
+ 8 |    19
+ 9 |    19
+(10 rows)
+
+select ss, count(*) from aggfns where cint2 is null group by ss order by 1;
+ ss | count 
+----+-------
+  0 |    19
+  3 |    19
+  4 |    19
+  5 |    19
+  6 |    19
+  7 |    19
+  8 |    19
+  9 |    19
+ 11 |    38
+(9 rows)
+
 select avg(cint2) from aggfns where cint2 is null order by 1;
  avg 
 -----
@@ -7327,8 +7704,6 @@ select ss, avg(cint2) from aggfns where cint2 is null group by ss order by 1;
  ss | avg 
 ----+-----
   0 |    
-  1 |    
-  2 |    
   3 |    
   4 |    
   5 |    
@@ -7336,7 +7711,8 @@ select ss, avg(cint2) from aggfns where cint2 is null group by ss order by 1;
   7 |    
   8 |    
   9 |    
-(10 rows)
+ 11 |    
+(9 rows)
 
 select count(cint2) from aggfns where cint2 is null order by 1;
  count 
@@ -7363,8 +7739,6 @@ select ss, count(cint2) from aggfns where cint2 is null group by ss order by 1;
  ss | count 
 ----+-------
   0 |     0
-  1 |     0
-  2 |     0
   3 |     0
   4 |     0
   5 |     0
@@ -7372,7 +7746,8 @@ select ss, count(cint2) from aggfns where cint2 is null group by ss order by 1;
   7 |     0
   8 |     0
   9 |     0
-(10 rows)
+ 11 |     0
+(9 rows)
 
 select max(cint2) from aggfns where cint2 is null order by 1;
  max 
@@ -7399,8 +7774,6 @@ select ss, max(cint2) from aggfns where cint2 is null group by ss order by 1;
  ss | max 
 ----+-----
   0 |    
-  1 |    
-  2 |    
   3 |    
   4 |    
   5 |    
@@ -7408,7 +7781,8 @@ select ss, max(cint2) from aggfns where cint2 is null group by ss order by 1;
   7 |    
   8 |    
   9 |    
-(10 rows)
+ 11 |    
+(9 rows)
 
 select min(cint2) from aggfns where cint2 is null order by 1;
  min 
@@ -7435,8 +7809,6 @@ select ss, min(cint2) from aggfns where cint2 is null group by ss order by 1;
  ss | min 
 ----+-----
   0 |    
-  1 |    
-  2 |    
   3 |    
   4 |    
   5 |    
@@ -7444,7 +7816,8 @@ select ss, min(cint2) from aggfns where cint2 is null group by ss order by 1;
   7 |    
   8 |    
   9 |    
-(10 rows)
+ 11 |    
+(9 rows)
 
 select stddev(cint2) from aggfns where cint2 is null order by 1;
  stddev 
@@ -7471,8 +7844,6 @@ select ss, stddev(cint2) from aggfns where cint2 is null group by ss order by 1;
  ss | stddev 
 ----+--------
   0 |       
-  1 |       
-  2 |       
   3 |       
   4 |       
   5 |       
@@ -7480,7 +7851,8 @@ select ss, stddev(cint2) from aggfns where cint2 is null group by ss order by 1;
   7 |       
   8 |       
   9 |       
-(10 rows)
+ 11 |       
+(9 rows)
 
 select sum(cint2) from aggfns where cint2 is null order by 1;
  sum 
@@ -7507,8 +7879,6 @@ select ss, sum(cint2) from aggfns where cint2 is null group by ss order by 1;
  ss | sum 
 ----+-----
   0 |    
-  1 |    
-  2 |    
   3 |    
   4 |    
   5 |    
@@ -7516,5 +7886,6 @@ select ss, sum(cint2) from aggfns where cint2 is null group by ss order by 1;
   7 |    
   8 |    
   9 |    
-(10 rows)
+ 11 |    
+(9 rows)
 
