@@ -69,7 +69,6 @@ typedef struct
 #define SH_SCOPE static inline
 #define SH_DECLARE
 #define SH_DEFINE
-#define SH_ENTRY_EMPTY(entry) (entry->agg_state_index == 0)
 #include <lib/simplehash.h>
 
 struct h_hash;
@@ -92,9 +91,20 @@ typedef struct
 	 */
 	MemoryContext agg_extra_mctx;
 
-	uint64 aggstate_bytes_per_key;
-	uint64 allocated_aggstate_rows;
+	/*
+	 * Temporary storage of aggregate state offsets for a given batch. We keep
+	 * it in the policy because it is too big to keep on stack, and we don't
+	 * want to reallocate it each batch.
+	 */
+	uint32 *offsets;
+	uint64 num_allocated_offsets;
+
+	/*
+	 * Storage of aggregate function states, each List entry is the array of
+	 * states for the respective function from agg_defs.
+	 */
 	List *per_agg_states;
+	uint64 allocated_aggstate_rows;
 
 	uint64 stat_input_total_rows;
 	uint64 stat_input_valid_rows;
@@ -112,13 +122,11 @@ create_grouping_policy_hash(List *agg_defs, List *output_grouping_columns)
 	policy->agg_defs = agg_defs;
 	policy->agg_extra_mctx =
 		AllocSetContextCreate(CurrentMemoryContext, "agg extra", ALLOCSET_DEFAULT_SIZES);
-	policy->allocated_aggstate_rows = 1000;
+	policy->allocated_aggstate_rows = TARGET_COMPRESSED_BATCH_SIZE;
 	ListCell *lc;
 	foreach (lc, agg_defs)
 	{
 		VectorAggDef *agg_def = lfirst(lc);
-		policy->aggstate_bytes_per_key += agg_def->func.state_bytes;
-
 		policy->per_agg_states =
 			lappend(policy->per_agg_states,
 					palloc0(agg_def->func.state_bytes * policy->allocated_aggstate_rows));
@@ -456,6 +464,17 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 	const int n = batch_state->total_batch_rows;
 
 	/*
+	 * Initialize the array for storing the aggregate state offsets corresponding
+	 * to a given batch row.
+	 */
+	if ((size_t) n > policy->num_allocated_offsets)
+	{
+		policy->num_allocated_offsets = n;
+		policy->offsets = palloc(sizeof(policy->offsets[0]) * policy->num_allocated_offsets);
+	}
+	memset(policy->offsets, 0, n * sizeof(policy->offsets[0]));
+
+	/*
 	 * For the partial aggregation node, the grouping columns are always in the
 	 * output, so we don't have to separately look at the list of the grouping
 	 * columns.
@@ -508,8 +527,7 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 		/*
 		 * Match rows to aggregation states using a hash table.
 		 */
-		uint32 offsets[1000] = { 0 };
-		Assert((size_t) end_row <= sizeof(offsets) / sizeof(*offsets));
+		Assert((size_t) end_row <= policy->num_allocated_offsets);
 		switch ((int) key_column->decompression_type)
 		{
 			case DT_Scalar:
@@ -519,7 +537,7 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 															  next_unused_state_index,
 															  start_row,
 															  end_row,
-															  offsets);
+															  policy->offsets);
 				break;
 			case 8:
 				next_unused_state_index = fill_offsets_arrow_fixed_8(policy,
@@ -528,7 +546,7 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 																	 next_unused_state_index,
 																	 start_row,
 																	 end_row,
-																	 offsets);
+																	 policy->offsets);
 				break;
 			case 4:
 				next_unused_state_index = fill_offsets_arrow_fixed_4(policy,
@@ -537,7 +555,7 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 																	 next_unused_state_index,
 																	 start_row,
 																	 end_row,
-																	 offsets);
+																	 policy->offsets);
 				break;
 			case 2:
 				next_unused_state_index = fill_offsets_arrow_fixed_2(policy,
@@ -546,7 +564,7 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 																	 next_unused_state_index,
 																	 start_row,
 																	 end_row,
-																	 offsets);
+																	 policy->offsets);
 				break;
 			default:
 				Assert(false);
@@ -592,7 +610,7 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 									 end_row,
 									 lfirst(aggdeflc),
 									 lfirst(aggstatelc),
-									 offsets,
+									 policy->offsets,
 									 policy->agg_extra_mctx);
 		}
 	}
