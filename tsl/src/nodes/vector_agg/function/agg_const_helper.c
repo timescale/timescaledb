@@ -11,14 +11,20 @@
  * implementation otherwise.
  */
 static void
-FUNCTION_NAME(const)(void *agg_state, Datum constvalue, bool constisnull, int nn,
+FUNCTION_NAME(const)(void *agg_state, Datum constvalue, bool constisnull, int n,
 					 MemoryContext agg_extra_mctx)
 {
-	const uint64 valid = constisnull ? 0 : 1;
-	const CTYPE value = valid ? DATUM_TO_CTYPE(constvalue) : 0;
-
-	for (int i = 0; i < nn; i++)
+	if (constisnull)
 	{
-		FUNCTION_NAME(vector_impl)(agg_state, 1, &value, &valid, NULL, agg_extra_mctx);
+		return;
 	}
+
+	const CTYPE value = DATUM_TO_CTYPE(constvalue);
+
+	MemoryContext old = MemoryContextSwitchTo(agg_extra_mctx);
+	for (int i = 0; i < n; i++)
+	{
+		FUNCTION_NAME(one)(agg_state, value);
+	}
+	MemoryContextSwitchTo(old);
 }

@@ -203,7 +203,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, size_t n, const CTYPE *values, const
 	/*
 	 * Vector registers can be up to 512 bits wide.
 	 */
-#define UNROLL_SIZE ((int) ((512 / 8) / sizeof(CTYPE)))
+#define UNROLL_SIZE ((int) (512 / 8 / sizeof(CTYPE)))
 
 	/*
 	 * Each inner iteration works with its own accumulators to avoid data
