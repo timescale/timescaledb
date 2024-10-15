@@ -11,8 +11,8 @@
  * aggregate function state.
  */
 static void
-FUNCTION_NAME(many)(void *restrict agg_states, uint32 *restrict offsets, int start_row, int end_row,
-					const ArrowArray *vector, MemoryContext agg_extra_mctx)
+FUNCTION_NAME(many_vector)(void *restrict agg_states, uint32 *restrict offsets, int start_row,
+						   int end_row, const ArrowArray *vector, MemoryContext agg_extra_mctx)
 {
 	MemoryContext old = MemoryContextSwitchTo(agg_extra_mctx);
 	const CTYPE *values = vector->buffers[1];

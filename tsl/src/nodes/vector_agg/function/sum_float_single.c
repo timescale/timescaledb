@@ -90,17 +90,17 @@ FUNCTION_NAME(one)(void *restrict agg_state, const CTYPE value)
 	state->result += value;
 }
 
-#include "agg_const_helper.c"
-#include "agg_many_helper.c"
+#include "agg_many_vector_helper.c"
+#include "agg_scalar_helper.c"
 #include "agg_vector_validity_helper.c"
 
 VectorAggFunctions FUNCTION_NAME(argdef) = {
 	.state_bytes = sizeof(FloatSumState),
 	.agg_init = float_sum_init,
 	.agg_emit = FUNCTION_NAME(emit),
-	.agg_const = FUNCTION_NAME(const),
+	.agg_scalar = FUNCTION_NAME(scalar),
 	.agg_vector = FUNCTION_NAME(vector),
-	.agg_many = FUNCTION_NAME(many),
+	.agg_many_vector = FUNCTION_NAME(many_vector),
 };
 
 #endif

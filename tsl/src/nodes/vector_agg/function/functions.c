@@ -72,7 +72,7 @@ count_star_many_scalar(void *restrict agg_states, uint32 *restrict offsets, int 
 VectorAggFunctions count_star_agg = {
 	.state_bytes = sizeof(CountState),
 	.agg_init = count_init,
-	.agg_const = count_star_const,
+	.agg_scalar = count_star_const,
 	.agg_emit = count_emit,
 	.agg_many_scalar = count_star_many_scalar,
 };
@@ -152,9 +152,9 @@ VectorAggFunctions count_any_agg = {
 	.state_bytes = sizeof(CountState),
 	.agg_init = count_init,
 	.agg_emit = count_emit,
-	.agg_const = count_any_const,
+	.agg_scalar = count_any_const,
 	.agg_vector = count_any_vector,
-	.agg_many = count_any_many,
+	.agg_many_vector = count_any_many,
 };
 
 /*

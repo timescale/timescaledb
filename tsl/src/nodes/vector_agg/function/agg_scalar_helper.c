@@ -11,8 +11,8 @@
  * implementation otherwise.
  */
 static void
-FUNCTION_NAME(const)(void *agg_state, Datum constvalue, bool constisnull, int n,
-					 MemoryContext agg_extra_mctx)
+FUNCTION_NAME(scalar)(void *agg_state, Datum constvalue, bool constisnull, int n,
+					  MemoryContext agg_extra_mctx)
 {
 	if (constisnull)
 	{

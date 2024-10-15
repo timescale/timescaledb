@@ -146,7 +146,7 @@ compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_de
 		 */
 		Assert(n > 0);
 
-		agg_def->func.agg_const(agg_state, arg_datum, arg_isnull, n, agg_extra_mctx);
+		agg_def->func.agg_scalar(agg_state, arg_datum, arg_isnull, n, agg_extra_mctx);
 	}
 }
 

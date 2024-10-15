@@ -226,7 +226,8 @@ compute_single_aggregate(DecompressBatchState *batch_state, int start_row, int e
 	if (arg_arrow != NULL)
 	{
 		/* Arrow argument. */
-		agg_def->func.agg_many(agg_states, offsets, start_row, end_row, arg_arrow, agg_extra_mctx);
+		agg_def->func
+			.agg_many_vector(agg_states, offsets, start_row, end_row, arg_arrow, agg_extra_mctx);
 	}
 	else
 	{
@@ -254,7 +255,7 @@ compute_single_aggregate(DecompressBatchState *batch_state, int start_row, int e
 				}
 
 				void *state = (offsets[i] * agg_def->func.state_bytes + (char *) agg_states);
-				agg_def->func.agg_const(state, arg_datum, arg_isnull, 1, agg_extra_mctx);
+				agg_def->func.agg_scalar(state, arg_datum, arg_isnull, 1, agg_extra_mctx);
 			}
 		}
 	}
