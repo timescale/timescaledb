@@ -45,8 +45,8 @@ count_emit(void *agg_state, Datum *out_result, bool *out_isnull)
 }
 
 static void
-count_star_const(void *agg_state, Datum constvalue, bool constisnull, int n,
-				 MemoryContext agg_extra_mctx)
+count_star_scalar(void *agg_state, Datum constvalue, bool constisnull, int n,
+				  MemoryContext agg_extra_mctx)
 {
 	CountState *state = (CountState *) agg_state;
 	state->count += n;
@@ -72,7 +72,7 @@ count_star_many_scalar(void *restrict agg_states, uint32 *restrict offsets, int 
 VectorAggFunctions count_star_agg = {
 	.state_bytes = sizeof(CountState),
 	.agg_init = count_init,
-	.agg_scalar = count_star_const,
+	.agg_scalar = count_star_scalar,
 	.agg_emit = count_emit,
 	.agg_many_scalar = count_star_many_scalar,
 };
@@ -81,8 +81,8 @@ VectorAggFunctions count_star_agg = {
  * Aggregate function count(x).
  */
 static void
-count_any_const(void *agg_state, Datum constvalue, bool constisnull, int n,
-				MemoryContext agg_extra_mctx)
+count_any_scalar(void *agg_state, Datum constvalue, bool constisnull, int n,
+				 MemoryContext agg_extra_mctx)
 {
 	if (constisnull)
 	{
@@ -94,8 +94,8 @@ count_any_const(void *agg_state, Datum constvalue, bool constisnull, int n,
 }
 
 static void
-count_any_vector(void *agg_state, const ArrowArray *vector, const uint64 *filter,
-				 MemoryContext agg_extra_mctx)
+count_any_many_vector(void *agg_state, const ArrowArray *vector, const uint64 *filter,
+					  MemoryContext agg_extra_mctx)
 {
 	CountState *state = (CountState *) agg_state;
 	const int n = vector->length;
@@ -152,8 +152,8 @@ VectorAggFunctions count_any_agg = {
 	.state_bytes = sizeof(CountState),
 	.agg_init = count_init,
 	.agg_emit = count_emit,
-	.agg_scalar = count_any_const,
-	.agg_vector = count_any_vector,
+	.agg_scalar = count_any_scalar,
+	.agg_vector = count_any_many_vector,
 	.agg_many_vector = count_any_many,
 };
 

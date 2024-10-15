@@ -80,8 +80,9 @@ typedef struct
 #define SH_DEFINE
 #include <lib/simplehash.h>
 
-struct h_hash;
-
+/*
+ * Hash grouping policy.
+ */
 typedef struct
 {
 	/*
