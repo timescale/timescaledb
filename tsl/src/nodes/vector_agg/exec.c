@@ -122,7 +122,6 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		}
 	}
 
-	///	List *grouping_child_output_offsets = linitial(cscan->custom_private);
 	if (list_length(vector_agg_state->output_grouping_columns) == 1)
 	{
 		GroupingColumn *col =
@@ -132,6 +131,9 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		if (desc->type == COMPRESSED_COLUMN && desc->by_value && desc->value_bytes > 0 &&
 			(size_t) desc->value_bytes <= sizeof(Datum))
 		{
+			/*
+			 * Hash grouping by a single fixed-size by-value compressed column.
+			 */
 			vector_agg_state->grouping =
 				create_grouping_policy_hash(vector_agg_state->agg_defs,
 											vector_agg_state->output_grouping_columns);
@@ -140,6 +142,9 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 
 	if (vector_agg_state->grouping == NULL)
 	{
+		/*
+		 * Per-batch grouping.
+		 */
 		vector_agg_state->grouping =
 			create_grouping_policy_batch(vector_agg_state->agg_defs,
 										 vector_agg_state->output_grouping_columns);

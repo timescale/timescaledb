@@ -313,17 +313,25 @@ can_vectorize_aggref(Aggref *aggref, CustomScan *custom)
 
 /*
  * Whether we can perform vectorized aggregation with a given grouping.
- * Currently supports either no grouping or grouping by segmentby columns.
  */
 static bool
 can_vectorize_grouping(Agg *agg, CustomScan *custom)
 {
+	/*
+	 * We support vectorized aggregation without grouping.
+	 */
 	if (agg->numCols == 0)
 	{
 		return true;
 	}
 
-	if (agg->numCols == 1)
+	/*
+	 * We support hashed vectorized grouping by one fixed-size by-value
+	 * compressed column.
+	 * We cannot use it when the plan has GroupAggregate because the
+	 * latter requires sorted output.
+	 */
+	if (agg->numCols == 1 && agg->aggstrategy == AGG_HASHED)
 	{
 		int offset = AttrNumberGetAttrOffset(agg->grpColIdx[0]);
 		TargetEntry *entry = list_nth(agg->plan.targetlist, offset);
@@ -342,6 +350,9 @@ can_vectorize_grouping(Agg *agg, CustomScan *custom)
 		}
 	}
 
+	/*
+	 * We support grouping by any number of columns if all of them are segmentby.
+	 */
 	for (int i = 0; i < agg->numCols; i++)
 	{
 		int offset = AttrNumberGetAttrOffset(agg->grpColIdx[i]);

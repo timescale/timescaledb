@@ -5,9 +5,8 @@
  */
 
 /*
- * This grouping policy aggregates entire compressed batches. It can be used to
- * aggregate with no grouping, or to produce partial aggregates per each batch
- * to group by segmentby columns.
+ * This grouping policy groups the rows using a hash table. Currently it only
+ * supports a single fixed-size by-value compressed column that fits into a Datum.
  */
 
 #include <postgres.h>
@@ -19,6 +18,8 @@
 
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
+
+#define DEBUG_LOG(MSG, ...) elog(DEBUG3, MSG, __VA_ARGS__)
 
 /*
  * We can use crc32 as a hash function, it has bad properties but takes only one
@@ -75,14 +76,33 @@ struct h_hash;
 
 typedef struct
 {
+	/*
+	 * We're using data inheritance from the GroupingPolicy.
+	 */
 	GroupingPolicy funcs;
+
 	List *agg_defs;
 	List *output_grouping_columns;
-	bool partial_per_batch;
+
+	/*
+	 * The hash table we use for grouping.
+	 */
 	struct h_hash *table;
-	bool have_null_key;
-	struct h_iterator iter;
+
+	/*
+	 * We have to track whether we are in the mode of returning the partial
+	 * aggregation results, and also use a hash table iterator to track our
+	 * progress between emit() calls.
+	 */
 	bool returning_results;
+	struct h_iterator iter;
+
+	/*
+	 * In single-column grouping, we store the null key outside of the hash
+	 * table, and it has a reserved aggregate state index 1. We also reset this
+	 * flag after we output the null key during iteration.
+	 */
+	bool have_null_key;
 
 	/*
 	 * A memory context for aggregate functions to allocate additional data,
@@ -93,19 +113,23 @@ typedef struct
 
 	/*
 	 * Temporary storage of aggregate state offsets for a given batch. We keep
-	 * it in the policy because it is too big to keep on stack, and we don't
-	 * want to reallocate it each batch.
+	 * it in the policy because it is potentially too big to keep on stack, and
+	 * we don't want to reallocate it each batch.
 	 */
 	uint32 *offsets;
 	uint64 num_allocated_offsets;
 
 	/*
 	 * Storage of aggregate function states, each List entry is the array of
-	 * states for the respective function from agg_defs.
+	 * states for the respective function from agg_defs. The state index 0 is
+	 * invalid, and the state index 1 is reserved for a null key.
 	 */
 	List *per_agg_states;
 	uint64 allocated_aggstate_rows;
 
+	/*
+	 * Some statistics for debugging.
+	 */
 	uint64 stat_input_total_rows;
 	uint64 stat_input_valid_rows;
 	uint64 stat_bulk_filtered_rows;
@@ -200,7 +224,7 @@ compute_single_aggregate(DecompressBatchState *batch_state, int start_row, int e
 	{
 		/*
 		 * Scalar argument, or count(*). The latter has an optimized
-		 * implementation for this case.
+		 * implementation.
 		 */
 		if (agg_def->func.agg_many_scalar != NULL)
 		{
@@ -266,6 +290,7 @@ fill_offsets_impl(GroupingPolicyHash *policy, CompressedColumnValues column,
 			offsets[row] = 1;
 		}
 	}
+
 	return next_unused_state_index;
 }
 
@@ -488,7 +513,7 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 	{
 		/*
 		 * If we have a highly selective filter, it's easy to skip the rows for
-		 * which the entire filter bitmap words are zero.
+		 * which the entire words of the filter bitmap are zero.
 		 */
 		if (filter)
 		{
@@ -641,15 +666,20 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 	{
 		policy->returning_results = true;
 		h_start_iterate(policy->table, &policy->iter);
-		//		fprintf(stderr,
-		//				"spill after %ld input %ld valid %ld bulk filtered, %d keys, %f ratio, %ld
-		// aggctx bytes, %ld aggstate bytes\n", 				policy->stat_input_total_rows,
-		// policy->stat_input_valid_rows, policy->stat_bulk_filtered_rows,
-		// policy->table->members
-		//				+ 		policy->have_null_key, 				policy->stat_input_valid_rows /
-		//(float) 				(policy->table->members + 				 policy->have_null_key),
-		// MemoryContextMemAllocated(policy->table->ctx,
-		// false), MemoryContextMemAllocated(policy->agg_extra_mctx, false));
+
+		const float keys = policy->table->members + policy->have_null_key;
+		if (keys > 0)
+		{
+			DEBUG_LOG("spill after %ld input %ld valid %ld bulk filtered %.0f keys %f ratio %ld "
+					  "aggctx bytes %ld aggstate bytes",
+					  policy->stat_input_total_rows,
+					  policy->stat_input_valid_rows,
+					  policy->stat_bulk_filtered_rows,
+					  keys,
+					  policy->stat_input_valid_rows / keys,
+					  MemoryContextMemAllocated(policy->table->ctx, false),
+					  MemoryContextMemAllocated(policy->agg_extra_mctx, false));
+		}
 	}
 
 	HashEntry null_key_entry = { .agg_state_index = 1 };
