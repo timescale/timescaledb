@@ -487,3 +487,34 @@ DO NOTHING;
 -- Even a regular insert will fail due to unique constrant checks for dml decompression
 INSERT INTO compressed_ht VALUES ('2022-01-24 01:10:28.192199+05:30', '7', 0.876, 4.123, 'new insert row');
 \set ON_ERROR_STOP 1
+
+RESET timescaledb.enable_dml_decompression;
+
+-- gh issue #7342
+CREATE TABLE test_collation (
+        time int8 NOT NULL,
+        device_id int4 NOT NULL,
+        name TEXT NOT NULL,
+        CONSTRAINT test_collation_pkey PRIMARY KEY (time, device_id, name)
+);
+SELECT create_hypertable('test_collation', 'time', chunk_time_interval => 2419200000);
+ALTER TABLE test_collation
+SET (
+        timescaledb.compress,
+        timescaledb.compress_segmentby = 'device_id',
+        timescaledb.compress_orderby = 'time DESC, name'
+);
+INSERT INTO "test_collation"
+  ("time", "device_id", "name")
+VALUES
+  (1609477200000, 41, 'val1'),
+  (1609478100000, 41, 'val1')
+ON CONFLICT DO NOTHING;
+SELECT compress_chunk(ch) FROM show_chunks('test_collation') ch;
+INSERT INTO "test_collation"
+  ("device_id", "time", "name")
+VALUES
+  (41, 1609477200000, 'val1'),
+  (41, 1609478100000, 'val1')
+ON CONFLICT DO NOTHING;
+
