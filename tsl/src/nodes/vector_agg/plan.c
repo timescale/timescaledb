@@ -154,13 +154,13 @@ vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk)
 	custom->scan.plan.extParam = bms_copy(agg->plan.extParam);
 	custom->scan.plan.allParam = bms_copy(agg->plan.allParam);
 
-	List *grouping_col_offsets = NIL;
+	List *grouping_child_output_offsets = NIL;
 	for (int i = 0; i < agg->numCols; i++)
 	{
-		grouping_col_offsets =
-			lappend_int(grouping_col_offsets, AttrNumberGetAttrOffset(agg->grpColIdx[i]));
+		grouping_child_output_offsets =
+			lappend_int(grouping_child_output_offsets, AttrNumberGetAttrOffset(agg->grpColIdx[i]));
 	}
-	custom->custom_private = list_make1(grouping_col_offsets);
+	custom->custom_private = list_make1(grouping_child_output_offsets);
 
 	return (Plan *) custom;
 }
@@ -313,16 +313,46 @@ can_vectorize_aggref(Aggref *aggref, CustomScan *custom)
 
 /*
  * Whether we can perform vectorized aggregation with a given grouping.
- * Currently supports either no grouping or grouping by segmentby columns.
  */
 static bool
 can_vectorize_grouping(Agg *agg, CustomScan *custom)
 {
+	/*
+	 * We support vectorized aggregation without grouping.
+	 */
 	if (agg->numCols == 0)
 	{
 		return true;
 	}
 
+	/*
+	 * We support hashed vectorized grouping by one fixed-size by-value
+	 * compressed column.
+	 * We cannot use it when the plan has GroupAggregate because the
+	 * latter requires sorted output.
+	 */
+	if (agg->numCols == 1 && agg->aggstrategy == AGG_HASHED)
+	{
+		int offset = AttrNumberGetAttrOffset(agg->grpColIdx[0]);
+		TargetEntry *entry = list_nth(agg->plan.targetlist, offset);
+
+		bool is_segmentby = false;
+		if (is_vector_var(custom, entry->expr, &is_segmentby))
+		{
+			Var *var = castNode(Var, entry->expr);
+			int16 typlen;
+			bool typbyval;
+			get_typlenbyval(var->vartype, &typlen, &typbyval);
+			if (typbyval && typlen > 0 && (size_t) typlen <= sizeof(Datum))
+			{
+				return true;
+			}
+		}
+	}
+
+	/*
+	 * We support grouping by any number of columns if all of them are segmentby.
+	 */
 	for (int i = 0; i < agg->numCols; i++)
 	{
 		int offset = AttrNumberGetAttrOffset(agg->grpColIdx[i]);
