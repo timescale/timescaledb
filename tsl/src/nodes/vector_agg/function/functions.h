@@ -29,7 +29,7 @@ typedef struct
 
 	/*
 	 * Add the rows of the given arrow array to aggregate function states given
-	 * by the respecitve offsets.
+	 * by the respective offsets.
 	 */
 	void (*agg_many_vector)(void *restrict agg_states, uint32 *restrict offsets, int start_row,
 							int end_row, const ArrowArray *vector, MemoryContext agg_extra_mctx);
