@@ -125,12 +125,11 @@ typedef struct
 	HashTableFunctions functions;
 
 	/*
-	 * We have to track whether we are in the mode of returning the partial
-	 * aggregation results, and also use a hash table iterator to track our
-	 * progress between emit() calls.
+	 * Whether we are in the mode of returning the partial aggregation results.
+	 * Track the last returned aggregate state offset if we are.
 	 */
 	bool returning_results;
-	struct h_iterator iter;
+	uint32 last_returned_key;
 
 	/*
 	 * In single-column grouping, we store the null key outside of the hash
@@ -151,7 +150,7 @@ typedef struct
 	 * it in the policy because it is potentially too big to keep on stack, and
 	 * we don't want to reallocate it each batch.
 	 */
-	uint32 *offsets;
+	uint32 *restrict offsets;
 	uint64 num_allocated_offsets;
 
 	/*
@@ -163,8 +162,8 @@ typedef struct
 	uint64 allocated_aggstate_rows;
 
 	uint64 key_bytes;
-	uint64 allocated_key_rows;
-	void *keys;
+	uint64 num_allocated_keys;
+	void *restrict keys;
 
 	/*
 	 * Some statistics for debugging.
@@ -196,11 +195,13 @@ create_grouping_policy_hash(List *agg_defs, List *output_grouping_columns)
 	}
 
 	Assert(list_length(policy->output_grouping_columns) == 1);
-	GroupingColumn *g = linitial(policy->output_grouping_columns);
-	policy->key_bytes = g->value_bytes;
+	// GroupingColumn *g = linitial(policy->output_grouping_columns);
+	//  policy->key_bytes = g->value_bytes;
+	policy->key_bytes = sizeof(Datum);
 	Assert(policy->key_bytes > 0);
-	policy->allocated_key_rows = policy->allocated_aggstate_rows;
-	policy->keys = palloc0(policy->allocated_key_rows * policy->key_bytes);
+
+	policy->num_allocated_keys = policy->allocated_aggstate_rows;
+	policy->keys = palloc(policy->key_bytes * policy->num_allocated_keys);
 
 	policy->functions = (HashTableFunctions){
 		.create = (void *(*) (MemoryContext, uint32, void *) ) h_create,
@@ -335,7 +336,9 @@ fill_offsets_impl(GroupingPolicyHash *policy, CompressedColumnValues column,
 			HashEntry *restrict entry = h_insert(table, key, &found);
 			if (!found)
 			{
-				entry->agg_state_index = next_unused_state_index++;
+				const int index = next_unused_state_index++;
+				entry->agg_state_index = index;
+				((Datum *restrict) policy->keys)[index] = key;
 			}
 			offsets[row] = entry->agg_state_index;
 		}
@@ -601,13 +604,24 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 		 * first run.
 		 */
 		const uint32 hash_keys = policy->functions.get_num_keys(policy->table);
-		const uint32 last_initialized_state_index = hash_keys ? hash_keys + 2 : 1;
-		uint32 next_unused_state_index = hash_keys + 2;
+		const uint32 first_uninitialized_state_index = hash_keys ? hash_keys + 2 : 1;
+
+		/*
+		 * Allocate enough storage for keys, given that each bach row might be
+		 * a separate new key.
+		 */
+		const uint32 num_possible_keys = first_uninitialized_state_index + (end_row - start_row);
+		if (num_possible_keys > policy->num_allocated_keys)
+		{
+			policy->num_allocated_keys = num_possible_keys;
+			policy->keys = repalloc(policy->keys, policy->key_bytes * num_possible_keys);
+		}
 
 		/*
 		 * Match rows to aggregation states using a hash table.
 		 */
 		Assert((size_t) end_row <= policy->num_allocated_offsets);
+		uint32 next_unused_state_index = hash_keys + 2;
 		switch ((int) key_column->decompression_type)
 		{
 			case DT_Scalar:
@@ -657,7 +671,7 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 		/*
 		 * Initialize the aggregate function states for the newly added keys.
 		 */
-		if (next_unused_state_index > last_initialized_state_index)
+		if (next_unused_state_index > first_uninitialized_state_index)
 		{
 			if (next_unused_state_index > policy->allocated_aggstate_rows)
 			{
@@ -674,9 +688,9 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 			forboth (aggdeflc, policy->agg_defs, aggstatelc, policy->per_agg_states)
 			{
 				const VectorAggDef *agg_def = lfirst(aggdeflc);
-				agg_def->func.agg_init(agg_def->func.state_bytes * last_initialized_state_index +
+				agg_def->func.agg_init(agg_def->func.state_bytes * first_uninitialized_state_index +
 										   (char *) lfirst(aggstatelc),
-									   next_unused_state_index - last_initialized_state_index);
+									   next_unused_state_index - first_uninitialized_state_index);
 			}
 		}
 
@@ -720,7 +734,7 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 	if (!policy->returning_results)
 	{
 		policy->returning_results = true;
-		h_start_iterate(policy->table, &policy->iter);
+		policy->last_returned_key = 1 + !policy->have_null_key;
 
 		const float keys = policy->functions.get_num_keys(policy->table) + policy->have_null_key;
 		if (keys > 0)
@@ -736,18 +750,14 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 					  MemoryContextMemAllocated(policy->agg_extra_mctx, false));
 		}
 	}
-
-	HashEntry null_key_entry = { .agg_state_index = 1 };
-	HashEntry *entry = h_iterate(policy->table, &policy->iter);
-	bool key_is_null = false;
-	if (entry == NULL && policy->have_null_key)
+	else
 	{
-		policy->have_null_key = false;
-		entry = &null_key_entry;
-		key_is_null = true;
+		policy->last_returned_key++;
 	}
 
-	if (entry == NULL)
+	const uint32 current_key = policy->last_returned_key;
+	const uint32 keys_end = policy->functions.get_num_keys(policy->table) + 2;
+	if (current_key >= keys_end)
 	{
 		policy->returning_results = false;
 		return false;
@@ -758,7 +768,7 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 	{
 		VectorAggDef *agg_def = (VectorAggDef *) list_nth(policy->agg_defs, i);
 		void *agg_states = list_nth(policy->per_agg_states, i);
-		void *agg_state = entry->agg_state_index * agg_def->func.state_bytes + (char *) agg_states;
+		void *agg_state = current_key * agg_def->func.state_bytes + (char *) agg_states;
 		agg_def->func.agg_emit(agg_state,
 							   &aggregated_slot->tts_values[agg_def->output_offset],
 							   &aggregated_slot->tts_isnull[agg_def->output_offset]);
@@ -766,8 +776,8 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 
 	Assert(list_length(policy->output_grouping_columns) == 1);
 	GroupingColumn *col = linitial(policy->output_grouping_columns);
-	aggregated_slot->tts_values[col->output_offset] = entry->key;
-	aggregated_slot->tts_isnull[col->output_offset] = key_is_null;
+	aggregated_slot->tts_values[col->output_offset] = ((Datum *) policy->keys)[current_key];
+	aggregated_slot->tts_isnull[col->output_offset] = current_key == 1;
 
 	return true;
 }
