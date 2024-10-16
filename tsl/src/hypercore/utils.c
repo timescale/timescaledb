@@ -13,14 +13,46 @@
 #include <commands/defrem.h>
 #include <nodes/makefuncs.h>
 #include <storage/lmgr.h>
+#include <storage/lockdefs.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 
 #include "compat/compat.h"
+#include "chunk.h"
 #include "extension_constants.h"
+#include "src/utils.h"
 #include "utils.h"
-#include <src/utils.h>
+
+/*
+ * Set reloptions for chunks using hypercore TAM.
+ *
+ * This sets all reloptions needed for chunks using the hypercore table access
+ * method. Right now this means turning of autovacuum for the compressed chunk
+ * associated with the hypercore chunk by setting the "autovacuum_enabled"
+ * option to "0" (false).
+ *
+ * It is (currently) not necessary to clear this reloption anywhere since we
+ * (currently) delete the compressed chunk when changing the table access
+ * method back to "heap".
+ */
+void
+hypercore_set_reloptions(Chunk *chunk)
+{
+	/*
+	 * Update the tuple for the compressed chunk and disable autovacuum on
+	 * it. This requires locking the relation (to prevent changes to the
+	 * definition), but it is sufficient to take an access share lock.
+	 */
+	Chunk *cchunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
+	Relation compressed_rel = table_open(cchunk->table_id, AccessShareLock);
+
+	/* We use makeInteger since makeBoolean does not exist prior to PG15 */
+	List *options = list_make1(makeDefElem("autovacuum_enabled", (Node *) makeInteger(0), -1));
+	ts_relation_set_reloption(compressed_rel, options, AccessShareLock);
+
+	table_close(compressed_rel, AccessShareLock);
+}
 
 /*
  * Make a relation use hypercore without rewriting any data, simply by

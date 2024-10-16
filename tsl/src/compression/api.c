@@ -823,6 +823,7 @@ compress_hypercore(Chunk *chunk, bool rel_is_hypercore, UseAccessMethod useam,
 		/* Do quick migration to hypercore of already compressed data by
 		 * simply changing the access method to hypercore in pg_am. */
 		hypercore_set_am(rv);
+		hypercore_set_reloptions(chunk);
 		return chunk->table_id;
 	}
 
