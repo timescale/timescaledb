@@ -347,6 +347,11 @@ can_vectorize_grouping(Agg *agg, CustomScan *custom)
 			{
 				return true;
 			}
+
+			if (var->vartype == TEXTOID)
+			{
+				return true;
+			}
 		}
 	}
 

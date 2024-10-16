@@ -11,6 +11,7 @@
 
 #include <postgres.h>
 
+#include <common/hashfn.h>
 #include <executor/tuptable.h>
 #include <nodes/pg_list.h>
 
@@ -18,6 +19,8 @@
 
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
+
+#include "grouping_policy_hash.h"
 
 #ifdef USE_FLOAT8_BYVAL
 #define DEBUG_LOG(MSG, ...) elog(DEBUG3, MSG, __VA_ARGS__)
@@ -34,6 +37,7 @@
  * cycle, which is why it is sometimes used in the existing hash table
  * implementations.
  */
+
 #ifdef USE_SSE42_CRC32C
 #include <nmmintrin.h>
 static pg_attribute_always_inline uint64
@@ -58,120 +62,103 @@ hash64(uint64 x)
 }
 #endif
 
-/*
- * For the hash table, use the generic Datum key that is mapped to the aggregate
- * state index.
- */
-typedef struct
+#define KEY_VARIANT single_fixed_2
+#define KEY_BYTES 2
+#define KEY_HASH hash64
+#define KEY_EQUAL(a, b) a == b
+#define CTYPE int16
+#define DATUM_TO_CTYPE DatumGetInt16
+#define CTYPE_TO_DATUM Int16GetDatum
+
+#include "single_fixed_key_impl.c"
+
+#include "hash_table_functions_impl.c"
+
+#define KEY_VARIANT single_fixed_4
+#define KEY_BYTES 4
+#define KEY_HASH hash64
+#define KEY_EQUAL(a, b) a == b
+#define CTYPE int32
+#define DATUM_TO_CTYPE DatumGetInt32
+#define CTYPE_TO_DATUM Int32GetDatum
+
+#include "single_fixed_key_impl.c"
+
+#include "hash_table_functions_impl.c"
+
+
+#define KEY_VARIANT single_fixed_8
+#define KEY_BYTES 8
+#define KEY_HASH hash64
+#define KEY_EQUAL(a, b) a == b
+#define CTYPE int64
+#define DATUM_TO_CTYPE DatumGetInt64
+#define CTYPE_TO_DATUM Int64GetDatum
+
+#include "single_fixed_key_impl.c"
+
+#include "hash_table_functions_impl.c"
+
+static void
+store_text_datum(CompressedColumnValues *column_values, int arrow_row)
 {
-	Datum key;
-	uint32 status;
-	uint32 agg_state_index;
-} HashEntry;
+	const uint32 start = ((uint32 *) column_values->buffers[1])[arrow_row];
+	const int32 value_bytes = ((uint32 *) column_values->buffers[1])[arrow_row + 1] - start;
+	Assert(value_bytes >= 0);
 
-#define SH_PREFIX h
-#define SH_ELEMENT_TYPE HashEntry
-#define SH_KEY_TYPE Datum
-#define SH_KEY key
-#define SH_HASH_KEY(tb, key) hash64(key)
-#define SH_EQUAL(tb, a, b) a == b
-#define SH_SCOPE static inline
-#define SH_DECLARE
-#define SH_DEFINE
-#define SH_ENTRY_EMPTY(entry) (entry->agg_state_index == 0)
-#include "import/ts_simplehash.h"
-
-struct h_hash;
-
-typedef struct
-{
-	void *(*create)(MemoryContext context, uint32 initial_rows, void *data);
-	void (*reset)(void *table);
-	uint32 (*get_num_keys)(void *table);
-	uint64 (*get_size_bytes)(void *table);
-} HashTableFunctions;
-
-static uint32
-get_num_keys(void *table)
-{
-	struct h_hash *hash = (struct h_hash *) table;
-	return hash->members;
+	const int total_bytes = value_bytes + VARHDRSZ;
+	Assert(DatumGetPointer(*column_values->output_value) != NULL);
+	SET_VARSIZE(*column_values->output_value, total_bytes);
+	memcpy(VARDATA(*column_values->output_value),
+		   &((uint8 *) column_values->buffers[2])[start],
+		   value_bytes);
 }
 
-static uint64
-get_size_bytes(void *table)
+static pg_attribute_always_inline void
+single_text_get_key(CompressedColumnValues column, int row, text **restrict key,
+					bool *restrict valid)
 {
-	struct h_hash *hash = (struct h_hash *) table;
-	return hash->members * sizeof(HashEntry);
+	if (unlikely(column.decompression_type == DT_Scalar))
+	{
+		/* Already stored. */
+	}
+	else if (column.decompression_type == DT_ArrowText)
+	{
+		store_text_datum(&column, row);
+		*column.output_isnull = !arrow_row_is_valid(column.buffers[0], row);
+	}
+	else if (column.decompression_type == DT_ArrowTextDict)
+	{
+		const int16 index = ((int16 *) column.buffers[3])[row];
+		store_text_datum(&column, index);
+		*column.output_isnull = !arrow_row_is_valid(column.buffers[0], row);
+	}
+	else
+	{
+		pg_unreachable();
+	}
+	*key = (text *) DatumGetPointer(*column.output_value);
+	*valid = !*column.output_isnull;
 }
 
-/*
- * Hash grouping policy.
- */
-typedef struct
+static pg_attribute_always_inline text *
+single_text_store_key(text *key, Datum *key_storage, MemoryContext key_memory_context)
 {
-	/*
-	 * We're using data inheritance from the GroupingPolicy.
-	 */
-	GroupingPolicy funcs;
+	size_t size = VARSIZE_ANY(key);
+	text *stored = (text *) MemoryContextAlloc(key_memory_context, size);
+	memcpy(stored, key, size);
+	*key_storage = PointerGetDatum(stored);
+	return stored;
+}
 
-	List *agg_defs;
-	List *output_grouping_columns;
-
-	/*
-	 * The hash table we use for grouping.
-	 */
-	void *table;
-	HashTableFunctions functions;
-
-	/*
-	 * Whether we are in the mode of returning the partial aggregation results.
-	 * Track the last returned aggregate state offset if we are.
-	 */
-	bool returning_results;
-	uint32 last_returned_key;
-
-	/*
-	 * In single-column grouping, we store the null key outside of the hash
-	 * table, and it has a reserved aggregate state index 1. We also reset this
-	 * flag after we output the null key during iteration.
-	 */
-	bool have_null_key;
-
-	/*
-	 * A memory context for aggregate functions to allocate additional data,
-	 * i.e. if they store strings or float8 datum on 32-bit systems. Valid until
-	 * the grouping policy is reset.
-	 */
-	MemoryContext agg_extra_mctx;
-
-	/*
-	 * Temporary storage of aggregate state offsets for a given batch. We keep
-	 * it in the policy because it is potentially too big to keep on stack, and
-	 * we don't want to reallocate it each batch.
-	 */
-	uint32 *restrict offsets;
-	uint64 num_allocated_offsets;
-
-	/*
-	 * Storage of aggregate function states, each List entry is the array of
-	 * states for the respective function from agg_defs. The state index 0 is
-	 * invalid, and the state index 1 is reserved for a null key.
-	 */
-	List *per_agg_states;
-	uint64 allocated_aggstate_rows;
-
-	uint64 key_bytes;
-	uint64 num_allocated_keys;
-	void *restrict keys;
-
-	/*
-	 * Some statistics for debugging.
-	 */
-	uint64 stat_input_total_rows;
-	uint64 stat_input_valid_rows;
-	uint64 stat_bulk_filtered_rows;
-} GroupingPolicyHash;
+#define KEY_VARIANT single_text
+#define KEY_HASH(X) hash_bytes((const unsigned char *) VARDATA_ANY(X), VARSIZE_ANY_EXHDR(X))
+#define KEY_EQUAL(a, b)                                                                            \
+	(VARSIZE_ANY(a) == VARSIZE_ANY(b) &&                                                           \
+	 memcmp(VARDATA_ANY(a), VARDATA_ANY(b), VARSIZE_ANY_EXHDR(a)) == 0)
+#define SH_STORE_HASH
+#define CTYPE text *
+#include "hash_table_functions_impl.c"
 
 static const GroupingPolicy grouping_policy_hash_functions;
 
@@ -195,20 +182,34 @@ create_grouping_policy_hash(List *agg_defs, List *output_grouping_columns)
 	}
 
 	Assert(list_length(policy->output_grouping_columns) == 1);
-	// GroupingColumn *g = linitial(policy->output_grouping_columns);
+	GroupingColumn *g = linitial(policy->output_grouping_columns);
 	//  policy->key_bytes = g->value_bytes;
 	policy->key_bytes = sizeof(Datum);
 	Assert(policy->key_bytes > 0);
 
 	policy->num_allocated_keys = policy->allocated_aggstate_rows;
 	policy->keys = palloc(policy->key_bytes * policy->num_allocated_keys);
+	policy->key_body_mctx = policy->agg_extra_mctx;
 
-	policy->functions = (HashTableFunctions){
-		.create = (void *(*) (MemoryContext, uint32, void *) ) h_create,
-		.reset = (void (*)(void *)) h_reset,
-		.get_num_keys = get_num_keys,
-		.get_size_bytes = get_size_bytes,
-	};
+	switch (g->value_bytes)
+	{
+		case 8:
+			policy->functions = single_fixed_8_functions;
+			break;
+		case 4:
+			policy->functions = single_fixed_4_functions;
+			break;
+		case 2:
+			policy->functions = single_fixed_2_functions;
+			break;
+		case -1:
+			Assert(g->typid == TEXTOID);
+			policy->functions = single_text_functions;
+			break;
+		default:
+			Assert(false);
+			break;
+	}
 
 	policy->table =
 		policy->functions.create(CurrentMemoryContext, policy->allocated_aggstate_rows, NULL);
@@ -308,234 +309,6 @@ compute_single_aggregate(DecompressBatchState *batch_state, int start_row, int e
 	}
 }
 
-/*
- * Fill the aggregation state offsets for all rows using a hash table.
- */
-static pg_attribute_always_inline uint32
-fill_offsets_impl(GroupingPolicyHash *policy, CompressedColumnValues column,
-				  const uint64 *restrict filter, uint32 next_unused_state_index, int start_row,
-				  int end_row, uint32 *restrict offsets,
-				  void (*get_key)(CompressedColumnValues column, int row, Datum *restrict key,
-								  bool *restrict valid))
-{
-	struct h_hash *restrict table = policy->table;
-	for (int row = start_row; row < end_row; row++)
-	{
-		bool key_valid = false;
-		Datum key = { 0 };
-		get_key(column, row, &key, &key_valid);
-
-		if (!arrow_row_is_valid(filter, row))
-		{
-			continue;
-		}
-
-		if (key_valid)
-		{
-			bool found = false;
-			HashEntry *restrict entry = h_insert(table, key, &found);
-			if (!found)
-			{
-				const int index = next_unused_state_index++;
-				entry->agg_state_index = index;
-				((Datum *restrict) policy->keys)[index] = key;
-			}
-			offsets[row] = entry->agg_state_index;
-		}
-		else
-		{
-			policy->have_null_key = true;
-			offsets[row] = 1;
-		}
-	}
-
-	return next_unused_state_index;
-}
-
-/*
- * This function exists just to nudge the compiler to generate simplified
- * implementation for the important case where the entire batch matches and the
- * key has no null values.
- */
-static pg_attribute_always_inline uint32
-fill_offsets_dispatch(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
-					  int key_column_index, uint32 next_unused_state_index, int start_row,
-					  int end_row, uint32 *restrict offsets,
-					  void (*get_key)(CompressedColumnValues column, int row, Datum *restrict key,
-									  bool *restrict valid))
-{
-	CompressedColumnValues column = batch_state->compressed_columns[key_column_index];
-	const uint64 *restrict filter = batch_state->vector_qual_result;
-
-	if (filter == NULL && column.buffers[0] == NULL)
-	{
-		next_unused_state_index = fill_offsets_impl(policy,
-													column,
-													filter,
-													next_unused_state_index,
-													start_row,
-													end_row,
-													offsets,
-													get_key);
-	}
-	else if (filter != NULL && column.buffers[0] == NULL)
-	{
-		next_unused_state_index = fill_offsets_impl(policy,
-													column,
-													filter,
-													next_unused_state_index,
-													start_row,
-													end_row,
-													offsets,
-													get_key);
-	}
-	else if (filter == NULL && column.buffers[0] != NULL)
-	{
-		next_unused_state_index = fill_offsets_impl(policy,
-													column,
-													filter,
-													next_unused_state_index,
-													start_row,
-													end_row,
-													offsets,
-													get_key);
-	}
-	else if (filter != NULL && column.buffers[0] != NULL)
-	{
-		next_unused_state_index = fill_offsets_impl(policy,
-													column,
-													filter,
-													next_unused_state_index,
-													start_row,
-													end_row,
-													offsets,
-													get_key);
-	}
-	else
-	{
-		Assert(false);
-	}
-
-	policy->stat_input_total_rows += batch_state->total_batch_rows;
-	policy->stat_input_valid_rows += arrow_num_valid(filter, batch_state->total_batch_rows);
-	return next_unused_state_index;
-}
-
-/*
- * Functions to get the key value from the decompressed column, depending on its
- * width and whether it's a scalar column.
- */
-static pg_attribute_always_inline void
-get_key_scalar(CompressedColumnValues column, int row, Datum *restrict key, bool *restrict valid)
-{
-	Assert(column.decompression_type == DT_Scalar);
-	*key = *column.output_value;
-	*valid = !*column.output_isnull;
-}
-
-static pg_attribute_always_inline void
-get_key_arrow_fixed(CompressedColumnValues column, int row, int key_bytes, Datum *restrict key,
-					bool *restrict valid)
-{
-	Assert(column.decompression_type == key_bytes);
-	const void *values = column.buffers[1];
-	const uint64 *key_validity = column.buffers[0];
-	*valid = arrow_row_is_valid(key_validity, row);
-	memcpy(key, key_bytes * row + (char *) values, key_bytes);
-}
-
-static pg_attribute_always_inline void
-get_key_arrow_fixed_2(CompressedColumnValues column, int row, Datum *restrict key,
-					  bool *restrict valid)
-{
-	get_key_arrow_fixed(column, row, 2, key, valid);
-}
-
-static pg_attribute_always_inline void
-get_key_arrow_fixed_4(CompressedColumnValues column, int row, Datum *restrict key,
-					  bool *restrict valid)
-{
-	get_key_arrow_fixed(column, row, 4, key, valid);
-}
-
-static pg_attribute_always_inline void
-get_key_arrow_fixed_8(CompressedColumnValues column, int row, Datum *restrict key,
-					  bool *restrict valid)
-{
-#ifndef USE_FLOAT8_BYVAL
-	/*
-	 * Shouldn't be called for this configuration, because we only use this
-	 * grouping strategy for by-value types.
-	 */
-	Assert(false);
-#endif
-
-	get_key_arrow_fixed(column, row, 8, key, valid);
-}
-
-/*
- * Implementation of bulk hashing specialized for a given key width.
- */
-static pg_noinline uint32
-fill_offsets_arrow_fixed_8(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
-						   int key_column_index, uint32 next_unused_state_index, int start_row,
-						   int end_row, uint32 *restrict offsets)
-{
-	return fill_offsets_dispatch(policy,
-								 batch_state,
-								 key_column_index,
-								 next_unused_state_index,
-								 start_row,
-								 end_row,
-								 offsets,
-								 get_key_arrow_fixed_8);
-}
-
-static pg_noinline uint32
-fill_offsets_arrow_fixed_4(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
-						   int key_column_index, uint32 next_unused_state_index, int start_row,
-						   int end_row, uint32 *restrict offsets)
-{
-	return fill_offsets_dispatch(policy,
-								 batch_state,
-								 key_column_index,
-								 next_unused_state_index,
-								 start_row,
-								 end_row,
-								 offsets,
-								 get_key_arrow_fixed_4);
-}
-
-static pg_noinline uint32
-fill_offsets_arrow_fixed_2(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
-						   int key_column_index, uint32 next_unused_state_index, int start_row,
-						   int end_row, uint32 *restrict offsets)
-{
-	return fill_offsets_dispatch(policy,
-								 batch_state,
-								 key_column_index,
-								 next_unused_state_index,
-								 start_row,
-								 end_row,
-								 offsets,
-								 get_key_arrow_fixed_2);
-}
-
-static pg_noinline uint32
-fill_offsets_scalar(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
-					int key_column_index, uint32 next_unused_state_index, int start_row,
-					int end_row, uint32 *restrict offsets)
-{
-	return fill_offsets_dispatch(policy,
-								 batch_state,
-								 key_column_index,
-								 next_unused_state_index,
-								 start_row,
-								 end_row,
-								 offsets,
-								 get_key_scalar);
-}
-
 static void
 gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 {
@@ -563,8 +336,8 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 	 * columns.
 	 */
 	Assert(list_length(policy->output_grouping_columns) == 1);
-	GroupingColumn *g = linitial(policy->output_grouping_columns);
-	CompressedColumnValues *key_column = &batch_state->compressed_columns[g->input_offset];
+	// GroupingColumn *g = linitial(policy->output_grouping_columns);
+	// CompressedColumnValues *key_column = &batch_state->compressed_columns[g->input_offset];
 	int start_row = 0;
 	int end_row = 0;
 	for (start_row = 0; start_row < n; start_row = end_row)
@@ -622,48 +395,11 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 		 */
 		Assert((size_t) end_row <= policy->num_allocated_offsets);
 		uint32 next_unused_state_index = hash_keys + 2;
-		switch ((int) key_column->decompression_type)
-		{
-			case DT_Scalar:
-				next_unused_state_index = fill_offsets_scalar(policy,
-															  batch_state,
-															  g->input_offset,
-															  next_unused_state_index,
-															  start_row,
-															  end_row,
-															  policy->offsets);
-				break;
-			case 8:
-				next_unused_state_index = fill_offsets_arrow_fixed_8(policy,
-																	 batch_state,
-																	 g->input_offset,
-																	 next_unused_state_index,
-																	 start_row,
-																	 end_row,
-																	 policy->offsets);
-				break;
-			case 4:
-				next_unused_state_index = fill_offsets_arrow_fixed_4(policy,
-																	 batch_state,
-																	 g->input_offset,
-																	 next_unused_state_index,
-																	 start_row,
-																	 end_row,
-																	 policy->offsets);
-				break;
-			case 2:
-				next_unused_state_index = fill_offsets_arrow_fixed_2(policy,
-																	 batch_state,
-																	 g->input_offset,
-																	 next_unused_state_index,
-																	 start_row,
-																	 end_row,
-																	 policy->offsets);
-				break;
-			default:
-				Assert(false);
-				break;
-		}
+		next_unused_state_index = policy->functions.fill_offsets(policy,
+																 batch_state,
+																 next_unused_state_index,
+																 start_row,
+																 end_row);
 
 		ListCell *aggdeflc;
 		ListCell *aggstatelc;
