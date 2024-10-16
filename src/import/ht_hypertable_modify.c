@@ -11,6 +11,7 @@
  * the PostgreSQL License.
  */
 #include <postgres.h>
+#include "debug_assert.h"
 #include <catalog/pg_type.h>
 #include <executor/nodeModifyTable.h>
 #include <executor/tuptable.h>
@@ -743,6 +744,7 @@ lmerge_matched:;
 					 * tuple, for the refetch we do at
 					 * the top.
 					 */
+					Ensure(tupleid != NULL, "matched tupleid during merge cannot be null");
 					ItemPointerCopy(&context->tmfd.ctid, tupleid);
 					goto lmerge_matched;
 
