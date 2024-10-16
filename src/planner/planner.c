@@ -653,7 +653,7 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 			preprocess_query((Node *) parse, &context);
 
 			if (ts_guc_enable_optimizations)
-				ts_cm_functions->preprocess_query_tsl(parse);
+				ts_cm_functions->preprocess_query_tsl(parse, &cursor_opts);
 		}
 
 		if (prev_planner_hook != NULL)
