@@ -3464,6 +3464,9 @@ convert_to_hypercore_finish(Oid relid)
 	ts_chunk_constraints_create(ht_compressed, c_chunk);
 	ts_trigger_create_all_on_chunk(c_chunk);
 	create_proxy_vacuum_index(relation, RelationGetRelid(compressed_rel));
+	/* We use makeInteger since makeBoolean does not exist prior to PG15 */
+	List *options = list_make1(makeDefElem("autovacuum_enabled", (Node *) makeInteger(0), -1));
+	ts_relation_set_reloption(compressed_rel, options, RowExclusiveLock);
 
 	table_close(relation, NoLock);
 	table_close(compressed_rel, NoLock);

@@ -5,6 +5,29 @@
 \ir include/hypercore_helpers.sql
 select setseed(0.3);
 
+-- View to get information about chunks and associated compressed
+-- chunks.
+create or replace view test_chunk_info as
+with
+  ht_and_chunk as (
+    select format('%I.%I', ht.schema_name, ht.table_name)::regclass as hypertable,
+           format('%I.%I', ch.schema_name, ch.table_name)::regclass as chunk,
+           case when cc.table_name is not null then
+                format('%I.%I', cc.schema_name, cc.table_name)::regclass
+                else null
+           end as compressed_chunk
+      from _timescaledb_catalog.chunk ch
+      left join _timescaledb_catalog.chunk cc on ch.compressed_chunk_id = cc.id
+      join _timescaledb_catalog.hypertable ht on ch.hypertable_id = ht.id
+     where ht.compression_state != 2
+  )
+select hypertable,
+       chunk,
+       (select reloptions from pg_class where oid = chunk) as chunk_reloptions,
+       compressed_chunk,
+       (select reloptions from pg_class where oid = compressed_chunk) as compress_reloptions
+  from ht_and_chunk;
+
 -- Testing the basic API for creating a hypercore
 
 -- This should just fail because you cannot create a plain table with
@@ -166,7 +189,9 @@ select count(ch) from show_chunks('test4') ch;
 select ch as chunk from show_chunks('test4') ch limit 1 \gset
 
 alter table test4 set (timescaledb.compress);
+select compress_reloptions from test_chunk_info where chunk = :'chunk'::regclass;
 alter table :chunk set access method hypercore;
+select compress_reloptions from test_chunk_info where chunk = :'chunk'::regclass;
 select * from amrels where relparent='test4'::regclass;
 
 -- test that alter table on the hypertable works
@@ -283,7 +308,9 @@ select compress_chunk(ch, compress_using => 'hypercore') from chunks;
 -- compressed chunks.
 select ch as alter_chunk from show_chunks('test2') ch limit 1 \gset
 insert into :alter_chunk values ('2022-06-01 10:00', 4, 4, 4.0, 4.0);
+select compress_reloptions from test_chunk_info where chunk = :'alter_chunk'::regclass;
 alter table :alter_chunk set access method hypercore;
+select compress_reloptions from test_chunk_info where chunk = :'alter_chunk'::regclass;
 
 reset client_min_messages;
 
