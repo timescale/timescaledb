@@ -832,7 +832,7 @@ compress_hypercore(Chunk *chunk, bool rel_is_hypercore, enum UseAccessMethod use
 		const RangeVar *rv = makeRangeVar(relschema, relname, -1);
 		/* Do quick migration to hypercore of already compressed data by
 		 * simply changing the access method to hypercore in pg_am. */
-		hypercore_set_am(rv);
+		hypercore_convert_rv(rv);
 		return chunk->table_id;
 	}
 

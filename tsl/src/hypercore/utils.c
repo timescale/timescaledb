@@ -12,13 +12,15 @@
 #include <catalog/pg_class.h>
 #include <commands/defrem.h>
 #include <nodes/makefuncs.h>
+#include <storage/lockdefs.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 
+#include "chunk.h"
 #include "extension_constants.h"
+#include "src/utils.h"
 #include "utils.h"
-#include <src/utils.h>
 
 /*
  * Make a relation use hypercore without rewriting any data, simply by
@@ -26,7 +28,7 @@
  * using (non-hypercore) compression.
  */
 void
-hypercore_set_am(const RangeVar *rv)
+hypercore_convert_rv(const RangeVar *rv)
 {
 	HeapTuple tp;
 	Oid relid = RangeVarGetRelid(rv, NoLock, false);
@@ -41,6 +43,7 @@ hypercore_set_am(const RangeVar *rv)
 		elog(DEBUG1, "migrating table \"%s\" to hypercore", get_rel_name(relid));
 
 		reltup->relam = hypercore_amoid;
+
 		/* Set the new table access method */
 		CatalogTupleUpdate(class_rel, &tp->t_self, tp);
 		/* Also update pg_am dependency for the relation */
@@ -54,6 +57,21 @@ hypercore_set_am(const RangeVar *rv)
 		};
 
 		recordDependencyOn(&depender, &referenced, DEPENDENCY_NORMAL);
+
+		/*
+		 * Update the tuple for the compressed chunk and disable autovacuum on
+		 * it. This requires locking the relation (to prevent changes to the
+		 * definition), but it is sufficient to take an access share lock.
+		 */
+		Chunk *chunk = ts_chunk_get_by_relid(relid, true);
+		Chunk *cchunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
+		Relation compressed_rel = table_open(cchunk->table_id, AccessShareLock);
+
+		/* We use makeInteger since makeBoolean does not exist prior to PG15 */
+		List *options = list_make1(makeDefElem("autovacuum_enabled", (Node *) makeInteger(0), -1));
+		ts_relation_set_reloption(compressed_rel, options, AccessShareLock);
+
+		table_close(compressed_rel, AccessShareLock);
 		table_close(class_rel, RowExclusiveLock);
 		ReleaseSysCache(tp);
 
