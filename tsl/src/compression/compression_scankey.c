@@ -35,7 +35,6 @@ build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *settings, Relati
 	ScanKeyData *scankeys = NULL;
 	int key_index = 0;
 	TupleDesc out_desc = RelationGetDescr(out_rel);
-	TupleDesc in_desc = slot->tts_tupleDescriptor;
 
 	if (bms_is_empty(constraints->key_columns))
 	{
@@ -99,8 +98,9 @@ build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *settings, Relati
 							   isnull ? SK_ISNULL : 0,
 							   attno,
 							   BTEqualStrategyNumber,
-							   in_desc->attrs[AttrNumberGetAttrOffset(ht_attno)].atttypid,
-							   in_desc->attrs[AttrNumberGetAttrOffset(ht_attno)].attcollation,
+							   atttypid,
+							   TupleDescAttr(out_desc, AttrNumberGetAttrOffset(attno))
+								   ->attcollation,
 							   get_opcode(opr),
 							   isnull ? 0 : value);
 	}
