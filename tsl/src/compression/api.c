@@ -458,6 +458,20 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 				(errmsg("new compressed chunk \"%s.%s\" created",
 						NameStr(compress_ht_chunk->fd.schema_name),
 						NameStr(compress_ht_chunk->fd.table_name))));
+
+		/* Since a new compressed relation was created it is necessary to
+		 * invalidate the relcache entry for the chunk because Hypercore TAM
+		 * caches information about the compressed relation in the
+		 * relcache. */
+		if (ts_is_hypercore_am(cxt.srcht_chunk->amoid))
+		{
+			/* Tell other backends */
+			CacheInvalidateRelcacheByRelid(cxt.srcht_chunk->table_id);
+
+			/* Immediately invalidate our own cache */
+			RelationCacheInvalidateEntry(cxt.srcht_chunk->table_id);
+		}
+
 		EventTriggerAlterTableEnd();
 	}
 	else
@@ -826,11 +840,19 @@ compress_hypercore(Chunk *chunk, bool rel_is_hypercore, UseAccessMethod useam,
 			break;
 		case USE_AM_NULL:
 			Assert(rel_is_hypercore);
+			/* Don't forward the truncate to the compressed data during recompression */
+			bool truncate_compressed = hypercore_set_truncate_compressed(false);
 			relid = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
+			hypercore_set_truncate_compressed(truncate_compressed);
 			break;
 		case USE_AM_TRUE:
 			if (rel_is_hypercore)
+			{
+				/* Don't forward the truncate to the compressed data during recompression */
+				bool truncate_compressed = hypercore_set_truncate_compressed(false);
 				relid = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
+				hypercore_set_truncate_compressed(truncate_compressed);
+			}
 			else
 			{
 				/* Convert to a compressed hypercore by simply calling ALTER TABLE
