@@ -987,3 +987,115 @@ select * from only_nulls_null;
 ---------+------+--------+----------+-------+------------
 (0 rows)
 
+--------------------------------------------------
+-- Test unique index creation                   --
+--------------------------------------------------
+create table uniquetable (time timestamptz not null, value int);
+select create_hypertable('uniquetable', 'time', create_default_indexes => false);
+    create_hypertable     
+--------------------------
+ (7,public,uniquetable,t)
+(1 row)
+
+insert into uniquetable values ('2024-01-01 01:00', 1), ('2024-01-01 02:00', 2);
+select format('%I.%I', chunk_schema, chunk_name)::regclass as unique_chunk
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = 'uniquetable'::regclass
+ order by unique_chunk asc
+ limit 1 \gset
+alter table uniquetable set (timescaledb.compress_orderby='time');
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "uniquetable" is set to ""
+-- Create a non-Hypercore TAM compressed chunk
+select * from compress_chunk(:'unique_chunk');
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_7_19_chunk
+(1 row)
+
+-- Should still be a "heap" chunk
+select c.relname, a.amname from pg_class c
+inner join pg_am a ON (c.relam = a.oid)
+where c.oid = :'unique_chunk'::regclass;
+      relname      | amname 
+-------------------+--------
+ _hyper_7_19_chunk | heap
+(1 row)
+
+insert into uniquetable values ('2024-01-01 01:00', 3);
+-- Unique index creation on compressed chunk not supported
+\set ON_ERROR_STOP 0
+create unique index time_key on uniquetable (time);
+ERROR:  operation not supported on hypertables that have compression enabled
+\set ON_ERROR_STOP 1
+-- Convert the chunk to using Hypercore TAM
+alter table :unique_chunk set access method hypercore;
+-- Should now be a chunk using Hypercore TAM
+select c.relname, a.amname from pg_class c
+inner join pg_am a ON (c.relam = a.oid)
+where c.oid = :'unique_chunk'::regclass;
+      relname      |  amname   
+-------------------+-----------
+ _hyper_7_19_chunk | hypercore
+(1 row)
+
+select _timescaledb_debug.is_compressed_tid(ctid), * from :unique_chunk order by time;
+ is_compressed_tid |             time             | value 
+-------------------+------------------------------+-------
+ t                 | Mon Jan 01 01:00:00 2024 PST |     1
+ f                 | Mon Jan 01 01:00:00 2024 PST |     3
+ t                 | Mon Jan 01 02:00:00 2024 PST |     2
+(3 rows)
+
+-- Unique index creation should work but fail on uniqueness check
+\set ON_ERROR_STOP 0
+create unique index time_key on uniquetable (time);
+ERROR:  could not create unique index "_hyper_7_19_chunk_time_key"
+DETAIL:  Key ("time")=(Mon Jan 01 01:00:00 2024 PST) is duplicated.
+\set ON_ERROR_STOP 1
+-- Recompress to get all values in compressed format
+select compress_chunk(:'unique_chunk');
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_7_19_chunk
+(1 row)
+
+-- Everything's compressed
+select _timescaledb_debug.is_compressed_tid(ctid), * from :unique_chunk order by time;
+ is_compressed_tid |             time             | value 
+-------------------+------------------------------+-------
+ t                 | Mon Jan 01 01:00:00 2024 PST |     3
+ t                 | Mon Jan 01 01:00:00 2024 PST |     1
+ t                 | Mon Jan 01 02:00:00 2024 PST |     2
+(3 rows)
+
+-- Unique index creation should still fail
+\set ON_ERROR_STOP 0
+create unique index time_key on uniquetable (time);
+ERROR:  could not create unique index "_hyper_7_19_chunk_time_key"
+DETAIL:  Key ("time")=(Mon Jan 01 01:00:00 2024 PST) is duplicated.
+\set ON_ERROR_STOP 1
+-- Delete the conflicting value and unique index creation should succeed
+delete from uniquetable where value = 3;
+select _timescaledb_debug.is_compressed_tid(ctid), * from :unique_chunk order by time;
+ is_compressed_tid |             time             | value 
+-------------------+------------------------------+-------
+ f                 | Mon Jan 01 01:00:00 2024 PST |     1
+ f                 | Mon Jan 01 02:00:00 2024 PST |     2
+(2 rows)
+
+create unique index time_key on uniquetable (time);
+explain (costs off)
+select * from uniquetable where time = '2024-01-01 01:00';
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
+ Index Scan using _hyper_7_19_chunk_time_key on _hyper_7_19_chunk
+   Index Cond: ("time" = 'Mon Jan 01 01:00:00 2024 PST'::timestamp with time zone)
+(2 rows)
+
+select * from uniquetable where time = '2024-01-01 01:00';
+             time             | value 
+------------------------------+-------
+ Mon Jan 01 01:00:00 2024 PST |     1
+(1 row)
+
