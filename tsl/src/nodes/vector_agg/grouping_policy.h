@@ -9,6 +9,8 @@ typedef struct DecompressBatchState DecompressBatchState;
 
 typedef struct GroupingPolicy GroupingPolicy;
 
+typedef struct TupleTableSlot TupleTableSlot;
+
 /*
  * This is a common interface for grouping policies which define how the rows
  * are grouped for aggregation -- e.g. there can be an implementation for no

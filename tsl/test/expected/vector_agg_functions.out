@@ -50,19 +50,23 @@ select count(compress_chunk(x)) from show_chunks('aggfns') x;
 (1 row)
 
 alter table aggfns add column ss int default 11;
+alter table aggfns add column x text default '11';
 insert into aggfns
-select *,
-    case
-        -- null in entire batch
-        when s = 2 then null
-        -- null for some rows
-        when s = 3 and t % 1053 = 0 then null
-        -- for some rows same as default
-        when s = 4 and t % 1057 = 0 then 11
-        -- not null for entire batch
-        else s
-    end as ss
-from source where s != 1;
+select *, ss::text as x from (
+    select *,
+        case
+            -- null in entire batch
+            when s = 2 then null
+            -- null for some rows
+            when s = 3 and t % 1053 = 0 then null
+            -- for some rows same as default
+            when s = 4 and t % 1057 = 0 then 11
+            -- not null for entire batch
+            else s
+        end as ss
+    from source where s != 1
+) t
+;
 select count(compress_chunk(x)) from show_chunks('aggfns') x;
  count 
 -------
@@ -114,7 +118,8 @@ from
     unnest(array[
         null,
         's',
-        'ss']) with ordinality as grouping(grouping, n)
+        'ss',
+        'x']) with ordinality as grouping(grouping, n)
 where
     case
 --        when explain is not null then condition is null and grouping = 's'
@@ -124,6 +129,9 @@ where
     and
     case
         when variable = '*' then function = 'count'
+        -- No need to test the aggregate functions themselves again for string
+        -- grouping.
+        when grouping = 'x' then function = 'count' and variable = 'cfloat4'
         when condition = 'cint2 is null' then variable = 'cint2'
         when function = 'count' then variable in ('cfloat4', 's', 'ss')
         when variable = 't' then function in ('min', 'max')
@@ -164,6 +172,21 @@ select ss, count(*) from aggfns group by ss order by 1;
   8 | 20000
   9 | 20000
  11 | 40019
+    |    19
+(10 rows)
+
+select x, count(*) from aggfns group by x order by 1;
+ x  | count 
+----+-------
+ 0  | 20000
+ 11 | 40019
+ 3  | 19981
+ 4  | 19981
+ 5  | 20000
+ 6  | 20000
+ 7  | 20000
+ 8  | 20000
+ 9  | 20000
     |    19
 (10 rows)
 
@@ -308,6 +331,21 @@ select ss, count(cfloat4) from aggfns group by ss order by 1;
   8 | 20000
   9 | 20000
  11 | 40019
+    |    19
+(10 rows)
+
+select x, count(cfloat4) from aggfns group by x order by 1;
+ x  | count 
+----+-------
+ 0  | 20000
+ 11 | 40019
+ 3  | 19981
+ 4  | 19981
+ 5  | 20000
+ 6  | 20000
+ 7  | 20000
+ 8  | 20000
+ 9  | 20000
     |    19
 (10 rows)
 
@@ -1859,6 +1897,21 @@ select ss, count(*) from aggfns where cfloat8 > 0 group by ss order by 1;
     |     8
 (10 rows)
 
+select x, count(*) from aggfns where cfloat8 > 0 group by x order by 1;
+ x  | count 
+----+-------
+ 0  |  9943
+ 11 | 19896
+ 3  |  9934
+ 4  |  9932
+ 5  |  9943
+ 6  |  9944
+ 7  |  9944
+ 8  |  9943
+ 9  |  9943
+    |     8
+(10 rows)
+
 select max(cdate) from aggfns where cfloat8 > 0 order by 1;
     max     
 ------------
@@ -2000,6 +2053,21 @@ select ss, count(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1;
   8 |  9943
   9 |  9943
  11 | 19896
+    |     8
+(10 rows)
+
+select x, count(cfloat4) from aggfns where cfloat8 > 0 group by x order by 1;
+ x  | count 
+----+-------
+ 0  |  9943
+ 11 | 19896
+ 3  |  9934
+ 4  |  9932
+ 5  |  9943
+ 6  |  9944
+ 7  |  9944
+ 8  |  9943
+ 9  |  9943
     |     8
 (10 rows)
 
@@ -3551,6 +3619,21 @@ select ss, count(*) from aggfns where cfloat8 <= 0 group by ss order by 1;
     |    11
 (10 rows)
 
+select x, count(*) from aggfns where cfloat8 <= 0 group by x order by 1;
+ x  | count 
+----+-------
+ 0  | 10057
+ 11 | 20123
+ 3  | 10047
+ 4  | 10049
+ 5  | 10057
+ 6  | 10056
+ 7  | 10056
+ 8  | 10057
+ 9  | 10057
+    |    11
+(10 rows)
+
 select max(cdate) from aggfns where cfloat8 <= 0 order by 1;
     max     
 ------------
@@ -3692,6 +3775,21 @@ select ss, count(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1;
   8 | 10057
   9 | 10057
  11 | 20123
+    |    11
+(10 rows)
+
+select x, count(cfloat4) from aggfns where cfloat8 <= 0 group by x order by 1;
+ x  | count 
+----+-------
+ 0  | 10057
+ 11 | 20123
+ 3  | 10047
+ 4  | 10049
+ 5  | 10057
+ 6  | 10056
+ 7  | 10056
+ 8  | 10057
+ 9  | 10057
     |    11
 (10 rows)
 
@@ -5243,6 +5341,21 @@ select ss, count(*) from aggfns where cfloat8 < 1000 group by ss order by 1;
     |    19
 (10 rows)
 
+select x, count(*) from aggfns where cfloat8 < 1000 group by x order by 1;
+ x  | count 
+----+-------
+ 0  | 20000
+ 11 | 40019
+ 3  | 19981
+ 4  | 19981
+ 5  | 20000
+ 6  | 20000
+ 7  | 20000
+ 8  | 20000
+ 9  | 20000
+    |    19
+(10 rows)
+
 select max(cdate) from aggfns where cfloat8 < 1000 order by 1;
     max     
 ------------
@@ -5384,6 +5497,21 @@ select ss, count(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 
   8 | 20000
   9 | 20000
  11 | 40019
+    |    19
+(10 rows)
+
+select x, count(cfloat4) from aggfns where cfloat8 < 1000 group by x order by 1;
+ x  | count 
+----+-------
+ 0  | 20000
+ 11 | 40019
+ 3  | 19981
+ 4  | 19981
+ 5  | 20000
+ 6  | 20000
+ 7  | 20000
+ 8  | 20000
+ 9  | 20000
     |    19
 (10 rows)
 
@@ -6915,6 +7043,11 @@ select ss, count(*) from aggfns where cfloat8 > 1000 group by ss order by 1;
 ----+-------
 (0 rows)
 
+select x, count(*) from aggfns where cfloat8 > 1000 group by x order by 1;
+ x | count 
+---+-------
+(0 rows)
+
 select max(cdate) from aggfns where cfloat8 > 1000 order by 1;
  max 
 -----
@@ -6977,6 +7110,11 @@ select s, count(cfloat4) from aggfns where cfloat8 > 1000 group by s order by 1;
 select ss, count(cfloat4) from aggfns where cfloat8 > 1000 group by ss order by 1;
  ss | count 
 ----+-------
+(0 rows)
+
+select x, count(cfloat4) from aggfns where cfloat8 > 1000 group by x order by 1;
+ x | count 
+---+-------
 (0 rows)
 
 select max(cfloat4) from aggfns where cfloat8 > 1000 order by 1;
@@ -7679,6 +7817,34 @@ select ss, count(*) from aggfns where cint2 is null group by ss order by 1;
  11 |    38
 (9 rows)
 
+select x, count(*) from aggfns where cint2 is null group by x order by 1;
+ x  | count 
+----+-------
+ 0  |    19
+ 11 |    38
+ 3  |    19
+ 4  |    19
+ 5  |    19
+ 6  |    19
+ 7  |    19
+ 8  |    19
+ 9  |    19
+(9 rows)
+
+select x, count(cfloat4) from aggfns where cint2 is null group by x order by 1;
+ x  | count 
+----+-------
+ 0  |    19
+ 11 |    38
+ 3  |    19
+ 4  |    19
+ 5  |    19
+ 6  |    19
+ 7  |    19
+ 8  |    19
+ 9  |    19
+(9 rows)
+
 select avg(cint2) from aggfns where cint2 is null order by 1;
  avg 
 -----
@@ -7888,4 +8054,21 @@ select ss, sum(cint2) from aggfns where cint2 is null group by ss order by 1;
   9 |    
  11 |    
 (9 rows)
+
+select count(*), count(cint2), min(cfloat4), cint2 from aggfns group by cint2
+order by count(*) desc, cint2 limit 10
+;
+ count | count |   min    | cint2  
+-------+-------+----------+--------
+   190 |     0 | -49.6472 |       
+    60 |    60 | -13.3701 | -11208
+    60 |    60 | -48.5206 |   1924
+    50 |    50 | -44.7573 | -11714
+    50 |    50 | -22.1541 | -11331
+    50 |    50 | -35.9287 |  -6252
+    50 |    50 | -9.84793 |   -120
+    50 |    50 | -36.2595 |  15467
+    50 |    50 | -30.1285 |  15889
+    40 |    40 | -33.4605 | -15975
+(10 rows)
 

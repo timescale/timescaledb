@@ -11,7 +11,6 @@
 
 #include <postgres.h>
 
-#include <common/hashfn.h>
 #include <executor/tuptable.h>
 #include <nodes/pg_list.h>
 
@@ -32,133 +31,10 @@
 #define DEBUG_LOG(...)
 #endif
 
-/*
- * We can use crc32 as a hash function, it has bad properties but takes only one
- * cycle, which is why it is sometimes used in the existing hash table
- * implementations.
- */
-
-#ifdef USE_SSE42_CRC32C
-#include <nmmintrin.h>
-static pg_attribute_always_inline uint64
-hash64(uint64 x)
-{
-	return _mm_crc32_u64(~0ULL, x);
-}
-
-#else
-/*
- * When we don't have the crc32 instruction, use the SplitMix64 finalizer.
- */
-static pg_attribute_always_inline uint64
-hash64(uint64 x)
-{
-	x ^= x >> 30;
-	x *= 0xbf58476d1ce4e5b9U;
-	x ^= x >> 27;
-	x *= 0x94d049bb133111ebU;
-	x ^= x >> 31;
-	return x;
-}
-#endif
-
-#define KEY_VARIANT single_fixed_2
-#define KEY_BYTES 2
-#define KEY_HASH hash64
-#define KEY_EQUAL(a, b) a == b
-#define CTYPE int16
-#define DATUM_TO_CTYPE DatumGetInt16
-#define CTYPE_TO_DATUM Int16GetDatum
-
-#include "single_fixed_key_impl.c"
-
-#include "hash_table_functions_impl.c"
-
-#define KEY_VARIANT single_fixed_4
-#define KEY_BYTES 4
-#define KEY_HASH hash64
-#define KEY_EQUAL(a, b) a == b
-#define CTYPE int32
-#define DATUM_TO_CTYPE DatumGetInt32
-#define CTYPE_TO_DATUM Int32GetDatum
-
-#include "single_fixed_key_impl.c"
-
-#include "hash_table_functions_impl.c"
-
-
-#define KEY_VARIANT single_fixed_8
-#define KEY_BYTES 8
-#define KEY_HASH hash64
-#define KEY_EQUAL(a, b) a == b
-#define CTYPE int64
-#define DATUM_TO_CTYPE DatumGetInt64
-#define CTYPE_TO_DATUM Int64GetDatum
-
-#include "single_fixed_key_impl.c"
-
-#include "hash_table_functions_impl.c"
-
-static void
-store_text_datum(CompressedColumnValues *column_values, int arrow_row)
-{
-	const uint32 start = ((uint32 *) column_values->buffers[1])[arrow_row];
-	const int32 value_bytes = ((uint32 *) column_values->buffers[1])[arrow_row + 1] - start;
-	Assert(value_bytes >= 0);
-
-	const int total_bytes = value_bytes + VARHDRSZ;
-	Assert(DatumGetPointer(*column_values->output_value) != NULL);
-	SET_VARSIZE(*column_values->output_value, total_bytes);
-	memcpy(VARDATA(*column_values->output_value),
-		   &((uint8 *) column_values->buffers[2])[start],
-		   value_bytes);
-}
-
-static pg_attribute_always_inline void
-single_text_get_key(CompressedColumnValues column, int row, text **restrict key,
-					bool *restrict valid)
-{
-	if (unlikely(column.decompression_type == DT_Scalar))
-	{
-		/* Already stored. */
-	}
-	else if (column.decompression_type == DT_ArrowText)
-	{
-		store_text_datum(&column, row);
-		*column.output_isnull = !arrow_row_is_valid(column.buffers[0], row);
-	}
-	else if (column.decompression_type == DT_ArrowTextDict)
-	{
-		const int16 index = ((int16 *) column.buffers[3])[row];
-		store_text_datum(&column, index);
-		*column.output_isnull = !arrow_row_is_valid(column.buffers[0], row);
-	}
-	else
-	{
-		pg_unreachable();
-	}
-	*key = (text *) DatumGetPointer(*column.output_value);
-	*valid = !*column.output_isnull;
-}
-
-static pg_attribute_always_inline text *
-single_text_store_key(text *key, Datum *key_storage, MemoryContext key_memory_context)
-{
-	size_t size = VARSIZE_ANY(key);
-	text *stored = (text *) MemoryContextAlloc(key_memory_context, size);
-	memcpy(stored, key, size);
-	*key_storage = PointerGetDatum(stored);
-	return stored;
-}
-
-#define KEY_VARIANT single_text
-#define KEY_HASH(X) hash_bytes((const unsigned char *) VARDATA_ANY(X), VARSIZE_ANY_EXHDR(X))
-#define KEY_EQUAL(a, b)                                                                            \
-	(VARSIZE_ANY(a) == VARSIZE_ANY(b) &&                                                           \
-	 memcmp(VARDATA_ANY(a), VARDATA_ANY(b), VARSIZE_ANY_EXHDR(a)) == 0)
-#define SH_STORE_HASH
-#define CTYPE text *
-#include "hash_table_functions_impl.c"
+extern HashTableFunctions single_fixed_2_functions;
+extern HashTableFunctions single_fixed_4_functions;
+extern HashTableFunctions single_fixed_8_functions;
+extern HashTableFunctions single_text_functions;
 
 static const GroupingPolicy grouping_policy_hash_functions;
 
@@ -316,6 +192,9 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 
 	Assert(!policy->returning_results);
 
+	const int num_fns = list_length(policy->agg_defs);
+	Assert(list_length(policy->per_agg_states) == num_fns);
+
 	const uint64_t *restrict filter = batch_state->vector_qual_result;
 	const int n = batch_state->total_batch_rows;
 
@@ -401,47 +280,46 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 																 start_row,
 																 end_row);
 
-		ListCell *aggdeflc;
-		ListCell *aggstatelc;
-
-		/*
-		 * Initialize the aggregate function states for the newly added keys.
-		 */
-		if (next_unused_state_index > first_uninitialized_state_index)
+		const uint64 new_aggstate_rows = policy->allocated_aggstate_rows * 2 + 1;
+		for (int i = 0; i < num_fns; i++)
 		{
-			if (next_unused_state_index > policy->allocated_aggstate_rows)
+			VectorAggDef *agg_def = list_nth(policy->agg_defs, i);
+			if (next_unused_state_index > first_uninitialized_state_index)
 			{
-				policy->allocated_aggstate_rows = policy->allocated_aggstate_rows * 2 + 1;
-				forboth (aggdeflc, policy->agg_defs, aggstatelc, policy->per_agg_states)
+				if (next_unused_state_index > policy->allocated_aggstate_rows)
 				{
-					VectorAggDef *agg_def = lfirst(aggdeflc);
-					lfirst(aggstatelc) =
-						repalloc(lfirst(aggstatelc),
-								 policy->allocated_aggstate_rows * agg_def->func.state_bytes);
+					lfirst(list_nth_cell(policy->per_agg_states, i)) =
+						repalloc(list_nth(policy->per_agg_states, i),
+								 new_aggstate_rows * agg_def->func.state_bytes);
 				}
-			}
 
-			forboth (aggdeflc, policy->agg_defs, aggstatelc, policy->per_agg_states)
-			{
-				const VectorAggDef *agg_def = lfirst(aggdeflc);
+				/*
+				 * Initialize the aggregate function states for the newly added keys.
+				 */
 				agg_def->func.agg_init(agg_def->func.state_bytes * first_uninitialized_state_index +
-										   (char *) lfirst(aggstatelc),
+										   (char *) list_nth(policy->per_agg_states, i),
 									   next_unused_state_index - first_uninitialized_state_index);
 			}
-		}
 
-		/*
-		 * Update the aggregate function states.
-		 */
-		forboth (aggdeflc, policy->agg_defs, aggstatelc, policy->per_agg_states)
-		{
+			/*
+			 * Update the aggregate function states.
+			 */
 			compute_single_aggregate(batch_state,
 									 start_row,
 									 end_row,
-									 lfirst(aggdeflc),
-									 lfirst(aggstatelc),
+									 agg_def,
+									 list_nth(policy->per_agg_states, i),
 									 policy->offsets,
 									 policy->agg_extra_mctx);
+		}
+
+		/*
+		 * Record the newly allocated number of rows in case we had to reallocate.
+		 */
+		if (next_unused_state_index > policy->allocated_aggstate_rows)
+		{
+			Assert(new_aggstate_rows >= policy->allocated_aggstate_rows);
+			policy->allocated_aggstate_rows = new_aggstate_rows;
 		}
 	}
 	Assert(end_row == n);

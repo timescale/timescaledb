@@ -101,6 +101,33 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *policy, CompressedColumnValues column,
 	return next_unused_state_index;
 }
 
+static pg_attribute_always_inline uint32
+FUNCTION_NAME(dispatch_type)(GroupingPolicyHash *policy, CompressedColumnValues column,
+							 const uint64 *restrict filter, uint32 next_unused_state_index,
+							 int start_row, int end_row)
+{
+	if (unlikely(column.decompression_type == DT_Scalar))
+	{
+		return FUNCTION_NAME(
+			impl)(policy, column, filter, next_unused_state_index, start_row, end_row);
+	}
+	else if (column.decompression_type == DT_ArrowText)
+	{
+		return FUNCTION_NAME(
+			impl)(policy, column, filter, next_unused_state_index, start_row, end_row);
+	}
+	else if (column.decompression_type == DT_ArrowTextDict)
+	{
+		return FUNCTION_NAME(
+			impl)(policy, column, filter, next_unused_state_index, start_row, end_row);
+	}
+	else
+	{
+		return FUNCTION_NAME(
+			impl)(policy, column, filter, next_unused_state_index, start_row, end_row);
+	}
+}
+
 /*
  * This function exists just to nudge the compiler to generate separate
  * implementation for the important case where the entire batch matches and the
@@ -116,40 +143,25 @@ FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *ba
 	CompressedColumnValues column = batch_state->compressed_columns[g->input_offset];
 	const uint64 *restrict filter = batch_state->vector_qual_result;
 
-	if (unlikely(column.decompression_type == DT_Scalar))
+	if (filter == NULL && column.buffers[0] == NULL)
 	{
 		next_unused_state_index = FUNCTION_NAME(
-			impl)(policy, column, filter, next_unused_state_index, start_row, end_row);
-	}
-	else if (column.decompression_type == DT_ArrowText)
-	{
-		next_unused_state_index = FUNCTION_NAME(
-			impl)(policy, column, filter, next_unused_state_index, start_row, end_row);
-	}
-	else if (column.decompression_type == DT_ArrowTextDict)
-	{
-		next_unused_state_index = FUNCTION_NAME(
-			impl)(policy, column, filter, next_unused_state_index, start_row, end_row);
-	}
-	else if (filter == NULL && column.buffers[0] == NULL)
-	{
-		next_unused_state_index = FUNCTION_NAME(
-			impl)(policy, column, filter, next_unused_state_index, start_row, end_row);
+			dispatch_type)(policy, column, filter, next_unused_state_index, start_row, end_row);
 	}
 	else if (filter != NULL && column.buffers[0] == NULL)
 	{
 		next_unused_state_index = FUNCTION_NAME(
-			impl)(policy, column, filter, next_unused_state_index, start_row, end_row);
+			dispatch_type)(policy, column, filter, next_unused_state_index, start_row, end_row);
 	}
 	else if (filter == NULL && column.buffers[0] != NULL)
 	{
 		next_unused_state_index = FUNCTION_NAME(
-			impl)(policy, column, filter, next_unused_state_index, start_row, end_row);
+			dispatch_type)(policy, column, filter, next_unused_state_index, start_row, end_row);
 	}
 	else if (filter != NULL && column.buffers[0] != NULL)
 	{
 		next_unused_state_index = FUNCTION_NAME(
-			impl)(policy, column, filter, next_unused_state_index, start_row, end_row);
+			dispatch_type)(policy, column, filter, next_unused_state_index, start_row, end_row);
 	}
 	else
 	{

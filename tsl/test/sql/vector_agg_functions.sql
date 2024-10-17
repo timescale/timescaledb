@@ -46,20 +46,24 @@ alter table aggfns set (timescaledb.compress, timescaledb.compress_orderby = 't'
 select count(compress_chunk(x)) from show_chunks('aggfns') x;
 
 alter table aggfns add column ss int default 11;
+alter table aggfns add column x text default '11';
 
 insert into aggfns
-select *,
-    case
-        -- null in entire batch
-        when s = 2 then null
-        -- null for some rows
-        when s = 3 and t % 1053 = 0 then null
-        -- for some rows same as default
-        when s = 4 and t % 1057 = 0 then 11
-        -- not null for entire batch
-        else s
-    end as ss
-from source where s != 1;
+select *, ss::text as x from (
+    select *,
+        case
+            -- null in entire batch
+            when s = 2 then null
+            -- null for some rows
+            when s = 3 and t % 1053 = 0 then null
+            -- for some rows same as default
+            when s = 4 and t % 1057 = 0 then 11
+            -- not null for entire batch
+            else s
+        end as ss
+    from source where s != 1
+) t
+;
 
 select count(compress_chunk(x)) from show_chunks('aggfns') x;
 
@@ -110,7 +114,8 @@ from
     unnest(array[
         null,
         's',
-        'ss']) with ordinality as grouping(grouping, n)
+        'ss',
+        'x']) with ordinality as grouping(grouping, n)
 where
     case
 --        when explain is not null then condition is null and grouping = 's'
@@ -120,6 +125,9 @@ where
     and
     case
         when variable = '*' then function = 'count'
+        -- No need to test the aggregate functions themselves again for string
+        -- grouping.
+        when grouping = 'x' then function = 'count' and variable = 'cfloat4'
         when condition = 'cint2 is null' then variable = 'cint2'
         when function = 'count' then variable in ('cfloat4', 's', 'ss')
         when variable = 't' then function in ('min', 'max')
@@ -127,3 +135,8 @@ where
     else true end
 order by explain, condition.n, variable, function, grouping.n
 \gexec
+
+
+select count(*), count(cint2), min(cfloat4), cint2 from aggfns group by cint2
+order by count(*) desc, cint2 limit 10
+;
