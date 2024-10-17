@@ -519,6 +519,7 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 	state->result_relation_info = relinfo;
 	state->estate = dispatch->estate;
 	state->compressed_chunk_table_id = InvalidOid;
+	state->use_tam = ts_is_hypercore_am(chunk->amoid);
 	ts_set_compression_status(state, chunk);
 
 	if (relinfo->ri_RelationDesc->rd_rel->relhasindex && relinfo->ri_IndexRelationDescs == NULL)

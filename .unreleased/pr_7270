@@ -1,1 +1,0 @@
-Fixes: #7270 Fix memory leak in compressed DML batch filtering

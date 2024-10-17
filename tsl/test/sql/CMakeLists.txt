@@ -109,8 +109,35 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
   if(CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_FILES bgw_scheduler_control.sql)
   endif()
-  list(APPEND TEST_FILES merge_compress.sql cagg_query_using_merge.sql
-       cagg_refresh_using_merge.sql)
+  list(
+    APPEND
+    TEST_FILES
+    merge_compress.sql
+    cagg_query_using_merge.sql
+    cagg_refresh_using_merge.sql
+    hypercore.sql
+    hypercore_columnar.sql
+    hypercore_copy.sql
+    hypercore_create.sql
+    hypercore_cursor.sql
+    hypercore_ddl.sql
+    hypercore_delete.sql
+    hypercore_index_btree.sql
+    hypercore_index_hash.sql
+    hypercore_insert.sql
+    hypercore_join.sql
+    hypercore_merge.sql
+    hypercore_policy.sql
+    hypercore_scans.sql
+    hypercore_stats.sql
+    hypercore_types.sql
+    hypercore_update.sql
+    hypercore_vacuum.sql
+    hypercore_vacuum_full.sql)
+endif()
+
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
+  list(APPEND TEST_FILES hypercore_parallel.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))

@@ -12,6 +12,7 @@
 #include <access/xact.h>
 #include <catalog/indexing.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_am.h>
 #include <catalog/pg_cast.h>
 #include <catalog/pg_inherits.h>
 #include <catalog/pg_operator.h>
@@ -37,6 +38,7 @@
 
 #include "compat/compat.h"
 #include "chunk.h"
+#include "cross_module_fn.h"
 #include "debug_point.h"
 #include "guc.h"
 #include "hypertable_cache.h"
@@ -1797,29 +1799,35 @@ ts_get_rel_info_by_name(const char *relnamespace, const char *relname, Oid *reli
 	ReleaseSysCache(tuple);
 }
 
+Oid
+ts_get_rel_am(Oid relid)
+{
+	HeapTuple tuple;
+	Form_pg_class cform;
+	Oid amoid;
+
+	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for relation %u", relid);
+
+	cform = (Form_pg_class) GETSTRUCT(tuple);
+	amoid = cform->relam;
+	ReleaseSysCache(tuple);
+
+	return amoid;
+}
+
 static Oid hypercore_amoid = InvalidOid;
 
 bool
 ts_is_hypercore_am(Oid amoid)
 {
-	/* Can't use InvalidOid as an indication of non-cached value since
-	   get_am_oid() will return InvalidOid when the access method does not
-	   exist and we will do the lookup every time this query is called. This
-	   boolean can be removed once we know that there should exist an access
-	   method with the given name. */
-	static bool iscached = false;
-
-	if (!iscached && !OidIsValid(hypercore_amoid))
-	{
-		hypercore_amoid = get_am_oid("hypercore", true);
-		iscached = true;
-	}
-
 	if (!OidIsValid(hypercore_amoid))
-		return false;
+		hypercore_amoid = get_table_am_oid(TS_HYPERCORE_TAM_NAME, true);
 
-	/* Shouldn't get here for now */
-	Assert(false);
+	if (!OidIsValid(amoid) || !OidIsValid(hypercore_amoid))
+		return false;
 
 	return amoid == hypercore_amoid;
 }

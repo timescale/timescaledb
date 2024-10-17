@@ -288,7 +288,7 @@ for commit_sha, commit_title in main_commits:
     pygithub_commit = source_repo.get_commit(sha=commit_sha)
 
     pulls = pygithub_commit.get_pulls()
-    if not pulls:
+    if not pulls or pulls.totalCount == 0:
         print(f"{commit_sha[:9]} '{commit_title}' does not belong to a PR.")
         continue
 

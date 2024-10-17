@@ -4,6 +4,8 @@ name: Windows Packages
   schedule:
     # run daily 0:00 on main branch
     - cron: '0 0 * * *'
+  pull_request:
+    paths: .github/workflows/windows-packages.yaml
   push:
     tags:
     - '*'
@@ -18,6 +20,7 @@ jobs:
       pg14_earliest: ${{ steps.config.outputs.pg14_abi_min }}
       pg15_earliest: ${{ steps.config.outputs.pg15_abi_min }}
       pg16_earliest: ${{ steps.config.outputs.pg16_abi_min }}
+      pg17_earliest: ${{ steps.config.outputs.pg17_abi_min }}
       pg14_latest: ${{ steps.config.outputs.pg14_latest }}
       pg15_latest: ${{ steps.config.outputs.pg15_latest }}
       pg16_latest: ${{ steps.config.outputs.pg16_latest }}
@@ -37,7 +40,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ windows-2019 ]
-        test: [ "14min", "14max", "15min", "15max", "16min", "16max" ]
+        test: [ "14min", "14max", "15min", "15max", "16min", "16max", "17min" ]
         include:
           - test: 14min
             pg: 14
@@ -57,6 +60,9 @@ jobs:
           - test: 16max
             pg: 16
             pkg_version: 16.1.0 # hardcoded since 16.2 is not available yet
+          - test: 17min
+            pg: 17
+            pkg_version: ${{ fromJson(needs.config.outputs.pg17_earliest) }}.0
     env:
       # PostgreSQL configuration
       PGPORT: 6543

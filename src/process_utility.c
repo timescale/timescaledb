@@ -10,6 +10,7 @@
 #include <catalog/index.h>
 #include <catalog/namespace.h>
 #include <catalog/objectaddress.h>
+#include <catalog/pg_am.h>
 #include <catalog/pg_authid.h>
 #include <catalog/pg_class_d.h>
 #include <catalog/pg_constraint.h>
@@ -36,9 +37,11 @@
 #include <tcop/utility.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
+#include <utils/elog.h>
 #include <utils/guc.h>
 #include <utils/inval.h>
 #include <utils/lsyscache.h>
+#include <utils/palloc.h>
 #include <utils/rel.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
@@ -111,10 +114,14 @@ prev_ProcessUtility(ProcessUtilityArgs *args)
 static void
 check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 {
+	const Chunk *chunk;
+
 	if (expect_chunk_modification)
 		return;
 
-	if (ts_chunk_exists_relid(relid))
+	chunk = ts_chunk_get_by_relid(relid, false /* fail_if_not_found */);
+
+	if (chunk != NULL)
 	{
 		bool all_allowed = true;
 		ListCell *lc;
@@ -140,13 +147,16 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 				case AT_SetTableSpace:
 				case AT_ReAddStatistics:
 				case AT_SetCompression:
+#if PG15_GE
+
+				case AT_SetAccessMethod:
+#endif
 					/* allowed on chunks */
 					break;
 				case AT_AddConstraint:
 				{
 					/* if this is an OSM chunk, block the operation */
-					Chunk *chunk = ts_chunk_get_by_relid(relid, false /* fail_if_not_found */);
-					if (chunk && chunk->fd.osm_chunk)
+					if (chunk->fd.osm_chunk)
 					{
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -157,12 +167,28 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 				case AT_DropConstraint:
 				{
 					/* if this is an OSM chunk, block the operation */
-					Chunk *chunk = ts_chunk_get_by_relid(relid, false /* fail_if_not_found */);
-					if (chunk && chunk->fd.osm_chunk)
+					if (chunk->fd.osm_chunk)
 					{
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 								 errmsg("operation not supported on OSM chunk tables")));
+					}
+
+					ChunkConstraints *ccs =
+						ts_chunk_constraint_scan_by_chunk_id(chunk->fd.id,
+															 10,
+															 CurrentMemoryContext);
+					Assert(cmd->name);
+
+					for (int i = 0; i < ccs->num_constraints; i++)
+					{
+						ChunkConstraint *cc = &ccs->constraints[i];
+
+						if (namestrcmp(&cc->fd.constraint_name, cmd->name) == 0)
+							ereport(ERROR,
+									(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+									 errmsg("cannot drop inherited constraint"),
+									 errhint("Drop the constraint on the hypertable instead.")));
 					}
 					break;
 				}
@@ -233,6 +259,7 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			 * This is a whitelist of allowed commands.
 			 */
 			case AT_AddIndex:
+			case AT_AddConstraint:
 			case AT_ReAddIndex:
 			case AT_ResetRelOptions:
 			case AT_ReplaceRelOptions:
@@ -251,6 +278,9 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			case AT_ReplicaIdentity:
 			case AT_ReAddStatistics:
 			case AT_SetCompression:
+#if PG15_GE
+			case AT_SetAccessMethod:
+#endif
 				continue;
 				/*
 				 * BLOCKED:
@@ -697,8 +727,9 @@ add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
 		makeVacuumRelation(chunk_range_var, chunk_relid, ctx->ht_vacuum_rel->va_cols);
 	ctx->chunk_rels = lappend(ctx->chunk_rels, chunk_vacuum_rel);
 
-	/* If we have a compressed chunk, make sure to analyze it as well */
-	if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+	/* If we have a compressed chunk and the chunk is not using hypercore
+	 * access method, make sure to analyze it as well */
+	if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID && !ts_is_hypercore_am(chunk->amoid))
 	{
 		Chunk *comp_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
 		/* Compressed chunk might be missing due to concurrent operations */
@@ -1040,8 +1071,9 @@ process_truncate(ProcessUtilityArgs *args)
 						 * the truncated region. */
 						if (ts_continuous_agg_hypertable_status(ht->fd.id) == HypertableIsRawTable)
 							ts_continuous_agg_invalidate_chunk(ht, chunk);
-						/* Truncate the compressed chunk too. */
-						if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+						/* Truncate the compressed chunk too, unless it is a hypercore table. */
+						if (!ts_is_hypercore_am(chunk->amoid) &&
+							chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
 						{
 							Chunk *compressed_chunk =
 								ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
@@ -2222,24 +2254,54 @@ process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd)
 	}
 }
 
+typedef struct ChunkConstraintInfo
+{
+	const AlterTableCmd *cmd;
+	const char *constraint_name;
+	Oid hypertable_constraint_oid;
+} ChunkConstraintInfo;
+
 static void
 process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
-	Oid hypertable_constraint_oid = *((Oid *) arg);
+	const ChunkConstraintInfo *info = arg;
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 
-	ts_chunk_constraint_create_on_chunk(ht, chunk, hypertable_constraint_oid);
+	switch (info->cmd->subtype)
+	{
+		case AT_AddIndex:
+		case AT_AddConstraint:
+#if PG16_LT
+		case AT_AddConstraintRecurse:
+#endif
+			if (ts_chunk_is_compressed(chunk) && !ts_is_hypercore_am(chunk->amoid))
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("operation not supported on hypertables that have compressed "
+								"data"),
+						 errhint("Decompress the data before retrying the operation.")));
+			break;
+			/* Other AT commands might not be allowed on compressed chunks, but
+			 * they are checked at hypertable level in that case */
+		default:
+			break;
+	}
+
+	ts_chunk_constraint_create_on_chunk(ht, chunk, info->hypertable_constraint_oid);
 }
 
 static void
-process_altertable_add_constraint(Hypertable *ht, const char *constraint_name)
+process_altertable_add_constraint(Hypertable *ht, const AlterTableCmd *cmd,
+								  const char *constraint_name)
 {
-	Oid hypertable_constraint_oid =
-		get_relation_constraint_oid(ht->main_table_relid, constraint_name, false);
+	ChunkConstraintInfo info = {
+		.cmd = cmd,
+		.constraint_name = constraint_name,
+		.hypertable_constraint_oid =
+			get_relation_constraint_oid(ht->main_table_relid, constraint_name, false),
+	};
 
-	Assert(constraint_name != NULL);
-
-	foreach_chunk(ht, process_add_constraint_chunk, &hypertable_constraint_oid);
+	foreach_chunk(ht, process_add_constraint_chunk, &info);
 }
 
 static void
@@ -2425,6 +2487,22 @@ typedef struct CreateIndexInfo
 	MemoryContext mctx;
 } CreateIndexInfo;
 
+static inline void
+raise_error_if_creating_index_on_compressed(const Chunk *chunk, const IndexStmt *stmt)
+{
+	if (ts_chunk_is_compressed(chunk) && !ts_is_hypercore_am(chunk->amoid))
+	{
+		/* unique indexes are not allowed on compressed hypertables*/
+		if (stmt->unique || stmt->primary || stmt->isconstraint)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("operation not supported on hypertables that have compression "
+							"enabled")));
+		}
+	}
+}
+
 /*
  * Create index on a chunk.
  *
@@ -2446,9 +2524,29 @@ process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 		ereport(NOTICE, (errmsg("skipping index creation for tiered data")));
 		return;
 	}
+
+	raise_error_if_creating_index_on_compressed(chunk, info->stmt);
+
 	chunk_rel = table_open(chunk_relid, ShareLock);
 	hypertable_index_rel = index_open(info->obj.objectId, AccessShareLock);
 	indexinfo = BuildIndexInfo(hypertable_index_rel);
+
+	/* Hypercore does not support arbitrary index, so abort if a non-approved
+	 * index type is used.
+	 *
+	 * We are using a whitelist rather than a blacklist because supporting
+	 * indexes on Hypercore requires special considerations given its
+	 * dual-heap implementation. */
+	if (ts_is_hypercore_am(chunk->amoid))
+	{
+		Assert(OidIsValid(hypertable_index_rel->rd_rel->relam));
+		const char *amname = get_am_name(hypertable_index_rel->rd_rel->relam);
+		if (!ts_is_whitelisted_indexam(amname))
+			ereport(ERROR,
+					errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					errmsg("index access method \"%s\" not supported", amname),
+					errdetail("Available candidates: %s", ts_guc_hypercore_indexam_whitelist));
+	}
 
 	if (chunk_index_columns_changed(info->extended_options.n_ht_atts, RelationGetDescr(chunk_rel)))
 		ts_adjust_indexinfo_attnos(indexinfo, info->main_table_relid, chunk_rel);
@@ -2554,6 +2652,9 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 	{
 		ereport(NOTICE, (errmsg("skipping index creation for tiered data")));
 	}
+
+	raise_error_if_creating_index_on_compressed(chunk, info->stmt);
+
 	table_close(chunk_rel, NoLock);
 
 	ts_catalog_restore_user(&sec_ctx);
@@ -2673,18 +2774,6 @@ process_index_start(ProcessUtilityArgs *args)
 
 		/* Make the RangeVar for the underlying materialization hypertable */
 		stmt->relation = makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), -1);
-	}
-	else if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
-	{
-		/* unique indexes are not allowed on compressed hypertables*/
-		if (stmt->unique || stmt->primary || stmt->isconstraint)
-		{
-			ts_cache_release(hcache);
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("operation not supported on hypertables that have compression "
-							"enabled")));
-		}
 	}
 
 	ts_hypertable_permissions_check_by_id(ht->fd.id);
@@ -2866,6 +2955,24 @@ chunk_index_mappings_cmp(const void *p1, const void *p2)
 	if (lhs->chunkoid > rhs->chunkoid)
 		return 1;
 	return 0;
+}
+
+static DDLResult
+process_explain_start(ProcessUtilityArgs *args)
+{
+	ExplainStmt *stmt = castNode(ExplainStmt, args->parsetree);
+	ListCell *lc;
+
+	if (ts_cm_functions->process_explain_def)
+	{
+		foreach (lc, stmt->options)
+		{
+			DefElem *opt = (DefElem *) lfirst(lc);
+			if (ts_cm_functions->process_explain_def(opt))
+				foreach_delete_current(stmt->options, lc);
+		}
+	}
+	return DDL_CONTINUE;
 }
 
 /*
@@ -3388,7 +3495,7 @@ process_set_access_method(AlterTableCmd *cmd, ProcessUtilityArgs *args)
 	Oid relid = AlterTableLookupRelation(stmt, NoLock);
 	Cache *hcache;
 	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
-	if (ht && (strcmp(cmd->name, "hypercore_tam") == 0))
+	if (ht && (strcmp(cmd->name, TS_HYPERCORE_TAM_NAME) == 0))
 	{
 		/* For hypertables, we automatically add command to set the
 		 * compression flag if we are setting the access method to be a
@@ -3761,7 +3868,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			if (idxname == NULL)
 				idxname = get_rel_name(obj->objectId);
 
-			process_altertable_add_constraint(ht, idxname);
+			process_altertable_add_constraint(ht, cmd, idxname);
 		}
 		break;
 		case AT_AddConstraint:
@@ -3774,14 +3881,10 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 
 			Assert(IsA(cmd->def, Constraint));
 
-			/* Check constraints are recursed to chunks by default */
-			if (stmt->contype == CONSTR_CHECK)
-				break;
-
 			if (conname == NULL)
 				conname = get_rel_name(obj->objectId);
 
-			process_altertable_add_constraint(ht, conname);
+			process_altertable_add_constraint(ht, cmd, conname);
 		}
 		break;
 		case AT_AlterColumnType:
@@ -4260,6 +4363,34 @@ process_create_table_as(ProcessUtilityArgs *args)
 	return DDL_CONTINUE;
 }
 
+#if PG15_GE
+static DDLResult
+process_create_stmt(ProcessUtilityArgs *args)
+{
+	CreateStmt *stmt = castNode(CreateStmt, args->parsetree);
+
+	if (stmt->accessMethod && strcmp(stmt->accessMethod, TS_HYPERCORE_TAM_NAME) == 0)
+		ereport(ERROR,
+				errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				errmsg("hypercore access method not supported on \"%s\"", stmt->relation->relname),
+				errdetail("The hypercore access method is only supported for hypertables."),
+				errhint("Create a hypertable from a table using another access method (e.g., heap),"
+						" then use \"ALTER TABLE\" to set the access method to hypercore."));
+
+	if (default_table_access_method &&
+		strcmp(default_table_access_method, TS_HYPERCORE_TAM_NAME) == 0)
+		ereport(ERROR,
+				errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				errmsg("hypercore access method not supported on \"%s\"", stmt->relation->relname),
+				errdetail("The hypercore access method is only supported for hypertables."),
+				errhint("It does not make sense to set the default access method for all tables "
+						"to \"%s\" since it is only supported for hypertables.",
+						TS_HYPERCORE_TAM_NAME));
+
+	return DDL_CONTINUE;
+}
+#endif
+
 static DDLResult
 process_refresh_mat_view_start(ProcessUtilityArgs *args)
 {
@@ -4380,10 +4511,20 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 		case T_CreateTableAsStmt:
 			handler = process_create_table_as;
 			break;
+#if PG15_GE
+		case T_CreateStmt:
+			handler = process_create_stmt;
+			break;
+#endif
+
 		case T_ExecuteStmt:
 			check_read_only = false;
 			handler = preprocess_execute;
 			break;
+		case T_ExplainStmt:
+			handler = process_explain_start;
+			break;
+
 		default:
 			handler = NULL;
 			break;
@@ -4606,7 +4747,7 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string, bool
 	 * We don't want to load the extension if we just got the command to alter
 	 * it.
 	 */
-	if (altering_timescaledb || !ts_extension_is_loaded())
+	if (altering_timescaledb || !ts_extension_is_loaded_and_not_upgrading())
 	{
 		prev_ProcessUtility(&args);
 		return;
@@ -4617,6 +4758,14 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string, bool
 	 * execution in TSL.
 	 */
 	result = process_ddl_command_start(&args);
+
+	/*
+	 * We need to run tsl-side ddl_command_start hook before
+	 * standard process utility hook to maintain proper invocation
+	 * order of sql_drop and ddl_command_end triggers.
+	 */
+	if (ts_cm_functions->ddl_command_start && result == DDL_CONTINUE)
+		result = ts_cm_functions->ddl_command_start(&args);
 
 	/*
 	 * We need to run tsl-side ddl_command_start hook before
@@ -4634,6 +4783,9 @@ process_ddl_event_command_end(EventTriggerData *trigdata)
 
 	/* Inhibit collecting new commands while in the trigger */
 	EventTriggerInhibitCommandCollection();
+
+	if (ts_cm_functions->ddl_command_end)
+		ts_cm_functions->ddl_command_end(trigdata);
 
 	switch (nodeTag(trigdata->parsetree))
 	{
@@ -4675,7 +4827,7 @@ ts_timescaledb_process_ddl_event(PG_FUNCTION_ARGS)
 	if (!CALLED_AS_EVENT_TRIGGER(fcinfo))
 		elog(ERROR, "not fired by event trigger manager");
 
-	if (!ts_extension_is_loaded())
+	if (!ts_extension_is_loaded_and_not_upgrading())
 		PG_RETURN_NULL();
 
 	if (strcmp("ddl_command_end", trigdata->event) == 0)

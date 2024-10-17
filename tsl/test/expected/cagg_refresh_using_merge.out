@@ -122,8 +122,7 @@ CALL refresh_continuous_aggregate('daily_temp', '2020-04-30', '2020-05-04');
 psql:include/cagg_refresh_common.sql:65: LOG:  statement: CALL refresh_continuous_aggregate('daily_temp', '2020-04-30', '2020-05-04');
 psql:include/cagg_refresh_common.sql:65: DEBUG:  hypertable 1 existing watermark >= new invalidation threshold 1588723200000000 1588550400000000
 psql:include/cagg_refresh_common.sql:65: DEBUG:  continuous aggregate refresh (individual invalidation) on "daily_temp" in window [ Thu Apr 30 17:00:00 2020 PDT, Sat May 02 17:00:00 2020 PDT ]
-psql:include/cagg_refresh_common.sql:65: LOG:  merged 8 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
-psql:include/cagg_refresh_common.sql:65: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
+psql:include/cagg_refresh_common.sql:65: LOG:  inserted 8 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 psql:include/cagg_refresh_common.sql:65: DEBUG:  hypertable 2 existing watermark >= new watermark 1588723200000000 1588723200000000
 RESET client_min_messages;
 psql:include/cagg_refresh_common.sql:66: LOG:  statement: RESET client_min_messages;
@@ -491,3 +490,193 @@ SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions
 GROUP BY 1,2 WITH NO DATA;
 COMMIT;
+-- Additional tests for MERGE refresh
+DROP TABLE conditions CASCADE;
+NOTICE:  drop cascades to 10 other objects
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_2_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_12_24_chunk
+CREATE TABLE conditions (
+    time TIMESTAMPTZ NOT NULL,
+    location TEXT NOT NULL,
+    temperature DOUBLE PRECISION,
+    humidity DOUBLE PRECISION
+);
+SELECT FROM create_hypertable( 'conditions', 'time');
+--
+(1 row)
+
+INSERT INTO conditions
+VALUES
+    ('2018-01-01 09:20:00-08', 'SFO', 55, 45),
+    ('2018-01-02 09:30:00-08', 'POR', 100, 100),
+    ('2018-01-02 09:20:00-08', 'SFO', 65, 45),
+    ('2018-01-02 09:10:00-08', 'NYC', 65, 45),
+    ('2018-11-01 09:20:00-08', 'NYC', 45, 30),
+    ('2018-11-01 10:40:00-08', 'NYC', 55, 35),
+    ('2018-11-01 11:50:00-08', 'NYC', 65, 40),
+    ('2018-11-01 12:10:00-08', 'NYC', 75, 45),
+    ('2018-11-01 13:10:00-08', 'NYC', 85, 50),
+    ('2018-11-02 09:20:00-08', 'NYC', 10, 10),
+    ('2018-11-02 10:30:00-08', 'NYC', 20, 15),
+    ('2018-11-02 11:40:00-08', 'NYC', null, null),
+    ('2018-11-03 09:50:00-08', 'NYC', null, null);
+CREATE MATERIALIZED VIEW conditions_daily
+WITH (timescaledb.continuous) AS
+SELECT
+   time_bucket(INTERVAL '1 day', time) AS bucket,
+   location,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature)
+FROM conditions
+GROUP BY bucket, location
+WITH NO DATA;
+-- First refresh using MERGE should fall back to INSERT
+SET client_min_messages TO LOG;
+CALL refresh_continuous_aggregate('conditions_daily', NULL, '2018-11-01 23:59:59-08');
+LOG:  statement: CALL refresh_continuous_aggregate('conditions_daily', NULL, '2018-11-01 23:59:59-08');
+LOG:  inserted 5 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_16"
+SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
+LOG:  statement: SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
+            bucket            | location | avg | max | min 
+------------------------------+----------+-----+-----+-----
+ Sun Dec 31 16:00:00 2017 PST | SFO      |  55 |  55 |  55
+ Mon Jan 01 16:00:00 2018 PST | NYC      |  65 |  65 |  65
+ Mon Jan 01 16:00:00 2018 PST | POR      | 100 | 100 | 100
+ Mon Jan 01 16:00:00 2018 PST | SFO      |  65 |  65 |  65
+ Wed Oct 31 17:00:00 2018 PDT | NYC      |  65 |  85 |  45
+(5 rows)
+
+-- Second refresh using MERGE should also fall back to INSERT since there's no data in the materialization hypertable
+CALL refresh_continuous_aggregate('conditions_daily', '2018-11-01', NULL);
+LOG:  statement: CALL refresh_continuous_aggregate('conditions_daily', '2018-11-01', NULL);
+LOG:  inserted 2 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_16"
+SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
+LOG:  statement: SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
+            bucket            | location | avg | max | min 
+------------------------------+----------+-----+-----+-----
+ Sun Dec 31 16:00:00 2017 PST | SFO      |  55 |  55 |  55
+ Mon Jan 01 16:00:00 2018 PST | NYC      |  65 |  65 |  65
+ Mon Jan 01 16:00:00 2018 PST | POR      | 100 | 100 | 100
+ Mon Jan 01 16:00:00 2018 PST | SFO      |  65 |  65 |  65
+ Wed Oct 31 17:00:00 2018 PDT | NYC      |  65 |  85 |  45
+ Thu Nov 01 17:00:00 2018 PDT | NYC      |  15 |  20 |  10
+ Fri Nov 02 17:00:00 2018 PDT | NYC      |     |     |    
+(7 rows)
+
+-- All data should be in the materialization hypertable
+CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
+LOG:  statement: CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
+NOTICE:  continuous aggregate "conditions_daily" is already up-to-date
+SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
+LOG:  statement: SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
+            bucket            | location | avg | max | min 
+------------------------------+----------+-----+-----+-----
+ Sun Dec 31 16:00:00 2017 PST | SFO      |  55 |  55 |  55
+ Mon Jan 01 16:00:00 2018 PST | NYC      |  65 |  65 |  65
+ Mon Jan 01 16:00:00 2018 PST | POR      | 100 | 100 | 100
+ Mon Jan 01 16:00:00 2018 PST | SFO      |  65 |  65 |  65
+ Wed Oct 31 17:00:00 2018 PDT | NYC      |  65 |  85 |  45
+ Thu Nov 01 17:00:00 2018 PDT | NYC      |  15 |  20 |  10
+ Fri Nov 02 17:00:00 2018 PDT | NYC      |     |     |    
+(7 rows)
+
+-- Changing past data that is not part of the cagg
+UPDATE conditions SET humidity = humidity + 100 WHERE time = '2018-01-02 09:20:00-08' AND location = 'SFO';
+LOG:  statement: UPDATE conditions SET humidity = humidity + 100 WHERE time = '2018-01-02 09:20:00-08' AND location = 'SFO';
+-- Shoudn't affect the materialization hypertable (merged=0 and deleted=0)
+CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
+LOG:  statement: CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
+LOG:  merged 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_16"
+LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_16"
+SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
+LOG:  statement: SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
+            bucket            | location | avg | max | min 
+------------------------------+----------+-----+-----+-----
+ Sun Dec 31 16:00:00 2017 PST | SFO      |  55 |  55 |  55
+ Mon Jan 01 16:00:00 2018 PST | NYC      |  65 |  65 |  65
+ Mon Jan 01 16:00:00 2018 PST | POR      | 100 | 100 | 100
+ Mon Jan 01 16:00:00 2018 PST | SFO      |  65 |  65 |  65
+ Wed Oct 31 17:00:00 2018 PDT | NYC      |  65 |  85 |  45
+ Thu Nov 01 17:00:00 2018 PDT | NYC      |  15 |  20 |  10
+ Fri Nov 02 17:00:00 2018 PDT | NYC      |     |     |    
+(7 rows)
+
+-- Backfill some data in the past
+INSERT INTO conditions
+VALUES
+    ('2017-01-01 09:20:00-08', 'GRU', 55, 45),
+    ('2017-01-01 09:30:00-08', 'POA', 100, 100),
+    ('2017-01-02 09:20:00-08', 'CNF', 65, 45);
+LOG:  statement: INSERT INTO conditions
+VALUES
+    ('2017-01-01 09:20:00-08', 'GRU', 55, 45),
+    ('2017-01-01 09:30:00-08', 'POA', 100, 100),
+    ('2017-01-02 09:20:00-08', 'CNF', 65, 45);
+-- There's no data in the affected range so the refresh should fall back to INSERT
+CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
+LOG:  statement: CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
+LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_16"
+SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
+LOG:  statement: SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
+            bucket            | location | avg | max | min 
+------------------------------+----------+-----+-----+-----
+ Sat Dec 31 16:00:00 2016 PST | GRU      |  55 |  55 |  55
+ Sat Dec 31 16:00:00 2016 PST | POA      | 100 | 100 | 100
+ Sun Jan 01 16:00:00 2017 PST | CNF      |  65 |  65 |  65
+ Sun Dec 31 16:00:00 2017 PST | SFO      |  55 |  55 |  55
+ Mon Jan 01 16:00:00 2018 PST | NYC      |  65 |  65 |  65
+ Mon Jan 01 16:00:00 2018 PST | POR      | 100 | 100 | 100
+ Mon Jan 01 16:00:00 2018 PST | SFO      |  65 |  65 |  65
+ Wed Oct 31 17:00:00 2018 PDT | NYC      |  65 |  85 |  45
+ Thu Nov 01 17:00:00 2018 PDT | NYC      |  15 |  20 |  10
+ Fri Nov 02 17:00:00 2018 PDT | NYC      |     |     |    
+(10 rows)
+
+-- Update already materilized data in the past
+UPDATE conditions SET temperature = temperature + 100 WHERE time = '2018-11-02 10:30:00-08' AND location = 'NYC';
+LOG:  statement: UPDATE conditions SET temperature = temperature + 100 WHERE time = '2018-11-02 10:30:00-08' AND location = 'NYC';
+-- Should merge 1 bucket (merged=1 and deleted=0)
+CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
+LOG:  statement: CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
+LOG:  merged 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_16"
+LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_16"
+SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
+LOG:  statement: SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
+            bucket            | location | avg | max | min 
+------------------------------+----------+-----+-----+-----
+ Sat Dec 31 16:00:00 2016 PST | GRU      |  55 |  55 |  55
+ Sat Dec 31 16:00:00 2016 PST | POA      | 100 | 100 | 100
+ Sun Jan 01 16:00:00 2017 PST | CNF      |  65 |  65 |  65
+ Sun Dec 31 16:00:00 2017 PST | SFO      |  55 |  55 |  55
+ Mon Jan 01 16:00:00 2018 PST | NYC      |  65 |  65 |  65
+ Mon Jan 01 16:00:00 2018 PST | POR      | 100 | 100 | 100
+ Mon Jan 01 16:00:00 2018 PST | SFO      |  65 |  65 |  65
+ Wed Oct 31 17:00:00 2018 PDT | NYC      |  65 |  85 |  45
+ Thu Nov 01 17:00:00 2018 PDT | NYC      |  65 | 120 |  10
+ Fri Nov 02 17:00:00 2018 PDT | NYC      |     |     |    
+(10 rows)
+
+-- Delete one entire bucket
+DELETE FROM conditions WHERE time >= '2018-11-02' AND time < '2018-11-03' AND location = 'NYC';
+LOG:  statement: DELETE FROM conditions WHERE time >= '2018-11-02' AND time < '2018-11-03' AND location = 'NYC';
+-- Should not merge any bucket but delete one bucket (merged=0 and deleted=1)
+CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
+LOG:  statement: CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
+LOG:  merged 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_16"
+LOG:  deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_16"
+SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
+LOG:  statement: SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
+            bucket            | location | avg | max | min 
+------------------------------+----------+-----+-----+-----
+ Sat Dec 31 16:00:00 2016 PST | GRU      |  55 |  55 |  55
+ Sat Dec 31 16:00:00 2016 PST | POA      | 100 | 100 | 100
+ Sun Jan 01 16:00:00 2017 PST | CNF      |  65 |  65 |  65
+ Sun Dec 31 16:00:00 2017 PST | SFO      |  55 |  55 |  55
+ Mon Jan 01 16:00:00 2018 PST | NYC      |  65 |  65 |  65
+ Mon Jan 01 16:00:00 2018 PST | POR      | 100 | 100 | 100
+ Mon Jan 01 16:00:00 2018 PST | SFO      |  65 |  65 |  65
+ Wed Oct 31 17:00:00 2018 PDT | NYC      |  65 |  85 |  45
+ Fri Nov 02 17:00:00 2018 PDT | NYC      |     |     |    
+(9 rows)
+
