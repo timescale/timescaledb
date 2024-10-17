@@ -575,7 +575,7 @@ SH_GROW(SH_TYPE *tb, uint64 newsize)
  * This is a separate static inline function, so it can be reliably be inlined
  * into its wrapper functions even if SH_SCOPE is extern.
  */
-static pg_attribute_always_inline SH_ELEMENT_TYPE *
+static inline SH_ELEMENT_TYPE *
 SH_INSERT_HASH_INTERNAL(SH_TYPE *restrict tb, SH_KEY_TYPE key, uint32 hash, bool *found)
 {
 	/*
