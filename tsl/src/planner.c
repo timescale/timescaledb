@@ -161,7 +161,7 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 	 */
 	else if (ts_is_hypercore_am(chunk->amoid))
 	{
-		if (ts_guc_enable_columnarscan)
+		if (ts_guc_enable_transparent_decompression != 2)
 			columnar_scan_set_rel_pathlist(root, rel, ht);
 
 		hypercore_set_rel_pathlist(root, rel, ht);

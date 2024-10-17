@@ -1,6 +1,7 @@
 DUMPFILE=${DUMPFILE:-$1}
+EXTRA_PGOPTIONS=${EXTRA_PGOPTIONS:-$2}
 # Override PGOPTIONS to remove verbose output
-PGOPTIONS='--client-min-messages=warning'
+PGOPTIONS="--client-min-messages=warning $EXTRA_PGOPTIONS"
 
 export PGOPTIONS
 

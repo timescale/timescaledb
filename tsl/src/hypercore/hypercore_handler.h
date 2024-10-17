@@ -13,11 +13,6 @@
 
 #include "hypertable.h"
 
-/* Scan key flag (skey.h) to indicate that a table scan should only return
- * tuples from the non-compressed relation. Bits 16-31 are reserved for
- * individual access methods, so use bit 16. */
-#define SK_NO_COMPRESSED 0x8000
-
 extern void hypercore_set_analyze_relid(Oid relid);
 extern const TableAmRoutine *hypercore_routine(void);
 extern void hypercore_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht);
@@ -25,6 +20,8 @@ extern void hypercore_alter_access_method_begin(Oid relid, bool to_other_am);
 extern void hypercore_alter_access_method_finish(Oid relid, bool to_other_am);
 extern Datum hypercore_handler(PG_FUNCTION_ARGS);
 extern void hypercore_xact_event(XactEvent event, void *arg);
+extern void hypercore_skip_compressed_data_for_relation(Oid relid);
+extern void hypercore_scan_set_skip_compressed(TableScanDesc scan);
 
 typedef struct ColumnCompressionSettings
 {
