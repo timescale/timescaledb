@@ -44,12 +44,12 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	 * Pad the number of elements to multiple of 64 bytes if needed, so that we
 	 * can work in 64-byte blocks.
 	 */
+#define INNER_LOOP_SIZE_LOG2 3
+#define INNER_LOOP_SIZE (1 << INNER_LOOP_SIZE_LOG2)
 	const uint32 n_total = has_nulls ? nulls.num_elements : num_deltas;
-	const uint32 n_total_padded =
-		((n_total * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
+	const uint32 n_total_padded = pad_to_multiple(INNER_LOOP_SIZE, n_total);
 	const uint32 n_notnull = num_deltas;
-	const uint32 n_notnull_padded =
-		((n_notnull * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
+	const uint32 n_notnull_padded = pad_to_multiple(INNER_LOOP_SIZE, n_notnull);
 	Assert(n_total_padded >= n_total);
 	Assert(n_notnull_padded >= n_notnull);
 	Assert(n_total >= n_notnull);
@@ -57,7 +57,7 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 
 	/*
 	 * We need additional padding at the end of buffer, because the code that
-	 * converts the elements to postres Datum always reads in 8 bytes.
+	 * converts the elements to postgres Datum always reads in 8 bytes.
 	 */
 	const int buffer_bytes = n_total_padded * sizeof(ELEMENT_TYPE) + 8;
 	ELEMENT_TYPE *restrict decompressed_values = MemoryContextAlloc(dest_mctx, buffer_bytes);
@@ -75,7 +75,6 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	 * Also tried zig-zag decoding in a separate loop, seems to be slightly
 	 * slower, around the noise threshold.
 	 */
-#define INNER_LOOP_SIZE 8
 	Assert(n_notnull_padded % INNER_LOOP_SIZE == 0);
 	for (uint32 outer = 0; outer < n_notnull_padded; outer += INNER_LOOP_SIZE)
 	{
@@ -86,6 +85,7 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 			decompressed_values[outer + inner] = current_element;
 		}
 	}
+#undef INNER_LOOP_SIZE_LOG2
 #undef INNER_LOOP_SIZE
 
 	uint64 *restrict validity_bitmap = NULL;
