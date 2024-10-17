@@ -188,9 +188,9 @@ lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 	/* Create compressed chunk and set the created flag if it does not
 	 * exist. */
 	if (compressed_relation_created)
-		*compressed_relation_created = (hsinfo->compressed_relation_id == 0);
+		*compressed_relation_created = (hsinfo->compressed_relation_id == INVALID_CHUNK_ID);
 
-	if (hsinfo->compressed_relation_id == 0)
+	if (hsinfo->compressed_relation_id == INVALID_CHUNK_ID)
 	{
 		/* Consider if we want to make it simpler to create the compressed
 		 * table by just considering a normal side-relation with no strong
@@ -3062,7 +3062,7 @@ hypercore_relation_size(Relation rel, ForkNumber forkNumber)
 	uint64 ubytes = table_block_relation_size(rel, forkNumber);
 	int32 hyper_id = ts_chunk_get_hypertable_id_by_reloid(rel->rd_id);
 
-	if (hyper_id == 0)
+	if (hyper_id == INVALID_HYPERTABLE_ID)
 		return ubytes;
 
 	HypercoreInfo *hsinfo = RelationGetHypercoreInfo(rel);
