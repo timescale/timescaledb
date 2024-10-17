@@ -310,3 +310,64 @@ SELECT sum(_ts_meta_count) FROM :cchunk;
 SELECT count(*) FROM :chunk;
 
 drop table readings;
+
+---------------------------------------------
+-- Test recompression via compress_chunk() --
+---------------------------------------------
+show timescaledb.enable_transparent_decompression;
+
+create table recompress (time timestamptz, value int);
+select create_hypertable('recompress', 'time', create_default_indexes => false);
+insert into recompress values ('2024-01-01 01:00', 1), ('2024-01-01 02:00', 2);
+
+select format('%I.%I', chunk_schema, chunk_name)::regclass as unique_chunk
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = 'recompress'::regclass
+ order by unique_chunk asc
+ limit 1 \gset
+
+alter table recompress set (timescaledb.compress_orderby='time');
+alter table :unique_chunk set access method hypercore;
+
+-- Should already be compressed
+select compress_chunk(:'unique_chunk');
+
+-- Insert something to compress
+insert into recompress values ('2024-01-01 03:00', 3);
+
+select compress_chunk(:'unique_chunk');
+
+-- Make sure we see the data after recompression and everything is
+-- compressed
+select _timescaledb_debug.is_compressed_tid(ctid), * from recompress order by time;
+
+-- Add a time index to test recompression with index scan. Index scans
+-- during compression is actually disabled for Hypercore TAM since the
+-- index covers also compressed data, so this is only a check that the
+-- GUC can be set without negative consequences.
+create index on recompress (time);
+set timescaledb.enable_compression_indexscan=true;
+
+-- Insert another value to compress
+insert into recompress values ('2024-01-02 04:00', 4);
+select compress_chunk(:'unique_chunk');
+select _timescaledb_debug.is_compressed_tid(ctid), * from recompress order by time;
+
+-- Test using delete instead of truncate when compressing
+set timescaledb.enable_delete_after_compression=true;
+
+-- Insert another value to compress
+insert into recompress values ('2024-01-02 05:00', 5);
+
+select compress_chunk(:'unique_chunk');
+select _timescaledb_debug.is_compressed_tid(ctid), * from recompress order by time;
+
+-- Add a segmentby key to test segmentwise recompression
+-- Insert another value to compress that goes into same segment
+alter table :unique_chunk set access method heap;
+alter table recompress set (timescaledb.compress_orderby='time', timescaledb.compress_segmentby='value');
+alter table :unique_chunk set access method hypercore;
+insert into recompress values ('2024-01-02 06:00', 5);
+
+select compress_chunk(:'unique_chunk');
+select _timescaledb_debug.is_compressed_tid(ctid), * from recompress order by time;

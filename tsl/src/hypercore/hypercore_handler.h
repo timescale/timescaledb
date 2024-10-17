@@ -25,6 +25,7 @@ extern void hypercore_alter_access_method_begin(Oid relid, bool to_other_am);
 extern void hypercore_alter_access_method_finish(Oid relid, bool to_other_am);
 extern Datum hypercore_handler(PG_FUNCTION_ARGS);
 extern void hypercore_xact_event(XactEvent event, void *arg);
+extern bool hypercore_set_truncate_compressed(bool onoff);
 
 typedef struct ColumnCompressionSettings
 {
@@ -55,5 +56,7 @@ typedef struct HypercoreInfo
 	/* Per-column information follows. */
 	ColumnCompressionSettings columns[FLEXIBLE_ARRAY_MEMBER];
 } HypercoreInfo;
+
+#define REL_IS_HYPERCORE(rel) ((rel)->rd_tableam == hypercore_routine())
 
 extern HypercoreInfo *RelationGetHypercoreInfo(Relation rel);
