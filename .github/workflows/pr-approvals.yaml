@@ -5,6 +5,7 @@
 name: PR Approval Check
 "on":
   pull_request:
+    types: [opened, synchronize, reopened, edited, auto_merge_enabled, auto_merge_disabled]
     branches: [main]
 jobs:
 
@@ -27,9 +28,7 @@ jobs:
             # Get the list of modified files in this pull request
             files=$(gh pr view $PR_NUMBER --json files --jq '.files.[].path | select(startswith(".github") | not)')
             # Get the number of approvals in this pull request
-            approvals=$(gh pr view $PR_NUMBER --json reviews --jq '[.reviews.[] | select(.authorAssociation == "MEMBER" and .state == "APPROVED")] | length')
-
-            gh pr view $PR_NUMBER --json reviews --jq '[.reviews.[] | select(.authorAssociation == "MEMBER" and .state == "APPROVED")]'
+            approvals=$(gh pr view $PR_NUMBER --json reviews --jq '[.reviews.[] | select((.authorAssociation == "MEMBER" or .authorAssociation == "CONTRIBUTOR") and .state == "APPROVED")] | length')
 
             if [[ $approvals -lt 2 ]] && [[ "${files}" ]] ; then
               echo "This pull request requires 2 approvals before merging."
