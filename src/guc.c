@@ -134,6 +134,7 @@ bool ts_guc_enable_vectorized_aggregation = true;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = false;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
+bool ts_guc_enable_chunk_skipping = false;
 
 /* Enable of disable columnar scans for columnar-oriented storage engines. If
  * disabled, regular sequence scans will be used instead. */
@@ -666,6 +667,18 @@ _guc_init(void)
 							 "Enable MERGE statement on cagg refresh",
 							 "Enable MERGE statement on cagg refresh",
 							 &ts_guc_enable_merge_on_cagg_refresh,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_chunk_skipping"),
+							 "Enable chunk skipping functionality",
+							 "Enable using chunk column stats to filter chunks based on column "
+							 "filters",
+							 &ts_guc_enable_chunk_skipping,
 							 false,
 							 PGC_USERSET,
 							 0,

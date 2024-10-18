@@ -18,6 +18,7 @@
 #include "compat/compat.h"
 #include "chunk_column_stats.h"
 #include "dimension_vector.h"
+#include "guc.h"
 
 /*
  * Enable chunk column stats attributes
@@ -388,6 +389,12 @@ ts_chunk_column_stats_enable(PG_FUNCTION_ARGS)
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
+	if (!ts_guc_enable_chunk_skipping)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("chunk skipping functionality disabled, "
+						"enable it by first setting timescaledb.enable_chunk_skipping to on")));
+
 	if (PG_ARGISNULL(0))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("hypertable cannot be NULL")));
@@ -423,6 +430,12 @@ ts_chunk_column_stats_disable(PG_FUNCTION_ARGS)
 	int delete_count = 0;
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	if (!ts_guc_enable_chunk_skipping)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("chunk skipping functionality disabled, "
+						"enable it by first setting timescaledb.enable_chunk_skipping to on")));
 
 	if (PG_ARGISNULL(0))
 		ereport(ERROR,
