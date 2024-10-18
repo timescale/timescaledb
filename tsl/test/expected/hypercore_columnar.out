@@ -9,6 +9,23 @@
 -- emitted plan. This is intended to be used when the structure of the
 -- plan is important, but not the specific chunks scanned nor the
 -- number of heap fetches, rows, loops, etc.
+create function anonymize(ln text) returns text language plpgsql as
+$$
+begin
+    ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
+    ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
+    ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
+    ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
+
+    if trim(both from ln) like 'Array: %' then
+       ln := regexp_replace(ln, 'hits=\d+', 'hits=N');
+       ln := regexp_replace(ln, 'misses=\d+', 'misses=N');
+       ln := regexp_replace(ln, 'count=\d+', 'count=N');
+       ln := regexp_replace(ln, 'calls=\d+', 'calls=N');
+    end if;
+    return ln;
+end
+$$;
 create function explain_analyze_anonymize(text) returns setof text
 language plpgsql as
 $$
@@ -18,17 +35,11 @@ begin
     for ln in
         execute format('explain (analyze, costs off, summary off, timing off, decompress_cache_stats) %s', $1)
     loop
-        if trim(both from ln) like 'Group Key:%' then
-	   continue;
-	end if;
-        ln := regexp_replace(ln, 'Array Cache Hits: \d+', 'Array Cache Hits: N');
-        ln := regexp_replace(ln, 'Array Cache Misses: \d+', 'Array Cache Misses: N');
-        ln := regexp_replace(ln, 'Array Cache Evictions: \d+', 'Array Cache Evictions: N');
-        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
-        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
-        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
-        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
-        return next ln;
+	if trim(both from ln) like 'Group Key:%' then
+       	   continue;
+        end if;
+
+        return next anonymize(ln);
     end loop;
 end;
 $$;
@@ -41,14 +52,10 @@ begin
     for ln in
         execute format('explain (costs off, summary off, timing off) %s', $1)
     loop
-        ln := regexp_replace(ln, 'Array Cache Hits: \d+', 'Array Cache Hits: N');
-        ln := regexp_replace(ln, 'Array Cache Misses: \d+', 'Array Cache Misses: N');
-        ln := regexp_replace(ln, 'Array Cache Evictions: \d+', 'Array Cache Evictions: N');
-        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
-        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
-        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
-        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
-        return next ln;
+	if trim(both from ln) like 'Group Key:%' then
+       	   continue;
+        end if;
+        return next anonymize(ln);
     end loop;
 end;
 $$;
@@ -101,11 +108,8 @@ $$, :'chunk'));
          Scankey: (device < 4)
          Vectorized Filter: (location = 2)
          Rows Removed by Filter: 16
- Array Cache Hits: N
- Array Cache Misses: N
- Array Cache Evictions: N
- Array Decompressions: 3
-(9 rows)
+ Array: cache misses=N, decompress count=N calls=N
+(6 rows)
 
 -- Save away all data from the chunk so that we can compare.
 create table saved as select * from :chunk;
@@ -136,11 +140,8 @@ $$, :'chunk'));
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Vectorized Filter: (humidity > '110'::double precision)
          Rows Removed by Filter: 204
- Array Cache Hits: N
- Array Cache Misses: N
- Array Cache Evictions: N
- Array Decompressions: 30
-(8 rows)
+ Array: cache misses=N, decompress count=N calls=N
+(5 rows)
 
 select count(*) from :chunk where humidity > 110;
  count 
@@ -159,11 +160,8 @@ $$, :'chunk'));
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Vectorized Filter: (humidity > '50'::double precision)
          Rows Removed by Filter: 87
- Array Cache Hits: N
- Array Cache Misses: N
- Array Cache Evictions: N
- Array Decompressions: 30
-(8 rows)
+ Array: cache misses=N, decompress count=N calls=N
+(5 rows)
 
 select lhs.count, rhs.count
 from (select count(*) from :chunk where humidity > 50) lhs,
@@ -194,11 +192,8 @@ $$, :'chunk'));
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Filter: (temp > '50'::numeric)
          Rows Removed by Filter: 204
- Array Cache Hits: N
- Array Cache Misses: N
- Array Cache Evictions: N
- Array Decompressions: 30
-(8 rows)
+ Array: cache misses=N, decompress count=N calls=N
+(5 rows)
 
 select count(*) from :chunk where temp > 50;
  count 
@@ -216,11 +211,8 @@ $$, :'chunk'));
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Filter: (temp > '20'::numeric)
          Rows Removed by Filter: 98
- Array Cache Hits: N
- Array Cache Misses: N
- Array Cache Evictions: N
- Array Decompressions: 30
-(8 rows)
+ Array: cache misses=N, decompress count=N calls=N
+(5 rows)
 
 select lhs.count, rhs.count
 from (select count(*) from :chunk where temp > 20) lhs,
@@ -251,11 +243,8 @@ select count(*) from :chunk where humidity > 40 and temp > 20;
          Filter: (temp > '20'::numeric)
          Rows Removed by Filter: 132
          Vectorized Filter: (humidity > '40'::double precision)
- Array Cache Hits: 0
- Array Cache Misses: 30
- Array Cache Evictions: 0
- Array Decompressions: 60
-(9 rows)
+ Array: cache misses=30, decompress count=60 calls=165
+(6 rows)
 
 select count(*) from :chunk where humidity > 40 and temp > 20;
  count 
@@ -284,11 +273,8 @@ $$, :'chunk'));
          Rows Removed by Filter: 3
          Scankey: (device = 3)
          Vectorized Filter: (humidity > '40'::double precision)
- Array Cache Hits: N
- Array Cache Misses: N
- Array Cache Evictions: N
- Array Decompressions: 2
-(10 rows)
+ Array: cache misses=N, decompress count=N calls=N
+(7 rows)
 
 select count(*) from :chunk where humidity > 40 and temp > 20 and device = 3;
  count 
@@ -318,11 +304,8 @@ $$, :'chunk'));
          ->  Seq Scan on _hyper_I_N_chunk (actual rows=N loops=N)
                Filter: (device < 4)
                Rows Removed by Filter: 184
- Array Cache Hits: N
- Array Cache Misses: N
- Array Cache Evictions: N
- Array Decompressions: 96
-(11 rows)
+ Array: cache misses=N, decompress count=N calls=N
+(8 rows)
 
 drop table readings;
 drop table saved;
