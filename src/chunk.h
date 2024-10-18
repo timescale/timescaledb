@@ -278,19 +278,9 @@ extern TSDLLEXPORT void ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk 
  */
 #define CHUNK_STATUS_DEFAULT 0
 /*
- * Setting a Data-Node chunk as CHUNK_STATUS_COMPRESSED means that the corresponding
+ * Setting a chunk status field as CHUNK_STATUS_COMPRESSED means that the corresponding
  * compressed_chunk_id field points to a chunk that holds the compressed data. Otherwise,
  * the corresponding compressed_chunk_id is NULL.
- *
- * However, for Access-Nodes compressed_chunk_id is always NULL. CHUNK_STATUS_COMPRESSED being set
- * means that a remote compress_chunk() operation has taken place for this distributed
- * meta-chunk. On the other hand, if CHUNK_STATUS_COMPRESSED is cleared, then it is probable
- * that a remote compress_chunk() has not taken place, but not certain.
- *
- * For the above reason, this flag should not be assumed to be consistent (when it is cleared)
- * for Access-Nodes. When used in distributed hypertables one should take advantage of the
- * idempotent properties of remote compress_chunk() and distributed compression policy to
- * make progress.
  */
 #define CHUNK_STATUS_COMPRESSED 1
 /*
