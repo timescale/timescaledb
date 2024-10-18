@@ -190,7 +190,7 @@ pad_to_multiple(uint64 pad_to, uint64 source_value)
 }
 
 static inline size_t
-arrow_num_valid(uint64 *bitmap, size_t total_rows)
+arrow_num_valid(const uint64 *bitmap, size_t total_rows)
 {
 	if (bitmap == NULL)
 	{

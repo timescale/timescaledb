@@ -9,6 +9,8 @@ typedef struct DecompressBatchState DecompressBatchState;
 
 typedef struct GroupingPolicy GroupingPolicy;
 
+typedef struct TupleTableSlot TupleTableSlot;
+
 /*
  * This is a common interface for grouping policies which define how the rows
  * are grouped for aggregation -- e.g. there can be an implementation for no
@@ -37,5 +39,6 @@ typedef struct GroupingPolicy
 	void (*gp_destroy)(GroupingPolicy *gp);
 } GroupingPolicy;
 
-extern GroupingPolicy *create_grouping_policy_batch(List *agg_defs, List *grouping_columns,
-													bool partial_per_batch);
+extern GroupingPolicy *create_grouping_policy_batch(List *agg_defs, List *grouping_columns);
+
+extern GroupingPolicy *create_grouping_policy_hash(List *agg_defs, List *grouping_columns);

@@ -90,7 +90,7 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 			Aggref *aggref = castNode(Aggref, tlentry->expr);
 			VectorAggFunctions *func = get_vector_aggregate(aggref->aggfnoid);
 			Assert(func != NULL);
-			def->func = func;
+			def->func = *func;
 
 			if (list_length(aggref->args) > 0)
 			{
@@ -119,14 +119,45 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 
 			Var *var = castNode(Var, tlentry->expr);
 			col->input_offset = get_input_offset(decompress_state, var);
+
+			DecompressContext *dcontext = &decompress_state->decompress_context;
+			CompressionColumnDescription *desc =
+				&dcontext->compressed_chunk_columns[col->input_offset];
+
+			col->typid = desc->typid;
+			col->value_bytes = desc->value_bytes;
+			col->by_value = desc->by_value;
 		}
 	}
 
-	List *grouping_column_offsets = linitial(cscan->custom_private);
-	vector_agg_state->grouping =
-		create_grouping_policy_batch(vector_agg_state->agg_defs,
-									 vector_agg_state->output_grouping_columns,
-									 /* partial_per_batch = */ grouping_column_offsets != NIL);
+	if (list_length(vector_agg_state->output_grouping_columns) == 1)
+	{
+		GroupingColumn *col =
+			(GroupingColumn *) linitial(vector_agg_state->output_grouping_columns);
+		DecompressContext *dcontext = &decompress_state->decompress_context;
+		CompressionColumnDescription *desc = &dcontext->compressed_chunk_columns[col->input_offset];
+		//		if (desc->type == COMPRESSED_COLUMN && desc->by_value && desc->value_bytes > 0 &&
+		//			(size_t) desc->value_bytes <= sizeof(Datum))
+		if (desc->type == COMPRESSED_COLUMN)
+		{
+			/*
+			 * Hash grouping by a single fixed-size by-value compressed column.
+			 */
+			vector_agg_state->grouping =
+				create_grouping_policy_hash(vector_agg_state->agg_defs,
+											vector_agg_state->output_grouping_columns);
+		}
+	}
+
+	if (vector_agg_state->grouping == NULL)
+	{
+		/*
+		 * Per-batch grouping.
+		 */
+		vector_agg_state->grouping =
+			create_grouping_policy_batch(vector_agg_state->agg_defs,
+										 vector_agg_state->output_grouping_columns);
+	}
 }
 
 static void
