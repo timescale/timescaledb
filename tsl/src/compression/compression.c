@@ -182,12 +182,8 @@ static void
 RelationDeleteAllRows(Relation rel, Snapshot snap)
 {
 	TupleTableSlot *slot = table_slot_create(rel, NULL);
-	ScanKeyData scankey = {
-		/* Let compression TAM know it should only return tuples from the
-		 * non-compressed relation. No actual scankey necessary */
-		.sk_flags = SK_NO_COMPRESSED,
-	};
-	TableScanDesc scan = table_beginscan(rel, snap, 0, &scankey);
+	TableScanDesc scan = table_beginscan(rel, snap, 0, NULL);
+	hypercore_scan_set_skip_compressed(scan);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
 	{
@@ -576,13 +572,9 @@ compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
 	Tuplesortstate *tuplesortstate;
 	TableScanDesc scan;
 	TupleTableSlot *slot;
-	ScanKeyData scankey = {
-		/* Let compression TAM know it should only return tuples from the
-		 * non-compressed relation. No actual scankey necessary */
-		.sk_flags = SK_NO_COMPRESSED,
-	};
 	tuplesortstate = compression_create_tuplesort_state(settings, in_rel);
-	scan = table_beginscan(in_rel, GetLatestSnapshot(), 0, &scankey);
+	scan = table_beginscan(in_rel, GetLatestSnapshot(), 0, NULL);
+	hypercore_scan_set_skip_compressed(scan);
 	slot = table_slot_create(in_rel, NULL);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
