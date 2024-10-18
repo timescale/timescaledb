@@ -13,6 +13,7 @@
 #include "arrow_array.h"
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
+#include "src/utils.h"
 
 #define TYPLEN_VARLEN (-1)
 
@@ -470,7 +471,7 @@ arrow_get_datum_fixlen(const ArrowArray *array, Oid typid, int16 typlen, uint16 
 	/* In order to handle fixed-length values of arbitrary size that are byref
 	 * and byval, we use fetch_all() rather than rolling our own. This is
 	 * taken from utils/adt/rangetypes.c */
-	Datum datum = fetch_att(&values[index * typlen], apriv->typbyval, typlen);
+	Datum datum = ts_fetch_att(&values[index * typlen], apriv->typbyval, typlen);
 
 	TS_DEBUG_LOG("retrieved fixlen value %s row %u from offset %u"
 				 " in memory context %s",
