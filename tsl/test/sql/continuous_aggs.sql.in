@@ -1271,7 +1271,7 @@ group by bucket, symbol;
 
 -- see corresponding materialization_hypertables
 select view_name, materialization_hypertable_name from timescaledb_information.continuous_aggregates ca
-where view_name like 'cagg_index_%';
+where view_name like 'cagg_index_%' ORDER BY view_name;
 
 -- now make sure a group index has been created when explicitly asked for
 \x on
