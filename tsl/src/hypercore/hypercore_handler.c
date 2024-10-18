@@ -380,6 +380,7 @@ typedef struct HypercoreScanDescData
 	int32 compressed_row_count;
 	HypercoreScanState hs_scan_state;
 	bool reset;
+	bool skip_compressed; /* Skip compressed data when scanning */
 #if PG17_GE
 	/* These fields are only used for ANALYZE */
 	ReadStream *canalyze_read_stream;
@@ -393,6 +394,34 @@ static bool hypercore_getnextslot_noncompressed(HypercoreScanDesc scan, ScanDire
 												TupleTableSlot *slot);
 static bool hypercore_getnextslot_compressed(HypercoreScanDesc scan, ScanDirection direction,
 											 TupleTableSlot *slot);
+
+/*
+ * Skip scanning compressed data in a table scan.
+ *
+ * This function can be called on a scan descriptor to skip scanning of
+ * compressed data. Typically called directly after table_beginscan().
+ */
+void
+hypercore_scan_set_skip_compressed(TableScanDesc scan, bool skip)
+{
+	HypercoreScanDesc hscan;
+
+	if (!REL_IS_HYPERCORE(scan->rs_rd))
+		return;
+
+	hscan = (HypercoreScanDesc) scan;
+
+	if (skip)
+	{
+		scan->rs_flags |= SO_HYPERCORE_SKIP_COMPRESSED;
+		hscan->hs_scan_state = HYPERCORE_SCAN_NON_COMPRESSED;
+	}
+	else
+	{
+		scan->rs_flags &= ~SO_HYPERCORE_SKIP_COMPRESSED;
+		hscan->hs_scan_state = HYPERCORE_SCAN_START;
+	}
+}
 
 #if PG17_GE
 static int
@@ -526,8 +555,7 @@ hypercore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey key
 	HypercoreInfo *hsinfo = RelationGetHypercoreInfo(relation);
 	scan->compressed_rel = table_open(hsinfo->compressed_relid, AccessShareLock);
 
-	if ((ts_guc_enable_transparent_decompression == 2) ||
-		(keys && keys->sk_flags & SK_NO_COMPRESSED))
+	if ((ts_guc_enable_transparent_decompression == 2) || (flags & SO_HYPERCORE_SKIP_COMPRESSED))
 	{
 		/*
 		 * Don't read compressed data if transparent decompression is enabled
@@ -582,16 +610,7 @@ hypercore_rescan(TableScanDesc sscan, ScanKey key, bool set_params, bool allow_s
 	initscan(scan, key, scan->rs_base.rs_nkeys);
 	scan->reset = true;
 
-	/* Check if there's a change in "skip compressed" */
-	if (key)
-	{
-		if (key->sk_flags & SK_NO_COMPRESSED)
-			scan->rs_base.rs_flags = SO_HYPERCORE_SKIP_COMPRESSED;
-		else
-			scan->rs_base.rs_flags &= ~SO_HYPERCORE_SKIP_COMPRESSED;
-	}
-
-	if (scan->rs_base.rs_flags & SO_HYPERCORE_SKIP_COMPRESSED)
+	if (sscan->rs_flags & SO_HYPERCORE_SKIP_COMPRESSED)
 		scan->hs_scan_state = HYPERCORE_SCAN_NON_COMPRESSED;
 	else
 		scan->hs_scan_state = HYPERCORE_SCAN_START;
