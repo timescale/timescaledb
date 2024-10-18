@@ -5,7 +5,7 @@
 name: PR Approval Check
 "on":
   pull_request:
-    branches: [main]
+    types: [opened, synchronize, reopened, edited, auto_merge_enabled, auto_merge_disabled]
 jobs:
 
   check_approvals:
