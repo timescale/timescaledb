@@ -1116,11 +1116,14 @@ ca_get_relation_constraints(Oid relationObjectId, Index varno, bool include_notn
 			}
 		}
 
-		/* Add column range min/max ranges in 'CHECK CONSTRAINT' form */
-		result = list_concat(result,
-							 ts_chunk_column_stats_construct_check_constraints(relation,
-																			   relationObjectId,
-																			   varno));
+		if (ts_guc_enable_chunk_skipping)
+		{
+			/* Add column range min/max ranges in 'CHECK CONSTRAINT' form */
+			result = list_concat(result,
+								 ts_chunk_column_stats_construct_check_constraints(relation,
+																				   relationObjectId,
+																				   varno));
+		}
 	}
 
 	table_close(relation, NoLock);
