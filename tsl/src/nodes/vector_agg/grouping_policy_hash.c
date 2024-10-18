@@ -186,16 +186,98 @@ compute_single_aggregate(DecompressBatchState *batch_state, int start_row, int e
 }
 
 static void
+add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, const int start_row,
+			  const int end_row)
+{
+	const int num_fns = list_length(policy->agg_defs);
+	Assert(list_length(policy->per_agg_states) == num_fns);
+
+	const int n = batch_state->total_batch_rows;
+
+	Assert(start_row < end_row);
+	Assert(end_row <= n);
+
+	/*
+	 * Remember which aggregation states have already existed, and which we
+	 * have to initialize. State index zero is invalid, and state index one
+	 * is for null key. We have to initialize the null key state at the
+	 * first run.
+	 */
+	const uint32 hash_keys = policy->functions.get_num_keys(policy->table);
+	const uint32 first_uninitialized_state_index = hash_keys ? hash_keys + 2 : 1;
+
+	/*
+	 * Allocate enough storage for keys, given that each bach row might be
+	 * a separate new key.
+	 */
+	const uint32 num_possible_keys = first_uninitialized_state_index + (end_row - start_row);
+	if (num_possible_keys > policy->num_allocated_keys)
+	{
+		policy->num_allocated_keys = num_possible_keys;
+		policy->keys = repalloc(policy->keys, policy->key_bytes * num_possible_keys);
+	}
+
+	/*
+	 * Match rows to aggregation states using a hash table.
+	 */
+	Assert((size_t) end_row <= policy->num_allocated_offsets);
+	uint32 next_unused_state_index = hash_keys + 2;
+	next_unused_state_index = policy->functions.fill_offsets(policy,
+															 batch_state,
+															 next_unused_state_index,
+															 start_row,
+															 end_row);
+
+	const uint64 new_aggstate_rows = policy->allocated_aggstate_rows * 2 + 1;
+	for (int i = 0; i < num_fns; i++)
+	{
+		VectorAggDef *agg_def = list_nth(policy->agg_defs, i);
+		if (next_unused_state_index > first_uninitialized_state_index)
+		{
+			if (next_unused_state_index > policy->allocated_aggstate_rows)
+			{
+				lfirst(list_nth_cell(policy->per_agg_states, i)) =
+					repalloc(list_nth(policy->per_agg_states, i),
+							 new_aggstate_rows * agg_def->func.state_bytes);
+			}
+
+			/*
+			 * Initialize the aggregate function states for the newly added keys.
+			 */
+			agg_def->func.agg_init(agg_def->func.state_bytes * first_uninitialized_state_index +
+									   (char *) list_nth(policy->per_agg_states, i),
+								   next_unused_state_index - first_uninitialized_state_index);
+		}
+
+		/*
+		 * Update the aggregate function states.
+		 */
+		compute_single_aggregate(batch_state,
+								 start_row,
+								 end_row,
+								 agg_def,
+								 list_nth(policy->per_agg_states, i),
+								 policy->offsets,
+								 policy->agg_extra_mctx);
+	}
+
+	/*
+	 * Record the newly allocated number of rows in case we had to reallocate.
+	 */
+	if (next_unused_state_index > policy->allocated_aggstate_rows)
+	{
+		Assert(new_aggstate_rows >= policy->allocated_aggstate_rows);
+		policy->allocated_aggstate_rows = new_aggstate_rows;
+	}
+}
+
+static void
 gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 {
 	GroupingPolicyHash *policy = (GroupingPolicyHash *) gp;
 
 	Assert(!policy->returning_results);
 
-	const int num_fns = list_length(policy->agg_defs);
-	Assert(list_length(policy->per_agg_states) == num_fns);
-
-	const uint64_t *restrict filter = batch_state->vector_qual_result;
 	const int n = batch_state->total_batch_rows;
 
 	/*
@@ -209,120 +291,45 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 	}
 	memset(policy->offsets, 0, n * sizeof(policy->offsets[0]));
 
-	/*
-	 * For the partial aggregation node, the grouping columns are always in the
-	 * output, so we don't have to separately look at the list of the grouping
-	 * columns.
-	 */
-	Assert(list_length(policy->output_grouping_columns) == 1);
-	// GroupingColumn *g = linitial(policy->output_grouping_columns);
-	// CompressedColumnValues *key_column = &batch_state->compressed_columns[g->input_offset];
-	int start_row = 0;
-	int end_row = 0;
-	for (start_row = 0; start_row < n; start_row = end_row)
+	const uint64_t *restrict filter = batch_state->vector_qual_result;
+	if (filter == NULL)
+	{
+		add_one_range(policy, batch_state, 0, n);
+	}
+	else
 	{
 		/*
-		 * If we have a highly selective filter, it's easy to skip the rows for
-		 * which the entire words of the filter bitmap are zero.
+		 * If we have a filter, skip the rows for which the entire words of the
+		 * filter bitmap are zero. This improves performance for highly
+		 * selective filters.
 		 */
-		if (filter)
+		int start_word = 0;
+		int end_word = 0;
+		int past_the_end_word = (n - 1) / 64 + 1;
+		for (;;)
 		{
-			if (filter[start_row / 64] == 0)
+			for (start_word = end_word; start_word < past_the_end_word && filter[start_word] == 0;
+				 start_word++)
+				;
+
+			if (start_word >= past_the_end_word)
 			{
-				end_row = MIN(start_row + 64, n);
-				policy->stat_bulk_filtered_rows += 64;
-				continue;
+				break;
 			}
 
-			for (end_row = start_row; end_row < n; end_row = MIN(end_row + 64, n))
-			{
-				if (filter[end_row / 64] == 0)
-				{
-					break;
-				}
-			}
-		}
-		else
-		{
-			end_row = n;
-		}
-		Assert(start_row <= end_row);
-		Assert(end_row <= n);
+			for (end_word = start_word + 1; end_word < past_the_end_word && filter[end_word] != 0;
+				 end_word++)
+				;
 
-		/*
-		 * Remember which aggregation states have already existed, and which we
-		 * have to initialize. State index zero is invalid, and state index one
-		 * is for null key. We have to initialize the null key state at the
-		 * first run.
-		 */
-		const uint32 hash_keys = policy->functions.get_num_keys(policy->table);
-		const uint32 first_uninitialized_state_index = hash_keys ? hash_keys + 2 : 1;
-
-		/*
-		 * Allocate enough storage for keys, given that each bach row might be
-		 * a separate new key.
-		 */
-		const uint32 num_possible_keys = first_uninitialized_state_index + (end_row - start_row);
-		if (num_possible_keys > policy->num_allocated_keys)
-		{
-			policy->num_allocated_keys = num_possible_keys;
-			policy->keys = repalloc(policy->keys, policy->key_bytes * num_possible_keys);
-		}
-
-		/*
-		 * Match rows to aggregation states using a hash table.
-		 */
-		Assert((size_t) end_row <= policy->num_allocated_offsets);
-		uint32 next_unused_state_index = hash_keys + 2;
-		next_unused_state_index = policy->functions.fill_offsets(policy,
-																 batch_state,
-																 next_unused_state_index,
-																 start_row,
-																 end_row);
-
-		const uint64 new_aggstate_rows = policy->allocated_aggstate_rows * 2 + 1;
-		for (int i = 0; i < num_fns; i++)
-		{
-			VectorAggDef *agg_def = list_nth(policy->agg_defs, i);
-			if (next_unused_state_index > first_uninitialized_state_index)
-			{
-				if (next_unused_state_index > policy->allocated_aggstate_rows)
-				{
-					lfirst(list_nth_cell(policy->per_agg_states, i)) =
-						repalloc(list_nth(policy->per_agg_states, i),
-								 new_aggstate_rows * agg_def->func.state_bytes);
-				}
-
-				/*
-				 * Initialize the aggregate function states for the newly added keys.
-				 */
-				agg_def->func.agg_init(agg_def->func.state_bytes * first_uninitialized_state_index +
-										   (char *) list_nth(policy->per_agg_states, i),
-									   next_unused_state_index - first_uninitialized_state_index);
-			}
-
+			const int start_row = start_word * 64 + pg_rightmost_one_pos64(filter[start_word]);
 			/*
-			 * Update the aggregate function states.
+			 * The bits for past-the-end rows must be set to zero, so this
+			 * calculation should yield no more than n.
 			 */
-			compute_single_aggregate(batch_state,
-									 start_row,
-									 end_row,
-									 agg_def,
-									 list_nth(policy->per_agg_states, i),
-									 policy->offsets,
-									 policy->agg_extra_mctx);
-		}
-
-		/*
-		 * Record the newly allocated number of rows in case we had to reallocate.
-		 */
-		if (next_unused_state_index > policy->allocated_aggstate_rows)
-		{
-			Assert(new_aggstate_rows >= policy->allocated_aggstate_rows);
-			policy->allocated_aggstate_rows = new_aggstate_rows;
+			int end_row = (end_word - 1) * 64 + pg_leftmost_one_pos64(filter[end_word - 1]) + 1;
+			add_one_range(policy, batch_state, start_row, end_row);
 		}
 	}
-	Assert(end_row == n);
 }
 
 static bool

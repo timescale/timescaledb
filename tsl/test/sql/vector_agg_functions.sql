@@ -64,14 +64,29 @@ select *, ss::text as x from (
     from source where s != 1
 ) t
 ;
-
 select count(compress_chunk(x)) from show_chunks('aggfns') x;
+vacuum freeze analyze aggfns;
 
-analyze aggfns;
 
+create table edges(t int, s int, ss int, f1 int);
+select create_hypertable('edges', 't');
+alter table edges set (timescaledb.compress, timescaledb.compress_segmentby='s');
+insert into edges select
+    s * 10000 + f1 as t,
+    s,
+    s,
+    f1
+from generate_series(0, 10) s,
+    lateral generate_series(0, 60 + s + (s / 5::int) * 64) f1
+;
+select count(compress_chunk(x)) from show_chunks('edges') x;
+vacuum freeze analyze edges;
+
+
+set timescaledb.debug_require_vector_agg = 'require';
 ---- Uncomment to generate reference. Note that there are minor discrepancies
 ---- on float4 due to different numeric stability in our and PG implementations.
---set timescaledb.enable_vectorized_aggregation to off;
+--set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
 
 select
     format('%sselect %s%s(%s) from aggfns%s%s order by 1;',
@@ -132,11 +147,24 @@ where
         when function = 'count' then variable in ('cfloat4', 's', 'ss')
         when variable = 't' then function in ('min', 'max')
         when variable in ('cts', 'ctstz', 'cdate') then function in ('min', 'max')
+        -- This is not vectorized yet.
+        when function = 'stddev' then variable != 'cint8'
     else true end
 order by explain, condition.n, variable, function, grouping.n
 \gexec
 
 
+-- Test multiple aggregate functions as well.
 select count(*), count(cint2), min(cfloat4), cint2 from aggfns group by cint2
 order by count(*) desc, cint2 limit 10
 ;
+
+select s, count(*) from edges group by 1 order by 1;
+
+select s, count(*), min(f1) from edges where f1 = 63 group by 1 order by 1;
+select s, count(*), min(f1) from edges where f1 = 64 group by 1 order by 1;
+select s, count(*), min(f1) from edges where f1 = 65 group by 1 order by 1;
+
+select ss, count(*), min(f1) from edges where f1 = 63 group by 1 order by 1;
+select ss, count(*), min(f1) from edges where f1 = 64 group by 1 order by 1;
+select ss, count(*), min(f1) from edges where f1 = 65 group by 1 order by 1;

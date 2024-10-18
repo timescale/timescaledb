@@ -73,10 +73,36 @@ select count(compress_chunk(x)) from show_chunks('aggfns') x;
      2
 (1 row)
 
-analyze aggfns;
+vacuum freeze analyze aggfns;
+create table edges(t int, s int, ss int, f1 int);
+select create_hypertable('edges', 't');
+NOTICE:  adding not-null constraint to column "t"
+ create_hypertable  
+--------------------
+ (3,public,edges,t)
+(1 row)
+
+alter table edges set (timescaledb.compress, timescaledb.compress_segmentby='s');
+NOTICE:  default order by for hypertable "edges" is set to "t DESC"
+insert into edges select
+    s * 10000 + f1 as t,
+    s,
+    s,
+    f1
+from generate_series(0, 10) s,
+    lateral generate_series(0, 60 + s + (s / 5::int) * 64) f1
+;
+select count(compress_chunk(x)) from show_chunks('edges') x;
+ count 
+-------
+     2
+(1 row)
+
+vacuum freeze analyze edges;
+set timescaledb.debug_require_vector_agg = 'require';
 ---- Uncomment to generate reference. Note that there are minor discrepancies
 ---- on float4 due to different numeric stability in our and PG implementations.
---set timescaledb.enable_vectorized_aggregation to off;
+--set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
 select
     format('%sselect %s%s(%s) from aggfns%s%s order by 1;',
             explain,
@@ -136,6 +162,8 @@ where
         when function = 'count' then variable in ('cfloat4', 's', 'ss')
         when variable = 't' then function in ('min', 'max')
         when variable in ('cts', 'ctstz', 'cdate') then function in ('min', 'max')
+        -- This is not vectorized yet.
+        when function = 'stddev' then variable != 'cint8'
     else true end
 order by explain, condition.n, variable, function, grouping.n
 \gexec
@@ -1139,42 +1167,6 @@ select ss, min(cint8) from aggfns group by ss order by 1;
   9 | -1073184428
  11 | -1073184428
     |  -796158533
-(10 rows)
-
-select stddev(cint8) from aggfns order by 1;
-  stddev   
------------
- 620482773
-(1 row)
-
-select s, stddev(cint8) from aggfns group by s order by 1;
- s |  stddev   
----+-----------
- 0 | 620477996
- 1 | 620477953
- 2 | 620458232
- 3 | 620500878
- 4 | 620498014
- 5 | 620492575
- 6 | 620500389
- 7 | 620519080
- 8 | 620517247
- 9 | 620524975
-(10 rows)
-
-select ss, stddev(cint8) from aggfns group by ss order by 1;
- ss |  stddev   
-----+-----------
-  0 | 620477996
-  3 | 620514804
-  4 | 620462299
-  5 | 620492575
-  6 | 620500389
-  7 | 620519080
-  8 | 620517247
-  9 | 620524975
- 11 | 620478168
-    | 609007799
 (10 rows)
 
 select sum(cint8) from aggfns order by 1;
@@ -2863,42 +2855,6 @@ select ss, min(cint8) from aggfns where cfloat8 > 0 group by ss order by 1;
     |  -672677796
 (10 rows)
 
-select stddev(cint8) from aggfns where cfloat8 > 0 order by 1;
-  stddev   
------------
- 623577068
-(1 row)
-
-select s, stddev(cint8) from aggfns where cfloat8 > 0 group by s order by 1;
- s |  stddev   
----+-----------
- 0 | 623613696
- 1 | 623613596
- 2 | 623588105
- 3 | 623588105
- 4 | 623602577
- 5 | 623602577
- 6 | 623594116
- 7 | 623594116
- 8 | 623620316
- 9 | 623635702
-(10 rows)
-
-select ss, stddev(cint8) from aggfns where cfloat8 > 0 group by ss order by 1;
- ss |  stddev   
-----+-----------
-  0 | 623613696
-  3 | 623600813
-  4 | 623575078
-  5 | 623602577
-  6 | 623594116
-  7 | 623594116
-  8 | 623620316
-  9 | 623635702
- 11 | 623598886
-    | 648969761
-(10 rows)
-
 select sum(cint8) from aggfns where cfloat8 > 0 order by 1;
       sum      
 ---------------
@@ -4583,42 +4539,6 @@ select ss, min(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1;
   9 | -1073053412
  11 | -1073053412
     |  -796158533
-(10 rows)
-
-select stddev(cint8) from aggfns where cfloat8 <= 0 order by 1;
-  stddev   
------------
- 617379684
-(1 row)
-
-select s, stddev(cint8) from aggfns where cfloat8 <= 0 group by s order by 1;
- s |  stddev   
----+-----------
- 0 | 617360997
- 1 | 617360997
- 2 | 617348601
- 3 | 617433171
- 4 | 617412408
- 5 | 617401473
- 6 | 617425094
- 7 | 617462874
- 8 | 617433744
- 9 | 617433744
-(10 rows)
-
-select ss, stddev(cint8) from aggfns where cfloat8 <= 0 group by ss order by 1;
- ss |  stddev   
-----+-----------
-  0 | 617360997
-  3 | 617445433
-  4 | 617369297
-  5 | 617401473
-  6 | 617425094
-  7 | 617462874
-  8 | 617433744
-  9 | 617433744
- 11 | 617360997
-    | 586053845
 (10 rows)
 
 select sum(cint8) from aggfns where cfloat8 <= 0 order by 1;
@@ -6307,42 +6227,6 @@ select ss, min(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1;
     |  -796158533
 (10 rows)
 
-select stddev(cint8) from aggfns where cfloat8 < 1000 order by 1;
-  stddev   
------------
- 620482773
-(1 row)
-
-select s, stddev(cint8) from aggfns where cfloat8 < 1000 group by s order by 1;
- s |  stddev   
----+-----------
- 0 | 620477996
- 1 | 620477953
- 2 | 620458232
- 3 | 620500878
- 4 | 620498014
- 5 | 620492575
- 6 | 620500389
- 7 | 620519080
- 8 | 620517247
- 9 | 620524975
-(10 rows)
-
-select ss, stddev(cint8) from aggfns where cfloat8 < 1000 group by ss order by 1;
- ss |  stddev   
-----+-----------
-  0 | 620477996
-  3 | 620514804
-  4 | 620462299
-  5 | 620492575
-  6 | 620500389
-  7 | 620519080
-  8 | 620517247
-  9 | 620524975
- 11 | 620478168
-    | 609007799
-(10 rows)
-
 select sum(cint8) from aggfns where cfloat8 < 1000 order by 1;
       sum      
 ---------------
@@ -7466,21 +7350,6 @@ select ss, min(cint8) from aggfns where cfloat8 > 1000 group by ss order by 1;
 ----+-----
 (0 rows)
 
-select stddev(cint8) from aggfns where cfloat8 > 1000 order by 1;
- stddev 
---------
-(0 rows)
-
-select s, stddev(cint8) from aggfns where cfloat8 > 1000 group by s order by 1;
- s | stddev 
----+--------
-(0 rows)
-
-select ss, stddev(cint8) from aggfns where cfloat8 > 1000 group by ss order by 1;
- ss | stddev 
-----+--------
-(0 rows)
-
 select sum(cint8) from aggfns where cfloat8 > 1000 order by 1;
  sum 
 -----
@@ -8055,6 +7924,7 @@ select ss, sum(cint2) from aggfns where cint2 is null group by ss order by 1;
  11 |    
 (9 rows)
 
+-- Test multiple aggregate functions as well.
 select count(*), count(cint2), min(cfloat4), cint2 from aggfns group by cint2
 order by count(*) desc, cint2 limit 10
 ;
@@ -8071,4 +7941,92 @@ order by count(*) desc, cint2 limit 10
     50 |    50 | -30.1285 |  15889
     40 |    40 | -33.4605 | -15975
 (10 rows)
+
+select s, count(*) from edges group by 1 order by 1;
+ s  | count 
+----+-------
+  0 |    61
+  1 |    62
+  2 |    63
+  3 |    64
+  4 |    65
+  5 |   130
+  6 |   131
+  7 |   132
+  8 |   133
+  9 |   134
+ 10 |   199
+(11 rows)
+
+select s, count(*), min(f1) from edges where f1 = 63 group by 1 order by 1;
+ s  | count | min 
+----+-------+-----
+  3 |     1 |  63
+  4 |     1 |  63
+  5 |     1 |  63
+  6 |     1 |  63
+  7 |     1 |  63
+  8 |     1 |  63
+  9 |     1 |  63
+ 10 |     1 |  63
+(8 rows)
+
+select s, count(*), min(f1) from edges where f1 = 64 group by 1 order by 1;
+ s  | count | min 
+----+-------+-----
+  4 |     1 |  64
+  5 |     1 |  64
+  6 |     1 |  64
+  7 |     1 |  64
+  8 |     1 |  64
+  9 |     1 |  64
+ 10 |     1 |  64
+(7 rows)
+
+select s, count(*), min(f1) from edges where f1 = 65 group by 1 order by 1;
+ s  | count | min 
+----+-------+-----
+  5 |     1 |  65
+  6 |     1 |  65
+  7 |     1 |  65
+  8 |     1 |  65
+  9 |     1 |  65
+ 10 |     1 |  65
+(6 rows)
+
+select ss, count(*), min(f1) from edges where f1 = 63 group by 1 order by 1;
+ ss | count | min 
+----+-------+-----
+  3 |     1 |  63
+  4 |     1 |  63
+  5 |     1 |  63
+  6 |     1 |  63
+  7 |     1 |  63
+  8 |     1 |  63
+  9 |     1 |  63
+ 10 |     1 |  63
+(8 rows)
+
+select ss, count(*), min(f1) from edges where f1 = 64 group by 1 order by 1;
+ ss | count | min 
+----+-------+-----
+  4 |     1 |  64
+  5 |     1 |  64
+  6 |     1 |  64
+  7 |     1 |  64
+  8 |     1 |  64
+  9 |     1 |  64
+ 10 |     1 |  64
+(7 rows)
+
+select ss, count(*), min(f1) from edges where f1 = 65 group by 1 order by 1;
+ ss | count | min 
+----+-------+-----
+  5 |     1 |  65
+  6 |     1 |  65
+  7 |     1 |  65
+  8 |     1 |  65
+  9 |     1 |  65
+ 10 |     1 |  65
+(6 rows)
 

@@ -74,8 +74,16 @@ single_text_store_key(TextView key, Datum *key_storage, MemoryContext key_memory
 	return key;
 }
 
+static pg_attribute_always_inline uint32
+hash_text(TextView view)
+{
+	uint32 valll = -1;
+	COMP_CRC32C(valll, view.data, view.len);
+	return valll;
+}
+
 #define KEY_VARIANT single_text
-#define KEY_HASH(X) hash_bytes(X.data, X.len)
+#define KEY_HASH(X) hash_text(X)
 #define KEY_EQUAL(a, b) (a.len == b.len && memcmp(a.data, b.data, a.len) == 0)
 #define SH_STORE_HASH
 #define CTYPE TextView
