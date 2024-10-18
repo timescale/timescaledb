@@ -12,6 +12,7 @@
 #include <access/xact.h>
 #include <catalog/indexing.h>
 #include <catalog/namespace.h>
+#include <catalog/objectaccess.h>
 #include <catalog/pg_am.h>
 #include <catalog/pg_cast.h>
 #include <catalog/pg_inherits.h>
@@ -25,6 +26,7 @@
 #include <parser/parse_coerce.h>
 #include <parser/parse_func.h>
 #include <parser/scansup.h>
+#include <storage/lockdefs.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
 #include <utils/catcache.h>
@@ -1830,6 +1832,87 @@ ts_is_hypercore_am(Oid amoid)
 		return false;
 
 	return amoid == hypercore_amoid;
+}
+
+/*
+ * Set reloption for relation.
+ *
+ * Most of the code is from ATExecSetRelOptions() in tablecmds.c since that
+ * function is static and we also need to do a slightly different job.
+ */
+static void
+relation_set_reloption_impl(Relation rel, List *options, LOCKMODE lockmode)
+{
+	Datum repl_val[Natts_pg_class] = { 0 };
+	bool repl_null[Natts_pg_class] = { false };
+	bool repl_repl[Natts_pg_class] = { false };
+	bool isnull;
+
+	Assert(rel->rd_rel->relkind == RELKIND_RELATION || rel->rd_rel->relkind == RELKIND_TOASTVALUE);
+
+	if (options == NIL)
+		return; /* nothing to do */
+
+	TS_DEBUG_LOG("setting reloptions for %s", RelationGetRelationName(rel));
+
+	Relation pgclass = table_open(RelationRelationId, RowExclusiveLock);
+	Oid relid = RelationGetRelid(rel);
+	HeapTuple tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for relation %u", relid);
+
+	/* Get the old reloptions */
+	Datum datum = SysCacheGetAttr(RELOID, tuple, Anum_pg_class_reloptions, &isnull);
+
+	/* Generate new proposed reloptions (text array) */
+	Datum newOptions =
+		transformRelOptions(isnull ? (Datum) 0 : datum, options, NULL, NULL, false, false);
+	(void) heap_reloptions(rel->rd_rel->relkind, newOptions, true);
+
+	if (newOptions)
+		repl_val[AttrNumberGetAttrOffset(Anum_pg_class_reloptions)] = newOptions;
+	else
+		repl_null[AttrNumberGetAttrOffset(Anum_pg_class_reloptions)] = true;
+
+	repl_repl[AttrNumberGetAttrOffset(Anum_pg_class_reloptions)] = true;
+
+	HeapTuple newtuple =
+		heap_modify_tuple(tuple, RelationGetDescr(pgclass), repl_val, repl_null, repl_repl);
+
+	CatalogTupleUpdate(pgclass, &newtuple->t_self, newtuple);
+
+	/* Not sure if we need this one, but keeping it as a precaution */
+	InvokeObjectPostAlterHook(RelationRelationId, RelationGetRelid(rel), 0);
+
+	heap_freetuple(newtuple);
+	ReleaseSysCache(tuple);
+	table_close(pgclass, RowExclusiveLock);
+}
+
+/*
+ * Set value of reloptions for given relation.
+ *
+ * This will also set the reloption for the relations' associated relations,
+ * in this case the TOAST table. It is based on ATExecSetRelOptions but we
+ * split out the code to set the reloptions rather than duplicating it.
+ *
+ * The lockmode is needed for taking a correct lock on the toast table for the
+ * already locked relation. It is only used for
+ *
+ * rel: Relation to add reloptions to.
+ * defList: List of DefElem for the new definitions.
+ * lockmode: the mode that the actual tables are locked in.
+ */
+void
+ts_relation_set_reloption(Relation rel, List *options, LOCKMODE lockmode)
+{
+	relation_set_reloption_impl(rel, options, lockmode);
+	if (OidIsValid(rel->rd_rel->reltoastrelid))
+	{
+		Relation toastrel = table_open(rel->rd_rel->reltoastrelid, lockmode);
+		relation_set_reloption_impl(toastrel, options, lockmode);
+		table_close(toastrel, NoLock);
+	}
 }
 
 /* this function fills in a jsonb with the non-null fields of
