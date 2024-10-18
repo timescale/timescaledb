@@ -7,6 +7,8 @@
 -- We disable columnar scan for these tests since we have a dedicated
 -- test for this.
 set timescaledb.enable_columnarscan to false;
+-- Discourage seqscan to make sure we predictibly use indexscan
+set enable_seqscan to false;
 
 set enable_memoize to false;
 
