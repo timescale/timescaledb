@@ -37,4 +37,3 @@ where r.device_id is distinct from e.device_id;
 
 drop table :inner;
 drop table :outer;
-
