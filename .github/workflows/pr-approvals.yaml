@@ -1,0 +1,44 @@
+# All PRs except trivial ones should require 2 approvals, since this a global setting
+# we cannot make this decision from github configuration alone. So we set the required
+# approved in github to 1 and make this check required which will enforce 2 approvals
+# unless overwritten or only CI files are touched.
+name: PR Approval Check
+"on":
+  pull_request:
+    branches: [main]
+jobs:
+
+  check_approvals:
+    name: Check for sufficient approvals
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Check for sufficient approvals
+        shell: bash --norc --noprofile {0}
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          echo "$BODY" | egrep -qsi '^disable-check:.*\<approval-count\>'
+          if [[ $? -ne 0 ]]; then
+            # Get the list of modified files in this pull request
+            files=$(gh pr view $PR_NUMBER --json files --jq '.files.[].path | select(startswith(".github") | not)')
+            # Get the number of approvals in this pull request
+            approvals=$(gh pr view $PR_NUMBER --json reviews --jq '[.reviews.[] | select(.authorAssociation == "MEMBER" and .state == "APPROVED")] | length')
+
+            gh pr view $PR_NUMBER --json reviews --jq '[.reviews.[] | select(.authorAssociation == "MEMBER" and .state == "APPROVED")]'
+
+            if [[ $approvals -lt 2 ]] && [[ "${files}" ]] ; then
+              echo "This pull request requires 2 approvals before merging."
+              echo
+              echo "For trivial changes, you may disable this check by adding this trailer to the pull request message:"
+              echo
+              echo "Disable-check: approval-count"
+              echo
+              exit 1
+            fi
+          fi
+
