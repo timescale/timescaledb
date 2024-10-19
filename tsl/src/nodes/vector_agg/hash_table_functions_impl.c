@@ -193,8 +193,6 @@ FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *ba
 		Assert(false);
 	}
 
-	policy->stat_input_total_rows += batch_state->total_batch_rows;
-	policy->stat_input_valid_rows += arrow_num_valid(filter, batch_state->total_batch_rows);
 	return next_unused_state_index;
 }
 

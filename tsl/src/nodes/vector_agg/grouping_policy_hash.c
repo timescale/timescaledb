@@ -302,6 +302,7 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 		 * filter bitmap are zero. This improves performance for highly
 		 * selective filters.
 		 */
+		int stat_range_rows = 0;
 		int start_word = 0;
 		int end_word = 0;
 		int past_the_end_word = (n - 1) / 64 + 1;
@@ -327,8 +328,14 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 			 */
 			int end_row = (end_word - 1) * 64 + pg_leftmost_one_pos64(filter[end_word - 1]) + 1;
 			add_one_range(policy, batch_state, start_row, end_row);
+
+			stat_range_rows += end_row - start_row;
 		}
+		policy->stat_bulk_filtered_rows += batch_state->total_batch_rows - stat_range_rows;
 	}
+
+	policy->stat_input_total_rows += batch_state->total_batch_rows;
+	policy->stat_input_valid_rows += arrow_num_valid(filter, batch_state->total_batch_rows);
 }
 
 static bool
