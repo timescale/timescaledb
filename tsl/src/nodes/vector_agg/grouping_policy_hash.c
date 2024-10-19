@@ -111,6 +111,7 @@ gp_hash_reset(GroupingPolicy *obj)
 	policy->stat_input_valid_rows = 0;
 	policy->stat_input_total_rows = 0;
 	policy->stat_bulk_filtered_rows = 0;
+	policy->stat_consecutive_keys = 0;
 }
 
 static void
@@ -192,10 +193,8 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 	const int num_fns = list_length(policy->agg_defs);
 	Assert(list_length(policy->per_agg_states) == num_fns);
 
-	const int n = batch_state->total_batch_rows;
-
 	Assert(start_row < end_row);
-	Assert(end_row <= n);
+	Assert(end_row <= batch_state->total_batch_rows);
 
 	/*
 	 * Remember which aggregation states have already existed, and which we
@@ -360,11 +359,12 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 		const float keys = policy->functions.get_num_keys(policy->table) + policy->have_null_key;
 		if (keys > 0)
 		{
-			DEBUG_LOG("spill after %ld input %ld valid %ld bulk filtered %.0f keys %f ratio %ld "
-					  "curctx bytes %ld aggstate bytes",
+			DEBUG_LOG("spill after %ld input, %ld valid, %ld bulk filtered, %ld cons, %.0f keys, "
+					  "%f ratio, %ld curctx bytes, %ld aggstate bytes",
 					  policy->stat_input_total_rows,
 					  policy->stat_input_valid_rows,
 					  policy->stat_bulk_filtered_rows,
+					  policy->stat_consecutive_keys,
 					  keys,
 					  policy->stat_input_valid_rows / keys,
 					  MemoryContextMemAllocated(CurrentMemoryContext, false),

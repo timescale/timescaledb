@@ -66,36 +66,61 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *policy, CompressedColumnValues column,
 
 	struct FUNCTION_NAME(hash) *restrict table = policy->table;
 
+	CTYPE last_key;
+	uint32 last_key_index = 0;
 	for (int row = start_row; row < end_row; row++)
 	{
 		bool key_valid = false;
-		CTYPE key;
+		CTYPE key = { 0 };
 		FUNCTION_NAME(get_key)(column, row, &key, &key_valid);
 
 		if (!arrow_row_is_valid(filter, row))
 		{
+			/* The row doesn't pass the filter. */
 			continue;
 		}
 
-		if (key_valid)
+		if (unlikely(!key_valid))
 		{
-			bool found = false;
-			FUNCTION_NAME(entry) *restrict entry = FUNCTION_NAME(insert)(table, key, &found);
-			if (!found)
-			{
-				const int index = next_unused_state_index++;
-				entry->key = FUNCTION_NAME(store_key)(key,
-													  &((Datum *restrict) policy->keys)[index],
-													  policy->key_body_mctx);
-				entry->agg_state_index = index;
-			}
-			offsets[row] = entry->agg_state_index;
-		}
-		else
-		{
+			/* The key is null. */
 			policy->have_null_key = true;
 			offsets[row] = 1;
+			continue;
 		}
+
+		if (likely(last_key_index != 0) && KEY_EQUAL(key, last_key))
+		{
+			/*
+			 * In real data sets, we often see consecutive rows with the
+			 * same key, so checking for this case improves performance.
+			 */
+			Assert(last_key_index >= 2);
+			offsets[row] = last_key_index;
+#ifndef NDEBUG
+			policy->stat_consecutive_keys++;
+#endif
+			continue;
+		}
+
+		/*
+		 * Find the key using the hash table.
+		 */
+		bool found = false;
+		FUNCTION_NAME(entry) *restrict entry = FUNCTION_NAME(insert)(table, key, &found);
+		if (!found)
+		{
+			/*
+			 * New key, have to store it persistently.
+			 */
+			const int index = next_unused_state_index++;
+			entry->key = FUNCTION_NAME(
+				store_key)(key, &((Datum *restrict) policy->keys)[index], policy->key_body_mctx);
+			entry->agg_state_index = index;
+		}
+		offsets[row] = entry->agg_state_index;
+
+		last_key_index = entry->agg_state_index;
+		last_key = key;
 	}
 
 	return next_unused_state_index;
