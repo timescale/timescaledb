@@ -14,28 +14,22 @@
 
 #include "compression/arrow_c_data_interface.h"
 #include "grouping_policy_hash.h"
-#include "hash64.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
+#include "bytes_view.h"
 
-typedef struct TextView
-{
-	uint32 len;
-	const uint8 *data;
-} TextView;
-
-static TextView
-get_text_view(CompressedColumnValues *column_values, int arrow_row)
+static BytesView
+get_bytes_view(CompressedColumnValues *column_values, int arrow_row)
 {
 	const uint32 start = ((uint32 *) column_values->buffers[1])[arrow_row];
 	const int32 value_bytes = ((uint32 *) column_values->buffers[1])[arrow_row + 1] - start;
 	Assert(value_bytes >= 0);
 
-	return (TextView){ .len = value_bytes, .data = &((uint8 *) column_values->buffers[2])[start] };
+	return (BytesView){ .len = value_bytes, .data = &((uint8 *) column_values->buffers[2])[start] };
 }
 
 static pg_attribute_always_inline void
-single_text_get_key(CompressedColumnValues column, int row, TextView *restrict key,
+single_text_get_key(CompressedColumnValues column, int row, BytesView *restrict key,
 					bool *restrict valid)
 {
 	if (unlikely(column.decompression_type == DT_Scalar))
@@ -47,13 +41,13 @@ single_text_get_key(CompressedColumnValues column, int row, TextView *restrict k
 	}
 	else if (column.decompression_type == DT_ArrowText)
 	{
-		*key = get_text_view(&column, row);
+		*key = get_bytes_view(&column, row);
 		*valid = arrow_row_is_valid(column.buffers[0], row);
 	}
 	else if (column.decompression_type == DT_ArrowTextDict)
 	{
 		const int16 index = ((int16 *) column.buffers[3])[row];
-		*key = get_text_view(&column, index);
+		*key = get_bytes_view(&column, index);
 		*valid = arrow_row_is_valid(column.buffers[0], row);
 	}
 	else
@@ -62,8 +56,8 @@ single_text_get_key(CompressedColumnValues column, int row, TextView *restrict k
 	}
 }
 
-static pg_attribute_always_inline TextView
-single_text_store_key(TextView key, Datum *key_storage, MemoryContext key_memory_context)
+static pg_attribute_always_inline BytesView
+single_text_store_key(BytesView key, Datum *key_storage, MemoryContext key_memory_context)
 {
 	const int total_bytes = key.len + VARHDRSZ;
 	text *stored = (text *) MemoryContextAlloc(key_memory_context, total_bytes);
@@ -74,17 +68,9 @@ single_text_store_key(TextView key, Datum *key_storage, MemoryContext key_memory
 	return key;
 }
 
-static pg_attribute_always_inline uint32
-hash_text(TextView view)
-{
-	uint32 valll = -1;
-	COMP_CRC32C(valll, view.data, view.len);
-	return valll;
-}
-
 #define KEY_VARIANT single_text
-#define KEY_HASH(X) hash_text(X)
+#define KEY_HASH(X) hash_bytes_view(X)
 #define KEY_EQUAL(a, b) (a.len == b.len && memcmp(a.data, b.data, a.len) == 0)
 #define STORE_HASH
-#define CTYPE TextView
+#define CTYPE BytesView
 #include "hash_table_functions_impl.c"
