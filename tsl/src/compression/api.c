@@ -457,6 +457,20 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 				(errmsg("new compressed chunk \"%s.%s\" created",
 						NameStr(compress_ht_chunk->fd.schema_name),
 						NameStr(compress_ht_chunk->fd.table_name))));
+
+		/* Since a new compressed relation was created it is necessary to
+		 * invalidate the relcache entry for the chunk because Hypercore TAM
+		 * caches information about the compressed relation in the
+		 * relcache. */
+		if (ts_is_hypercore_am(cxt.srcht_chunk->amoid))
+		{
+			/* Tell other backends */
+			CacheInvalidateRelcacheByRelid(cxt.srcht_chunk->table_id);
+
+			/* Immediately invalidate our own cache */
+			RelationCacheInvalidateEntry(cxt.srcht_chunk->table_id);
+		}
+
 		EventTriggerAlterTableEnd();
 	}
 	else
@@ -844,11 +858,19 @@ compress_hypercore(Chunk *chunk, bool rel_is_hypercore, enum UseAccessMethod use
 			TS_FALLTHROUGH;
 		case USE_AM_NULL:
 			Assert(rel_is_hypercore);
+			/* Don't forward the truncate to the compressed data during recompression */
+			bool truncate_compressed = hypercore_set_truncate_compressed(false);
 			relid = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
+			hypercore_set_truncate_compressed(truncate_compressed);
 			break;
 		case USE_AM_TRUE:
 			if (rel_is_hypercore)
+			{
+				/* Don't forward the truncate to the compressed data during recompression */
+				bool truncate_compressed = hypercore_set_truncate_compressed(false);
 				relid = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
+				hypercore_set_truncate_compressed(truncate_compressed);
+			}
 			else
 			{
 				/* Convert to a compressed hypercore by simply calling ALTER TABLE
@@ -1116,13 +1138,11 @@ fetch_unmatched_uncompressed_chunk_into_tuplesort(Tuplesortstate *segment_tuples
 	TableScanDesc scan;
 	TupleTableSlot *slot = table_slot_create(uncompressed_chunk_rel, NULL);
 	Snapshot snapshot = GetLatestSnapshot();
-	ScanKeyData scankey = {
-		/* Let compression TAM know it should only return tuples from the
-		 * non-compressed relation. No actual scankey necessary */
-		.sk_flags = SK_NO_COMPRESSED,
-	};
 
-	scan = table_beginscan(uncompressed_chunk_rel, snapshot, 0, &scankey);
+	scan = table_beginscan(uncompressed_chunk_rel, snapshot, 0, NULL);
+	/* If scan is using Hypercore, configure the scan to only return
+	 * compressed data */
+	hypercore_scan_set_skip_compressed(scan);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
 	{
@@ -1189,10 +1209,12 @@ fetch_matching_uncompressed_chunk_into_tuplesort(Tuplesortstate *segment_tupleso
 	}
 
 	snapshot = GetLatestSnapshot();
-	/* Let compression TAM know it should only return tuples from the
-	 * non-compressed relation. */
-	scankey->sk_flags = SK_NO_COMPRESSED;
+
 	scan = table_beginscan(uncompressed_chunk_rel, snapshot, nsegbycols_nonnull, scankey);
+	/* Let Hypercore TAM know it should only return tuples from the
+	 * non-compressed relation. */
+	hypercore_scan_set_skip_compressed(scan);
+
 	TupleTableSlot *slot = table_slot_create(uncompressed_chunk_rel, NULL);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))

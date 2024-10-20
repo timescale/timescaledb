@@ -149,6 +149,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     hypercore_cursor.sql
     hypercore_ddl.sql
     hypercore_delete.sql
+    hypercore_dump_restore.sql
     hypercore_index_btree.sql
     hypercore_index_hash.sql
     hypercore_insert.sql
