@@ -18,12 +18,16 @@
  */
 typedef struct VectorQualInfo
 {
-	/* The range-table index of the relation to compute vectorized quals
-	 * for */
+	/*
+	 * The range-table index of the relation to compute vectorized quals
+	 * for.
+	 */
 	Index rti;
 
-	/* AttrNumber-indexed array indicating whether an attribute/column is a
-	 * vectorizable type */
+	/*
+	 * Array indexed by uncompressed attno indicating whether an
+	 * attribute/column is a vectorizable type.
+	 */
 	bool *vector_attrs;
 } VectorQualInfo;
 

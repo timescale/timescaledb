@@ -5,6 +5,10 @@
  */
 #pragma once
 
+#include <postgres.h>
+
+#include <port/pg_crc32c.h>
+
 typedef struct BytesView
 {
 	uint32 len;
