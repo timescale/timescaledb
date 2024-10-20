@@ -85,6 +85,6 @@ hash_text(TextView view)
 #define KEY_VARIANT single_text
 #define KEY_HASH(X) hash_text(X)
 #define KEY_EQUAL(a, b) (a.len == b.len && memcmp(a.data, b.data, a.len) == 0)
-#define SH_STORE_HASH
+#define STORE_HASH
 #define CTYPE TextView
 #include "hash_table_functions_impl.c"

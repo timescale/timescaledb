@@ -15,15 +15,11 @@
 typedef struct
 {
 	CTYPE key;
-#ifdef SH_STORE_HASH
+#ifdef STORE_HASH
 	uint32 hash;
 #endif
 	uint32 agg_state_index;
 } FUNCTION_NAME(entry);
-
-#ifdef SH_STORE_HASH
-#define SH_GET_HASH(tb, entry) entry->hash
-#endif
 
 #define SH_PREFIX KEY_VARIANT
 #define SH_ELEMENT_TYPE FUNCTION_NAME(entry)
@@ -35,6 +31,10 @@ typedef struct
 #define SH_DECLARE
 #define SH_DEFINE
 #define SH_ENTRY_EMPTY(entry) ((entry)->agg_state_index == 0)
+#ifdef STORE_HASH
+#define SH_GET_HASH(tb, entry) entry->hash
+#define SH_STORE_HASH
+#endif
 #include "import/ts_simplehash.h"
 
 struct FUNCTION_NAME(hash);
@@ -68,6 +68,9 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *policy, CompressedColumnValues column,
 
 	CTYPE last_key;
 	uint32 last_key_index = 0;
+#ifdef STORE_HASH
+	uint32 last_hash = 0;
+#endif
 	for (int row = start_row; row < end_row; row++)
 	{
 		bool key_valid = false;
@@ -88,7 +91,12 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *policy, CompressedColumnValues column,
 			continue;
 		}
 
-		if (likely(last_key_index != 0) && KEY_EQUAL(key, last_key))
+		uint32 current_hash = KEY_HASH(key);
+		if (likely(last_key_index != 0)
+#ifdef STORE_HASH
+			&& last_hash == current_hash
+#endif
+			&& KEY_EQUAL(key, last_key))
 		{
 			/*
 			 * In real data sets, we often see consecutive rows with the
@@ -106,7 +114,8 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *policy, CompressedColumnValues column,
 		 * Find the key using the hash table.
 		 */
 		bool found = false;
-		FUNCTION_NAME(entry) *restrict entry = FUNCTION_NAME(insert)(table, key, &found);
+		FUNCTION_NAME(entry) *restrict entry =
+			FUNCTION_NAME(insert_hash)(table, key, current_hash, &found);
 		if (!found)
 		{
 			/*
@@ -121,11 +130,18 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *policy, CompressedColumnValues column,
 
 		last_key_index = entry->agg_state_index;
 		last_key = key;
+#ifdef STORE_HASH
+		last_hash = current_hash;
+#endif
 	}
 
 	return next_unused_state_index;
 }
 
+/*
+ * Nudge the compiler to generate separate implementations for different key
+ * decompression types.
+ */
 static pg_attribute_always_inline uint32
 FUNCTION_NAME(dispatch_type)(GroupingPolicyHash *policy, CompressedColumnValues column,
 							 const uint64 *restrict filter, uint32 next_unused_state_index,
@@ -154,10 +170,9 @@ FUNCTION_NAME(dispatch_type)(GroupingPolicyHash *policy, CompressedColumnValues 
 }
 
 /*
- * This function exists just to nudge the compiler to generate separate
- * implementation for the important case where the entire batch matches and the
- * key has no null values, and the unimportant corner case when we have a scalar
- * column.
+ * Nudge the compiler to generate separate implementation for the important case
+ * where the entire batch matches and the key has no null values, and the
+ * unimportant corner case when we have a scalar column.
  */
 static uint32
 FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
