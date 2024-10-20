@@ -68,9 +68,6 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *policy, CompressedColumnValues column,
 
 	CTYPE last_key;
 	uint32 last_key_index = 0;
-#ifdef STORE_HASH
-	uint32 last_hash = 0;
-#endif
 	for (int row = start_row; row < end_row; row++)
 	{
 		bool key_valid = false;
@@ -91,12 +88,7 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *policy, CompressedColumnValues column,
 			continue;
 		}
 
-		uint32 current_hash = KEY_HASH(key);
-		if (likely(last_key_index != 0)
-#ifdef STORE_HASH
-			&& last_hash == current_hash
-#endif
-			&& KEY_EQUAL(key, last_key))
+		if (likely(last_key_index != 0) && KEY_EQUAL(key, last_key))
 		{
 			/*
 			 * In real data sets, we often see consecutive rows with the
@@ -114,8 +106,7 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *policy, CompressedColumnValues column,
 		 * Find the key using the hash table.
 		 */
 		bool found = false;
-		FUNCTION_NAME(entry) *restrict entry =
-			FUNCTION_NAME(insert_hash)(table, key, current_hash, &found);
+		FUNCTION_NAME(entry) *restrict entry = FUNCTION_NAME(insert)(table, key, &found);
 		if (!found)
 		{
 			/*
@@ -130,9 +121,6 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *policy, CompressedColumnValues column,
 
 		last_key_index = entry->agg_state_index;
 		last_key = key;
-#ifdef STORE_HASH
-		last_hash = current_hash;
-#endif
 	}
 
 	return next_unused_state_index;
