@@ -58,6 +58,28 @@ select setseed(0.3);
  
 (1 row)
 
+-- View to get information about chunks and associated compressed
+-- chunks.
+create or replace view test_chunk_info as
+with
+  ht_and_chunk as (
+    select format('%I.%I', ht.schema_name, ht.table_name)::regclass as hypertable,
+           format('%I.%I', ch.schema_name, ch.table_name)::regclass as chunk,
+           case when cc.table_name is not null then
+                format('%I.%I', cc.schema_name, cc.table_name)::regclass
+                else null
+           end as compressed_chunk
+      from _timescaledb_catalog.chunk ch
+      left join _timescaledb_catalog.chunk cc on ch.compressed_chunk_id = cc.id
+      join _timescaledb_catalog.hypertable ht on ch.hypertable_id = ht.id
+     where ht.compression_state != 2
+  )
+select hypertable,
+       chunk,
+       (select reloptions from pg_class where oid = chunk) as chunk_reloptions,
+       compressed_chunk,
+       (select reloptions from pg_class where oid = compressed_chunk) as compress_reloptions
+  from ht_and_chunk;
 -- Testing the basic API for creating a hypercore
 -- This should just fail because you cannot create a plain table with
 -- hypercore (yet).
@@ -301,7 +323,19 @@ alter table test4 set (timescaledb.compress);
 WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "test4" is set to ""
 NOTICE:  default order by for hypertable "test4" is set to ""time" DESC"
+select compress_reloptions from test_chunk_info where chunk = :'chunk'::regclass;
+ compress_reloptions 
+---------------------
+ 
+(1 row)
+
 alter table :chunk set access method hypercore;
+select compress_reloptions from test_chunk_info where chunk = :'chunk'::regclass;
+              compress_reloptions              
+-----------------------------------------------
+ {toast_tuple_target=128,autovacuum_enabled=0}
+(1 row)
+
 select * from amrels where relparent='test4'::regclass;
                    rel                   |  amname   | relparent 
 -----------------------------------------+-----------+-----------
@@ -561,6 +595,13 @@ select ch as alter_chunk from show_chunks('test2') ch limit 1 \gset
 LOG:  statement: select ch as alter_chunk from show_chunks('test2') ch limit 1 
 insert into :alter_chunk values ('2022-06-01 10:00', 4, 4, 4.0, 4.0);
 LOG:  statement: insert into _timescaledb_internal._hyper_1_1_chunk values ('2022-06-01 10:00', 4, 4, 4.0, 4.0);
+select compress_reloptions from test_chunk_info where chunk = :'alter_chunk'::regclass;
+LOG:  statement: select compress_reloptions from test_chunk_info where chunk = '_timescaledb_internal._hyper_1_1_chunk'::regclass;
+   compress_reloptions    
+--------------------------
+ {toast_tuple_target=128}
+(1 row)
+
 alter table :alter_chunk set access method hypercore;
 LOG:  statement: alter table _timescaledb_internal._hyper_1_1_chunk set access method hypercore;
 DEBUG:  migrating table "_hyper_1_1_chunk" to hypercore
@@ -568,6 +609,13 @@ DEBUG:  building index "_hyper_1_1_chunk_test2_device_id_created_at_idx" on tabl
 DEBUG:  index "_hyper_1_1_chunk_test2_device_id_created_at_idx" can safely use deduplication
 DEBUG:  building index "_hyper_1_1_chunk_test2_created_at_idx" on table "_hyper_1_1_chunk" serially
 DEBUG:  index "_hyper_1_1_chunk_test2_created_at_idx" can safely use deduplication
+select compress_reloptions from test_chunk_info where chunk = :'alter_chunk'::regclass;
+LOG:  statement: select compress_reloptions from test_chunk_info where chunk = '_timescaledb_internal._hyper_1_1_chunk'::regclass;
+              compress_reloptions              
+-----------------------------------------------
+ {toast_tuple_target=128,autovacuum_enabled=0}
+(1 row)
+
 reset client_min_messages;
 LOG:  statement: reset client_min_messages;
 -- Check pg_am dependencies for the chunks. Since they are using heap
