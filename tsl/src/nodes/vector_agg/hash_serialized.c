@@ -12,15 +12,15 @@
 
 #include <common/hashfn.h>
 
+#include "bytes_view.h"
 #include "compression/arrow_c_data_interface.h"
 #include "grouping_policy_hash.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
-#include "bytes_view.h"
 
 static pg_attribute_always_inline void
 serialized_get_key(CompressedColumnValues column, int row, BytesView *restrict key,
-	bool *restrict valid)
+				   bool *restrict valid)
 {
 	Assert(false);
 }

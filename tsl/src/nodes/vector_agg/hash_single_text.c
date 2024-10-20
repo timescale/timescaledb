@@ -12,11 +12,11 @@
 
 #include <common/hashfn.h>
 
+#include "bytes_view.h"
 #include "compression/arrow_c_data_interface.h"
 #include "grouping_policy_hash.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
-#include "bytes_view.h"
 
 static BytesView
 get_bytes_view(CompressedColumnValues *column_values, int arrow_row)
