@@ -27,11 +27,14 @@ typedef struct
 } Int24AvgAccumState;
 
 static void
-int24_avg_accum_init(void *agg_state)
+int24_avg_accum_init(void *restrict agg_states, int n)
 {
-	Int24AvgAccumState *state = (Int24AvgAccumState *) agg_state;
-	state->count = 0;
-	state->sum = 0;
+	Int24AvgAccumState *states = (Int24AvgAccumState *) agg_states;
+	for (int i = 0; i < n; i++)
+	{
+		states[i].count = 0;
+		states[i].sum = 0;
+	}
 }
 
 static void
