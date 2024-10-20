@@ -188,7 +188,7 @@ is_first_last_node(Node *node, List **context)
 		if (func_strategy != NULL)
 			return true;
 	}
-	return expression_tree_walker(node, is_first_last_node, context);
+	return expression_tree_walker(node, is_first_last_node, (void *) context);
 }
 
 static bool

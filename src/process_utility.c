@@ -1094,6 +1094,12 @@ process_truncate(ProcessUtilityArgs *args)
 					}
 					break;
 				}
+				default:
+					/*
+					 * Do nothing for other relation types. This is mostly to
+					 * placate the static analyzers.
+					 */
+					break;
 			}
 		}
 
@@ -3085,13 +3091,14 @@ process_cluster_start(ProcessUtilityArgs *args)
 			 * it only for "verbose" output, but this doesn't seem worth it as the
 			 * cost of sorting is quickly amortized over the actual work to cluster
 			 * the chunks. */
-			mappings = palloc(sizeof(ChunkIndexMapping *) * list_length(chunk_indexes));
+			mappings = (ChunkIndexMapping **) palloc(sizeof(ChunkIndexMapping *) *
+													 list_length(chunk_indexes));
 
 			i = 0;
 			foreach (lc, chunk_indexes)
 				mappings[i++] = lfirst(lc);
 
-			qsort(mappings,
+			qsort((void *) mappings,
 				  list_length(chunk_indexes),
 				  sizeof(ChunkIndexMapping *),
 				  chunk_index_mappings_cmp);
