@@ -61,43 +61,12 @@ standard_ExplainOneQuery(Query *query, int cursorOptions, IntoClause *into, Expl
 }
 #endif
 
-static struct
-{
-	const char *hits_text;			   /* Number of cache hits */
-	const char *miss_text;			   /* Number of cache misses */
-	const char *evict_text;			   /* Number of cache evictions */
-	const char *decompress_text;	   /* Number of arrays decompressed */
-	const char *decompress_calls_text; /* Number of calls to decompress an array */
-} format_texts[] = {
-	[EXPLAIN_FORMAT_TEXT] = {
-		.hits_text = "Array Cache Hits",
-		.miss_text = "Array Cache Misses",
-		.evict_text = "Array Cache Evictions",
-		.decompress_text = "Array Decompressions",
-		.decompress_calls_text = "Array Decompression Calls",
-	},
-	[EXPLAIN_FORMAT_XML]= {
-		.hits_text = "hits",
-		.miss_text = "misses",
-		.evict_text = "evictions",
-		.decompress_text = "decompressions",
-		.decompress_calls_text = "decompression calls",
-	},
-	[EXPLAIN_FORMAT_JSON] = {
-		.hits_text = "hits",
-		.miss_text = "misses",
-		.evict_text = "evictions",
-		.decompress_text = "decompressions",
-		.decompress_calls_text = "decompression calls",
-	},
-	[EXPLAIN_FORMAT_YAML] = {
-		.hits_text = "hits",
-		.miss_text = "misses",
-		.evict_text = "evictions",
-		.decompress_text = "decompressions",
-		.decompress_calls_text = "decompression calls",
-	},
-};
+#define APPEND_IF_POSITIVE(INFO, FMT, VAL)                                                         \
+	do                                                                                             \
+	{                                                                                              \
+		if ((VAL) > 0)                                                                             \
+			appendStringInfo((INFO), " " FMT, (long long) (VAL));                                  \
+	} while (0)
 
 static void
 explain_decompression(Query *query, int cursorOptions, IntoClause *into, ExplainState *es,
@@ -106,33 +75,45 @@ explain_decompression(Query *query, int cursorOptions, IntoClause *into, Explain
 	standard_ExplainOneQuery(query, cursorOptions, into, es, queryString, params, queryEnv);
 	if (decompress_cache_print)
 	{
-		Assert(es->format < sizeof(format_texts) / sizeof(*format_texts));
+		const bool has_decompress_data = decompress_cache_stats.decompressions > 0 ||
+										 decompress_cache_stats.decompress_calls > 0;
+		const bool has_cache_data = decompress_cache_stats.hits > 0 ||
+									decompress_cache_stats.misses > 0 ||
+									decompress_cache_stats.evictions > 0;
+		if (has_decompress_data || has_cache_data)
+		{
+			if (es->format == EXPLAIN_FORMAT_TEXT)
+			{
+				appendStringInfoString(es->str, "Array:");
+				if (has_cache_data)
+					appendStringInfoString(es->str, " cache");
+				APPEND_IF_POSITIVE(es->str, "hits=%lld", decompress_cache_stats.hits);
+				APPEND_IF_POSITIVE(es->str, "misses=%lld", decompress_cache_stats.misses);
+				APPEND_IF_POSITIVE(es->str, "evictions=%lld", decompress_cache_stats.evictions);
+				if (has_decompress_data)
+					appendStringInfoString(es->str, ", decompress");
+				APPEND_IF_POSITIVE(es->str, "count=%lld", decompress_cache_stats.decompressions);
+				APPEND_IF_POSITIVE(es->str, "calls=%lld", decompress_cache_stats.decompress_calls);
+				appendStringInfoChar(es->str, '\n');
+			}
+			else
+			{
+				ExplainOpenGroup("Array Cache", "Arrow Array Cache", true, es);
+				ExplainPropertyInteger("hits", NULL, decompress_cache_stats.hits, es);
+				ExplainPropertyInteger("misses", NULL, decompress_cache_stats.misses, es);
+				ExplainPropertyInteger("evictions", NULL, decompress_cache_stats.evictions, es);
+				ExplainCloseGroup("Array Cache", "Arrow Array Cache", true, es);
 
-		ExplainOpenGroup("Array cache", "Arrow Array Cache", true, es);
-		ExplainPropertyInteger(format_texts[es->format].hits_text,
-							   NULL,
-							   decompress_cache_stats.hits,
-							   es);
-		ExplainPropertyInteger(format_texts[es->format].miss_text,
-							   NULL,
-							   decompress_cache_stats.misses,
-							   es);
-		ExplainPropertyInteger(format_texts[es->format].evict_text,
-							   NULL,
-							   decompress_cache_stats.evictions,
-							   es);
-		ExplainPropertyInteger(format_texts[es->format].decompress_text,
-							   NULL,
-							   decompress_cache_stats.decompressions,
-							   es);
-
-		if (es->verbose)
-			ExplainPropertyInteger(format_texts[es->format].decompress_calls_text,
-								   NULL,
-								   decompress_cache_stats.decompress_calls,
-								   es);
-
-		ExplainCloseGroup("Array cache", "Arrow Array Cache", true, es);
+				ExplainOpenGroup("Array Decompress", "Arrow Array Decompress", true, es);
+				ExplainPropertyInteger("count", NULL, decompress_cache_stats.decompressions, es);
+				if (es->verbose)
+					ExplainPropertyInteger("calls",
+										   NULL,
+										   decompress_cache_stats.decompress_calls,
+										   es);
+				ExplainCloseGroup("Array Decompress", "Arrow Array Decompress", true, es);
+			}
+		}
 
 		decompress_cache_print = false;
 		memset(&decompress_cache_stats, 0, sizeof(struct DecompressCacheStats));
