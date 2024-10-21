@@ -4,6 +4,22 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.17.1 (2024-10-21)
+
+This release contains performance improvements and bug fixes since
+the 2.17.0 release. We recommend that you upgrade at the next
+available opportunity.
+
+**Features**
+* #7360 Add chunk skipping GUC
+
+**Bugfixes**
+* #7335 Change log level used in compression
+* #7342 Fix collation for in-memory tuple filtering
+
+**Thanks**
+* @gmilamjr for reporting an issue with the log level of compression messages
+* @hackbnw for reporting an issue with collation during tuple filtering
 
 ## 2.17.0 (2024-10-08)
 
