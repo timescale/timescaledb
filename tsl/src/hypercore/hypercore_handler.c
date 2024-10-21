@@ -279,6 +279,7 @@ lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 HypercoreInfo *
 RelationGetHypercoreInfo(Relation rel)
 {
+	/*coverity[tainted_data_downcast : FALSE]*/
 	if (NULL == rel->rd_amcache)
 		rel->rd_amcache = lazy_build_hypercore_info_cache(rel,
 														  true /* create constraints */,
@@ -286,6 +287,7 @@ RelationGetHypercoreInfo(Relation rel)
 
 	Assert(rel->rd_amcache && OidIsValid(((HypercoreInfo *) rel->rd_amcache)->compressed_relid));
 
+	/*coverity[tainted_data_downcast : FALSE]*/
 	return rel->rd_amcache;
 }
 

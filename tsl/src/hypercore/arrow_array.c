@@ -468,7 +468,7 @@ arrow_get_datum_fixlen(const ArrowArray *array, Oid typid, int16 typlen, uint16 
 		return (NullableDatum){ .isnull = true };
 
 	/* In order to handle fixed-length values of arbitrary size that are byref
-	 * and byval, we use fetch_all() rather than rolling our own. This is
+	 * and byval, we use fetch_att() rather than rolling our own. This is
 	 * taken from utils/adt/rangetypes.c */
 	Datum datum = fetch_att(&values[index * typlen], apriv->typbyval, typlen);
 
