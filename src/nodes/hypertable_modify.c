@@ -741,8 +741,14 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 			 */
 #if PG17_GE
 		if (cds && cds->rri && operation == CMD_MERGE)
+		{
+			cds->rri->ri_MergeActions[MERGE_WHEN_MATCHED] =
+				resultRelInfo->ri_MergeActions[MERGE_WHEN_MATCHED];
 			cds->rri->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET] =
 				resultRelInfo->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
+			cds->rri->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_SOURCE] =
+				resultRelInfo->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_SOURCE];
+		}
 #elif PG15_GE
 		if (cds && cds->rri && operation == CMD_MERGE)
 			cds->rri->ri_notMatchedMergeAction = resultRelInfo->ri_notMatchedMergeAction;
@@ -2572,7 +2578,7 @@ ExecDelete(ModifyTableContext *context, ResultRelInfo *resultRelInfo, ItemPointe
 		 * special-case behavior needed for referential integrity updates in
 		 * transaction-snapshot mode transactions.
 		 */
-	ldelete:;
+	ldelete:
 		if (!ItemPointerIsValid(tupleid))
 		{
 			elog(ERROR,

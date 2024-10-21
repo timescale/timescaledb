@@ -399,9 +399,14 @@ chunk_dispatch_exec(CustomScanState *node)
 			 * XXX do we need an additional support of NOT MATCHED BY SOURCE
 			 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
 			 */
+			bool not_matched_by_source = false;
 #if PG17_GE
 			List *actionStates = dispatch->dispatch_state->mtstate->resultRelInfo
-									 ->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
+									 ->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_SOURCE];
+			actionStates = list_concat(actionStates, dispatch->dispatch_state->mtstate->resultRelInfo
+									->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET]);
+			not_matched_by_source = dispatch->dispatch_state->mtstate->resultRelInfo
+									 ->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_SOURCE] != NIL;
 #else
 			List *actionStates =
 				dispatch->dispatch_state->mtstate->resultRelInfo->ri_notMatchedMergeAction;
@@ -418,6 +423,8 @@ chunk_dispatch_exec(CustomScanState *node)
 					newslot = ExecProject(action->mas_proj);
 					break;
 				}
+				else if (commandType == CMD_DELETE && not_matched_by_source)
+					goto out;
 			}
 			if (newslot)
 				break;
@@ -444,6 +451,9 @@ chunk_dispatch_exec(CustomScanState *node)
 
 	ts_chunk_dispatch_decompress_batches_for_insert(dispatch, cis, slot);
 
+#if PG15_GE
+out:
+#endif
 	MemoryContextSwitchTo(old);
 
 	/*
