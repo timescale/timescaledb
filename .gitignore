@@ -37,3 +37,4 @@ tags
 /cmake-build-debug/
 /.idea/
 coccinelle.diff
+.gdb_history
