@@ -650,12 +650,12 @@ try_insert_vector_agg_node(Plan *plan)
 													 bulk_decompression_enabled_globally));
 		vqi.vector_attrs[uncompressed_chunk_attno] = is_vector_var;
 
-//		fprintf(stderr,
-//				"compressed %d -> uncompressed %d custom scan %d vector %d\n",
-//				compressed_column_index,
-//				uncompressed_chunk_attno,
-//				custom_scan_attno,
-//				is_vector_var);
+		//		fprintf(stderr,
+		//				"compressed %d -> uncompressed %d custom scan %d vector %d\n",
+		//				compressed_column_index,
+		//				uncompressed_chunk_attno,
+		//				custom_scan_attno,
+		//				is_vector_var);
 	}
 
 	/* Now check the aggregate functions themselves. */

@@ -10,10 +10,10 @@
  * FUNCTION_NAME(one) function, which adds one passing non-null row to the given
  * aggregate function state.
  */
-static void
-FUNCTION_NAME(many_vector)(void *restrict agg_states, const uint32 *offsets, const uint64 *filter,
-						   int start_row, int end_row, const ArrowArray *vector,
-						   MemoryContext agg_extra_mctx)
+static pg_attribute_always_inline void
+FUNCTION_NAME(many_vector_impl)(void *restrict agg_states, const uint32 *offsets,
+								const uint64 *filter, int start_row, int end_row,
+								const ArrowArray *vector, MemoryContext agg_extra_mctx)
 {
 	FUNCTION_NAME(state) *restrict states = (FUNCTION_NAME(state) *) agg_states;
 	const CTYPE *values = vector->buffers[1];
@@ -27,4 +27,21 @@ FUNCTION_NAME(many_vector)(void *restrict agg_states, const uint32 *offsets, con
 		}
 	}
 	MemoryContextSwitchTo(old);
+}
+
+static void
+FUNCTION_NAME(many_vector)(void *restrict agg_states, const uint32 *offsets, const uint64 *filter,
+						   int start_row, int end_row, const ArrowArray *vector,
+						   MemoryContext agg_extra_mctx)
+{
+	if (filter == NULL)
+	{
+		FUNCTION_NAME(many_vector_impl)
+		(agg_states, offsets, NULL, start_row, end_row, vector, agg_extra_mctx);
+	}
+	else
+	{
+		FUNCTION_NAME(many_vector_impl)
+		(agg_states, offsets, filter, start_row, end_row, vector, agg_extra_mctx);
+	}
 }
