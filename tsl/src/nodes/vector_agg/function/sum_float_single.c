@@ -21,8 +21,8 @@ FUNCTION_NAME(emit)(void *agg_state, Datum *out_result, bool *out_isnull)
 }
 
 static pg_attribute_always_inline void
-FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *valid1,
-						   const uint64 *valid2, MemoryContext agg_extra_mctx)
+FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *filter,
+						   MemoryContext agg_extra_mctx)
 {
 	/*
 	 * Vector registers can be up to 512 bits wide.
@@ -46,15 +46,15 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 			 * infinities and NaNs.
 			 */
 #define INNER_LOOP                                                                                 \
-	const bool valid = arrow_row_both_valid(valid1, valid2, row);                                  \
+	const bool row_valid = arrow_row_is_valid(filter, row);                                        \
 	union                                                                                          \
 	{                                                                                              \
 		CTYPE f;                                                                                   \
 		MASKTYPE m;                                                                                \
 	} u = { .f = values[row] };                                                                    \
-	u.m &= valid ? ~(MASKTYPE) 0 : (MASKTYPE) 0;                                                   \
+	u.m &= row_valid ? ~(MASKTYPE) 0 : (MASKTYPE) 0;                                               \
 	*dest += u.f;                                                                                  \
-	*have_result |= valid;
+	*have_result |= row_valid;
 
 			INNER_LOOP
 		}

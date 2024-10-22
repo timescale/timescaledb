@@ -99,8 +99,7 @@ FUNCTION_NAME(emit)(void *agg_state, Datum *out_result, bool *out_isnull)
  * Youngs-Cramer update for rows after the first.
  */
 static pg_attribute_always_inline void
-FUNCTION_NAME(update)(const uint64 *valid1, const uint64 *valid2, const CTYPE *values, int row,
-					  double *N, double *Sx
+FUNCTION_NAME(update)(const uint64 *filter, const CTYPE *values, int row, double *N, double *Sx
 #ifdef NEED_SXX
 					  ,
 					  double *Sxx
@@ -108,7 +107,7 @@ FUNCTION_NAME(update)(const uint64 *valid1, const uint64 *valid2, const CTYPE *v
 )
 {
 	const CTYPE newval = values[row];
-	if (!arrow_row_both_valid(valid1, valid2, row))
+	if (!arrow_row_is_valid(filter, row))
 	{
 		return;
 	}
@@ -185,20 +184,19 @@ FUNCTION_NAME(combine)(double *inout_N, double *inout_Sx,
 }
 
 #ifdef NEED_SXX
-#define UPDATE(valid1, valid2, values, row, N, Sx, Sxx)                                            \
-	FUNCTION_NAME(update)(valid1, valid2, values, row, N, Sx, Sxx)
+#define UPDATE(filter, values, row, N, Sx, Sxx)                                                    \
+	FUNCTION_NAME(update)(filter, values, row, N, Sx, Sxx)
 #define COMBINE(inout_N, inout_Sx, inout_Sxx, N2, Sx2, Sxx2)                                       \
 	FUNCTION_NAME(combine)(inout_N, inout_Sx, inout_Sxx, N2, Sx2, Sxx2)
 #else
-#define UPDATE(valid1, valid2, values, row, N, Sx, Sxx)                                            \
-	FUNCTION_NAME(update)(valid1, valid2, values, row, N, Sx)
+#define UPDATE(filter, values, row, N, Sx, Sxx) FUNCTION_NAME(update)(filter, values, row, N, Sx)
 #define COMBINE(inout_N, inout_Sx, inout_Sxx, N2, Sx2, Sxx2)                                       \
 	FUNCTION_NAME(combine)(inout_N, inout_Sx, N2, Sx2)
 #endif
 
 static pg_attribute_always_inline void
-FUNCTION_NAME(vector_impl)(void *agg_state, size_t n, const CTYPE *values, const uint64 *valid1,
-						   const uint64 *valid2, MemoryContext agg_extra_mctx)
+FUNCTION_NAME(vector_impl)(void *agg_state, size_t n, const CTYPE *values, const uint64 *filter,
+						   MemoryContext agg_extra_mctx)
 {
 	/*
 	 * Vector registers can be up to 512 bits wide.
@@ -228,7 +226,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, size_t n, const CTYPE *values, const
 		for (; row < n; row++)
 		{
 			const CTYPE newval = values[row];
-			if (arrow_row_both_valid(valid1, valid2, row))
+			if (arrow_row_is_valid(filter, row))
 			{
 				Narray[inner] = 1;
 				Sxarray[inner] = newval;
@@ -246,7 +244,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, size_t n, const CTYPE *values, const
 	for (size_t inner = row % UNROLL_SIZE; inner > 0 && inner < UNROLL_SIZE && row < n;
 		 inner++, row++)
 	{
-		UPDATE(valid1, valid2, values, row, &Narray[inner], &Sxarray[inner], &Sxxarray[inner]);
+		UPDATE(filter, values, row, &Narray[inner], &Sxarray[inner], &Sxxarray[inner]);
 	}
 #endif
 
@@ -258,13 +256,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, size_t n, const CTYPE *values, const
 	{
 		for (size_t inner = 0; inner < UNROLL_SIZE; inner++)
 		{
-			UPDATE(valid1,
-				   valid2,
-				   values,
-				   row + inner,
-				   &Narray[inner],
-				   &Sxarray[inner],
-				   &Sxxarray[inner]);
+			UPDATE(filter, values, row + inner, &Narray[inner], &Sxarray[inner], &Sxxarray[inner]);
 		}
 	}
 
@@ -274,7 +266,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, size_t n, const CTYPE *values, const
 	for (; row < n; row++)
 	{
 		const size_t inner = row % UNROLL_SIZE;
-		UPDATE(valid1, valid2, values, row, &Narray[inner], &Sxarray[inner], &Sxxarray[inner]);
+		UPDATE(filter, values, row, &Narray[inner], &Sxarray[inner], &Sxxarray[inner]);
 	}
 
 	/*

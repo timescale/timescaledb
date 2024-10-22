@@ -11,14 +11,14 @@ case PG_AGG_OID_HELPER(AGG_NAME, PG_TYPE):
 #else
 
 static pg_attribute_always_inline void
-FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *valid1,
-						   const uint64 *valid2, MemoryContext agg_extra_mctx)
+FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *filter,
+						   MemoryContext agg_extra_mctx)
 {
 	int64 batch_count = 0;
 	int64 batch_sum = 0;
 	for (int row = 0; row < n; row++)
 	{
-		const bool row_ok = arrow_row_both_valid(valid1, valid2, row);
+		const bool row_ok = arrow_row_is_valid(filter, row);
 		batch_count += row_ok;
 		batch_sum += values[row] * row_ok;
 	}

@@ -10,8 +10,8 @@ case PG_AGG_OID_HELPER(AGG_NAME, PG_TYPE):
 	return &FUNCTION_NAME(argdef);
 #else
 static pg_attribute_always_inline void
-FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *valid1,
-						   const uint64 *valid2, MemoryContext agg_extra_mctx)
+FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *filter,
+						   MemoryContext agg_extra_mctx)
 {
 	MinMaxState *state = (MinMaxState *) agg_state;
 
@@ -20,7 +20,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 	for (int row = 0; row < n; row++)
 	{
 		const CTYPE new_value = values[row];
-		const bool new_value_ok = arrow_row_both_valid(valid1, valid2, row);
+		const bool new_value_ok = arrow_row_is_valid(filter, row);
 
 		/*
 		 * Note that we have to properly handle NaNs and Infinities for floats.
