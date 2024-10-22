@@ -31,15 +31,16 @@ typedef struct
 	 * Add the rows of the given arrow array to aggregate function states given
 	 * by the respective offsets.
 	 */
-	void (*agg_many_vector)(void *restrict agg_states, uint32 *restrict offsets, int start_row,
-							int end_row, const ArrowArray *vector, MemoryContext agg_extra_mctx);
+	void (*agg_many_vector)(void *restrict agg_states, const uint32 *offsets, const uint64 *filter,
+							int start_row, int end_row, const ArrowArray *vector,
+							MemoryContext agg_extra_mctx);
 
 	/*
 	 * Same as above, but for a scalar argument. This is mostly important for
 	 * count(*) and can be NULL.
 	 */
-	void (*agg_many_scalar)(void *restrict agg_states, uint32 *restrict offsets, int start_row,
-							int end_row, Datum constvalue, bool constisnull,
+	void (*agg_many_scalar)(void *restrict agg_states, const uint32 *offsets, const uint64 *filter,
+							int start_row, int end_row, Datum constvalue, bool constisnull,
 							MemoryContext agg_extra_mctx);
 
 	/* Emit a partial aggregation result. */

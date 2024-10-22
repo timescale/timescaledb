@@ -115,11 +115,11 @@ gp_hash_reset(GroupingPolicy *obj)
 }
 
 static void
-compute_single_aggregate(DecompressBatchState *batch_state, int start_row, int end_row,
-						 VectorAggDef *agg_def, void *agg_states, uint32 *offsets,
-						 MemoryContext agg_extra_mctx)
+compute_single_aggregate(GroupingPolicyHash *policy, const DecompressBatchState *batch_state,
+						 int start_row, int end_row, VectorAggDef *agg_def, void *agg_states,
+						 const uint32 *offsets, MemoryContext agg_extra_mctx)
 {
-	ArrowArray *arg_arrow = NULL;
+	const ArrowArray *arg_arrow = NULL;
 	Datum arg_datum = 0;
 	bool arg_isnull = true;
 
@@ -129,7 +129,8 @@ compute_single_aggregate(DecompressBatchState *batch_state, int start_row, int e
 	 */
 	if (agg_def->input_offset >= 0)
 	{
-		CompressedColumnValues *values = &batch_state->compressed_columns[agg_def->input_offset];
+		const CompressedColumnValues *values =
+			&batch_state->compressed_columns[agg_def->input_offset];
 		Assert(values->decompression_type != DT_Invalid);
 		Assert(values->decompression_type != DT_Iterator);
 
@@ -145,14 +146,44 @@ compute_single_aggregate(DecompressBatchState *batch_state, int start_row, int e
 		}
 	}
 
+	uint64 *restrict filter = NULL;
+	if (batch_state->vector_qual_result != NULL || agg_def->filter_result != NULL ||
+		(arg_arrow != NULL && arg_arrow->buffers[0] != NULL))
+	{
+		filter = policy->tmp_filter;
+		const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
+		for (size_t i = 0; i < num_words; i++)
+		{
+			uint64 word = -1;
+			if (batch_state->vector_qual_result != NULL)
+			{
+				word &= batch_state->vector_qual_result[i];
+			}
+			if (agg_def->filter_result != NULL)
+			{
+				word &= agg_def->filter_result[i];
+			}
+			if (arg_arrow != NULL && arg_arrow->buffers[0] != NULL)
+			{
+				word &= ((uint64 *) arg_arrow->buffers[0])[i];
+			}
+			filter[i] = word;
+		}
+	}
+
 	/*
 	 * Now call the function.
 	 */
 	if (arg_arrow != NULL)
 	{
 		/* Arrow argument. */
-		agg_def->func
-			.agg_many_vector(agg_states, offsets, start_row, end_row, arg_arrow, agg_extra_mctx);
+		agg_def->func.agg_many_vector(agg_states,
+									  offsets,
+									  filter,
+									  start_row,
+									  end_row,
+									  arg_arrow,
+									  agg_extra_mctx);
 	}
 	else
 	{
@@ -164,6 +195,7 @@ compute_single_aggregate(DecompressBatchState *batch_state, int start_row, int e
 		{
 			agg_def->func.agg_many_scalar(agg_states,
 										  offsets,
+										  filter,
 										  start_row,
 										  end_row,
 										  arg_datum,
@@ -174,7 +206,7 @@ compute_single_aggregate(DecompressBatchState *batch_state, int start_row, int e
 		{
 			for (int i = start_row; i < end_row; i++)
 			{
-				if (offsets[i] == 0)
+				if (!arrow_row_is_valid(filter, i))
 				{
 					continue;
 				}
@@ -251,7 +283,8 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 		/*
 		 * Update the aggregate function states.
 		 */
-		compute_single_aggregate(batch_state,
+		compute_single_aggregate(policy,
+								 batch_state,
 								 start_row,
 								 end_row,
 								 agg_def,
@@ -289,6 +322,17 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 		policy->offsets = palloc(sizeof(policy->offsets[0]) * policy->num_allocated_offsets);
 	}
 	memset(policy->offsets, 0, n * sizeof(policy->offsets[0]));
+
+	/*
+	 * Allocate the temporary filter array for computing the combined results of
+	 * batch filter, aggregate filter and column validity.
+	 */
+	const size_t num_words = (n + 63) / 64;
+	if (num_words > policy->num_tmp_filter_words)
+	{
+		policy->tmp_filter = palloc(sizeof(*policy->tmp_filter) * (num_words * 2 + 1));
+		policy->num_tmp_filter_words = (num_words * 2 + 1);
+	}
 
 	const uint64_t *restrict filter = batch_state->vector_qual_result;
 	if (filter == NULL)

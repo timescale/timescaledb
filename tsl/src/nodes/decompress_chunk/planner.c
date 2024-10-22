@@ -808,6 +808,8 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 	if (!vqinfo->vector_attrs[var->varattno])
 	{
 		/* This column doesn't support bulk decompression. */
+		//		fprintf(stderr, "doesn't support bulk decompression:\n");
+		//		my_print(var);
 		return NULL;
 	}
 

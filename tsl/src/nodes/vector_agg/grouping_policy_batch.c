@@ -98,6 +98,20 @@ compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_de
 	Datum arg_datum = 0;
 	bool arg_isnull = true;
 
+	uint64 *filter = batch_state->vector_qual_result;
+	if (agg_def->filter_result != NULL)
+	{
+		filter = agg_def->filter_result;
+		if (batch_state->vector_qual_result != NULL)
+		{
+			const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
+			for (size_t i = 0; i < num_words; i++)
+			{
+				filter[i] &= batch_state->vector_qual_result[i];
+			}
+		}
+	}
+
 	/*
 	 * We have functions with one argument, and one function with no arguments
 	 * (count(*)). Collect the arguments.
@@ -126,10 +140,7 @@ compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_de
 	if (arg_arrow != NULL)
 	{
 		/* Arrow argument. */
-		agg_def->func.agg_vector(agg_state,
-								 arg_arrow,
-								 batch_state->vector_qual_result,
-								 agg_extra_mctx);
+		agg_def->func.agg_vector(agg_state, arg_arrow, filter, agg_extra_mctx);
 	}
 	else
 	{
@@ -137,16 +148,18 @@ compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_de
 		 * Scalar argument, or count(*). Have to also count the valid rows in
 		 * the batch.
 		 */
-		const int n =
-			arrow_num_valid(batch_state->vector_qual_result, batch_state->total_batch_rows);
+		const int n = arrow_num_valid(filter, batch_state->total_batch_rows);
 
 		/*
 		 * The batches that are fully filtered out by vectorized quals should
 		 * have been skipped by the caller.
 		 */
-		Assert(n > 0);
+		// Assert(n > 0);
 
-		agg_def->func.agg_scalar(agg_state, arg_datum, arg_isnull, n, agg_extra_mctx);
+		if (n > 0)
+		{
+			agg_def->func.agg_scalar(agg_state, arg_datum, arg_isnull, n, agg_extra_mctx);
+		}
 	}
 }
 

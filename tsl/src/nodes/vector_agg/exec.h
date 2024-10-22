@@ -18,6 +18,8 @@ typedef struct
 	VectorAggFunctions func;
 	int input_offset;
 	int output_offset;
+	List *filter_clauses;
+	uint64 *filter_result;
 } VectorAggDef;
 
 typedef struct

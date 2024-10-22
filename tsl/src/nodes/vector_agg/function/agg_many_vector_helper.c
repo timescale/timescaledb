@@ -11,20 +11,17 @@
  * aggregate function state.
  */
 static void
-FUNCTION_NAME(many_vector)(void *restrict agg_states, uint32 *restrict offsets, int start_row,
-						   int end_row, const ArrowArray *vector, MemoryContext agg_extra_mctx)
+FUNCTION_NAME(many_vector)(void *restrict agg_states, const uint32 *offsets, const uint64 *filter,
+						   int start_row, int end_row, const ArrowArray *vector,
+						   MemoryContext agg_extra_mctx)
 {
 	FUNCTION_NAME(state) *restrict states = (FUNCTION_NAME(state) *) agg_states;
 	const CTYPE *values = vector->buffers[1];
-	const uint64 *valid = vector->buffers[0];
 	MemoryContext old = MemoryContextSwitchTo(agg_extra_mctx);
 	for (int row = start_row; row < end_row; row++)
 	{
 		const CTYPE value = values[row];
-		const bool row_passes = (offsets[row] != 0);
-		const bool value_notnull = arrow_row_is_valid(valid, row);
-
-		if (row_passes && value_notnull)
+		if (arrow_row_is_valid(filter, row))
 		{
 			FUNCTION_NAME(one)(&states[offsets[row]], value);
 		}

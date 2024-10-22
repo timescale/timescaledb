@@ -104,10 +104,11 @@ set timescaledb.debug_require_vector_agg = 'require';
 ---- on float4 due to different numeric stability in our and PG implementations.
 --set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
 select
-    format('%sselect %s%s(%s) from aggfns%s%s order by 1;',
+    format('%sselect %s%s(%s)%s from aggfns%s%s order by 1;',
             explain,
             grouping || ', ',
             function, variable,
+            ' filter (where ' || agg_filter || ')',
             ' where ' || condition,
             ' group by ' || grouping )
 from
@@ -145,32 +146,35 @@ from
         null,
         's',
         'ss',
-        'x']) with ordinality as grouping(grouping, n)
+        'x']) with ordinality as grouping(grouping, n),
+    unnest(array[
+        null,
+        'cint4 > 0']) with ordinality as agg_filter(agg_filter, n)
 where
-    case
---        when explain is not null then condition is null and grouping = 's'
-        when explain is not null then false
-        when true then true
-    end
-    and
-    case
-        when variable = '*' then function = 'count'
-        -- No need to test the aggregate functions themselves again for string
-        -- grouping.
-        when grouping = 'x' then function = 'count' and variable = 'cfloat4'
-        when condition = 'cint2 is null' then variable = 'cint2'
-        when function = 'count' then variable in ('cfloat4', 's', 'ss')
-        when variable = 't' then function in ('min', 'max')
-        when variable in ('cts', 'ctstz', 'cdate') then function in ('min', 'max')
-        -- This is not vectorized yet.
-        when function = 'stddev' then variable != 'cint8'
-    else true end
-order by explain, condition.n, variable, function, grouping.n
+    true
+    and (explain is null /* or condition is null and grouping = 's' */)
+    and (variable != '*' or function = 'count')
+    and (variable not in ('t', 'cts', 'ctstz', 'cdate') or function in ('min', 'max'))
+    -- This is not vectorized yet
+    and (variable != 'cint8' or function != 'stddev')
+    and (function != 'count' or variable in ('cint2', 's', '*'))
+    and (agg_filter is null or (function = 'count') or (function = 'sum' and variable in ('cint2', 'cint4')))
+    and (condition is distinct from 'cint2 is null' or variable = 'cint2')
+    -- No need to test the aggregate functions themselves again for string
+    -- grouping.
+    and (grouping is distinct from 'x' or (function = 'count' and variable in ('cint2', '*') and agg_filter is null))
+order by explain, condition.n, variable, function, grouping.n, agg_filter.n
 \gexec
 select count(*) from aggfns order by 1;
  count  
 --------
  200000
+(1 row)
+
+select count(*) filter (where cint4 > 0) from aggfns order by 1;
+ count 
+-------
+ 99428
 (1 row)
 
 select s, count(*) from aggfns group by s order by 1;
@@ -188,6 +192,21 @@ select s, count(*) from aggfns group by s order by 1;
  9 | 20000
 (10 rows)
 
+select s, count(*) filter (where cint4 > 0) from aggfns group by s order by 1;
+ s | count 
+---+-------
+ 0 |  9942
+ 1 |  9943
+ 2 |  9943
+ 3 |  9943
+ 4 |  9943
+ 5 |  9942
+ 6 |  9942
+ 7 |  9943
+ 8 |  9943
+ 9 |  9944
+(10 rows)
+
 select ss, count(*) from aggfns group by ss order by 1;
  ss | count 
 ----+-------
@@ -201,6 +220,21 @@ select ss, count(*) from aggfns group by ss order by 1;
   9 | 20000
  11 | 40019
     |    19
+(10 rows)
+
+select ss, count(*) filter (where cint4 > 0) from aggfns group by ss order by 1;
+ ss | count 
+----+-------
+  0 |  9942
+  3 |  9937
+  4 |  9932
+  5 |  9942
+  6 |  9942
+  7 |  9943
+  8 |  9943
+  9 |  9944
+ 11 | 19897
+    |     6
 (10 rows)
 
 select x, count(*) from aggfns group by x order by 1;
@@ -324,57 +358,6 @@ select ss, avg(cfloat4) from aggfns group by ss order by 1;
   9 | -0.132765194868064
  11 |                NaN
     |  -5.91588952823689
-(10 rows)
-
-select count(cfloat4) from aggfns order by 1;
- count  
---------
- 200000
-(1 row)
-
-select s, count(cfloat4) from aggfns group by s order by 1;
- s | count 
----+-------
- 0 | 20000
- 1 | 20000
- 2 | 20000
- 3 | 20000
- 4 | 20000
- 5 | 20000
- 6 | 20000
- 7 | 20000
- 8 | 20000
- 9 | 20000
-(10 rows)
-
-select ss, count(cfloat4) from aggfns group by ss order by 1;
- ss | count 
-----+-------
-  0 | 20000
-  3 | 19981
-  4 | 19981
-  5 | 20000
-  6 | 20000
-  7 | 20000
-  8 | 20000
-  9 | 20000
- 11 | 40019
-    |    19
-(10 rows)
-
-select x, count(cfloat4) from aggfns group by x order by 1;
- x  | count 
-----+-------
- 0  | 20000
- 11 | 40019
- 3  | 19981
- 4  | 19981
- 5  | 20000
- 6  | 20000
- 7  | 20000
- 8  | 20000
- 9  | 20000
-    |    19
 (10 rows)
 
 select max(cfloat4) from aggfns order by 1;
@@ -737,6 +720,93 @@ select ss, avg(cint2) from aggfns group by ss order by 1;
     | -335.0000000000000000
 (10 rows)
 
+select count(cint2) from aggfns order by 1;
+ count  
+--------
+ 199810
+(1 row)
+
+select count(cint2) filter (where cint4 > 0) from aggfns order by 1;
+ count 
+-------
+ 99342
+(1 row)
+
+select s, count(cint2) from aggfns group by s order by 1;
+ s | count 
+---+-------
+ 0 | 19981
+ 1 | 19981
+ 2 | 19981
+ 3 | 19981
+ 4 | 19981
+ 5 | 19981
+ 6 | 19981
+ 7 | 19981
+ 8 | 19981
+ 9 | 19981
+(10 rows)
+
+select s, count(cint2) filter (where cint4 > 0) from aggfns group by s order by 1;
+ s | count 
+---+-------
+ 0 |  9936
+ 1 |  9935
+ 2 |  9935
+ 3 |  9934
+ 4 |  9933
+ 5 |  9933
+ 6 |  9932
+ 7 |  9936
+ 8 |  9933
+ 9 |  9935
+(10 rows)
+
+select ss, count(cint2) from aggfns group by ss order by 1;
+ ss | count 
+----+-------
+  0 | 19981
+  3 | 19962
+  4 | 19962
+  5 | 19981
+  6 | 19981
+  7 | 19981
+  8 | 19981
+  9 | 19981
+ 11 | 39981
+    |    19
+(10 rows)
+
+select ss, count(cint2) filter (where cint4 > 0) from aggfns group by ss order by 1;
+ ss | count 
+----+-------
+  0 |  9936
+  3 |  9928
+  4 |  9922
+  5 |  9933
+  6 |  9932
+  7 |  9936
+  8 |  9933
+  9 |  9935
+ 11 | 19881
+    |     6
+(10 rows)
+
+select x, count(cint2) from aggfns group by x order by 1;
+ x  | count 
+----+-------
+ 0  | 19981
+ 11 | 39981
+ 3  | 19962
+ 4  | 19962
+ 5  | 19981
+ 6  | 19981
+ 7  | 19981
+ 8  | 19981
+ 9  | 19981
+    |    19
+(10 rows)
+
 select max(cint2) from aggfns order by 1;
   max  
 -------
@@ -851,6 +921,12 @@ select sum(cint2) from aggfns order by 1;
  -8423824
 (1 row)
 
+select sum(cint2) filter (where cint4 > 0) from aggfns order by 1;
+    sum    
+-----------
+ -17618159
+(1 row)
+
 select s, sum(cint2) from aggfns group by s order by 1;
  s |   sum   
 ---+---------
@@ -866,6 +942,21 @@ select s, sum(cint2) from aggfns group by s order by 1;
  9 | -861420
 (10 rows)
 
+select s, sum(cint2) filter (where cint4 > 0) from aggfns group by s order by 1;
+ s |   sum    
+---+----------
+ 0 | -1788968
+ 1 | -1806454
+ 2 | -1747433
+ 3 | -1738178
+ 4 | -1717456
+ 5 | -1788759
+ 6 | -1746163
+ 7 | -1731851
+ 8 | -1741688
+ 9 | -1811209
+(10 rows)
+
 select ss, sum(cint2) from aggfns group by ss order by 1;
  ss |   sum    
 ----+----------
@@ -879,6 +970,21 @@ select ss, sum(cint2) from aggfns group by ss order by 1;
   9 |  -861420
  11 | -1718122
     |    -6365
+(10 rows)
+
+select ss, sum(cint2) filter (where cint4 > 0) from aggfns group by ss order by 1;
+ ss |   sum    
+----+----------
+  0 | -1788968
+  3 | -1737816
+  4 | -1696920
+  5 | -1788759
+  6 | -1746163
+  7 | -1731851
+  8 | -1741688
+  9 | -1811209
+ 11 | -3574423
+    |     -362
 (10 rows)
 
 select avg(cint4) from aggfns order by 1;
@@ -1031,6 +1137,12 @@ select sum(cint4) from aggfns order by 1;
  -566665557362
 (1 row)
 
+select sum(cint4) filter (where cint4 > 0) from aggfns order by 1;
+      sum       
+----------------
+ 53436167838463
+(1 row)
+
 select s, sum(cint4) from aggfns group by s order by 1;
  s |     sum      
 ---+--------------
@@ -1046,6 +1158,21 @@ select s, sum(cint4) from aggfns group by s order by 1;
  9 | -56283868935
 (10 rows)
 
+select s, sum(cint4) filter (where cint4 > 0) from aggfns group by s order by 1;
+ s |      sum      
+---+---------------
+ 0 | 5342690615367
+ 1 | 5343370718252
+ 2 | 5343352005654
+ 3 | 5343352005654
+ 4 | 5344281595944
+ 5 | 5343480575409
+ 6 | 5343480575409
+ 7 | 5344006156678
+ 8 | 5344006156678
+ 9 | 5344147433418
+(10 rows)
+
 select ss, sum(cint4) from aggfns group by ss order by 1;
  ss |      sum      
 ----+---------------
@@ -1059,6 +1186,21 @@ select ss, sum(cint4) from aggfns group by ss order by 1;
   9 |  -56283868935
  11 | -113894123567
     |   -2774095334
+(10 rows)
+
+select ss, sum(cint4) filter (where cint4 > 0) from aggfns group by ss order by 1;
+ ss |      sum       
+----+----------------
+  0 |  5342690615367
+  3 |  5340469357420
+  4 |  5338771617836
+  5 |  5343480575409
+  6 |  5343480575409
+  7 |  5344006156678
+  8 |  5344006156678
+  9 |  5344147433418
+ 11 | 10692232702014
+    |     2882648234
 (10 rows)
 
 select avg(cint8) from aggfns order by 1;
@@ -1391,6 +1533,12 @@ select count(s) from aggfns order by 1;
  200000
 (1 row)
 
+select count(s) filter (where cint4 > 0) from aggfns order by 1;
+ count 
+-------
+ 99428
+(1 row)
+
 select s, count(s) from aggfns group by s order by 1;
  s | count 
 ---+-------
@@ -1406,6 +1554,21 @@ select s, count(s) from aggfns group by s order by 1;
  9 | 20000
 (10 rows)
 
+select s, count(s) filter (where cint4 > 0) from aggfns group by s order by 1;
+ s | count 
+---+-------
+ 0 |  9942
+ 1 |  9943
+ 2 |  9943
+ 3 |  9943
+ 4 |  9943
+ 5 |  9942
+ 6 |  9942
+ 7 |  9943
+ 8 |  9943
+ 9 |  9944
+(10 rows)
+
 select ss, count(s) from aggfns group by ss order by 1;
  ss | count 
 ----+-------
@@ -1419,6 +1582,21 @@ select ss, count(s) from aggfns group by ss order by 1;
   9 | 20000
  11 | 40019
     |    19
+(10 rows)
+
+select ss, count(s) filter (where cint4 > 0) from aggfns group by ss order by 1;
+ ss | count 
+----+-------
+  0 |  9942
+  3 |  9937
+  4 |  9932
+  5 |  9942
+  6 |  9942
+  7 |  9943
+  8 |  9943
+  9 |  9944
+ 11 | 19897
+    |     6
 (10 rows)
 
 select max(s) from aggfns order by 1;
@@ -1599,42 +1777,6 @@ select ss, avg(ss) from aggfns group by ss order by 1;
   9 |         9.0000000000000000
  11 |        11.0000000000000000
     |                           
-(10 rows)
-
-select count(ss) from aggfns order by 1;
- count  
---------
- 199981
-(1 row)
-
-select s, count(ss) from aggfns group by s order by 1;
- s | count 
----+-------
- 0 | 20000
- 1 | 20000
- 2 | 20000
- 3 | 19981
- 4 | 20000
- 5 | 20000
- 6 | 20000
- 7 | 20000
- 8 | 20000
- 9 | 20000
-(10 rows)
-
-select ss, count(ss) from aggfns group by ss order by 1;
- ss | count 
-----+-------
-  0 | 20000
-  3 | 19981
-  4 | 19981
-  5 | 20000
-  6 | 20000
-  7 | 20000
-  8 | 20000
-  9 | 20000
- 11 | 40019
-    |     0
 (10 rows)
 
 select max(ss) from aggfns order by 1;
@@ -1859,6 +2001,12 @@ select count(*) from aggfns where cfloat8 > 0 order by 1;
  99430
 (1 row)
 
+select count(*) filter (where cint4 > 0) from aggfns where cfloat8 > 0 order by 1;
+ count 
+-------
+ 49288
+(1 row)
+
 select s, count(*) from aggfns where cfloat8 > 0 group by s order by 1;
  s | count 
 ---+-------
@@ -1874,6 +2022,21 @@ select s, count(*) from aggfns where cfloat8 > 0 group by s order by 1;
  9 |  9943
 (10 rows)
 
+select s, count(*) filter (where cint4 > 0) from aggfns where cfloat8 > 0 group by s order by 1;
+ s | count 
+---+-------
+ 0 |  4928
+ 1 |  4929
+ 2 |  4928
+ 3 |  4928
+ 4 |  4929
+ 5 |  4929
+ 6 |  4929
+ 7 |  4929
+ 8 |  4929
+ 9 |  4930
+(10 rows)
+
 select ss, count(*) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss | count 
 ----+-------
@@ -1887,6 +2050,21 @@ select ss, count(*) from aggfns where cfloat8 > 0 group by ss order by 1;
   9 |  9943
  11 | 19896
     |     8
+(10 rows)
+
+select ss, count(*) filter (where cint4 > 0) from aggfns where cfloat8 > 0 group by ss order by 1;
+ ss | count 
+----+-------
+  0 |  4928
+  3 |  4925
+  4 |  4922
+  5 |  4929
+  6 |  4929
+  7 |  4929
+  8 |  4929
+  9 |  4930
+ 11 |  9864
+    |     3
 (10 rows)
 
 select x, count(*) from aggfns where cfloat8 > 0 group by x order by 1;
@@ -2010,57 +2188,6 @@ select ss, avg(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1;
   9 | -0.547059247380753
  11 | -0.540899217374597
     |  -1.46971142292023
-(10 rows)
-
-select count(cfloat4) from aggfns where cfloat8 > 0 order by 1;
- count 
--------
- 99430
-(1 row)
-
-select s, count(cfloat4) from aggfns where cfloat8 > 0 group by s order by 1;
- s | count 
----+-------
- 0 |  9943
- 1 |  9943
- 2 |  9942
- 3 |  9942
- 4 |  9943
- 5 |  9943
- 6 |  9944
- 7 |  9944
- 8 |  9943
- 9 |  9943
-(10 rows)
-
-select ss, count(cfloat4) from aggfns where cfloat8 > 0 group by ss order by 1;
- ss | count 
-----+-------
-  0 |  9943
-  3 |  9934
-  4 |  9932
-  5 |  9943
-  6 |  9944
-  7 |  9944
-  8 |  9943
-  9 |  9943
- 11 | 19896
-    |     8
-(10 rows)
-
-select x, count(cfloat4) from aggfns where cfloat8 > 0 group by x order by 1;
- x  | count 
-----+-------
- 0  |  9943
- 11 | 19896
- 3  |  9934
- 4  |  9932
- 5  |  9943
- 6  |  9944
- 7  |  9944
- 8  |  9943
- 9  |  9943
-    |     8
 (10 rows)
 
 select max(cfloat4) from aggfns where cfloat8 > 0 order by 1;
@@ -2423,6 +2550,93 @@ select ss, avg(cint2) from aggfns where cfloat8 > 0 group by ss order by 1;
     | 1475.6250000000000000
 (10 rows)
 
+select count(cint2) from aggfns where cfloat8 > 0 order by 1;
+ count 
+-------
+ 99340
+(1 row)
+
+select count(cint2) filter (where cint4 > 0) from aggfns where cfloat8 > 0 order by 1;
+ count 
+-------
+ 49247
+(1 row)
+
+select s, count(cint2) from aggfns where cfloat8 > 0 group by s order by 1;
+ s | count 
+---+-------
+ 0 |  9934
+ 1 |  9933
+ 2 |  9933
+ 3 |  9932
+ 4 |  9936
+ 5 |  9933
+ 6 |  9935
+ 7 |  9933
+ 8 |  9937
+ 9 |  9934
+(10 rows)
+
+select s, count(cint2) filter (where cint4 > 0) from aggfns where cfloat8 > 0 group by s order by 1;
+ s | count 
+---+-------
+ 0 |  4926
+ 1 |  4925
+ 2 |  4924
+ 3 |  4922
+ 4 |  4925
+ 5 |  4923
+ 6 |  4925
+ 7 |  4924
+ 8 |  4927
+ 9 |  4926
+(10 rows)
+
+select ss, count(cint2) from aggfns where cfloat8 > 0 group by ss order by 1;
+ ss | count 
+----+-------
+  0 |  9934
+  3 |  9924
+  4 |  9925
+  5 |  9933
+  6 |  9935
+  7 |  9933
+  8 |  9937
+  9 |  9934
+ 11 | 19877
+    |     8
+(10 rows)
+
+select ss, count(cint2) filter (where cint4 > 0) from aggfns where cfloat8 > 0 group by ss order by 1;
+ ss | count 
+----+-------
+  0 |  4926
+  3 |  4919
+  4 |  4918
+  5 |  4923
+  6 |  4925
+  7 |  4924
+  8 |  4927
+  9 |  4926
+ 11 |  9856
+    |     3
+(10 rows)
+
+select x, count(cint2) from aggfns where cfloat8 > 0 group by x order by 1;
+ x  | count 
+----+-------
+ 0  |  9934
+ 11 | 19877
+ 3  |  9924
+ 4  |  9925
+ 5  |  9933
+ 6  |  9935
+ 7  |  9933
+ 8  |  9937
+ 9  |  9934
+    |     8
+(10 rows)
+
 select max(cint2) from aggfns where cfloat8 > 0 order by 1;
   max  
 -------
@@ -2537,6 +2751,12 @@ select sum(cint2) from aggfns where cfloat8 > 0 order by 1;
  5959705
 (1 row)
 
+select sum(cint2) filter (where cint4 > 0) from aggfns where cfloat8 > 0 order by 1;
+   sum    
+----------
+ -6198630
+(1 row)
+
 select s, sum(cint2) from aggfns where cfloat8 > 0 group by s order by 1;
  s |  sum   
 ---+--------
@@ -2552,6 +2772,21 @@ select s, sum(cint2) from aggfns where cfloat8 > 0 group by s order by 1;
  9 | 590038
 (10 rows)
 
+select s, sum(cint2) filter (where cint4 > 0) from aggfns where cfloat8 > 0 group by s order by 1;
+ s |   sum   
+---+---------
+ 0 | -629182
+ 1 | -633190
+ 2 | -579865
+ 3 | -604326
+ 4 | -630147
+ 5 | -665070
+ 6 | -620684
+ 7 | -570776
+ 8 | -639376
+ 9 | -626014
+(10 rows)
+
 select ss, sum(cint2) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |   sum   
 ----+---------
@@ -2565,6 +2800,21 @@ select ss, sum(cint2) from aggfns where cfloat8 > 0 group by ss order by 1;
   9 |  590038
  11 | 1229939
     |   11805
+(10 rows)
+
+select ss, sum(cint2) filter (where cint4 > 0) from aggfns where cfloat8 > 0 group by ss order by 1;
+ ss |   sum    
+----+----------
+  0 |  -629182
+  3 |  -592786
+  4 |  -624445
+  5 |  -665070
+  6 |  -620684
+  7 |  -570776
+  8 |  -639376
+  9 |  -626014
+ 11 | -1218757
+    |   -11540
 (10 rows)
 
 select avg(cint4) from aggfns where cfloat8 > 0 order by 1;
@@ -2717,6 +2967,12 @@ select sum(cint4) from aggfns where cfloat8 > 0 order by 1;
  -302558074368
 (1 row)
 
+select sum(cint4) filter (where cint4 > 0) from aggfns where cfloat8 > 0 order by 1;
+      sum       
+----------------
+ 26671252627657
+(1 row)
+
 select s, sum(cint4) from aggfns where cfloat8 > 0 group by s order by 1;
  s |     sum      
 ---+--------------
@@ -2732,6 +2988,21 @@ select s, sum(cint4) from aggfns where cfloat8 > 0 group by s order by 1;
  9 | -29660662189
 (10 rows)
 
+select s, sum(cint4) filter (where cint4 > 0) from aggfns where cfloat8 > 0 group by s order by 1;
+ s |      sum      
+---+---------------
+ 0 | 2665908254089
+ 1 | 2666588356974
+ 2 | 2666553381473
+ 3 | 2666553381473
+ 4 | 2667584662818
+ 5 | 2667584662818
+ 6 | 2667584662818
+ 7 | 2667584662818
+ 8 | 2667584662818
+ 9 | 2667725939558
+(10 rows)
+
 select ss, sum(cint4) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss |     sum      
 ----+--------------
@@ -2745,6 +3016,21 @@ select ss, sum(cint4) from aggfns where cfloat8 > 0 group by ss order by 1;
   9 | -29660662189
  11 | -59726357442
     |   -728241449
+(10 rows)
+
+select ss, sum(cint4) filter (where cint4 > 0) from aggfns where cfloat8 > 0 group by ss order by 1;
+ ss |      sum      
+----+---------------
+  0 | 2665908254089
+  3 | 2664401125147
+  4 | 2663415726889
+  5 | 2667584662818
+  6 | 2667584662818
+  7 | 2667584662818
+  8 | 2667584662818
+  9 | 2667725939558
+ 11 | 5337310674376
+    |    2152256326
 (10 rows)
 
 select avg(cint8) from aggfns where cfloat8 > 0 order by 1;
@@ -3077,6 +3363,12 @@ select count(s) from aggfns where cfloat8 > 0 order by 1;
  99430
 (1 row)
 
+select count(s) filter (where cint4 > 0) from aggfns where cfloat8 > 0 order by 1;
+ count 
+-------
+ 49288
+(1 row)
+
 select s, count(s) from aggfns where cfloat8 > 0 group by s order by 1;
  s | count 
 ---+-------
@@ -3092,6 +3384,21 @@ select s, count(s) from aggfns where cfloat8 > 0 group by s order by 1;
  9 |  9943
 (10 rows)
 
+select s, count(s) filter (where cint4 > 0) from aggfns where cfloat8 > 0 group by s order by 1;
+ s | count 
+---+-------
+ 0 |  4928
+ 1 |  4929
+ 2 |  4928
+ 3 |  4928
+ 4 |  4929
+ 5 |  4929
+ 6 |  4929
+ 7 |  4929
+ 8 |  4929
+ 9 |  4930
+(10 rows)
+
 select ss, count(s) from aggfns where cfloat8 > 0 group by ss order by 1;
  ss | count 
 ----+-------
@@ -3105,6 +3412,21 @@ select ss, count(s) from aggfns where cfloat8 > 0 group by ss order by 1;
   9 |  9943
  11 | 19896
     |     8
+(10 rows)
+
+select ss, count(s) filter (where cint4 > 0) from aggfns where cfloat8 > 0 group by ss order by 1;
+ ss | count 
+----+-------
+  0 |  4928
+  3 |  4925
+  4 |  4922
+  5 |  4929
+  6 |  4929
+  7 |  4929
+  8 |  4929
+  9 |  4930
+ 11 |  9864
+    |     3
 (10 rows)
 
 select max(s) from aggfns where cfloat8 > 0 order by 1;
@@ -3285,42 +3607,6 @@ select ss, avg(ss) from aggfns where cfloat8 > 0 group by ss order by 1;
   9 |     9.0000000000000000
  11 |    11.0000000000000000
     |                       
-(10 rows)
-
-select count(ss) from aggfns where cfloat8 > 0 order by 1;
- count 
--------
- 99422
-(1 row)
-
-select s, count(ss) from aggfns where cfloat8 > 0 group by s order by 1;
- s | count 
----+-------
- 0 |  9943
- 1 |  9943
- 2 |  9942
- 3 |  9934
- 4 |  9943
- 5 |  9943
- 6 |  9944
- 7 |  9944
- 8 |  9943
- 9 |  9943
-(10 rows)
-
-select ss, count(ss) from aggfns where cfloat8 > 0 group by ss order by 1;
- ss | count 
-----+-------
-  0 |  9943
-  3 |  9934
-  4 |  9932
-  5 |  9943
-  6 |  9944
-  7 |  9944
-  8 |  9943
-  9 |  9943
- 11 | 19896
-    |     0
 (10 rows)
 
 select max(ss) from aggfns where cfloat8 > 0 order by 1;
@@ -3545,6 +3831,12 @@ select count(*) from aggfns where cfloat8 <= 0 order by 1;
  100570
 (1 row)
 
+select count(*) filter (where cint4 > 0) from aggfns where cfloat8 <= 0 order by 1;
+ count 
+-------
+ 50140
+(1 row)
+
 select s, count(*) from aggfns where cfloat8 <= 0 group by s order by 1;
  s | count 
 ---+-------
@@ -3560,6 +3852,21 @@ select s, count(*) from aggfns where cfloat8 <= 0 group by s order by 1;
  9 | 10057
 (10 rows)
 
+select s, count(*) filter (where cint4 > 0) from aggfns where cfloat8 <= 0 group by s order by 1;
+ s | count 
+---+-------
+ 0 |  5014
+ 1 |  5014
+ 2 |  5015
+ 3 |  5015
+ 4 |  5014
+ 5 |  5013
+ 6 |  5013
+ 7 |  5014
+ 8 |  5014
+ 9 |  5014
+(10 rows)
+
 select ss, count(*) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss | count 
 ----+-------
@@ -3573,6 +3880,21 @@ select ss, count(*) from aggfns where cfloat8 <= 0 group by ss order by 1;
   9 | 10057
  11 | 20123
     |    11
+(10 rows)
+
+select ss, count(*) filter (where cint4 > 0) from aggfns where cfloat8 <= 0 group by ss order by 1;
+ ss | count 
+----+-------
+  0 |  5014
+  3 |  5012
+  4 |  5010
+  5 |  5013
+  6 |  5013
+  7 |  5014
+  8 |  5014
+  9 |  5014
+ 11 | 10033
+    |     3
 (10 rows)
 
 select x, count(*) from aggfns where cfloat8 <= 0 group by x order by 1;
@@ -3696,57 +4018,6 @@ select ss, avg(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1;
   9 | 0.276832673694496
  11 |               NaN
     | -9.14947360483083
-(10 rows)
-
-select count(cfloat4) from aggfns where cfloat8 <= 0 order by 1;
- count  
---------
- 100570
-(1 row)
-
-select s, count(cfloat4) from aggfns where cfloat8 <= 0 group by s order by 1;
- s | count 
----+-------
- 0 | 10057
- 1 | 10057
- 2 | 10058
- 3 | 10058
- 4 | 10057
- 5 | 10057
- 6 | 10056
- 7 | 10056
- 8 | 10057
- 9 | 10057
-(10 rows)
-
-select ss, count(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by 1;
- ss | count 
-----+-------
-  0 | 10057
-  3 | 10047
-  4 | 10049
-  5 | 10057
-  6 | 10056
-  7 | 10056
-  8 | 10057
-  9 | 10057
- 11 | 20123
-    |    11
-(10 rows)
-
-select x, count(cfloat4) from aggfns where cfloat8 <= 0 group by x order by 1;
- x  | count 
-----+-------
- 0  | 10057
- 11 | 20123
- 3  | 10047
- 4  | 10049
- 5  | 10057
- 6  | 10056
- 7  | 10056
- 8  | 10057
- 9  | 10057
-    |    11
 (10 rows)
 
 select max(cfloat4) from aggfns where cfloat8 <= 0 order by 1;
@@ -4109,6 +4380,93 @@ select ss, avg(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1;
     | -1651.8181818181818182
 (10 rows)
 
+select count(cint2) from aggfns where cfloat8 <= 0 order by 1;
+ count  
+--------
+ 100470
+(1 row)
+
+select count(cint2) filter (where cint4 > 0) from aggfns where cfloat8 <= 0 order by 1;
+ count 
+-------
+ 50095
+(1 row)
+
+select s, count(cint2) from aggfns where cfloat8 <= 0 group by s order by 1;
+ s | count 
+---+-------
+ 0 | 10047
+ 1 | 10048
+ 2 | 10048
+ 3 | 10049
+ 4 | 10045
+ 5 | 10048
+ 6 | 10046
+ 7 | 10048
+ 8 | 10044
+ 9 | 10047
+(10 rows)
+
+select s, count(cint2) filter (where cint4 > 0) from aggfns where cfloat8 <= 0 group by s order by 1;
+ s | count 
+---+-------
+ 0 |  5010
+ 1 |  5010
+ 2 |  5011
+ 3 |  5012
+ 4 |  5008
+ 5 |  5010
+ 6 |  5007
+ 7 |  5012
+ 8 |  5006
+ 9 |  5009
+(10 rows)
+
+select ss, count(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1;
+ ss | count 
+----+-------
+  0 | 10047
+  3 | 10038
+  4 | 10037
+  5 | 10048
+  6 | 10046
+  7 | 10048
+  8 | 10044
+  9 | 10047
+ 11 | 20104
+    |    11
+(10 rows)
+
+select ss, count(cint2) filter (where cint4 > 0) from aggfns where cfloat8 <= 0 group by ss order by 1;
+ ss | count 
+----+-------
+  0 |  5010
+  3 |  5009
+  4 |  5004
+  5 |  5010
+  6 |  5007
+  7 |  5012
+  8 |  5006
+  9 |  5009
+ 11 | 10025
+    |     3
+(10 rows)
+
+select x, count(cint2) from aggfns where cfloat8 <= 0 group by x order by 1;
+ x  | count 
+----+-------
+ 0  | 10047
+ 11 | 20104
+ 3  | 10038
+ 4  | 10037
+ 5  | 10048
+ 6  | 10046
+ 7  | 10048
+ 8  | 10044
+ 9  | 10047
+    |    11
+(10 rows)
+
 select max(cint2) from aggfns where cfloat8 <= 0 order by 1;
   max  
 -------
@@ -4223,6 +4581,12 @@ select sum(cint2) from aggfns where cfloat8 <= 0 order by 1;
  -14383529
 (1 row)
 
+select sum(cint2) filter (where cint4 > 0) from aggfns where cfloat8 <= 0 order by 1;
+    sum    
+-----------
+ -11419529
+(1 row)
+
 select s, sum(cint2) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |   sum    
 ---+----------
@@ -4238,6 +4602,21 @@ select s, sum(cint2) from aggfns where cfloat8 <= 0 group by s order by 1;
  9 | -1451458
 (10 rows)
 
+select s, sum(cint2) filter (where cint4 > 0) from aggfns where cfloat8 <= 0 group by s order by 1;
+ s |   sum    
+---+----------
+ 0 | -1159786
+ 1 | -1173264
+ 2 | -1167568
+ 3 | -1133852
+ 4 | -1087309
+ 5 | -1123689
+ 6 | -1125479
+ 7 | -1161075
+ 8 | -1102312
+ 9 | -1185195
+(10 rows)
+
 select ss, sum(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |   sum    
 ----+----------
@@ -4251,6 +4630,21 @@ select ss, sum(cint2) from aggfns where cfloat8 <= 0 group by ss order by 1;
   9 | -1451458
  11 | -2948061
     |   -18170
+(10 rows)
+
+select ss, sum(cint2) filter (where cint4 > 0) from aggfns where cfloat8 <= 0 group by ss order by 1;
+ ss |   sum    
+----+----------
+  0 | -1159786
+  3 | -1145030
+  4 | -1072475
+  5 | -1123689
+  6 | -1125479
+  7 | -1161075
+  8 | -1102312
+  9 | -1185195
+ 11 | -2355666
+    |    11178
 (10 rows)
 
 select avg(cint4) from aggfns where cfloat8 <= 0 order by 1;
@@ -4403,6 +4797,12 @@ select sum(cint4) from aggfns where cfloat8 <= 0 order by 1;
  -264107482994
 (1 row)
 
+select sum(cint4) filter (where cint4 > 0) from aggfns where cfloat8 <= 0 order by 1;
+      sum       
+----------------
+ 26764915210806
+(1 row)
+
 select s, sum(cint4) from aggfns where cfloat8 <= 0 group by s order by 1;
  s |     sum      
 ---+--------------
@@ -4418,6 +4818,21 @@ select s, sum(cint4) from aggfns where cfloat8 <= 0 group by s order by 1;
  9 | -26623206746
 (10 rows)
 
+select s, sum(cint4) filter (where cint4 > 0) from aggfns where cfloat8 <= 0 group by s order by 1;
+ s |      sum      
+---+---------------
+ 0 | 2676782361278
+ 1 | 2676782361278
+ 2 | 2676798624181
+ 3 | 2676798624181
+ 4 | 2676696933126
+ 5 | 2675895912591
+ 6 | 2675895912591
+ 7 | 2676421493860
+ 8 | 2676421493860
+ 9 | 2676421493860
+(10 rows)
+
 select ss, sum(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss |     sum      
 ----+--------------
@@ -4431,6 +4846,21 @@ select ss, sum(cint4) from aggfns where cfloat8 <= 0 group by ss order by 1;
   9 | -26623206746
  11 | -54167766125
     |  -2045853885
+(10 rows)
+
+select ss, sum(cint4) filter (where cint4 > 0) from aggfns where cfloat8 <= 0 group by ss order by 1;
+ ss |      sum      
+----+---------------
+  0 | 2676782361278
+  3 | 2676068232273
+  4 | 2675355890947
+  5 | 2675895912591
+  6 | 2675895912591
+  7 | 2676421493860
+  8 | 2676421493860
+  9 | 2676421493860
+ 11 | 5354922027638
+    |     730391908
 (10 rows)
 
 select avg(cint8) from aggfns where cfloat8 <= 0 order by 1;
@@ -4763,6 +5193,12 @@ select count(s) from aggfns where cfloat8 <= 0 order by 1;
  100570
 (1 row)
 
+select count(s) filter (where cint4 > 0) from aggfns where cfloat8 <= 0 order by 1;
+ count 
+-------
+ 50140
+(1 row)
+
 select s, count(s) from aggfns where cfloat8 <= 0 group by s order by 1;
  s | count 
 ---+-------
@@ -4778,6 +5214,21 @@ select s, count(s) from aggfns where cfloat8 <= 0 group by s order by 1;
  9 | 10057
 (10 rows)
 
+select s, count(s) filter (where cint4 > 0) from aggfns where cfloat8 <= 0 group by s order by 1;
+ s | count 
+---+-------
+ 0 |  5014
+ 1 |  5014
+ 2 |  5015
+ 3 |  5015
+ 4 |  5014
+ 5 |  5013
+ 6 |  5013
+ 7 |  5014
+ 8 |  5014
+ 9 |  5014
+(10 rows)
+
 select ss, count(s) from aggfns where cfloat8 <= 0 group by ss order by 1;
  ss | count 
 ----+-------
@@ -4791,6 +5242,21 @@ select ss, count(s) from aggfns where cfloat8 <= 0 group by ss order by 1;
   9 | 10057
  11 | 20123
     |    11
+(10 rows)
+
+select ss, count(s) filter (where cint4 > 0) from aggfns where cfloat8 <= 0 group by ss order by 1;
+ ss | count 
+----+-------
+  0 |  5014
+  3 |  5012
+  4 |  5010
+  5 |  5013
+  6 |  5013
+  7 |  5014
+  8 |  5014
+  9 |  5014
+ 11 | 10033
+    |     3
 (10 rows)
 
 select max(s) from aggfns where cfloat8 <= 0 order by 1;
@@ -4971,42 +5437,6 @@ select ss, avg(ss) from aggfns where cfloat8 <= 0 group by ss order by 1;
   9 |         9.0000000000000000
  11 |        11.0000000000000000
     |                           
-(10 rows)
-
-select count(ss) from aggfns where cfloat8 <= 0 order by 1;
- count  
---------
- 100559
-(1 row)
-
-select s, count(ss) from aggfns where cfloat8 <= 0 group by s order by 1;
- s | count 
----+-------
- 0 | 10057
- 1 | 10057
- 2 | 10058
- 3 | 10047
- 4 | 10057
- 5 | 10057
- 6 | 10056
- 7 | 10056
- 8 | 10057
- 9 | 10057
-(10 rows)
-
-select ss, count(ss) from aggfns where cfloat8 <= 0 group by ss order by 1;
- ss | count 
-----+-------
-  0 | 10057
-  3 | 10047
-  4 | 10049
-  5 | 10057
-  6 | 10056
-  7 | 10056
-  8 | 10057
-  9 | 10057
- 11 | 20123
-    |     0
 (10 rows)
 
 select max(ss) from aggfns where cfloat8 <= 0 order by 1;
@@ -5231,6 +5661,12 @@ select count(*) from aggfns where cfloat8 < 1000 order by 1;
  200000
 (1 row)
 
+select count(*) filter (where cint4 > 0) from aggfns where cfloat8 < 1000 order by 1;
+ count 
+-------
+ 99428
+(1 row)
+
 select s, count(*) from aggfns where cfloat8 < 1000 group by s order by 1;
  s | count 
 ---+-------
@@ -5246,6 +5682,21 @@ select s, count(*) from aggfns where cfloat8 < 1000 group by s order by 1;
  9 | 20000
 (10 rows)
 
+select s, count(*) filter (where cint4 > 0) from aggfns where cfloat8 < 1000 group by s order by 1;
+ s | count 
+---+-------
+ 0 |  9942
+ 1 |  9943
+ 2 |  9943
+ 3 |  9943
+ 4 |  9943
+ 5 |  9942
+ 6 |  9942
+ 7 |  9943
+ 8 |  9943
+ 9 |  9944
+(10 rows)
+
 select ss, count(*) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss | count 
 ----+-------
@@ -5259,6 +5710,21 @@ select ss, count(*) from aggfns where cfloat8 < 1000 group by ss order by 1;
   9 | 20000
  11 | 40019
     |    19
+(10 rows)
+
+select ss, count(*) filter (where cint4 > 0) from aggfns where cfloat8 < 1000 group by ss order by 1;
+ ss | count 
+----+-------
+  0 |  9942
+  3 |  9937
+  4 |  9932
+  5 |  9942
+  6 |  9942
+  7 |  9943
+  8 |  9943
+  9 |  9944
+ 11 | 19897
+    |     6
 (10 rows)
 
 select x, count(*) from aggfns where cfloat8 < 1000 group by x order by 1;
@@ -5382,57 +5848,6 @@ select ss, avg(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1;
   9 | -0.132765194868064
  11 |                NaN
     |  -5.91588952823689
-(10 rows)
-
-select count(cfloat4) from aggfns where cfloat8 < 1000 order by 1;
- count  
---------
- 200000
-(1 row)
-
-select s, count(cfloat4) from aggfns where cfloat8 < 1000 group by s order by 1;
- s | count 
----+-------
- 0 | 20000
- 1 | 20000
- 2 | 20000
- 3 | 20000
- 4 | 20000
- 5 | 20000
- 6 | 20000
- 7 | 20000
- 8 | 20000
- 9 | 20000
-(10 rows)
-
-select ss, count(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by 1;
- ss | count 
-----+-------
-  0 | 20000
-  3 | 19981
-  4 | 19981
-  5 | 20000
-  6 | 20000
-  7 | 20000
-  8 | 20000
-  9 | 20000
- 11 | 40019
-    |    19
-(10 rows)
-
-select x, count(cfloat4) from aggfns where cfloat8 < 1000 group by x order by 1;
- x  | count 
-----+-------
- 0  | 20000
- 11 | 40019
- 3  | 19981
- 4  | 19981
- 5  | 20000
- 6  | 20000
- 7  | 20000
- 8  | 20000
- 9  | 20000
-    |    19
 (10 rows)
 
 select max(cfloat4) from aggfns where cfloat8 < 1000 order by 1;
@@ -5795,6 +6210,93 @@ select ss, avg(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1;
     | -335.0000000000000000
 (10 rows)
 
+select count(cint2) from aggfns where cfloat8 < 1000 order by 1;
+ count  
+--------
+ 199810
+(1 row)
+
+select count(cint2) filter (where cint4 > 0) from aggfns where cfloat8 < 1000 order by 1;
+ count 
+-------
+ 99342
+(1 row)
+
+select s, count(cint2) from aggfns where cfloat8 < 1000 group by s order by 1;
+ s | count 
+---+-------
+ 0 | 19981
+ 1 | 19981
+ 2 | 19981
+ 3 | 19981
+ 4 | 19981
+ 5 | 19981
+ 6 | 19981
+ 7 | 19981
+ 8 | 19981
+ 9 | 19981
+(10 rows)
+
+select s, count(cint2) filter (where cint4 > 0) from aggfns where cfloat8 < 1000 group by s order by 1;
+ s | count 
+---+-------
+ 0 |  9936
+ 1 |  9935
+ 2 |  9935
+ 3 |  9934
+ 4 |  9933
+ 5 |  9933
+ 6 |  9932
+ 7 |  9936
+ 8 |  9933
+ 9 |  9935
+(10 rows)
+
+select ss, count(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1;
+ ss | count 
+----+-------
+  0 | 19981
+  3 | 19962
+  4 | 19962
+  5 | 19981
+  6 | 19981
+  7 | 19981
+  8 | 19981
+  9 | 19981
+ 11 | 39981
+    |    19
+(10 rows)
+
+select ss, count(cint2) filter (where cint4 > 0) from aggfns where cfloat8 < 1000 group by ss order by 1;
+ ss | count 
+----+-------
+  0 |  9936
+  3 |  9928
+  4 |  9922
+  5 |  9933
+  6 |  9932
+  7 |  9936
+  8 |  9933
+  9 |  9935
+ 11 | 19881
+    |     6
+(10 rows)
+
+select x, count(cint2) from aggfns where cfloat8 < 1000 group by x order by 1;
+ x  | count 
+----+-------
+ 0  | 19981
+ 11 | 39981
+ 3  | 19962
+ 4  | 19962
+ 5  | 19981
+ 6  | 19981
+ 7  | 19981
+ 8  | 19981
+ 9  | 19981
+    |    19
+(10 rows)
+
 select max(cint2) from aggfns where cfloat8 < 1000 order by 1;
   max  
 -------
@@ -5909,6 +6411,12 @@ select sum(cint2) from aggfns where cfloat8 < 1000 order by 1;
  -8423824
 (1 row)
 
+select sum(cint2) filter (where cint4 > 0) from aggfns where cfloat8 < 1000 order by 1;
+    sum    
+-----------
+ -17618159
+(1 row)
+
 select s, sum(cint2) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |   sum   
 ---+---------
@@ -5924,6 +6432,21 @@ select s, sum(cint2) from aggfns where cfloat8 < 1000 group by s order by 1;
  9 | -861420
 (10 rows)
 
+select s, sum(cint2) filter (where cint4 > 0) from aggfns where cfloat8 < 1000 group by s order by 1;
+ s |   sum    
+---+----------
+ 0 | -1788968
+ 1 | -1806454
+ 2 | -1747433
+ 3 | -1738178
+ 4 | -1717456
+ 5 | -1788759
+ 6 | -1746163
+ 7 | -1731851
+ 8 | -1741688
+ 9 | -1811209
+(10 rows)
+
 select ss, sum(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |   sum    
 ----+----------
@@ -5937,6 +6460,21 @@ select ss, sum(cint2) from aggfns where cfloat8 < 1000 group by ss order by 1;
   9 |  -861420
  11 | -1718122
     |    -6365
+(10 rows)
+
+select ss, sum(cint2) filter (where cint4 > 0) from aggfns where cfloat8 < 1000 group by ss order by 1;
+ ss |   sum    
+----+----------
+  0 | -1788968
+  3 | -1737816
+  4 | -1696920
+  5 | -1788759
+  6 | -1746163
+  7 | -1731851
+  8 | -1741688
+  9 | -1811209
+ 11 | -3574423
+    |     -362
 (10 rows)
 
 select avg(cint4) from aggfns where cfloat8 < 1000 order by 1;
@@ -6089,6 +6627,12 @@ select sum(cint4) from aggfns where cfloat8 < 1000 order by 1;
  -566665557362
 (1 row)
 
+select sum(cint4) filter (where cint4 > 0) from aggfns where cfloat8 < 1000 order by 1;
+      sum       
+----------------
+ 53436167838463
+(1 row)
+
 select s, sum(cint4) from aggfns where cfloat8 < 1000 group by s order by 1;
  s |     sum      
 ---+--------------
@@ -6104,6 +6648,21 @@ select s, sum(cint4) from aggfns where cfloat8 < 1000 group by s order by 1;
  9 | -56283868935
 (10 rows)
 
+select s, sum(cint4) filter (where cint4 > 0) from aggfns where cfloat8 < 1000 group by s order by 1;
+ s |      sum      
+---+---------------
+ 0 | 5342690615367
+ 1 | 5343370718252
+ 2 | 5343352005654
+ 3 | 5343352005654
+ 4 | 5344281595944
+ 5 | 5343480575409
+ 6 | 5343480575409
+ 7 | 5344006156678
+ 8 | 5344006156678
+ 9 | 5344147433418
+(10 rows)
+
 select ss, sum(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss |      sum      
 ----+---------------
@@ -6117,6 +6676,21 @@ select ss, sum(cint4) from aggfns where cfloat8 < 1000 group by ss order by 1;
   9 |  -56283868935
  11 | -113894123567
     |   -2774095334
+(10 rows)
+
+select ss, sum(cint4) filter (where cint4 > 0) from aggfns where cfloat8 < 1000 group by ss order by 1;
+ ss |      sum       
+----+----------------
+  0 |  5342690615367
+  3 |  5340469357420
+  4 |  5338771617836
+  5 |  5343480575409
+  6 |  5343480575409
+  7 |  5344006156678
+  8 |  5344006156678
+  9 |  5344147433418
+ 11 | 10692232702014
+    |     2882648234
 (10 rows)
 
 select avg(cint8) from aggfns where cfloat8 < 1000 order by 1;
@@ -6449,6 +7023,12 @@ select count(s) from aggfns where cfloat8 < 1000 order by 1;
  200000
 (1 row)
 
+select count(s) filter (where cint4 > 0) from aggfns where cfloat8 < 1000 order by 1;
+ count 
+-------
+ 99428
+(1 row)
+
 select s, count(s) from aggfns where cfloat8 < 1000 group by s order by 1;
  s | count 
 ---+-------
@@ -6464,6 +7044,21 @@ select s, count(s) from aggfns where cfloat8 < 1000 group by s order by 1;
  9 | 20000
 (10 rows)
 
+select s, count(s) filter (where cint4 > 0) from aggfns where cfloat8 < 1000 group by s order by 1;
+ s | count 
+---+-------
+ 0 |  9942
+ 1 |  9943
+ 2 |  9943
+ 3 |  9943
+ 4 |  9943
+ 5 |  9942
+ 6 |  9942
+ 7 |  9943
+ 8 |  9943
+ 9 |  9944
+(10 rows)
+
 select ss, count(s) from aggfns where cfloat8 < 1000 group by ss order by 1;
  ss | count 
 ----+-------
@@ -6477,6 +7072,21 @@ select ss, count(s) from aggfns where cfloat8 < 1000 group by ss order by 1;
   9 | 20000
  11 | 40019
     |    19
+(10 rows)
+
+select ss, count(s) filter (where cint4 > 0) from aggfns where cfloat8 < 1000 group by ss order by 1;
+ ss | count 
+----+-------
+  0 |  9942
+  3 |  9937
+  4 |  9932
+  5 |  9942
+  6 |  9942
+  7 |  9943
+  8 |  9943
+  9 |  9944
+ 11 | 19897
+    |     6
 (10 rows)
 
 select max(s) from aggfns where cfloat8 < 1000 order by 1;
@@ -6657,42 +7267,6 @@ select ss, avg(ss) from aggfns where cfloat8 < 1000 group by ss order by 1;
   9 |         9.0000000000000000
  11 |        11.0000000000000000
     |                           
-(10 rows)
-
-select count(ss) from aggfns where cfloat8 < 1000 order by 1;
- count  
---------
- 199981
-(1 row)
-
-select s, count(ss) from aggfns where cfloat8 < 1000 group by s order by 1;
- s | count 
----+-------
- 0 | 20000
- 1 | 20000
- 2 | 20000
- 3 | 19981
- 4 | 20000
- 5 | 20000
- 6 | 20000
- 7 | 20000
- 8 | 20000
- 9 | 20000
-(10 rows)
-
-select ss, count(ss) from aggfns where cfloat8 < 1000 group by ss order by 1;
- ss | count 
-----+-------
-  0 | 20000
-  3 | 19981
-  4 | 19981
-  5 | 20000
-  6 | 20000
-  7 | 20000
-  8 | 20000
-  9 | 20000
- 11 | 40019
-    |     0
 (10 rows)
 
 select max(ss) from aggfns where cfloat8 < 1000 order by 1;
@@ -6917,12 +7491,28 @@ select count(*) from aggfns where cfloat8 > 1000 order by 1;
      0
 (1 row)
 
+select count(*) filter (where cint4 > 0) from aggfns where cfloat8 > 1000 order by 1;
+ count 
+-------
+     0
+(1 row)
+
 select s, count(*) from aggfns where cfloat8 > 1000 group by s order by 1;
  s | count 
 ---+-------
 (0 rows)
 
+select s, count(*) filter (where cint4 > 0) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | count 
+---+-------
+(0 rows)
+
 select ss, count(*) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | count 
+----+-------
+(0 rows)
+
+select ss, count(*) filter (where cint4 > 0) from aggfns where cfloat8 > 1000 group by ss order by 1;
  ss | count 
 ----+-------
 (0 rows)
@@ -6978,27 +7568,6 @@ select s, avg(cfloat4) from aggfns where cfloat8 > 1000 group by s order by 1;
 select ss, avg(cfloat4) from aggfns where cfloat8 > 1000 group by ss order by 1;
  ss | avg 
 ----+-----
-(0 rows)
-
-select count(cfloat4) from aggfns where cfloat8 > 1000 order by 1;
- count 
--------
-     0
-(1 row)
-
-select s, count(cfloat4) from aggfns where cfloat8 > 1000 group by s order by 1;
- s | count 
----+-------
-(0 rows)
-
-select ss, count(cfloat4) from aggfns where cfloat8 > 1000 group by ss order by 1;
- ss | count 
-----+-------
-(0 rows)
-
-select x, count(cfloat4) from aggfns where cfloat8 > 1000 group by x order by 1;
- x | count 
----+-------
 (0 rows)
 
 select max(cfloat4) from aggfns where cfloat8 > 1000 order by 1;
@@ -7161,6 +7730,43 @@ select ss, avg(cint2) from aggfns where cfloat8 > 1000 group by ss order by 1;
 ----+-----
 (0 rows)
 
+select count(cint2) from aggfns where cfloat8 > 1000 order by 1;
+ count 
+-------
+     0
+(1 row)
+
+select count(cint2) filter (where cint4 > 0) from aggfns where cfloat8 > 1000 order by 1;
+ count 
+-------
+     0
+(1 row)
+
+select s, count(cint2) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | count 
+---+-------
+(0 rows)
+
+select s, count(cint2) filter (where cint4 > 0) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | count 
+---+-------
+(0 rows)
+
+select ss, count(cint2) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | count 
+----+-------
+(0 rows)
+
+select ss, count(cint2) filter (where cint4 > 0) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | count 
+----+-------
+(0 rows)
+
+select x, count(cint2) from aggfns where cfloat8 > 1000 group by x order by 1;
+ x | count 
+---+-------
+(0 rows)
+
 select max(cint2) from aggfns where cfloat8 > 1000 order by 1;
  max 
 -----
@@ -7214,12 +7820,28 @@ select sum(cint2) from aggfns where cfloat8 > 1000 order by 1;
     
 (1 row)
 
+select sum(cint2) filter (where cint4 > 0) from aggfns where cfloat8 > 1000 order by 1;
+ sum 
+-----
+    
+(1 row)
+
 select s, sum(cint2) from aggfns where cfloat8 > 1000 group by s order by 1;
  s | sum 
 ---+-----
 (0 rows)
 
+select s, sum(cint2) filter (where cint4 > 0) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | sum 
+---+-----
+(0 rows)
+
 select ss, sum(cint2) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | sum 
+----+-----
+(0 rows)
+
+select ss, sum(cint2) filter (where cint4 > 0) from aggfns where cfloat8 > 1000 group by ss order by 1;
  ss | sum 
 ----+-----
 (0 rows)
@@ -7293,12 +7915,28 @@ select sum(cint4) from aggfns where cfloat8 > 1000 order by 1;
     
 (1 row)
 
+select sum(cint4) filter (where cint4 > 0) from aggfns where cfloat8 > 1000 order by 1;
+ sum 
+-----
+    
+(1 row)
+
 select s, sum(cint4) from aggfns where cfloat8 > 1000 group by s order by 1;
  s | sum 
 ---+-----
 (0 rows)
 
+select s, sum(cint4) filter (where cint4 > 0) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | sum 
+---+-----
+(0 rows)
+
 select ss, sum(cint4) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | sum 
+----+-----
+(0 rows)
+
+select ss, sum(cint4) filter (where cint4 > 0) from aggfns where cfloat8 > 1000 group by ss order by 1;
  ss | sum 
 ----+-----
 (0 rows)
@@ -7451,12 +8089,28 @@ select count(s) from aggfns where cfloat8 > 1000 order by 1;
      0
 (1 row)
 
+select count(s) filter (where cint4 > 0) from aggfns where cfloat8 > 1000 order by 1;
+ count 
+-------
+     0
+(1 row)
+
 select s, count(s) from aggfns where cfloat8 > 1000 group by s order by 1;
  s | count 
 ---+-------
 (0 rows)
 
+select s, count(s) filter (where cint4 > 0) from aggfns where cfloat8 > 1000 group by s order by 1;
+ s | count 
+---+-------
+(0 rows)
+
 select ss, count(s) from aggfns where cfloat8 > 1000 group by ss order by 1;
+ ss | count 
+----+-------
+(0 rows)
+
+select ss, count(s) filter (where cint4 > 0) from aggfns where cfloat8 > 1000 group by ss order by 1;
  ss | count 
 ----+-------
 (0 rows)
@@ -7538,22 +8192,6 @@ select s, avg(ss) from aggfns where cfloat8 > 1000 group by s order by 1;
 select ss, avg(ss) from aggfns where cfloat8 > 1000 group by ss order by 1;
  ss | avg 
 ----+-----
-(0 rows)
-
-select count(ss) from aggfns where cfloat8 > 1000 order by 1;
- count 
--------
-     0
-(1 row)
-
-select s, count(ss) from aggfns where cfloat8 > 1000 group by s order by 1;
- s | count 
----+-------
-(0 rows)
-
-select ss, count(ss) from aggfns where cfloat8 > 1000 group by ss order by 1;
- ss | count 
-----+-------
 (0 rows)
 
 select max(ss) from aggfns where cfloat8 > 1000 order by 1;
@@ -7651,69 +8289,6 @@ select ss, min(t) from aggfns where cfloat8 > 1000 group by ss order by 1;
 ----+-----
 (0 rows)
 
-select count(*) from aggfns where cint2 is null order by 1;
- count 
--------
-   190
-(1 row)
-
-select s, count(*) from aggfns where cint2 is null group by s order by 1;
- s | count 
----+-------
- 0 |    19
- 1 |    19
- 2 |    19
- 3 |    19
- 4 |    19
- 5 |    19
- 6 |    19
- 7 |    19
- 8 |    19
- 9 |    19
-(10 rows)
-
-select ss, count(*) from aggfns where cint2 is null group by ss order by 1;
- ss | count 
-----+-------
-  0 |    19
-  3 |    19
-  4 |    19
-  5 |    19
-  6 |    19
-  7 |    19
-  8 |    19
-  9 |    19
- 11 |    38
-(9 rows)
-
-select x, count(*) from aggfns where cint2 is null group by x order by 1;
- x  | count 
-----+-------
- 0  |    19
- 11 |    38
- 3  |    19
- 4  |    19
- 5  |    19
- 6  |    19
- 7  |    19
- 8  |    19
- 9  |    19
-(9 rows)
-
-select x, count(cfloat4) from aggfns where cint2 is null group by x order by 1;
- x  | count 
-----+-------
- 0  |    19
- 11 |    38
- 3  |    19
- 4  |    19
- 5  |    19
- 6  |    19
- 7  |    19
- 8  |    19
- 9  |    19
-(9 rows)
-
 select avg(cint2) from aggfns where cint2 is null order by 1;
  avg 
 -----
@@ -7755,7 +8330,28 @@ select count(cint2) from aggfns where cint2 is null order by 1;
      0
 (1 row)
 
+select count(cint2) filter (where cint4 > 0) from aggfns where cint2 is null order by 1;
+ count 
+-------
+     0
+(1 row)
+
 select s, count(cint2) from aggfns where cint2 is null group by s order by 1;
+ s | count 
+---+-------
+ 0 |     0
+ 1 |     0
+ 2 |     0
+ 3 |     0
+ 4 |     0
+ 5 |     0
+ 6 |     0
+ 7 |     0
+ 8 |     0
+ 9 |     0
+(10 rows)
+
+select s, count(cint2) filter (where cint4 > 0) from aggfns where cint2 is null group by s order by 1;
  s | count 
 ---+-------
  0 |     0
@@ -7782,6 +8378,34 @@ select ss, count(cint2) from aggfns where cint2 is null group by ss order by 1;
   8 |     0
   9 |     0
  11 |     0
+(9 rows)
+
+select ss, count(cint2) filter (where cint4 > 0) from aggfns where cint2 is null group by ss order by 1;
+ ss | count 
+----+-------
+  0 |     0
+  3 |     0
+  4 |     0
+  5 |     0
+  6 |     0
+  7 |     0
+  8 |     0
+  9 |     0
+ 11 |     0
+(9 rows)
+
+select x, count(cint2) from aggfns where cint2 is null group by x order by 1;
+ x  | count 
+----+-------
+ 0  |     0
+ 11 |     0
+ 3  |     0
+ 4  |     0
+ 5  |     0
+ 6  |     0
+ 7  |     0
+ 8  |     0
+ 9  |     0
 (9 rows)
 
 select max(cint2) from aggfns where cint2 is null order by 1;
@@ -7895,6 +8519,12 @@ select sum(cint2) from aggfns where cint2 is null order by 1;
     
 (1 row)
 
+select sum(cint2) filter (where cint4 > 0) from aggfns where cint2 is null order by 1;
+ sum 
+-----
+    
+(1 row)
+
 select s, sum(cint2) from aggfns where cint2 is null group by s order by 1;
  s | sum 
 ---+-----
@@ -7910,7 +8540,36 @@ select s, sum(cint2) from aggfns where cint2 is null group by s order by 1;
  9 |    
 (10 rows)
 
+select s, sum(cint2) filter (where cint4 > 0) from aggfns where cint2 is null group by s order by 1;
+ s | sum 
+---+-----
+ 0 |    
+ 1 |    
+ 2 |    
+ 3 |    
+ 4 |    
+ 5 |    
+ 6 |    
+ 7 |    
+ 8 |    
+ 9 |    
+(10 rows)
+
 select ss, sum(cint2) from aggfns where cint2 is null group by ss order by 1;
+ ss | sum 
+----+-----
+  0 |    
+  3 |    
+  4 |    
+  5 |    
+  6 |    
+  7 |    
+  8 |    
+  9 |    
+ 11 |    
+(9 rows)
+
+select ss, sum(cint2) filter (where cint4 > 0) from aggfns where cint2 is null group by ss order by 1;
  ss | sum 
 ----+-----
   0 |    

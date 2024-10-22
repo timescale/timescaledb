@@ -86,6 +86,9 @@ typedef struct GroupingPolicyHash
 	void *restrict keys;
 	MemoryContext key_body_mctx;
 
+	uint64 *tmp_filter;
+	uint64 num_tmp_filter_words;
+
 	/*
 	 * Some statistics for debugging.
 	 */

@@ -89,10 +89,11 @@ set timescaledb.debug_require_vector_agg = 'require';
 --set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
 
 select
-    format('%sselect %s%s(%s) from aggfns%s%s order by 1;',
+    format('%sselect %s%s(%s)%s from aggfns%s%s order by 1;',
             explain,
             grouping || ', ',
             function, variable,
+            ' filter (where ' || agg_filter || ')',
             ' where ' || condition,
             ' group by ' || grouping )
 from
@@ -130,27 +131,24 @@ from
         null,
         's',
         'ss',
-        'x']) with ordinality as grouping(grouping, n)
+        'x']) with ordinality as grouping(grouping, n),
+    unnest(array[
+        null,
+        'cint4 > 0']) with ordinality as agg_filter(agg_filter, n)
 where
-    case
---        when explain is not null then condition is null and grouping = 's'
-        when explain is not null then false
-        when true then true
-    end
-    and
-    case
-        when variable = '*' then function = 'count'
-        -- No need to test the aggregate functions themselves again for string
-        -- grouping.
-        when grouping = 'x' then function = 'count' and variable = 'cfloat4'
-        when condition = 'cint2 is null' then variable = 'cint2'
-        when function = 'count' then variable in ('cfloat4', 's', 'ss')
-        when variable = 't' then function in ('min', 'max')
-        when variable in ('cts', 'ctstz', 'cdate') then function in ('min', 'max')
-        -- This is not vectorized yet.
-        when function = 'stddev' then variable != 'cint8'
-    else true end
-order by explain, condition.n, variable, function, grouping.n
+    true
+    and (explain is null /* or condition is null and grouping = 's' */)
+    and (variable != '*' or function = 'count')
+    and (variable not in ('t', 'cts', 'ctstz', 'cdate') or function in ('min', 'max'))
+    -- This is not vectorized yet
+    and (variable != 'cint8' or function != 'stddev')
+    and (function != 'count' or variable in ('cint2', 's', '*'))
+    and (agg_filter is null or (function = 'count') or (function = 'sum' and variable in ('cint2', 'cint4')))
+    and (condition is distinct from 'cint2 is null' or variable = 'cint2')
+    -- No need to test the aggregate functions themselves again for string
+    -- grouping.
+    and (grouping is distinct from 'x' or (function = 'count' and variable in ('cint2', '*') and agg_filter is null))
+order by explain, condition.n, variable, function, grouping.n, agg_filter.n
 \gexec
 
 
