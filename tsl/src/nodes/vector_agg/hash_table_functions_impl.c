@@ -171,29 +171,15 @@ FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *ba
 	CompressedColumnValues column = batch_state->compressed_columns[g->input_offset];
 	const uint64 *restrict filter = batch_state->vector_qual_result;
 
-	if (filter == NULL && column.buffers[0] == NULL)
+	if (filter == NULL)
 	{
 		next_unused_state_index = FUNCTION_NAME(
-			dispatch_type)(policy, column, filter, next_unused_state_index, start_row, end_row);
-	}
-	else if (filter != NULL && column.buffers[0] == NULL)
-	{
-		next_unused_state_index = FUNCTION_NAME(
-			dispatch_type)(policy, column, filter, next_unused_state_index, start_row, end_row);
-	}
-	else if (filter == NULL && column.buffers[0] != NULL)
-	{
-		next_unused_state_index = FUNCTION_NAME(
-			dispatch_type)(policy, column, filter, next_unused_state_index, start_row, end_row);
-	}
-	else if (filter != NULL && column.buffers[0] != NULL)
-	{
-		next_unused_state_index = FUNCTION_NAME(
-			dispatch_type)(policy, column, filter, next_unused_state_index, start_row, end_row);
+			dispatch_type)(policy, column, NULL, next_unused_state_index, start_row, end_row);
 	}
 	else
 	{
-		Assert(false);
+		next_unused_state_index = FUNCTION_NAME(
+			dispatch_type)(policy, column, filter, next_unused_state_index, start_row, end_row);
 	}
 
 	return next_unused_state_index;

@@ -21,9 +21,11 @@ FUNCTION_NAME(many_vector_impl)(void *restrict agg_states, const uint32 *offsets
 	for (int row = start_row; row < end_row; row++)
 	{
 		const CTYPE value = values[row];
+		FUNCTION_NAME(state) *restrict state = &states[offsets[row]];
 		if (arrow_row_is_valid(filter, row))
 		{
-			FUNCTION_NAME(one)(&states[offsets[row]], value);
+			Assert(offsets[row] != 0);
+			FUNCTION_NAME(one)(state, value);
 		}
 	}
 	MemoryContextSwitchTo(old);
