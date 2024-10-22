@@ -146,30 +146,16 @@ compute_single_aggregate(GroupingPolicyHash *policy, const DecompressBatchState 
 		}
 	}
 
-	uint64 *restrict filter = NULL;
-	if (batch_state->vector_qual_result != NULL || agg_def->filter_result != NULL ||
-		(arg_arrow != NULL && arg_arrow->buffers[0] != NULL))
-	{
-		filter = policy->tmp_filter;
-		const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
-		for (size_t i = 0; i < num_words; i++)
-		{
-			uint64 word = -1;
-			if (batch_state->vector_qual_result != NULL)
-			{
-				word &= batch_state->vector_qual_result[i];
-			}
-			if (agg_def->filter_result != NULL)
-			{
-				word &= agg_def->filter_result[i];
-			}
-			if (arg_arrow != NULL && arg_arrow->buffers[0] != NULL)
-			{
-				word &= ((uint64 *) arg_arrow->buffers[0])[i];
-			}
-			filter[i] = word;
-		}
-	}
+	/*
+	 * Compute the unified validity bitmap.
+	 */
+	const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
+	uint64 *restrict filter =
+		arrow_combine_validity(num_words,
+							   policy->tmp_filter,
+							   batch_state->vector_qual_result,
+							   agg_def->filter_result,
+							   arg_arrow != NULL ? arg_arrow->buffers[0] : NULL);
 
 	/*
 	 * Now call the function.

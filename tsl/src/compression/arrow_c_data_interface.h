@@ -182,6 +182,35 @@ arrow_set_row_validity(uint64 *bitmap, size_t row_number, bool value)
 	Assert(arrow_row_is_valid(bitmap, row_number) == value);
 }
 
+static inline uint64 *
+arrow_combine_validity(size_t num_words, uint64 *restrict storage, const uint64 *filter1,
+					   const uint64 *filter2, const uint64 *filter3)
+{
+	if (filter1 == NULL && filter2 == NULL && filter3 == NULL)
+	{
+		return NULL;
+	}
+
+	for (size_t i = 0; i < num_words; i++)
+	{
+		uint64 word = ~0;
+		if (filter1 != NULL)
+		{
+			word &= filter1[i];
+		}
+		if (filter2 != NULL)
+		{
+			word &= filter2[i];
+		}
+		if (filter3 != NULL)
+		{
+			word &= filter3[i];
+		}
+		storage[i] = word;
+	}
+
+	return storage;
+}
 /* Increase the `source_value` to be an even multiple of `pad_to`. */
 static inline uint64
 pad_to_multiple(uint64 pad_to, uint64 source_value)

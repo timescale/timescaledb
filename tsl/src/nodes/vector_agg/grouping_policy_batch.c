@@ -36,6 +36,9 @@ typedef struct
 	 * the grouping policy is reset.
 	 */
 	MemoryContext agg_extra_mctx;
+
+	uint64 *tmp_filter;
+	uint64 num_tmp_filter_words;
 } GroupingPolicyBatch;
 
 static const GroupingPolicy grouping_policy_batch_functions;
@@ -91,26 +94,12 @@ gp_batch_reset(GroupingPolicy *obj)
 }
 
 static void
-compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_def, void *agg_state,
-						 MemoryContext agg_extra_mctx)
+compute_single_aggregate(GroupingPolicyBatch *policy, DecompressBatchState *batch_state,
+						 VectorAggDef *agg_def, void *agg_state, MemoryContext agg_extra_mctx)
 {
 	ArrowArray *arg_arrow = NULL;
 	Datum arg_datum = 0;
 	bool arg_isnull = true;
-
-	uint64 *filter = batch_state->vector_qual_result;
-	if (agg_def->filter_result != NULL)
-	{
-		filter = agg_def->filter_result;
-		if (batch_state->vector_qual_result != NULL)
-		{
-			const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
-			for (size_t i = 0; i < num_words; i++)
-			{
-				filter[i] &= batch_state->vector_qual_result[i];
-			}
-		}
-	}
 
 	/*
 	 * We have functions with one argument, and one function with no arguments
@@ -133,6 +122,16 @@ compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_de
 			arg_isnull = *values->output_isnull;
 		}
 	}
+
+	/*
+	 * Compute the unified validity bitmap.
+	 */
+	const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
+	const uint64 *filter = arrow_combine_validity(num_words,
+												  policy->tmp_filter,
+												  batch_state->vector_qual_result,
+												  agg_def->filter_result,
+												  arg_arrow != NULL ? arg_arrow->buffers[0] : NULL);
 
 	/*
 	 * Now call the function.
@@ -167,12 +166,24 @@ static void
 gp_batch_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 {
 	GroupingPolicyBatch *policy = (GroupingPolicyBatch *) gp;
+
+	/*
+	 * Allocate the temporary filter array for computing the combined results of
+	 * batch filter, aggregate filter and column validity.
+	 */
+	const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
+	if (num_words > policy->num_tmp_filter_words)
+	{
+		policy->tmp_filter = palloc(sizeof(*policy->tmp_filter) * (num_words * 2 + 1));
+		policy->num_tmp_filter_words = (num_words * 2 + 1);
+	}
+
 	const int naggs = list_length(policy->agg_defs);
 	for (int i = 0; i < naggs; i++)
 	{
 		VectorAggDef *agg_def = (VectorAggDef *) list_nth(policy->agg_defs, i);
 		void *agg_state = (void *) list_nth(policy->agg_states, i);
-		compute_single_aggregate(batch_state, agg_def, agg_state, policy->agg_extra_mctx);
+		compute_single_aggregate(policy, batch_state, agg_def, agg_state, policy->agg_extra_mctx);
 	}
 
 	const int ngrp = list_length(policy->output_grouping_columns);

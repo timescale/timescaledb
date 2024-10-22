@@ -92,28 +92,25 @@ count_any_scalar(void *agg_state, Datum constvalue, bool constisnull, int n,
 }
 
 static void
-count_any_many_vector(void *agg_state, const ArrowArray *vector, const uint64 *filter,
-					  MemoryContext agg_extra_mctx)
+count_any_vector(void *agg_state, const ArrowArray *vector, const uint64 *filter,
+				 MemoryContext agg_extra_mctx)
 {
 	CountState *state = (CountState *) agg_state;
 	const int n = vector->length;
-	const uint64 *restrict validity = (uint64 *) vector->buffers[0];
 	/* First, process the full words. */
 	for (int i = 0; i < n / 64; i++)
 	{
-		const uint64 validity_word = validity ? validity[i] : ~0ULL;
 		const uint64 filter_word = filter ? filter[i] : ~0ULL;
-		const uint64 resulting_word = validity_word & filter_word;
 
 #ifdef HAVE__BUILTIN_POPCOUNT
-		state->count += __builtin_popcountll(resulting_word);
+		state->count += __builtin_popcountll(filter_word);
 #else
 		/*
 		 * Unfortunately, we have to have this fallback for Windows.
 		 */
 		for (uint16 i = 0; i < 64; i++)
 		{
-			const bool this_bit = (resulting_word >> i) & 1;
+			const bool this_bit = (filter_word >> i) & 1;
 			state->count += this_bit;
 		}
 #endif
@@ -125,13 +122,14 @@ count_any_many_vector(void *agg_state, const ArrowArray *vector, const uint64 *f
 	 */
 	for (int i = 64 * (n / 64); i < n; i++)
 	{
-		state->count += arrow_row_is_valid(validity, i) * arrow_row_is_valid(filter, i);
+		state->count += arrow_row_is_valid(filter, i);
 	}
 }
 
 static void
-count_any_many(void *restrict agg_states, const uint32 *offsets, const uint64 *filter,
-			   int start_row, int end_row, const ArrowArray *vector, MemoryContext agg_extra_mctx)
+count_any_many_vector(void *restrict agg_states, const uint32 *offsets, const uint64 *filter,
+					  int start_row, int end_row, const ArrowArray *vector,
+					  MemoryContext agg_extra_mctx)
 {
 	for (int row = start_row; row < end_row; row++)
 	{
@@ -148,8 +146,8 @@ VectorAggFunctions count_any_agg = {
 	.agg_init = count_init,
 	.agg_emit = count_emit,
 	.agg_scalar = count_any_scalar,
-	.agg_vector = count_any_many_vector,
-	.agg_many_vector = count_any_many,
+	.agg_vector = count_any_vector,
+	.agg_many_vector = count_any_many_vector,
 };
 
 /*
