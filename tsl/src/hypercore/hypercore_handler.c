@@ -64,7 +64,6 @@
 #include "debug_assert.h"
 #include "guc.h"
 #include "hypercore_handler.h"
-#include "process_utility.h"
 #include "relstats.h"
 #include "trigger.h"
 #include "ts_catalog/array_utils.h"
@@ -81,6 +80,16 @@ static void convert_to_hypercore_finish(Oid relid);
 static List *partially_compressed_relids = NIL; /* Relids that needs to have
 												 * updated status set at end of
 												 * transaction */
+
+static bool hypercore_truncate_compressed = true;
+
+bool
+hypercore_set_truncate_compressed(bool onoff)
+{
+	bool old_value = hypercore_truncate_compressed;
+	hypercore_truncate_compressed = onoff;
+	return old_value;
+}
 
 #define HYPERCORE_AM_INFO_SIZE(natts)                                                              \
 	(sizeof(HypercoreInfo) + (sizeof(ColumnCompressionSettings) * (natts)))
@@ -560,7 +569,11 @@ hypercore_rescan(TableScanDesc sscan, ScanKey key, bool set_params, bool allow_s
 	scan->reset = true;
 	scan->hs_scan_state = HYPERCORE_SCAN_START;
 
-	table_rescan(scan->cscan_desc, key);
+	if (key && key->sk_flags & SK_NO_COMPRESSED)
+		scan->hs_scan_state = HYPERCORE_SCAN_NON_COMPRESSED;
+
+	if (scan->cscan_desc)
+		table_rescan(scan->cscan_desc, key);
 
 	Relation relation = scan->uscan_desc->rs_rd;
 	const TableAmRoutine *oldtam = switch_to_heapam(relation);
@@ -1643,7 +1656,7 @@ hypercore_tuple_delete(Relation relation, ItemPointer tid, CommandId cid, Snapsh
 {
 	TM_Result result = TM_Ok;
 
-	if (is_compressed_tid(tid))
+	if (is_compressed_tid(tid) && hypercore_truncate_compressed)
 	{
 		HypercoreInfo *caminfo = RelationGetHypercoreInfo(relation);
 		Relation crel = table_open(caminfo->compressed_relid, RowExclusiveLock);
@@ -1827,7 +1840,7 @@ hypercore_relation_set_new_filelocator(Relation rel, const RelFileLocator *newrl
 	 * change the rel file number for it as well. This can happen if you, for
 	 * example, execute a transactional TRUNCATE. */
 	Oid compressed_relid = chunk_get_compressed_chunk_relid(RelationGetRelid(rel));
-	if (OidIsValid(compressed_relid))
+	if (OidIsValid(compressed_relid) && hypercore_truncate_compressed)
 	{
 		Relation compressed_rel = table_open(compressed_relid, AccessExclusiveLock);
 #if PG16_GE
@@ -1847,7 +1860,7 @@ hypercore_relation_nontransactional_truncate(Relation rel)
 	rel->rd_tableam = oldtam;
 
 	Oid compressed_relid = chunk_get_compressed_chunk_relid(RelationGetRelid(rel));
-	if (OidIsValid(compressed_relid))
+	if (OidIsValid(compressed_relid) && hypercore_truncate_compressed)
 	{
 		Relation crel = table_open(compressed_relid, AccessShareLock);
 		crel->rd_tableam->relation_nontransactional_truncate(crel);
