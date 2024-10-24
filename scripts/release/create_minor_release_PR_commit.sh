@@ -123,7 +123,7 @@ cd ..
 git diff HEAD --name-only
 
 
-echo "---- Commiting the Release PR to fork ----"
+echo "---- Committing the Release PR to fork ----"
 
 #Remove date from the intermediate CHANGELOG file.
 
