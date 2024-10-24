@@ -311,8 +311,6 @@ ts_get_relation_relid(char const *schema_name, char const *relation_name, bool r
 	}
 }
 
-struct Hypertable;
-
 void replace_now_mock_walker(PlannerInfo *root, Node *clause, Oid funcid);
 
 extern TSDLLEXPORT HeapTuple ts_heap_form_tuple(TupleDesc tupleDescriptor, NullableDatum *datums);
@@ -388,5 +386,6 @@ extern TSDLLEXPORT void ts_get_rel_info_by_name(const char *relnamespace, const 
 												Oid *relid, Oid *amoid, char *relkind);
 extern TSDLLEXPORT void ts_get_rel_info(Oid relid, Oid *amoid, char *relkind);
 extern TSDLLEXPORT Oid ts_get_rel_am(Oid relid);
+extern TSDLLEXPORT void ts_relation_set_reloption(Relation rel, List *options, LOCKMODE lockmode);
 extern TSDLLEXPORT bool ts_is_hypercore_am(Oid amoid);
 extern TSDLLEXPORT Jsonb *ts_errdata_to_jsonb(ErrorData *edata, Name proc_schema, Name proc_name);
