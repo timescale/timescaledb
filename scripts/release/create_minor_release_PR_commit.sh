@@ -18,9 +18,18 @@ NEW_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
 RELEASE_BRANCH="${NEW_VERSION/%.$NEW_PATCH_VERSION/.x}"
 CURRENT_VERSION=$(tail -1 version.config | cut -d ' ' -f 3)
 cd sql/updates
-LAST_VERSION=$(ls |grep $CURRENT_VERSION.sql |cut -d '-' -f 1)
+
+for f in ./*
+do
+  case $f in
+    *$CURRENT_VERSION.sql) LAST_UPDATE_FILE=$f;;
+    *) true;;
+  esac
+done
+LAST_VERSION=$(echo "$LAST_UPDATE_FILE" |cut -d '-' -f 1 |cut -d '/' -f 2)
 
 echo "CURRENT_VERSION is $CURRENT_VERSION"
+#echo "LAST_UPDATE_FILE is $LAST_UPDATE_FILE"
 echo "LAST_VERSION is $LAST_VERSION"
 echo "RELEASE_BRANCH is $RELEASE_BRANCH"
 echo "NEW_VERSION is $NEW_VERSION"
@@ -28,6 +37,7 @@ cd ~/"$SOURCES_DIR"/"$FORK_DIR"
 
 
 # Derived Variables
+#RELEASE_PR_BRANCH="release-$NEW_VERSION-$RELEASE_BRANCH"
 RELEASE_PR_BRANCH="release-$NEW_VERSION"
 UPDATE_FILE="$CURRENT_VERSION--$NEW_VERSION.sql"
 DOWNGRADE_FILE="$NEW_VERSION--$CURRENT_VERSION.sql"
