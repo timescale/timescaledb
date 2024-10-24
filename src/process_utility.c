@@ -239,11 +239,31 @@ check_continuous_agg_alter_table_allowed(Hypertable *ht, AlterTableStmt *stmt)
 	}
 }
 
+static bool
+hypertable_has_compressed_chunks(Hypertable *ht)
+{
+	List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.id);
+	ListCell *lc;
+
+	foreach (lc, chunks)
+	{
+		Chunk *chunk = lfirst(lc);
+
+		if (ts_chunk_is_compressed(chunk))
+			return true;
+	}
+
+	return false;
+}
+
 static void
 check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt *stmt)
 {
 	ListCell *lc;
 	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+		return;
+
+	if (!hypertable_has_compressed_chunks(ht))
 		return;
 
 	/* only allow if all commands are allowed */
@@ -295,8 +315,8 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			default:
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("operation not supported on hypertables that have compression "
-								"enabled")));
+						 errmsg("operation not supported on hypertables that have compressed "
+								"chunks")));
 				break;
 		}
 	}
