@@ -461,6 +461,12 @@ lmerge_matched:;
 	 * visible to our MVCC snapshot.
 	 */
 
+#if PG17_GE
+	if (oldtuple != NULL)
+		ExecForceStoreHeapTuple(oldtuple, resultRelInfo->ri_oldTupleSlot,
+								false);
+	else
+#endif
 	if (!table_tuple_fetch_row_version(resultRelInfo->ri_RelationDesc,
 					   tupleid,
 					   SnapshotAny,
