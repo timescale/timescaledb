@@ -12,35 +12,54 @@ $$ LANGUAGE SQL;
 \set CHUNK_ROWS 100000::int
 \set GROUPING_CARDINALITY 10::int
 
-create table aggfns(t int, s int, ss int,
+create table aggfns(t int, s int,
     cint2 int2, cint4 int4, cint8 int8,
     cfloat4 float4, cfloat8 float8,
     cts timestamp, ctstz timestamptz,
     cdate date);
 select create_hypertable('aggfns', 's', chunk_time_interval => :GROUPING_CARDINALITY / :CHUNKS);
 
-insert into aggfns
-select s * 10000::int + t,
+create view source as
+select s * 10000::int + t as t,
     s,
-    s,
-    case when t % 1051 = 0 then null else (mix(s + t + 1) * 32767)::int2 end,
-    (mix(s + t + 2) * 32767 * 65536)::int4,
-    (mix(s + t + 3) * 32767 * 65536)::int8,
+    case when t % 1051 = 0 then null else (mix(s + t + 1) * 32767)::int2 end as cint2,
+    (mix(s + t + 2) * 32767 * 65536)::int4 as cint4,
+    (mix(s + t + 3) * 32767 * 65536)::int8 as cint8,
     case when s = 1 and t = 1061 then 'nan'::float4
         when s = 2 and t = 1061 then '+inf'::float4
         when s = 3 and t = 1061 then '-inf'::float4
-        else (mix(s + t + 4) * 100)::float4 end,
-    (mix(s + t + 5) * 100)::float8,
-    '2021-01-01 01:01:01'::timestamp + interval '1 second' * (s * 10000::int + t),
-    '2021-01-01 01:01:01'::timestamptz + interval '1 second' * (s * 10000::int + t),
-    '2021-01-01 01:01:01'::timestamptz + interval '1 day' * (s * 10000::int + t)
+        else (mix(s + t + 4) * 100)::float4 end as cfloat4,
+    (mix(s + t + 5) * 100)::float8 as cfloat8,
+    '2021-01-01 01:01:01'::timestamp + interval '1 second' * (s * 10000::int + t) as cts,
+    '2021-01-01 01:01:01'::timestamptz + interval '1 second' * (s * 10000::int + t) as ctstz,
+    '2021-01-01'::date + interval '1 day' * (s * 10000::int + t) as cdate
 from
     generate_series(1::int, :CHUNK_ROWS * :CHUNKS / :GROUPING_CARDINALITY) t,
     generate_series(0::int, :GROUPING_CARDINALITY - 1::int) s(s)
 ;
 
+insert into aggfns select * from source where s = 1;
+
 alter table aggfns set (timescaledb.compress, timescaledb.compress_orderby = 't',
     timescaledb.compress_segmentby = 's');
+
+select count(compress_chunk(x)) from show_chunks('aggfns') x;
+
+alter table aggfns add column ss int default 11;
+
+insert into aggfns
+select *,
+    case
+        -- null in entire batch
+        when s = 2 then null
+        -- null for some rows
+        when s = 3 and t % 1053 = 0 then null
+        -- for some rows same as default
+        when s = 4 and t % 1057 = 0 then 11
+        -- not null for entire batch
+        else s
+    end as ss
+from source where s != 1;
 
 select count(compress_chunk(x)) from show_chunks('aggfns') x;
 
@@ -72,7 +91,8 @@ from
         'cfloat8',
         'cts',
         'ctstz',
-        'cdate']) variable,
+        'cdate',
+        '*']) variable,
     unnest(array[
         'min',
         'max',
@@ -99,8 +119,9 @@ where
     end
     and
     case
+        when variable = '*' then function = 'count'
         when condition = 'cint2 is null' then variable = 'cint2'
-        when function = 'count' then variable in ('cfloat4', 's')
+        when function = 'count' then variable in ('cfloat4', 's', 'ss')
         when variable = 't' then function in ('min', 'max')
         when variable in ('cts', 'ctstz', 'cdate') then function in ('min', 'max')
     else true end

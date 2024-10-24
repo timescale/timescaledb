@@ -37,5 +37,6 @@ typedef struct GroupingPolicy
 	void (*gp_destroy)(GroupingPolicy *gp);
 } GroupingPolicy;
 
-extern GroupingPolicy *create_grouping_policy_batch(List *agg_defs, List *grouping_columns,
-													bool partial_per_batch);
+extern GroupingPolicy *create_grouping_policy_batch(List *agg_defs, List *grouping_columns);
+
+extern GroupingPolicy *create_grouping_policy_hash(List *agg_defs, List *grouping_columns);
