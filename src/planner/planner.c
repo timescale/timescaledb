@@ -1590,7 +1590,6 @@ timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
 									RelOptInfo *input_rel, RelOptInfo *output_rel, void *extra)
 {
 	Query *parse = root->parse;
-	bool partials_found = false;
 	TsRelType reltype = TS_REL_OTHER;
 	Hypertable *ht = NULL;
 
@@ -1615,7 +1614,7 @@ timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
 			/* Existing AggPaths are modified here.
 			 * No new AggPaths should be added after this if there
 			 * are partials. */
-			partials_found = ts_plan_process_partialize_agg(root, output_rel);
+			ts_plan_process_partialize_agg(root, output_rel);
 		}
 	}
 
@@ -1624,9 +1623,6 @@ timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
 	{
 		if (parse->hasAggs)
 			ts_preprocess_first_last_aggregates(root, root->processed_tlist);
-
-		if (!partials_found)
-			ts_plan_add_hashagg(root, input_rel, output_rel);
 	}
 
 	if (ts_cm_functions->create_upper_paths_hook != NULL)
