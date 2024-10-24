@@ -1,0 +1,1 @@
+Fixes: #7388 Use-after-free in vectorized grouping by segmentby columns.
