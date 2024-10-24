@@ -26,10 +26,10 @@ max_patch_version=$(echo "${MAX_VERSION}" | awk -F. '{print $3}')
 
 # Filter versions depending on the current postgres version
 # Minimum version for valid update paths are as follows:
-# PG 13 v7 2.1+
 # PG 14 v8 2.5+
 # PG 15 v8 2.9+
 # PG 16 v8 2.13+
+# PG 17 v8 2.17+
 for version in ${ALL_VERSIONS}; do
   minor_version=$(echo "${version}" | awk -F. '{print $2}')
   patch_version=$(echo "${version}" | awk -F. '{print $3}')
@@ -52,6 +52,10 @@ for version in ${ALL_VERSIONS}; do
     fi
   elif [ "${minor_version}" -le 12 ]; then
     if [ "${PG_MAJOR_VERSION}" -le 15 ]; then
+        VERSIONS="${VERSIONS} ${version}"
+    fi
+  elif [ "${minor_version}" -le 16 ]; then
+    if [ "${PG_MAJOR_VERSION}" -le 16 ]; then
         VERSIONS="${VERSIONS} ${version}"
     fi
   else
