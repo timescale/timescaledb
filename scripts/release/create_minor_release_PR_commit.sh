@@ -130,6 +130,6 @@ echo "---- Commiting the Release PR to fork ----"
 cut -d '(' -f1 < ~/CHANGELOG_"$NEW_VERSION".md > ~/CHANGELOG_"$NEW_VERSION".md.tmp
 mv ~/CHANGELOG_"$NEW_VERSION".md.tmp ~/CHANGELOG_"$NEW_VERSION".md
 
-git commit -a -F ~/CHANGELOG_"$NEW_VERSION".md
+git commit --no-verify -a -F ~/CHANGELOG_"$NEW_VERSION".md
 
 git push origin $RELEASE_PR_BRANCH
