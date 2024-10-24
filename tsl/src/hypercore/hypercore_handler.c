@@ -62,9 +62,9 @@
 #include "compression/compression.h"
 #include "compression/create.h"
 #include "debug_assert.h"
+#include "extension.h"
 #include "guc.h"
 #include "hypercore_handler.h"
-#include "process_utility.h"
 #include "relstats.h"
 #include "trigger.h"
 #include "ts_catalog/array_utils.h"
@@ -81,6 +81,30 @@ static void convert_to_hypercore_finish(Oid relid);
 static List *partially_compressed_relids = NIL; /* Relids that needs to have
 												 * updated status set at end of
 												 * transaction */
+/*
+ * For COPY <hypercore_rel> TO commands, track the relid of the hypercore
+ * being copied from. It is needed to filter out compressed data in the COPY
+ * scan so that pg_dump does not dump compressed data twice: once in
+ * uncompressed format via the hypercore rel and once in compressed format in
+ * the internal compressed rel that gets dumped separately.
+ */
+static Oid hypercore_skip_compressed_data_relid = InvalidOid;
+
+void
+hypercore_skip_compressed_data_for_relation(Oid relid)
+{
+	hypercore_skip_compressed_data_relid = relid;
+}
+
+static bool hypercore_truncate_compressed = true;
+
+bool
+hypercore_set_truncate_compressed(bool onoff)
+{
+	bool old_value = hypercore_truncate_compressed;
+	hypercore_truncate_compressed = onoff;
+	return old_value;
+}
 
 #define HYPERCORE_AM_INFO_SIZE(natts)                                                              \
 	(sizeof(HypercoreInfo) + (sizeof(ColumnCompressionSettings) * (natts)))
@@ -167,7 +191,7 @@ static HypercoreInfo *
 lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 								bool *compressed_relation_created)
 {
-	Assert(OidIsValid(rel->rd_id) && !ts_is_hypertable(rel->rd_id));
+	Assert(OidIsValid(rel->rd_id) && (!ts_extension_is_loaded() || !ts_is_hypertable(rel->rd_id)));
 
 	HypercoreInfo *hsinfo;
 	CompressionSettings *settings;
@@ -358,6 +382,7 @@ typedef struct HypercoreScanDescData
 	int32 compressed_row_count;
 	HypercoreScanState hs_scan_state;
 	bool reset;
+	bool skip_compressed; /* Skip compressed data when scanning */
 #if PG17_GE
 	/* These fields are only used for ANALYZE */
 	ReadStream *canalyze_read_stream;
@@ -371,6 +396,19 @@ static bool hypercore_getnextslot_noncompressed(HypercoreScanDesc scan, ScanDire
 												TupleTableSlot *slot);
 static bool hypercore_getnextslot_compressed(HypercoreScanDesc scan, ScanDirection direction,
 											 TupleTableSlot *slot);
+
+void
+hypercore_scan_set_skip_compressed(TableScanDesc scan)
+{
+	HypercoreScanDesc hscan;
+
+	if (!REL_IS_HYPERCORE(scan->rs_rd))
+		return;
+
+	hscan = (HypercoreScanDesc) scan;
+	scan->rs_flags |= SO_HYPERCORE_SKIP_COMPRESSED;
+	hscan->hs_scan_state = HYPERCORE_SCAN_NON_COMPRESSED;
+}
 
 #if PG17_GE
 static int
@@ -468,6 +506,27 @@ get_scan_type(uint32 flags)
 }
 #endif
 
+static inline bool
+should_skip_compressed_data(const TableScanDesc scan)
+{
+	/*
+	 * Skip compressed data in a scan if any of these apply:
+	 *
+	 * 1. Transaparent decompression (DecompressChunk) is enabled for
+	 *    hypercore.
+	 *
+	 * 2. The scan was started with a flag indicating no compressed data
+	 *    should be returned.
+	 *
+	 * 3. A COPY <hypercore> TO <file> on the hypercore is executed and we
+	 *    want to ensure such commands issued by pg_dump doesn't lead to
+	 *    dumping compressed data twice.
+	 */
+	return (ts_guc_enable_transparent_decompression == 2) ||
+		   RelationGetRelid(scan->rs_rd) == hypercore_skip_compressed_data_relid ||
+		   (scan->rs_flags & SO_HYPERCORE_SKIP_COMPRESSED);
+}
+
 static TableScanDesc
 hypercore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey keys,
 					ParallelTableScanDesc parallel_scan, uint32 flags)
@@ -504,8 +563,7 @@ hypercore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey key
 	HypercoreInfo *hsinfo = RelationGetHypercoreInfo(relation);
 	scan->compressed_rel = table_open(hsinfo->compressed_relid, AccessShareLock);
 
-	if ((ts_guc_enable_transparent_decompression == 2) ||
-		(keys && keys->sk_flags & SK_NO_COMPRESSED))
+	if (should_skip_compressed_data(&scan->rs_base))
 	{
 		/*
 		 * Don't read compressed data if transparent decompression is enabled
@@ -514,7 +572,7 @@ hypercore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey key
 		 * Transparent decompression reads compressed data itself, directly
 		 * from the compressed chunk, so avoid reading it again here.
 		 */
-		scan->hs_scan_state = HYPERCORE_SCAN_NON_COMPRESSED;
+		hypercore_scan_set_skip_compressed(&scan->rs_base);
 	}
 
 	initscan(scan, keys, nkeys);
@@ -540,12 +598,13 @@ hypercore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey key
 	ParallelTableScanDesc cptscan =
 		parallel_scan ? (ParallelTableScanDesc) &cpscan->cpscandesc : NULL;
 
-	scan->cscan_desc = scan->compressed_rel->rd_tableam->scan_begin(scan->compressed_rel,
-																	snapshot,
-																	scan->rs_base.rs_nkeys,
-																	scan->rs_base.rs_key,
-																	cptscan,
-																	flags);
+	if (scan->compressed_rel)
+		scan->cscan_desc = scan->compressed_rel->rd_tableam->scan_begin(scan->compressed_rel,
+																		snapshot,
+																		scan->rs_base.rs_nkeys,
+																		scan->rs_base.rs_key,
+																		cptscan,
+																		flags);
 
 	return &scan->rs_base;
 }
@@ -560,7 +619,11 @@ hypercore_rescan(TableScanDesc sscan, ScanKey key, bool set_params, bool allow_s
 	scan->reset = true;
 	scan->hs_scan_state = HYPERCORE_SCAN_START;
 
-	table_rescan(scan->cscan_desc, key);
+	if (sscan->rs_flags & SO_HYPERCORE_SKIP_COMPRESSED)
+		scan->hs_scan_state = HYPERCORE_SCAN_NON_COMPRESSED;
+
+	if (scan->cscan_desc)
+		table_rescan(scan->cscan_desc, key);
 
 	Relation relation = scan->uscan_desc->rs_rd;
 	const TableAmRoutine *oldtam = switch_to_heapam(relation);
@@ -606,6 +669,9 @@ hypercore_endscan(TableScanDesc sscan)
 		pfree(scan->rs_base.rs_key);
 
 	pfree(scan);
+
+	/* Clear the COPY TO filter state */
+	hypercore_skip_compressed_data_relid = InvalidOid;
 }
 
 static bool
@@ -1643,7 +1709,7 @@ hypercore_tuple_delete(Relation relation, ItemPointer tid, CommandId cid, Snapsh
 {
 	TM_Result result = TM_Ok;
 
-	if (is_compressed_tid(tid))
+	if (is_compressed_tid(tid) && hypercore_truncate_compressed)
 	{
 		HypercoreInfo *caminfo = RelationGetHypercoreInfo(relation);
 		Relation crel = table_open(caminfo->compressed_relid, RowExclusiveLock);
@@ -1827,7 +1893,7 @@ hypercore_relation_set_new_filelocator(Relation rel, const RelFileLocator *newrl
 	 * change the rel file number for it as well. This can happen if you, for
 	 * example, execute a transactional TRUNCATE. */
 	Oid compressed_relid = chunk_get_compressed_chunk_relid(RelationGetRelid(rel));
-	if (OidIsValid(compressed_relid))
+	if (OidIsValid(compressed_relid) && hypercore_truncate_compressed)
 	{
 		Relation compressed_rel = table_open(compressed_relid, AccessExclusiveLock);
 #if PG16_GE
@@ -1847,7 +1913,7 @@ hypercore_relation_nontransactional_truncate(Relation rel)
 	rel->rd_tableam = oldtam;
 
 	Oid compressed_relid = chunk_get_compressed_chunk_relid(RelationGetRelid(rel));
-	if (OidIsValid(compressed_relid))
+	if (OidIsValid(compressed_relid) && hypercore_truncate_compressed)
 	{
 		Relation crel = table_open(compressed_relid, AccessShareLock);
 		crel->rd_tableam->relation_nontransactional_truncate(crel);
@@ -3374,6 +3440,7 @@ hypercore_xact_event(XactEvent event, void *arg)
 				Ensure(OidIsValid(hsinfo->compressed_relid),
 					   "hypercore \"%s\" has no compressed data relation",
 					   get_rel_name(relid));
+
 				Chunk *chunk = ts_chunk_get_by_relid(relid, true);
 				ts_chunk_set_partial(chunk);
 				table_close(rel, NoLock);
