@@ -404,7 +404,7 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 		policy->returning_results = true;
 		policy->last_returned_key = 1;
 
-		const float keys = policy->next_unused_key_index;
+		const float keys = policy->next_unused_key_index - 1;
 		if (keys > 0)
 		{
 			DEBUG_LOG("spill after %ld input, %ld valid, %ld bulk filtered, %ld cons, %.0f keys, "
