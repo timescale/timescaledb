@@ -58,12 +58,10 @@ create_grouping_policy_hash(List *agg_defs, List *output_grouping_columns)
 					palloc0(agg_def->func.state_bytes * policy->allocated_aggstate_rows));
 	}
 
-	//  policy->key_bytes = g->value_bytes;
-	policy->key_bytes = sizeof(Datum);
-	Assert(policy->key_bytes > 0);
-
 	policy->num_allocated_keys = policy->allocated_aggstate_rows;
-	policy->keys = palloc(policy->key_bytes * policy->num_allocated_keys);
+	policy->output_keys =
+		palloc((sizeof(uint64) + list_length(policy->output_grouping_columns) * sizeof(Datum)) *
+			   policy->num_allocated_keys);
 	policy->key_body_mctx = policy->agg_extra_mctx;
 
 	if (list_length(policy->output_grouping_columns) == 1)
@@ -71,22 +69,22 @@ create_grouping_policy_hash(List *agg_defs, List *output_grouping_columns)
 		GroupingColumn *g = linitial(policy->output_grouping_columns);
 		switch (g->value_bytes)
 		{
-		case 8:
-			policy->functions = single_fixed_8_functions;
-			break;
-		case 4:
-			policy->functions = single_fixed_4_functions;
-			break;
-		case 2:
-			policy->functions = single_fixed_2_functions;
-			break;
-		case -1:
-			Assert(g->typid == TEXTOID);
-			policy->functions = single_text_functions;
-			break;
-		default:
-			Assert(false);
-			break;
+			case 8:
+				policy->functions = single_fixed_8_functions;
+				break;
+			case 4:
+				policy->functions = single_fixed_4_functions;
+				break;
+			case 2:
+				policy->functions = single_fixed_2_functions;
+				break;
+			case -1:
+				Assert(g->typid == TEXTOID);
+				policy->functions = single_text_functions;
+				break;
+			default:
+				Assert(false);
+				break;
 		}
 	}
 	else
@@ -96,7 +94,8 @@ create_grouping_policy_hash(List *agg_defs, List *output_grouping_columns)
 
 	policy->table =
 		policy->functions.create(CurrentMemoryContext, policy->allocated_aggstate_rows, NULL);
-	policy->have_null_key = false;
+	policy->null_key_index = 0;
+	policy->next_unused_key_index = 1;
 
 	policy->returning_results = false;
 
@@ -113,7 +112,9 @@ gp_hash_reset(GroupingPolicy *obj)
 	policy->returning_results = false;
 
 	policy->functions.reset(policy->table);
-	policy->have_null_key = false;
+
+	policy->null_key_index = 0;
+	policy->next_unused_key_index = 1;
 
 	policy->stat_input_valid_rows = 0;
 	policy->stat_input_total_rows = 0;
@@ -223,12 +224,9 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 
 	/*
 	 * Remember which aggregation states have already existed, and which we
-	 * have to initialize. State index zero is invalid, and state index one
-	 * is for null key. We have to initialize the null key state at the
-	 * first run.
+	 * have to initialize. State index zero is invalid.
 	 */
-	const uint32 hash_keys = policy->functions.get_num_keys(policy->table);
-	const uint32 first_uninitialized_state_index = hash_keys ? hash_keys + 2 : 1;
+	const uint32 first_uninitialized_state_index = policy->next_unused_key_index;
 
 	/*
 	 * Allocate enough storage for keys, given that each bach row might be
@@ -238,27 +236,31 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 	if (num_possible_keys > policy->num_allocated_keys)
 	{
 		policy->num_allocated_keys = num_possible_keys;
-		policy->keys = repalloc(policy->keys, list_length(policy->output_grouping_columns) * policy->key_bytes * num_possible_keys);
+		policy->output_keys =
+			repalloc(policy->output_keys,
+					 (sizeof(uint64) +
+					  list_length(policy->output_grouping_columns) * sizeof(Datum)) *
+						 num_possible_keys);
 	}
 
 	/*
 	 * Match rows to aggregation states using a hash table.
 	 */
 	Assert((size_t) end_row <= policy->num_allocated_offsets);
-	uint32 next_unused_state_index = hash_keys + 2;
-	next_unused_state_index = policy->functions.fill_offsets(policy,
-															 batch_state,
-															 next_unused_state_index,
-															 start_row,
-															 end_row);
+	uint32 next_unused_key_index = policy->next_unused_key_index;
+	next_unused_key_index = policy->functions.fill_offsets(policy,
+														   batch_state,
+														   next_unused_key_index,
+														   start_row,
+														   end_row);
 
 	const uint64 new_aggstate_rows = policy->allocated_aggstate_rows * 2 + 1;
 	for (int i = 0; i < num_fns; i++)
 	{
 		VectorAggDef *agg_def = list_nth(policy->agg_defs, i);
-		if (next_unused_state_index > first_uninitialized_state_index)
+		if (next_unused_key_index > first_uninitialized_state_index)
 		{
-			if (next_unused_state_index > policy->allocated_aggstate_rows)
+			if (next_unused_key_index > policy->allocated_aggstate_rows)
 			{
 				lfirst(list_nth_cell(policy->per_agg_states, i)) =
 					repalloc(list_nth(policy->per_agg_states, i),
@@ -270,7 +272,7 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 			 */
 			agg_def->func.agg_init(agg_def->func.state_bytes * first_uninitialized_state_index +
 									   (char *) list_nth(policy->per_agg_states, i),
-								   next_unused_state_index - first_uninitialized_state_index);
+								   next_unused_key_index - first_uninitialized_state_index);
 		}
 
 		/*
@@ -289,11 +291,13 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 	/*
 	 * Record the newly allocated number of rows in case we had to reallocate.
 	 */
-	if (next_unused_state_index > policy->allocated_aggstate_rows)
+	if (next_unused_key_index > policy->allocated_aggstate_rows)
 	{
 		Assert(new_aggstate_rows >= policy->allocated_aggstate_rows);
 		policy->allocated_aggstate_rows = new_aggstate_rows;
 	}
+
+	policy->next_unused_key_index = next_unused_key_index;
 }
 
 static void
@@ -398,9 +402,9 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 	if (!policy->returning_results)
 	{
 		policy->returning_results = true;
-		policy->last_returned_key = 1 + !policy->have_null_key;
+		policy->last_returned_key = 1;
 
-		const float keys = policy->functions.get_num_keys(policy->table) + policy->have_null_key;
+		const float keys = policy->next_unused_key_index;
 		if (keys > 0)
 		{
 			DEBUG_LOG("spill after %ld input, %ld valid, %ld bulk filtered, %ld cons, %.0f keys, "
@@ -421,7 +425,7 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 	}
 
 	const uint32 current_key = policy->last_returned_key;
-	const uint32 keys_end = policy->functions.get_num_keys(policy->table) + 2;
+	const uint32 keys_end = policy->next_unused_key_index;
 	if (current_key >= keys_end)
 	{
 		policy->returning_results = false;
@@ -443,8 +447,9 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 	for (int i = 0; i < num_keys; i++)
 	{
 		GroupingColumn *col = list_nth(policy->output_grouping_columns, i);
-		aggregated_slot->tts_values[col->output_offset] = ((Datum *) policy->keys)[current_key * num_keys + i];
-		aggregated_slot->tts_isnull[col->output_offset] = false; //current_key == 1;
+		aggregated_slot->tts_values[col->output_offset] =
+			gp_hash_output_keys(policy, current_key)[i];
+		aggregated_slot->tts_isnull[col->output_offset] = current_key == policy->null_key_index;
 	}
 
 	return true;

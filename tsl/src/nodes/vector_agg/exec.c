@@ -171,11 +171,11 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 	else
 	{
 		/*
-			 * Hash grouping.
-			 */
+		 * Hash grouping.
+		 */
 		vector_agg_state->grouping =
-				create_grouping_policy_hash(vector_agg_state->agg_defs,
-											vector_agg_state->output_grouping_columns);
+			create_grouping_policy_hash(vector_agg_state->agg_defs,
+										vector_agg_state->output_grouping_columns);
 	}
 }
 

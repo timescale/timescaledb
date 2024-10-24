@@ -56,7 +56,7 @@ typedef struct GroupingPolicyHash
 	 * table, and it has a reserved aggregate state index 1. We also reset this
 	 * flag after we output the null key during iteration.
 	 */
-	bool have_null_key;
+	uint32 null_key_index;
 
 	/*
 	 * A memory context for aggregate functions to allocate additional data,
@@ -81,10 +81,10 @@ typedef struct GroupingPolicyHash
 	List *per_agg_states;
 	uint64 allocated_aggstate_rows;
 
-	uint64 key_bytes;
 	uint64 num_allocated_keys;
-	void *restrict keys;
+	void *restrict output_keys;
 	MemoryContext key_body_mctx;
+	uint32 next_unused_key_index;
 
 	uint64 *tmp_filter;
 	uint64 num_tmp_filter_words;
@@ -97,3 +97,19 @@ typedef struct GroupingPolicyHash
 	uint64 stat_bulk_filtered_rows;
 	uint64 stat_consecutive_keys;
 } GroupingPolicyHash;
+
+static inline uint64 *
+gp_hash_key_validity_bitmap(GroupingPolicyHash *policy, int key_index)
+{
+	return (
+		uint64 *) ((char *) policy->output_keys +
+				   (sizeof(uint64) + sizeof(Datum) * list_length(policy->output_grouping_columns)) *
+					   key_index);
+}
+
+static inline Datum *
+gp_hash_output_keys(GroupingPolicyHash *policy, int key_index)
+{
+	Assert(key_index != 0);
+	return (Datum *) &gp_hash_key_validity_bitmap(policy, key_index)[1];
+}

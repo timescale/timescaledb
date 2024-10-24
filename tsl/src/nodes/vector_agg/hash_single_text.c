@@ -29,9 +29,8 @@ get_bytes_view(CompressedColumnValues *column_values, int arrow_row)
 }
 
 static pg_attribute_always_inline void
-single_text_get_key(GroupingPolicyHash *restrict policy,
-	DecompressBatchState *restrict batch_state, int row, int next_key_index, BytesView *restrict key,
-					bool *restrict valid)
+single_text_get_key(GroupingPolicyHash *restrict policy, DecompressBatchState *restrict batch_state,
+					int row, int next_key_index, BytesView *restrict key, bool *restrict valid)
 {
 	if (list_length(policy->output_grouping_columns) != 1)
 	{
@@ -73,7 +72,7 @@ single_text_store_key(GroupingPolicyHash *restrict policy, BytesView key, uint32
 	SET_VARSIZE(stored, total_bytes);
 	memcpy(VARDATA(stored), key.data, key.len);
 	key.data = (uint8 *) VARDATA(stored);
-	((Datum *restrict) policy->keys)[key_index] = PointerGetDatum(stored);
+	gp_hash_output_keys(policy, key_index)[0] = PointerGetDatum(stored);
 	return key;
 }
 

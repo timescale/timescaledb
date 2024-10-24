@@ -19,16 +19,15 @@
 #include "nodes/vector_agg/exec.h"
 
 static pg_attribute_always_inline void
-serialized_get_key(GroupingPolicyHash *restrict policy,
-	DecompressBatchState *restrict batch_state, int row, int next_key_index, BytesView *restrict key,
-				   bool *restrict valid)
+serialized_get_key(GroupingPolicyHash *restrict policy, DecompressBatchState *restrict batch_state,
+				   int row, int next_key_index, BytesView *restrict key, bool *restrict valid)
 {
-	if (list_length(policy->output_grouping_columns) == 1)
-	{
-		pg_unreachable();
-	}
+	//	if (list_length(policy->output_grouping_columns) == 1)
+	//	{
+	//		pg_unreachable();
+	//	}
 
-	uint64 *restrict validity_bitmap;
+	uint64 *restrict serialized_key_validity_word;
 
 	const int num_columns = list_length(policy->output_grouping_columns);
 	Assert(num_columns <= 64);
@@ -43,7 +42,8 @@ serialized_get_key(GroupingPolicyHash *restrict policy,
 		}
 		else
 		{
-			const CompressedColumnValues *column = &batch_state->compressed_columns[def->input_offset];
+			const CompressedColumnValues *column =
+				&batch_state->compressed_columns[def->input_offset];
 			if (unlikely(column->decompression_type == DT_Scalar))
 			{
 				num_bytes += (*column->output_isnull) ? 0 : VARSIZE_ANY(*column->output_value);
@@ -76,94 +76,119 @@ serialized_get_key(GroupingPolicyHash *restrict policy,
 
 	/* The optional null bitmap. */
 	num_bytes = att_align_nominal(num_bytes, TYPALIGN_DOUBLE);
-	num_bytes += sizeof(*validity_bitmap);
+	num_bytes += sizeof(*serialized_key_validity_word);
 
-
-	Datum *restrict key_data = &((Datum *) policy->keys)[num_columns * next_key_index];
-	uint8 *restrict key_storage = MemoryContextAlloc(policy->key_body_mctx, num_bytes);
-	validity_bitmap = (uint64 *) &((char *) key_storage)[num_bytes - sizeof(*validity_bitmap)];
-	*validity_bitmap = ~0ULL;
+	uint64 *restrict output_key_validity_word = gp_hash_key_validity_bitmap(policy, next_key_index);
+	Datum *restrict output_key_datums = gp_hash_output_keys(policy, next_key_index);
+	uint8 *restrict serialized_key_storage = MemoryContextAlloc(policy->key_body_mctx, num_bytes);
+	serialized_key_validity_word = (uint64 *) &(
+		(char *) serialized_key_storage)[num_bytes - sizeof(*serialized_key_validity_word)];
+	*serialized_key_validity_word = ~0ULL;
 
 	uint32 offset = 0;
-	for (int i = 0; i < num_columns; i++)
+	for (int column_index = 0; column_index < num_columns; column_index++)
 	{
-		const GroupingColumn *def = list_nth(policy->output_grouping_columns, i);
+		const GroupingColumn *def = list_nth(policy->output_grouping_columns, column_index);
 		offset = att_align_nominal(offset, def->typalign);
 
-		const CompressedColumnValues *column = &batch_state->compressed_columns[def->input_offset];
-		if (column->decompression_type > 0)
+		const CompressedColumnValues *column_values =
+			&batch_state->compressed_columns[def->input_offset];
+		if (column_values->decompression_type > 0)
 		{
-			Assert(offset <= UINT_MAX - column->decompression_type);
-			memcpy(&key_storage[offset],
-				((char *) column->buffers[1]) + column->decompression_type * row,
-				column->decompression_type);
-			arrow_set_row_validity(validity_bitmap, i, arrow_row_is_valid(column->buffers[0], row));
-			offset += column->decompression_type;
+			Assert(offset <= UINT_MAX - column_values->decompression_type);
+			memcpy(&serialized_key_storage[offset],
+				   ((char *) column_values->buffers[1]) + column_values->decompression_type * row,
+				   column_values->decompression_type);
+			arrow_set_row_validity(serialized_key_validity_word,
+								   column_index,
+								   arrow_row_is_valid(column_values->buffers[0], row));
+			offset += column_values->decompression_type;
 
-			memcpy(&key_data[i],
-				((char *) column->buffers[1]) + column->decompression_type * row,
-				column->decompression_type);
+			memcpy(&output_key_datums[column_index],
+				   ((char *) column_values->buffers[1]) + column_values->decompression_type * row,
+				   column_values->decompression_type);
 		}
-		else if (unlikely(column->decompression_type == DT_Scalar))
+		else if (unlikely(column_values->decompression_type == DT_Scalar))
 		{
-			const bool is_valid = !*column->output_isnull;
-			arrow_set_row_validity(validity_bitmap, i, is_valid);
+			const bool is_valid = !*column_values->output_isnull;
+			arrow_set_row_validity(serialized_key_validity_word, column_index, is_valid);
 			if (is_valid)
 			{
 				if (def->by_value)
 				{
-					memcpy(&key_storage[offset], column->output_value, def->value_bytes);
+					memcpy(&serialized_key_storage[offset],
+						   column_values->output_value,
+						   def->value_bytes);
 					offset += def->value_bytes;
 
-					memcpy(&key_data[row], column->output_value, def->value_bytes);
+					memcpy(&output_key_datums[column_index],
+						   column_values->output_value,
+						   def->value_bytes);
 				}
 				else
 				{
-					memcpy(&key_storage[offset], DatumGetPointer(*column->output_value), VARSIZE_ANY(column->output_value));
+					memcpy(&serialized_key_storage[offset],
+						   DatumGetPointer(*column_values->output_value),
+						   VARSIZE_ANY(*column_values->output_value));
 
-					key_data[row] = PointerGetDatum(&key_storage[offset]);
+					output_key_datums[column_index] =
+						PointerGetDatum(&serialized_key_storage[offset]);
 
-					offset += VARSIZE_ANY(column->output_value);
+					offset += VARSIZE_ANY(*column_values->output_value);
 				}
 			}
+			else
+			{
+				output_key_datums[column_index] = PointerGetDatum(NULL);
+			}
 		}
-		else if (column->decompression_type == DT_ArrowText)
+		else if (column_values->decompression_type == DT_ArrowText)
 		{
-			const bool is_valid = arrow_row_is_valid(column->buffers[0], row);
-			arrow_set_row_validity(validity_bitmap, i, is_valid);
+			const bool is_valid = arrow_row_is_valid(column_values->buffers[0], row);
+			arrow_set_row_validity(serialized_key_validity_word, column_index, is_valid);
 			if (is_valid)
 			{
-				const uint32 start = ((uint32 *) column->buffers[1])[row];
-				const int32 value_bytes = ((uint32 *) column->buffers[1])[row + 1] - start;
+				const uint32 start = ((uint32 *) column_values->buffers[1])[row];
+				const int32 value_bytes = ((uint32 *) column_values->buffers[1])[row + 1] - start;
 				const int32 total_bytes = value_bytes + VARHDRSZ;
 
-				SET_VARSIZE(&key_storage[offset], total_bytes);
-				memcpy(VARDATA(&key_storage[offset]), &((uint8 *) column->buffers[2])[start],
-					value_bytes);
+				SET_VARSIZE(&serialized_key_storage[offset], total_bytes);
+				memcpy(VARDATA(&serialized_key_storage[offset]),
+					   &((uint8 *) column_values->buffers[2])[start],
+					   value_bytes);
 
-				key_data[i] = PointerGetDatum(&key_storage[offset]);
+				output_key_datums[column_index] = PointerGetDatum(&serialized_key_storage[offset]);
 
 				offset += total_bytes;
 			}
+			else
+			{
+				output_key_datums[column_index] = PointerGetDatum(NULL);
+			}
 		}
-		else if (column->decompression_type == DT_ArrowTextDict)
+		else if (column_values->decompression_type == DT_ArrowTextDict)
 		{
-			const bool is_valid = arrow_row_is_valid(column->buffers[0], row);
-			arrow_set_row_validity(validity_bitmap, i, is_valid);
+			const bool is_valid = arrow_row_is_valid(column_values->buffers[0], row);
+			arrow_set_row_validity(serialized_key_validity_word, column_index, is_valid);
 			if (is_valid)
 			{
-				const int16 index = ((int16 *) column->buffers[3])[row];
-				const uint32 start = ((uint32 *) column->buffers[1])[index];
-				const int32 value_bytes = ((uint32 *) column->buffers[1])[index + 1] - start;
+				const int16 index = ((int16 *) column_values->buffers[3])[row];
+				const uint32 start = ((uint32 *) column_values->buffers[1])[index];
+				const int32 value_bytes = ((uint32 *) column_values->buffers[1])[index + 1] - start;
 				const int32 total_bytes = value_bytes + VARHDRSZ;
 
-				SET_VARSIZE(&key_storage[offset], total_bytes);
-				memcpy(VARDATA(&key_storage[offset]), &((uint8 *) column->buffers[2])[start],
-					value_bytes);
+				SET_VARSIZE(&serialized_key_storage[offset], total_bytes);
+				memcpy(VARDATA(&serialized_key_storage[offset]),
+					   &((uint8 *) column_values->buffers[2])[start],
+					   value_bytes);
 
-				key_data[i] = PointerGetDatum(&key_storage[offset]);
+				output_key_datums[column_index] = PointerGetDatum(&serialized_key_storage[offset]);
 
 				offset += total_bytes;
+			}
+			else
+			{
+				output_key_datums[column_index] = PointerGetDatum(NULL);
 			}
 		}
 		else
@@ -172,15 +197,25 @@ serialized_get_key(GroupingPolicyHash *restrict policy,
 		}
 	}
 
-	Assert((void *) &key_storage[att_align_nominal(offset, TYPALIGN_DOUBLE)] == (void *) validity_bitmap);
+	Assert((void *) &serialized_key_storage[att_align_nominal(offset, TYPALIGN_DOUBLE)] ==
+		   (void *) serialized_key_validity_word);
 
-	if (*validity_bitmap != ~0ULL)
+	if (*serialized_key_validity_word != ~0ULL)
 	{
-		offset = att_align_nominal(offset, TYPALIGN_DOUBLE) + sizeof(*validity_bitmap);
+		offset = att_align_nominal(offset, TYPALIGN_DOUBLE) + sizeof(*serialized_key_validity_word);
 		Assert(offset == num_bytes);
 	}
 
-	*key = (BytesView) { .data = key_storage, .len = offset };
+	*output_key_validity_word = *serialized_key_validity_word;
+
+	//	fprintf(stderr, "key is %d bytes: ", offset);
+	//	for (size_t i = 0; i < offset; i++)
+	//	{
+	//		fprintf(stderr, "%.2x.", key_storage[i]);
+	//	}
+	//	fprintf(stderr, "\n");
+
+	*key = (BytesView){ .data = serialized_key_storage, .len = offset };
 	*valid = true;
 }
 

@@ -57,9 +57,8 @@ FUNCTION_NAME(get_size_bytes)(void *table)
  * Fill the aggregation state offsets for all rows using a hash table.
  */
 static pg_attribute_always_inline uint32
-FUNCTION_NAME(impl)(GroupingPolicyHash *restrict policy,
-					DecompressBatchState *restrict batch_state, uint32 next_unused_state_index, int start_row,
-					int end_row)
+FUNCTION_NAME(impl)(GroupingPolicyHash *restrict policy, DecompressBatchState *restrict batch_state,
+					uint32 next_unused_state_index, int start_row, int end_row)
 {
 	uint32 *restrict offsets = policy->offsets;
 	Assert((size_t) end_row <= policy->num_allocated_offsets);
@@ -84,8 +83,11 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *restrict policy,
 		if (unlikely(!key_valid))
 		{
 			/* The key is null. */
-			policy->have_null_key = true;
-			offsets[row] = 1;
+			if (policy->null_key_index == 0)
+			{
+				policy->null_key_index = next_unused_state_index++;
+			}
+			offsets[row] = policy->null_key_index;
 			FUNCTION_NAME(destroy_key)(key);
 			continue;
 		}
@@ -96,7 +98,6 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *restrict policy,
 			 * In real data sets, we often see consecutive rows with the
 			 * same key, so checking for this case improves performance.
 			 */
-			Assert(last_key_index >= 2);
 			offsets[row] = last_key_index;
 			FUNCTION_NAME(destroy_key)(key);
 #ifndef NDEBUG
@@ -136,8 +137,8 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *restrict policy,
  */
 static pg_attribute_always_inline uint32
 FUNCTION_NAME(dispatch_type)(GroupingPolicyHash *restrict policy,
-							 DecompressBatchState *restrict batch_state, uint32 next_unused_state_index,
-							 int start_row, int end_row)
+							 DecompressBatchState *restrict batch_state,
+							 uint32 next_unused_state_index, int start_row, int end_row)
 {
 	if (list_length(policy->output_grouping_columns) == 1)
 	{
