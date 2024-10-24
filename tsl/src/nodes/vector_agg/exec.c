@@ -193,6 +193,15 @@ vector_agg_exec(CustomScanState *node)
 	 */
 	while (!grouping->gp_should_emit(grouping))
 	{
+		/*
+		 * We discard the previous compressed batch here and not earlier,
+		 * because the grouping column values returned by the batch grouping
+		 * policy are owned by the compressed batch memory context. This is done
+		 * to avoid generic value copying in the grouping policy to simplify its
+		 * code.
+		 */
+		compressed_batch_discard_tuples(batch_state);
+
 		TupleTableSlot *compressed_slot =
 			ExecProcNode(linitial(decompress_state->csstate.custom_ps));
 
@@ -233,8 +242,6 @@ vector_agg_exec(CustomScanState *node)
 		}
 
 		grouping->gp_add_batch(grouping, batch_state);
-
-		compressed_batch_discard_tuples(batch_state);
 	}
 
 	if (grouping->gp_do_emit(grouping, aggregated_slot))
