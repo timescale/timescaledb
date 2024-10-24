@@ -279,14 +279,17 @@ lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 HypercoreInfo *
 RelationGetHypercoreInfo(Relation rel)
 {
-	if (NULL == rel->rd_amcache)
+	/*coverity[tainted_data_downcast : FALSE]*/
+	HypercoreInfo *const info = rel->rd_amcache;
+
+	if (NULL == info)
 		rel->rd_amcache = lazy_build_hypercore_info_cache(rel,
 														  true /* create constraints */,
 														  NULL /* compressed rel created */);
 
-	Assert(rel->rd_amcache && OidIsValid(((HypercoreInfo *) rel->rd_amcache)->compressed_relid));
+	Assert(info && OidIsValid(info->compressed_relid));
 
-	return rel->rd_amcache;
+	return info;
 }
 
 static void
