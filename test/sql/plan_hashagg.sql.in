@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
+SET max_parallel_workers_per_gather TO 0;
+
 \set PREFIX 'EXPLAIN (costs off) '
 \ir include/plan_hashagg_load.sql
 \ir include/plan_hashagg_query.sql
@@ -15,6 +17,7 @@ SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
 \gset
 SELECT format('\! diff -u  --label "Unoptimized result" --label "Optimized result" %s %s', :'TEST_RESULTS_UNOPTIMIZED', :'TEST_RESULTS_OPTIMIZED') as "DIFF_CMD"
 \gset
+
 
 SET client_min_messages TO error;
 --generate the results into two different files
