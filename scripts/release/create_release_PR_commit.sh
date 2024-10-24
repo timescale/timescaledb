@@ -15,13 +15,22 @@ git fetch --all
 
 CURRENT_VERSION=$(tail -1 version.config | cut -d ' ' -f 3)
 cd sql/updates
-LAST_VERSION=$(ls |grep $CURRENT_VERSION.sql |cut -d '-' -f 1)
 CURRENT_PATCH_VERSION=$(echo $CURRENT_VERSION | cut -d '.' -f 3)
 NEW_PATCH_VERSION=$((CURRENT_PATCH_VERSION + 1))
 RELEASE_BRANCH="${CURRENT_VERSION/%.$CURRENT_PATCH_VERSION/.x}"
 NEW_VERSION="${CURRENT_VERSION/%.$CURRENT_PATCH_VERSION/.$NEW_PATCH_VERSION}"
 
+for f in ./*
+do
+  case $f in
+    *$CURRENT_VERSION.sql) LAST_UPDATE_FILE=$f;;
+    *) true;;
+  esac
+done
+LAST_VERSION=$(echo "$LAST_UPDATE_FILE" |cut -d '-' -f 1 |cut -d '/' -f 2)
+
 echo "CURRENT_VERSION is $CURRENT_VERSION"
+#echo "LAST_UPDATE_FILE is $LAST_UPDATE_FILE"
 echo "LAST_VERSION is $LAST_VERSION"
 echo "RELEASE_BRANCH is $RELEASE_BRANCH"
 echo "NEW_VERSION is $NEW_VERSION"
