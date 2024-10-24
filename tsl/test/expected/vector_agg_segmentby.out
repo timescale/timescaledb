@@ -178,4 +178,93 @@ select sum(t) from svagg group by s order by 1;
  2000010000
 (10 rows)
 
+reset timescaledb.debug_require_vector_agg;
+-- text segmentby column
+select count(decompress_chunk(x)) from show_chunks('svagg') x;
+ count 
+-------
+     2
+(1 row)
+
+alter table svagg set (timescaledb.compress = false);
+alter table svagg add column x text;
+update svagg set x = repeat(s::text, 100);
+alter table svagg set (timescaledb.compress, timescaledb.compress_segmentby = 'x');
+NOTICE:  default order by for hypertable "svagg" is set to "s DESC"
+select count(compress_chunk(x)) from show_chunks('svagg') x;
+ count 
+-------
+     2
+(1 row)
+
+set timescaledb.debug_require_vector_agg = 'require';
+---- Uncomment to generate reference
+--set timescaledb.debug_require_vector_agg = 'forbid';
+--set timescaledb.enable_vectorized_aggregation to off;
+select substr(x, 1, 2), sum(t), count(*) from svagg where f >= 0         group by x order by x;
+ substr |    sum     | count 
+--------+------------+-------
+ 00     |  200010000 | 20000
+ 11     |  400010000 | 20000
+ 22     |  600010000 | 20000
+ 33     |  800010000 | 20000
+ 44     | 1000010000 | 20000
+ 55     | 1200010000 | 20000
+ 66     | 1400010000 | 20000
+ 77     | 1600010000 | 20000
+ 88     | 1800010000 | 20000
+ 99     | 2000010000 | 20000
+(10 rows)
+
+select substr(x, 1, 2), sum(t), count(*) from svagg where f = 0          group by x order by x;
+ substr |    sum    | count 
+--------+-----------+-------
+ 00     |  28578571 |  2857
+ 11     |  57145714 |  2857
+ 22     |  85712857 |  2857
+ 33     | 114280000 |  2857
+ 44     | 142847143 |  2857
+ 55     | 171414286 |  2857
+ 66     | 200061429 |  2858
+ 77     | 228568571 |  2857
+ 88     | 257135714 |  2857
+ 99     | 285702857 |  2857
+(10 rows)
+
+select substr(x, 1, 2), sum(t), count(*) from svagg where f in (0, 1)    group by x order by x;
+ substr |    sum    | count 
+--------+-----------+-------
+ 00     |  57160000 |  5715
+ 11     | 114294285 |  5714
+ 22     | 171428571 |  5714
+ 33     | 228562857 |  5714
+ 44     | 285697143 |  5714
+ 55     | 342831429 |  5714
+ 66     | 400045715 |  5715
+ 77     | 457210000 |  5715
+ 88     | 514274285 |  5714
+ 99     | 571408571 |  5714
+(10 rows)
+
+select substr(x, 1, 2), sum(t), count(*) from svagg where f in (0, 1, 3) group by x order by x;
+ substr |    sum    | count 
+--------+-----------+-------
+ 00     |  85727143 |  8572
+ 11     | 171428571 |  8571
+ 22     | 257170000 |  8572
+ 33     | 342851428 |  8571
+ 44     | 428552857 |  8571
+ 55     | 514254286 |  8571
+ 66     | 600035715 |  8572
+ 77     | 685767143 |  8572
+ 88     | 771398571 |  8571
+ 99     | 857210000 |  8572
+(10 rows)
+
+select substr(x, 1, 2), sum(t), count(*) from svagg where f > 10         group by x order by x;
+ substr | sum | count 
+--------+-----+-------
+(0 rows)
+
+reset timescaledb.debug_require_vector_agg;
 drop table svagg;

@@ -70,5 +70,27 @@ select sum(t), s, count(*) from svagg group by s order by s;
 
 select sum(t) from svagg group by s order by 1;
 
+reset timescaledb.debug_require_vector_agg;
+
+-- text segmentby column
+select count(decompress_chunk(x)) from show_chunks('svagg') x;
+alter table svagg set (timescaledb.compress = false);
+alter table svagg add column x text;
+update svagg set x = repeat(s::text, 100);
+alter table svagg set (timescaledb.compress, timescaledb.compress_segmentby = 'x');
+select count(compress_chunk(x)) from show_chunks('svagg') x;
+
+set timescaledb.debug_require_vector_agg = 'require';
+---- Uncomment to generate reference
+--set timescaledb.debug_require_vector_agg = 'forbid';
+--set timescaledb.enable_vectorized_aggregation to off;
+
+select substr(x, 1, 2), sum(t), count(*) from svagg where f >= 0         group by x order by x;
+select substr(x, 1, 2), sum(t), count(*) from svagg where f = 0          group by x order by x;
+select substr(x, 1, 2), sum(t), count(*) from svagg where f in (0, 1)    group by x order by x;
+select substr(x, 1, 2), sum(t), count(*) from svagg where f in (0, 1, 3) group by x order by x;
+select substr(x, 1, 2), sum(t), count(*) from svagg where f > 10         group by x order by x;
+
+reset timescaledb.debug_require_vector_agg;
 
 drop table svagg;

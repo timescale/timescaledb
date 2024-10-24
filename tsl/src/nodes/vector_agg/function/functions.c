@@ -27,10 +27,13 @@ typedef struct
 } CountState;
 
 static void
-count_init(void *agg_state)
+count_init(void *restrict agg_states, int n)
 {
-	CountState *state = (CountState *) agg_state;
-	state->count = 0;
+	CountState *states = (CountState *) agg_states;
+	for (int i = 0; i < n; i++)
+	{
+		states[i].count = 0;
+	}
 }
 
 static void
@@ -42,26 +45,42 @@ count_emit(void *agg_state, Datum *out_result, bool *out_isnull)
 }
 
 static void
-count_star_const(void *agg_state, Datum constvalue, bool constisnull, int n,
-				 MemoryContext agg_extra_mctx)
+count_star_scalar(void *agg_state, Datum constvalue, bool constisnull, int n,
+				  MemoryContext agg_extra_mctx)
 {
 	CountState *state = (CountState *) agg_state;
 	state->count += n;
 }
 
+static void
+count_star_many_scalar(void *restrict agg_states, const uint32 *offsets, const uint64 *filter,
+					   int start_row, int end_row, Datum constvalue, bool constisnull,
+					   MemoryContext agg_extra_mctx)
+{
+	CountState *states = (CountState *) agg_states;
+	for (int row = start_row; row < end_row; row++)
+	{
+		if (arrow_row_is_valid(filter, row))
+		{
+			states[offsets[row]].count++;
+		}
+	}
+}
+
 VectorAggFunctions count_star_agg = {
 	.state_bytes = sizeof(CountState),
 	.agg_init = count_init,
-	.agg_const = count_star_const,
+	.agg_scalar = count_star_scalar,
 	.agg_emit = count_emit,
+	.agg_many_scalar = count_star_many_scalar,
 };
 
 /*
  * Aggregate function count(x).
  */
 static void
-count_any_const(void *agg_state, Datum constvalue, bool constisnull, int n,
-				MemoryContext agg_extra_mctx)
+count_any_scalar(void *agg_state, Datum constvalue, bool constisnull, int n,
+				 MemoryContext agg_extra_mctx)
 {
 	if (constisnull)
 	{
@@ -78,23 +97,20 @@ count_any_vector(void *agg_state, const ArrowArray *vector, const uint64 *filter
 {
 	CountState *state = (CountState *) agg_state;
 	const int n = vector->length;
-	const uint64 *restrict validity = (uint64 *) vector->buffers[0];
 	/* First, process the full words. */
 	for (int i = 0; i < n / 64; i++)
 	{
-		const uint64 validity_word = validity ? validity[i] : ~0ULL;
 		const uint64 filter_word = filter ? filter[i] : ~0ULL;
-		const uint64 resulting_word = validity_word & filter_word;
 
 #ifdef HAVE__BUILTIN_POPCOUNT
-		state->count += __builtin_popcountll(resulting_word);
+		state->count += __builtin_popcountll(filter_word);
 #else
 		/*
 		 * Unfortunately, we have to have this fallback for Windows.
 		 */
 		for (uint16 i = 0; i < 64; i++)
 		{
-			const bool this_bit = (resulting_word >> i) & 1;
+			const bool this_bit = (filter_word >> i) & 1;
 			state->count += this_bit;
 		}
 #endif
@@ -106,7 +122,22 @@ count_any_vector(void *agg_state, const ArrowArray *vector, const uint64 *filter
 	 */
 	for (int i = 64 * (n / 64); i < n; i++)
 	{
-		state->count += arrow_row_is_valid(validity, i) * arrow_row_is_valid(filter, i);
+		state->count += arrow_row_is_valid(filter, i);
+	}
+}
+
+static void
+count_any_many_vector(void *restrict agg_states, const uint32 *offsets, const uint64 *filter,
+					  int start_row, int end_row, const ArrowArray *vector,
+					  MemoryContext agg_extra_mctx)
+{
+	for (int row = start_row; row < end_row; row++)
+	{
+		CountState *state = (offsets[row] + (CountState *) agg_states);
+		if (arrow_row_is_valid(filter, row))
+		{
+			state->count++;
+		}
 	}
 }
 
@@ -114,8 +145,9 @@ VectorAggFunctions count_any_agg = {
 	.state_bytes = sizeof(CountState),
 	.agg_init = count_init,
 	.agg_emit = count_emit,
-	.agg_const = count_any_const,
+	.agg_scalar = count_any_scalar,
 	.agg_vector = count_any_vector,
+	.agg_many_vector = count_any_many_vector,
 };
 
 /*

@@ -28,7 +28,6 @@ typedef struct
 	List *output_grouping_columns;
 	Datum *output_grouping_values;
 	bool *output_grouping_isnull;
-	bool partial_per_batch;
 	bool have_results;
 
 	/*
@@ -37,15 +36,17 @@ typedef struct
 	 * the grouping policy is reset.
 	 */
 	MemoryContext agg_extra_mctx;
+
+	uint64 *tmp_filter;
+	uint64 num_tmp_filter_words;
 } GroupingPolicyBatch;
 
 static const GroupingPolicy grouping_policy_batch_functions;
 
 GroupingPolicy *
-create_grouping_policy_batch(List *agg_defs, List *output_grouping_columns, bool partial_per_batch)
+create_grouping_policy_batch(List *agg_defs, List *output_grouping_columns)
 {
 	GroupingPolicyBatch *policy = palloc0(sizeof(GroupingPolicyBatch));
-	policy->partial_per_batch = partial_per_batch;
 	policy->funcs = grouping_policy_batch_functions;
 	policy->output_grouping_columns = output_grouping_columns;
 	policy->agg_defs = agg_defs;
@@ -54,8 +55,8 @@ create_grouping_policy_batch(List *agg_defs, List *output_grouping_columns, bool
 	ListCell *lc;
 	foreach (lc, agg_defs)
 	{
-		VectorAggDef *def = lfirst(lc);
-		policy->agg_states = lappend(policy->agg_states, palloc0(def->func->state_bytes));
+		VectorAggDef *agg_def = lfirst(lc);
+		policy->agg_states = lappend(policy->agg_states, palloc0(agg_def->func.state_bytes));
 	}
 	policy->output_grouping_values =
 		(Datum *) palloc0(MAXALIGN(list_length(output_grouping_columns) * sizeof(Datum)) +
@@ -79,7 +80,7 @@ gp_batch_reset(GroupingPolicy *obj)
 	{
 		VectorAggDef *agg_def = (VectorAggDef *) list_nth(policy->agg_defs, i);
 		void *agg_state = (void *) list_nth(policy->agg_states, i);
-		agg_def->func->agg_init(agg_state);
+		agg_def->func.agg_init(agg_state, 1);
 	}
 
 	const int ngrp = list_length(policy->output_grouping_columns);
@@ -93,8 +94,8 @@ gp_batch_reset(GroupingPolicy *obj)
 }
 
 static void
-compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_def, void *agg_state,
-						 MemoryContext agg_extra_mctx)
+compute_single_aggregate(GroupingPolicyBatch *policy, DecompressBatchState *batch_state,
+						 VectorAggDef *agg_def, void *agg_state, MemoryContext agg_extra_mctx)
 {
 	ArrowArray *arg_arrow = NULL;
 	Datum arg_datum = 0;
@@ -123,15 +124,22 @@ compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_de
 	}
 
 	/*
+	 * Compute the unified validity bitmap.
+	 */
+	const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
+	const uint64 *filter = arrow_combine_validity(num_words,
+												  policy->tmp_filter,
+												  batch_state->vector_qual_result,
+												  agg_def->filter_result,
+												  arg_arrow != NULL ? arg_arrow->buffers[0] : NULL);
+
+	/*
 	 * Now call the function.
 	 */
 	if (arg_arrow != NULL)
 	{
 		/* Arrow argument. */
-		agg_def->func->agg_vector(agg_state,
-								  arg_arrow,
-								  batch_state->vector_qual_result,
-								  agg_extra_mctx);
+		agg_def->func.agg_vector(agg_state, arg_arrow, filter, agg_extra_mctx);
 	}
 	else
 	{
@@ -139,16 +147,18 @@ compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_de
 		 * Scalar argument, or count(*). Have to also count the valid rows in
 		 * the batch.
 		 */
-		const int n =
-			arrow_num_valid(batch_state->vector_qual_result, batch_state->total_batch_rows);
+		const int n = arrow_num_valid(filter, batch_state->total_batch_rows);
 
 		/*
 		 * The batches that are fully filtered out by vectorized quals should
 		 * have been skipped by the caller.
 		 */
-		Assert(n > 0);
+		// Assert(n > 0);
 
-		agg_def->func->agg_const(agg_state, arg_datum, arg_isnull, n, agg_extra_mctx);
+		if (n > 0)
+		{
+			agg_def->func.agg_scalar(agg_state, arg_datum, arg_isnull, n, agg_extra_mctx);
+		}
 	}
 }
 
@@ -156,12 +166,24 @@ static void
 gp_batch_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 {
 	GroupingPolicyBatch *policy = (GroupingPolicyBatch *) gp;
+
+	/*
+	 * Allocate the temporary filter array for computing the combined results of
+	 * batch filter, aggregate filter and column validity.
+	 */
+	const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
+	if (num_words > policy->num_tmp_filter_words)
+	{
+		policy->tmp_filter = palloc(sizeof(*policy->tmp_filter) * (num_words * 2 + 1));
+		policy->num_tmp_filter_words = (num_words * 2 + 1);
+	}
+
 	const int naggs = list_length(policy->agg_defs);
 	for (int i = 0; i < naggs; i++)
 	{
 		VectorAggDef *agg_def = (VectorAggDef *) list_nth(policy->agg_defs, i);
 		void *agg_state = (void *) list_nth(policy->agg_states, i);
-		compute_single_aggregate(batch_state, agg_def, agg_state, policy->agg_extra_mctx);
+		compute_single_aggregate(policy, batch_state, agg_def, agg_state, policy->agg_extra_mctx);
 	}
 
 	const int ngrp = list_length(policy->output_grouping_columns);
@@ -180,7 +202,6 @@ gp_batch_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 		 * means we're grouping by segmentby, and these values will be valid
 		 * until the next call to the vector agg node.
 		 */
-		Assert(policy->partial_per_batch);
 		policy->output_grouping_values[i] = *values->output_value;
 		policy->output_grouping_isnull[i] = *values->output_isnull;
 	}
@@ -192,7 +213,11 @@ static bool
 gp_batch_should_emit(GroupingPolicy *gp)
 {
 	GroupingPolicyBatch *policy = (GroupingPolicyBatch *) gp;
-	return policy->partial_per_batch && policy->have_results;
+	/*
+	 * If we're grouping by segmentby columns, we have to output partials for
+	 * every batch.
+	 */
+	return policy->output_grouping_columns != NIL && policy->have_results;
 }
 
 static bool
@@ -210,9 +235,9 @@ gp_batch_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 	{
 		VectorAggDef *agg_def = (VectorAggDef *) list_nth(policy->agg_defs, i);
 		void *agg_state = (void *) list_nth(policy->agg_states, i);
-		agg_def->func->agg_emit(agg_state,
-								&aggregated_slot->tts_values[agg_def->output_offset],
-								&aggregated_slot->tts_isnull[agg_def->output_offset]);
+		agg_def->func.agg_emit(agg_state,
+							   &aggregated_slot->tts_values[agg_def->output_offset],
+							   &aggregated_slot->tts_isnull[agg_def->output_offset]);
 	}
 
 	const int ngrp = list_length(policy->output_grouping_columns);

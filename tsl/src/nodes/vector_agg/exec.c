@@ -18,6 +18,7 @@
 #include "guc.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/decompress_chunk/exec.h"
+#include "nodes/decompress_chunk/vector_quals.h"
 #include "nodes/vector_agg.h"
 
 static int
@@ -47,7 +48,10 @@ get_input_offset(DecompressChunkState *decompress_state, Var *var)
 	Assert(value_column_description->type == COMPRESSED_COLUMN ||
 		   value_column_description->type == SEGMENTBY_COLUMN);
 
-	return value_column_description - dcontext->compressed_chunk_columns;
+	const int index = value_column_description - dcontext->compressed_chunk_columns;
+	//	fprintf(stderr, "index %d for var:\n", index);
+	//	my_print(var);
+	return index;
 }
 
 static void
@@ -88,9 +92,13 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 			def->output_offset = i;
 
 			Aggref *aggref = castNode(Aggref, tlentry->expr);
+
+			//			fprintf(stderr, "the aggref at execution is:\n");
+			//			my_print(aggref);
+
 			VectorAggFunctions *func = get_vector_aggregate(aggref->aggfnoid);
 			Assert(func != NULL);
-			def->func = func;
+			def->func = *func;
 
 			if (list_length(aggref->args) > 0)
 			{
@@ -106,6 +114,11 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 			{
 				def->input_offset = -1;
 			}
+
+			if (aggref->aggfilter != NULL)
+			{
+				def->filter_clauses = list_make1(aggref->aggfilter);
+			}
 		}
 		else
 		{
@@ -119,14 +132,51 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 
 			Var *var = castNode(Var, tlentry->expr);
 			col->input_offset = get_input_offset(decompress_state, var);
+
+			DecompressContext *dcontext = &decompress_state->decompress_context;
+			CompressionColumnDescription *desc =
+				&dcontext->compressed_chunk_columns[col->input_offset];
+
+			col->typid = desc->typid;
+			col->value_bytes = desc->value_bytes;
+			col->by_value = desc->by_value;
+			col->typalign = desc->typalign;
 		}
 	}
 
-	List *grouping_column_offsets = linitial(cscan->custom_private);
-	vector_agg_state->grouping =
-		create_grouping_policy_batch(vector_agg_state->agg_defs,
-									 vector_agg_state->output_grouping_columns,
-									 /* partial_per_batch = */ grouping_column_offsets != NIL);
+	bool all_segmentby = true;
+	for (int i = 0; i < list_length(vector_agg_state->output_grouping_columns); i++)
+	{
+		GroupingColumn *col =
+			(GroupingColumn *) list_nth(vector_agg_state->output_grouping_columns, i);
+		DecompressContext *dcontext = &decompress_state->decompress_context;
+		CompressionColumnDescription *desc = &dcontext->compressed_chunk_columns[col->input_offset];
+		//		if (desc->type == COMPRESSED_COLUMN && desc->by_value && desc->value_bytes > 0 &&
+		//			(size_t) desc->value_bytes <= sizeof(Datum))
+		if (desc->type != SEGMENTBY_COLUMN)
+		{
+			all_segmentby = false;
+			break;
+		}
+	}
+	if (all_segmentby)
+	{
+		/*
+		 * Per-batch grouping.
+		 */
+		vector_agg_state->grouping =
+			create_grouping_policy_batch(vector_agg_state->agg_defs,
+										 vector_agg_state->output_grouping_columns);
+	}
+	else
+	{
+		/*
+		 * Hash grouping.
+		 */
+		vector_agg_state->grouping =
+			create_grouping_policy_hash(vector_agg_state->agg_defs,
+										vector_agg_state->output_grouping_columns);
+	}
 }
 
 static void
@@ -193,6 +243,15 @@ vector_agg_exec(CustomScanState *node)
 	 */
 	while (!grouping->gp_should_emit(grouping))
 	{
+		/*
+		 * We discard the previous compressed batch here and not earlier,
+		 * because the grouping column values returned by the batch grouping
+		 * policy are owned by the compressed batch memory context. This is done
+		 * to avoid generic value copying in the grouping policy to simplify its
+		 * code.
+		 */
+		compressed_batch_discard_tuples(batch_state);
+
 		TupleTableSlot *compressed_slot =
 			ExecProcNode(linitial(decompress_state->csstate.custom_ps));
 
@@ -232,9 +291,31 @@ vector_agg_exec(CustomScanState *node)
 			dcontext->ps->instrument->tuplecount += not_filtered_rows;
 		}
 
-		grouping->gp_add_batch(grouping, batch_state);
+		const int naggs = list_length(vector_agg_state->agg_defs);
+		for (int i = 0; i < naggs; i++)
+		{
+			VectorAggDef *agg_def = (VectorAggDef *) list_nth(vector_agg_state->agg_defs, i);
+			if (agg_def->filter_clauses == NIL)
+			{
+				continue;
+			}
+			CompressedBatchVectorQualState cbvqstate = {
+				.vqstate = {
+					.vectorized_quals_constified = agg_def->filter_clauses,
+					.num_results = batch_state->total_batch_rows,
+					.per_vector_mcxt = batch_state->per_batch_context,
+					.slot = compressed_slot,
+					.get_arrow_array = compressed_batch_get_arrow_array,
+				},
+				.batch_state = batch_state,
+				.dcontext = dcontext,
+			};
+			VectorQualState *vqstate = &cbvqstate.vqstate;
+			vector_qual_compute(vqstate);
+			agg_def->filter_result = vqstate->vector_qual_result;
+		}
 
-		compressed_batch_discard_tuples(batch_state);
+		grouping->gp_add_batch(grouping, batch_state);
 	}
 
 	if (grouping->gp_do_emit(grouping, aggregated_slot))
