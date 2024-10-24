@@ -35,6 +35,7 @@ extern HashTableFunctions single_fixed_2_functions;
 extern HashTableFunctions single_fixed_4_functions;
 extern HashTableFunctions single_fixed_8_functions;
 extern HashTableFunctions single_text_functions;
+extern HashTableFunctions serialized_functions;
 
 static const GroupingPolicy grouping_policy_hash_functions;
 
@@ -57,8 +58,6 @@ create_grouping_policy_hash(List *agg_defs, List *output_grouping_columns)
 					palloc0(agg_def->func.state_bytes * policy->allocated_aggstate_rows));
 	}
 
-	Assert(list_length(policy->output_grouping_columns) == 1);
-	GroupingColumn *g = linitial(policy->output_grouping_columns);
 	//  policy->key_bytes = g->value_bytes;
 	policy->key_bytes = sizeof(Datum);
 	Assert(policy->key_bytes > 0);
@@ -67,8 +66,11 @@ create_grouping_policy_hash(List *agg_defs, List *output_grouping_columns)
 	policy->keys = palloc(policy->key_bytes * policy->num_allocated_keys);
 	policy->key_body_mctx = policy->agg_extra_mctx;
 
-	switch (g->value_bytes)
+	if (list_length(policy->output_grouping_columns) == 1)
 	{
+		GroupingColumn *g = linitial(policy->output_grouping_columns);
+		switch (g->value_bytes)
+		{
 		case 8:
 			policy->functions = single_fixed_8_functions;
 			break;
@@ -85,6 +87,11 @@ create_grouping_policy_hash(List *agg_defs, List *output_grouping_columns)
 		default:
 			Assert(false);
 			break;
+		}
+	}
+	else
+	{
+		policy->functions = serialized_functions;
 	}
 
 	policy->table =
@@ -231,7 +238,7 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 	if (num_possible_keys > policy->num_allocated_keys)
 	{
 		policy->num_allocated_keys = num_possible_keys;
-		policy->keys = repalloc(policy->keys, policy->key_bytes * num_possible_keys);
+		policy->keys = repalloc(policy->keys, list_length(policy->output_grouping_columns) * policy->key_bytes * num_possible_keys);
 	}
 
 	/*
@@ -432,10 +439,13 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 							   &aggregated_slot->tts_isnull[agg_def->output_offset]);
 	}
 
-	Assert(list_length(policy->output_grouping_columns) == 1);
-	GroupingColumn *col = linitial(policy->output_grouping_columns);
-	aggregated_slot->tts_values[col->output_offset] = ((Datum *) policy->keys)[current_key];
-	aggregated_slot->tts_isnull[col->output_offset] = current_key == 1;
+	const int num_keys = list_length(policy->output_grouping_columns);
+	for (int i = 0; i < num_keys; i++)
+	{
+		GroupingColumn *col = list_nth(policy->output_grouping_columns, i);
+		aggregated_slot->tts_values[col->output_offset] = ((Datum *) policy->keys)[current_key * num_keys + i];
+		aggregated_slot->tts_isnull[col->output_offset] = false; //current_key == 1;
+	}
 
 	return true;
 }

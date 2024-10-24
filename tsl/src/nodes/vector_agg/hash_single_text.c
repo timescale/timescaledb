@@ -29,9 +29,18 @@ get_bytes_view(CompressedColumnValues *column_values, int arrow_row)
 }
 
 static pg_attribute_always_inline void
-single_text_get_key(CompressedColumnValues column, int row, BytesView *restrict key,
+single_text_get_key(GroupingPolicyHash *restrict policy,
+	DecompressBatchState *restrict batch_state, int row, int next_key_index, BytesView *restrict key,
 					bool *restrict valid)
 {
+	if (list_length(policy->output_grouping_columns) != 1)
+	{
+		pg_unreachable();
+	}
+
+	GroupingColumn *g = linitial(policy->output_grouping_columns);
+	CompressedColumnValues column = batch_state->compressed_columns[g->input_offset];
+
 	if (unlikely(column.decompression_type == DT_Scalar))
 	{
 		/* Already stored. */
@@ -57,15 +66,21 @@ single_text_get_key(CompressedColumnValues column, int row, BytesView *restrict 
 }
 
 static pg_attribute_always_inline BytesView
-single_text_store_key(BytesView key, Datum *key_storage, MemoryContext key_memory_context)
+single_text_store_key(GroupingPolicyHash *restrict policy, BytesView key, uint32 key_index)
 {
 	const int total_bytes = key.len + VARHDRSZ;
-	text *stored = (text *) MemoryContextAlloc(key_memory_context, total_bytes);
+	text *restrict stored = (text *) MemoryContextAlloc(policy->key_body_mctx, total_bytes);
 	SET_VARSIZE(stored, total_bytes);
 	memcpy(VARDATA(stored), key.data, key.len);
 	key.data = (uint8 *) VARDATA(stored);
-	*key_storage = PointerGetDatum(stored);
+	((Datum *restrict) policy->keys)[key_index] = PointerGetDatum(stored);
 	return key;
+}
+
+static pg_attribute_always_inline void
+single_text_destroy_key(BytesView key)
+{
+	/* Noop. */
 }
 
 #define KEY_VARIANT single_text

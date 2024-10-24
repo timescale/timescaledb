@@ -337,27 +337,35 @@ can_vectorize_grouping(Agg *agg, CustomScan *custom)
 	 * We cannot use it when the plan has GroupAggregate because the
 	 * latter requires sorted output.
 	 */
-	if (agg->numCols == 1 && agg->aggstrategy == AGG_HASHED)
+	if (agg->aggstrategy == AGG_HASHED)
 	{
-		int offset = AttrNumberGetAttrOffset(agg->grpColIdx[0]);
-		TargetEntry *entry = list_nth(aggregated_tlist_resolved, offset);
-
-		bool is_segmentby = false;
-		if (is_vector_var(custom, entry->expr, &is_segmentby))
+		bool have_wrong_type = false;
+		for (int i = 0; i < agg->numCols; i++)
 		{
+			int offset = AttrNumberGetAttrOffset(agg->grpColIdx[i]);
+			TargetEntry *entry = list_nth(aggregated_tlist_resolved, offset);
+
+			bool is_segmentby = false;
+			if (!is_vector_var(custom, entry->expr, &is_segmentby))
+			{
+				have_wrong_type = true;
+				break;
+			}
 			Var *var = castNode(Var, entry->expr);
 			int16 typlen;
 			bool typbyval;
 			get_typlenbyval(var->vartype, &typlen, &typbyval);
-			if (typbyval && typlen > 0 && (size_t) typlen <= sizeof(Datum))
+			if (!(
+						(typbyval && typlen > 0 && (size_t) typlen <= sizeof(Datum))
+						|| (var->vartype == TEXTOID)))
 			{
-				return true;
+				have_wrong_type = true;
+				break;
 			}
-
-			if (var->vartype == TEXTOID)
-			{
-				return true;
-			}
+		}
+		if (!have_wrong_type)
+		{
+			return true;
 		}
 	}
 

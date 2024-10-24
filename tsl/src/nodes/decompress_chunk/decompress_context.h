@@ -29,6 +29,7 @@ typedef struct CompressionColumnDescription
 	Oid typid;
 	int16 value_bytes;
 	bool by_value;
+	char typalign;
 
 	/*
 	 * Attno of the decompressed column in the scan tuple of DecompressChunk node.

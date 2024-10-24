@@ -57,8 +57,8 @@ FUNCTION_NAME(get_size_bytes)(void *table)
  * Fill the aggregation state offsets for all rows using a hash table.
  */
 static pg_attribute_always_inline uint32
-FUNCTION_NAME(impl)(GroupingPolicyHash *policy, CompressedColumnValues column,
-					const uint64 *restrict filter, uint32 next_unused_state_index, int start_row,
+FUNCTION_NAME(impl)(GroupingPolicyHash *restrict policy,
+					DecompressBatchState *restrict batch_state, uint32 next_unused_state_index, int start_row,
 					int end_row)
 {
 	uint32 *restrict offsets = policy->offsets;
@@ -72,11 +72,12 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *policy, CompressedColumnValues column,
 	{
 		bool key_valid = false;
 		CTYPE key = { 0 };
-		FUNCTION_NAME(get_key)(column, row, &key, &key_valid);
+		FUNCTION_NAME(get_key)(policy, batch_state, row, next_unused_state_index, &key, &key_valid);
 
-		if (!arrow_row_is_valid(filter, row))
+		if (!arrow_row_is_valid(batch_state->vector_qual_result, row))
 		{
 			/* The row doesn't pass the filter. */
+			FUNCTION_NAME(destroy_key)(key);
 			continue;
 		}
 
@@ -85,6 +86,7 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *policy, CompressedColumnValues column,
 			/* The key is null. */
 			policy->have_null_key = true;
 			offsets[row] = 1;
+			FUNCTION_NAME(destroy_key)(key);
 			continue;
 		}
 
@@ -96,6 +98,7 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *policy, CompressedColumnValues column,
 			 */
 			Assert(last_key_index >= 2);
 			offsets[row] = last_key_index;
+			FUNCTION_NAME(destroy_key)(key);
 #ifndef NDEBUG
 			policy->stat_consecutive_keys++;
 #endif
@@ -113,14 +116,15 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *policy, CompressedColumnValues column,
 			 * New key, have to store it persistently.
 			 */
 			const int index = next_unused_state_index++;
-			entry->key = FUNCTION_NAME(
-				store_key)(key, &((Datum *restrict) policy->keys)[index], policy->key_body_mctx);
+			entry->key = FUNCTION_NAME(store_key)(policy, key, index);
 			entry->agg_state_index = index;
 		}
 		offsets[row] = entry->agg_state_index;
 
 		last_key_index = entry->agg_state_index;
-		last_key = key;
+		last_key = entry->key;
+
+		FUNCTION_NAME(destroy_key)(key);
 	}
 
 	return next_unused_state_index;
@@ -131,30 +135,38 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *policy, CompressedColumnValues column,
  * decompression types.
  */
 static pg_attribute_always_inline uint32
-FUNCTION_NAME(dispatch_type)(GroupingPolicyHash *policy, CompressedColumnValues column,
-							 const uint64 *restrict filter, uint32 next_unused_state_index,
+FUNCTION_NAME(dispatch_type)(GroupingPolicyHash *restrict policy,
+							 DecompressBatchState *restrict batch_state, uint32 next_unused_state_index,
 							 int start_row, int end_row)
 {
-	if (unlikely(column.decompression_type == DT_Scalar))
+	if (list_length(policy->output_grouping_columns) == 1)
 	{
-		return FUNCTION_NAME(
-			impl)(policy, column, filter, next_unused_state_index, start_row, end_row);
+		GroupingColumn *g = linitial(policy->output_grouping_columns);
+		CompressedColumnValues column = batch_state->compressed_columns[g->input_offset];
+
+		if (unlikely(column.decompression_type == DT_Scalar))
+		{
+			return FUNCTION_NAME(
+				impl)(policy, batch_state, next_unused_state_index, start_row, end_row);
+		}
+		else if (column.decompression_type == DT_ArrowText)
+		{
+			return FUNCTION_NAME(
+				impl)(policy, batch_state, next_unused_state_index, start_row, end_row);
+		}
+		else if (column.decompression_type == DT_ArrowTextDict)
+		{
+			return FUNCTION_NAME(
+				impl)(policy, batch_state, next_unused_state_index, start_row, end_row);
+		}
+		else
+		{
+			return FUNCTION_NAME(
+				impl)(policy, batch_state, next_unused_state_index, start_row, end_row);
+		}
 	}
-	else if (column.decompression_type == DT_ArrowText)
-	{
-		return FUNCTION_NAME(
-			impl)(policy, column, filter, next_unused_state_index, start_row, end_row);
-	}
-	else if (column.decompression_type == DT_ArrowTextDict)
-	{
-		return FUNCTION_NAME(
-			impl)(policy, column, filter, next_unused_state_index, start_row, end_row);
-	}
-	else
-	{
-		return FUNCTION_NAME(
-			impl)(policy, column, filter, next_unused_state_index, start_row, end_row);
-	}
+
+	return FUNCTION_NAME(impl)(policy, batch_state, next_unused_state_index, start_row, end_row);
 }
 
 /*
@@ -166,20 +178,15 @@ static uint32
 FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
 							uint32 next_unused_state_index, int start_row, int end_row)
 {
-	Assert(list_length(policy->output_grouping_columns) == 1);
-	GroupingColumn *g = linitial(policy->output_grouping_columns);
-	CompressedColumnValues column = batch_state->compressed_columns[g->input_offset];
-	const uint64 *restrict filter = batch_state->vector_qual_result;
-
-	if (filter == NULL)
+	if (batch_state->vector_qual_result == NULL)
 	{
 		next_unused_state_index = FUNCTION_NAME(
-			dispatch_type)(policy, column, NULL, next_unused_state_index, start_row, end_row);
+			dispatch_type)(policy, batch_state, next_unused_state_index, start_row, end_row);
 	}
 	else
 	{
 		next_unused_state_index = FUNCTION_NAME(
-			dispatch_type)(policy, column, filter, next_unused_state_index, start_row, end_row);
+			dispatch_type)(policy, batch_state, next_unused_state_index, start_row, end_row);
 	}
 
 	return next_unused_state_index;

@@ -9,9 +9,19 @@
 #define FUNCTION_NAME(Y) FUNCTION_NAME_HELPER(KEY_VARIANT, Y)
 
 static pg_attribute_always_inline void
-FUNCTION_NAME(get_key)(CompressedColumnValues column, int row, CTYPE *restrict key,
+FUNCTION_NAME(get_key)(GroupingPolicyHash *restrict policy,
+	DecompressBatchState *restrict batch_state, int row, int next_key_index, CTYPE *restrict key,
 					   bool *restrict valid)
 {
+	if (list_length(policy->output_grouping_columns) != 1)
+	{
+		Assert(false);
+		pg_unreachable();
+	}
+
+	GroupingColumn *g = linitial(policy->output_grouping_columns);
+	CompressedColumnValues column = batch_state->compressed_columns[g->input_offset];
+
 	if (unlikely(column.decompression_type == DT_Scalar))
 	{
 		*key = DATUM_TO_CTYPE(*column.output_value);
@@ -30,12 +40,18 @@ FUNCTION_NAME(get_key)(CompressedColumnValues column, int row, CTYPE *restrict k
 	}
 }
 
+
 static pg_attribute_always_inline CTYPE
-FUNCTION_NAME(store_key)(CTYPE key, Datum *key_storage, MemoryContext key_memory_context)
+FUNCTION_NAME(store_key)(GroupingPolicyHash *restrict policy, CTYPE key, uint32 key_index)
+{
+	((Datum *restrict) policy->keys)[key_index] = CTYPE_TO_DATUM(key);
+	return key;
+}
+
+static pg_attribute_always_inline void
+FUNCTION_NAME(destroy_key)(CTYPE key)
 {
 	/* Noop for fixed-size keys. */
-	*key_storage = CTYPE_TO_DATUM(key);
-	return key;
 }
 
 #undef FUNCTION_NAME_HELPER2
