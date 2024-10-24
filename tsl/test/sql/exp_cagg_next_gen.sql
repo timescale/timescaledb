@@ -121,19 +121,19 @@ DROP TABLE conditions CASCADE;
 -- Experimental functions using different schema for installation than PUBLIC
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
-
-CREATE DATABASE test;
-\c test :ROLE_SUPERUSER
-CREATE SCHEMA test;
+\set TEST_DBNAME_2 :TEST_DBNAME _2
+CREATE DATABASE :TEST_DBNAME_2;
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
+CREATE SCHEMA test1;
 SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb SCHEMA test;
+CREATE EXTENSION timescaledb SCHEMA test1;
 
 CREATE TABLE conditions(
   tstamp TIMESTAMP NOT NULL,
   city text NOT NULL,
   temperature INT NOT NULL);
 
-SELECT test.create_hypertable(
+SELECT test1.create_hypertable(
   'conditions', 'tstamp',
   chunk_time_interval => INTERVAL '1 day'
 );
@@ -153,7 +153,7 @@ RESET timescaledb.debug_allow_cagg_with_deprecated_funcs;
 CREATE MATERIALIZED VIEW conditions_summary_yearly
 WITH (timescaledb.continuous) AS
 SELECT city,
-       test.time_bucket('1 year', tstamp) AS bucket,
+       test1.time_bucket('1 year', tstamp) AS bucket,
        MIN(temperature),
        MAX(temperature)
 FROM conditions
@@ -168,4 +168,4 @@ ALTER MATERIALIZED VIEW conditions_summary_monthly SET (timescaledb.materialized
 ALTER MATERIALIZED VIEW conditions_summary_monthly SET (timescaledb.materialized_only=true);
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-DROP DATABASE test WITH (FORCE);
+DROP DATABASE :TEST_DBNAME_2 WITH (FORCE);

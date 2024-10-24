@@ -37,7 +37,7 @@ INSERT INTO comp_conflicts_1 VALUES
 ROLLBACK;
 SELECT compress_chunk(c) AS "CHUNK" FROM show_chunks('comp_conflicts_1') c
 \gset
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
 -- after compression no data should be in uncompressed chunk
 SELECT count(*) FROM ONLY :CHUNK;
  count 
@@ -123,7 +123,7 @@ INSERT INTO comp_conflicts_2 VALUES ('2020-01-01','d1',0.1);
 INSERT INTO comp_conflicts_2 VALUES ('2020-01-01','d2',0.2);
 SELECT compress_chunk(c) AS "CHUNK" FROM show_chunks('comp_conflicts_2') c
 \gset
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_3_3_chunk" for compression
 -- after compression no data should be in uncompressed chunk
 SELECT count(*) FROM ONLY :CHUNK;
  count 
@@ -212,7 +212,7 @@ INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d2', 'label', 0.2);
 INSERT INTO comp_conflicts_3 VALUES ('2020-01-01',NULL, 'label', 0.3);
 SELECT compress_chunk(c) AS "CHUNK" FROM show_chunks('comp_conflicts_3') c
 \gset
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_5_5_chunk" for compression
 -- after compression no data should be in uncompressed chunk
 SELECT count(*) FROM ONLY :CHUNK;
  count 
@@ -465,7 +465,7 @@ INSERT INTO comp_conflicts_4 VALUES ('2020-01-01','d2',0.2);
 INSERT INTO comp_conflicts_4 VALUES ('2020-01-01',NULL,0.3);
 SELECT compress_chunk(c) AS "CHUNK" FROM show_chunks('comp_conflicts_4') c
 \gset
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_7_7_chunk" for compression
 -- after compression no data should be in uncompressed chunk
 SELECT count(*) FROM ONLY :CHUNK;
  count 
@@ -611,9 +611,9 @@ ALTER TABLE compressed_ht SET (
 );
 NOTICE:  default order by for hypertable "compressed_ht" is set to ""time" DESC"
 SELECT COMPRESS_CHUNK(SHOW_CHUNKS('compressed_ht'));
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_9_9_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_9_10_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_9_11_chunk" for compression
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_9_9_chunk
@@ -708,3 +708,43 @@ ERROR:  inserting into compressed chunk with unique constraints disabled
 INSERT INTO compressed_ht VALUES ('2022-01-24 01:10:28.192199+05:30', '7', 0.876, 4.123, 'new insert row');
 ERROR:  inserting into compressed chunk with unique constraints disabled
 \set ON_ERROR_STOP 1
+RESET timescaledb.enable_dml_decompression;
+-- gh issue #7342
+CREATE TABLE test_collation (
+        time int8 NOT NULL,
+        device_id int4 NOT NULL,
+        name TEXT NOT NULL,
+        CONSTRAINT test_collation_pkey PRIMARY KEY (time, device_id, name)
+);
+SELECT create_hypertable('test_collation', 'time', chunk_time_interval => 2419200000);
+      create_hypertable       
+------------------------------
+ (11,public,test_collation,t)
+(1 row)
+
+ALTER TABLE test_collation
+SET (
+        timescaledb.compress,
+        timescaledb.compress_segmentby = 'device_id',
+        timescaledb.compress_orderby = 'time DESC, name'
+);
+INSERT INTO "test_collation"
+  ("time", "device_id", "name")
+VALUES
+  (1609477200000, 41, 'val1'),
+  (1609478100000, 41, 'val1')
+ON CONFLICT DO NOTHING;
+SELECT compress_chunk(ch) FROM show_chunks('test_collation') ch;
+INFO:  using tuplesort to scan rows from "_hyper_11_15_chunk" for compression
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_11_15_chunk
+(1 row)
+
+INSERT INTO "test_collation"
+  ("device_id", "time", "name")
+VALUES
+  (41, 1609477200000, 'val1'),
+  (41, 1609478100000, 'val1')
+ON CONFLICT DO NOTHING;
+INFO:  Using index scan with scan keys: index 1, heap 4, memory 2. 

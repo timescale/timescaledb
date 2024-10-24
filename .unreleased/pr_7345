@@ -1,0 +1,2 @@
+Fixes: #7342 Fix collation for in-memory tuple filtering
+Thanks: @hackbnw for reporting an issue with collation during tuple filtering

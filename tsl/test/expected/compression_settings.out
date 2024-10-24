@@ -43,7 +43,7 @@ SELECT * FROM settings;
 --Enable compression path info
 SET timescaledb.debug_compression_path_info= 'on';
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
-INFO:  compress_chunk_tuplesort_start
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
