@@ -75,6 +75,7 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *restrict policy, DecompressBatchState *r
 
 		if (!arrow_row_is_valid(batch_state->vector_qual_result, row))
 		{
+			DEBUG_PRINT("%p: row %d doesn't pass batch filter\n", policy, row);
 			/* The row doesn't pass the filter. */
 			FUNCTION_NAME(destroy_key)(key);
 			continue;
@@ -88,6 +89,7 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *restrict policy, DecompressBatchState *r
 				policy->null_key_index = next_unused_state_index++;
 			}
 			offsets[row] = policy->null_key_index;
+			DEBUG_PRINT("%p: row %d null key index %d\n", policy, row, policy->null_key_index);
 			FUNCTION_NAME(destroy_key)(key);
 			continue;
 		}
@@ -103,6 +105,7 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *restrict policy, DecompressBatchState *r
 #ifndef NDEBUG
 			policy->stat_consecutive_keys++;
 #endif
+			DEBUG_PRINT("%p: row %d consecutive key index %d\n", policy, row, last_key_index);
 			continue;
 		}
 
@@ -119,13 +122,17 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *restrict policy, DecompressBatchState *r
 			const int index = next_unused_state_index++;
 			entry->key = FUNCTION_NAME(store_key)(policy, key, index);
 			entry->agg_state_index = index;
+			DEBUG_PRINT("%p: row %d new key index %d\n", policy, row, index);
+		}
+		else
+		{
+			DEBUG_PRINT("%p: row %d old key index %d\n", policy, row, entry->agg_state_index);
+			FUNCTION_NAME(destroy_key)(key);
 		}
 		offsets[row] = entry->agg_state_index;
 
 		last_key_index = entry->agg_state_index;
 		last_key = entry->key;
-
-		FUNCTION_NAME(destroy_key)(key);
 	}
 
 	return next_unused_state_index;

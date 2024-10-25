@@ -62,6 +62,19 @@ single_text_get_key(GroupingPolicyHash *restrict policy, DecompressBatchState *r
 	{
 		pg_unreachable();
 	}
+
+	gp_hash_key_validity_bitmap(policy, next_key_index)[0] = *valid;
+
+	DEBUG_PRINT("%p consider key row %d key index %d is %d bytes: ",
+				policy,
+				row,
+				next_key_index,
+				key->len);
+	for (size_t i = 0; i < key->len; i++)
+	{
+		DEBUG_PRINT("%.2x.", key->data[i]);
+	}
+	DEBUG_PRINT("\n");
 }
 
 static pg_attribute_always_inline BytesView

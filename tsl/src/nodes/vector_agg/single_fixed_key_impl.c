@@ -15,7 +15,6 @@ FUNCTION_NAME(get_key)(GroupingPolicyHash *restrict policy,
 {
 	if (list_length(policy->output_grouping_columns) != 1)
 	{
-		Assert(false);
 		pg_unreachable();
 	}
 
@@ -38,12 +37,14 @@ FUNCTION_NAME(get_key)(GroupingPolicyHash *restrict policy,
 	{
 		pg_unreachable();
 	}
+
+	gp_hash_output_keys(policy, next_key_index)[0] = CTYPE_TO_DATUM(*key);
+	gp_hash_key_validity_bitmap(policy, next_key_index)[0] = *valid;
 }
 
 static pg_attribute_always_inline CTYPE
 FUNCTION_NAME(store_key)(GroupingPolicyHash *restrict policy, CTYPE key, uint32 key_index)
 {
-	gp_hash_output_keys(policy, key_index)[0] = CTYPE_TO_DATUM(key);
 	return key;
 }
 

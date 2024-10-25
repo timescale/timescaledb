@@ -113,3 +113,8 @@ gp_hash_output_keys(GroupingPolicyHash *policy, int key_index)
 	Assert(key_index != 0);
 	return (Datum *) &gp_hash_key_validity_bitmap(policy, key_index)[1];
 }
+
+// #define DEBUG_PRINT(...) fprintf(stderr, __VA_ARGS__)
+#ifndef DEBUG_PRINT
+#define DEBUG_PRINT(...)
+#endif

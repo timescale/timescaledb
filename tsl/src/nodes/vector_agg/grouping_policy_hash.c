@@ -64,7 +64,7 @@ create_grouping_policy_hash(List *agg_defs, List *output_grouping_columns)
 			   policy->num_allocated_keys);
 	policy->key_body_mctx = policy->agg_extra_mctx;
 
-	if (list_length(policy->output_grouping_columns) == 1)
+	if (false && list_length(policy->output_grouping_columns) == 1)
 	{
 		GroupingColumn *g = linitial(policy->output_grouping_columns);
 		switch (g->value_bytes)
@@ -449,8 +449,14 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 		GroupingColumn *col = list_nth(policy->output_grouping_columns, i);
 		aggregated_slot->tts_values[col->output_offset] =
 			gp_hash_output_keys(policy, current_key)[i];
-		aggregated_slot->tts_isnull[col->output_offset] = current_key == policy->null_key_index;
+		aggregated_slot->tts_isnull[col->output_offset] =
+			!arrow_row_is_valid(gp_hash_key_validity_bitmap(policy, current_key), i);
 	}
+
+	DEBUG_PRINT("%p: output key index %d valid %lx\n",
+				policy,
+				current_key,
+				gp_hash_key_validity_bitmap(policy, current_key)[0]);
 
 	return true;
 }

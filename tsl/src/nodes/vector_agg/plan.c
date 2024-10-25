@@ -339,7 +339,7 @@ can_vectorize_grouping(Agg *agg, CustomScan *custom)
 	 * the input order of the keys.
 	 * FIXME write a test for that.
 	 */
-	if (agg->numCols == 1)
+	if (true || agg->numCols == 1)
 	{
 		bool have_wrong_type = false;
 		for (int i = 0; i < agg->numCols; i++)
