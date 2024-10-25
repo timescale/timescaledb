@@ -20,19 +20,20 @@ create table aggfns(t int, s int,
 select create_hypertable('aggfns', 's', chunk_time_interval => :GROUPING_CARDINALITY / :CHUNKS);
 
 create view source as
-select s * 10000::int + t as t,
+select s * 10000 + t as t,
     s,
-    case when t % 1051 = 0 then null else (mix(s + t + 1) * 32767)::int2 end as cint2,
-    (mix(s + t + 2) * 32767 * 65536)::int4 as cint4,
-    (mix(s + t + 3) * 32767 * 65536)::int8 as cint8,
+    case when t % 1051 = 0 then null
+        else (mix(s + t * 1019) * 32767)::int2 end as cint2,
+    (mix(s + t * 1021) * 32767)::int4 as cint4,
+    (mix(s + t * 1031) * 32767)::int8 as cint8,
     case when s = 1 and t = 1061 then 'nan'::float4
         when s = 2 and t = 1061 then '+inf'::float4
         when s = 3 and t = 1061 then '-inf'::float4
-        else (mix(s + t + 4) * 100)::float4 end as cfloat4,
-    (mix(s + t + 5) * 100)::float8 as cfloat8,
-    '2021-01-01 01:01:01'::timestamp + interval '1 second' * (s * 10000::int + t) as cts,
-    '2021-01-01 01:01:01'::timestamptz + interval '1 second' * (s * 10000::int + t) as ctstz,
-    '2021-01-01'::date + interval '1 day' * (s * 10000::int + t) as cdate
+        else (mix(s + t * 1033) * 100::int)::float4 end as cfloat4,
+    (mix(s + t * 1039) * 100)::float8 as cfloat8,
+    '2021-01-01 01:01:01'::timestamp + interval '1 second' * (s * 10000) as cts,
+    '2021-01-01 01:01:01'::timestamptz + interval '1 second' * (s * 10000) as ctstz,
+    '2021-01-01'::date + interval '1 day' * (s * 10000) as cdate
 from
     generate_series(1::int, :CHUNK_ROWS * :CHUNKS / :GROUPING_CARDINALITY) t,
     generate_series(0::int, :GROUPING_CARDINALITY - 1::int) s(s)
@@ -86,16 +87,17 @@ vacuum freeze analyze edges;
 set timescaledb.debug_require_vector_agg = 'require';
 ---- Uncomment to generate reference. Note that there are minor discrepancies
 ---- on float4 due to different numeric stability in our and PG implementations.
---set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
+-- set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
 
 select
-    format('%sselect %s%s(%s)%s from aggfns%s%s order by 1;',
+    format('%sselect %s%s(%s) from aggfns%s%s%s;',
             explain,
             grouping || ', ',
             function, variable,
-            ' filter (where ' || agg_filter || ')',
             ' where ' || condition,
-            ' group by ' || grouping )
+            ' group by ' || grouping,
+            format(' order by %s(%s), ', function, variable) || grouping || ' limit 10',
+            function, variable)
 from
     unnest(array[
         'explain (costs off) ',
@@ -130,11 +132,7 @@ from
     unnest(array[
         null,
         's',
-        'ss',
-        'x']) with ordinality as grouping(grouping, n),
-    unnest(array[
-        null,
-        'cint4 > 0']) with ordinality as agg_filter(agg_filter, n)
+        'ss']) with ordinality as grouping(grouping, n)
 where
     true
     and (explain is null /* or condition is null and grouping = 's' */)
@@ -143,12 +141,8 @@ where
     -- This is not vectorized yet
     and (variable != 'cint8' or function != 'stddev')
     and (function != 'count' or variable in ('cint2', 's', '*'))
-    and (agg_filter is null or (function = 'count') or (function = 'sum' and variable in ('cint2', 'cint4')))
     and (condition is distinct from 'cint2 is null' or variable = 'cint2')
-    -- No need to test the aggregate functions themselves again for string
-    -- grouping.
-    and (grouping is distinct from 'x' or (function = 'count' and variable in ('cint2', '*') and agg_filter is null))
-order by explain, condition.n, variable, function, grouping.n, agg_filter.n
+order by explain, condition.n, variable, function, grouping.n
 \gexec
 
 

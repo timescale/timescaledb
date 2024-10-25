@@ -64,7 +64,7 @@ create_grouping_policy_hash(List *agg_defs, List *output_grouping_columns)
 			   policy->num_allocated_keys);
 	policy->key_body_mctx = policy->agg_extra_mctx;
 
-	if (false && list_length(policy->output_grouping_columns) == 1)
+	if (list_length(policy->output_grouping_columns) == 1)
 	{
 		GroupingColumn *g = linitial(policy->output_grouping_columns);
 		switch (g->value_bytes)
