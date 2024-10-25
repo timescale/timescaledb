@@ -157,7 +157,7 @@ append_ec_for_metadata_col(PlannerInfo *root, CompressionInfo *info, Var *var, P
 	EquivalenceMember *em = makeNode(EquivalenceMember);
 
 	em->em_expr = (Expr *) var;
-	em->em_relids = bms_make_singleton(info->compressed_rte->relid);
+	em->em_relids = bms_make_singleton(info->compressed_rel->relid);
 	em->em_is_const = false;
 	em->em_is_child = false;
 	em->em_datatype = var->vartype;
