@@ -130,7 +130,7 @@ WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
 AND ch1.compressed_chunk_id = comp_ch.id
 ORDER BY ch1.id LIMIT 1 \gset
 
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SET timescaledb.restoring TO ON;
 -- add sequence number column and fill in the correct sequences
 ALTER TABLE :CHUNK_FULL_NAME ADD COLUMN _ts_meta_sequence_num int;
@@ -140,7 +140,7 @@ FROM :CHUNK_FULL_NAME
 ORDER BY _ts_meta_min_1, _ts_meta_max_1;
 DELETE FROM :CHUNK_FULL_NAME WHERE _ts_meta_sequence_num IS NULL;
 SET timescaledb.restoring TO OFF;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 SELECT comp_ch.table_name AS "CHUNK_NAME", comp_ch.schema_name|| '.' || comp_ch.table_name AS "CHUNK_FULL_NAME"
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk comp_ch, _timescaledb_catalog.hypertable ht
@@ -148,7 +148,7 @@ WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
 AND ch1.compressed_chunk_id = comp_ch.id
 ORDER BY ch1.id OFFSET 3 LIMIT 1 \gset
 
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SET timescaledb.restoring TO ON;
 -- add sequence number column and fill in the correct sequences
 ALTER TABLE :CHUNK_FULL_NAME ADD COLUMN _ts_meta_sequence_num int;
@@ -157,7 +157,8 @@ SELECT device_id, time, val, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 , 10
 FROM :CHUNK_FULL_NAME
 ORDER BY _ts_meta_min_1, _ts_meta_max_1;
 DELETE FROM :CHUNK_FULL_NAME WHERE _ts_meta_sequence_num IS NULL;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET timescaledb.restoring TO OFF;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 -- from this point, two chunks should use sequence numbers and the rest will work without them
 :EXPLAIN SELECT * FROM hyper
@@ -175,3 +176,37 @@ INSERT INTO hyper VALUES (41, 1, 1), (42, 2, 1), (43, 3, 1), (50, 3, 2), (51, 4,
 -- and roll up the two new chunks into a single chunk
 SELECT compress_chunk(show_chunks('hyper'));
 
+
+-- gh issue #7384
+-- modifying compressed chunk OID to over INT32_MAX
+-- to detect if we handle those properly
+TRUNCATE hyper;
+ALTER TABLE hyper SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'time',
+    timescaledb.compress_segmentby = 'device_id');
+INSERT INTO hyper VALUES (1, 1, 1), (2, 2, 1), (3, 3, 1), (10, 3, 2), (11, 4, 2), (11, 5, 2), (21, 2, 3), (22, 3, 3), (23, 4, 3), (30, 1, 4), (31, 3, 4), (31, 5, 4);
+
+SELECT compress_chunk(show_chunks('hyper'));
+
+SELECT comp_ch.table_name AS "CHUNK_NAME", comp_ch.schema_name|| '.' || comp_ch.table_name AS "CHUNK_FULL_NAME"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk comp_ch, _timescaledb_catalog.hypertable ht
+WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
+AND ch1.compressed_chunk_id = comp_ch.id
+ORDER BY ch1.id LIMIT 1 \gset
+
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SELECT :'CHUNK_FULL_NAME'::regclass::oid as "CHUNK_OID" \gset
+SELECT (power(2,31)+1)::bigint as "CHUNK_NEW_OID" \gset
+UPDATE pg_class SET oid = :CHUNK_NEW_OID
+WHERE oid = :CHUNK_OID;
+UPDATE pg_attribute SET attrelid = :CHUNK_NEW_OID
+WHERE attrelid = :CHUNK_OID;
+UPDATE _timescaledb_catalog.compression_settings SET relid = :CHUNK_NEW_OID
+WHERE relid = :CHUNK_OID;
+
+:EXPLAIN SELECT * FROM hyper
+WHERE device_id = 1 ORDER BY time;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+
+DROP TABLE hyper;
