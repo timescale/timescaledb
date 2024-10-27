@@ -95,6 +95,7 @@ single_text_destroy_key(BytesView key)
 	/* Noop. */
 }
 
+#define EXPLAIN_NAME "single text"
 #define KEY_VARIANT single_text
 #define KEY_HASH(X) hash_bytes_view(X)
 #define KEY_EQUAL(a, b) (a.len == b.len && memcmp(a.data, b.data, a.len) == 0)

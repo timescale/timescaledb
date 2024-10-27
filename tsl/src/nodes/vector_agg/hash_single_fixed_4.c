@@ -16,6 +16,7 @@
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
 
+#define EXPLAIN_NAME "single 4-byte"
 #define KEY_VARIANT single_fixed_4
 #define KEY_BYTES 4
 #define KEY_HASH hash64

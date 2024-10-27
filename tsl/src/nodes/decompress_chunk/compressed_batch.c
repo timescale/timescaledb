@@ -345,8 +345,6 @@ compressed_batch_get_arrow_array(VectorQualState *vqstate, Expr *expr, bool *is_
 		   var->varattno);
 	Assert(column_description != NULL);
 	Assert(column_description->typid == var->vartype);
-	Ensure(column_description->type == COMPRESSED_COLUMN,
-		   "only compressed columns are supported in vectorized quals");
 
 	CompressedColumnValues *column_values = &batch_state->compressed_columns[column_index];
 

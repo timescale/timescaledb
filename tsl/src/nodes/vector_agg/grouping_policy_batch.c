@@ -259,9 +259,16 @@ gp_batch_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 	return true;
 }
 
+static char *
+gp_batch_explain(GroupingPolicy *gp)
+{
+	return "entire batch";
+}
+
 static const GroupingPolicy grouping_policy_batch_functions = {
 	.gp_reset = gp_batch_reset,
 	.gp_add_batch = gp_batch_add_batch,
 	.gp_should_emit = gp_batch_should_emit,
 	.gp_do_emit = gp_batch_do_emit,
+	.gp_explain = gp_batch_explain,
 };

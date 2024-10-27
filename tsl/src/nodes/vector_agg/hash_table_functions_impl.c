@@ -206,8 +206,10 @@ HashTableFunctions FUNCTION_NAME(functions) = {
 	.get_num_keys = FUNCTION_NAME(get_num_keys),
 	.get_size_bytes = FUNCTION_NAME(get_size_bytes),
 	.fill_offsets = FUNCTION_NAME(fill_offsets),
+	.explain_name = EXPLAIN_NAME,
 };
 
+#undef EXPLAIN_NAME
 #undef KEY_VARIANT
 #undef KEY_BYTES
 #undef KEY_HASH

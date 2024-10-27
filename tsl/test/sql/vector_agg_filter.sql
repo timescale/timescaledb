@@ -98,7 +98,8 @@ from
         null,
         'cint2 < 0',
         'ss > 1000',
-        'cint4 > 0']) with ordinality as agg_filter(agg_filter, n)
+        'cint4 > 0',
+        's != 5']) with ordinality as agg_filter(agg_filter, n)
 where
     true
     and (explain is null /* or condition is null and grouping = 's' */)

@@ -87,6 +87,11 @@ from
         null,
         'cint2 > 0']) with ordinality as condition(condition, n),
     unnest(array[
+        null,
+        's',
+        'cint2',
+        'cint4',
+        'cint8',
         'x',
         'ss, x',
         't, s, ss, x, cint2, cint4, cint8']) with ordinality as grouping(grouping, n)

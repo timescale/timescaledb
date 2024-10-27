@@ -16,6 +16,7 @@
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
 
+#define EXPLAIN_NAME "single 8-byte"
 #define KEY_VARIANT single_fixed_8
 #define KEY_BYTES 8
 #define KEY_HASH hash64

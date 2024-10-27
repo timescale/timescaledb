@@ -17,6 +17,7 @@ typedef struct GroupingPolicyHash GroupingPolicyHash;
 
 typedef struct
 {
+	char *explain_name;
 	void *(*create)(MemoryContext context, uint32 initial_rows, void *data);
 	void (*reset)(void *table);
 	uint32 (*get_num_keys)(void *table);

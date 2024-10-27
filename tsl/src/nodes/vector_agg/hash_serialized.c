@@ -232,6 +232,7 @@ serialized_destroy_key(BytesView key)
 	pfree((void *) key.data);
 }
 
+#define EXPLAIN_NAME "serialized"
 #define KEY_VARIANT serialized
 #define KEY_HASH(X) hash_bytes_view(X)
 #define KEY_EQUAL(a, b) (a.len == b.len && memcmp(a.data, b.data, a.len) == 0)

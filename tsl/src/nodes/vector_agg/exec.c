@@ -346,7 +346,11 @@ vector_agg_exec(CustomScanState *node)
 static void
 vector_agg_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
-	/* No additional output is needed. */
+	VectorAggState *state = (VectorAggState *) node;
+	if (es->verbose || es->format != EXPLAIN_FORMAT_TEXT)
+	{
+		ExplainPropertyText("Grouping Policy", state->grouping->gp_explain(state->grouping), es);
+	}
 }
 
 static struct CustomExecMethods exec_methods = {

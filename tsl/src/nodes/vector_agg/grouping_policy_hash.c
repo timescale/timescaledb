@@ -254,6 +254,9 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 														   start_row,
 														   end_row);
 
+	/*
+	 * Process the aggregate function states.
+	 */
 	const uint64 new_aggstate_rows = policy->allocated_aggstate_rows * 2 + 1;
 	for (int i = 0; i < num_fns; i++)
 	{
@@ -270,8 +273,10 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 			/*
 			 * Initialize the aggregate function states for the newly added keys.
 			 */
-			agg_def->func.agg_init(agg_def->func.state_bytes * first_uninitialized_state_index +
-									   (char *) list_nth(policy->per_agg_states, i),
+			void *first_uninitialized_state =
+				agg_def->func.state_bytes * first_uninitialized_state_index +
+				(char *) list_nth(policy->per_agg_states, i);
+			agg_def->func.agg_init(first_uninitialized_state,
 								   next_unused_key_index - first_uninitialized_state_index);
 		}
 
@@ -363,11 +368,17 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 				;
 
 			const int start_row = start_word * 64 + pg_rightmost_one_pos64(filter[start_word]);
+			Assert(start_row <= n);
+
 			/*
 			 * The bits for past-the-end rows must be set to zero, so this
 			 * calculation should yield no more than n.
 			 */
-			int end_row = (end_word - 1) * 64 + pg_leftmost_one_pos64(filter[end_word - 1]) + 1;
+			Assert(end_word > start_word);
+			const int end_row =
+				(end_word - 1) * 64 + pg_leftmost_one_pos64(filter[end_word - 1]) + 1;
+			Assert(end_row <= n);
+
 			add_one_range(policy, batch_state, start_row, end_row);
 
 			stat_range_rows += end_row - start_row;
@@ -461,9 +472,17 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 	return true;
 }
 
+static char *
+gp_hash_explain(GroupingPolicy *gp)
+{
+	GroupingPolicyHash *policy = (GroupingPolicyHash *) gp;
+	return psprintf("hashed with %s key", policy->functions.explain_name);
+}
+
 static const GroupingPolicy grouping_policy_hash_functions = {
 	.gp_reset = gp_hash_reset,
 	.gp_add_batch = gp_hash_add_batch,
 	.gp_should_emit = gp_hash_should_emit,
 	.gp_do_emit = gp_hash_do_emit,
+	.gp_explain = gp_hash_explain,
 };

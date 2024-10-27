@@ -37,6 +37,8 @@ typedef struct GroupingPolicy
 	bool (*gp_do_emit)(GroupingPolicy *gp, TupleTableSlot *aggregated_slot);
 
 	void (*gp_destroy)(GroupingPolicy *gp);
+
+	char *(*gp_explain)(GroupingPolicy *gp);
 } GroupingPolicy;
 
 extern GroupingPolicy *create_grouping_policy_batch(List *agg_defs, List *grouping_columns);
