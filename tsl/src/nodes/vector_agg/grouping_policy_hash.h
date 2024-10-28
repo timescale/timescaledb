@@ -36,7 +36,9 @@ typedef struct GroupingPolicyHash
 
 	int num_agg_defs;
 	VectorAggDef *agg_defs;
-	List *output_grouping_columns;
+
+	int num_grouping_columns;
+	GroupingColumn *grouping_columns;
 
 	/*
 	 * The hash table we use for grouping.
@@ -101,10 +103,8 @@ typedef struct GroupingPolicyHash
 static inline uint64 *
 gp_hash_key_validity_bitmap(GroupingPolicyHash *policy, int key_index)
 {
-	return (
-		uint64 *) ((char *) policy->output_keys +
-				   (sizeof(uint64) + sizeof(Datum) * list_length(policy->output_grouping_columns)) *
-					   key_index);
+	return (uint64 *) ((char *) policy->output_keys +
+					   (sizeof(uint64) + sizeof(Datum) * policy->num_grouping_columns) * key_index);
 }
 
 static inline Datum *

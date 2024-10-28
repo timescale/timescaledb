@@ -32,12 +32,12 @@ static pg_attribute_always_inline void
 single_text_get_key(GroupingPolicyHash *restrict policy, DecompressBatchState *restrict batch_state,
 					int row, int next_key_index, BytesView *restrict key, bool *restrict valid)
 {
-	if (list_length(policy->output_grouping_columns) != 1)
+	if (policy->num_grouping_columns != 1)
 	{
 		pg_unreachable();
 	}
 
-	GroupingColumn *g = linitial(policy->output_grouping_columns);
+	GroupingColumn *g = &policy->grouping_columns[0];
 	CompressedColumnValues column = batch_state->compressed_columns[g->input_offset];
 
 	if (unlikely(column.decompression_type == DT_Scalar))

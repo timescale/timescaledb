@@ -29,12 +29,12 @@ serialized_get_key(GroupingPolicyHash *restrict policy, DecompressBatchState *re
 
 	uint64 *restrict serialized_key_validity_word;
 
-	const int num_columns = list_length(policy->output_grouping_columns);
+	const int num_columns = policy->num_grouping_columns;
 	Assert(num_columns <= 64);
 	size_t num_bytes = 0;
 	for (int i = 0; i < num_columns; i++)
 	{
-		const GroupingColumn *def = list_nth(policy->output_grouping_columns, i);
+		const GroupingColumn *def = &policy->grouping_columns[i];
 		num_bytes = att_align_nominal(num_bytes, def->typalign);
 		if (def->by_value)
 		{
@@ -88,7 +88,7 @@ serialized_get_key(GroupingPolicyHash *restrict policy, DecompressBatchState *re
 	uint32 offset = 0;
 	for (int column_index = 0; column_index < num_columns; column_index++)
 	{
-		const GroupingColumn *def = list_nth(policy->output_grouping_columns, column_index);
+		const GroupingColumn *def = &policy->grouping_columns[column_index];
 		offset = att_align_nominal(offset, def->typalign);
 
 		const CompressedColumnValues *column_values =

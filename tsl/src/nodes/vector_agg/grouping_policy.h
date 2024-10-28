@@ -13,6 +13,8 @@ typedef struct TupleTableSlot TupleTableSlot;
 
 typedef struct VectorAggDef VectorAggDef;
 
+typedef struct GroupingColumn GroupingColumn;
+
 /*
  * This is a common interface for grouping policies which define how the rows
  * are grouped for aggregation -- e.g. there can be an implementation for no
@@ -44,7 +46,9 @@ typedef struct GroupingPolicy
 } GroupingPolicy;
 
 extern GroupingPolicy *create_grouping_policy_batch(int num_agg_defs, VectorAggDef *agg_defs,
-													List *grouping_columns);
+													int num_grouping_columns,
+													GroupingColumn *grouping_columns);
 
 extern GroupingPolicy *create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs,
-												   List *grouping_columns);
+												   int num_grouping_columns,
+												   GroupingColumn *grouping_columns);

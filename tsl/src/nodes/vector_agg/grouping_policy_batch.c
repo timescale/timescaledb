@@ -29,7 +29,9 @@ typedef struct
 
 	void **agg_states;
 
-	List *output_grouping_columns;
+	int num_grouping_columns;
+	GroupingColumn *grouping_columns;
+
 	Datum *output_grouping_values;
 	bool *output_grouping_isnull;
 	bool have_results;
@@ -48,14 +50,18 @@ typedef struct
 static const GroupingPolicy grouping_policy_batch_functions;
 
 GroupingPolicy *
-create_grouping_policy_batch(int num_agg_defs, VectorAggDef *agg_defs,
-							 List *output_grouping_columns)
+create_grouping_policy_batch(int num_agg_defs, VectorAggDef *agg_defs, int num_grouping_columns,
+							 GroupingColumn *output_grouping_columns)
 {
 	GroupingPolicyBatch *policy = palloc0(sizeof(GroupingPolicyBatch));
 	policy->funcs = grouping_policy_batch_functions;
-	policy->output_grouping_columns = output_grouping_columns;
+
+	policy->num_grouping_columns = num_grouping_columns;
+	policy->grouping_columns = output_grouping_columns;
+
 	policy->num_agg_defs = num_agg_defs;
 	policy->agg_defs = agg_defs;
+
 	policy->agg_extra_mctx =
 		AllocSetContextCreate(CurrentMemoryContext, "agg extra", ALLOCSET_DEFAULT_SIZES);
 
@@ -67,11 +73,10 @@ create_grouping_policy_batch(int num_agg_defs, VectorAggDef *agg_defs,
 	}
 
 	policy->output_grouping_values =
-		(Datum *) palloc0(MAXALIGN(list_length(output_grouping_columns) * sizeof(Datum)) +
-						  MAXALIGN(list_length(output_grouping_columns) * sizeof(bool)));
-	policy->output_grouping_isnull =
-		(bool *) ((char *) policy->output_grouping_values +
-				  MAXALIGN(list_length(output_grouping_columns) * sizeof(Datum)));
+		(Datum *) palloc0(MAXALIGN(num_grouping_columns * sizeof(Datum)) +
+						  MAXALIGN(num_grouping_columns * sizeof(bool)));
+	policy->output_grouping_isnull = (bool *) ((char *) policy->output_grouping_values +
+											   MAXALIGN(num_grouping_columns * sizeof(Datum)));
 
 	return &policy->funcs;
 }
@@ -91,7 +96,7 @@ gp_batch_reset(GroupingPolicy *obj)
 		agg_def->func.agg_init(agg_state, 1);
 	}
 
-	const int ngrp = list_length(policy->output_grouping_columns);
+	const int ngrp = policy->num_grouping_columns;
 	for (int i = 0; i < ngrp; i++)
 	{
 		policy->output_grouping_values[i] = 0;
@@ -194,10 +199,10 @@ gp_batch_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 		compute_single_aggregate(policy, batch_state, agg_def, agg_state, policy->agg_extra_mctx);
 	}
 
-	const int ngrp = list_length(policy->output_grouping_columns);
+	const int ngrp = policy->num_grouping_columns;
 	for (int i = 0; i < ngrp; i++)
 	{
-		GroupingColumn *col = list_nth(policy->output_grouping_columns, i);
+		GroupingColumn *col = &policy->grouping_columns[i];
 		Assert(col->input_offset >= 0);
 		Assert(col->output_offset >= 0);
 
@@ -225,7 +230,7 @@ gp_batch_should_emit(GroupingPolicy *gp)
 	 * If we're grouping by segmentby columns, we have to output partials for
 	 * every batch.
 	 */
-	return policy->output_grouping_columns != NIL && policy->have_results;
+	return policy->num_grouping_columns > 0 && policy->have_results;
 }
 
 static bool
@@ -248,10 +253,10 @@ gp_batch_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 							   &aggregated_slot->tts_isnull[agg_def->output_offset]);
 	}
 
-	const int ngrp = list_length(policy->output_grouping_columns);
+	const int ngrp = policy->num_grouping_columns;
 	for (int i = 0; i < ngrp; i++)
 	{
-		GroupingColumn *col = list_nth(policy->output_grouping_columns, i);
+		GroupingColumn *col = &policy->grouping_columns[i];
 		Assert(col->input_offset >= 0);
 		Assert(col->output_offset >= 0);
 

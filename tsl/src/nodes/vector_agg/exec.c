@@ -83,6 +83,7 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 	const int tlist_length = list_length(aggregated_tlist);
 
 	int agg_functions_counter = 0;
+	int grouping_column_counter = 0;
 	for (int i = 0; i < tlist_length; i++)
 	{
 		TargetEntry *tlentry = (TargetEntry *) list_nth(aggregated_tlist, i);
@@ -94,6 +95,7 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		{
 			/* This is a grouping column. */
 			Assert(IsA(tlentry->expr, Var));
+			grouping_column_counter++;
 		}
 	}
 
@@ -101,7 +103,12 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 	vector_agg_state->agg_defs =
 		palloc0(sizeof(*vector_agg_state->agg_defs) * vector_agg_state->num_agg_defs);
 
+	vector_agg_state->num_grouping_columns = grouping_column_counter;
+	vector_agg_state->grouping_columns = palloc0(sizeof(*vector_agg_state->grouping_columns) *
+												 vector_agg_state->num_grouping_columns);
+
 	agg_functions_counter = 0;
+	grouping_column_counter = 0;
 	for (int i = 0; i < tlist_length; i++)
 	{
 		TargetEntry *tlentry = (TargetEntry *) list_nth(aggregated_tlist, i);
@@ -145,9 +152,7 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 			/* This is a grouping column. */
 			Assert(IsA(tlentry->expr, Var));
 
-			GroupingColumn *col = palloc0(sizeof(GroupingColumn));
-			vector_agg_state->output_grouping_columns =
-				lappend(vector_agg_state->output_grouping_columns, col);
+			GroupingColumn *col = &vector_agg_state->grouping_columns[grouping_column_counter++];
 			col->output_offset = i;
 
 			Var *var = castNode(Var, tlentry->expr);
@@ -165,10 +170,9 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 
 	bool all_segmentby = true;
-	for (int i = 0; i < list_length(vector_agg_state->output_grouping_columns); i++)
+	for (int i = 0; i < vector_agg_state->num_grouping_columns; i++)
 	{
-		GroupingColumn *col =
-			(GroupingColumn *) list_nth(vector_agg_state->output_grouping_columns, i);
+		GroupingColumn *col = &vector_agg_state->grouping_columns[i];
 		DecompressContext *dcontext = &decompress_state->decompress_context;
 		CompressionColumnDescription *desc = &dcontext->compressed_chunk_columns[col->input_offset];
 		//		if (desc->type == COMPRESSED_COLUMN && desc->by_value && desc->value_bytes > 0 &&
@@ -187,7 +191,8 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		vector_agg_state->grouping =
 			create_grouping_policy_batch(vector_agg_state->num_agg_defs,
 										 vector_agg_state->agg_defs,
-										 vector_agg_state->output_grouping_columns);
+										 vector_agg_state->num_grouping_columns,
+										 vector_agg_state->grouping_columns);
 	}
 	else
 	{
@@ -197,7 +202,8 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		vector_agg_state->grouping =
 			create_grouping_policy_hash(vector_agg_state->num_agg_defs,
 										vector_agg_state->agg_defs,
-										vector_agg_state->output_grouping_columns);
+										vector_agg_state->num_grouping_columns,
+										vector_agg_state->grouping_columns);
 	}
 }
 

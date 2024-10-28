@@ -147,9 +147,9 @@ FUNCTION_NAME(dispatch_type)(GroupingPolicyHash *restrict policy,
 							 DecompressBatchState *restrict batch_state,
 							 uint32 next_unused_state_index, int start_row, int end_row)
 {
-	if (list_length(policy->output_grouping_columns) == 1)
+	if (policy->num_grouping_columns == 1)
 	{
-		GroupingColumn *g = linitial(policy->output_grouping_columns);
+		GroupingColumn *g = &policy->grouping_columns[0];
 		CompressedColumnValues column = batch_state->compressed_columns[g->input_offset];
 
 		if (unlikely(column.decompression_type == DT_Scalar))

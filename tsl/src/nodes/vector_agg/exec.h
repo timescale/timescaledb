@@ -22,7 +22,7 @@ typedef struct VectorAggDef
 	uint64 *filter_result;
 } VectorAggDef;
 
-typedef struct
+typedef struct GroupingColumn
 {
 	int input_offset;
 	int output_offset;
@@ -40,7 +40,8 @@ typedef struct
 	int num_agg_defs;
 	VectorAggDef *agg_defs;
 
-	List *output_grouping_columns;
+	int num_grouping_columns;
+	GroupingColumn *grouping_columns;
 
 	/*
 	 * We can't call the underlying scan after it has ended, or it will be

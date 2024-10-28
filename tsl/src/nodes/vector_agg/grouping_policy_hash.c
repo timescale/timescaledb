@@ -40,17 +40,22 @@ extern HashTableFunctions serialized_functions;
 static const GroupingPolicy grouping_policy_hash_functions;
 
 GroupingPolicy *
-create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, List *output_grouping_columns)
+create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_grouping_columns,
+							GroupingColumn *grouping_columns)
 {
 	GroupingPolicyHash *policy = palloc0(sizeof(GroupingPolicyHash));
 	policy->funcs = grouping_policy_hash_functions;
-	policy->output_grouping_columns = output_grouping_columns;
+
+	policy->num_grouping_columns = num_grouping_columns;
+	policy->grouping_columns = grouping_columns;
+
 	policy->agg_extra_mctx =
 		AllocSetContextCreate(CurrentMemoryContext, "agg extra", ALLOCSET_DEFAULT_SIZES);
 	policy->allocated_aggstate_rows = TARGET_COMPRESSED_BATCH_SIZE;
 
 	policy->num_agg_defs = num_agg_defs;
 	policy->agg_defs = agg_defs;
+
 	policy->per_agg_states = palloc(sizeof(*policy->per_agg_states) * policy->num_agg_defs);
 	for (int i = 0; i < policy->num_agg_defs; i++)
 	{
@@ -60,14 +65,13 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, List *outp
 	}
 
 	policy->num_allocated_keys = policy->allocated_aggstate_rows;
-	policy->output_keys =
-		palloc((sizeof(uint64) + list_length(policy->output_grouping_columns) * sizeof(Datum)) *
-			   policy->num_allocated_keys);
+	policy->output_keys = palloc((sizeof(uint64) + policy->num_grouping_columns * sizeof(Datum)) *
+								 policy->num_allocated_keys);
 	policy->key_body_mctx = policy->agg_extra_mctx;
 
-	if (list_length(policy->output_grouping_columns) == 1)
+	if (num_grouping_columns == 1)
 	{
-		GroupingColumn *g = linitial(policy->output_grouping_columns);
+		GroupingColumn *g = &policy->grouping_columns[0];
 		switch (g->value_bytes)
 		{
 			case 8:
@@ -238,8 +242,7 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 		policy->num_allocated_keys = num_possible_keys;
 		policy->output_keys =
 			repalloc(policy->output_keys,
-					 (sizeof(uint64) +
-					  list_length(policy->output_grouping_columns) * sizeof(Datum)) *
+					 (sizeof(uint64) + policy->num_grouping_columns * sizeof(Datum)) *
 						 num_possible_keys);
 	}
 
@@ -453,10 +456,10 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 							   &aggregated_slot->tts_isnull[agg_def->output_offset]);
 	}
 
-	const int num_keys = list_length(policy->output_grouping_columns);
-	for (int i = 0; i < num_keys; i++)
+	const int num_key_columns = policy->num_grouping_columns;
+	for (int i = 0; i < num_key_columns; i++)
 	{
-		GroupingColumn *col = list_nth(policy->output_grouping_columns, i);
+		GroupingColumn *col = &policy->grouping_columns[i];
 		aggregated_slot->tts_values[col->output_offset] =
 			gp_hash_output_keys(policy, current_key)[i];
 		aggregated_slot->tts_isnull[col->output_offset] =
