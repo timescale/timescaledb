@@ -21,6 +21,7 @@
 #define KEY_BYTES 4
 #define KEY_HASH hash64
 #define KEY_EQUAL(a, b) a == b
+#define CHECK_PREVIOUS_KEY
 #define CTYPE int32
 #define DATUM_TO_CTYPE DatumGetInt32
 #define CTYPE_TO_DATUM Int32GetDatum

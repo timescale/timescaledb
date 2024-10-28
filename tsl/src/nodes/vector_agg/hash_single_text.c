@@ -30,33 +30,28 @@ get_bytes_view(CompressedColumnValues *column_values, int arrow_row)
 
 static pg_attribute_always_inline void
 single_text_get_key(GroupingPolicyHash *restrict policy, DecompressBatchState *restrict batch_state,
+					CompressedColumnValues *single_key_column,
 					int row, BytesView *restrict key, bool *restrict valid)
 {
-	if (policy->num_grouping_columns != 1)
-	{
-		pg_unreachable();
-	}
+	Assert(policy->num_grouping_columns == 1);
 
-	GroupingColumn *g = &policy->grouping_columns[0];
-	CompressedColumnValues column = batch_state->compressed_columns[g->input_offset];
-
-	if (unlikely(column.decompression_type == DT_Scalar))
+	if (unlikely(single_key_column->decompression_type == DT_Scalar))
 	{
 		/* Already stored. */
-		key->len = VARSIZE_ANY_EXHDR(*column.output_value);
-		key->data = (const uint8 *) VARDATA_ANY(*column.output_value);
-		*valid = !*column.output_isnull;
+		key->len = VARSIZE_ANY_EXHDR(*single_key_column->output_value);
+		key->data = (const uint8 *) VARDATA_ANY(*single_key_column->output_value);
+		*valid = !*single_key_column->output_isnull;
 	}
-	else if (column.decompression_type == DT_ArrowText)
+	else if (single_key_column->decompression_type == DT_ArrowText)
 	{
-		*key = get_bytes_view(&column, row);
-		*valid = arrow_row_is_valid(column.buffers[0], row);
+		*key = get_bytes_view(single_key_column, row);
+		*valid = arrow_row_is_valid(single_key_column->buffers[0], row);
 	}
-	else if (column.decompression_type == DT_ArrowTextDict)
+	else if (single_key_column->decompression_type == DT_ArrowTextDict)
 	{
-		const int16 index = ((int16 *) column.buffers[3])[row];
-		*key = get_bytes_view(&column, index);
-		*valid = arrow_row_is_valid(column.buffers[0], row);
+		const int16 index = ((int16 *) single_key_column->buffers[3])[row];
+		*key = get_bytes_view(single_key_column, index);
+		*valid = arrow_row_is_valid(single_key_column->buffers[0], row);
 	}
 	else
 	{
@@ -100,5 +95,6 @@ single_text_destroy_key(BytesView key)
 #define KEY_HASH(X) hash_bytes_view(X)
 #define KEY_EQUAL(a, b) (a.len == b.len && memcmp(a.data, b.data, a.len) == 0)
 #define STORE_HASH
+#define CHECK_PREVIOUS_KEY
 #define CTYPE BytesView
 #include "hash_table_functions_impl.c"

@@ -67,6 +67,7 @@ FUNCTION_NAME(get_size_bytes)(void *table)
  */
 static pg_attribute_always_inline void
 FUNCTION_NAME(impl)(GroupingPolicyHash *restrict policy, DecompressBatchState *restrict batch_state,
+					CompressedColumnValues *single_key_column,
 					int start_row, int end_row)
 {
 	uint32 *restrict indexes = policy->key_index_for_row;
@@ -74,13 +75,15 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *restrict policy, DecompressBatchState *r
 
 	struct FUNCTION_NAME(hash) *restrict table = policy->table;
 
+#ifdef CHECK_PREVIOUS_KEY
 	CTYPE previous_key;
 	uint32 previous_key_index = 0;
+#endif
 	for (int row = start_row; row < end_row; row++)
 	{
 		bool key_valid = false;
 		CTYPE key = { 0 };
-		FUNCTION_NAME(get_key)(policy, batch_state, row, &key, &key_valid);
+		FUNCTION_NAME(get_key)(policy, batch_state, single_key_column, row, &key, &key_valid);
 
 		if (!arrow_row_is_valid(batch_state->vector_qual_result, row))
 		{
@@ -103,11 +106,14 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *restrict policy, DecompressBatchState *r
 			continue;
 		}
 
+#ifdef CHECK_PREVIOUS_KEY
 		if (likely(previous_key_index != 0) && KEY_EQUAL(key, previous_key))
 		{
 			/*
 			 * In real data sets, we often see consecutive rows with the
-			 * same key, so checking for this case improves performance.
+			 * same value of a grouping column, so checking for this case
+			 * improves performance. For multi-column keys, this is unlikely and
+			 * so this check is disabled.
 			 */
 			indexes[row] = previous_key_index;
 			FUNCTION_NAME(destroy_key)(key);
@@ -117,6 +123,7 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *restrict policy, DecompressBatchState *r
 			DEBUG_PRINT("%p: row %d consecutive key index %d\n", policy, row, previous_key_index);
 			continue;
 		}
+#endif
 
 		/*
 		 * Find the key using the hash table.
@@ -140,8 +147,10 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *restrict policy, DecompressBatchState *r
 		}
 		indexes[row] = entry->key_index;
 
+#ifdef CHECK_PREVIOUS_KEY
 		previous_key_index = entry->key_index;
 		previous_key = entry->key;
+#endif
 	}
 }
 
@@ -156,27 +165,29 @@ FUNCTION_NAME(dispatch_type)(GroupingPolicyHash *restrict policy,
 	if (policy->num_grouping_columns == 1)
 	{
 		GroupingColumn *g = &policy->grouping_columns[0];
-		CompressedColumnValues column = batch_state->compressed_columns[g->input_offset];
+		CompressedColumnValues *restrict single_key_column = &batch_state->compressed_columns[g->input_offset];
 
-		if (unlikely(column.decompression_type == DT_Scalar))
+		if (unlikely(single_key_column->decompression_type == DT_Scalar))
 		{
-			FUNCTION_NAME(impl)(policy, batch_state, start_row, end_row);
+			FUNCTION_NAME(impl)(policy, batch_state, single_key_column, start_row, end_row);
 		}
-		else if (column.decompression_type == DT_ArrowText)
+		else if (single_key_column->decompression_type == DT_ArrowText)
 		{
-			FUNCTION_NAME(impl)(policy, batch_state, start_row, end_row);
+			FUNCTION_NAME(impl)(policy, batch_state, single_key_column, start_row, end_row);
 		}
-		else if (column.decompression_type == DT_ArrowTextDict)
+		else if (single_key_column->decompression_type == DT_ArrowTextDict)
 		{
-			FUNCTION_NAME(impl)(policy, batch_state, start_row, end_row);
+			FUNCTION_NAME(impl)(policy, batch_state, single_key_column, start_row, end_row);
 		}
 		else
 		{
-			FUNCTION_NAME(impl)(policy, batch_state, start_row, end_row);
+			FUNCTION_NAME(impl)(policy, batch_state, single_key_column, start_row, end_row);
 		}
 	}
-
-	FUNCTION_NAME(impl)(policy, batch_state, start_row, end_row);
+	else
+	{
+		FUNCTION_NAME(impl)(policy, batch_state, NULL, start_row, end_row);
+	}
 }
 
 /*
@@ -212,6 +223,8 @@ HashTableFunctions FUNCTION_NAME(functions) = {
 #undef KEY_BYTES
 #undef KEY_HASH
 #undef KEY_EQUAL
+#undef STORE_HASH
+#undef CHECK_PREVIOUS_KEY
 #undef CTYPE
 #undef DATUM_TO_CTYPE
 #undef CTYPE_TO_DATUM

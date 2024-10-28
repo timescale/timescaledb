@@ -19,7 +19,9 @@
 #include "nodes/vector_agg/exec.h"
 
 static pg_attribute_always_inline void
-serialized_get_key(GroupingPolicyHash *restrict policy, DecompressBatchState *restrict batch_state,
+serialized_get_key(GroupingPolicyHash *restrict policy,
+DecompressBatchState *restrict batch_state,
+					CompressedColumnValues *single_key_column,
 				   int row, BytesView *restrict key, bool *restrict valid)
 {
 	//	if (list_length(policy->output_grouping_columns) == 1)

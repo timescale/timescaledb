@@ -18,7 +18,7 @@ typedef struct BytesView
 static pg_attribute_always_inline uint32
 hash_bytes_view(BytesView view)
 {
-	uint32 valll = -1;
-	COMP_CRC32C(valll, view.data, view.len);
-	return valll;
+	uint32 val = -1;
+	COMP_CRC32C(val, view.data, view.len);
+	return val;
 }
