@@ -10,8 +10,8 @@
 
 static pg_attribute_always_inline void
 FUNCTION_NAME(get_key)(GroupingPolicyHash *restrict policy,
-					   DecompressBatchState *restrict batch_state, int row, int next_key_index,
-					   CTYPE *restrict key, bool *restrict valid)
+					   DecompressBatchState *restrict batch_state, int row, CTYPE *restrict key,
+					   bool *restrict valid)
 {
 	if (policy->num_grouping_columns != 1)
 	{
@@ -38,12 +38,12 @@ FUNCTION_NAME(get_key)(GroupingPolicyHash *restrict policy,
 		pg_unreachable();
 	}
 
-	gp_hash_output_keys(policy, next_key_index)[0] = CTYPE_TO_DATUM(*key);
-	gp_hash_key_validity_bitmap(policy, next_key_index)[0] = *valid;
+	gp_hash_output_keys(policy, policy->last_used_key_index + 1)[0] = CTYPE_TO_DATUM(*key);
+	gp_hash_key_validity_bitmap(policy, policy->last_used_key_index + 1)[0] = *valid;
 }
 
 static pg_attribute_always_inline CTYPE
-FUNCTION_NAME(store_key)(GroupingPolicyHash *restrict policy, CTYPE key, uint32 key_index)
+FUNCTION_NAME(store_key)(GroupingPolicyHash *restrict policy, CTYPE key)
 {
 	return key;
 }

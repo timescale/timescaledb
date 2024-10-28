@@ -20,7 +20,7 @@
 
 static pg_attribute_always_inline void
 serialized_get_key(GroupingPolicyHash *restrict policy, DecompressBatchState *restrict batch_state,
-				   int row, int next_key_index, BytesView *restrict key, bool *restrict valid)
+				   int row, BytesView *restrict key, bool *restrict valid)
 {
 	//	if (list_length(policy->output_grouping_columns) == 1)
 	//	{
@@ -78,8 +78,10 @@ serialized_get_key(GroupingPolicyHash *restrict policy, DecompressBatchState *re
 	num_bytes = att_align_nominal(num_bytes, TYPALIGN_DOUBLE);
 	num_bytes += sizeof(*serialized_key_validity_word);
 
-	uint64 *restrict output_key_validity_word = gp_hash_key_validity_bitmap(policy, next_key_index);
-	Datum *restrict output_key_datums = gp_hash_output_keys(policy, next_key_index);
+	uint64 *restrict output_key_validity_word =
+		gp_hash_key_validity_bitmap(policy, policy->last_used_key_index + 1);
+	Datum *restrict output_key_datums =
+		gp_hash_output_keys(policy, policy->last_used_key_index + 1);
 	uint8 *restrict serialized_key_storage = MemoryContextAlloc(policy->key_body_mctx, num_bytes);
 	serialized_key_validity_word = (uint64 *) &(
 		(char *) serialized_key_storage)[num_bytes - sizeof(*serialized_key_validity_word)];
@@ -220,7 +222,7 @@ serialized_get_key(GroupingPolicyHash *restrict policy, DecompressBatchState *re
 }
 
 static pg_attribute_always_inline BytesView
-serialized_store_key(GroupingPolicyHash *restrict policy, BytesView key, uint32 key_index)
+serialized_store_key(GroupingPolicyHash *restrict policy, BytesView key)
 {
 	/* Noop, all done in get_key. */
 	return key;

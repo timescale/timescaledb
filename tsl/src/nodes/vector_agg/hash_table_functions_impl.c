@@ -9,16 +9,25 @@
 #define FUNCTION_NAME(Y) FUNCTION_NAME_HELPER(KEY_VARIANT, Y)
 
 /*
- * For the hash table, use the generic Datum key that is mapped to the aggregate
- * state index.
+ * The hash table maps the value of the grouping key to its unique index.
+ * We don't store any extra information here, because we're accessing the memory
+ * of the hash table randomly, and want it to be as small as possible to fit the
+ * caches.
  */
 typedef struct
 {
 	CTYPE key;
+
 #ifdef STORE_HASH
+	/*
+	 * We store hash for non-POD types, because it's slow to recalculate it
+	 * on inserts for the existing values.
+	 */
 	uint32 hash;
 #endif
-	uint32 agg_state_index;
+
+	/* Key index 0 is invalid. */
+	uint32 key_index;
 } FUNCTION_NAME(entry);
 
 #define SH_PREFIX KEY_VARIANT
@@ -30,7 +39,7 @@ typedef struct
 #define SH_SCOPE static inline
 #define SH_DECLARE
 #define SH_DEFINE
-#define SH_ENTRY_EMPTY(entry) ((entry)->agg_state_index == 0)
+#define SH_ENTRY_EMPTY(entry) ((entry)->key_index == 0)
 #ifdef STORE_HASH
 #define SH_GET_HASH(tb, entry) entry->hash
 #define SH_STORE_HASH
@@ -54,24 +63,24 @@ FUNCTION_NAME(get_size_bytes)(void *table)
 }
 
 /*
- * Fill the aggregation state offsets for all rows using a hash table.
+ * Fill the unique key indexes for all rows using a hash table.
  */
-static pg_attribute_always_inline uint32
+static pg_attribute_always_inline void
 FUNCTION_NAME(impl)(GroupingPolicyHash *restrict policy, DecompressBatchState *restrict batch_state,
-					uint32 next_unused_state_index, int start_row, int end_row)
+					int start_row, int end_row)
 {
-	uint32 *restrict offsets = policy->offsets;
-	Assert((size_t) end_row <= policy->num_allocated_offsets);
+	uint32 *restrict indexes = policy->key_index_for_row;
+	Assert((size_t) end_row <= policy->num_key_index_for_row);
 
 	struct FUNCTION_NAME(hash) *restrict table = policy->table;
 
-	CTYPE last_key;
-	uint32 last_key_index = 0;
+	CTYPE previous_key;
+	uint32 previous_key_index = 0;
 	for (int row = start_row; row < end_row; row++)
 	{
 		bool key_valid = false;
 		CTYPE key = { 0 };
-		FUNCTION_NAME(get_key)(policy, batch_state, row, next_unused_state_index, &key, &key_valid);
+		FUNCTION_NAME(get_key)(policy, batch_state, row, &key, &key_valid);
 
 		if (!arrow_row_is_valid(batch_state->vector_qual_result, row))
 		{
@@ -86,26 +95,26 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *restrict policy, DecompressBatchState *r
 			/* The key is null. */
 			if (policy->null_key_index == 0)
 			{
-				policy->null_key_index = next_unused_state_index++;
+				policy->null_key_index = ++policy->last_used_key_index;
 			}
-			offsets[row] = policy->null_key_index;
+			indexes[row] = policy->null_key_index;
 			DEBUG_PRINT("%p: row %d null key index %d\n", policy, row, policy->null_key_index);
 			FUNCTION_NAME(destroy_key)(key);
 			continue;
 		}
 
-		if (likely(last_key_index != 0) && KEY_EQUAL(key, last_key))
+		if (likely(previous_key_index != 0) && KEY_EQUAL(key, previous_key))
 		{
 			/*
 			 * In real data sets, we often see consecutive rows with the
 			 * same key, so checking for this case improves performance.
 			 */
-			offsets[row] = last_key_index;
+			indexes[row] = previous_key_index;
 			FUNCTION_NAME(destroy_key)(key);
 #ifndef NDEBUG
 			policy->stat_consecutive_keys++;
 #endif
-			DEBUG_PRINT("%p: row %d consecutive key index %d\n", policy, row, last_key_index);
+			DEBUG_PRINT("%p: row %d consecutive key index %d\n", policy, row, previous_key_index);
 			continue;
 		}
 
@@ -119,33 +128,30 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *restrict policy, DecompressBatchState *r
 			/*
 			 * New key, have to store it persistently.
 			 */
-			const int index = next_unused_state_index++;
-			entry->key = FUNCTION_NAME(store_key)(policy, key, index);
-			entry->agg_state_index = index;
+			const int index = ++policy->last_used_key_index;
+			entry->key = FUNCTION_NAME(store_key)(policy, key);
+			entry->key_index = index;
 			DEBUG_PRINT("%p: row %d new key index %d\n", policy, row, index);
 		}
 		else
 		{
-			DEBUG_PRINT("%p: row %d old key index %d\n", policy, row, entry->agg_state_index);
+			DEBUG_PRINT("%p: row %d old key index %d\n", policy, row, entry->key_index);
 			FUNCTION_NAME(destroy_key)(key);
 		}
-		offsets[row] = entry->agg_state_index;
+		indexes[row] = entry->key_index;
 
-		last_key_index = entry->agg_state_index;
-		last_key = entry->key;
+		previous_key_index = entry->key_index;
+		previous_key = entry->key;
 	}
-
-	return next_unused_state_index;
 }
 
 /*
  * Nudge the compiler to generate separate implementations for different key
  * decompression types.
  */
-static pg_attribute_always_inline uint32
+static pg_attribute_always_inline void
 FUNCTION_NAME(dispatch_type)(GroupingPolicyHash *restrict policy,
-							 DecompressBatchState *restrict batch_state,
-							 uint32 next_unused_state_index, int start_row, int end_row)
+							 DecompressBatchState *restrict batch_state, int start_row, int end_row)
 {
 	if (policy->num_grouping_columns == 1)
 	{
@@ -154,27 +160,23 @@ FUNCTION_NAME(dispatch_type)(GroupingPolicyHash *restrict policy,
 
 		if (unlikely(column.decompression_type == DT_Scalar))
 		{
-			return FUNCTION_NAME(
-				impl)(policy, batch_state, next_unused_state_index, start_row, end_row);
+			FUNCTION_NAME(impl)(policy, batch_state, start_row, end_row);
 		}
 		else if (column.decompression_type == DT_ArrowText)
 		{
-			return FUNCTION_NAME(
-				impl)(policy, batch_state, next_unused_state_index, start_row, end_row);
+			FUNCTION_NAME(impl)(policy, batch_state, start_row, end_row);
 		}
 		else if (column.decompression_type == DT_ArrowTextDict)
 		{
-			return FUNCTION_NAME(
-				impl)(policy, batch_state, next_unused_state_index, start_row, end_row);
+			FUNCTION_NAME(impl)(policy, batch_state, start_row, end_row);
 		}
 		else
 		{
-			return FUNCTION_NAME(
-				impl)(policy, batch_state, next_unused_state_index, start_row, end_row);
+			FUNCTION_NAME(impl)(policy, batch_state, start_row, end_row);
 		}
 	}
 
-	return FUNCTION_NAME(impl)(policy, batch_state, next_unused_state_index, start_row, end_row);
+	FUNCTION_NAME(impl)(policy, batch_state, start_row, end_row);
 }
 
 /*
@@ -182,22 +184,18 @@ FUNCTION_NAME(dispatch_type)(GroupingPolicyHash *restrict policy,
  * where the entire batch matches and the key has no null values, and the
  * unimportant corner case when we have a scalar column.
  */
-static uint32
+static void
 FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
-							uint32 next_unused_state_index, int start_row, int end_row)
+							int start_row, int end_row)
 {
 	if (batch_state->vector_qual_result == NULL)
 	{
-		next_unused_state_index = FUNCTION_NAME(
-			dispatch_type)(policy, batch_state, next_unused_state_index, start_row, end_row);
+		FUNCTION_NAME(dispatch_type)(policy, batch_state, start_row, end_row);
 	}
 	else
 	{
-		next_unused_state_index = FUNCTION_NAME(
-			dispatch_type)(policy, batch_state, next_unused_state_index, start_row, end_row);
+		FUNCTION_NAME(dispatch_type)(policy, batch_state, start_row, end_row);
 	}
-
-	return next_unused_state_index;
 }
 
 HashTableFunctions FUNCTION_NAME(functions) = {

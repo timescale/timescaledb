@@ -30,7 +30,7 @@ get_bytes_view(CompressedColumnValues *column_values, int arrow_row)
 
 static pg_attribute_always_inline void
 single_text_get_key(GroupingPolicyHash *restrict policy, DecompressBatchState *restrict batch_state,
-					int row, int next_key_index, BytesView *restrict key, bool *restrict valid)
+					int row, BytesView *restrict key, bool *restrict valid)
 {
 	if (policy->num_grouping_columns != 1)
 	{
@@ -63,12 +63,12 @@ single_text_get_key(GroupingPolicyHash *restrict policy, DecompressBatchState *r
 		pg_unreachable();
 	}
 
-	gp_hash_key_validity_bitmap(policy, next_key_index)[0] = *valid;
+	gp_hash_key_validity_bitmap(policy, policy->last_used_key_index + 1)[0] = *valid;
 
 	DEBUG_PRINT("%p consider key row %d key index %d is %d bytes: ",
 				policy,
 				row,
-				next_key_index,
+				policy->last_used_key_index + 1,
 				key->len);
 	for (size_t i = 0; i < key->len; i++)
 	{
@@ -78,14 +78,14 @@ single_text_get_key(GroupingPolicyHash *restrict policy, DecompressBatchState *r
 }
 
 static pg_attribute_always_inline BytesView
-single_text_store_key(GroupingPolicyHash *restrict policy, BytesView key, uint32 key_index)
+single_text_store_key(GroupingPolicyHash *restrict policy, BytesView key)
 {
 	const int total_bytes = key.len + VARHDRSZ;
 	text *restrict stored = (text *) MemoryContextAlloc(policy->key_body_mctx, total_bytes);
 	SET_VARSIZE(stored, total_bytes);
 	memcpy(VARDATA(stored), key.data, key.len);
 	key.data = (uint8 *) VARDATA(stored);
-	gp_hash_output_keys(policy, key_index)[0] = PointerGetDatum(stored);
+	gp_hash_output_keys(policy, policy->last_used_key_index)[0] = PointerGetDatum(stored);
 	return key;
 }
 

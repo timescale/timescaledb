@@ -51,7 +51,7 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 
 	policy->agg_extra_mctx =
 		AllocSetContextCreate(CurrentMemoryContext, "agg extra", ALLOCSET_DEFAULT_SIZES);
-	policy->allocated_aggstate_rows = TARGET_COMPRESSED_BATCH_SIZE;
+	policy->num_agg_state_rows = TARGET_COMPRESSED_BATCH_SIZE;
 
 	policy->num_agg_defs = num_agg_defs;
 	policy->agg_defs = agg_defs;
@@ -60,13 +60,9 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 	for (int i = 0; i < policy->num_agg_defs; i++)
 	{
 		VectorAggDef *agg_def = &policy->agg_defs[i];
-		policy->per_agg_states[i] =
-			palloc(agg_def->func.state_bytes * policy->allocated_aggstate_rows);
+		policy->per_agg_states[i] = palloc(agg_def->func.state_bytes * policy->num_agg_state_rows);
 	}
 
-	policy->num_allocated_keys = policy->allocated_aggstate_rows;
-	policy->output_keys = palloc((sizeof(uint64) + policy->num_grouping_columns * sizeof(Datum)) *
-								 policy->num_allocated_keys);
 	policy->key_body_mctx = policy->agg_extra_mctx;
 
 	if (num_grouping_columns == 1)
@@ -98,11 +94,7 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 	}
 
 	policy->table =
-		policy->functions.create(CurrentMemoryContext, policy->allocated_aggstate_rows, NULL);
-	policy->null_key_index = 0;
-	policy->next_unused_key_index = 1;
-
-	policy->returning_results = false;
+		policy->functions.create(CurrentMemoryContext, policy->num_agg_state_rows, NULL);
 
 	return &policy->funcs;
 }
@@ -119,7 +111,7 @@ gp_hash_reset(GroupingPolicy *obj)
 	policy->functions.reset(policy->table);
 
 	policy->null_key_index = 0;
-	policy->next_unused_key_index = 1;
+	policy->last_used_key_index = 0;
 
 	policy->stat_input_valid_rows = 0;
 	policy->stat_input_total_rows = 0;
@@ -230,43 +222,24 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 	 * Remember which aggregation states have already existed, and which we
 	 * have to initialize. State index zero is invalid.
 	 */
-	const uint32 first_uninitialized_state_index = policy->next_unused_key_index;
-
-	/*
-	 * Allocate enough storage for keys, given that each bach row might be
-	 * a separate new key.
-	 */
-	const uint32 num_possible_keys = first_uninitialized_state_index + (end_row - start_row);
-	if (num_possible_keys > policy->num_allocated_keys)
-	{
-		policy->num_allocated_keys = num_possible_keys;
-		policy->output_keys =
-			repalloc(policy->output_keys,
-					 (sizeof(uint64) + policy->num_grouping_columns * sizeof(Datum)) *
-						 num_possible_keys);
-	}
+	const uint32 first_initialized_key_index = policy->last_used_key_index;
 
 	/*
 	 * Match rows to aggregation states using a hash table.
 	 */
-	Assert((size_t) end_row <= policy->num_allocated_offsets);
-	uint32 next_unused_key_index = policy->next_unused_key_index;
-	next_unused_key_index = policy->functions.fill_offsets(policy,
-														   batch_state,
-														   next_unused_key_index,
-														   start_row,
-														   end_row);
+	Assert((size_t) end_row <= policy->num_key_index_for_row);
+	policy->functions.fill_offsets(policy, batch_state, start_row, end_row);
 
 	/*
 	 * Process the aggregate function states.
 	 */
-	const uint64 new_aggstate_rows = policy->allocated_aggstate_rows * 2 + 1;
+	const uint64 new_aggstate_rows = policy->num_agg_state_rows * 2 + 1;
 	for (int i = 0; i < num_fns; i++)
 	{
 		VectorAggDef *agg_def = &policy->agg_defs[i];
-		if (next_unused_key_index > first_uninitialized_state_index)
+		if (policy->last_used_key_index > first_initialized_key_index)
 		{
-			if (next_unused_key_index > policy->allocated_aggstate_rows)
+			if (policy->last_used_key_index >= policy->num_agg_state_rows)
 			{
 				policy->per_agg_states[i] = repalloc(policy->per_agg_states[i],
 													 new_aggstate_rows * agg_def->func.state_bytes);
@@ -276,10 +249,10 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 			 * Initialize the aggregate function states for the newly added keys.
 			 */
 			void *first_uninitialized_state =
-				agg_def->func.state_bytes * first_uninitialized_state_index +
+				agg_def->func.state_bytes * (first_initialized_key_index + 1) +
 				(char *) policy->per_agg_states[i];
 			agg_def->func.agg_init(first_uninitialized_state,
-								   next_unused_key_index - first_uninitialized_state_index);
+								   policy->last_used_key_index - first_initialized_key_index);
 		}
 
 		/*
@@ -291,20 +264,18 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 								 end_row,
 								 agg_def,
 								 policy->per_agg_states[i],
-								 policy->offsets,
+								 policy->key_index_for_row,
 								 policy->agg_extra_mctx);
 	}
 
 	/*
 	 * Record the newly allocated number of rows in case we had to reallocate.
 	 */
-	if (next_unused_key_index > policy->allocated_aggstate_rows)
+	if (policy->last_used_key_index >= policy->num_agg_state_rows)
 	{
-		Assert(new_aggstate_rows >= policy->allocated_aggstate_rows);
-		policy->allocated_aggstate_rows = new_aggstate_rows;
+		Assert(new_aggstate_rows > policy->num_agg_state_rows);
+		policy->num_agg_state_rows = new_aggstate_rows;
 	}
-
-	policy->next_unused_key_index = next_unused_key_index;
 }
 
 static void
@@ -318,14 +289,42 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 
 	/*
 	 * Initialize the array for storing the aggregate state offsets corresponding
-	 * to a given batch row.
+	 * to a given batch row. We don't need the offsets for the previous batch
+	 * that are currently stored there, so we don't need to use repalloc.
 	 */
-	if ((size_t) n > policy->num_allocated_offsets)
+	if ((size_t) n > policy->num_key_index_for_row)
 	{
-		policy->num_allocated_offsets = n;
-		policy->offsets = palloc(sizeof(policy->offsets[0]) * policy->num_allocated_offsets);
+		if (policy->key_index_for_row != NULL)
+		{
+			pfree(policy->key_index_for_row);
+		}
+		policy->num_key_index_for_row = n;
+		policy->key_index_for_row =
+			palloc(sizeof(policy->key_index_for_row[0]) * policy->num_key_index_for_row);
 	}
-	memset(policy->offsets, 0, n * sizeof(policy->offsets[0]));
+	memset(policy->key_index_for_row, 0, n * sizeof(policy->key_index_for_row[0]));
+
+	/*
+	 * Allocate enough storage for keys, given that each row of the new
+	 * compressed batch might turn out to be a new grouping key.
+	 * We do this here to avoid allocations in the hot loop that fills the hash
+	 * table.
+	 */
+	const uint32 num_possible_keys = policy->last_used_key_index + 1 + n;
+	if (num_possible_keys > policy->num_output_keys)
+	{
+		policy->num_output_keys = num_possible_keys * 2 + 1;
+		const size_t new_bytes = (sizeof(uint64) + policy->num_grouping_columns * sizeof(Datum)) *
+								 policy->num_output_keys;
+		if (policy->output_keys == NULL)
+		{
+			policy->output_keys = palloc(new_bytes);
+		}
+		else
+		{
+			policy->output_keys = repalloc(policy->output_keys, new_bytes);
+		}
+	}
 
 	/*
 	 * Allocate the temporary filter array for computing the combined results of
@@ -417,7 +416,7 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 		policy->returning_results = true;
 		policy->last_returned_key = 1;
 
-		const float keys = policy->next_unused_key_index - 1;
+		const float keys = policy->last_used_key_index;
 		if (keys > 0)
 		{
 			DEBUG_LOG("spill after %ld input, %ld valid, %ld bulk filtered, %ld cons, %.0f keys, "
@@ -438,7 +437,7 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 	}
 
 	const uint32 current_key = policy->last_returned_key;
-	const uint32 keys_end = policy->next_unused_key_index;
+	const uint32 keys_end = policy->last_used_key_index + 1;
 	if (current_key >= keys_end)
 	{
 		policy->returning_results = false;
