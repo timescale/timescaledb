@@ -158,17 +158,26 @@ FUNCTION_NAME(fill_offsets_impl)(GroupingPolicyHash *restrict policy,
  * implementations that will be more efficient. For example, for 2-byte keys
  * when all the batch and key rows are valid.
  */
-#define APPLY_FOR_SPECIALIZATIONS(X)                                                               \
-	X(fixed_all_valid,                                                                             \
-	  config.batch_filter == NULL && config.single_key.decompression_type == sizeof(CTYPE) &&      \
-		  config.single_key.buffers[0] == NULL)                                                    \
-	X(text_all_valid,                                                                              \
-	  config.batch_filter == NULL && config.single_key.decompression_type == DT_ArrowText &&       \
-		  config.single_key.buffers[0] == NULL)                                                    \
-	X(text_dict_all_valid,                                                                         \
-	  config.batch_filter == NULL && config.single_key.decompression_type == DT_ArrowTextDict &&   \
-		  config.single_key.buffers[0] == NULL)                                                    \
-	X(no_batch_filter, config.batch_filter == NULL)
+#define APPLY_FOR_BATCH_FILTER(X, NAME, COND)                                                      \
+	X(NAME##_all, (COND) && (config.batch_filter == NULL))                                         \
+	X(NAME##_filter, (COND) && (config.batch_filter != NULL))
+
+#define APPLY_FOR_TYPE(X, NAME, COND)                                                              \
+	APPLY_FOR_BATCH_FILTER(X,                                                                      \
+						   NAME##_fixed,                                                           \
+						   (COND) && (config.single_key.decompression_type == sizeof(CTYPE)))      \
+	APPLY_FOR_BATCH_FILTER(X,                                                                      \
+						   NAME##_text,                                                            \
+						   (COND) && (config.single_key.decompression_type == DT_ArrowText))       \
+	APPLY_FOR_BATCH_FILTER(X,                                                                      \
+						   NAME##_dict,                                                            \
+						   (COND) && (config.single_key.decompression_type == DT_ArrowTextDict))
+
+#define APPLY_FOR_VALIDITY(X, NAME, COND)                                                          \
+	APPLY_FOR_TYPE(X, NAME, (COND) && (config.single_key.buffers[0] == NULL))                      \
+	APPLY_FOR_TYPE(X, NAME##_nullable, (COND) && (config.single_key.buffers[0] != NULL))
+
+#define APPLY_FOR_SPECIALIZATIONS(X) APPLY_FOR_VALIDITY(X, , true)
 
 #define DEFINE(NAME, CONDITION)                                                                    \
 	static pg_noinline void FUNCTION_NAME(NAME)(GroupingPolicyHash *restrict policy,               \
