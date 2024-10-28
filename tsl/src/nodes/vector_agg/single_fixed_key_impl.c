@@ -10,23 +10,20 @@
 
 static pg_attribute_always_inline void
 FUNCTION_NAME(get_key)(GroupingPolicyHash *restrict policy,
-						DecompressBatchState *restrict batch_state,
-					CompressedColumnValues *single_key_column,
-					   int row, CTYPE *restrict key,
-					   bool *restrict valid)
+					   DecompressBatchState *restrict batch_state, HashingConfig config, int row,
+					   CTYPE *restrict key, bool *restrict valid)
 {
 	Assert(policy->num_grouping_columns == 1);
 
-	if (unlikely(single_key_column->decompression_type == DT_Scalar))
+	if (unlikely(config.single_key.decompression_type == DT_Scalar))
 	{
-		*key = DATUM_TO_CTYPE(*single_key_column->output_value);
-		*valid = !*single_key_column->output_isnull;
+		*key = DATUM_TO_CTYPE(*config.single_key.output_value);
+		*valid = !*config.single_key.output_isnull;
 	}
-	else if (single_key_column->decompression_type == sizeof(CTYPE))
+	else if (config.single_key.decompression_type == sizeof(CTYPE))
 	{
-		const CTYPE *values = single_key_column->buffers[1];
-		const uint64 *key_validity = single_key_column->buffers[0];
-		*valid = arrow_row_is_valid(key_validity, row);
+		const CTYPE *values = config.single_key.buffers[1];
+		*valid = arrow_row_is_valid(config.single_key.buffers[0], row);
 		*key = values[row];
 	}
 	else

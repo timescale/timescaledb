@@ -30,35 +30,35 @@ get_bytes_view(CompressedColumnValues *column_values, int arrow_row)
 
 static pg_attribute_always_inline void
 single_text_get_key(GroupingPolicyHash *restrict policy, DecompressBatchState *restrict batch_state,
-					CompressedColumnValues *single_key_column,
-					int row, BytesView *restrict key, bool *restrict valid)
+					HashingConfig config, int row, BytesView *restrict key, bool *restrict valid)
 {
 	Assert(policy->num_grouping_columns == 1);
 
-	if (unlikely(single_key_column->decompression_type == DT_Scalar))
+	if (unlikely(config.single_key.decompression_type == DT_Scalar))
 	{
 		/* Already stored. */
-		key->len = VARSIZE_ANY_EXHDR(*single_key_column->output_value);
-		key->data = (const uint8 *) VARDATA_ANY(*single_key_column->output_value);
-		*valid = !*single_key_column->output_isnull;
+		key->len = VARSIZE_ANY_EXHDR(*config.single_key.output_value);
+		key->data = (const uint8 *) VARDATA_ANY(*config.single_key.output_value);
+		*valid = !*config.single_key.output_isnull;
 	}
-	else if (single_key_column->decompression_type == DT_ArrowText)
+	else if (config.single_key.decompression_type == DT_ArrowText)
 	{
-		*key = get_bytes_view(single_key_column, row);
-		*valid = arrow_row_is_valid(single_key_column->buffers[0], row);
+		*key = get_bytes_view(&config.single_key, row);
+		*valid = arrow_row_is_valid(config.single_key.buffers[0], row);
 	}
-	else if (single_key_column->decompression_type == DT_ArrowTextDict)
+	else if (config.single_key.decompression_type == DT_ArrowTextDict)
 	{
-		const int16 index = ((int16 *) single_key_column->buffers[3])[row];
-		*key = get_bytes_view(single_key_column, index);
-		*valid = arrow_row_is_valid(single_key_column->buffers[0], row);
+		const int16 index = ((int16 *) config.single_key.buffers[3])[row];
+		*key = get_bytes_view(&config.single_key, index);
+		*valid = arrow_row_is_valid(config.single_key.buffers[0], row);
 	}
 	else
 	{
 		pg_unreachable();
 	}
 
-	gp_hash_key_validity_bitmap(policy, policy->last_used_key_index + 1)[0] = *valid;
+	*(uint64 *restrict) gp_hash_key_validity_bitmap(policy, policy->last_used_key_index + 1) =
+		*valid;
 
 	DEBUG_PRINT("%p consider key row %d key index %d is %d bytes: ",
 				policy,

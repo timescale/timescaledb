@@ -31,6 +31,15 @@ FUNCTION_NAME(many_vector_impl)(void *restrict agg_states, const uint32 *offsets
 	MemoryContextSwitchTo(old);
 }
 
+static pg_noinline void
+FUNCTION_NAME(many_vector_all_valid)(void *restrict agg_states, const uint32 *offsets,
+									 int start_row, int end_row, const ArrowArray *vector,
+									 MemoryContext agg_extra_mctx)
+{
+	FUNCTION_NAME(many_vector_impl)
+	(agg_states, offsets, NULL, start_row, end_row, vector, agg_extra_mctx);
+}
+
 static void
 FUNCTION_NAME(many_vector)(void *restrict agg_states, const uint32 *offsets, const uint64 *filter,
 						   int start_row, int end_row, const ArrowArray *vector,
@@ -38,8 +47,8 @@ FUNCTION_NAME(many_vector)(void *restrict agg_states, const uint32 *offsets, con
 {
 	if (filter == NULL)
 	{
-		FUNCTION_NAME(many_vector_impl)
-		(agg_states, offsets, NULL, start_row, end_row, vector, agg_extra_mctx);
+		FUNCTION_NAME(many_vector_all_valid)
+		(agg_states, offsets, start_row, end_row, vector, agg_extra_mctx);
 	}
 	else
 	{

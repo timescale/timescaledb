@@ -66,9 +66,9 @@ FUNCTION_NAME(get_size_bytes)(void *table)
  * Fill the unique key indexes for all rows using a hash table.
  */
 static pg_attribute_always_inline void
-FUNCTION_NAME(impl)(GroupingPolicyHash *restrict policy, DecompressBatchState *restrict batch_state,
-					CompressedColumnValues *single_key_column,
-					int start_row, int end_row)
+FUNCTION_NAME(fill_offsets_impl)(GroupingPolicyHash *restrict policy,
+								 DecompressBatchState *restrict batch_state, HashingConfig config,
+								 int start_row, int end_row)
 {
 	uint32 *restrict indexes = policy->key_index_for_row;
 	Assert((size_t) end_row <= policy->num_key_index_for_row);
@@ -81,17 +81,16 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *restrict policy, DecompressBatchState *r
 #endif
 	for (int row = start_row; row < end_row; row++)
 	{
-		bool key_valid = false;
-		CTYPE key = { 0 };
-		FUNCTION_NAME(get_key)(policy, batch_state, single_key_column, row, &key, &key_valid);
-
-		if (!arrow_row_is_valid(batch_state->vector_qual_result, row))
+		if (!arrow_row_is_valid(config.batch_filter, row))
 		{
-			DEBUG_PRINT("%p: row %d doesn't pass batch filter\n", policy, row);
 			/* The row doesn't pass the filter. */
-			FUNCTION_NAME(destroy_key)(key);
+			DEBUG_PRINT("%p: row %d doesn't pass batch filter\n", policy, row);
 			continue;
 		}
+
+		bool key_valid = false;
+		CTYPE key = { 0 };
+		FUNCTION_NAME(get_key)(policy, batch_state, config, row, &key, &key_valid);
 
 		if (unlikely(!key_valid))
 		{
@@ -155,57 +154,73 @@ FUNCTION_NAME(impl)(GroupingPolicyHash *restrict policy, DecompressBatchState *r
 }
 
 /*
- * Nudge the compiler to generate separate implementations for different key
- * decompression types.
+ * For some configurations of hashing, we want to generate dedicated
+ * implementations that will be more efficient. For example, for 2-byte keys
+ * when all the batch and key rows are valid.
  */
-static pg_attribute_always_inline void
-FUNCTION_NAME(dispatch_type)(GroupingPolicyHash *restrict policy,
-							 DecompressBatchState *restrict batch_state, int start_row, int end_row)
-{
-	if (policy->num_grouping_columns == 1)
-	{
-		GroupingColumn *g = &policy->grouping_columns[0];
-		CompressedColumnValues *restrict single_key_column = &batch_state->compressed_columns[g->input_offset];
+#define APPLY_FOR_SPECIALIZATIONS(X)                                                               \
+	X(fixed_all_valid,                                                                             \
+	  config.batch_filter == NULL && config.single_key.decompression_type == sizeof(CTYPE) &&      \
+		  config.single_key.buffers[0] == NULL)                                                    \
+	X(text_all_valid,                                                                              \
+	  config.batch_filter == NULL && config.single_key.decompression_type == DT_ArrowText &&       \
+		  config.single_key.buffers[0] == NULL)                                                    \
+	X(text_dict_all_valid,                                                                         \
+	  config.batch_filter == NULL && config.single_key.decompression_type == DT_ArrowTextDict &&   \
+		  config.single_key.buffers[0] == NULL)                                                    \
+	X(no_batch_filter, config.batch_filter == NULL)
 
-		if (unlikely(single_key_column->decompression_type == DT_Scalar))
-		{
-			FUNCTION_NAME(impl)(policy, batch_state, single_key_column, start_row, end_row);
-		}
-		else if (single_key_column->decompression_type == DT_ArrowText)
-		{
-			FUNCTION_NAME(impl)(policy, batch_state, single_key_column, start_row, end_row);
-		}
-		else if (single_key_column->decompression_type == DT_ArrowTextDict)
-		{
-			FUNCTION_NAME(impl)(policy, batch_state, single_key_column, start_row, end_row);
-		}
-		else
-		{
-			FUNCTION_NAME(impl)(policy, batch_state, single_key_column, start_row, end_row);
-		}
+#define DEFINE(NAME, CONDITION)                                                                    \
+	static pg_noinline void FUNCTION_NAME(NAME)(GroupingPolicyHash *restrict policy,               \
+												DecompressBatchState *restrict batch_state,        \
+												HashingConfig config,                              \
+												int start_row,                                     \
+												int end_row)                                       \
+	{                                                                                              \
+		if (!(CONDITION))                                                                          \
+		{                                                                                          \
+			pg_unreachable();                                                                      \
+		}                                                                                          \
+                                                                                                   \
+		FUNCTION_NAME(fill_offsets_impl)(policy, batch_state, config, start_row, end_row);         \
 	}
-	else
-	{
-		FUNCTION_NAME(impl)(policy, batch_state, NULL, start_row, end_row);
-	}
-}
+
+APPLY_FOR_SPECIALIZATIONS(DEFINE)
+
+#undef DEFINE
 
 /*
- * Nudge the compiler to generate separate implementation for the important case
- * where the entire batch matches and the key has no null values, and the
- * unimportant corner case when we have a scalar column.
+ * In some special cases we call a more efficient specialization of the grouping
+ * function.
  */
 static void
 FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
 							int start_row, int end_row)
 {
-	if (batch_state->vector_qual_result == NULL)
+	HashingConfig config = {
+		.batch_filter = batch_state->vector_qual_result,
+	};
+
+	if (policy->num_grouping_columns == 1)
 	{
-		FUNCTION_NAME(dispatch_type)(policy, batch_state, start_row, end_row);
+		const GroupingColumn *g = &policy->grouping_columns[0];
+		CompressedColumnValues *restrict single_key_column =
+			&batch_state->compressed_columns[g->input_offset];
+
+		config.single_key = *single_key_column;
 	}
+
+#define DISPATCH(NAME, CONDITION)                                                                  \
+	if (CONDITION)                                                                                 \
+	{                                                                                              \
+		FUNCTION_NAME(NAME)(policy, batch_state, config, start_row, end_row);                      \
+	}                                                                                              \
 	else
+
+	APPLY_FOR_SPECIALIZATIONS(DISPATCH)
 	{
-		FUNCTION_NAME(dispatch_type)(policy, batch_state, start_row, end_row);
+		/* Use a generic implementation if no specializations matched. */
+		FUNCTION_NAME(fill_offsets_impl)(policy, batch_state, config, start_row, end_row);
 	}
 }
 

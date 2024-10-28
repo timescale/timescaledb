@@ -59,7 +59,7 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 	policy->per_agg_states = palloc(sizeof(*policy->per_agg_states) * policy->num_agg_defs);
 	for (int i = 0; i < policy->num_agg_defs; i++)
 	{
-		VectorAggDef *agg_def = &policy->agg_defs[i];
+		const VectorAggDef *agg_def = &policy->agg_defs[i];
 		policy->per_agg_states[i] = palloc(agg_def->func.state_bytes * policy->num_agg_state_rows);
 	}
 
@@ -67,7 +67,7 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 
 	if (num_grouping_columns == 1)
 	{
-		GroupingColumn *g = &policy->grouping_columns[0];
+		const GroupingColumn *g = &policy->grouping_columns[0];
 		switch (g->value_bytes)
 		{
 			case 8:
@@ -121,7 +121,7 @@ gp_hash_reset(GroupingPolicy *obj)
 
 static void
 compute_single_aggregate(GroupingPolicyHash *policy, const DecompressBatchState *batch_state,
-						 int start_row, int end_row, VectorAggDef *agg_def, void *agg_states,
+						 int start_row, int end_row, const VectorAggDef *agg_def, void *agg_states,
 						 const uint32 *offsets, MemoryContext agg_extra_mctx)
 {
 	const ArrowArray *arg_arrow = NULL;
@@ -236,7 +236,7 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 	const uint64 new_aggstate_rows = policy->num_agg_state_rows * 2 + 1;
 	for (int i = 0; i < num_fns; i++)
 	{
-		VectorAggDef *agg_def = &policy->agg_defs[i];
+		const VectorAggDef *agg_def = &policy->agg_defs[i];
 		if (policy->last_used_key_index > first_initialized_key_index)
 		{
 			if (policy->last_used_key_index >= policy->num_agg_state_rows)
@@ -447,7 +447,7 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 	const int naggs = policy->num_agg_defs;
 	for (int i = 0; i < naggs; i++)
 	{
-		VectorAggDef *agg_def = &policy->agg_defs[i];
+		const VectorAggDef *agg_def = &policy->agg_defs[i];
 		void *agg_states = policy->per_agg_states[i];
 		void *agg_state = current_key * agg_def->func.state_bytes + (char *) agg_states;
 		agg_def->func.agg_emit(agg_state,
@@ -458,7 +458,7 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 	const int num_key_columns = policy->num_grouping_columns;
 	for (int i = 0; i < num_key_columns; i++)
 	{
-		GroupingColumn *col = &policy->grouping_columns[i];
+		const GroupingColumn *col = &policy->grouping_columns[i];
 		aggregated_slot->tts_values[col->output_offset] =
 			gp_hash_output_keys(policy, current_key)[i];
 		aggregated_slot->tts_isnull[col->output_offset] =

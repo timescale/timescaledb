@@ -11,6 +11,8 @@
 
 #include "grouping_policy.h"
 
+#include "nodes/decompress_chunk/compressed_batch.h"
+
 typedef struct GroupingPolicyHash GroupingPolicyHash;
 
 typedef struct
@@ -59,10 +61,10 @@ typedef struct GroupingPolicyHash
 	GroupingPolicy funcs;
 
 	int num_agg_defs;
-	VectorAggDef *agg_defs;
+	const VectorAggDef *restrict agg_defs;
 
 	int num_grouping_columns;
-	GroupingColumn *grouping_columns;
+	const GroupingColumn *restrict grouping_columns;
 
 	/*
 	 * The hash table we use for grouping. It matches each grouping key to its
@@ -166,3 +168,9 @@ gp_hash_output_keys(GroupingPolicyHash *policy, int key_index)
 #ifndef DEBUG_PRINT
 #define DEBUG_PRINT(...)
 #endif
+
+typedef struct HashingConfig
+{
+	const uint64 *restrict batch_filter;
+	CompressedColumnValues single_key;
+} HashingConfig;
