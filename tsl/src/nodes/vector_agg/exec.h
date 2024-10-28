@@ -13,7 +13,7 @@
 #include "function/functions.h"
 #include "grouping_policy.h"
 
-typedef struct
+typedef struct VectorAggDef
 {
 	VectorAggFunctions func;
 	int input_offset;
@@ -37,7 +37,8 @@ typedef struct
 {
 	CustomScanState custom;
 
-	List *agg_defs;
+	int num_agg_defs;
+	VectorAggDef *agg_defs;
 
 	List *output_grouping_columns;
 

@@ -40,22 +40,23 @@ extern HashTableFunctions serialized_functions;
 static const GroupingPolicy grouping_policy_hash_functions;
 
 GroupingPolicy *
-create_grouping_policy_hash(List *agg_defs, List *output_grouping_columns)
+create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, List *output_grouping_columns)
 {
 	GroupingPolicyHash *policy = palloc0(sizeof(GroupingPolicyHash));
 	policy->funcs = grouping_policy_hash_functions;
 	policy->output_grouping_columns = output_grouping_columns;
-	policy->agg_defs = agg_defs;
 	policy->agg_extra_mctx =
 		AllocSetContextCreate(CurrentMemoryContext, "agg extra", ALLOCSET_DEFAULT_SIZES);
 	policy->allocated_aggstate_rows = TARGET_COMPRESSED_BATCH_SIZE;
-	ListCell *lc;
-	foreach (lc, agg_defs)
+
+	policy->num_agg_defs = num_agg_defs;
+	policy->agg_defs = agg_defs;
+	policy->per_agg_states = palloc(sizeof(*policy->per_agg_states) * policy->num_agg_defs);
+	for (int i = 0; i < policy->num_agg_defs; i++)
 	{
-		VectorAggDef *agg_def = lfirst(lc);
-		policy->per_agg_states =
-			lappend(policy->per_agg_states,
-					palloc0(agg_def->func.state_bytes * policy->allocated_aggstate_rows));
+		VectorAggDef *agg_def = &policy->agg_defs[i];
+		policy->per_agg_states[i] =
+			palloc(agg_def->func.state_bytes * policy->allocated_aggstate_rows);
 	}
 
 	policy->num_allocated_keys = policy->allocated_aggstate_rows;
@@ -216,8 +217,7 @@ static void
 add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, const int start_row,
 			  const int end_row)
 {
-	const int num_fns = list_length(policy->agg_defs);
-	Assert(list_length(policy->per_agg_states) == num_fns);
+	const int num_fns = policy->num_agg_defs;
 
 	Assert(start_row < end_row);
 	Assert(end_row <= batch_state->total_batch_rows);
@@ -260,14 +260,13 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 	const uint64 new_aggstate_rows = policy->allocated_aggstate_rows * 2 + 1;
 	for (int i = 0; i < num_fns; i++)
 	{
-		VectorAggDef *agg_def = list_nth(policy->agg_defs, i);
+		VectorAggDef *agg_def = &policy->agg_defs[i];
 		if (next_unused_key_index > first_uninitialized_state_index)
 		{
 			if (next_unused_key_index > policy->allocated_aggstate_rows)
 			{
-				lfirst(list_nth_cell(policy->per_agg_states, i)) =
-					repalloc(list_nth(policy->per_agg_states, i),
-							 new_aggstate_rows * agg_def->func.state_bytes);
+				policy->per_agg_states[i] = repalloc(policy->per_agg_states[i],
+													 new_aggstate_rows * agg_def->func.state_bytes);
 			}
 
 			/*
@@ -275,7 +274,7 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 			 */
 			void *first_uninitialized_state =
 				agg_def->func.state_bytes * first_uninitialized_state_index +
-				(char *) list_nth(policy->per_agg_states, i);
+				(char *) policy->per_agg_states[i];
 			agg_def->func.agg_init(first_uninitialized_state,
 								   next_unused_key_index - first_uninitialized_state_index);
 		}
@@ -288,7 +287,7 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 								 start_row,
 								 end_row,
 								 agg_def,
-								 list_nth(policy->per_agg_states, i),
+								 policy->per_agg_states[i],
 								 policy->offsets,
 								 policy->agg_extra_mctx);
 	}
@@ -379,9 +378,9 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 				(end_word - 1) * 64 + pg_leftmost_one_pos64(filter[end_word - 1]) + 1;
 			Assert(end_row <= n);
 
-			add_one_range(policy, batch_state, start_row, end_row);
-
 			stat_range_rows += end_row - start_row;
+
+			add_one_range(policy, batch_state, start_row, end_row);
 		}
 		policy->stat_bulk_filtered_rows += batch_state->total_batch_rows - stat_range_rows;
 	}
@@ -443,11 +442,11 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 		return false;
 	}
 
-	const int naggs = list_length(policy->agg_defs);
+	const int naggs = policy->num_agg_defs;
 	for (int i = 0; i < naggs; i++)
 	{
-		VectorAggDef *agg_def = (VectorAggDef *) list_nth(policy->agg_defs, i);
-		void *agg_states = list_nth(policy->per_agg_states, i);
+		VectorAggDef *agg_def = &policy->agg_defs[i];
+		void *agg_states = policy->per_agg_states[i];
 		void *agg_state = current_key * agg_def->func.state_bytes + (char *) agg_states;
 		agg_def->func.agg_emit(agg_state,
 							   &aggregated_slot->tts_values[agg_def->output_offset],

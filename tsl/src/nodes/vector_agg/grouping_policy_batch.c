@@ -23,8 +23,12 @@
 typedef struct
 {
 	GroupingPolicy funcs;
-	List *agg_defs;
-	List *agg_states;
+
+	int num_agg_defs;
+	VectorAggDef *agg_defs;
+
+	void **agg_states;
+
 	List *output_grouping_columns;
 	Datum *output_grouping_values;
 	bool *output_grouping_isnull;
@@ -44,20 +48,24 @@ typedef struct
 static const GroupingPolicy grouping_policy_batch_functions;
 
 GroupingPolicy *
-create_grouping_policy_batch(List *agg_defs, List *output_grouping_columns)
+create_grouping_policy_batch(int num_agg_defs, VectorAggDef *agg_defs,
+							 List *output_grouping_columns)
 {
 	GroupingPolicyBatch *policy = palloc0(sizeof(GroupingPolicyBatch));
 	policy->funcs = grouping_policy_batch_functions;
 	policy->output_grouping_columns = output_grouping_columns;
+	policy->num_agg_defs = num_agg_defs;
 	policy->agg_defs = agg_defs;
 	policy->agg_extra_mctx =
 		AllocSetContextCreate(CurrentMemoryContext, "agg extra", ALLOCSET_DEFAULT_SIZES);
-	ListCell *lc;
-	foreach (lc, agg_defs)
+
+	policy->agg_states = palloc(sizeof(*policy->agg_states) * policy->num_agg_defs);
+	for (int i = 0; i < policy->num_agg_defs; i++)
 	{
-		VectorAggDef *agg_def = lfirst(lc);
-		policy->agg_states = lappend(policy->agg_states, palloc0(agg_def->func.state_bytes));
+		VectorAggDef *agg_def = &policy->agg_defs[i];
+		policy->agg_states[i] = palloc0(agg_def->func.state_bytes);
 	}
+
 	policy->output_grouping_values =
 		(Datum *) palloc0(MAXALIGN(list_length(output_grouping_columns) * sizeof(Datum)) +
 						  MAXALIGN(list_length(output_grouping_columns) * sizeof(bool)));
@@ -75,11 +83,11 @@ gp_batch_reset(GroupingPolicy *obj)
 
 	MemoryContextReset(policy->agg_extra_mctx);
 
-	const int naggs = list_length(policy->agg_defs);
+	const int naggs = policy->num_agg_defs;
 	for (int i = 0; i < naggs; i++)
 	{
-		VectorAggDef *agg_def = (VectorAggDef *) list_nth(policy->agg_defs, i);
-		void *agg_state = (void *) list_nth(policy->agg_states, i);
+		VectorAggDef *agg_def = &policy->agg_defs[i];
+		void *agg_state = policy->agg_states[i];
 		agg_def->func.agg_init(agg_state, 1);
 	}
 
@@ -178,11 +186,11 @@ gp_batch_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 		policy->num_tmp_filter_words = (num_words * 2 + 1);
 	}
 
-	const int naggs = list_length(policy->agg_defs);
+	const int naggs = policy->num_agg_defs;
 	for (int i = 0; i < naggs; i++)
 	{
-		VectorAggDef *agg_def = (VectorAggDef *) list_nth(policy->agg_defs, i);
-		void *agg_state = (void *) list_nth(policy->agg_states, i);
+		VectorAggDef *agg_def = &policy->agg_defs[i];
+		void *agg_state = policy->agg_states[i];
 		compute_single_aggregate(policy, batch_state, agg_def, agg_state, policy->agg_extra_mctx);
 	}
 
@@ -230,11 +238,11 @@ gp_batch_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 		return false;
 	}
 
-	const int naggs = list_length(policy->agg_defs);
+	const int naggs = policy->num_agg_defs;
 	for (int i = 0; i < naggs; i++)
 	{
-		VectorAggDef *agg_def = (VectorAggDef *) list_nth(policy->agg_defs, i);
-		void *agg_state = (void *) list_nth(policy->agg_states, i);
+		VectorAggDef *agg_def = &policy->agg_defs[i];
+		void *agg_state = policy->agg_states[i];
 		agg_def->func.agg_emit(agg_state,
 							   &aggregated_slot->tts_values[agg_def->output_offset],
 							   &aggregated_slot->tts_isnull[agg_def->output_offset]);

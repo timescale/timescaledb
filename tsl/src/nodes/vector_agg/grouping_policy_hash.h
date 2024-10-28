@@ -11,8 +11,6 @@
 
 #include "grouping_policy.h"
 
-typedef struct DecompressBatchState DecompressBatchState;
-
 typedef struct GroupingPolicyHash GroupingPolicyHash;
 
 typedef struct
@@ -36,7 +34,8 @@ typedef struct GroupingPolicyHash
 	 */
 	GroupingPolicy funcs;
 
-	List *agg_defs;
+	int num_agg_defs;
+	VectorAggDef *agg_defs;
 	List *output_grouping_columns;
 
 	/*
@@ -75,11 +74,11 @@ typedef struct GroupingPolicyHash
 	uint64 num_allocated_offsets;
 
 	/*
-	 * Storage of aggregate function states, each List entry is the array of
+	 * Storage of aggregate function states, each entry is the array of
 	 * states for the respective function from agg_defs. The state index 0 is
-	 * invalid, and the state index 1 is reserved for a null key.
+	 * invalid.
 	 */
-	List *per_agg_states;
+	void **per_agg_states;
 	uint64 allocated_aggstate_rows;
 
 	uint64 num_allocated_keys;

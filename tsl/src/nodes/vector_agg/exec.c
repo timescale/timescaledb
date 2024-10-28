@@ -80,15 +80,35 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 	 */
 	List *aggregated_tlist =
 		castNode(CustomScan, vector_agg_state->custom.ss.ps.plan)->custom_scan_tlist;
-	const int naggs = list_length(aggregated_tlist);
-	for (int i = 0; i < naggs; i++)
+	const int tlist_length = list_length(aggregated_tlist);
+
+	int agg_functions_counter = 0;
+	for (int i = 0; i < tlist_length; i++)
+	{
+		TargetEntry *tlentry = (TargetEntry *) list_nth(aggregated_tlist, i);
+		if (IsA(tlentry->expr, Aggref))
+		{
+			agg_functions_counter++;
+		}
+		else
+		{
+			/* This is a grouping column. */
+			Assert(IsA(tlentry->expr, Var));
+		}
+	}
+
+	vector_agg_state->num_agg_defs = agg_functions_counter;
+	vector_agg_state->agg_defs =
+		palloc0(sizeof(*vector_agg_state->agg_defs) * vector_agg_state->num_agg_defs);
+
+	agg_functions_counter = 0;
+	for (int i = 0; i < tlist_length; i++)
 	{
 		TargetEntry *tlentry = (TargetEntry *) list_nth(aggregated_tlist, i);
 		if (IsA(tlentry->expr, Aggref))
 		{
 			/* This is an aggregate function. */
-			VectorAggDef *def = palloc0(sizeof(VectorAggDef));
-			vector_agg_state->agg_defs = lappend(vector_agg_state->agg_defs, def);
+			VectorAggDef *def = &vector_agg_state->agg_defs[agg_functions_counter++];
 			def->output_offset = i;
 
 			Aggref *aggref = castNode(Aggref, tlentry->expr);
@@ -165,7 +185,8 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		 * Per-batch grouping.
 		 */
 		vector_agg_state->grouping =
-			create_grouping_policy_batch(vector_agg_state->agg_defs,
+			create_grouping_policy_batch(vector_agg_state->num_agg_defs,
+										 vector_agg_state->agg_defs,
 										 vector_agg_state->output_grouping_columns);
 	}
 	else
@@ -174,7 +195,8 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		 * Hash grouping.
 		 */
 		vector_agg_state->grouping =
-			create_grouping_policy_hash(vector_agg_state->agg_defs,
+			create_grouping_policy_hash(vector_agg_state->num_agg_defs,
+										vector_agg_state->agg_defs,
 										vector_agg_state->output_grouping_columns);
 	}
 }
@@ -291,10 +313,14 @@ vector_agg_exec(CustomScanState *node)
 			dcontext->ps->instrument->tuplecount += not_filtered_rows;
 		}
 
-		const int naggs = list_length(vector_agg_state->agg_defs);
+		/*
+		 * Compute the vectorized filters for the aggregate function FILTER
+		 * clauses.
+		 */
+		const int naggs = vector_agg_state->num_agg_defs;
 		for (int i = 0; i < naggs; i++)
 		{
-			VectorAggDef *agg_def = (VectorAggDef *) list_nth(vector_agg_state->agg_defs, i);
+			VectorAggDef *agg_def = &vector_agg_state->agg_defs[i];
 			if (agg_def->filter_clauses == NIL)
 			{
 				continue;
@@ -315,6 +341,9 @@ vector_agg_exec(CustomScanState *node)
 			agg_def->filter_result = vqstate->vector_qual_result;
 		}
 
+		/*
+		 * Finally, pass the compressed batch to the grouping policy.
+		 */
 		grouping->gp_add_batch(grouping, batch_state);
 	}
 
