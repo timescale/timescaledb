@@ -185,7 +185,7 @@ arrow_set_row_validity(uint64 *bitmap, size_t row_number, bool value)
 /*
  * AND two optional arrow validity bitmaps into the given storage.
  */
-static inline uint64 *
+static inline const uint64 *
 arrow_combine_validity(size_t num_words, uint64 *restrict storage, const uint64 *filter1,
 					   const uint64 *filter2)
 {
