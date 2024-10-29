@@ -49,8 +49,6 @@ get_input_offset(DecompressChunkState *decompress_state, Var *var)
 		   value_column_description->type == SEGMENTBY_COLUMN);
 
 	const int index = value_column_description - dcontext->compressed_chunk_columns;
-	//	fprintf(stderr, "index %d for var:\n", index);
-	//	my_print(var);
 	return index;
 }
 
@@ -82,6 +80,9 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		castNode(CustomScan, vector_agg_state->custom.ss.ps.plan)->custom_scan_tlist;
 	const int tlist_length = list_length(aggregated_tlist);
 
+	/*
+	 * First, count how many grouping columns and aggregate functions we have.
+	 */
 	int agg_functions_counter = 0;
 	int grouping_column_counter = 0;
 	for (int i = 0; i < tlist_length; i++)
@@ -98,7 +99,12 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 			grouping_column_counter++;
 		}
 	}
+	Assert(agg_functions_counter + grouping_column_counter == tlist_length);
 
+	/*
+	 * Allocate the storage for definitions of aggregate function and grouping
+	 * columns.
+	 */
 	vector_agg_state->num_agg_defs = agg_functions_counter;
 	vector_agg_state->agg_defs =
 		palloc0(sizeof(*vector_agg_state->agg_defs) * vector_agg_state->num_agg_defs);
@@ -107,6 +113,9 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 	vector_agg_state->grouping_columns = palloc0(sizeof(*vector_agg_state->grouping_columns) *
 												 vector_agg_state->num_grouping_columns);
 
+	/*
+	 * Loop through the aggregated targetlist again and fill the definitions.
+	 */
 	agg_functions_counter = 0;
 	grouping_column_counter = 0;
 	for (int i = 0; i < tlist_length; i++)

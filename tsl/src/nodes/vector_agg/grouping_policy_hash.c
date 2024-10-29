@@ -132,6 +132,7 @@ compute_single_aggregate(GroupingPolicyHash *policy, const DecompressBatchState 
 						 const uint32 *offsets, MemoryContext agg_extra_mctx)
 {
 	const ArrowArray *arg_arrow = NULL;
+	const uint64 *arg_validity_bitmap = NULL;
 	Datum arg_datum = 0;
 	bool arg_isnull = true;
 
@@ -149,6 +150,7 @@ compute_single_aggregate(GroupingPolicyHash *policy, const DecompressBatchState 
 		if (values->arrow != NULL)
 		{
 			arg_arrow = values->arrow;
+			arg_validity_bitmap = values->buffers[0];
 		}
 		else
 		{
@@ -162,12 +164,11 @@ compute_single_aggregate(GroupingPolicyHash *policy, const DecompressBatchState 
 	 * Compute the unified validity bitmap.
 	 */
 	const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
-	uint64 *restrict filter =
-		arrow_combine_validity(num_words,
-							   policy->tmp_filter,
-							   batch_state->vector_qual_result,
-							   agg_def->filter_result,
-							   arg_arrow != NULL ? arg_arrow->buffers[0] : NULL);
+	const uint64 *filter = arrow_combine_validity(num_words,
+												  policy->tmp_filter,
+												  batch_state->vector_qual_result,
+												  agg_def->filter_result,
+												  arg_validity_bitmap);
 
 	/*
 	 * Now call the function.

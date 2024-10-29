@@ -40,8 +40,14 @@ typedef struct GroupingPolicy
 	 */
 	bool (*gp_do_emit)(GroupingPolicy *gp, TupleTableSlot *aggregated_slot);
 
+	/*
+	 * Destroy the grouping policy.
+	 */
 	void (*gp_destroy)(GroupingPolicy *gp);
 
+	/*
+	 * Description of this grouping policy for the EXPLAIN output.
+	 */
 	char *(*gp_explain)(GroupingPolicy *gp);
 } GroupingPolicy;
 
