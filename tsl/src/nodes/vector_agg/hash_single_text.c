@@ -29,9 +29,9 @@ get_bytes_view(CompressedColumnValues *column_values, int arrow_row)
 }
 
 static pg_attribute_always_inline void
-single_text_get_key(GroupingPolicyHash *restrict policy, DecompressBatchState *restrict batch_state,
-					HashingConfig config, int row, BytesView *restrict key, bool *restrict valid)
+single_text_get_key(HashingConfig config, int row, BytesView *restrict key, bool *restrict valid)
 {
+	GroupingPolicyHash *policy = config.policy;
 	Assert(policy->num_grouping_columns == 1);
 
 	if (unlikely(config.single_key.decompression_type == DT_Scalar))
@@ -95,6 +95,5 @@ single_text_destroy_key(BytesView key)
 #define KEY_HASH(X) hash_bytes_view(X)
 #define KEY_EQUAL(a, b) (a.len == b.len && memcmp(a.data, b.data, a.len) == 0)
 #define STORE_HASH
-#define CHECK_PREVIOUS_KEY
 #define CTYPE BytesView
 #include "hash_table_functions_impl.c"

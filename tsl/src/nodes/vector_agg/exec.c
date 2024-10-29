@@ -165,7 +165,24 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 			col->typid = desc->typid;
 			col->value_bytes = desc->value_bytes;
 			col->by_value = desc->by_value;
-			col->typalign = desc->typalign;
+			switch (desc->typalign)
+			{
+				case TYPALIGN_CHAR:
+					col->alignment_bytes = 1;
+					break;
+				case TYPALIGN_SHORT:
+					col->alignment_bytes = ALIGNOF_SHORT;
+					break;
+				case TYPALIGN_INT:
+					col->alignment_bytes = ALIGNOF_INT;
+					break;
+				case TYPALIGN_DOUBLE:
+					col->alignment_bytes = ALIGNOF_DOUBLE;
+					break;
+				default:
+					Assert(false);
+					col->alignment_bytes = 1;
+			}
 		}
 	}
 

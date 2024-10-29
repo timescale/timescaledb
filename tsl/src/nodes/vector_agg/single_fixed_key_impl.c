@@ -9,11 +9,9 @@
 #define FUNCTION_NAME(Y) FUNCTION_NAME_HELPER(KEY_VARIANT, Y)
 
 static pg_attribute_always_inline void
-FUNCTION_NAME(get_key)(GroupingPolicyHash *restrict policy,
-					   DecompressBatchState *restrict batch_state, HashingConfig config, int row,
-					   CTYPE *restrict key, bool *restrict valid)
+FUNCTION_NAME(get_key)(HashingConfig config, int row, CTYPE *restrict key, bool *restrict valid)
 {
-	Assert(policy->num_grouping_columns == 1);
+	GroupingPolicyHash *policy = config.policy;
 
 	if (unlikely(config.single_key.decompression_type == DT_Scalar))
 	{

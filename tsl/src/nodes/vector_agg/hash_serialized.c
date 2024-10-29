@@ -19,82 +19,121 @@
 #include "nodes/vector_agg/exec.h"
 
 static pg_attribute_always_inline void
-serialized_get_key(GroupingPolicyHash *restrict policy, DecompressBatchState *restrict batch_state,
-				   HashingConfig config, int row, BytesView *restrict key, bool *restrict valid)
+serialized_get_key(HashingConfig config, int row, BytesView *restrict key, bool *restrict valid)
 {
-	//	if (list_length(policy->output_grouping_columns) == 1)
-	//	{
-	//		pg_unreachable();
-	//	}
+	GroupingPolicyHash *policy = config.policy;
 
 	uint64 *restrict serialized_key_validity_word;
 
-	const int num_columns = policy->num_grouping_columns;
+	const int num_columns = config.num_grouping_columns;
 	Assert(num_columns <= 64);
+
+	/*
+	 * Loop through the grouping columns to determine the length of the key. We
+	 * need that to allocate memory to store it.
+	 */
 	size_t num_bytes = 0;
-	for (int i = 0; i < num_columns; i++)
+	for (int column_index = 0; column_index < num_columns; column_index++)
 	{
-		const GroupingColumn *def = &policy->grouping_columns[i];
-		num_bytes = att_align_nominal(num_bytes, def->typalign);
-		if (def->by_value)
+		const GroupingColumn *def = &config.grouping_columns[column_index];
+		const CompressedColumnValues *column_values = &config.compressed_columns[def->input_offset];
+
+		num_bytes = TYPEALIGN(def->alignment_bytes, num_bytes);
+
+		if (column_values->decompression_type > 0)
 		{
-			num_bytes += def->value_bytes;
+			Assert(def->by_value);
+			num_bytes += column_values->decompression_type;
 		}
-		else
+		else if (unlikely(column_values->decompression_type == DT_Scalar))
 		{
-			const CompressedColumnValues *column =
-				&batch_state->compressed_columns[def->input_offset];
-			if (unlikely(column->decompression_type == DT_Scalar))
+			if (def->by_value)
 			{
-				num_bytes += (*column->output_isnull) ? 0 : VARSIZE_ANY(*column->output_value);
-			}
-			else if (column->decompression_type == DT_ArrowText)
-			{
-				if (arrow_row_is_valid(column->buffers[0], row))
-				{
-					const uint32 start = ((uint32 *) column->buffers[1])[row];
-					const int32 value_bytes = ((uint32 *) column->buffers[1])[row + 1] - start;
-					num_bytes += value_bytes + VARHDRSZ;
-				}
-			}
-			else if (column->decompression_type == DT_ArrowTextDict)
-			{
-				if (arrow_row_is_valid(column->buffers[0], row))
-				{
-					const int16 index = ((int16 *) column->buffers[3])[row];
-					const uint32 start = ((uint32 *) column->buffers[1])[index];
-					const int32 value_bytes = ((uint32 *) column->buffers[1])[index + 1] - start;
-					num_bytes += value_bytes + VARHDRSZ;
-				}
+				num_bytes += def->value_bytes;
 			}
 			else
 			{
-				pg_unreachable();
+				num_bytes +=
+					(*column_values->output_isnull) ? 0 : VARSIZE_ANY(*column_values->output_value);
 			}
+		}
+		else if (column_values->decompression_type == DT_ArrowText)
+		{
+			if (arrow_row_is_valid(column_values->buffers[0], row))
+			{
+				const uint32 start = ((uint32 *) column_values->buffers[1])[row];
+				const int32 value_bytes = ((uint32 *) column_values->buffers[1])[row + 1] - start;
+				num_bytes += value_bytes + VARHDRSZ;
+			}
+		}
+		else if (column_values->decompression_type == DT_ArrowTextDict)
+		{
+			if (arrow_row_is_valid(column_values->buffers[0], row))
+			{
+				const int16 index = ((int16 *) column_values->buffers[3])[row];
+				const uint32 start = ((uint32 *) column_values->buffers[1])[index];
+				const int32 value_bytes = ((uint32 *) column_values->buffers[1])[index + 1] - start;
+				num_bytes += value_bytes + VARHDRSZ;
+			}
+		}
+		else
+		{
+			pg_unreachable();
 		}
 	}
 
-	/* The optional null bitmap. */
-	num_bytes = att_align_nominal(num_bytes, TYPALIGN_DOUBLE);
+	/*
+	 * The key can have a null bitmap if any values are null, we always allocate
+	 * the storage for it.
+	 */
+	num_bytes = TYPEALIGN(ALIGNOF_DOUBLE, num_bytes);
 	num_bytes += sizeof(*serialized_key_validity_word);
 
-	uint64 *restrict output_key_validity_word =
-		gp_hash_key_validity_bitmap(policy, policy->last_used_key_index + 1);
-	Datum *restrict output_key_datums =
-		gp_hash_output_keys(policy, policy->last_used_key_index + 1);
-	uint8 *restrict serialized_key_storage = MemoryContextAlloc(policy->key_body_mctx, num_bytes);
+	/*
+	 * Use temporary storage for the new key, reallocate if it's too small.
+	 */
+	if (num_bytes > policy->num_tmp_key_storage_bytes)
+	{
+		if (policy->tmp_key_storage != NULL)
+		{
+			policy->key_body_mctx->methods->free_p(policy->key_body_mctx, policy->tmp_key_storage);
+		}
+		policy->tmp_key_storage = MemoryContextAlloc(policy->key_body_mctx, num_bytes);
+		policy->num_tmp_key_storage_bytes = num_bytes;
+	}
+	uint8 *restrict serialized_key_storage = policy->tmp_key_storage;
+
+	/*
+	 * Have to memset the key with zeros, so that the alignment bytes are zeroed
+	 * out.
+	 */
+	memset(serialized_key_storage, 0, num_bytes);
+
 	serialized_key_validity_word = (uint64 *) &(
 		(char *) serialized_key_storage)[num_bytes - sizeof(*serialized_key_validity_word)];
 	*serialized_key_validity_word = ~0ULL;
 
+	/*
+	 * We will also fill the output key values in Postgres format. They can go
+	 * straight into the next unused key space, if this key is discarded they
+	 * will just be overwritten later.
+	 */
+	uint64 *restrict output_key_validity_word =
+		gp_hash_key_validity_bitmap(policy, policy->last_used_key_index + 1);
+	Datum *restrict output_key_datums =
+		gp_hash_output_keys(policy, policy->last_used_key_index + 1);
+
+	/*
+	 * Loop through the grouping columns again and build the actual key.
+	 */
 	uint32 offset = 0;
 	for (int column_index = 0; column_index < num_columns; column_index++)
 	{
-		const GroupingColumn *def = &policy->grouping_columns[column_index];
-		offset = att_align_nominal(offset, def->typalign);
+		const GroupingColumn *def = &config.grouping_columns[column_index];
+		const CompressedColumnValues *column_values = &config.compressed_columns[def->input_offset];
 
-		const CompressedColumnValues *column_values =
-			&batch_state->compressed_columns[def->input_offset];
+		offset = TYPEALIGN(def->alignment_bytes, offset);
+
 		if (column_values->decompression_type > 0)
 		{
 			Assert(offset <= UINT_MAX - column_values->decompression_type);
@@ -199,12 +238,12 @@ serialized_get_key(GroupingPolicyHash *restrict policy, DecompressBatchState *re
 		}
 	}
 
-	Assert((void *) &serialized_key_storage[att_align_nominal(offset, TYPALIGN_DOUBLE)] ==
+	Assert((void *) &serialized_key_storage[TYPEALIGN(ALIGNOF_DOUBLE, offset)] ==
 		   (void *) serialized_key_validity_word);
 
 	if (*serialized_key_validity_word != ~0ULL)
 	{
-		offset = att_align_nominal(offset, TYPALIGN_DOUBLE) + sizeof(*serialized_key_validity_word);
+		offset = TYPEALIGN(ALIGNOF_DOUBLE, offset) + sizeof(*serialized_key_validity_word);
 		Assert(offset == num_bytes);
 	}
 
@@ -218,20 +257,32 @@ serialized_get_key(GroupingPolicyHash *restrict policy, DecompressBatchState *re
 	//	fprintf(stderr, "\n");
 
 	*key = (BytesView){ .data = serialized_key_storage, .len = offset };
+
+	/*
+	 * The multi-column key is always considered non-null, and the null flags
+	 * for the individual columns are stored in a bitmap that is part of the
+	 * key.
+	 */
 	*valid = true;
 }
 
 static pg_attribute_always_inline BytesView
 serialized_store_key(GroupingPolicyHash *restrict policy, BytesView key)
 {
-	/* Noop, all done in get_key. */
+	/*
+	 * We will store this key so we have to consume the temporary storage that
+	 * was used for it. The subsequent keys will need to allocate new memory.
+	 */
+	Assert(policy->tmp_key_storage == key.data);
+	policy->tmp_key_storage = NULL;
+	policy->num_tmp_key_storage_bytes = 0;
 	return key;
 }
 
 static pg_attribute_always_inline void
 serialized_destroy_key(BytesView key)
 {
-	pfree((void *) key.data);
+	/* Noop, the memory will be reused by the subsequent key. */
 }
 
 #define EXPLAIN_NAME "serialized"

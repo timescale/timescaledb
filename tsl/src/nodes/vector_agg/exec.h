@@ -30,7 +30,7 @@ typedef struct GroupingColumn
 	Oid typid;
 	int16 value_bytes;
 	bool by_value;
-	char typalign;
+	int8 alignment_bytes;
 } GroupingColumn;
 
 typedef struct

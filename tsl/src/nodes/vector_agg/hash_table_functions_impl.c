@@ -66,19 +66,19 @@ FUNCTION_NAME(get_size_bytes)(void *table)
  * Fill the unique key indexes for all rows using a hash table.
  */
 static pg_attribute_always_inline void
-FUNCTION_NAME(fill_offsets_impl)(GroupingPolicyHash *restrict policy,
-								 DecompressBatchState *restrict batch_state, HashingConfig config,
-								 int start_row, int end_row)
+FUNCTION_NAME(fill_offsets_impl)(
+
+	HashingConfig config, int start_row, int end_row)
 {
+	GroupingPolicyHash *policy = config.policy;
+
 	uint32 *restrict indexes = policy->key_index_for_row;
 	Assert((size_t) end_row <= policy->num_key_index_for_row);
 
 	struct FUNCTION_NAME(hash) *restrict table = policy->table;
 
-#ifdef CHECK_PREVIOUS_KEY
 	CTYPE previous_key;
 	uint32 previous_key_index = 0;
-#endif
 	for (int row = start_row; row < end_row; row++)
 	{
 		if (!arrow_row_is_valid(config.batch_filter, row))
@@ -90,7 +90,7 @@ FUNCTION_NAME(fill_offsets_impl)(GroupingPolicyHash *restrict policy,
 
 		bool key_valid = false;
 		CTYPE key = { 0 };
-		FUNCTION_NAME(get_key)(policy, batch_state, config, row, &key, &key_valid);
+		FUNCTION_NAME(get_key)(config, row, &key, &key_valid);
 
 		if (unlikely(!key_valid))
 		{
@@ -105,24 +105,22 @@ FUNCTION_NAME(fill_offsets_impl)(GroupingPolicyHash *restrict policy,
 			continue;
 		}
 
-#ifdef CHECK_PREVIOUS_KEY
 		if (likely(previous_key_index != 0) && KEY_EQUAL(key, previous_key))
 		{
 			/*
 			 * In real data sets, we often see consecutive rows with the
 			 * same value of a grouping column, so checking for this case
-			 * improves performance. For multi-column keys, this is unlikely and
-			 * so this check is disabled.
+			 * improves performance. For multi-column keys, this is unlikely,
+			 * but we currently often have suboptimal plans that use this policy
+			 * as a GroupAggregate, so we still use this as an easy optimization
+			 * for that case.
 			 */
 			indexes[row] = previous_key_index;
 			FUNCTION_NAME(destroy_key)(key);
-#ifndef NDEBUG
 			policy->stat_consecutive_keys++;
-#endif
 			DEBUG_PRINT("%p: row %d consecutive key index %d\n", policy, row, previous_key_index);
 			continue;
 		}
-#endif
 
 		/*
 		 * Find the key using the hash table.
@@ -146,10 +144,8 @@ FUNCTION_NAME(fill_offsets_impl)(GroupingPolicyHash *restrict policy,
 		}
 		indexes[row] = entry->key_index;
 
-#ifdef CHECK_PREVIOUS_KEY
 		previous_key_index = entry->key_index;
 		previous_key = entry->key;
-#endif
 	}
 }
 
@@ -162,36 +158,35 @@ FUNCTION_NAME(fill_offsets_impl)(GroupingPolicyHash *restrict policy,
 	X(NAME##_all, (COND) && (config.batch_filter == NULL))                                         \
 	X(NAME##_filter, (COND) && (config.batch_filter != NULL))
 
-#define APPLY_FOR_TYPE(X, NAME, COND)                                                              \
-	APPLY_FOR_BATCH_FILTER(X,                                                                      \
-						   NAME##_fixed,                                                           \
-						   (COND) && (config.single_key.decompression_type == sizeof(CTYPE)))      \
-	APPLY_FOR_BATCH_FILTER(X,                                                                      \
-						   NAME##_text,                                                            \
-						   (COND) && (config.single_key.decompression_type == DT_ArrowText))       \
-	APPLY_FOR_BATCH_FILTER(X,                                                                      \
-						   NAME##_dict,                                                            \
-						   (COND) && (config.single_key.decompression_type == DT_ArrowTextDict))
-
 #define APPLY_FOR_VALIDITY(X, NAME, COND)                                                          \
-	APPLY_FOR_TYPE(X, NAME, (COND) && (config.single_key.buffers[0] == NULL))                      \
-	APPLY_FOR_TYPE(X, NAME##_nullable, (COND) && (config.single_key.buffers[0] != NULL))
+	APPLY_FOR_BATCH_FILTER(X, NAME, (COND) && (config.single_key.buffers[0] == NULL))              \
+	APPLY_FOR_BATCH_FILTER(X, NAME##_nullable, (COND) && (config.single_key.buffers[0] != NULL))
 
-#define APPLY_FOR_SPECIALIZATIONS(X) APPLY_FOR_VALIDITY(X, , true)
+#define APPLY_FOR_TYPE(X, NAME, COND)                                                              \
+	APPLY_FOR_VALIDITY(X,                                                                          \
+					   NAME##_fixed,                                                               \
+					   (COND) && (config.single_key.decompression_type == sizeof(CTYPE)))          \
+	APPLY_FOR_VALIDITY(X,                                                                          \
+					   NAME##_text,                                                                \
+					   (COND) && (config.single_key.decompression_type == DT_ArrowText))           \
+	APPLY_FOR_VALIDITY(X,                                                                          \
+					   NAME##_dict,                                                                \
+					   (COND) && (config.single_key.decompression_type == DT_ArrowTextDict))       \
+	APPLY_FOR_BATCH_FILTER(X,                                                                      \
+						   NAME##_multi,                                                           \
+						   (COND) && (config.single_key.decompression_type == DT_Invalid))
+
+#define APPLY_FOR_SPECIALIZATIONS(X) APPLY_FOR_TYPE(X, , true)
 
 #define DEFINE(NAME, CONDITION)                                                                    \
-	static pg_noinline void FUNCTION_NAME(NAME)(GroupingPolicyHash *restrict policy,               \
-												DecompressBatchState *restrict batch_state,        \
-												HashingConfig config,                              \
-												int start_row,                                     \
-												int end_row)                                       \
+	static pg_noinline void FUNCTION_NAME(NAME)(HashingConfig config, int start_row, int end_row)  \
 	{                                                                                              \
 		if (!(CONDITION))                                                                          \
 		{                                                                                          \
 			pg_unreachable();                                                                      \
 		}                                                                                          \
                                                                                                    \
-		FUNCTION_NAME(fill_offsets_impl)(policy, batch_state, config, start_row, end_row);         \
+		FUNCTION_NAME(fill_offsets_impl)(config, start_row, end_row);                              \
 	}
 
 APPLY_FOR_SPECIALIZATIONS(DEFINE)
@@ -207,7 +202,11 @@ FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *ba
 							int start_row, int end_row)
 {
 	HashingConfig config = {
+		.policy = policy,
 		.batch_filter = batch_state->vector_qual_result,
+		.num_grouping_columns = policy->num_grouping_columns,
+		.grouping_columns = policy->grouping_columns,
+		.compressed_columns = batch_state->compressed_columns,
 	};
 
 	if (policy->num_grouping_columns == 1)
@@ -222,14 +221,14 @@ FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *ba
 #define DISPATCH(NAME, CONDITION)                                                                  \
 	if (CONDITION)                                                                                 \
 	{                                                                                              \
-		FUNCTION_NAME(NAME)(policy, batch_state, config, start_row, end_row);                      \
+		FUNCTION_NAME(NAME)(config, start_row, end_row);                                           \
 	}                                                                                              \
 	else
 
 	APPLY_FOR_SPECIALIZATIONS(DISPATCH)
 	{
 		/* Use a generic implementation if no specializations matched. */
-		FUNCTION_NAME(fill_offsets_impl)(policy, batch_state, config, start_row, end_row);
+		FUNCTION_NAME(fill_offsets_impl)(config, start_row, end_row);
 	}
 }
 

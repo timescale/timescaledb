@@ -74,6 +74,13 @@ typedef struct GroupingPolicyHash
 	HashTableFunctions functions;
 
 	/*
+	 * Temporary key storages. Some hashing strategies need to put the key in a
+	 * separate memory area, we don't want to alloc/free it on each row.
+	 */
+	uint8 *tmp_key_storage;
+	uint64 num_tmp_key_storage_bytes;
+
+	/*
 	 * The last used index of an unique grouping key. Key index 0 is invalid.
 	 */
 	uint32 last_used_key_index;
@@ -171,6 +178,12 @@ gp_hash_output_keys(GroupingPolicyHash *policy, int key_index)
 
 typedef struct HashingConfig
 {
-	const uint64 *restrict batch_filter;
+	const uint64 *batch_filter;
 	CompressedColumnValues single_key;
+
+	int num_grouping_columns;
+	const GroupingColumn *grouping_columns;
+	const CompressedColumnValues *compressed_columns;
+
+	GroupingPolicyHash *policy;
 } HashingConfig;
