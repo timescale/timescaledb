@@ -92,30 +92,8 @@ single_text_destroy_key(BytesView key)
 	/* Noop. */
 }
 
-static pg_attribute_always_inline void single_text_fill_offsets_impl(HashingConfig config,
-																	 int start_row, int end_row);
-
-static pg_attribute_always_inline void
-single_text_get_key_dict(HashingConfig config, int row, void *restrict key_ptr,
-						 bool *restrict valid)
-{
-	GroupingPolicyHash *policy = config.policy;
-	Assert(policy->num_grouping_columns == 1);
-
-	BytesView *restrict key = (BytesView *) key_ptr;
-
-	if (config.single_key.decompression_type == DT_ArrowTextDict)
-	{
-		*key = get_bytes_view(&config.single_key, row);
-		*valid = true;
-	}
-	else
-	{
-		pg_unreachable();
-	}
-
-	*(uint64 *restrict) gp_hash_key_validity_bitmap(policy, policy->last_used_key_index + 1) = true;
-}
+static pg_attribute_always_inline void single_text_dispatch_for_config(HashingConfig config,
+																	   int start_row, int end_row);
 
 static void
 single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *batch_state)
@@ -168,7 +146,6 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 		.num_grouping_columns = policy->num_grouping_columns,
 		.grouping_columns = policy->grouping_columns,
 		.compressed_columns = batch_state->compressed_columns,
-		.get_key = single_text_get_key_dict,
 		.result_key_indexes = policy->key_index_for_dict,
 	};
 
@@ -182,25 +159,55 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 		const size_t dict_words = (dict_rows + 63) / 64;
 		memset(dict_filter, 0, sizeof(*dict_filter) * dict_words);
 
-		const int n = batch_state->total_batch_rows;
-		for (int i = 0; i < n; i++)
-		{
-			const int16 index = ((int16 *) config.single_key.buffers[3])[i];
-			const bool batch_row_valid = arrow_row_is_valid(row_filter, i);
+		bool *restrict tmp = (bool *) policy->key_index_for_dict;
+		Assert(sizeof(*tmp) <= sizeof(*policy->key_index_for_dict));
+		memset(tmp, 0, sizeof(*tmp) * dict_rows);
 
-			const size_t qword_index = index / 64;
-			Assert(qword_index < dict_words);
-			const size_t bit_index = index % 64;
-			const uint64 mask = (batch_row_valid ? 1ull : 0ull) << bit_index;
-			dict_filter[qword_index] |= mask;
+		const int batch_rows = batch_state->total_batch_rows;
+		int outer;
+		for (outer = 0; outer < batch_rows / 64; outer++)
+		{
+#define INNER_LOOP(INNER_MAX)                                                                      \
+	const uint64 word = row_filter[outer];                                                         \
+	for (int inner = 0; inner < INNER_MAX; inner++)                                                \
+	{                                                                                              \
+		const int16 index = ((int16 *) config.single_key.buffers[3])[outer * 64 + inner];          \
+		tmp[index] |= (word & (1ull << inner));                                                    \
+	}
+
+			INNER_LOOP(64)
 		}
+
+		if (batch_rows % 64)
+		{
+			INNER_LOOP(batch_rows % 64)
+		}
+#undef INNER_LOOP
+
+		for (outer = 0; outer < dict_rows / 64; outer++)
+		{
+#define INNER_LOOP(INNER_MAX)                                                                      \
+	uint64 word = 0;                                                                               \
+	for (int inner = 0; inner < INNER_MAX; inner++)                                                \
+	{                                                                                              \
+		word |= (tmp[outer * 64 + inner] ? 1ull : 0ull) << inner;                                  \
+	}                                                                                              \
+	dict_filter[outer] = word;
+
+			INNER_LOOP(64)
+		}
+		if (dict_rows % 64)
+		{
+			INNER_LOOP(dict_rows % 64)
+		}
+#undef INNER_LOOP
 
 		config.batch_filter = dict_filter;
 
 		if (config.single_key.arrow->null_count > 0)
 		{
 			Assert(config.single_key.buffers[0] != NULL);
-			const size_t batch_words = (n + 63) / 64;
+			const size_t batch_words = (batch_rows + 63) / 64;
 			for (size_t i = 0; i < batch_words; i++)
 			{
 				have_null_key |=
@@ -212,11 +219,19 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 	{
 		if (config.single_key.arrow->null_count > 0)
 		{
+			Assert(config.single_key.buffers[0] != NULL);
 			have_null_key = true;
 		}
 	}
 
-	single_text_fill_offsets_impl(config, 0, dict_rows);
+	/*
+	 * Build offsets for the array entries as normal non-nullable text values.
+	 */
+	Assert(config.single_key.decompression_type = DT_ArrowTextDict);
+	config.single_key.decompression_type = DT_ArrowText;
+	config.single_key.buffers[0] = NULL;
+	memset(policy->key_index_for_dict, 0, sizeof(*policy->key_index_for_dict) * dict_rows);
+	single_text_dispatch_for_config(config, 0, dict_rows);
 
 	/*
 	 * The dictionary doesn't store nulls, so add the null key separately if we
@@ -245,14 +260,8 @@ single_text_offsets_translate_impl(HashingConfig config, int start_row, int end_
 
 	for (int row = start_row; row < end_row; row++)
 	{
-		bool passes = arrow_row_is_valid(config.batch_filter, row);
-		bool row_valid = arrow_row_is_valid(config.single_key.buffers[0], row);
+		const bool row_valid = arrow_row_is_valid(config.single_key.buffers[0], row);
 		const int16 dict_index = ((int16 *) config.single_key.buffers[3])[row];
-
-		if (!passes)
-		{
-			continue;
-		}
 
 		if (row_valid)
 		{
@@ -263,17 +272,13 @@ single_text_offsets_translate_impl(HashingConfig config, int start_row, int end_
 			indexes_for_rows[row] = policy->null_key_index;
 		}
 
-		Assert(indexes_for_rows[row] != 0);
+		Assert(indexes_for_rows[row] != 0 || !arrow_row_is_valid(config.batch_filter, row));
 	}
 }
 
-#define APPLY_FOR_BATCH_FILTER(X, NAME, COND)                                                      \
-	X(NAME##_all, (COND) && (config.batch_filter == NULL))                                         \
-	X(NAME##_filter, (COND) && (config.batch_filter != NULL))
-
 #define APPLY_FOR_VALIDITY(X, NAME, COND)                                                          \
-	APPLY_FOR_BATCH_FILTER(X, NAME##_notnull, (COND) && (config.single_key.buffers[0] == NULL))    \
-	APPLY_FOR_BATCH_FILTER(X, NAME##_nullable, (COND) && (config.single_key.buffers[0] != NULL))
+	X(NAME##_notnull, (COND) && (config.single_key.buffers[0] == NULL))                            \
+	X(NAME##_nullable, (COND) && (config.single_key.buffers[0] != NULL))
 
 #define APPLY_FOR_SPECIALIZATIONS(X) APPLY_FOR_VALIDITY(X, single_text_offsets_translate, true)
 

@@ -89,7 +89,7 @@ FUNCTION_NAME(fill_offsets_impl)(
 
 		bool key_valid = false;
 		CTYPE key = { 0 };
-		config.get_key(config, row, &key, &key_valid);
+		FUNCTION_NAME(get_key)(config, row, &key, &key_valid);
 
 		if (unlikely(!key_valid))
 		{
@@ -192,6 +192,26 @@ APPLY_FOR_SPECIALIZATIONS(DEFINE)
 
 #undef DEFINE
 
+static void
+FUNCTION_NAME(dispatch_for_config)(HashingConfig config, int start_row, int end_row)
+{
+#define DISPATCH(NAME, CONDITION)                                                                  \
+	if (CONDITION)                                                                                 \
+	{                                                                                              \
+		FUNCTION_NAME(NAME)(config, start_row, end_row);                                           \
+	}                                                                                              \
+	else
+
+	APPLY_FOR_SPECIALIZATIONS(DISPATCH)
+	{
+		/* Use a generic implementation if no specializations matched. */
+		FUNCTION_NAME(fill_offsets_impl)(config, start_row, end_row);
+	}
+#undef DISPATCH
+}
+
+#undef APPLY_FOR_SPECIALIZATIONS
+
 /*
  * In some special cases we call a more efficient specialization of the grouping
  * function.
@@ -206,7 +226,6 @@ FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *ba
 		.num_grouping_columns = policy->num_grouping_columns,
 		.grouping_columns = policy->grouping_columns,
 		.compressed_columns = batch_state->compressed_columns,
-		.get_key = FUNCTION_NAME(get_key),
 		.result_key_indexes = policy->key_index_for_row,
 	};
 
@@ -221,27 +240,15 @@ FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *ba
 		config.single_key = *single_key_column;
 	}
 
-#define DISPATCH(NAME, CONDITION)                                                                  \
-	else if (CONDITION)                                                                            \
-	{                                                                                              \
-		FUNCTION_NAME(NAME)(config, start_row, end_row);                                           \
-	}
-
-	if (false)
-	{
-	}
 #ifdef HAVE_PREPARE_FUNCTION
-	else if (policy->use_key_index_for_dict)
+	if (policy->use_key_index_for_dict)
 	{
 		single_text_offsets_translate(config, start_row, end_row);
+		return;
 	}
 #endif
-	APPLY_FOR_SPECIALIZATIONS(DISPATCH)
-	else
-	{
-		/* Use a generic implementation if no specializations matched. */
-		FUNCTION_NAME(fill_offsets_impl)(config, start_row, end_row);
-	}
+
+	FUNCTION_NAME(dispatch_for_config)(config, start_row, end_row);
 }
 
 HashTableFunctions FUNCTION_NAME(functions) = {

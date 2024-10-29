@@ -197,8 +197,5 @@ typedef struct HashingConfig
 
 	GroupingPolicyHash *policy;
 
-	void (*get_key)(struct HashingConfig config, int row, void *restrict key,
-					bool *restrict key_valid);
-
 	uint32 *restrict result_key_indexes;
 } HashingConfig;
