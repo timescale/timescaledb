@@ -11,8 +11,8 @@ case PG_AGG_OID_HELPER(AGG_NAME, PG_TYPE):
 #else
 
 static pg_attribute_always_inline void
-FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *valid1,
-						   const uint64 *valid2, MemoryContext agg_extra_mctx)
+FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *filter,
+						   MemoryContext agg_extra_mctx)
 {
 	Int24SumState *state = (Int24SumState *) agg_state;
 
@@ -37,7 +37,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 	bool have_result = false;
 	for (int row = 0; row < n; row++)
 	{
-		const bool row_ok = arrow_row_both_valid(valid1, valid2, row);
+		const bool row_ok = arrow_row_is_valid(filter, row);
 		batch_sum += values[row] * row_ok;
 		have_result |= row_ok;
 	}
@@ -51,14 +51,24 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 	state->isnull &= !have_result;
 }
 
-#include "agg_const_helper.c"
+static pg_attribute_always_inline void
+FUNCTION_NAME(one)(void *restrict agg_state, const CTYPE value)
+{
+	Int24SumState *state = (Int24SumState *) agg_state;
+	state->result += value;
+	state->isnull = false;
+}
+
+typedef Int24SumState FUNCTION_NAME(state);
+
+#include "agg_scalar_helper.c"
 #include "agg_vector_validity_helper.c"
 
 VectorAggFunctions FUNCTION_NAME(argdef) = {
 	.state_bytes = sizeof(Int24SumState),
 	.agg_init = int_sum_init,
 	.agg_emit = int_sum_emit,
-	.agg_const = FUNCTION_NAME(const),
+	.agg_scalar = FUNCTION_NAME(scalar),
 	.agg_vector = FUNCTION_NAME(vector),
 };
 #endif

@@ -182,6 +182,31 @@ arrow_set_row_validity(uint64 *bitmap, size_t row_number, bool value)
 	Assert(arrow_row_is_valid(bitmap, row_number) == value);
 }
 
+/*
+ * AND two optional arrow validity bitmaps into the given storage.
+ */
+static inline uint64 *
+arrow_combine_validity(size_t num_words, uint64 *restrict storage, const uint64 *filter1,
+					   const uint64 *filter2)
+{
+	if (filter1 == NULL)
+	{
+		return filter2;
+	}
+
+	if (filter2 == NULL)
+	{
+		return filter1;
+	}
+
+	for (size_t i = 0; i < num_words; i++)
+	{
+		storage[i] = filter1[i] & filter2[i];
+	}
+
+	return storage;
+}
+
 /* Increase the `source_value` to be an even multiple of `pad_to`. */
 static inline uint64
 pad_to_multiple(uint64 pad_to, uint64 source_value)
@@ -190,7 +215,7 @@ pad_to_multiple(uint64 pad_to, uint64 source_value)
 }
 
 static inline size_t
-arrow_num_valid(uint64 *bitmap, size_t total_rows)
+arrow_num_valid(const uint64 *bitmap, size_t total_rows)
 {
 	if (bitmap == NULL)
 	{
