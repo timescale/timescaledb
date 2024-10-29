@@ -182,36 +182,71 @@ arrow_set_row_validity(uint64 *bitmap, size_t row_number, bool value)
 	Assert(arrow_row_is_valid(bitmap, row_number) == value);
 }
 
+/*
+ * Combine the validity bitmaps into the given storage.
+ */
 static inline const uint64 *
 arrow_combine_validity(size_t num_words, uint64 *restrict storage, const uint64 *filter1,
 					   const uint64 *filter2, const uint64 *filter3)
 {
-	if (filter1 == NULL && filter2 == NULL && filter3 == NULL)
+	/*
+	 * Any and all of the filters can be null. For simplicity, move the non-null
+	 * filters to the front.
+	 */
+	const uint64 *tmp;
+#define SWAP(X, Y)                                                                                 \
+	tmp = (X);                                                                                     \
+	(X) = (Y);                                                                                     \
+	(Y) = tmp;
+
+	if (filter2 == NULL)
 	{
-		return NULL;
+		SWAP(filter2, filter3);
 	}
 
-	for (size_t i = 0; i < num_words; i++)
+	if (filter1 == NULL)
 	{
-		uint64 word = ~0;
-		if (filter1 != NULL)
+		SWAP(filter1, filter2);
+
+		if (filter2 == NULL)
 		{
-			word &= filter1[i];
+			SWAP(filter2, filter3);
 		}
-		if (filter2 != NULL)
+	}
+#undef SWAP
+
+	Assert(filter2 == NULL || filter1 != NULL);
+	Assert(filter3 == NULL || filter2 != NULL);
+
+	if (filter2 == NULL)
+	{
+		/* Either have one non-null filter, or all of them are null. */
+		return filter1;
+	}
+
+	if (filter3 == NULL)
+	{
+		/* Have two non-null filters. */
+		for (size_t i = 0; i < num_words; i++)
 		{
-			word &= filter2[i];
+			storage[i] = filter1[i] & filter2[i];
 		}
-		if (filter3 != NULL)
+	}
+	else
+	{
+		/* Have three non-null filters. */
+		for (size_t i = 0; i < num_words; i++)
 		{
-			word &= filter3[i];
+			storage[i] = filter1[i] & filter2[i] & filter3[i];
 		}
-		storage[i] = word;
 	}
 
 	return storage;
 }
-/* Increase the `source_value` to be an even multiple of `pad_to`. */
+
+/*
+ * Increase the `source_value` to be an even multiple of `pad_to`.
+ */
 static inline uint64
 pad_to_multiple(uint64 pad_to, uint64 source_value)
 {
