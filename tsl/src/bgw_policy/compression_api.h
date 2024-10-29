@@ -6,9 +6,10 @@
 #pragma once
 
 #include <postgres.h>
-#include "compression/api.h"
 #include <utils/jsonb.h>
 #include <utils/timestamp.h>
+
+#include "guc.h"
 
 /* User-facing API functions */
 extern Datum policy_compression_add(PG_FUNCTION_ARGS);

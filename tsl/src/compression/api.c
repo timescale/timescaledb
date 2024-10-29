@@ -838,13 +838,23 @@ compress_hypercore(Chunk *chunk, bool rel_is_hypercore, UseAccessMethod useam,
 	return relid;
 }
 
+/*
+ * Check the value of the use_access_method argument and use the default value
+ * otherwise.
+ */
+static UseAccessMethod
+check_useam(UseAccessMethod arg)
+{
+	return arg == USE_AM_NULL ? (UseAccessMethod) ts_guc_default_hypercore_use_access_method : arg;
+}
+
 Datum
 tsl_compress_chunk(PG_FUNCTION_ARGS)
 {
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	bool if_not_compressed = PG_ARGISNULL(1) ? true : PG_GETARG_BOOL(1);
 	bool recompress = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
-	UseAccessMethod useam = PG_ARGISNULL(3) ? USE_AM_NULL : PG_GETARG_BOOL(3);
+	UseAccessMethod useam = check_useam(PG_ARGISNULL(3) ? USE_AM_NULL : PG_GETARG_BOOL(3));
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 
