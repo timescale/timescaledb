@@ -1,3 +1,6 @@
+-- remove obsolete job
+DELETE FROM _timescaledb_config.bgw_job WHERE id = 2;
+
 -- Hypercore updates
 CREATE FUNCTION _timescaledb_debug.is_compressed_tid(tid) RETURNS BOOL
 AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C STRICT;

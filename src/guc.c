@@ -10,6 +10,7 @@
 #include <utils/regproc.h>
 #include <utils/varlena.h>
 
+#include "compat/compat.h"
 #include "config.h"
 #include "extension.h"
 #include "guc.h"
@@ -119,6 +120,9 @@ bool ts_guc_enable_qual_propagation = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 bool ts_guc_enable_now_constify = true;
 bool ts_guc_enable_foreign_key_propagation = true;
+#if PG16_GE
+TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown = true;
+#endif
 TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify = true;
 TSDLLEXPORT int ts_guc_cagg_max_individual_materializations = 10;
 bool ts_guc_enable_osm_reads = true;
@@ -134,6 +138,7 @@ bool ts_guc_enable_vectorized_aggregation = true;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = false;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
+bool ts_guc_enable_chunk_skipping = false;
 
 /* Enable of disable columnar scans for columnar-oriented storage engines. If
  * disabled, regular sequence scans will be used instead. */
@@ -651,6 +656,19 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+#if PG16_GE
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_cagg_sort_pushdown"),
+							 "Enable sort pushdown for continuous aggregates",
+							 "Enable pushdown of ORDER BY clause for continuous aggregates",
+							 &ts_guc_enable_cagg_sort_pushdown,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+#endif
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_cagg_watermark_constify"),
 							 "Enable cagg watermark constify",
 							 "Enable constifying cagg watermark for real-time caggs",
@@ -666,6 +684,18 @@ _guc_init(void)
 							 "Enable MERGE statement on cagg refresh",
 							 "Enable MERGE statement on cagg refresh",
 							 &ts_guc_enable_merge_on_cagg_refresh,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_chunk_skipping"),
+							 "Enable chunk skipping functionality",
+							 "Enable using chunk column stats to filter chunks based on column "
+							 "filters",
+							 &ts_guc_enable_chunk_skipping,
 							 false,
 							 PGC_USERSET,
 							 0,

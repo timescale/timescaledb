@@ -283,8 +283,15 @@ typedef struct HypertableRestrictInfo
 HypertableRestrictInfo *
 ts_hypertable_restrict_info_create(RelOptInfo *rel, Hypertable *ht)
 {
+	/* If chunk skipping is disabled, we have to empty range_space
+	 * in case it was cached earlier.
+	 */
+	ChunkRangeSpace *range_space = ht->range_space;
+	if (!ts_guc_enable_chunk_skipping)
+		range_space = NULL;
+
 	int num_dimensions =
-		ht->space->num_dimensions + (ht->range_space ? ht->range_space->num_range_cols : 0);
+		ht->space->num_dimensions + (range_space ? range_space->num_range_cols : 0);
 	HypertableRestrictInfo *res =
 		palloc0(sizeof(HypertableRestrictInfo) + sizeof(DimensionRestrictInfo *) * num_dimensions);
 	int i;
@@ -304,7 +311,7 @@ ts_hypertable_restrict_info_create(RelOptInfo *rel, Hypertable *ht)
 	 * We convert the range_space entries into dummy "DimensionRestrictInfo" entries. This allows
 	 * the hypertable restrict info machinery to consider these as well.
 	 */
-	for (i = 0; ht->range_space != NULL && i < ht->range_space->num_range_cols; i++)
+	for (i = 0; range_space != NULL && i < range_space->num_range_cols; i++)
 	{
 		DimensionRestrictInfo *dri =
 			chunk_column_stats_restrict_info_create(ht, &ht->range_space->range_cols[i]);

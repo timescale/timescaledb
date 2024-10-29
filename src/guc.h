@@ -6,6 +6,8 @@
 #pragma once
 
 #include <postgres.h>
+
+#include "compat/compat.h"
 #include "config.h"
 #include "export.h"
 
@@ -27,8 +29,11 @@ extern bool ts_guc_enable_cagg_reorder_groupby;
 extern TSDLLEXPORT int ts_guc_cagg_max_individual_materializations;
 extern bool ts_guc_enable_now_constify;
 extern bool ts_guc_enable_foreign_key_propagation;
-extern TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify;
 extern bool ts_guc_enable_osm_reads;
+#if PG16_GE
+extern TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown;
+#endif
+extern TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering;
 extern TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete;
@@ -46,6 +51,7 @@ extern TSDLLEXPORT bool ts_guc_enable_job_execution_logging;
 extern bool ts_guc_enable_tss_callbacks;
 extern TSDLLEXPORT bool ts_guc_enable_delete_after_compression;
 extern TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh;
+extern bool ts_guc_enable_chunk_skipping;
 
 #ifdef USE_TELEMETRY
 typedef enum TelemetryLevel

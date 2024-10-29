@@ -51,6 +51,11 @@ INSERT INTO sample_table VALUES (:'start_date'::timestamptz, 16, 14.6554, 47, 'n
 -- Non-int, date, timestamp cannot be specified as a min/max ranges for now
 -- We could expand to FLOATs, NUMERICs later
 \set ON_ERROR_STOP 0
+-- Error if you try enabling without enabling the GUC first
+SELECT * FROM enable_chunk_skipping('sample_table', 'name');
+ERROR:  chunk skipping functionality disabled, enable it by first setting timescaledb.enable_chunk_skipping to on
+-- Enable the chunk skipping GUC
+SET timescaledb.enable_chunk_skipping to ON;
 SELECT * FROM enable_chunk_skipping('sample_table', 'name');
 ERROR:  data type "character varying" unsupported for range calculation
 SELECT * FROM enable_chunk_skipping('sample_table', NULL);
@@ -433,6 +438,20 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
          Filter: ((sensor_id >= 6) AND (sensor_id < 8))
 (6 rows)
 
+-- Disabling the GUC will prevent plan time chunk skipping
+RESET timescaledb.enable_chunk_skipping;
+:PREFIX SELECT * FROM sample_table WHERE sensor_id < 1;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+               Index Cond: (sensor_id < 1)
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: (sensor_id < 1)
+(6 rows)
+
+SET timescaledb.enable_chunk_skipping to ON;
 -- Query ranges with OR clause will not work properly due to the way
 -- hypertable expansion works as of now. Once we fix that, it should
 -- fix the issue here too.
@@ -497,6 +516,24 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
          Filter: (sensor_id > length("substring"(version(), 1, 6)))
 (7 rows)
 
+-- Disabling the GUC will prevent execution time chunk skipping
+RESET timescaledb.enable_chunk_skipping;
+:PREFIX UPDATE sample_table set sensor_id = 10 WHERE sensor_id > length(substring(version(),1,9));
+                                   QUERY PLAN                                   
+--------------------------------------------------------------------------------
+ Custom Scan (HypertableModify)
+   ->  Update on sample_table
+         Update on _hyper_1_1_chunk sample_table_1
+         Update on _hyper_1_2_chunk sample_table_2
+         ->  Custom Scan (ChunkAppend) on sample_table
+               Chunks excluded during startup: 0
+               ->  Seq Scan on _hyper_1_1_chunk sample_table_1
+                     Filter: (sensor_id > length("substring"(version(), 1, 9)))
+               ->  Seq Scan on _hyper_1_2_chunk sample_table_2
+                     Filter: (sensor_id > length("substring"(version(), 1, 9)))
+(10 rows)
+
+SET timescaledb.enable_chunk_skipping to ON;
 -- IN/ANY is not supported for now
 :PREFIX SELECT * FROM sample_table WHERE sensor_id IN (9, 10, 11);
                                                         QUERY PLAN                                                        

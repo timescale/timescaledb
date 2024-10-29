@@ -269,7 +269,9 @@ def should_backport_by_labels(number, title, labels):
         )
         return False
 
-    force_labels = labels.intersection(["bug", "force-auto-backport"])
+    force_labels = labels.intersection(
+        ["bug", "force-auto-backport", "force-auto-backport-workflow"]
+    )
     if force_labels:
         print(
             f"#{number} '{title}' is labeled as '{list(force_labels)[0]}' which requests automated backporting."
@@ -433,13 +435,22 @@ for index, pr_info in enumerate(prs_to_backport.values()):
         for filename in changed_files
         if filename.startswith(".github/workflows/")
     }
+
     if changed_workflow_files:
-        details = (
-            f"The PR touches a workflow file '{list(changed_workflow_files)[0]}' "
-            " and cannot be backported automatically"
+        pull_labels = {label.name for label in original_pr.labels}
+        force_workflow_label = pull_labels.intersection(
+            ["force-auto-backport-workflow"]
         )
-        report_backport_not_done(original_pr, "backport failed", details)
-        continue
+        if not force_workflow_label:
+            details = (
+                f"The PR touches a workflow file '{list(changed_workflow_files)[0]}' "
+                " and cannot be backported automatically"
+            )
+            report_backport_not_done(original_pr, "backport failed", details)
+            continue
+        print(
+            f"PR #{original_pr.number} '{original_pr.title}' touches a workflow file, but will be backported anyway."
+        )
 
     # Push the backport branch.
     git_check(f"push --quiet {target_remote} @:refs/heads/{backport_branch}")

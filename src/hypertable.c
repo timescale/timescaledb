@@ -249,8 +249,11 @@ ts_hypertable_from_tupleinfo(const TupleInfo *ti)
 		ts_subspace_store_init(h->space, ti->mctx, ts_guc_max_cached_chunks_per_hypertable);
 	h->chunk_sizing_func = get_chunk_sizing_func_oid(&h->fd);
 
-	h->range_space =
-		ts_chunk_column_stats_range_space_scan(h->fd.id, h->main_table_relid, ti->mctx);
+	if (ts_guc_enable_chunk_skipping)
+	{
+		h->range_space =
+			ts_chunk_column_stats_range_space_scan(h->fd.id, h->main_table_relid, ti->mctx);
+	}
 
 	return h;
 }
