@@ -1808,11 +1808,12 @@ SELECT sum(cpu) FROM f_sensor_data;
          Workers Planned: 4
          ->  Custom Scan (VectorAgg)
                Output: (PARTIAL sum(_hyper_37_73_chunk.cpu))
+               Grouping Policy: all compressed batches
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_73_chunk
                      Output: _hyper_37_73_chunk.cpu
                      ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_38_74_chunk
                            Output: compress_hyper_38_74_chunk._ts_meta_count, compress_hyper_38_74_chunk.sensor_id, compress_hyper_38_74_chunk._ts_meta_min_1, compress_hyper_38_74_chunk._ts_meta_max_1, compress_hyper_38_74_chunk."time", compress_hyper_38_74_chunk.cpu, compress_hyper_38_74_chunk.temperature
-(11 rows)
+(12 rows)
 
 -- Encourage use of Index Scan
 SET enable_seqscan = false;
@@ -1863,11 +1864,12 @@ SELECT sum(cpu) FROM f_sensor_data;
                            Output: _hyper_37_73_chunk.cpu
                ->  Custom Scan (VectorAgg)
                      Output: (PARTIAL sum(_hyper_37_73_chunk.cpu))
+                     Grouping Policy: all compressed batches
                      ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_73_chunk
                            Output: _hyper_37_73_chunk.cpu
                            ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_38_74_chunk
                                  Output: compress_hyper_38_74_chunk._ts_meta_count, compress_hyper_38_74_chunk.sensor_id, compress_hyper_38_74_chunk._ts_meta_min_1, compress_hyper_38_74_chunk._ts_meta_max_1, compress_hyper_38_74_chunk."time", compress_hyper_38_74_chunk.cpu, compress_hyper_38_74_chunk.temperature
-(16 rows)
+(17 rows)
 
 :explain
 SELECT * FROM f_sensor_data WHERE sensor_id > 100;
