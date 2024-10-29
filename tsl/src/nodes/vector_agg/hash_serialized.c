@@ -96,7 +96,7 @@ serialized_get_key(HashingConfig config, int row, BytesView *restrict key, bool 
 	{
 		if (policy->tmp_key_storage != NULL)
 		{
-			policy->key_body_mctx->methods->free_p(policy->key_body_mctx, policy->tmp_key_storage);
+			pfree(policy->tmp_key_storage);
 		}
 		policy->tmp_key_storage = MemoryContextAlloc(policy->key_body_mctx, num_bytes);
 		policy->num_tmp_key_storage_bytes = num_bytes;
