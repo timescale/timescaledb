@@ -446,3 +446,30 @@ analyze rides;
 explain (costs off)
 select * from rides order by pickup_datetime;
 select * from rides order by pickup_datetime;
+
+-- All these are valid methods to set the default
+show timescaledb.default_hypercore_use_access_method;
+set timescaledb.default_hypercore_use_access_method to on;
+set timescaledb.default_hypercore_use_access_method to off;
+set timescaledb.default_hypercore_use_access_method to true;
+set timescaledb.default_hypercore_use_access_method to false;
+set timescaledb.default_hypercore_use_access_method to yes;
+set timescaledb.default_hypercore_use_access_method to no;
+set timescaledb.default_hypercore_use_access_method to 0;
+set timescaledb.default_hypercore_use_access_method to 1;
+show timescaledb.default_hypercore_use_access_method;
+
+-- This should unset the value
+reset timescaledb.default_hypercore_use_access_method;
+show timescaledb.default_hypercore_use_access_method;
+
+-- Using GUC should compress using the hyperstore
+set timescaledb.default_hypercore_use_access_method to on;
+create table test5 (time timestamptz not null, device int, temp float);
+select created from create_hypertable('test5', 'time');
+insert into test5 values ('2022-06-01', 1, 1.0), ('2022-08-01', 1, 1.0);
+
+select ch as chunk from show_chunks('test5') ch limit 1 \gset
+alter table test5 set (timescaledb.compress);
+select compress_chunk(:'chunk');
+select * from amrels where relparent = 'test5'::regclass;

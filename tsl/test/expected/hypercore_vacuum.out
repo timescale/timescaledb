@@ -227,6 +227,7 @@ insert into hystable (time, location, device, temp)
 values ('2022-06-01 00:01', 1, 1, 1.0);
 -- Recompress to get data back into compressed form
 select compress_chunk(:'hystable_chunk');
+NOTICE:  cannot compress hypercore "_hyper_1_2_chunk" using heap, recompressing instead
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_2_chunk
@@ -310,6 +311,7 @@ select tuple_count from pgstattuple(:'hystable_device_chunk_idx');
 -- rebuild indexes. It will optimize the structure of the index and
 -- thus reduce the number of index tuples
 select compress_chunk(:'hystable_chunk');
+NOTICE:  cannot compress hypercore "_hyper_1_2_chunk" using heap, recompressing instead
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_2_chunk
