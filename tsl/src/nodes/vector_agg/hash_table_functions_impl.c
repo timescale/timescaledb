@@ -72,8 +72,7 @@ FUNCTION_NAME(fill_offsets_impl)(
 {
 	GroupingPolicyHash *policy = config.policy;
 
-	uint32 *restrict indexes = policy->key_index_for_row;
-	Assert((size_t) end_row <= policy->num_key_index_for_row);
+	uint32 *restrict indexes = config.result_key_indexes;
 
 	struct FUNCTION_NAME(hash) *restrict table = policy->table;
 
@@ -90,7 +89,7 @@ FUNCTION_NAME(fill_offsets_impl)(
 
 		bool key_valid = false;
 		CTYPE key = { 0 };
-		FUNCTION_NAME(get_key)(config, row, &key, &key_valid);
+		config.get_key(config, row, &key, &key_valid);
 
 		if (unlikely(!key_valid))
 		{
@@ -207,7 +206,11 @@ FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *ba
 		.num_grouping_columns = policy->num_grouping_columns,
 		.grouping_columns = policy->grouping_columns,
 		.compressed_columns = batch_state->compressed_columns,
+		.get_key = FUNCTION_NAME(get_key),
+		.result_key_indexes = policy->key_index_for_row,
 	};
+
+	Assert((size_t) end_row <= policy->num_key_index_for_row);
 
 	if (policy->num_grouping_columns == 1)
 	{
@@ -219,13 +222,22 @@ FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *ba
 	}
 
 #define DISPATCH(NAME, CONDITION)                                                                  \
-	if (CONDITION)                                                                                 \
+	else if (CONDITION)                                                                            \
 	{                                                                                              \
 		FUNCTION_NAME(NAME)(config, start_row, end_row);                                           \
-	}                                                                                              \
-	else
+	}
 
+	if (false)
+	{
+	}
+#ifdef HAVE_PREPARE_FUNCTION
+	else if (policy->use_key_index_for_dict)
+	{
+		single_text_offsets_translate(config, start_row, end_row);
+	}
+#endif
 	APPLY_FOR_SPECIALIZATIONS(DISPATCH)
+	else
 	{
 		/* Use a generic implementation if no specializations matched. */
 		FUNCTION_NAME(fill_offsets_impl)(config, start_row, end_row);
@@ -239,6 +251,9 @@ HashTableFunctions FUNCTION_NAME(functions) = {
 	.get_size_bytes = FUNCTION_NAME(get_size_bytes),
 	.fill_offsets = FUNCTION_NAME(fill_offsets),
 	.explain_name = EXPLAIN_NAME,
+#ifdef HAVE_PREPARE_FUNCTION
+	.prepare_for_batch = FUNCTION_NAME(prepare_for_batch),
+#endif
 };
 
 #undef EXPLAIN_NAME

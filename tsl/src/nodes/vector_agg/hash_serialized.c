@@ -19,9 +19,11 @@
 #include "nodes/vector_agg/exec.h"
 
 static pg_attribute_always_inline void
-serialized_get_key(HashingConfig config, int row, BytesView *restrict key, bool *restrict valid)
+serialized_get_key(HashingConfig config, int row, void *restrict key_ptr, bool *restrict valid)
 {
 	GroupingPolicyHash *policy = config.policy;
+
+	BytesView *restrict key = (BytesView *) key_ptr;
 
 	uint64 *restrict serialized_key_validity_word;
 

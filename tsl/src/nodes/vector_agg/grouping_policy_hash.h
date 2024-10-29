@@ -22,6 +22,7 @@ typedef struct
 	void (*reset)(void *table);
 	uint32 (*get_num_keys)(void *table);
 	uint64 (*get_size_bytes)(void *table);
+	void (*prepare_for_batch)(GroupingPolicyHash *policy, DecompressBatchState *batch_state);
 	void (*fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
 						 int start_row, int end_row);
 } HashTableFunctions;
@@ -101,6 +102,15 @@ typedef struct GroupingPolicyHash
 	 */
 	uint32 *restrict key_index_for_row;
 	uint64 num_key_index_for_row;
+
+	/*
+	 * For single text key that uses dictionary encoding, in some cases we first
+	 * calculate the key indexes for the dictionary entries, and then translate
+	 * it to the actual rows.
+	 */
+	uint32 *restrict key_index_for_dict;
+	uint64 num_key_index_for_dict;
+	bool use_key_index_for_dict;
 
 	/*
 	 * The temporary filter bitmap we use to combine the results of the
@@ -186,4 +196,9 @@ typedef struct HashingConfig
 	const CompressedColumnValues *compressed_columns;
 
 	GroupingPolicyHash *policy;
+
+	void (*get_key)(struct HashingConfig config, int row, void *restrict key,
+					bool *restrict key_valid);
+
+	uint32 *restrict result_key_indexes;
 } HashingConfig;

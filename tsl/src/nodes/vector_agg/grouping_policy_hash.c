@@ -345,6 +345,51 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 		policy->num_tmp_filter_words = (num_words * 2 + 1);
 	}
 
+	if (policy->functions.prepare_for_batch)
+	{
+		/*
+		 * Remember which aggregation states have already existed, and which we
+		 * have to initialize. State index zero is invalid.
+		 */
+		const uint32 first_initialized_key_index = policy->last_used_key_index;
+
+		policy->functions.prepare_for_batch(policy, batch_state);
+
+		if (policy->last_used_key_index > first_initialized_key_index)
+		{
+			const uint64 new_aggstate_rows = policy->num_agg_state_rows * 2 + 1;
+			const int num_fns = policy->num_agg_defs;
+			for (int i = 0; i < num_fns; i++)
+			{
+				const VectorAggDef *agg_def = &policy->agg_defs[i];
+				if (policy->last_used_key_index >= policy->num_agg_state_rows)
+				{
+					policy->per_agg_states[i] =
+						repalloc(policy->per_agg_states[i],
+								 new_aggstate_rows * agg_def->func.state_bytes);
+				}
+
+				/*
+				 * Initialize the aggregate function states for the newly added keys.
+				 */
+				void *first_uninitialized_state =
+					agg_def->func.state_bytes * (first_initialized_key_index + 1) +
+					(char *) policy->per_agg_states[i];
+				agg_def->func.agg_init(first_uninitialized_state,
+									   policy->last_used_key_index - first_initialized_key_index);
+			}
+
+			/*
+			 * Record the newly allocated number of rows in case we had to reallocate.
+			 */
+			if (policy->last_used_key_index >= policy->num_agg_state_rows)
+			{
+				Assert(new_aggstate_rows > policy->num_agg_state_rows);
+				policy->num_agg_state_rows = new_aggstate_rows;
+			}
+		}
+	}
+
 	const uint64_t *restrict filter = batch_state->vector_qual_result;
 	if (filter == NULL)
 	{
