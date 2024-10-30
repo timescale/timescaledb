@@ -29,7 +29,7 @@ select device_id, count(*) into orig_chunk from :chunk1 group by device_id;
 -----------------------
 -- Enable hypercore --
 -----------------------
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
+select compress_chunk(show_chunks(:'hypertable'), hypercore_use_access_method => true);
 
 -- Show count without parallel plan and without ColumnarScan
 set timescaledb.enable_columnarscan=false;
