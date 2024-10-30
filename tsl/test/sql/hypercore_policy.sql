@@ -23,25 +23,19 @@ join pg_am am on (am.oid = cl.relam);
 
 set timezone to pst8pdt;
 
-\set ON_ERROR_STOP 0
--- Test invalid compress_using option
-select add_compression_policy('readings',
-                              compress_after => '1000 years'::interval,
-                              compress_using => 'foo');
-\set ON_ERROR_STOP 1
-
--- Check that compress_using is not part of the policy if not set. Use
--- a large compress_after to ensure the policy doesn't do anything at
--- this time.
+-- Check that hypercore_use_access_method is not part of the policy if
+-- not set. Use a large compress_after to ensure the policy doesn't do
+-- anything at this time.
 select add_compression_policy('readings', compress_after => '1000 years'::interval)
 as compression_job \gset
 select config from timescaledb_information.jobs where job_id = :compression_job;
 select remove_compression_policy('readings');
 
--- Check that compress_using is not part of the policy if set to NULL
+-- Check that hypercore_use_access_method is not part of the policy if
+-- set to NULL
 select add_compression_policy('readings',
                               compress_after => '1000 years'::interval,
-                              compress_using => NULL)
+                              hypercore_use_access_method => NULL)
 as compression_job \gset
 select config from timescaledb_information.jobs where job_id = :compression_job;
 select remove_compression_policy('readings');
@@ -51,10 +45,11 @@ select * from chunk_info
 where hypertable = 'readings'
 order by chunk;
 
--- Check that compress_using is part of the policy config when non-NULL
+-- Check that hypercore_use_access_method is part of the policy config
+-- when enabled.
 select add_compression_policy('readings',
                               compress_after => '1 day'::interval,
-                              compress_using => 'hypercore')
+                              hypercore_use_access_method => true)
 as compression_job \gset
 
 select config from timescaledb_information.jobs where job_id = :compression_job;
@@ -81,7 +76,7 @@ where time = '2022-06-01 10:14' and device = 1;
 -- recompress hypercores.
 select add_compression_policy('readings',
                               compress_after => '1 day'::interval,
-                              compress_using => 'heap')
+                              hypercore_use_access_method => false)
 as compression_job \gset
 
 -- Run the policy job again to recompress
@@ -98,7 +93,7 @@ select * from readings where time = '2022-06-01 10:14' and device = 1;
 select * from readings where time = '2022-06-01 10:14' and device = 1;
 
 -- Test recompression again with a policy that doesn't specify
--- compress_using
+-- hypercore_use_access_method
 select remove_compression_policy('readings');
 -- Insert one value into existing hypercore, also create a new non-hypercore chunk
 insert into readings values ('2022-06-01 10:14', 1, 1.0), ('2022-07-01 10:14', 2, 2.0);
@@ -134,7 +129,7 @@ select timescaledb_experimental.add_policies('daily',
        refresh_start_offset => '8 days'::interval,
        refresh_end_offset => '1 day'::interval,
        compress_after => '9 days'::interval,
-       compress_using => 'hypercore');
+       hypercore_use_access_method => true);
 
 select job_id as cagg_compression_job, materialization_hypertable_name as mathyper
 from timescaledb_information.jobs j

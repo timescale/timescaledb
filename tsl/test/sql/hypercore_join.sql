@@ -43,7 +43,7 @@ alter table the_hypercore set (
       timescaledb.compress_segmentby = '',
       timescaledb.compress_orderby = 'updated_at desc'
 );
-select compress_chunk(show_chunks('the_hypercore'), compress_using => 'hypercore');
+select compress_chunk(show_chunks('the_hypercore'), hypercore_use_access_method => true);
 
 vacuum analyze the_hypercore;
 

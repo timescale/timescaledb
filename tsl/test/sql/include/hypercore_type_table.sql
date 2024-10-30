@@ -30,7 +30,7 @@ from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
 create table :saved_table as select * from :the_table;
 
 -- Compress the rows in the hypercore.
-select compress_chunk(show_chunks(:'the_table'), compress_using => 'hypercore');
+select compress_chunk(show_chunks(:'the_table'), hypercore_use_access_method => true);
 
 -- This part of the include file will run a query with the aggregate
 -- provided by the including file and test that using a hypercore

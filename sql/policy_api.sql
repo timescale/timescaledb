@@ -53,7 +53,7 @@ CREATE OR REPLACE FUNCTION @extschema@.add_compression_policy(
     initial_start TIMESTAMPTZ = NULL,
     timezone TEXT = NULL,
     compress_created_before INTERVAL = NULL,
-    compress_using NAME = NULL
+    hypercore_use_access_method BOOL = NULL
 )
 RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_policy_compression_add'
@@ -95,7 +95,7 @@ CREATE OR REPLACE FUNCTION timescaledb_experimental.add_policies(
     refresh_end_offset "any" = NULL,
     compress_after "any" = NULL,
     drop_after "any" = NULL,
-    compress_using NAME = NULL)
+    hypercore_use_access_method BOOL = NULL)
 RETURNS BOOL
 AS '@MODULE_PATHNAME@', 'ts_policies_add'
 LANGUAGE C VOLATILE;
