@@ -176,8 +176,9 @@ arrow_set_row_validity(uint64 *bitmap, size_t row_number, bool value)
 	const size_t qword_index = row_number / 64;
 	const size_t bit_index = row_number % 64;
 	const uint64 mask = 1ull << bit_index;
+	const uint64 new_bit = (value ? 1ull : 0ull) << bit_index;
 
-	bitmap[qword_index] = (bitmap[qword_index] & ~mask) | ((-(uint64) value) & mask);
+	bitmap[qword_index] = (bitmap[qword_index] & ~mask) | new_bit;
 
 	Assert(arrow_row_is_valid(bitmap, row_number) == value);
 }

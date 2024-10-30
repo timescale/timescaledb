@@ -85,16 +85,23 @@ from
         'count']) function,
     unnest(array[
         null,
-        'cint2 > 0']) with ordinality as condition(condition, n),
+        'cint2 > 0',
+        'cint2 is null',
+        'cint2 is null and x is null']) with ordinality as condition(condition, n),
     unnest(array[
         null,
-        's',
         'cint2',
         'cint4',
+        'cint4, cint8',
         'cint8',
-        'x',
-        'ss, x',
-        't, s, ss, x, cint2, cint4, cint8']) with ordinality as grouping(grouping, n)
+        's, cint2',
+        's, ss',
+        's, x',
+        'ss, cint2, x',
+        'ss, s',
+        'ss, x, cint2',
+        't, s, ss, x, cint2, cint4, cint8',
+        'x']) with ordinality as grouping(grouping, n)
 where
     true
     and (explain is null /* or condition is null and grouping = 's' */)

@@ -67,6 +67,8 @@ typedef struct GroupingPolicyHash
 	int num_grouping_columns;
 	const GroupingColumn *restrict grouping_columns;
 
+	CompressedColumnValues *restrict grouping_column_values;
+
 	/*
 	 * The hash table we use for grouping. It matches each grouping key to its
 	 * unique integer index.
@@ -167,21 +169,55 @@ typedef struct GroupingPolicyHash
 	uint64 stat_consecutive_keys;
 } GroupingPolicyHash;
 
-static inline uint64 *
-gp_hash_key_validity_bitmap(GroupingPolicyHash *policy, int key_index)
-{
-	return (uint64 *) ((char *) policy->output_keys +
-					   (sizeof(uint64) + sizeof(Datum) * policy->num_grouping_columns) * key_index);
-}
-
 static inline Datum *
 gp_hash_output_keys(GroupingPolicyHash *policy, int key_index)
 {
 	Assert(key_index != 0);
-	return (Datum *) &gp_hash_key_validity_bitmap(policy, key_index)[1];
+
+	const size_t null_bitmap_bytes = (policy->num_grouping_columns + 7) / 8;
+	const size_t key_bytes = sizeof(Datum) * policy->num_grouping_columns;
+	const size_t serialized_key_bytes = TYPEALIGN(8, null_bitmap_bytes + key_bytes);
+	/* Bitmap goes to the end. */
+	return (Datum *) (serialized_key_bytes * key_index + (uint8 *) policy->output_keys);
 }
 
-// #define DEBUG_PRINT(...) fprintf(stderr, __VA_ARGS__)
+static inline uint8 *
+gp_hash_key_validity_bitmap(GroupingPolicyHash *policy, int key_index)
+{
+	Assert(key_index != 0);
+
+	const size_t null_bitmap_bytes = (policy->num_grouping_columns + 7) / 8;
+	return ((uint8 *) gp_hash_output_keys(policy, key_index + 1)) - null_bitmap_bytes;
+}
+
+static pg_attribute_always_inline bool
+byte_bitmap_row_is_valid(const uint8 *bitmap, size_t row_number)
+{
+	if (likely(bitmap == NULL))
+	{
+		return true;
+	}
+
+	const size_t byte_index = row_number / 8;
+	const size_t bit_index = row_number % 8;
+	const uint8 mask = ((uint8) 1) << bit_index;
+	return bitmap[byte_index] & mask;
+}
+
+static pg_attribute_always_inline void
+byte_bitmap_set_row_validity(uint8 *bitmap, size_t row_number, bool value)
+{
+	const size_t byte_index = row_number / 8;
+	const size_t bit_index = row_number % 8;
+	const uint8 mask = ((uint8) 1) << bit_index;
+	const uint8 new_bit = ((uint8) value) << bit_index;
+
+	bitmap[byte_index] = (bitmap[byte_index] & ~mask) | new_bit;
+
+	Assert(byte_bitmap_row_is_valid(bitmap, row_number) == value);
+}
+
+//#define DEBUG_PRINT(...) fprintf(stderr, __VA_ARGS__)
 #ifndef DEBUG_PRINT
 #define DEBUG_PRINT(...)
 #endif
@@ -192,10 +228,37 @@ typedef struct HashingConfig
 	CompressedColumnValues single_key;
 
 	int num_grouping_columns;
-	const GroupingColumn *grouping_columns;
-	const CompressedColumnValues *compressed_columns;
+	const CompressedColumnValues *grouping_column_values;
+	bool have_scalar_columns;
 
 	GroupingPolicyHash *policy;
 
 	uint32 *restrict result_key_indexes;
 } HashingConfig;
+
+static inline HashingConfig
+build_hashing_config(GroupingPolicyHash *policy, DecompressBatchState *batch_state)
+{
+	HashingConfig config = {
+		.policy = policy,
+		.batch_filter = batch_state->vector_qual_result,
+		.num_grouping_columns = policy->num_grouping_columns,
+		.grouping_column_values = policy->grouping_column_values,
+		.result_key_indexes = policy->key_index_for_row,
+	};
+
+	Assert(policy->num_grouping_columns > 0);
+	if (policy->num_grouping_columns == 1)
+	{
+		config.single_key = policy->grouping_column_values[0];
+	}
+
+	for (int i = 0; i < policy->num_grouping_columns; i++)
+	{
+		config.have_scalar_columns |=
+			(policy->grouping_column_values[i].decompression_type == DT_Scalar ||
+			 policy->grouping_column_values[i].buffers[0] != NULL);
+	}
+
+	return config;
+}

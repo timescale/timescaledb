@@ -154,28 +154,30 @@ FUNCTION_NAME(fill_offsets_impl)(
  * when all the batch and key rows are valid.
  */
 #define APPLY_FOR_BATCH_FILTER(X, NAME, COND)                                                      \
-	X(NAME##_all, (COND) && (config.batch_filter == NULL))                                         \
+	X(NAME, (COND) && (config.batch_filter == NULL))                                               \
 	X(NAME##_filter, (COND) && (config.batch_filter != NULL))
 
 #define APPLY_FOR_VALIDITY(X, NAME, COND)                                                          \
-	APPLY_FOR_BATCH_FILTER(X, NAME, (COND) && (config.single_key.buffers[0] == NULL))              \
-	APPLY_FOR_BATCH_FILTER(X, NAME##_nullable, (COND) && (config.single_key.buffers[0] != NULL))
+	APPLY_FOR_BATCH_FILTER(X, NAME, (COND) && config.single_key.buffers[0] == NULL)                \
+	APPLY_FOR_BATCH_FILTER(X, NAME##_nullable, (COND) && config.single_key.buffers[0] != NULL)
+
+#define APPLY_FOR_SCALARS(X, NAME, COND)                                                           \
+	APPLY_FOR_BATCH_FILTER(X, NAME, (COND) && !config.have_scalar_columns)                         \
+	APPLY_FOR_BATCH_FILTER(X, NAME##_scalar, (COND) && config.have_scalar_columns)
 
 #define APPLY_FOR_TYPE(X, NAME, COND)                                                              \
 	APPLY_FOR_VALIDITY(X,                                                                          \
-					   NAME##_fixed,                                                               \
-					   (COND) && (config.single_key.decompression_type == sizeof(CTYPE)))          \
+					   NAME##_byval,                                                               \
+					   (COND) && config.single_key.decompression_type == sizeof(CTYPE))            \
 	APPLY_FOR_VALIDITY(X,                                                                          \
 					   NAME##_text,                                                                \
-					   (COND) && (config.single_key.decompression_type == DT_ArrowText))           \
+					   (COND) && config.single_key.decompression_type == DT_ArrowText)             \
 	APPLY_FOR_VALIDITY(X,                                                                          \
 					   NAME##_dict,                                                                \
-					   (COND) && (config.single_key.decompression_type == DT_ArrowTextDict))       \
-	APPLY_FOR_BATCH_FILTER(X,                                                                      \
-						   NAME##_multi,                                                           \
-						   (COND) && (config.single_key.decompression_type == DT_Invalid))
+					   (COND) && config.single_key.decompression_type == DT_ArrowTextDict)         \
+	APPLY_FOR_SCALARS(X, NAME##_multi, (COND) && config.single_key.decompression_type == DT_Invalid)
 
-#define APPLY_FOR_SPECIALIZATIONS(X) APPLY_FOR_TYPE(X, , true)
+#define APPLY_FOR_SPECIALIZATIONS(X) APPLY_FOR_TYPE(X, index, true)
 
 #define DEFINE(NAME, CONDITION)                                                                    \
 	static pg_noinline void FUNCTION_NAME(NAME)(HashingConfig config, int start_row, int end_row)  \
@@ -220,25 +222,9 @@ static void
 FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
 							int start_row, int end_row)
 {
-	HashingConfig config = {
-		.policy = policy,
-		.batch_filter = batch_state->vector_qual_result,
-		.num_grouping_columns = policy->num_grouping_columns,
-		.grouping_columns = policy->grouping_columns,
-		.compressed_columns = batch_state->compressed_columns,
-		.result_key_indexes = policy->key_index_for_row,
-	};
-
 	Assert((size_t) end_row <= policy->num_key_index_for_row);
 
-	if (policy->num_grouping_columns == 1)
-	{
-		const GroupingColumn *g = &policy->grouping_columns[0];
-		CompressedColumnValues *restrict single_key_column =
-			&batch_state->compressed_columns[g->input_offset];
-
-		config.single_key = *single_key_column;
-	}
+	HashingConfig config = build_hashing_config(policy, batch_state);
 
 #ifdef HAVE_PREPARE_FUNCTION
 	if (policy->use_key_index_for_dict)

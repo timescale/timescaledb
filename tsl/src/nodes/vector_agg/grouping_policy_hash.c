@@ -63,6 +63,8 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 		policy->per_agg_states[i] = palloc(agg_def->func.state_bytes * policy->num_agg_state_rows);
 	}
 
+	policy->grouping_column_values = palloc(sizeof(CompressedColumnValues) * num_grouping_columns);
+
 	policy->key_body_mctx = policy->agg_extra_mctx;
 
 	if (num_grouping_columns == 1)
@@ -322,8 +324,8 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 	if (num_possible_keys > policy->num_output_keys)
 	{
 		policy->num_output_keys = num_possible_keys * 2 + 1;
-		const size_t new_bytes = (sizeof(uint64) + policy->num_grouping_columns * sizeof(Datum)) *
-								 policy->num_output_keys;
+		const size_t new_bytes = (char *) gp_hash_output_keys(policy, policy->num_output_keys) -
+								 (char *) policy->output_keys;
 		if (policy->output_keys == NULL)
 		{
 			policy->output_keys = palloc(new_bytes);
@@ -345,6 +347,20 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 		policy->num_tmp_filter_words = (num_words * 2 + 1);
 	}
 
+	/*
+	 * Arrange the input compressed columns in the order of grouping columns.
+	 */
+	for (int i = 0; i < policy->num_grouping_columns; i++)
+	{
+		const GroupingColumn *def = &policy->grouping_columns[i];
+		const CompressedColumnValues *values = &batch_state->compressed_columns[def->input_offset];
+		policy->grouping_column_values[i] = *values;
+	}
+
+	/*
+	 * Call the per-batch initialization function of the hashing strategy, if
+	 * it has one.
+	 */
 	if (policy->functions.prepare_for_batch)
 	{
 		/*
@@ -515,7 +531,7 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 		aggregated_slot->tts_values[col->output_offset] =
 			gp_hash_output_keys(policy, current_key)[i];
 		aggregated_slot->tts_isnull[col->output_offset] =
-			!arrow_row_is_valid(gp_hash_key_validity_bitmap(policy, current_key), i);
+			!byte_bitmap_row_is_valid(gp_hash_key_validity_bitmap(policy, current_key), i);
 	}
 
 	DEBUG_PRINT("%p: output key index %d valid %lx\n",

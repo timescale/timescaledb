@@ -100,20 +100,16 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 {
 	policy->use_key_index_for_dict = false;
 
-	if (policy->num_grouping_columns != 1)
+	Assert(policy->num_grouping_columns == 1);
+
+	HashingConfig config = build_hashing_config(policy, batch_state);
+
+	if (config.single_key.decompression_type != DT_ArrowTextDict)
 	{
 		return;
 	}
 
-	const GroupingColumn *g = &policy->grouping_columns[0];
-	CompressedColumnValues *restrict single_key_column =
-		&batch_state->compressed_columns[g->input_offset];
-	if (single_key_column->decompression_type != DT_ArrowTextDict)
-	{
-		return;
-	}
-
-	const int dict_rows = single_key_column->arrow->dictionary->length;
+	const int dict_rows = config.single_key.arrow->dictionary->length;
 	if ((size_t) dict_rows >
 		arrow_num_valid(batch_state->vector_qual_result, batch_state->total_batch_rows))
 	{
@@ -137,24 +133,13 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 	}
 
 	/*
-	 * Compute key indexes for the dictionary entries.
+	 * We shouldn't add the dictionary entries that are not used by any mathching
+	 * rows. Translate the batch filter bitmap to dictionary rows.
 	 */
-	HashingConfig config = {
-		.policy = policy,
-		.batch_filter = NULL,
-		.single_key = *single_key_column,
-		.num_grouping_columns = policy->num_grouping_columns,
-		.grouping_columns = policy->grouping_columns,
-		.compressed_columns = batch_state->compressed_columns,
-		.result_key_indexes = policy->key_index_for_dict,
-	};
-
-	Assert((size_t) dict_rows <= policy->num_key_index_for_dict);
-
-	bool have_null_key = false;
+	const int batch_rows = batch_state->total_batch_rows;
+	const uint64 *row_filter = batch_state->vector_qual_result;
 	if (batch_state->vector_qual_result != NULL)
 	{
-		const uint64 *row_filter = batch_state->vector_qual_result;
 		uint64 *restrict dict_filter = policy->tmp_filter;
 		const size_t dict_words = (dict_rows + 63) / 64;
 		memset(dict_filter, 0, sizeof(*dict_filter) * dict_words);
@@ -163,7 +148,6 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 		Assert(sizeof(*tmp) <= sizeof(*policy->key_index_for_dict));
 		memset(tmp, 0, sizeof(*tmp) * dict_rows);
 
-		const int batch_rows = batch_state->total_batch_rows;
 		int outer;
 		for (outer = 0; outer < batch_rows / 64; outer++)
 		{
@@ -203,7 +187,20 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 #undef INNER_LOOP
 
 		config.batch_filter = dict_filter;
+	}
+	else
+	{
+		config.batch_filter = NULL;
+	}
 
+	/*
+	 * The dictionary contains no null entries, so we will be adding the null
+	 * key separately. Determine if we have any null key that also passes the
+	 * batch filter.
+	 */
+	bool have_null_key = false;
+	if (batch_state->vector_qual_result != NULL)
+	{
 		if (config.single_key.arrow->null_count > 0)
 		{
 			Assert(config.single_key.buffers[0] != NULL);
@@ -225,12 +222,17 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 	}
 
 	/*
-	 * Build offsets for the array entries as normal non-nullable text values.
+	 * Build key indexes for the dictionary entries as for normal non-nullable
+	 * text values.
 	 */
 	Assert(config.single_key.decompression_type = DT_ArrowTextDict);
 	config.single_key.decompression_type = DT_ArrowText;
 	config.single_key.buffers[0] = NULL;
+
+	Assert((size_t) dict_rows <= policy->num_key_index_for_dict);
+	config.result_key_indexes = policy->key_index_for_dict;
 	memset(policy->key_index_for_dict, 0, sizeof(*policy->key_index_for_dict) * dict_rows);
+
 	single_text_dispatch_for_config(config, 0, dict_rows);
 
 	/*

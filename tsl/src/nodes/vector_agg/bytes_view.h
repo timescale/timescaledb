@@ -11,8 +11,8 @@
 
 typedef struct BytesView
 {
-	uint32 len;
 	const uint8 *data;
+	uint32 len;
 } BytesView;
 
 static pg_attribute_always_inline uint32
