@@ -961,6 +961,10 @@ void
 ts_bgw_job_validate_job_owner(Oid owner)
 {
 	HeapTuple role_tup = SearchSysCache1(AUTHOID, ObjectIdGetDatum(owner));
+
+	if (!HeapTupleIsValid(role_tup))
+		elog(ERROR, "cache lookup failed for role %u", owner);
+
 	Form_pg_authid rform = (Form_pg_authid) GETSTRUCT(role_tup);
 
 	if (!rform->rolcanlogin)
