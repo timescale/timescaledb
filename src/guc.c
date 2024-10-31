@@ -139,6 +139,7 @@ TSDLLEXPORT bool ts_guc_enable_compression_indexscan = false;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
 bool ts_guc_enable_chunk_skipping = false;
+TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
 
 /* Enable of disable columnar scans for columnar-oriented storage engines. If
  * disabled, regular sequence scans will be used instead. */
@@ -697,6 +698,17 @@ _guc_init(void)
 							 "filters",
 							 &ts_guc_enable_chunk_skipping,
 							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_segmentwise_recompression"),
+							 "Enable segmentwise recompression functionality",
+							 "Enable segmentwise recompression",
+							 &ts_guc_enable_segmentwise_recompression,
+							 true,
 							 PGC_USERSET,
 							 0,
 							 NULL,

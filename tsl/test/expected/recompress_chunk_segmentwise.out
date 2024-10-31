@@ -593,3 +593,36 @@ select * from :compressed_chunk_name;
               2 | 1 |   | Sat Jan 01 01:00:00 2022 PST | Sat Jan 01 01:00:00 2022 PST | BAAAAneAR/JEAAAAAAAAAAAAAAAAAgAAAAIAAAAAAAAA7gAE7wCP5IgAAATvAI/kh/8= | BAEAAAAAAAAABAAAAAAAAAAEAAAAAQAAAAEAAAAAAAAABAAAAAAAAAAIAAAAAgAAAAEAAAAAAAAAAQAAAAAAAAAB
 (5 rows)
 
+--- Test behaviour when enable_segmentwise_recompression GUC if OFF
+CREATE TABLE guc_test(time timestamptz not null, a int, b int, c int);
+SELECT create_hypertable('guc_test', by_range('time', INTERVAL '1 day'));
+ create_hypertable 
+-------------------
+ (18,t)
+(1 row)
+
+ALTER TABLE guc_test set (timescaledb.compress, timescaledb.compress_segmentby = 'a, b');
+NOTICE:  default order by for hypertable "guc_test" is set to ""time" DESC"
+INSERT INTO guc_test VALUES ('2024-10-30 14:04:00.501519-06'::timestamptz, 1, 1, 1);
+SELECT show_chunks as chunk_to_compress FROM show_chunks('guc_test') LIMIT 1 \gset
+SELECT compress_chunk(:'chunk_to_compress');
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_18_20_chunk
+(1 row)
+
+INSERT INTO guc_test VALUES ('2024-10-30 14:14:00.501519-06'::timestamptz, 1, 1, 2);
+-- When GUC is OFF, recompress function should throw an error
+SET timescaledb.enable_segmentwise_recompression TO OFF;
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress');
+ERROR:  segmentwise recompression functionality disabled, enable it by first setting timescaledb.enable_segmentwise_recompression to on
+\set ON_ERROR_STOP 1
+-- When GUC is OFF, entire chunk should be fully uncompressed and compressed instead
+SELECT compress_chunk(:'chunk_to_compress');
+NOTICE:  segmentwise recompression is disabled, performing full recompression on chunk "_timescaledb_internal._hyper_18_20_chunk"
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_18_20_chunk
+(1 row)
+
