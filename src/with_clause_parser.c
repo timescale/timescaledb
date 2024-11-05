@@ -137,7 +137,9 @@ parse_arg(WithClauseDefinition arg, DefElem *def)
 	Oid typIOParam;
 
 	if (!OidIsValid(arg.type_id))
-		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_PARAMETER), errmsg("argument \"%s.%s\" not implemented", def->defnamespace, def->defname)));
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_PARAMETER),
+				 errmsg("argument \"%s.%s\" not implemented", def->defnamespace, def->defname)));
 
 	if (def->arg != NULL)
 		value = defGetString(def);
