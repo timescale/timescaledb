@@ -103,7 +103,7 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 		 * Frozen chunks require at least PG14.
 		 */
 		if (chunk && ts_chunk_is_frozen(chunk))
-			elog(ERROR, "cannot INSERT into frozen chunk \"%s\"", get_rel_name(chunk->table_id));
+			ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("cannot INSERT into frozen chunk \"%s\"", get_rel_name(chunk->table_id))));
 		if (chunk && IS_OSM_CHUNK(chunk))
 		{
 			const Dimension *time_dim =

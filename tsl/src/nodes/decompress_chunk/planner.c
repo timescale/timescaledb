@@ -61,7 +61,7 @@ check_for_system_columns(Bitmapset *attrs_used)
 			bit = bms_next_member(attrs_used, bit);
 
 		if (bit > 0 && bit + FirstLowInvalidHeapAttributeNumber < 0)
-			elog(ERROR, "transparent decompression only supports tableoid system column");
+			ereport(ERROR, (errcode(ERRCODE_INVALID_COLUMN_REFERENCE), errmsg("transparent decompression only supports tableoid system column")));
 	}
 }
 

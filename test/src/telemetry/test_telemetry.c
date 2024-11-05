@@ -112,9 +112,9 @@ test_factory(ConnectionType type, int status, char *host, int port)
 	ts_connection_destroy(conn);
 
 	if (!ts_http_response_state_valid_status(rsp))
-		elog(ERROR,
+		ereport(ERROR, (errcode(ERRCODE_IO_ERROR), errmsg(
 			 "endpoint sent back unexpected HTTP status: %d",
-			 ts_http_response_state_status_code(rsp));
+			 ts_http_response_state_status_code(rsp))));
 
 	json = DirectFunctionCall1(jsonb_in, CStringGetDatum(ts_http_response_state_body_start(rsp)));
 
@@ -135,7 +135,7 @@ ts_test_status_ssl(PG_FUNCTION_ARGS)
 	char buf[128] = { '\0' };
 
 	if (status / 100 != 2)
-		elog(ERROR, "endpoint sent back unexpected HTTP status: %d", status);
+		ereport(ERROR, (errcode(ERRCODE_IO_ERROR), errmsg("endpoint sent back unexpected HTTP status: %d", status)));
 
 	snprintf(buf, sizeof(buf) - 1, "{\"status\":%d}", status);
 
