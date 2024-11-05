@@ -117,7 +117,16 @@ rm CHANGELOG.md.tmp
 echo "---- Deleting all unreleased pr_* , fix_* , ... style files, except template ones ----"
 
 cd .unreleased
-ls |grep -vi 'template' |grep -vi 'release_notes'|xargs git rm
+
+for f in ./*
+do
+  case $f in
+    *template.*) true;;
+    *RELEASE_NOTES*) true;;
+    *) git rm "$f";;
+  esac
+done
+
 cd ..
 
 git diff HEAD --name-only
