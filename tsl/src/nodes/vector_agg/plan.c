@@ -74,29 +74,43 @@ resolve_outer_special_vars_mutator(Node *node, void *context)
 		return expression_tree_mutator(node, resolve_outer_special_vars_mutator, context);
 	}
 
-	Var *aggregated_var = castNode(Var, node);
-	Ensure(aggregated_var->varno == OUTER_VAR,
-		   "encountered unexpected varno %d as an aggregate argument",
-		   aggregated_var->varno);
-
+	Var *var = castNode(Var, node);
 	CustomScan *custom = castNode(CustomScan, context);
-	TargetEntry *decompress_chunk_tentry =
-		castNode(TargetEntry, list_nth(custom->scan.plan.targetlist, aggregated_var->varattno - 1));
-	Var *decompressed_var = castNode(Var, decompress_chunk_tentry->expr);
-	if (decompressed_var->varno == INDEX_VAR)
+	if ((Index) var->varno == (Index) custom->scan.scanrelid)
+	{
+		/*
+		 * This is already the ucompressed chunk var. We can see it referenced
+		 * by expressions in the output targetlist of DecompressChunk node.
+		 */
+		return (Node *) var;
+	}
+
+	if (var->varno == OUTER_VAR)
+	{
+		/*
+		 * Reference into the output targetlist of the DecompressChunk node.
+		 */
+		TargetEntry *decompress_chunk_tentry =
+			castNode(TargetEntry, list_nth(custom->scan.plan.targetlist, var->varattno - 1));
+
+		return resolve_outer_special_vars_mutator((Node *) decompress_chunk_tentry->expr, context);
+	}
+
+	if (var->varno == INDEX_VAR)
 	{
 		/*
 		 * This is a reference into the custom scan targetlist, we have to resolve
 		 * it as well.
 		 */
-		decompressed_var =
-			castNode(Var,
-					 castNode(TargetEntry,
-							  list_nth(custom->custom_scan_tlist, decompressed_var->varattno - 1))
-						 ->expr);
+		var = castNode(Var,
+					   castNode(TargetEntry, list_nth(custom->custom_scan_tlist, var->varattno - 1))
+						   ->expr);
+		Assert(var->varno > 0);
+
+		return (Node *) copyObject(var);
 	}
-	Assert(decompressed_var->varno > 0);
-	return (Node *) copyObject(decompressed_var);
+
+	Ensure(false, "encountered unexpected varno %d as an aggregate argument", var->varno);
 }
 
 /*
