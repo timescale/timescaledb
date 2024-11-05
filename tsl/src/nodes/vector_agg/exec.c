@@ -26,7 +26,7 @@ get_input_offset(DecompressChunkState *decompress_state, Var *var)
 	DecompressContext *dcontext = &decompress_state->decompress_context;
 
 	/*
-	 * All variable references in the tectorized aggregation node were
+	 * All variable references in the vectorized aggregation node were
 	 * translated to uncompressed chunk variables when it was created.
 	 */
 	CustomScan *cscan = castNode(CustomScan, decompress_state->csstate.ss.ps.plan);
