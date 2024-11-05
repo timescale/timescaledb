@@ -1185,6 +1185,9 @@ Datum
 ts_chunk_index_clone(PG_FUNCTION_ARGS)
 {
 	Oid chunk_index_oid = PG_GETARG_OID(0);
+	if (!OidIsValid(chunk_index_oid))
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk index")));
+
 	Relation chunk_index_rel;
 	Relation hypertable_rel;
 	Relation chunk_rel;
@@ -1228,7 +1231,13 @@ Datum
 ts_chunk_index_replace(PG_FUNCTION_ARGS)
 {
 	Oid chunk_index_oid_old = PG_GETARG_OID(0);
+	if (!OidIsValid(chunk_index_oid_old))
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk index")));
+
 	Oid chunk_index_oid_new = PG_GETARG_OID(1);
+	if (!OidIsValid(chunk_index_oid_new))
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk index")));
+
 	Relation index_rel;
 	Chunk *chunk;
 	ChunkIndexMapping cim;
