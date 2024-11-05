@@ -111,6 +111,7 @@ resolve_outer_special_vars_mutator(Node *node, void *context)
 	}
 
 	Ensure(false, "encountered unexpected varno %d as an aggregate argument", var->varno);
+	return node;
 }
 
 /*
