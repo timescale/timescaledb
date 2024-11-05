@@ -236,7 +236,7 @@ typedef struct HashingConfig
 	uint32 *restrict result_key_indexes;
 } HashingConfig;
 
-static inline HashingConfig
+static pg_attribute_always_inline HashingConfig
 build_hashing_config(GroupingPolicyHash *policy, DecompressBatchState *batch_state)
 {
 	HashingConfig config = {
