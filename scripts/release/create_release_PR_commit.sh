@@ -93,14 +93,14 @@ sed -i.bak "s/FILE ${LAST_DOWNGRADE_FILE})/FILE ${DOWNGRADE_FILE})/g" CMakeLists
 rm CMakeLists.txt.bak
 
 
-echo "---- Creating CHANGELOG_"$NEW_VERSION".md file ----"
+echo "---- Creating CHANGELOG_$NEW_VERSION.md file ----"
 
 rm -f ~/CHANGELOG_"$NEW_VERSION".md
 
 cd ~/"$SOURCES_DIR"/"$FORK_DIR"
 ./scripts/merge_changelogs.sh > ~/CHANGELOG_"$NEW_VERSION".md
 
-echo "---- Editing the CHANGELOG.md file with the contents of CHANGELOG_"$NEW_VERSION".md file. ----"
+echo "---- Editing the CHANGELOG.md file with the contents of CHANGELOG_$NEW_VERSION.md file. ----"
 
 cd ~/"$SOURCES_DIR"/"$FORK_DIR"
 RELEASE_NOTE_START=$(grep -n $CURRENT_VERSION CHANGELOG.md | cut -d ':' -f 1 | head -1)
