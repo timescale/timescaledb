@@ -16,7 +16,10 @@ typedef struct
 	/* Size of the aggregate function state. */
 	size_t state_bytes;
 
-	/* Initialize the aggregate function states. */
+	/*
+	 * Initialize the n aggregate function states stored contiguously at the
+	 * given pointer.
+	 */
 	void (*agg_init)(void *restrict agg_states, int n);
 
 	/* Aggregate a given arrow array. */

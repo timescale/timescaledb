@@ -48,7 +48,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE), errmsg("bigint out of range")));
 	}
 
-	state->isnull &= !have_result;
+	state->isvalid |= have_result;
 }
 
 static pg_attribute_always_inline void
@@ -56,7 +56,7 @@ FUNCTION_NAME(one)(void *restrict agg_state, const CTYPE value)
 {
 	Int24SumState *state = (Int24SumState *) agg_state;
 	state->result += value;
-	state->isnull = false;
+	state->isvalid = true;
 }
 
 typedef Int24SumState FUNCTION_NAME(state);
