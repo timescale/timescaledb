@@ -19,10 +19,20 @@ select count(compress_chunk(x)) from show_chunks('pvagg') x;
 analyze pvagg;
 
 
-explain (costs off)
+explain (verbose, costs off)
 select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a) from pvagg where s = x) xx;
 
 select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a) from pvagg where s = x) xx;
+
+explain (verbose, costs off)
+select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a + x) from pvagg) xx;
+
+select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a + x) from pvagg) xx;
+
+explain (verbose, costs off)
+select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a) from pvagg group by x) xx;
+
+select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a) from pvagg group by x) xx;
 
 
 drop table pvagg;
