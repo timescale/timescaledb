@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 \set TEST_BASE_NAME jit
 SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
