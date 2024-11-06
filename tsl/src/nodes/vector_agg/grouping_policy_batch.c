@@ -174,11 +174,7 @@ compute_single_aggregate(GroupingPolicyBatch *policy, DecompressBatchState *batc
 		 * have been skipped by the caller.
 		 */
 		Assert(n > 0);
-
-		if (n > 0)
-		{
-			agg_def->func.agg_scalar(agg_state, arg_datum, arg_isnull, n, agg_extra_mctx);
-		}
+		agg_def->func.agg_scalar(agg_state, arg_datum, arg_isnull, n, agg_extra_mctx);
 	}
 }
 

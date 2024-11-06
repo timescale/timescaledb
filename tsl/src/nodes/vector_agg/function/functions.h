@@ -10,6 +10,13 @@
 
 /*
  * Function table for a vectorized implementation of an aggregate function.
+ *
+ * One state of aggregate function corresponds to one set of rows that are
+ * supposed to be grouped together (e.g. for one grouping key).
+ *
+ * There are functions for adding a compressed batch to one aggregate function
+ * state (no grouping keys), and to multiple aggregate function states laid out
+ * contiguously in memory.
  */
 typedef struct
 {
