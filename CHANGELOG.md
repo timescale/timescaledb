@@ -4,6 +4,23 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.17.2 (2024-11-06)
+
+This release contains performance improvements and bug fixes since
+the 2.17.1 release. We recommend that you upgrade at the next
+available opportunity.
+
+
+**Features**
+
+**Bugfixes**
+* #7384 Fix using OIDs with bitmapsets
+* #7388 Use-after-free in vectorized grouping by segmentby columns
+
+**Thanks**
+* @dx034 for reporting an issue with negative bitmapset members due to large OIDs
+
+
 ## 2.17.1 (2024-10-21)
 
 This release contains performance improvements and bug fixes since

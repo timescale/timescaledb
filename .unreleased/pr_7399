@@ -1,2 +1,0 @@
-Fixes: #7384 Fix using OIDs with bitmapsets
-Thanks: @dx034 for reporting an issue with negative bitmapset members due to large OIDs
