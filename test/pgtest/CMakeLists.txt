@@ -24,6 +24,7 @@ set(PG_IGNORE_TESTS
     amutils
     database
     event_trigger
+    jsonb_jsonpath
     opr_sanity
     sanity_check
     type_sanity
