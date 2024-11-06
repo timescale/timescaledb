@@ -1,7 +1,7 @@
 # NOTE: any changes here require changes to tsl/test/postgresql.conf. Its prefix
 # must be the same as this file.
 
-autovacuum=true
+autovacuum=false
 datestyle='Postgres, MDY'
 hba_file='@TEST_PG_HBA_FILE@'
 log_destination='@TEST_PG_LOG_DESTINATION@'
