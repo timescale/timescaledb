@@ -15,7 +15,7 @@ CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLE
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 CREATE TABLE test1 ("Time" timestamptz, i integer, b bigint, t text);
 SELECT table_name from create_hypertable('test1', 'Time', chunk_time_interval=> INTERVAL '1 day');
@@ -358,7 +358,7 @@ SELECT count(*) FROM test1_cont_view;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 SELECT chunk.schema_name|| '.' || chunk.table_name as "COMPRESSED_CHUNK_NAME"
 FROM _timescaledb_catalog.chunk chunk

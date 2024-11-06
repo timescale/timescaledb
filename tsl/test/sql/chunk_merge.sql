@@ -8,7 +8,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.test_merge_chunks_on_dimension(
     AS :TSL_MODULE_PATHNAME, 'ts_test_merge_chunks_on_dimension' LANGUAGE C VOLATILE;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 CREATE TABLE test1 ("Time" timestamptz, i integer, value integer);
 SELECT table_name FROM Create_hypertable('test1', 'Time', chunk_time_interval=> INTERVAL '1 hour');
