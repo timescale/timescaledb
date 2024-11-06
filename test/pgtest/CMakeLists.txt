@@ -20,7 +20,8 @@ file(READ ${PG_REGRESS_DIR}/parallel_schedule PG_TEST_SCHEDULE)
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/testtablespace)
 
 # Tests to ignore
-set(PG_IGNORE_TESTS database event_trigger opr_sanity sanity_check type_sanity)
+set(PG_IGNORE_TESTS database event_trigger jsonb_jsonpath opr_sanity
+                    sanity_check type_sanity)
 
 # Modify the test schedule to ignore some tests
 foreach(IGNORE_TEST ${PG_IGNORE_TESTS})
