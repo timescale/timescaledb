@@ -4,7 +4,7 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 -- hypertable creation
 SHOW timescaledb.enable_hypertable_create;
