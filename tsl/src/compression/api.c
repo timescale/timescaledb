@@ -8,6 +8,7 @@
  *  compress and decompress chunks
  */
 #include <postgres.h>
+#include "guc.h"
 #include <access/tableam.h>
 #include <access/xact.h>
 #include <catalog/dependency.h>
@@ -919,12 +920,19 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 			return uncompressed_chunk_id;
 		}
 
-		if (ts_chunk_is_partial(chunk) && get_compressed_chunk_index_for_recompression(chunk))
+		if (ts_guc_enable_segmentwise_recompression && ts_chunk_is_partial(chunk) &&
+			get_compressed_chunk_index_for_recompression(chunk))
 		{
 			uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk);
 		}
 		else
 		{
+			if (!ts_guc_enable_segmentwise_recompression)
+				elog(NOTICE,
+					 "segmentwise recompression is disabled, performing full recompression on "
+					 "chunk \"%s.%s\"",
+					 NameStr(chunk->fd.schema_name),
+					 NameStr(chunk->fd.table_name));
 			decompress_chunk_impl(chunk, false);
 			compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
 		}
@@ -1257,6 +1265,14 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	}
 	else
 	{
+		if (!ts_guc_enable_segmentwise_recompression)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("segmentwise recompression functionality disabled, "
+							"enable it by first setting "
+							"timescaledb.enable_segmentwise_recompression to on")));
+		}
 		uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk);
 	}
 
