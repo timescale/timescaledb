@@ -94,8 +94,8 @@ then
     match($0, /^(test|    ) ([^ ]+)[ ]+\.\.\.[ ]+([^ ]+) (|\(.*\))[ ]+([0-9]+) ms$/, a) {
         print ENVIRON["JOB_DATE"], a[2], tolower(a[3] (a[4] ? (" " a[4]) : "")), a[5];
     }
-    match($0, /^([^0-9]+) [0-9]+ +- ([^ ]+) +([0-9]+) ms/, a) {
-    	print ENVIRON["JOB_DATE"], a[2], a[1], a[3];
+    match($0, /^([^0-9]+) [0-9]+ +[-+] ([^ ]+) +([0-9]+) ms/, a) {
+        print ENVIRON["JOB_DATE"], a[2], a[1], a[3];
     }
     ' installcheck.log > tests.tsv
 
