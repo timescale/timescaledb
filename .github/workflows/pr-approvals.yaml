@@ -25,11 +25,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          echo "Event is: "
+          echo "${{ toJSON(github.event) }}"
+          echo "PR number is $PR_NUMBER"
           echo "$BODY" | egrep -qsi '^disable-check:.*\<approval-count\>'
           if [[ $? -ne 0 ]]; then
             # Get the list of modified files in this pull request
+            echo "Modified files: "
+            gh pr view $PR_NUMBER --json files
             files=$(gh pr view $PR_NUMBER --json files --jq '.files.[].path | select(startswith(".github") | not)')
+
             # Get the number of approvals in this pull request
+            echo "Reviews: "
+            gh pr view $PR_NUMBER --json reviews
             approvals=$(gh pr view $PR_NUMBER --json reviews --jq '[.reviews.[] | select((.authorAssociation == "MEMBER" or .authorAssociation == "CONTRIBUTOR") and .state == "APPROVED")] | length')
 
             if [[ $approvals -lt 2 ]] && [[ "${files}" ]] ; then
