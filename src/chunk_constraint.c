@@ -330,9 +330,17 @@ create_dimension_check_constraint(const Dimension *dim, const DimensionSlice *sl
 		enddat = ts_internal_to_time_value(slice->fd.range_end, dim->fd.column_type);
 	}
 
-	/* Convert internal format datums to string (output) datums */
+	/*
+	 * Convert internal format datums to string (output) datums.
+	 *
+	 * We are forcing ISO datestyle here to prevent parsing errors with
+	 * certain timezone/datestyle combinations.
+	 */
+	int current_datestyle = DateStyle;
+	DateStyle = USE_ISO_DATES;
 	startdat = OidFunctionCall1(outfuncid, startdat);
 	enddat = OidFunctionCall1(outfuncid, enddat);
+	DateStyle = current_datestyle;
 
 	/* Elide range constraint for +INF or -INF */
 	if (slice->fd.range_start != PG_INT64_MIN)
