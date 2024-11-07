@@ -11,7 +11,7 @@ GRANT NOLOGIN_ROLE TO :ROLE_DEFAULT_PERM_USER WITH ADMIN OPTION;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 CREATE TABLE conditions (
       time        TIMESTAMPTZ       NOT NULL,
@@ -166,7 +166,7 @@ RESET ROLE;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 CREATE TABLE conditions(
     time TIMESTAMPTZ NOT NULL,
