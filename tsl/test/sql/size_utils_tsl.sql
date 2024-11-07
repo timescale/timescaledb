@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 -- Prepare test data for continuous aggregate size function tests
 CREATE TABLE hypersize(time timestamptz, device int);
