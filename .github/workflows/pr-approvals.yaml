@@ -23,10 +23,12 @@ jobs:
         env:
           BODY: ${{ github.event.pull_request.body }}
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NUMBER: ${{ github.event.number }}
         run: |
           echo "Event is: "
-          echo "${{ toJSON(github.event) }}"
+          cat <<EOF
+            ${{ toJSON(github.event) }}
+          EOF
           echo "PR number is $PR_NUMBER"
           echo "$BODY" | egrep -qsi '^disable-check:.*\<approval-count\>'
           if [[ $? -ne 0 ]]; then
