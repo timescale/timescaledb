@@ -5,7 +5,7 @@
 --telemetry tests that require a community license
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 -- function call info size is too variable for this test, so disable it
 SET timescaledb.telemetry_level='no_functions';
