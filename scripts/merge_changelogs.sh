@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
+set -eu
 
 #
 # This script build a CHANGELOG.md entry for a new release
 #
 
-RELEASE_NOTES_HEADER_TEMPLATE='.unreleased/RELEASE_NOTES_HEADER.md.j2'
+REPO="$(readlink -e "$(dirname "${BASH_SOURCE[0]}")/..")"
+RELEASE_NOTES_HEADER_TEMPLATE="$REPO/scripts/changelog/RELEASE_NOTES_HEADER.md.j2"
 
 echo_changelog() {
     echo "${1}"
     # skip the template and release notes files
     grep -i "${2}" .unreleased/* | \
-        grep -v '.unreleased/template.*' | \
-        grep -v "${RELEASE_NOTES_HEADER_TEMPLATE}" | \
         cut -d: -f3- | sort | uniq | sed -e 's/^[[:space:]]*//' -e 's/^/* /'
     echo
 }
@@ -33,7 +33,7 @@ then
     jinja \
         -D release_current "${RELEASE_CURRENT}" \
         -D release_previous "${RELEASE_PREVIOUS}" \
-        -D release_date "${RELEASE_DATE}" ${RELEASE_NOTES_HEADER_TEMPLATE}
+        -D release_date "${RELEASE_DATE}" "${RELEASE_NOTES_HEADER_TEMPLATE}"
     echo
 fi
 
