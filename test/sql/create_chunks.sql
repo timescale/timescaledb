@@ -121,3 +121,53 @@ SELECT set_chunk_time_interval('chunk_test', NULL::BIGINT);
 SELECT set_chunk_time_interval('chunk_test2', NULL::BIGINT);
 SELECT set_chunk_time_interval('chunk_test2', NULL::INTERVAL);
 \set ON_ERROR_STOP 1
+
+-- Issue https://github.com/timescale/timescaledb/issues/7406
+CREATE TABLE test_ht (time TIMESTAMPTZ, v1 INTEGER);
+SELECT create_hypertable('test_ht', by_range('time', INTERVAL '1 hour'));
+CREATE TABLE test_tb (time TIMESTAMPTZ, v1 INTEGER);
+
+CREATE OR REPLACE FUNCTION test_tb_trg_insert() RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO test_ht VALUES (NEW.time, NEW.v1);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER test_tb_trg_insert AFTER
+INSERT ON test_tb
+FOR EACH ROW EXECUTE FUNCTION test_tb_trg_insert();
+
+-- Creating new chunk inside a trigger called by
+-- a DDL statement should not fail.
+CREATE TABLE test_output AS
+WITH inserted AS (
+  INSERT INTO test_tb VALUES (NOW(), 1), (NOW(), 2) RETURNING *
+)
+SELECT * FROM inserted;
+
+-- Check the DEFAULT REPLICA IDENTITY of the chunks
+SELECT relname, relreplident FROM show_chunks('test_ht') ch JOIN pg_class c ON (ch = c.oid) ORDER BY relname;
+
+-- Clean up
+TRUNCATE test_ht, test_tb;
+DROP TABLE test_output;
+
+-- Change the DEFAULT REPLICA IDENTITY of the chunks
+ALTER TABLE test_ht REPLICA IDENTITY FULL;
+
+-- Internally we force new chunks have the same REPLICA IDENTITY
+-- as the parent table.
+CREATE TABLE test_output AS
+WITH inserted AS (
+  INSERT INTO test_tb VALUES (NOW(), 1), (NOW(), 2) RETURNING *
+)
+SELECT * FROM inserted;
+
+-- Check current new REPLICA IDENTITY FULL in the chunks
+SELECT relname, relreplident FROM show_chunks('test_ht') ch JOIN pg_class c ON (ch = c.oid) ORDER BY relname;
+
+-- All tables should have the same number of rows
+SELECT count(*) FROM test_tb;
+SELECT count(*) FROM test_ht;
+SELECT count(*) FROM test_output;
