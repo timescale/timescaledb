@@ -45,7 +45,10 @@ arrow_slot_get_attribute_offset_map_slow(TupleTableSlot *slot)
 
 	Assert(aslot->attrs_offset_map == NULL);
 
-	Ensure(OidIsValid(relid), "invalid relation for ArrowTupleTableSlot");
+	if (!OidIsValid(relid))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid relation for ArrowTupleTableSlot")));
 
 	aslot->attrs_offset_map =
 		MemoryContextAllocZero(slot->tts_mcxt, sizeof(int16) * tupdesc->natts);
