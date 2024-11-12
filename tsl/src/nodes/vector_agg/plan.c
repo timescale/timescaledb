@@ -79,7 +79,7 @@ resolve_outer_special_vars_mutator(Node *node, void *context)
 	if ((Index) var->varno == (Index) custom->scan.scanrelid)
 	{
 		/*
-		 * This is already the ucompressed chunk var. We can see it referenced
+		 * This is already the uncompressed chunk var. We can see it referenced
 		 * by expressions in the output targetlist of DecompressChunk node.
 		 */
 		return (Node *) var;
