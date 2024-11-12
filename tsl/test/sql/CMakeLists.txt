@@ -26,6 +26,7 @@ set(TEST_FILES
     compression_defaults.sql
     compression_fks.sql
     compression_insert.sql
+    compression_indexcreate.sql
     compression_policy.sql
     compression_qualpushdown.sql
     compression_settings.sql
