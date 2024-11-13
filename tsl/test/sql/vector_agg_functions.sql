@@ -86,8 +86,8 @@ vacuum freeze analyze edges;
 
 -- We can't vectorize some aggregate functions on platforms withouth int128
 -- support. Just relax the test requirements for them.
-select case when typbyval then 'require' else 'allow' end guc_value
-from pg_type where oid = 'int8'::regtype
+select case when setting::bool then 'require' else 'allow' end guc_value
+from pg_settings where name = 'timescaledb.debug_have_int128'
 \gset
 
 set timescaledb.debug_require_vector_agg = :'guc_value';
