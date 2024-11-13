@@ -84,8 +84,13 @@ from generate_series(0, 12) s,
 select count(compress_chunk(x)) from show_chunks('edges') x;
 vacuum freeze analyze edges;
 
+-- We can't vectorize some aggregate functions on platforms withouth int128
+-- support. Just relax the test requirements for them.
+select case when typbyval then 'require' else 'allow' end guc_value
+from pg_type where oid = 'int8'::regtype
+\gset
 
-set timescaledb.debug_require_vector_agg = 'require';
+set timescaledb.debug_require_vector_agg = :'guc_value';
 ---- Uncomment to generate reference. Note that there are minor discrepancies
 ---- on float4 due to different numeric stability in our and PG implementations.
 -- set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
