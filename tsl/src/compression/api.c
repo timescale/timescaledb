@@ -779,31 +779,6 @@ set_access_method(Oid relid, const char *amname)
 	return relid;
 }
 
-enum UseAccessMethod
-{
-	USE_AM_FALSE,
-	USE_AM_TRUE,
-	USE_AM_NULL,
-};
-
-static enum UseAccessMethod
-parse_use_access_method(const char *compress_using)
-{
-	if (compress_using == NULL)
-		return USE_AM_NULL;
-
-	if (strcmp(compress_using, "heap") == 0)
-		return USE_AM_FALSE;
-	else if (strcmp(compress_using, TS_HYPERCORE_TAM_NAME) == 0)
-		return USE_AM_TRUE;
-
-	ereport(ERROR,
-			(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-			 errmsg("can only compress using \"heap\" or \"%s\"", TS_HYPERCORE_TAM_NAME)));
-
-	pg_unreachable();
-}
-
 /*
  * When using compress_chunk() with hypercore, there are three cases to
  * handle:
@@ -815,7 +790,7 @@ parse_use_access_method(const char *compress_using)
  * 3. Recompress a hypercore
  */
 static Oid
-compress_hypercore(Chunk *chunk, bool rel_is_hypercore, enum UseAccessMethod useam,
+compress_hypercore(Chunk *chunk, bool rel_is_hypercore, UseAccessMethod useam,
 				   bool if_not_compressed, bool recompress)
 {
 	Oid relid = InvalidOid;
@@ -863,20 +838,29 @@ compress_hypercore(Chunk *chunk, bool rel_is_hypercore, enum UseAccessMethod use
 	return relid;
 }
 
+/*
+ * Check the value of the use_access_method argument and use the default value
+ * otherwise.
+ */
+static UseAccessMethod
+check_useam(UseAccessMethod arg)
+{
+	return arg == USE_AM_NULL ? (UseAccessMethod) ts_guc_default_hypercore_use_access_method : arg;
+}
+
 Datum
 tsl_compress_chunk(PG_FUNCTION_ARGS)
 {
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	bool if_not_compressed = PG_ARGISNULL(1) ? true : PG_GETARG_BOOL(1);
 	bool recompress = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
-	const char *compress_using = PG_ARGISNULL(3) ? NULL : NameStr(*PG_GETARG_NAME(3));
+	UseAccessMethod useam = check_useam(PG_ARGISNULL(3) ? USE_AM_NULL : PG_GETARG_BOOL(3));
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
 	bool rel_is_hypercore = get_table_am_oid(TS_HYPERCORE_TAM_NAME, false) == chunk->amoid;
-	enum UseAccessMethod useam = parse_use_access_method(compress_using);
 
 	if (rel_is_hypercore || useam == USE_AM_TRUE)
 		uncompressed_chunk_id =

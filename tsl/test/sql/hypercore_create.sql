@@ -125,7 +125,7 @@ select * from amrels where rel=:'chunk'::regclass;
 
 -- Try same thing with compress_chunk()
 alter table :chunk set access method heap;
-select compress_chunk(:'chunk', compress_using => 'hypercore');
+select compress_chunk(:'chunk', hypercore_use_access_method => true);
 
 -- Check that chunk is using hypercore
 select relname, amname
@@ -138,7 +138,7 @@ alter table :chunk set access method hypercore;
 
 -- Test recompression after changing compression settings
 alter table test3 set (timescaledb.compress_segmentby='device');
-select compress_chunk(:'chunk', compress_using => 'hypercore', recompress => true);
+select compress_chunk(:'chunk', hypercore_use_access_method => true, recompress => true);
 
 -- Create a second chunk
 insert into test3 values ('2022-08-01', 1, 1.0);
@@ -219,9 +219,9 @@ from compressed_rel_size_stats;
 
 -- Create hypercores again and check that compression size stats are
 -- updated showing compressed data
-select compress_chunk(ch, compress_using => 'hypercore')
+select compress_chunk(ch, hypercore_use_access_method => true)
 from show_chunks('test2') ch;
-select compress_chunk(ch, compress_using => 'hypercore')
+select compress_chunk(ch, hypercore_use_access_method => true)
 from show_chunks('test3') ch;
 
 -- Save the stats for later comparison. Exclude the amname column
@@ -241,8 +241,8 @@ select * from compressed_rel_size_stats order by rel;
 -- compression size stats
 select compress_chunk(decompress_chunk(ch))
 from show_chunks('test2') ch;
--- Using compress_using => NULL should be the same as "heap"
-select compress_chunk(decompress_chunk(ch), compress_using => NULL)
+--- Using hypercore_use_access_method => NULL should be the same as "heap"
+select compress_chunk(decompress_chunk(ch), hypercore_use_access_method => NULL)
 from show_chunks('test3') ch;
 
 select * from compressed_rel_size_stats order by rel;
@@ -276,7 +276,7 @@ set client_min_messages=DEBUG1;
 with chunks as (
 	 select ch from show_chunks('test2') ch offset 1
 )
-select compress_chunk(ch, compress_using => 'hypercore') from chunks;
+select compress_chunk(ch, hypercore_use_access_method => true) from chunks;
 
 -- Test direct migration of the remaining chunk via SET ACCESS
 -- METHOD. Add some uncompressed data to test migration with partially
@@ -316,23 +316,18 @@ commit;
 -- Trying to convert a hypercore to a hypercore should be an error
 -- if if_not_compressed is false and the hypercore is fully
 -- compressed.
-select compress_chunk(ch, compress_using => 'hypercore', if_not_compressed => false)
-from show_chunks('test2') ch;
-
--- Compressing using something different than "hypercore" or "heap"
--- should not be allowed
-select compress_chunk(ch, compress_using => 'non_existing_am')
+select compress_chunk(ch, hypercore_use_access_method => true, if_not_compressed => false)
 from show_chunks('test2') ch;
 
 \set ON_ERROR_STOP 1
 
--- Compressing from hypercore with compress_using=>heap should lead
--- to recompression of hypercore with a notice.
-select compress_chunk(ch, compress_using => 'heap')
+-- Compressing from hypercore not using access method should lead to
+-- recompression of hypercore with a notice.
+select compress_chunk(ch, hypercore_use_access_method => false)
 from show_chunks('test2') ch;
 
--- Compressing a hypercore without specifying compress_using should
--- lead to recompression. First check that :chunk is a hypercore.
+-- Compressing a hypercore should by default lead to
+-- recompression. First check that :chunk is a hypercore.
 select ch as chunk from show_chunks('test2') ch limit 1 \gset
 select * from compressed_rel_size_stats
 where amname = 'hypercore' and rel = :'chunk'::regclass;
@@ -340,11 +335,11 @@ insert into :chunk values ('2022-06-01 10:01', 6, 6, 6.0, 6.0);
 select ctid from :chunk where created_at = '2022-06-01 10:01' and device_id = 6;
 select compress_chunk(:'chunk');
 select ctid from :chunk where created_at = '2022-06-01 10:01' and device_id = 6;
--- Compressing a hypercore with compress_using=>hypercore should
--- also lead to recompression
+-- Compressing a hypercore using the access method should also lead to
+-- recompression
 insert into :chunk values ('2022-06-01 11:02', 7, 7, 7.0, 7.0);
 select ctid from :chunk where created_at = '2022-06-01 11:02' and device_id = 7;
-select compress_chunk(:'chunk', compress_using => 'hypercore');
+select compress_chunk(:'chunk', hypercore_use_access_method => true);
 select ctid from :chunk where created_at = '2022-06-01 11:02' and device_id = 7;
 
 -- Convert all hypercores back to heap
@@ -358,37 +353,37 @@ select decompress_chunk(rel) ch
 -- cleaned up between two or more commands in same transaction.
 select ch as chunk2 from show_chunks('test2') ch offset 1 limit 1 \gset
 start transaction;
-select compress_chunk(:'chunk', compress_using => 'hypercore');
-select compress_chunk(:'chunk2', compress_using => 'hypercore');
+select compress_chunk(:'chunk', hypercore_use_access_method => true);
+select compress_chunk(:'chunk2', hypercore_use_access_method => true);
 commit;
 
 select * from compressed_rel_size_stats
 where amname = 'hypercore' and relparent = 'test2'::regclass
 order by rel;
 
--- Test that we can compress old way using compress_using=>heap
+-- Test that we can compress old way by not using the access method
 select ch as chunk3 from show_chunks('test2') ch offset 2 limit 1 \gset
-select compress_chunk(:'chunk3', compress_using => 'heap');
+select compress_chunk(:'chunk3', hypercore_use_access_method => false);
 
 select * from compressed_rel_size_stats
 where amname = 'heap' and relparent = 'test2'::regclass
 order by rel;
 
 \set ON_ERROR_STOP 0
--- If we call compress_chunk with compress_using=>'heap' on a
+-- If we call compress_chunk using the table access method on a
 -- heap-compressed chunk, it should lead to an error if
 -- if_not_compressed is false. The commands below are all equivalent
 -- in this case.
-select compress_chunk(:'chunk3', compress_using => 'heap', if_not_compressed=>false);
-select compress_chunk(:'chunk3', compress_using => NULL, if_not_compressed=>false);
+select compress_chunk(:'chunk3', hypercore_use_access_method => false, if_not_compressed=>false);
+select compress_chunk(:'chunk3', hypercore_use_access_method => NULL, if_not_compressed=>false);
 select compress_chunk(:'chunk3', if_not_compressed=>false);
 \set ON_ERROR_STOP 1
 
 -- For a heap-compressed chunk, these should all be equivalent and
 -- should not do anything when there is nothing to recompress. A
 -- notice should be raised instead of an error.
-select compress_chunk(:'chunk3', compress_using => 'heap');
-select compress_chunk(:'chunk3', compress_using => NULL);
+select compress_chunk(:'chunk3', hypercore_use_access_method => false);
+select compress_chunk(:'chunk3', hypercore_use_access_method => NULL);
 select compress_chunk(:'chunk3');
 
 -- Insert new data to create a "partially compressed" chunk. Note that
@@ -396,7 +391,7 @@ select compress_chunk(:'chunk3');
 -- doesn't properly update the partially compressed state.
 insert into test2 values ('2022-06-15 16:00', 8, 8, 8.0, 8.0);
 select * from only :chunk3;
-select compress_chunk(:'chunk3', compress_using => 'heap');
+select compress_chunk(:'chunk3', hypercore_use_access_method => false);
 -- The tuple should no longer be in the non-compressed chunk
 select * from only :chunk3;
 -- But the tuple is returned in a query without ONLY
@@ -439,7 +434,7 @@ insert into rides values
 (6,'2016-01-01 00:00:02','2016-01-01 00:11:55',1,1.20,-73.979423522949219,40.744613647460938,1,-73.992034912109375,40.753944396972656,2,9,0.5,0.5,0,0,0.3,10.3),
 (356,'2016-01-01 00:00:01','2016-01-01 00:11:55',1,1.20,-73.979423522949219,40.744613647460938,1,-73.992034912109375,40.753944396972656,2,9,0.5,0.5,0,0,0.3,10.3);
 -- Check that it is possible to compress
-select compress_chunk(ch, compress_using=>'hypercore') from show_chunks('rides') ch;
+select compress_chunk(ch, hypercore_use_access_method => true) from show_chunks('rides') ch;
 select rel, amname from compressed_rel_size_stats
 where relparent::regclass = 'rides'::regclass;
 
@@ -451,3 +446,30 @@ analyze rides;
 explain (costs off)
 select * from rides order by pickup_datetime;
 select * from rides order by pickup_datetime;
+
+-- All these are valid methods to set the default
+show timescaledb.default_hypercore_use_access_method;
+set timescaledb.default_hypercore_use_access_method to on;
+set timescaledb.default_hypercore_use_access_method to off;
+set timescaledb.default_hypercore_use_access_method to true;
+set timescaledb.default_hypercore_use_access_method to false;
+set timescaledb.default_hypercore_use_access_method to yes;
+set timescaledb.default_hypercore_use_access_method to no;
+set timescaledb.default_hypercore_use_access_method to 0;
+set timescaledb.default_hypercore_use_access_method to 1;
+show timescaledb.default_hypercore_use_access_method;
+
+-- This should unset the value
+reset timescaledb.default_hypercore_use_access_method;
+show timescaledb.default_hypercore_use_access_method;
+
+-- Using GUC should compress using the hyperstore
+set timescaledb.default_hypercore_use_access_method to on;
+create table test5 (time timestamptz not null, device int, temp float);
+select created from create_hypertable('test5', 'time');
+insert into test5 values ('2022-06-01', 1, 1.0), ('2022-08-01', 1, 1.0);
+
+select ch as chunk from show_chunks('test5') ch limit 1 \gset
+alter table test5 set (timescaledb.compress);
+select compress_chunk(:'chunk');
+select * from amrels where relparent = 'test5'::regclass;

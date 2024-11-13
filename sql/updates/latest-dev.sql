@@ -11,7 +11,7 @@ CREATE FUNCTION @extschema@.compress_chunk(
     uncompressed_chunk REGCLASS,
     if_not_compressed BOOLEAN = true,
     recompress BOOLEAN = false,
-    compress_using NAME = NULL
+    hypercore_use_access_method BOOL = NULL
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE;
 
 DROP FUNCTION IF EXISTS @extschema@.add_compression_policy(hypertable REGCLASS, compress_after "any", if_not_exists BOOL, schedule_interval INTERVAL, initial_start TIMESTAMPTZ, timezone TEXT, compress_created_before INTERVAL);
@@ -24,7 +24,7 @@ CREATE FUNCTION @extschema@.add_compression_policy(
     initial_start TIMESTAMPTZ = NULL,
     timezone TEXT = NULL,
     compress_created_before INTERVAL = NULL,
-    compress_using NAME = NULL
+    hypercore_use_access_method BOOL = NULL
 )
 RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
@@ -39,7 +39,7 @@ CREATE FUNCTION timescaledb_experimental.add_policies(
     refresh_end_offset "any" = NULL,
     compress_after "any" = NULL,
     drop_after "any" = NULL,
-    compress_using NAME = NULL)
+    hypercore_use_access_method BOOL = NULL)
 RETURNS BOOL
 AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
 LANGUAGE C VOLATILE;

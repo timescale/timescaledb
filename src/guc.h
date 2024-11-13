@@ -11,6 +11,21 @@
 #include "config.h"
 #include "export.h"
 
+/*
+ * Decide if the access method should be used for compression, or if it is
+ * undefined. Used for parameter values to PostgreSQL functions and is a
+ * nullable boolean.
+ *
+ * Using explicit values of TRUE = 1 and FALSE = 0 since this enum is cast to
+ * boolean value in the code.
+ */
+typedef enum UseAccessMethod
+{
+	USE_AM_FALSE = 0,
+	USE_AM_TRUE = 1,
+	USE_AM_NULL = 2,
+} UseAccessMethod;
+
 #ifdef USE_TELEMETRY
 extern bool ts_telemetry_on(void);
 extern bool ts_function_telemetry_on(void);
@@ -44,6 +59,7 @@ extern TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge;
 extern TSDLLEXPORT bool ts_guc_enable_skip_scan;
 extern TSDLLEXPORT bool ts_guc_enable_chunkwise_aggregation;
 extern TSDLLEXPORT bool ts_guc_enable_vectorized_aggregation;
+extern TSDLLEXPORT bool ts_guc_enable_custom_hashagg;
 extern bool ts_guc_restoring;
 extern int ts_guc_max_open_chunks_per_insert;
 extern int ts_guc_max_cached_chunks_per_hypertable;
@@ -101,6 +117,7 @@ extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_vector_agg;
 
 extern TSDLLEXPORT bool ts_guc_debug_compression_path_info;
 extern TSDLLEXPORT bool ts_guc_enable_rowlevel_compression_locking;
+extern TSDLLEXPORT bool ts_guc_default_hypercore_use_access_method;
 
 extern TSDLLEXPORT bool ts_guc_debug_require_batch_sorted_merge;
 
@@ -120,4 +137,5 @@ typedef enum
 extern TSDLLEXPORT void ts_feature_flag_check(FeatureFlagType);
 extern TSDLLEXPORT Oid ts_guc_default_segmentby_fn_oid(void);
 extern TSDLLEXPORT Oid ts_guc_default_orderby_fn_oid(void);
+
 extern TSDLLEXPORT bool ts_is_whitelisted_indexam(const char *amname);

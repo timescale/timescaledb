@@ -16,6 +16,7 @@
 #include "guc.h"
 #include "hypertable_cache.h"
 #include "license_guc.h"
+
 #ifdef USE_TELEMETRY
 #include "telemetry/telemetry.h"
 #endif
@@ -135,9 +136,11 @@ TSDLLEXPORT bool ts_guc_enable_compression_wal_markers = false;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
 bool ts_guc_enable_chunkwise_aggregation = true;
 bool ts_guc_enable_vectorized_aggregation = true;
+bool ts_guc_enable_custom_hashagg = false;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = false;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
+TSDLLEXPORT bool ts_guc_default_hypercore_use_access_method = false;
 bool ts_guc_enable_chunk_skipping = false;
 TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
 
@@ -759,6 +762,17 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_custom_hashagg"),
+							 "Enable custom hash aggregation",
+							 "Enable creating custom hash aggregation plans",
+							 &ts_guc_enable_custom_hashagg,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_vectorized_aggregation"),
 							 "Enable vectorized aggregation",
 							 "Enable vectorized aggregation for compressed data",
@@ -1104,6 +1118,18 @@ _guc_init(void)
 							 /* assign_hook= */ NULL,
 							 /* show_hook= */ NULL);
 #endif
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("default_hypercore_use_access_method"),
+							 gettext_noop("Enable to always use Hypercore TAM when compressing."),
+							 gettext_noop("Sets the global default for using Hypercore TAM when "
+										  "compressing chunks."),
+							 &ts_guc_default_hypercore_use_access_method,
+							 false,
+							 /* context= */ PGC_USERSET,
+							 /* flags= */ 0,
+							 /* check_hook= */ NULL,
+							 /* assign_hook= */ NULL,
+							 /* show_hook= */ NULL);
 
 	/* register feature flags */
 	ts_feature_flag_add(FEATURE_HYPERTABLE);

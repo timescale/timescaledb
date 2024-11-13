@@ -139,7 +139,7 @@ begin
 end;
 $$
 language plpgsql;
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
+select compress_chunk(show_chunks(:'hypertable'), hypercore_use_access_method => true);
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -236,7 +236,7 @@ NOTICE:  adding not-null constraint to column "time"
 
 alter table backward_cursor set (timescaledb.compress, timescaledb.compress_segmentby='location_id', timescaledb.compress_orderby='time asc');
 insert into backward_cursor values ('2024-01-01 01:00', 1, 1.0), ('2024-01-01 02:00', 1, 2.0), ('2024-01-01 03:00', 2, 3.0), ('2024-01-01 04:00', 2, 4.0);
-select compress_chunk(ch, compress_using=>'hypercore') from show_chunks('backward_cursor') ch;
+select compress_chunk(ch, hypercore_use_access_method => true) from show_chunks('backward_cursor') ch;
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_3_13_chunk

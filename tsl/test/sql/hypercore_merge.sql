@@ -12,7 +12,7 @@ set enable_hashjoin to false;
 
 -- There are already tests to merge into uncompressed tables, so just
 -- compress all chunks using Hypercore.
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
+select compress_chunk(show_chunks(:'hypertable'), hypercore_use_access_method => true);
 
 create table source_data (
        created_at timestamptz not null,
@@ -62,7 +62,7 @@ select * from :hypertable where not _timescaledb_debug.is_compressed_tid(ctid);
 
 -- Recompress all and try to insert the same rows again. This there
 -- should be no rows inserted.
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
+select compress_chunk(show_chunks(:'hypertable'), hypercore_use_access_method => true);
 
 \x on
 select * from :hypertable where not _timescaledb_debug.is_compressed_tid(ctid);
