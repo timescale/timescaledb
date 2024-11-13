@@ -137,7 +137,8 @@ from
         'cint2 is null']) with ordinality as condition(condition, n),
     unnest(array[
         null,
-        's']) with ordinality as grouping(grouping, n)
+        's',
+        'ss']) with ordinality as grouping(grouping, n)
 where
     true
     and (explain is null /* or condition is null and grouping = 's' */)
