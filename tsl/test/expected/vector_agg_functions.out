@@ -109,7 +109,7 @@ from pg_type where oid = 'int8'::regtype
 set timescaledb.debug_require_vector_agg = :'guc_value';
 ---- Uncomment to generate reference. Note that there are minor discrepancies
 ---- on float4 due to different numeric stability in our and PG implementations.
--- set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
+--set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
 select
     format('%sselect %s%s(%s) from aggfns%s%s%s;',
             explain,
