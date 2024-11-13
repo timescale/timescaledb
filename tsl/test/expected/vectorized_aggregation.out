@@ -3292,3 +3292,10 @@ SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 1000 AND
 (75 rows)
 
 RESET max_parallel_workers_per_gather;
+-- Can't group by a system column
+SELECT sum(float_value) FROM testtable2 GROUP BY tableoid ORDER BY 1 LIMIT 1;
+  sum  
+-------
+ 82620
+(1 row)
+

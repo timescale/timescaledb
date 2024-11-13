@@ -18,6 +18,9 @@ select count(compress_chunk(x)) from show_chunks('pvagg') x;
 
 analyze pvagg;
 
+-- Uncomment to generate reference
+--set timescaledb.enable_vectorized_aggregation to off;
+
 
 explain (verbose, costs off)
 select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a) from pvagg where s = x) xx;

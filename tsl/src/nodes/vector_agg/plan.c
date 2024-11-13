@@ -205,6 +205,16 @@ is_vector_var(CustomScan *custom, Expr *expr, bool *out_is_segmentby)
 		   custom->scan.scanrelid,
 		   decompressed_var->varno);
 
+	if (decompressed_var->varattno <= 0)
+	{
+		/* Can't work with special attributes like tableoid. */
+		if (out_is_segmentby)
+		{
+			*out_is_segmentby = false;
+		}
+		return false;
+	}
+
 	/*
 	 * Now, we have to translate the decompressed varno into the compressed
 	 * column index, to check if the column supports bulk decompression.
