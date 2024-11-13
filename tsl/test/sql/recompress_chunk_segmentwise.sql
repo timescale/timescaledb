@@ -290,3 +290,21 @@ select * from :compressed_chunk_name;
 insert into nullseg_many values (:'start_time', 1, NULL, NULL);
 SELECT compress_chunk(:'chunk_to_compress');
 select * from :compressed_chunk_name;
+
+--- Test behaviour when enable_segmentwise_recompression GUC if OFF
+CREATE TABLE guc_test(time timestamptz not null, a int, b int, c int);
+SELECT create_hypertable('guc_test', by_range('time', INTERVAL '1 day'));
+
+ALTER TABLE guc_test set (timescaledb.compress, timescaledb.compress_segmentby = 'a, b');
+INSERT INTO guc_test VALUES ('2024-10-30 14:04:00.501519-06'::timestamptz, 1, 1, 1);
+SELECT show_chunks as chunk_to_compress FROM show_chunks('guc_test') LIMIT 1 \gset
+SELECT compress_chunk(:'chunk_to_compress');
+
+INSERT INTO guc_test VALUES ('2024-10-30 14:14:00.501519-06'::timestamptz, 1, 1, 2);
+-- When GUC is OFF, recompress function should throw an error
+SET timescaledb.enable_segmentwise_recompression TO OFF;
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress');
+\set ON_ERROR_STOP 1
+-- When GUC is OFF, entire chunk should be fully uncompressed and compressed instead
+SELECT compress_chunk(:'chunk_to_compress');

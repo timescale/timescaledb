@@ -44,6 +44,7 @@ extern TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge;
 extern TSDLLEXPORT bool ts_guc_enable_skip_scan;
 extern TSDLLEXPORT bool ts_guc_enable_chunkwise_aggregation;
 extern TSDLLEXPORT bool ts_guc_enable_vectorized_aggregation;
+extern TSDLLEXPORT bool ts_guc_enable_custom_hashagg;
 extern bool ts_guc_restoring;
 extern int ts_guc_max_open_chunks_per_insert;
 extern int ts_guc_max_cached_chunks_per_hypertable;
@@ -52,6 +53,7 @@ extern bool ts_guc_enable_tss_callbacks;
 extern TSDLLEXPORT bool ts_guc_enable_delete_after_compression;
 extern TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh;
 extern bool ts_guc_enable_chunk_skipping;
+extern TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression;
 
 #ifdef USE_TELEMETRY
 typedef enum TelemetryLevel

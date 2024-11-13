@@ -124,7 +124,9 @@ constify_tableoid_walker(Node *node, ConstifyTableOidContext *ctx)
 		 * segfault if any system columns get through
 		 */
 		if (var->varattno < SelfItemPointerAttributeNumber)
-			elog(ERROR, "transparent decompression only supports tableoid system column");
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+					 errmsg("transparent decompression only supports tableoid system column")));
 
 		return node;
 	}

@@ -112,7 +112,7 @@ select cl.oid::regclass as rel, am.amname, inh.inhparent::regclass as relparent
   left join pg_inherits inh on (inh.inhrelid = cl.oid);
 -- Compress the chunks and check that the counts are the same
 select location_id, count(*) into orig from :hypertable GROUP BY location_id;
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
+select compress_chunk(show_chunks(:'hypertable'), hypercore_use_access_method => true);
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk

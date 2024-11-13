@@ -36,7 +36,7 @@ CREATE OR REPLACE FUNCTION @extschema@.compress_chunk(
     uncompressed_chunk REGCLASS,
     if_not_compressed BOOLEAN = true,
     recompress BOOLEAN = false,
-    compress_using NAME = NULL
+    hypercore_use_access_method BOOL = NULL
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_compress_chunk' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION @extschema@.decompress_chunk(

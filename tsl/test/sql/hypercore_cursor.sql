@@ -40,7 +40,7 @@ end;
 $$
 language plpgsql;
 
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
+select compress_chunk(show_chunks(:'hypertable'), hypercore_use_access_method => true);
 
 -- Compare executing the function with a cursor with a query fetching
 -- the same data directly from the hypertable.
@@ -107,7 +107,7 @@ create table backward_cursor (time timestamptz, location_id bigint, temp float8)
 select create_hypertable('backward_cursor', 'time', create_default_indexes=>false);
 alter table backward_cursor set (timescaledb.compress, timescaledb.compress_segmentby='location_id', timescaledb.compress_orderby='time asc');
 insert into backward_cursor values ('2024-01-01 01:00', 1, 1.0), ('2024-01-01 02:00', 1, 2.0), ('2024-01-01 03:00', 2, 3.0), ('2024-01-01 04:00', 2, 4.0);
-select compress_chunk(ch, compress_using=>'hypercore') from show_chunks('backward_cursor') ch;
+select compress_chunk(ch, hypercore_use_access_method => true) from show_chunks('backward_cursor') ch;
 insert into backward_cursor values ('2024-01-01 05:00', 3, 5.0), ('2024-01-01 06:00', 3, 6.0);
 
 begin;

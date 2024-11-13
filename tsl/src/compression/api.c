@@ -8,6 +8,7 @@
  *  compress and decompress chunks
  */
 #include <postgres.h>
+#include "guc.h"
 #include <access/tableam.h>
 #include <access/xact.h>
 #include <catalog/dependency.h>
@@ -778,31 +779,6 @@ set_access_method(Oid relid, const char *amname)
 	return relid;
 }
 
-enum UseAccessMethod
-{
-	USE_AM_FALSE,
-	USE_AM_TRUE,
-	USE_AM_NULL,
-};
-
-static enum UseAccessMethod
-parse_use_access_method(const char *compress_using)
-{
-	if (compress_using == NULL)
-		return USE_AM_NULL;
-
-	if (strcmp(compress_using, "heap") == 0)
-		return USE_AM_FALSE;
-	else if (strcmp(compress_using, TS_HYPERCORE_TAM_NAME) == 0)
-		return USE_AM_TRUE;
-
-	ereport(ERROR,
-			(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-			 errmsg("can only compress using \"heap\" or \"%s\"", TS_HYPERCORE_TAM_NAME)));
-
-	pg_unreachable();
-}
-
 /*
  * When using compress_chunk() with hypercore, there are three cases to
  * handle:
@@ -814,7 +790,7 @@ parse_use_access_method(const char *compress_using)
  * 3. Recompress a hypercore
  */
 static Oid
-compress_hypercore(Chunk *chunk, bool rel_is_hypercore, enum UseAccessMethod useam,
+compress_hypercore(Chunk *chunk, bool rel_is_hypercore, UseAccessMethod useam,
 				   bool if_not_compressed, bool recompress)
 {
 	Oid relid = InvalidOid;
@@ -868,14 +844,13 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	bool if_not_compressed = PG_ARGISNULL(1) ? true : PG_GETARG_BOOL(1);
 	bool recompress = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
-	const char *compress_using = PG_ARGISNULL(3) ? NULL : NameStr(*PG_GETARG_NAME(3));
+	UseAccessMethod useam = PG_ARGISNULL(3) ? USE_AM_NULL : PG_GETARG_BOOL(3);
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
 	bool rel_is_hypercore = get_table_am_oid(TS_HYPERCORE_TAM_NAME, false) == chunk->amoid;
-	enum UseAccessMethod useam = parse_use_access_method(compress_using);
 
 	if (rel_is_hypercore || useam == USE_AM_TRUE)
 		uncompressed_chunk_id =
@@ -919,12 +894,19 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 			return uncompressed_chunk_id;
 		}
 
-		if (ts_chunk_is_partial(chunk) && get_compressed_chunk_index_for_recompression(chunk))
+		if (ts_guc_enable_segmentwise_recompression && ts_chunk_is_partial(chunk) &&
+			get_compressed_chunk_index_for_recompression(chunk))
 		{
 			uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk);
 		}
 		else
 		{
+			if (!ts_guc_enable_segmentwise_recompression)
+				elog(NOTICE,
+					 "segmentwise recompression is disabled, performing full recompression on "
+					 "chunk \"%s.%s\"",
+					 NameStr(chunk->fd.schema_name),
+					 NameStr(chunk->fd.table_name));
 			decompress_chunk_impl(chunk, false);
 			compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
 		}
@@ -1257,6 +1239,14 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	}
 	else
 	{
+		if (!ts_guc_enable_segmentwise_recompression)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("segmentwise recompression functionality disabled, "
+							"enable it by first setting "
+							"timescaledb.enable_segmentwise_recompression to on")));
+		}
 		uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk);
 	}
 
