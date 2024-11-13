@@ -141,7 +141,7 @@ alter table the_hypercore set (
       timescaledb.compress_segmentby = '',
       timescaledb.compress_orderby = 'updated_at desc'
 );
-select compress_chunk(show_chunks('the_hypercore'), compress_using => 'hypercore');
+select compress_chunk(show_chunks('the_hypercore'), hypercore_use_access_method => true);
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_3_7_chunk

@@ -135,7 +135,7 @@ select explain_anonymize(format($$
 $$, :'chunk2'));
 select created_at, location_id, temp from :chunk2 where location_id=1 and temp=2.0;
 
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
+select compress_chunk(show_chunks(:'hypertable'), hypercore_use_access_method => true);
 
 vacuum analyze :hypertable;
 
@@ -378,7 +378,7 @@ select * from nullvalues where only_nulls is null;
 select * from only_nulls_null;
 
 -- Convert all chunks to hypercore and run same queries
-select compress_chunk(ch, compress_using=>'hypercore') from show_chunks('nullvalues') ch;
+select compress_chunk(ch, hypercore_use_access_method => true) from show_chunks('nullvalues') ch;
 
 select c.relname, a.amname FROM pg_class c
 join pg_am a on (c.relam = a.oid)

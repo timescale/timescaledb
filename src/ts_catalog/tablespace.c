@@ -522,10 +522,11 @@ ts_tablespace_attach_internal(Name tspcname, Oid hypertable_oid, bool if_not_att
 	CatalogSecurityContext sec_ctx;
 
 	if (NULL == tspcname)
-		elog(ERROR, "invalid tablespace name");
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid tablespace name")));
 
 	if (!OidIsValid(hypertable_oid))
-		elog(ERROR, "invalid hypertable");
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid hypertable")));
 
 	tspc_oid = get_tablespace_oid(NameStr(*tspcname), true);
 

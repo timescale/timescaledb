@@ -135,6 +135,7 @@ TSDLLEXPORT bool ts_guc_enable_compression_wal_markers = false;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
 bool ts_guc_enable_chunkwise_aggregation = true;
 bool ts_guc_enable_vectorized_aggregation = true;
+bool ts_guc_enable_custom_hashagg = false;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = false;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
@@ -753,6 +754,17 @@ _guc_init(void)
 							 " chunk level",
 							 &ts_guc_enable_chunkwise_aggregation,
 							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_custom_hashagg"),
+							 "Enable custom hash aggregation",
+							 "Enable creating custom hash aggregation plans",
+							 &ts_guc_enable_custom_hashagg,
+							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,
