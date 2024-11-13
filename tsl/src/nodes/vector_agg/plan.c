@@ -82,7 +82,7 @@ resolve_outer_special_vars_mutator(Node *node, void *context)
 		 * This is already the uncompressed chunk var. We can see it referenced
 		 * by expressions in the output targetlist of DecompressChunk node.
 		 */
-		return (Node *) var;
+		return (Node *) copyObject(var);
 	}
 
 	if (var->varno == OUTER_VAR)
