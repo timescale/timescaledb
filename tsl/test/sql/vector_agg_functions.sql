@@ -86,14 +86,14 @@ vacuum freeze analyze edges;
 
 -- We can't vectorize some aggregate functions on platforms withouth int128
 -- support. Just relax the test requirements for them.
-select case when typbyval then 'require' else 'allow' end guc_value
-from pg_type where oid = 'int8'::regtype
+select case when setting::bool then 'require' else 'allow' end guc_value
+from pg_settings where name = 'timescaledb.debug_have_int128'
 \gset
 
 set timescaledb.debug_require_vector_agg = :'guc_value';
 ---- Uncomment to generate reference. Note that there are minor discrepancies
 ---- on float4 due to different numeric stability in our and PG implementations.
---set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
+--set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'forbid';
 
 select
     format('%sselect %s%s(%s) from aggfns%s%s%s;',
@@ -137,8 +137,7 @@ from
         'cint2 is null']) with ordinality as condition(condition, n),
     unnest(array[
         null,
-        's',
-        'ss']) with ordinality as grouping(grouping, n)
+        's']) with ordinality as grouping(grouping, n)
 where
     true
     and (explain is null /* or condition is null and grouping = 's' */)

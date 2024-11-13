@@ -75,7 +75,7 @@ create_grouping_policy_batch(int num_agg_defs, VectorAggDef *agg_defs, int num_g
 	for (int i = 0; i < policy->num_agg_defs; i++)
 	{
 		VectorAggDef *agg_def = &policy->agg_defs[i];
-		policy->agg_states[i] = palloc0(agg_def->func.state_bytes);
+		policy->agg_states[i] = palloc(agg_def->func.state_bytes);
 	}
 
 	policy->output_grouping_values =
@@ -174,12 +174,8 @@ compute_single_aggregate(GroupingPolicyBatch *policy, DecompressBatchState *batc
 		 * The batches that are fully filtered out by vectorized quals should
 		 * have been skipped by the caller.
 		 */
-		// Assert(n > 0);
-
-		if (n > 0)
-		{
-			agg_def->func.agg_scalar(agg_state, arg_datum, arg_isnull, n, agg_extra_mctx);
-		}
+		Assert(n > 0);
+		agg_def->func.agg_scalar(agg_state, arg_datum, arg_isnull, n, agg_extra_mctx);
 	}
 }
 

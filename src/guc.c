@@ -180,6 +180,9 @@ char *ts_current_timestamp_mock = NULL;
 int ts_guc_debug_toast_tuple_target = 128;
 
 #ifdef TS_DEBUG
+
+bool ts_guc_debug_have_int128;
+
 static const struct config_enum_entry debug_require_options[] = { { "allow", DRO_Allow, false },
 																  { "forbid", DRO_Forbid, false },
 																  { "require", DRO_Require, false },
@@ -1062,6 +1065,21 @@ _guc_init(void)
 							/* check_hook= */ NULL,
 							/* assign_hook= */ NULL,
 							/* show_hook= */ NULL);
+
+	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("debug_have_int128"),
+							 /* short_desc= */ "whether we have int128 support",
+							 /* long_desc= */ "this is for debugging purposes",
+							 /* valueAddr= */ &ts_guc_debug_have_int128,
+#ifdef HAVE_INT128
+							 /* bootValue= */ true,
+#else
+							 /* bootValue= */ false,
+#endif
+							 /* context= */ PGC_INTERNAL,
+							 /* flags= */ 0,
+							 /* check_hook= */ NULL,
+							 /* assign_hook= */ NULL,
+							 /* show_hook= */ NULL);
 
 	DefineCustomEnumVariable(/* name= */ MAKE_EXTOPTION("debug_require_vector_agg"),
 							 /* short_desc= */
