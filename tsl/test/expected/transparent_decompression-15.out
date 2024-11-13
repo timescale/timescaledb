@@ -2067,6 +2067,7 @@ WHERE device_id = 1;
    ->  Append (actual rows=3 loops=1)
          ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
                Output: (PARTIAL count(*))
+               Grouping Policy: all compressed batches
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=720 loops=1)
                      Bulk Decompression: false
                      ->  Index Scan using compress_hyper_5_15_chunk_device_id_device_id_peer__ts_meta_idx on _timescaledb_internal.compress_hyper_5_15_chunk (actual rows=1 loops=1)
@@ -2079,12 +2080,13 @@ WHERE device_id = 1;
                      Rows Removed by Filter: 2688
          ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
                Output: (PARTIAL count(*))
+               Grouping Policy: all compressed batches
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_3_chunk (actual rows=336 loops=1)
                      Bulk Decompression: false
                      ->  Index Scan using compress_hyper_5_16_chunk_device_id_device_id_peer__ts_meta_idx on _timescaledb_internal.compress_hyper_5_16_chunk (actual rows=1 loops=1)
                            Output: compress_hyper_5_16_chunk._ts_meta_count, compress_hyper_5_16_chunk.device_id, compress_hyper_5_16_chunk.device_id_peer, compress_hyper_5_16_chunk._ts_meta_min_3, compress_hyper_5_16_chunk._ts_meta_max_3, compress_hyper_5_16_chunk."time", compress_hyper_5_16_chunk._ts_meta_min_1, compress_hyper_5_16_chunk._ts_meta_max_1, compress_hyper_5_16_chunk.v0, compress_hyper_5_16_chunk._ts_meta_min_2, compress_hyper_5_16_chunk._ts_meta_max_2, compress_hyper_5_16_chunk.v1, compress_hyper_5_16_chunk.v2, compress_hyper_5_16_chunk.v3
                            Index Cond: (compress_hyper_5_16_chunk.device_id = 1)
-(22 rows)
+(24 rows)
 
 -- should be able to order using an index
 CREATE INDEX tmp_idx ON :TEST_TABLE (device_id);
@@ -6128,6 +6130,7 @@ WHERE device_id = 1;
    ->  Append (actual rows=3 loops=1)
          ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
                Output: (PARTIAL count(*))
+               Grouping Policy: all compressed batches
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_4_chunk (actual rows=720 loops=1)
                      Bulk Decompression: false
                      ->  Index Scan using compress_hyper_6_17_chunk_device_id_device_id_peer__ts_meta_idx on _timescaledb_internal.compress_hyper_6_17_chunk (actual rows=1 loops=1)
@@ -6140,12 +6143,13 @@ WHERE device_id = 1;
                      Heap Fetches: 0
          ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
                Output: (PARTIAL count(*))
+               Grouping Policy: all compressed batches
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_10_chunk (actual rows=336 loops=1)
                      Bulk Decompression: false
                      ->  Index Scan using compress_hyper_6_20_chunk_device_id_device_id_peer__ts_meta_idx on _timescaledb_internal.compress_hyper_6_20_chunk (actual rows=1 loops=1)
                            Output: compress_hyper_6_20_chunk._ts_meta_count, compress_hyper_6_20_chunk.device_id, compress_hyper_6_20_chunk.device_id_peer, compress_hyper_6_20_chunk._ts_meta_min_3, compress_hyper_6_20_chunk._ts_meta_max_3, compress_hyper_6_20_chunk."time", compress_hyper_6_20_chunk._ts_meta_min_1, compress_hyper_6_20_chunk._ts_meta_max_1, compress_hyper_6_20_chunk.v0, compress_hyper_6_20_chunk._ts_meta_min_2, compress_hyper_6_20_chunk._ts_meta_max_2, compress_hyper_6_20_chunk.v1, compress_hyper_6_20_chunk.v2, compress_hyper_6_20_chunk.v3
                            Index Cond: (compress_hyper_6_20_chunk.device_id = 1)
-(22 rows)
+(24 rows)
 
 -- should be able to order using an index
 CREATE INDEX tmp_idx ON :TEST_TABLE (device_id);

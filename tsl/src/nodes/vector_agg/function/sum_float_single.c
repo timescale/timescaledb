@@ -17,7 +17,7 @@ FUNCTION_NAME(emit)(void *agg_state, Datum *out_result, bool *out_isnull)
 {
 	FloatSumState *state = (FloatSumState *) agg_state;
 	*out_result = CTYPE_TO_DATUM((CTYPE) state->result);
-	*out_isnull = state->isnull;
+	*out_isnull = !state->isvalid;
 }
 
 static pg_attribute_always_inline void
@@ -76,7 +76,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 #undef INNER_LOOP
 
 	FloatSumState *state = (FloatSumState *) agg_state;
-	state->isnull &= !have_result_accu[0];
+	state->isvalid |= have_result_accu[0];
 	state->result += sum_accu[0];
 }
 
@@ -86,7 +86,7 @@ static pg_attribute_always_inline void
 FUNCTION_NAME(one)(void *restrict agg_state, const CTYPE value)
 {
 	FUNCTION_NAME(state) *state = (FUNCTION_NAME(state) *) agg_state;
-	state->isnull = false;
+	state->isvalid = true;
 	state->result += value;
 }
 

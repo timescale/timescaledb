@@ -19,7 +19,7 @@
 typedef struct
 {
 	double result;
-	bool isnull;
+	bool isvalid;
 } FloatSumState;
 
 static void
@@ -29,7 +29,7 @@ float_sum_init(void *restrict agg_states, int n)
 	for (int i = 0; i < n; i++)
 	{
 		states[i].result = 0;
-		states[i].isnull = true;
+		states[i].isvalid = false;
 	}
 }
 #endif

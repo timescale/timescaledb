@@ -87,7 +87,7 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 	int grouping_column_counter = 0;
 	for (int i = 0; i < tlist_length; i++)
 	{
-		TargetEntry *tlentry = (TargetEntry *) list_nth(aggregated_tlist, i);
+		TargetEntry *tlentry = list_nth_node(TargetEntry, aggregated_tlist, i);
 		if (IsA(tlentry->expr, Aggref))
 		{
 			agg_functions_counter++;
@@ -120,7 +120,7 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 	grouping_column_counter = 0;
 	for (int i = 0; i < tlist_length; i++)
 	{
-		TargetEntry *tlentry = (TargetEntry *) list_nth(aggregated_tlist, i);
+		TargetEntry *tlentry = list_nth_node(TargetEntry, aggregated_tlist, i);
 		if (IsA(tlentry->expr, Aggref))
 		{
 			/* This is an aggregate function. */
