@@ -265,6 +265,8 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 		column_values->decompression_type = value_bytes;
 		column_values->buffers[0] = arrow->buffers[0];
 		column_values->buffers[1] = arrow->buffers[1];
+		column_values->buffers[2] = NULL;
+		column_values->buffers[3] = NULL;
 	}
 	else
 	{
@@ -290,6 +292,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 			column_values->buffers[0] = arrow->buffers[0];
 			column_values->buffers[1] = arrow->buffers[1];
 			column_values->buffers[2] = arrow->buffers[2];
+			column_values->buffers[3] = NULL;
 		}
 		else
 		{

@@ -117,9 +117,9 @@ resolve_outer_special_vars(List *agg_tlist, CustomScan *custom)
 static Plan *
 vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk)
 {
-	CustomScan *custom = (CustomScan *) makeNode(CustomScan);
-	custom->custom_plans = list_make1(decompress_chunk);
-	custom->methods = &scan_methods;
+	CustomScan *vector_agg = (CustomScan *) makeNode(CustomScan);
+	vector_agg->custom_plans = list_make1(decompress_chunk);
+	vector_agg->methods = &scan_methods;
 
 	/*
 	 * Note that this is being called from the post-planning hook, and therefore
@@ -127,42 +127,43 @@ vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk)
 	 * the previous planning stages, and they contain special varnos referencing
 	 * the scan targetlists.
 	 */
-	custom->custom_scan_tlist = resolve_outer_special_vars(agg->plan.targetlist, decompress_chunk);
-	custom->scan.plan.targetlist =
-		build_trivial_custom_output_targetlist(custom->custom_scan_tlist);
+	vector_agg->custom_scan_tlist =
+		resolve_outer_special_vars(agg->plan.targetlist, decompress_chunk);
+	vector_agg->scan.plan.targetlist =
+		build_trivial_custom_output_targetlist(vector_agg->custom_scan_tlist);
 
 	/*
 	 * Copy the costs from the normal aggregation node, so that they show up in
 	 * the EXPLAIN output. They are not used for any other purposes, because
 	 * this hook is called after the planning is finished.
 	 */
-	custom->scan.plan.plan_rows = agg->plan.plan_rows;
-	custom->scan.plan.plan_width = agg->plan.plan_width;
-	custom->scan.plan.startup_cost = agg->plan.startup_cost;
-	custom->scan.plan.total_cost = agg->plan.total_cost;
+	vector_agg->scan.plan.plan_rows = agg->plan.plan_rows;
+	vector_agg->scan.plan.plan_width = agg->plan.plan_width;
+	vector_agg->scan.plan.startup_cost = agg->plan.startup_cost;
+	vector_agg->scan.plan.total_cost = agg->plan.total_cost;
 
-	custom->scan.plan.parallel_aware = false;
-	custom->scan.plan.parallel_safe = decompress_chunk->scan.plan.parallel_safe;
-	custom->scan.plan.async_capable = false;
+	vector_agg->scan.plan.parallel_aware = false;
+	vector_agg->scan.plan.parallel_safe = decompress_chunk->scan.plan.parallel_safe;
+	vector_agg->scan.plan.async_capable = false;
 
-	custom->scan.plan.plan_node_id = agg->plan.plan_node_id;
+	vector_agg->scan.plan.plan_node_id = agg->plan.plan_node_id;
 
 	Assert(agg->plan.qual == NIL);
 
-	custom->scan.plan.initPlan = agg->plan.initPlan;
+	vector_agg->scan.plan.initPlan = agg->plan.initPlan;
 
-	custom->scan.plan.extParam = bms_copy(agg->plan.extParam);
-	custom->scan.plan.allParam = bms_copy(agg->plan.allParam);
+	vector_agg->scan.plan.extParam = bms_copy(agg->plan.extParam);
+	vector_agg->scan.plan.allParam = bms_copy(agg->plan.allParam);
 
-	List *grouping_col_offsets = NIL;
+	List *grouping_child_output_offsets = NIL;
 	for (int i = 0; i < agg->numCols; i++)
 	{
-		grouping_col_offsets =
-			lappend_int(grouping_col_offsets, AttrNumberGetAttrOffset(agg->grpColIdx[i]));
+		grouping_child_output_offsets =
+			lappend_int(grouping_child_output_offsets, AttrNumberGetAttrOffset(agg->grpColIdx[i]));
 	}
-	custom->custom_private = list_make1(grouping_col_offsets);
+	vector_agg->custom_private = list_make1(grouping_child_output_offsets);
 
-	return (Plan *) custom;
+	return (Plan *) vector_agg;
 }
 
 /*

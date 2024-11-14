@@ -47,7 +47,8 @@ get_input_offset(DecompressChunkState *decompress_state, Var *var)
 	Assert(value_column_description->type == COMPRESSED_COLUMN ||
 		   value_column_description->type == SEGMENTBY_COLUMN);
 
-	return value_column_description - dcontext->compressed_chunk_columns;
+	const int index = value_column_description - dcontext->compressed_chunk_columns;
+	return index;
 }
 
 static void
@@ -76,21 +77,60 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 	 */
 	List *aggregated_tlist =
 		castNode(CustomScan, vector_agg_state->custom.ss.ps.plan)->custom_scan_tlist;
-	const int naggs = list_length(aggregated_tlist);
-	for (int i = 0; i < naggs; i++)
+	const int tlist_length = list_length(aggregated_tlist);
+
+	/*
+	 * First, count how many grouping columns and aggregate functions we have.
+	 */
+	int agg_functions_counter = 0;
+	int grouping_column_counter = 0;
+	for (int i = 0; i < tlist_length; i++)
 	{
-		TargetEntry *tlentry = (TargetEntry *) list_nth(aggregated_tlist, i);
+		TargetEntry *tlentry = list_nth_node(TargetEntry, aggregated_tlist, i);
+		if (IsA(tlentry->expr, Aggref))
+		{
+			agg_functions_counter++;
+		}
+		else
+		{
+			/* This is a grouping column. */
+			Assert(IsA(tlentry->expr, Var));
+			grouping_column_counter++;
+		}
+	}
+	Assert(agg_functions_counter + grouping_column_counter == tlist_length);
+
+	/*
+	 * Allocate the storage for definitions of aggregate function and grouping
+	 * columns.
+	 */
+	vector_agg_state->num_agg_defs = agg_functions_counter;
+	vector_agg_state->agg_defs =
+		palloc0(sizeof(*vector_agg_state->agg_defs) * vector_agg_state->num_agg_defs);
+
+	vector_agg_state->num_grouping_columns = grouping_column_counter;
+	vector_agg_state->grouping_columns = palloc0(sizeof(*vector_agg_state->grouping_columns) *
+												 vector_agg_state->num_grouping_columns);
+
+	/*
+	 * Loop through the aggregated targetlist again and fill the definitions.
+	 */
+	agg_functions_counter = 0;
+	grouping_column_counter = 0;
+	for (int i = 0; i < tlist_length; i++)
+	{
+		TargetEntry *tlentry = list_nth_node(TargetEntry, aggregated_tlist, i);
 		if (IsA(tlentry->expr, Aggref))
 		{
 			/* This is an aggregate function. */
-			VectorAggDef *def = palloc0(sizeof(VectorAggDef));
-			vector_agg_state->agg_defs = lappend(vector_agg_state->agg_defs, def);
+			VectorAggDef *def = &vector_agg_state->agg_defs[agg_functions_counter++];
 			def->output_offset = i;
 
 			Aggref *aggref = castNode(Aggref, tlentry->expr);
+
 			VectorAggFunctions *func = get_vector_aggregate(aggref->aggfnoid);
 			Assert(func != NULL);
-			def->func = func;
+			def->func = *func;
 
 			if (list_length(aggref->args) > 0)
 			{
@@ -112,9 +152,7 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 			/* This is a grouping column. */
 			Assert(IsA(tlentry->expr, Var));
 
-			GroupingColumn *col = palloc0(sizeof(GroupingColumn));
-			vector_agg_state->output_grouping_columns =
-				lappend(vector_agg_state->output_grouping_columns, col);
+			GroupingColumn *col = &vector_agg_state->grouping_columns[grouping_column_counter++];
 			col->output_offset = i;
 
 			Var *var = castNode(Var, tlentry->expr);
@@ -122,11 +160,14 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		}
 	}
 
-	List *grouping_column_offsets = linitial(cscan->custom_private);
+	/*
+	 * Currently the only grouping policy we use is per-batch grouping.
+	 */
 	vector_agg_state->grouping =
-		create_grouping_policy_batch(vector_agg_state->agg_defs,
-									 vector_agg_state->output_grouping_columns,
-									 /* partial_per_batch = */ grouping_column_offsets != NIL);
+		create_grouping_policy_batch(vector_agg_state->num_agg_defs,
+									 vector_agg_state->agg_defs,
+									 vector_agg_state->num_grouping_columns,
+									 vector_agg_state->grouping_columns);
 }
 
 static void
@@ -272,7 +313,11 @@ vector_agg_exec(CustomScanState *node)
 static void
 vector_agg_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
-	/* No additional output is needed. */
+	VectorAggState *state = (VectorAggState *) node;
+	if (es->verbose || es->format != EXPLAIN_FORMAT_TEXT)
+	{
+		ExplainPropertyText("Grouping Policy", state->grouping->gp_explain(state->grouping), es);
+	}
 }
 
 static struct CustomExecMethods exec_methods = {

@@ -26,11 +26,14 @@ typedef struct
 } MinMaxState;
 
 static void
-minmax_init(void *agg_state)
+minmax_init(void *restrict agg_states, int n)
 {
-	MinMaxState *state = (MinMaxState *) agg_state;
-	state->isvalid = false;
-	state->value = 0;
+	MinMaxState *states = (MinMaxState *) agg_states;
+	for (int i = 0; i < n; i++)
+	{
+		states[i].isvalid = false;
+		states[i].value = 0;
+	}
 }
 
 static void
