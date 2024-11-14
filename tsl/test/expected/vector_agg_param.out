@@ -96,35 +96,8 @@ select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a + x) from p
  2 | 2001996
 (3 rows)
 
-explain (verbose, costs off)
-select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a) from pvagg group by x) xx;
-                                                                                                        QUERY PLAN                                                                                                         
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Nested Loop
-   Output: x.x, (sum(_hyper_1_1_chunk.a))
-   ->  Function Scan on pg_catalog.unnest x
-         Output: x.x
-         Function Call: unnest('{0,1,2}'::integer[])
-   ->  Finalize GroupAggregate
-         Output: sum(_hyper_1_1_chunk.a), (x.x)
-         Group Key: (x.x)
-         ->  Append
-               ->  Partial GroupAggregate
-                     Output: (x.x), PARTIAL sum(_hyper_1_1_chunk.a)
-                     Group Key: x.x
-                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
-                           Output: x.x, _hyper_1_1_chunk.a
-                           ->  Seq Scan on _timescaledb_internal.compress_hyper_2_3_chunk
-                                 Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk.s, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1, compress_hyper_2_3_chunk.a
-               ->  Partial GroupAggregate
-                     Output: (x.x), PARTIAL sum(_hyper_1_2_chunk.a)
-                     Group Key: x.x
-                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk
-                           Output: x.x, _hyper_1_2_chunk.a
-                           ->  Seq Scan on _timescaledb_internal.compress_hyper_2_4_chunk
-                                 Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk.s, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk.a
-(23 rows)
-
+-- The plan for this query differs after PG16, x is not used as grouping key but
+-- just added into the output targetlist of partial aggregation nodes.
 select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a) from pvagg group by x) xx;
  x |   sum   
 ---+---------

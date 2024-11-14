@@ -32,9 +32,8 @@ select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a + x) from p
 
 select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a + x) from pvagg) xx;
 
-explain (verbose, costs off)
-select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a) from pvagg group by x) xx;
-
+-- The plan for this query differs after PG16, x is not used as grouping key but
+-- just added into the output targetlist of partial aggregation nodes.
 select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a) from pvagg group by x) xx;
 
 

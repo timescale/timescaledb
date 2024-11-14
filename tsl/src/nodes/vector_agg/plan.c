@@ -364,7 +364,7 @@ can_vectorize_grouping(Agg *agg, CustomScan *custom, List *resolved_targetlist)
 	for (int i = 0; i < agg->numCols; i++)
 	{
 		int offset = AttrNumberGetAttrOffset(agg->grpColIdx[i]);
-		TargetEntry *entry = list_nth(resolved_targetlist, offset);
+		TargetEntry *entry = list_nth_node(TargetEntry, resolved_targetlist, offset);
 
 		bool is_segmentby = false;
 		if (!is_vector_var(custom, entry->expr, &is_segmentby))
@@ -559,19 +559,35 @@ try_insert_vector_agg_node(Plan *plan)
 		return plan;
 	}
 
-	/* Now check the aggregate functions themselves. */
+	/* Now check the output targetlist. */
 	ListCell *lc;
 	foreach (lc, resolved_targetlist)
 	{
 		TargetEntry *target_entry = castNode(TargetEntry, lfirst(lc));
-		if (!IsA(target_entry->expr, Aggref))
+		if (IsA(target_entry->expr, Aggref))
 		{
-			continue;
+			Aggref *aggref = castNode(Aggref, target_entry->expr);
+			if (!can_vectorize_aggref(aggref, custom))
+			{
+				/* Aggregate function not vectorizable. */
+				return plan;
+			}
 		}
-
-		Aggref *aggref = castNode(Aggref, target_entry->expr);
-		if (!can_vectorize_aggref(aggref, custom))
+		else if (IsA(target_entry->expr, Var))
 		{
+			if (!is_vector_var(custom, target_entry->expr, NULL))
+			{
+				/* Variable not vectorizable. */
+				return plan;
+			}
+		}
+		else
+		{
+			/*
+			 * Sometimes the plan can require this node to perform a projection,
+			 * e.g. we can see a nested loop param in its output targetlist. We
+			 * can't handle this case currently.
+			 */
 			return plan;
 		}
 	}
