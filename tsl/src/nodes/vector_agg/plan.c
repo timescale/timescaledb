@@ -365,9 +365,6 @@ can_vectorize_grouping(Agg *agg, CustomScan *custom, List *resolved_targetlist)
 		return true;
 	}
 
-	/* FIXME */
-	List *aggregated_tlist_resolved = resolved_targetlist;
-
 	/*
 	 * We support hashed vectorized grouping by one fixed-size by-value
 	 * compressed column.
@@ -381,7 +378,7 @@ can_vectorize_grouping(Agg *agg, CustomScan *custom, List *resolved_targetlist)
 		for (int i = 0; i < agg->numCols; i++)
 		{
 			int offset = AttrNumberGetAttrOffset(agg->grpColIdx[i]);
-			TargetEntry *entry = list_nth(aggregated_tlist_resolved, offset);
+			TargetEntry *entry = list_nth_node(TargetEntry, resolved_targetlist, offset);
 
 			bool is_segmentby = false;
 			if (!is_vector_var(custom, entry->expr, &is_segmentby))
@@ -412,7 +409,7 @@ can_vectorize_grouping(Agg *agg, CustomScan *custom, List *resolved_targetlist)
 	for (int i = 0; i < agg->numCols; i++)
 	{
 		int offset = AttrNumberGetAttrOffset(agg->grpColIdx[i]);
-		TargetEntry *entry = list_nth(aggregated_tlist_resolved, offset);
+		TargetEntry *entry = list_nth_node(TargetEntry, resolved_targetlist, offset);
 
 		bool is_segmentby = false;
 		if (!is_vector_var(custom, entry->expr, &is_segmentby))

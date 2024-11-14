@@ -11,21 +11,6 @@
 
 #include "chunk.h"
 
-/*
- * Decide if the access method should be used for compression, or if it is
- * undefined. Used for parameter values to PostgreSQL functions and is a
- * nullable boolean.
- *
- * Using explicit values of TRUE = 1 and FALSE = 0 since this enum is cast to
- * boolean value in the code.
- */
-typedef enum UseAccessMethod
-{
-	USE_AM_FALSE = 0,
-	USE_AM_TRUE = 1,
-	USE_AM_NULL = 2,
-} UseAccessMethod;
-
 extern Datum tsl_create_compressed_chunk(PG_FUNCTION_ARGS);
 extern Datum tsl_compress_chunk(PG_FUNCTION_ARGS);
 extern Datum tsl_decompress_chunk(PG_FUNCTION_ARGS);
