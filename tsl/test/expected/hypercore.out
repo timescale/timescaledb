@@ -521,7 +521,6 @@ SELECT sum(_ts_meta_count) FROM :cchunk;
 
 CALL recompress_chunk(:'chunk');
 WARNING:  procedure public.recompress_chunk(regclass,boolean) is deprecated and the functionality is now included in public.compress_chunk. this compatibility function will be removed in a future version.
-NOTICE:  cannot compress hypercore "_hyper_1_1_chunk" using heap, recompressing instead
 -- Data should be returned even after recompress, but now from the
 -- compressed relation. Still using index scan.
 EXPLAIN (verbose, costs off)
@@ -576,7 +575,6 @@ SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
 -- Can't recompress twice without new non-compressed rows
 CALL recompress_chunk(:'chunk');
 WARNING:  procedure public.recompress_chunk(regclass,boolean) is deprecated and the functionality is now included in public.compress_chunk. this compatibility function will be removed in a future version.
-NOTICE:  cannot compress hypercore "_hyper_1_1_chunk" using heap, recompressing instead
 NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
 \set ON_ERROR_STOP 1
 -- Compressed count after recompression

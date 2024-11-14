@@ -814,10 +814,16 @@ compress_hypercore(Chunk *chunk, bool rel_is_hypercore, UseAccessMethod useam,
 	switch (useam)
 	{
 		case USE_AM_FALSE:
-			elog(NOTICE,
-				 "cannot compress hypercore \"%s\" using heap, recompressing instead",
-				 get_rel_name(chunk->table_id));
-			TS_FALLTHROUGH;
+			/* Converting from Hypercore to "regular" compressed is currently
+			 * not supported */
+			Assert(rel_is_hypercore);
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot compress \"%s\" without using Hypercore access method",
+							get_rel_name(chunk->table_id)),
+					 errhint(
+						 "Decompress first and then compress without Hypercore access method.")));
+			break;
 		case USE_AM_NULL:
 			Assert(rel_is_hypercore);
 			relid = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
@@ -843,9 +849,12 @@ compress_hypercore(Chunk *chunk, bool rel_is_hypercore, UseAccessMethod useam,
  * otherwise.
  */
 static UseAccessMethod
-check_useam(UseAccessMethod arg)
+check_useam(UseAccessMethod arg, bool is_hypercore)
 {
-	return arg == USE_AM_NULL ? (UseAccessMethod) ts_guc_default_hypercore_use_access_method : arg;
+	if (arg == USE_AM_NULL)
+		return is_hypercore ? USE_AM_TRUE :
+							  (UseAccessMethod) ts_guc_default_hypercore_use_access_method;
+	return arg;
 }
 
 Datum
@@ -854,13 +863,14 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	bool if_not_compressed = PG_ARGISNULL(1) ? true : PG_GETARG_BOOL(1);
 	bool recompress = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
-	UseAccessMethod useam = check_useam(PG_ARGISNULL(3) ? USE_AM_NULL : PG_GETARG_BOOL(3));
+	UseAccessMethod useam;
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
 	bool rel_is_hypercore = get_table_am_oid(TS_HYPERCORE_TAM_NAME, false) == chunk->amoid;
+	useam = check_useam(PG_ARGISNULL(3) ? USE_AM_NULL : PG_GETARG_BOOL(3), rel_is_hypercore);
 
 	if (rel_is_hypercore || useam == USE_AM_TRUE)
 		uncompressed_chunk_id =
