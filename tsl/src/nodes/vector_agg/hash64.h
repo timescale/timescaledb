@@ -11,7 +11,7 @@
  * implementations.
  */
 
-#ifdef USE_SSE42_CRC32C
+#ifdef USE_SSE42_CRC32Ceeeeeeeee
 #include <nmmintrin.h>
 static pg_attribute_always_inline uint64
 hash64(uint64 x)
@@ -31,6 +31,28 @@ hash64(uint64 x)
 	x ^= x >> 27;
 	x *= 0x94d049bb133111ebU;
 	x ^= x >> 31;
+	return x;
+}
+
+static pg_attribute_always_inline uint32
+hash32(uint32 x)
+{
+	x ^= x >> 16;
+	x *= 0x7feb352d;
+	x ^= x >> 15;
+	x *= 0x846ca68b;
+	x ^= x >> 16;
+	return x;
+}
+
+static pg_attribute_always_inline uint16
+hash16(uint16 x)
+{
+	x ^= x >> 8;
+	x *= 0x88b5U;
+	x ^= x >> 7;
+	x *= 0xdb2dU;
+	x ^= x >> 9;
 	return x;
 }
 #endif

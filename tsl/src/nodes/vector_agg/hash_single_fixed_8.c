@@ -19,13 +19,14 @@
 #define EXPLAIN_NAME "single 8-byte"
 #define KEY_VARIANT single_fixed_8
 #define KEY_BYTES 8
-#define KEY_HASH hash64
-#define KEY_EQUAL(a, b) a == b
 #define FULL_KEY_TYPE int64
 #define ABBREV_KEY_TYPE int64
 #define DATUM_TO_FULL_KEY DatumGetInt64
 #define FULL_KEY_TO_DATUM Int64GetDatum
+#define ABBREVIATE(X) hash64(X)
 
 #include "single_fixed_key_impl.c"
 
+#define KEY_HASH(X) (X)
+#define KEY_EQUAL(a, b) a == b
 #include "hash_table_functions_impl.c"

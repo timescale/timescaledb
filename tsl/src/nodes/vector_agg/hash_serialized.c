@@ -250,23 +250,23 @@ serialized_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
 }
 
 static pg_attribute_always_inline text *
-serialized_store_key(GroupingPolicyHash *restrict policy, text *key)
+serialized_store_key(GroupingPolicyHash *restrict policy, text *full_key, text *abbrev_key)
 {
 	/*
 	 * We will store this key so we have to consume the temporary storage that
 	 * was used for it. The subsequent keys will need to allocate new memory.
 	 */
-	Assert(policy->tmp_key_storage == (void *) key);
+	Assert(policy->tmp_key_storage == (void *) full_key);
 	policy->tmp_key_storage = NULL;
 	policy->num_tmp_key_storage_bytes = 0;
 
-	gp_hash_output_keys(policy, policy->last_used_key_index)[0] = PointerGetDatum(key);
+	gp_hash_output_keys(policy, policy->last_used_key_index)[0] = PointerGetDatum(abbrev_key);
 
-	return key;
+	return abbrev_key;
 }
 
 static pg_attribute_always_inline void
-serialized_destroy_key(text *key)
+serialized_destroy_key(const text *key)
 {
 	/* Noop, the memory will be reused by the subsequent key. */
 }

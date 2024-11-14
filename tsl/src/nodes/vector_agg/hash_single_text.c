@@ -75,15 +75,15 @@ single_text_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
 }
 
 static pg_attribute_always_inline BytesView
-single_text_store_key(GroupingPolicyHash *restrict policy, BytesView key)
+single_text_store_key(GroupingPolicyHash *restrict policy, BytesView full_key, BytesView abbrev_key)
 {
-	const int total_bytes = key.len + VARHDRSZ;
+	const int total_bytes = full_key.len + VARHDRSZ;
 	text *restrict stored = (text *) MemoryContextAlloc(policy->key_body_mctx, total_bytes);
 	SET_VARSIZE(stored, total_bytes);
-	memcpy(VARDATA(stored), key.data, key.len);
-	key.data = (uint8 *) VARDATA(stored);
+	memcpy(VARDATA(stored), full_key.data, full_key.len);
+	full_key.data = (uint8 *) VARDATA(stored);
 	gp_hash_output_keys(policy, policy->last_used_key_index)[0] = PointerGetDatum(stored);
-	return key;
+	return full_key;
 }
 
 static pg_attribute_always_inline void

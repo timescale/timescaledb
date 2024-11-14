@@ -134,7 +134,7 @@ FUNCTION_NAME(fill_offsets_impl)(
 			 * New key, have to store it persistently.
 			 */
 			const int index = ++policy->last_used_key_index;
-			entry->abbrev_key = FUNCTION_NAME(store_key)(policy, abbrev_key);
+			entry->abbrev_key = FUNCTION_NAME(store_key)(policy, full_key, abbrev_key);
 			entry->key_index = index;
 			DEBUG_PRINT("%p: row %d new key index %d\n", policy, row, index);
 		}
