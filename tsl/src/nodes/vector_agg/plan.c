@@ -75,29 +75,44 @@ resolve_outer_special_vars_mutator(Node *node, void *context)
 		return expression_tree_mutator(node, resolve_outer_special_vars_mutator, context);
 	}
 
-	Var *aggregated_var = castNode(Var, node);
-	Ensure(aggregated_var->varno == OUTER_VAR,
-		   "encountered unexpected varno %d as an aggregate argument",
-		   aggregated_var->varno);
-
+	Var *var = castNode(Var, node);
 	CustomScan *custom = castNode(CustomScan, context);
-	TargetEntry *decompress_chunk_tentry =
-		castNode(TargetEntry, list_nth(custom->scan.plan.targetlist, aggregated_var->varattno - 1));
-	Expr *decompressed_expr = decompress_chunk_tentry->expr;
-	if (IsA(decompressed_expr, Var) && castNode(Var, decompressed_expr)->varno == INDEX_VAR)
+	if ((Index) var->varno == (Index) custom->scan.scanrelid)
+	{
+		/*
+		 * This is already the uncompressed chunk var. We can see it referenced
+		 * by expressions in the output targetlist of DecompressChunk node.
+		 */
+		return (Node *) copyObject(var);
+	}
+
+	if (var->varno == OUTER_VAR)
+	{
+		/*
+		 * Reference into the output targetlist of the DecompressChunk node.
+		 */
+		TargetEntry *decompress_chunk_tentry =
+			castNode(TargetEntry, list_nth(custom->scan.plan.targetlist, var->varattno - 1));
+
+		return resolve_outer_special_vars_mutator((Node *) decompress_chunk_tentry->expr, context);
+	}
+
+	if (var->varno == INDEX_VAR)
 	{
 		/*
 		 * This is a reference into the custom scan targetlist, we have to resolve
 		 * it as well.
 		 */
-		TargetEntry *custom_scan_tentry =
-			castNode(TargetEntry,
-					 list_nth(custom->custom_scan_tlist,
-							  castNode(Var, decompressed_expr)->varattno - 1));
-		decompressed_expr = custom_scan_tentry->expr;
+		var = castNode(Var,
+					   castNode(TargetEntry, list_nth(custom->custom_scan_tlist, var->varattno - 1))
+						   ->expr);
+		Assert(var->varno > 0);
+
+		return (Node *) copyObject(var);
 	}
-	Assert(!IsA(decompressed_expr, Var) || castNode(Var, decompressed_expr)->varno > 0);
-	return (Node *) copyObject(decompressed_expr);
+
+	Ensure(false, "encountered unexpected varno %d as an aggregate argument", var->varno);
+	return node;
 }
 
 /*
@@ -116,11 +131,13 @@ resolve_outer_special_vars(List *agg_tlist, CustomScan *custom)
  * node.
  */
 static Plan *
-vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk)
+vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk, List *resolved_targetlist)
 {
 	CustomScan *vector_agg = (CustomScan *) makeNode(CustomScan);
 	vector_agg->custom_plans = list_make1(decompress_chunk);
 	vector_agg->methods = &scan_methods;
+
+	vector_agg->custom_scan_tlist = resolved_targetlist;
 
 	/*
 	 * Note that this is being called from the post-planning hook, and therefore
@@ -128,8 +145,6 @@ vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk)
 	 * the previous planning stages, and they contain special varnos referencing
 	 * the scan targetlists.
 	 */
-	vector_agg->custom_scan_tlist =
-		resolve_outer_special_vars(agg->plan.targetlist, decompress_chunk);
 	vector_agg->scan.plan.targetlist =
 		build_trivial_custom_output_targetlist(vector_agg->custom_scan_tlist);
 
@@ -183,12 +198,29 @@ is_vector_var(CustomScan *custom, Expr *expr, bool *out_is_segmentby)
 	Var *decompressed_var = castNode(Var, expr);
 
 	/*
+	 * This must be called after resolve_outer_special_vars(), so we should only
+	 * see the uncompressed chunk variables here.
+	 */
+	Ensure((Index) decompressed_var->varno == (Index) custom->scan.scanrelid,
+		   "expected scan varno %d got %d",
+		   custom->scan.scanrelid,
+		   decompressed_var->varno);
+
+	if (decompressed_var->varattno <= 0)
+	{
+		/* Can't work with special attributes like tableoid. */
+		if (out_is_segmentby)
+		{
+			*out_is_segmentby = false;
+		}
+		return false;
+	}
+
+	/*
 	 * Now, we have to translate the decompressed varno into the compressed
 	 * column index, to check if the column supports bulk decompression.
 	 */
 	List *decompression_map = list_nth(custom->custom_private, DCP_DecompressionMap);
-	List *is_segmentby_column = list_nth(custom->custom_private, DCP_IsSegmentbyColumn);
-	List *bulk_decompression_column = list_nth(custom->custom_private, DCP_BulkDecompressionColumn);
 	int compressed_column_index = 0;
 	for (; compressed_column_index < list_length(decompression_map); compressed_column_index++)
 	{
@@ -219,6 +251,8 @@ is_vector_var(CustomScan *custom, Expr *expr, bool *out_is_segmentby)
 		}
 	}
 	Ensure(compressed_column_index < list_length(decompression_map), "compressed column not found");
+
+	List *bulk_decompression_column = list_nth(custom->custom_private, DCP_BulkDecompressionColumn);
 	Assert(list_length(decompression_map) == list_length(bulk_decompression_column));
 	const bool bulk_decompression_enabled_for_column =
 		list_nth_int(bulk_decompression_column, compressed_column_index);
@@ -235,6 +269,8 @@ is_vector_var(CustomScan *custom, Expr *expr, bool *out_is_segmentby)
 	/*
 	 * Check if this column is a segmentby.
 	 */
+	List *is_segmentby_column = list_nth(custom->custom_private, DCP_IsSegmentbyColumn);
+	Assert(list_length(is_segmentby_column) == list_length(decompression_map));
 	const bool is_segmentby = list_nth_int(is_segmentby_column, compressed_column_index);
 	if (out_is_segmentby)
 	{
@@ -319,7 +355,7 @@ can_vectorize_aggref(Aggref *aggref, CustomScan *custom, VectorQualInfo *vqi)
  * Whether we can perform vectorized aggregation with a given grouping.
  */
 static bool
-can_vectorize_grouping(Agg *agg, CustomScan *custom)
+can_vectorize_grouping(Agg *agg, CustomScan *custom, List *resolved_targetlist)
 {
 	/*
 	 * We support vectorized aggregation without grouping.
@@ -330,7 +366,7 @@ can_vectorize_grouping(Agg *agg, CustomScan *custom)
 	}
 
 	/* FIXME */
-	List *aggregated_tlist_resolved = resolve_outer_special_vars(agg->plan.targetlist, custom);
+	List *aggregated_tlist_resolved = resolved_targetlist;
 
 	/*
 	 * We support hashed vectorized grouping by one fixed-size by-value
@@ -558,7 +594,14 @@ try_insert_vector_agg_node(Plan *plan)
 		return plan;
 	}
 
-	if (!can_vectorize_grouping(agg, custom))
+	/*
+	 * To make it easier to examine the variables participating in the aggregation,
+	 * the subsequent checks are performed on the aggregated targetlist with
+	 * all variables resolved to uncompressed chunk variables.
+	 */
+	List *resolved_targetlist = resolve_outer_special_vars(agg->plan.targetlist, custom);
+
+	if (!can_vectorize_grouping(agg, custom, resolved_targetlist))
 	{
 		/* No GROUP BY support for now. */
 		return plan;
@@ -582,9 +625,6 @@ try_insert_vector_agg_node(Plan *plan)
 	List *decompression_map = list_nth(custom->custom_private, DCP_DecompressionMap);
 	List *is_segmentby_column = list_nth(custom->custom_private, DCP_IsSegmentbyColumn);
 	List *bulk_decompression_column = list_nth(custom->custom_private, DCP_BulkDecompressionColumn);
-
-	/* FIXME */
-	List *aggregated_tlist_resolved = resolve_outer_special_vars(agg->plan.targetlist, custom);
 
 	int maxattno = 0;
 	for (int compressed_column_index = 0; compressed_column_index < list_length(decompression_map);
@@ -667,21 +707,35 @@ try_insert_vector_agg_node(Plan *plan)
 		//				is_vector_var);
 	}
 
-	/* Now check the aggregate functions themselves. */
+	/* Now check the output targetlist. */
 	ListCell *lc;
-	foreach (lc, aggregated_tlist_resolved)
+	foreach (lc, resolved_targetlist)
 	{
 		TargetEntry *target_entry = castNode(TargetEntry, lfirst(lc));
-		if (!IsA(target_entry->expr, Aggref))
+		if (IsA(target_entry->expr, Aggref))
 		{
-			continue;
+			Aggref *aggref = castNode(Aggref, target_entry->expr);
+			if (!can_vectorize_aggref(aggref, custom, &vqi))
+			{
+				/* Aggregate function not vectorizable. */
+				return plan;
+			}
 		}
-
-		Aggref *aggref = castNode(Aggref, target_entry->expr);
-		//		fprintf(stderr, "the final aggref is:\n");
-		//		my_print(aggref);
-		if (!can_vectorize_aggref(aggref, custom, &vqi))
+		else if (IsA(target_entry->expr, Var))
 		{
+			if (!is_vector_var(custom, target_entry->expr, NULL))
+			{
+				/* Variable not vectorizable. */
+				return plan;
+			}
+		}
+		else
+		{
+			/*
+			 * Sometimes the plan can require this node to perform a projection,
+			 * e.g. we can see a nested loop param in its output targetlist. We
+			 * can't handle this case currently.
+			 */
 			return plan;
 		}
 	}
@@ -690,5 +744,5 @@ try_insert_vector_agg_node(Plan *plan)
 	 * Finally, all requirements are satisfied and we can vectorize this partial
 	 * aggregation node.
 	 */
-	return vector_agg_plan_create(agg, custom);
+	return vector_agg_plan_create(agg, custom, resolved_targetlist);
 }

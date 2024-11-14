@@ -155,15 +155,15 @@ FUNCTION_NAME(fill_offsets_impl)(
  * when all the batch and key rows are valid.
  */
 #define APPLY_FOR_BATCH_FILTER(X, NAME, COND)                                                      \
-	X(NAME##_nofilter, (COND) && (config.batch_filter == NULL))                                               \
+	X(NAME##_nofilter, (COND) && (config.batch_filter == NULL))                                    \
 	X(NAME##_filter, (COND) && (config.batch_filter != NULL))
 
 #define APPLY_FOR_VALIDITY(X, NAME, COND)                                                          \
-	APPLY_FOR_BATCH_FILTER(X, NAME##_notnull, (COND) && config.single_key.buffers[0] == NULL)                \
+	APPLY_FOR_BATCH_FILTER(X, NAME##_notnull, (COND) && config.single_key.buffers[0] == NULL)      \
 	APPLY_FOR_BATCH_FILTER(X, NAME##_nullable, (COND) && config.single_key.buffers[0] != NULL)
 
 #define APPLY_FOR_SCALARS(X, NAME, COND)                                                           \
-	APPLY_FOR_BATCH_FILTER(X, NAME##_noscalar, (COND) && !config.have_scalar_columns)                         \
+	APPLY_FOR_BATCH_FILTER(X, NAME##_noscalar, (COND) && !config.have_scalar_columns)              \
 	APPLY_FOR_BATCH_FILTER(X, NAME##_scalar, (COND) && config.have_scalar_columns)
 
 #define APPLY_FOR_TYPE(X, NAME, COND)                                                              \

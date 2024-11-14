@@ -167,15 +167,16 @@ compute_single_aggregate(GroupingPolicyBatch *policy, DecompressBatchState *batc
 		/*
 		 * Scalar argument, or count(*). Have to also count the valid rows in
 		 * the batch.
+		 *
+		 * The batches that are fully filtered out by vectorized quals should
+		 * have been skipped by the caller, but we also have to check for the
+		 * case when no rows match the aggregate FILTER clause.
 		 */
 		const int n = arrow_num_valid(filter, batch_state->total_batch_rows);
-
-		/*
-		 * The batches that are fully filtered out by vectorized quals should
-		 * have been skipped by the caller.
-		 */
-		Assert(n > 0);
-		agg_def->func.agg_scalar(agg_state, arg_datum, arg_isnull, n, agg_extra_mctx);
+		if (n > 0)
+		{
+			agg_def->func.agg_scalar(agg_state, arg_datum, arg_isnull, n, agg_extra_mctx);
+		}
 	}
 }
 
