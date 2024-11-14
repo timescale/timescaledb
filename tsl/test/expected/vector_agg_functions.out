@@ -103,9 +103,12 @@ select count(compress_chunk(x)) from show_chunks('edges') x;
 
 vacuum freeze analyze edges;
 -- We can't vectorize some aggregate functions on platforms withouth int128
--- support. Just relax the test requirements for them.
+-- support. Just relax the test requirements for them. I don't want to disable
+-- this test in release builds, and don't want to have the guc in release builds,
+-- so we'll assume we have int128 in all release builds.
 select case when setting::bool then 'require' else 'allow' end guc_value
 from pg_settings where name = 'timescaledb.debug_have_int128'
+union select 'require' guc_value
 \gset
 set timescaledb.debug_require_vector_agg = :'guc_value';
 ---- Uncomment to generate reference. Note that there are minor discrepancies
