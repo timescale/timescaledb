@@ -29,28 +29,30 @@ get_bytes_view(CompressedColumnValues *column_values, int arrow_row)
 }
 
 static pg_attribute_always_inline void
-single_text_get_key(HashingConfig config, int row, void *restrict key_ptr, bool *restrict valid)
+single_text_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
+					void *restrict abbrev_key_ptr, bool *restrict valid)
 {
 	Assert(config.policy->num_grouping_columns == 1);
 
-	BytesView *restrict key = (BytesView *) key_ptr;
+	BytesView *restrict full_key = (BytesView *) full_key_ptr;
+	BytesView *restrict abbrev_key = (BytesView *) abbrev_key_ptr;
 
 	if (unlikely(config.single_key.decompression_type == DT_Scalar))
 	{
 		/* Already stored. */
-		key->len = VARSIZE_ANY_EXHDR(*config.single_key.output_value);
-		key->data = (const uint8 *) VARDATA_ANY(*config.single_key.output_value);
+		full_key->len = VARSIZE_ANY_EXHDR(*config.single_key.output_value);
+		full_key->data = (const uint8 *) VARDATA_ANY(*config.single_key.output_value);
 		*valid = !*config.single_key.output_isnull;
 	}
 	else if (config.single_key.decompression_type == DT_ArrowText)
 	{
-		*key = get_bytes_view(&config.single_key, row);
+		*full_key = get_bytes_view(&config.single_key, row);
 		*valid = arrow_row_is_valid(config.single_key.buffers[0], row);
 	}
 	else if (config.single_key.decompression_type == DT_ArrowTextDict)
 	{
 		const int16 index = ((int16 *) config.single_key.buffers[3])[row];
-		*key = get_bytes_view(&config.single_key, index);
+		*full_key = get_bytes_view(&config.single_key, index);
 		*valid = arrow_row_is_valid(config.single_key.buffers[0], row);
 	}
 	else
@@ -62,12 +64,14 @@ single_text_get_key(HashingConfig config, int row, void *restrict key_ptr, bool 
 				policy,
 				row,
 				policy->last_used_key_index + 1,
-				key->len);
-	for (size_t i = 0; i < key->len; i++)
+				full_key->len);
+	for (size_t i = 0; i < full_key->len; i++)
 	{
-		DEBUG_PRINT("%.2x.", key->data[i]);
+		DEBUG_PRINT("%.2x.", full_key->data[i]);
 	}
 	DEBUG_PRINT("\n");
+
+	*abbrev_key = *full_key;
 }
 
 static pg_attribute_always_inline BytesView
@@ -317,7 +321,8 @@ single_text_offsets_translate(HashingConfig config, int start_row, int end_row)
 #define KEY_HASH(X) hash_bytes_view(X)
 #define KEY_EQUAL(a, b) (a.len == b.len && memcmp(a.data, b.data, a.len) == 0)
 #define STORE_HASH
-#define CTYPE BytesView
+#define FULL_KEY_TYPE BytesView
+#define ABBREV_KEY_TYPE BytesView
 #define HAVE_PREPARE_FUNCTION
 
 #include "hash_single_helper.c"

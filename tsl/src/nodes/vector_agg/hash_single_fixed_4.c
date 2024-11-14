@@ -21,9 +21,10 @@
 #define KEY_BYTES 4
 #define KEY_HASH hash64
 #define KEY_EQUAL(a, b) a == b
-#define CTYPE int32
-#define DATUM_TO_CTYPE DatumGetInt32
-#define CTYPE_TO_DATUM Int32GetDatum
+#define FULL_KEY_TYPE int32
+#define ABBREV_KEY_TYPE int32
+#define DATUM_TO_FULL_KEY DatumGetInt32
+#define FULL_KEY_TO_DATUM Int32GetDatum
 
 #include "single_fixed_key_impl.c"
 

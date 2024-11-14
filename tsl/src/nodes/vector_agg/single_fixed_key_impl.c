@@ -9,39 +9,40 @@
 #define FUNCTION_NAME(Y) FUNCTION_NAME_HELPER(KEY_VARIANT, Y)
 
 static pg_attribute_always_inline void
-FUNCTION_NAME(get_key)(HashingConfig config, int row, void *restrict key_ptr, bool *restrict valid)
+FUNCTION_NAME(get_key)(HashingConfig config, int row, void *restrict full_key_ptr,
+					   void *restrict abbrev_key_ptr, bool *restrict valid)
 {
-	GroupingPolicyHash *policy = config.policy;
-
-	CTYPE *restrict key = (CTYPE *) key_ptr;
+	FULL_KEY_TYPE *restrict full_key = (FULL_KEY_TYPE *) full_key_ptr;
+	ABBREV_KEY_TYPE *restrict abbrev_key = (ABBREV_KEY_TYPE *) abbrev_key_ptr;
 
 	if (unlikely(config.single_key.decompression_type == DT_Scalar))
 	{
-		*key = DATUM_TO_CTYPE(*config.single_key.output_value);
+		*full_key = DATUM_TO_FULL_KEY(*config.single_key.output_value);
 		*valid = !*config.single_key.output_isnull;
 	}
-	else if (config.single_key.decompression_type == sizeof(CTYPE))
+	else if (config.single_key.decompression_type == sizeof(FULL_KEY_TYPE))
 	{
-		const CTYPE *values = config.single_key.buffers[1];
+		const FULL_KEY_TYPE *values = config.single_key.buffers[1];
 		*valid = arrow_row_is_valid(config.single_key.buffers[0], row);
-		*key = values[row];
+		*full_key = values[row];
 	}
 	else
 	{
 		pg_unreachable();
 	}
 
-	gp_hash_output_keys(policy, policy->last_used_key_index + 1)[0] = CTYPE_TO_DATUM(*key);
+	*abbrev_key = *full_key;
 }
 
-static pg_attribute_always_inline CTYPE
-FUNCTION_NAME(store_key)(GroupingPolicyHash *restrict policy, CTYPE key)
+static pg_attribute_always_inline FULL_KEY_TYPE
+FUNCTION_NAME(store_key)(GroupingPolicyHash *restrict policy, FULL_KEY_TYPE key)
 {
+	gp_hash_output_keys(policy, policy->last_used_key_index)[0] = FULL_KEY_TO_DATUM(key);
 	return key;
 }
 
 static pg_attribute_always_inline void
-FUNCTION_NAME(destroy_key)(CTYPE key)
+FUNCTION_NAME(destroy_key)(FULL_KEY_TYPE key)
 {
 	/* Noop for fixed-size keys. */
 }

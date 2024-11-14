@@ -16,7 +16,7 @@
  */
 typedef struct
 {
-	CTYPE key;
+	ABBREV_KEY_TYPE abbrev_key;
 
 #ifdef STORE_HASH
 	/*
@@ -33,8 +33,8 @@ typedef struct
 #define SH_FILLFACTOR (0.5)
 #define SH_PREFIX KEY_VARIANT
 #define SH_ELEMENT_TYPE FUNCTION_NAME(entry)
-#define SH_KEY_TYPE CTYPE
-#define SH_KEY key
+#define SH_KEY_TYPE FULL_KEY_TYPE
+#define SH_KEY abbrev_key
 #define SH_HASH_KEY(tb, key) KEY_HASH(key)
 #define SH_EQUAL(tb, a, b) KEY_EQUAL(a, b)
 #define SH_SCOPE static inline
@@ -77,7 +77,7 @@ FUNCTION_NAME(fill_offsets_impl)(
 
 	struct FUNCTION_NAME(hash) *restrict table = policy->table;
 
-	CTYPE previous_key;
+	ABBREV_KEY_TYPE prev_abbrev_key;
 	uint32 previous_key_index = 0;
 	for (int row = start_row; row < end_row; row++)
 	{
@@ -89,8 +89,9 @@ FUNCTION_NAME(fill_offsets_impl)(
 		}
 
 		bool key_valid = false;
-		CTYPE key = { 0 };
-		FUNCTION_NAME(get_key)(config, row, &key, &key_valid);
+		FULL_KEY_TYPE full_key = { 0 };
+		ABBREV_KEY_TYPE abbrev_key = { 0 };
+		FUNCTION_NAME(get_key)(config, row, &full_key, &abbrev_key, &key_valid);
 
 		if (unlikely(!key_valid))
 		{
@@ -101,11 +102,11 @@ FUNCTION_NAME(fill_offsets_impl)(
 			}
 			indexes[row] = policy->null_key_index;
 			DEBUG_PRINT("%p: row %d null key index %d\n", policy, row, policy->null_key_index);
-			FUNCTION_NAME(destroy_key)(key);
+			FUNCTION_NAME(destroy_key)(full_key);
 			continue;
 		}
 
-		if (likely(previous_key_index != 0) && KEY_EQUAL(key, previous_key))
+		if (likely(previous_key_index != 0) && KEY_EQUAL(abbrev_key, prev_abbrev_key))
 		{
 			/*
 			 * In real data sets, we often see consecutive rows with the
@@ -116,7 +117,7 @@ FUNCTION_NAME(fill_offsets_impl)(
 			 * for that case.
 			 */
 			indexes[row] = previous_key_index;
-			FUNCTION_NAME(destroy_key)(key);
+			FUNCTION_NAME(destroy_key)(full_key);
 			policy->stat_consecutive_keys++;
 			DEBUG_PRINT("%p: row %d consecutive key index %d\n", policy, row, previous_key_index);
 			continue;
@@ -126,26 +127,26 @@ FUNCTION_NAME(fill_offsets_impl)(
 		 * Find the key using the hash table.
 		 */
 		bool found = false;
-		FUNCTION_NAME(entry) *restrict entry = FUNCTION_NAME(insert)(table, key, &found);
+		FUNCTION_NAME(entry) *restrict entry = FUNCTION_NAME(insert)(table, abbrev_key, &found);
 		if (!found)
 		{
 			/*
 			 * New key, have to store it persistently.
 			 */
 			const int index = ++policy->last_used_key_index;
-			entry->key = FUNCTION_NAME(store_key)(policy, key);
+			entry->abbrev_key = FUNCTION_NAME(store_key)(policy, abbrev_key);
 			entry->key_index = index;
 			DEBUG_PRINT("%p: row %d new key index %d\n", policy, row, index);
 		}
 		else
 		{
 			DEBUG_PRINT("%p: row %d old key index %d\n", policy, row, entry->key_index);
-			FUNCTION_NAME(destroy_key)(key);
+			FUNCTION_NAME(destroy_key)(full_key);
 		}
 		indexes[row] = entry->key_index;
 
 		previous_key_index = entry->key_index;
-		previous_key = entry->key;
+		prev_abbrev_key = entry->abbrev_key;
 	}
 }
 
@@ -169,7 +170,7 @@ FUNCTION_NAME(fill_offsets_impl)(
 #define APPLY_FOR_TYPE(X, NAME, COND)                                                              \
 	APPLY_FOR_VALIDITY(X,                                                                          \
 					   NAME##_byval,                                                               \
-					   (COND) && config.single_key.decompression_type == sizeof(CTYPE))            \
+					   (COND) && config.single_key.decompression_type == sizeof(FULL_KEY_TYPE))    \
 	APPLY_FOR_VALIDITY(X,                                                                          \
 					   NAME##_text,                                                                \
 					   (COND) && config.single_key.decompression_type == DT_ArrowText)             \
@@ -264,9 +265,9 @@ HashingStrategy FUNCTION_NAME(strategy) = {
 #undef KEY_EQUAL
 #undef STORE_HASH
 #undef CHECK_PREVIOUS_KEY
-#undef CTYPE
-#undef DATUM_TO_CTYPE
-#undef CTYPE_TO_DATUM
+#undef FULL_KEY_TYPE
+#undef DATUM_TO_FULL_KEY
+#undef FULL_KEY_TO_DATUM
 
 #undef FUNCTION_NAME_HELPER2
 #undef FUNCTION_NAME_HELPER

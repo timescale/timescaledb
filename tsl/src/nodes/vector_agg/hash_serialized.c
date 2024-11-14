@@ -19,11 +19,13 @@
 #include "nodes/vector_agg/exec.h"
 
 static pg_attribute_always_inline void
-serialized_get_key(HashingConfig config, int row, void *restrict key_ptr, bool *restrict valid)
+serialized_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
+				   void *restrict abbrev_key_ptr, bool *restrict valid)
 {
 	GroupingPolicyHash *policy = config.policy;
 
-	text **restrict key = (text **) key_ptr;
+	text **restrict full_key = (text **) full_key_ptr;
+	text **restrict abbrev_key = (text **) abbrev_key_ptr;
 
 	const int num_columns = config.num_grouping_columns;
 
@@ -235,7 +237,7 @@ serialized_get_key(HashingConfig config, int row, void *restrict key_ptr, bool *
 
 	SET_VARSIZE(serialized_key_storage, offset);
 
-	*key = (text *) serialized_key_storage;
+	*full_key = (text *) serialized_key_storage;
 
 	/*
 	 * The multi-column key is always considered non-null, and the null flags
@@ -243,6 +245,8 @@ serialized_get_key(HashingConfig config, int row, void *restrict key_ptr, bool *
 	 * key.
 	 */
 	*valid = true;
+
+	*abbrev_key = *full_key;
 }
 
 static pg_attribute_always_inline text *
@@ -331,5 +335,6 @@ serialized_emit_key(GroupingPolicyHash *policy, uint32 current_key, TupleTableSl
 	(VARSIZE_4B(a) == VARSIZE_4B(b) &&                                                             \
 	 memcmp(VARDATA_4B(a), VARDATA_4B(b), VARSIZE_4B(a) - VARHDRSZ) == 0)
 #define STORE_HASH
-#define CTYPE text *
+#define FULL_KEY_TYPE text *
+#define ABBREV_KEY_TYPE text *
 #include "hash_table_functions_impl.c"
