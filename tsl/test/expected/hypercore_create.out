@@ -691,6 +691,7 @@ select ctid from :chunk where created_at = '2022-06-01 10:01' and device_id = 6;
 (1 row)
 
 select compress_chunk(:'chunk');
+NOTICE:  cannot compress hypercore "_hyper_1_1_chunk" using heap, recompressing instead
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -920,4 +921,61 @@ select * from rides order by pickup_datetime;
  6            | Fri Jan 01 00:00:02 2016 PST | Fri Jan 01 00:11:55 2016 PST |               1 |          1.20 | -73.979423522949219 | 40.744613647460938 |         1 | -73.992034912109375 | 40.753944396972656 |            2 |           9 |   0.5 |     0.5 |          0 |            0 |                   0.3 |         10.3
  745233436676 | Fri Jan 01 00:00:03 2016 PST | Fri Jan 01 00:11:14 2016 PST |               1 |          6.00 | -73.947151184082031 | 40.791046142578125 |         1 | -73.920768737792969 | 40.865577697753906 |            2 |           9 |   0.5 |     0.5 |          0 |            0 |                   0.3 |         19.3
 (3 rows)
+
+-- All these are valid methods to set the default
+show timescaledb.default_hypercore_use_access_method;
+ timescaledb.default_hypercore_use_access_method 
+-------------------------------------------------
+ off
+(1 row)
+
+set timescaledb.default_hypercore_use_access_method to on;
+set timescaledb.default_hypercore_use_access_method to off;
+set timescaledb.default_hypercore_use_access_method to true;
+set timescaledb.default_hypercore_use_access_method to false;
+set timescaledb.default_hypercore_use_access_method to yes;
+set timescaledb.default_hypercore_use_access_method to no;
+set timescaledb.default_hypercore_use_access_method to 0;
+set timescaledb.default_hypercore_use_access_method to 1;
+show timescaledb.default_hypercore_use_access_method;
+ timescaledb.default_hypercore_use_access_method 
+-------------------------------------------------
+ on
+(1 row)
+
+-- This should unset the value
+reset timescaledb.default_hypercore_use_access_method;
+show timescaledb.default_hypercore_use_access_method;
+ timescaledb.default_hypercore_use_access_method 
+-------------------------------------------------
+ off
+(1 row)
+
+-- Using GUC should compress using the hyperstore
+set timescaledb.default_hypercore_use_access_method to on;
+create table test5 (time timestamptz not null, device int, temp float);
+select created from create_hypertable('test5', 'time');
+ created 
+---------
+ t
+(1 row)
+
+insert into test5 values ('2022-06-01', 1, 1.0), ('2022-08-01', 1, 1.0);
+select ch as chunk from show_chunks('test5') ch limit 1 \gset
+alter table test5 set (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test5" is set to ""
+NOTICE:  default order by for hypertable "test5" is set to ""time" DESC"
+select compress_chunk(:'chunk');
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_10_46_chunk
+(1 row)
+
+select * from amrels where relparent = 'test5'::regclass;
+                   rel                    |  amname   | relparent 
+------------------------------------------+-----------+-----------
+ _timescaledb_internal._hyper_10_46_chunk | hypercore | test5
+ _timescaledb_internal._hyper_10_47_chunk | heap      | test5
+(2 rows)
 
