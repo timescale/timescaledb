@@ -23,10 +23,11 @@
 #define ABBREV_KEY_TYPE int16
 #define DATUM_TO_FULL_KEY DatumGetInt16
 #define FULL_KEY_TO_DATUM Int16GetDatum
-#define ABBREVIATE(X) hash16(X)
+
+#define ABBREVIATE(X) (X)
+#define KEY_HASH(X) hash64_crc(X)
 
 #include "single_fixed_key_impl.c"
 
-#define KEY_HASH(X) (X)
 #define KEY_EQUAL(a, b) a == b
 #include "hash_table_functions_impl.c"

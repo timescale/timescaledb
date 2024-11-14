@@ -11,20 +11,11 @@
  * implementations.
  */
 
-#ifdef USE_SSE42_CRC32Ceeeeeeeee
-#include <nmmintrin.h>
-static pg_attribute_always_inline uint64
-hash64(uint64 x)
-{
-	return _mm_crc32_u64(~0ULL, x);
-}
-
-#else
 /*
  * When we don't have the crc32 instruction, use the SplitMix64 finalizer.
  */
 static pg_attribute_always_inline uint64
-hash64(uint64 x)
+hash64_splitmix(uint64 x)
 {
 	x ^= x >> 30;
 	x *= 0xbf58476d1ce4e5b9U;
@@ -33,6 +24,19 @@ hash64(uint64 x)
 	x ^= x >> 31;
 	return x;
 }
+
+#ifdef USE_SSE42_CRC32C
+#include <nmmintrin.h>
+static pg_attribute_always_inline uint64
+hash64_crc(uint64 x)
+{
+	return _mm_crc32_u64(~0ULL, x);
+}
+
+#define HASH64 hash64_crc
+#else
+#define HASH64 hash64_splitmix
+#endif
 
 static pg_attribute_always_inline uint32
 hash32(uint32 x)
@@ -55,4 +59,3 @@ hash16(uint16 x)
 	x ^= x >> 9;
 	return x;
 }
-#endif
