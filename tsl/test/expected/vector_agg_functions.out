@@ -77,7 +77,7 @@ select count(compress_chunk(x)) from show_chunks('aggfns') x;
 
 vacuum freeze analyze aggfns;
 create table edges(t int, s int, ss int, f1 int);
-select create_hypertable('edges', 't');
+select create_hypertable('edges', 't', chunk_time_interval => 100000);
 NOTICE:  adding not-null constraint to column "t"
  create_hypertable  
 --------------------
@@ -87,13 +87,14 @@ NOTICE:  adding not-null constraint to column "t"
 alter table edges set (timescaledb.compress, timescaledb.compress_segmentby='s');
 NOTICE:  default order by for hypertable "edges" is set to "t DESC"
 insert into edges select
-    s * 10000 + f1 as t,
+    s * 1000 + f1 as t,
     s,
     s,
     f1
 from generate_series(0, 12) s,
     lateral generate_series(0, 60 + s + (s / 5::int) * 64 + (s / 10::int) * 2048) f1
 ;
+insert into edges select 200000 t, 111 s, 111 ss, 1 f1;
 select count(compress_chunk(x)) from show_chunks('edges') x;
  count 
 -------
@@ -7544,23 +7545,30 @@ order by count(*) desc, cint2 limit 10
 
 -- Test edge cases for various batch sizes and the filter matching around batch
 -- end.
+select count(*) from edges;
+ count 
+-------
+  7720
+(1 row)
+
 select s, count(*) from edges group by 1 order by 1;
- s  | count 
-----+-------
-  0 |    61
-  1 |    62
-  2 |    63
-  3 |    64
-  4 |    65
-  5 |   130
-  6 |   131
-  7 |   132
-  8 |   133
-  9 |   134
- 10 |  2247
- 11 |  2248
- 12 |  2249
-(13 rows)
+  s  | count 
+-----+-------
+   0 |    61
+   1 |    62
+   2 |    63
+   3 |    64
+   4 |    65
+   5 |   130
+   6 |   131
+   7 |   132
+   8 |   133
+   9 |   134
+  10 |  2247
+  11 |  2248
+  12 |  2249
+ 111 |     1
+(14 rows)
 
 select s, count(*), min(f1) from edges where f1 = 63 group by 1 order by 1;
  s  | count | min 
