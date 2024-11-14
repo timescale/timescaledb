@@ -88,6 +88,7 @@ serialized_get_key(HashingConfig config, int row, void *restrict key_ptr, bool *
 			{
 				/* Short varlena, unaligned. */
 				total_bytes = value_bytes + VARHDRSZ_SHORT;
+				num_bytes += total_bytes;
 			}
 			else
 			{
@@ -95,8 +96,6 @@ serialized_get_key(HashingConfig config, int row, void *restrict key_ptr, bool *
 				total_bytes = value_bytes + VARHDRSZ;
 				num_bytes = TYPEALIGN(4, num_bytes) + total_bytes;
 			}
-
-			num_bytes += total_bytes;
 		}
 	}
 
@@ -128,16 +127,6 @@ serialized_get_key(HashingConfig config, int row, void *restrict key_ptr, bool *
 	serialized_key_validity_bitmap = &serialized_key_storage[num_bytes - bitmap_bytes];
 
 	/*
-	 * We will also fill the output key values in Postgres format. They can go
-	 * straight into the next unused key space, if this key is discarded they
-	 * will just be overwritten later.
-	 */
-	uint8 *restrict output_key_validity_bitmap =
-		gp_hash_key_validity_bitmap(policy, policy->last_used_key_index + 1);
-	Datum *restrict output_key_datums =
-		gp_hash_output_keys(policy, policy->last_used_key_index + 1);
-
-	/*
 	 * Loop through the grouping columns again and build the actual key.
 	 */
 	uint32 offset = 0;
@@ -159,10 +148,6 @@ serialized_get_key(HashingConfig config, int row, void *restrict key_ptr, bool *
 						   column_values->output_value,
 						   def->value_bytes);
 
-					memcpy(&output_key_datums[column_index],
-						   column_values->output_value,
-						   def->value_bytes);
-
 					offset += def->value_bytes;
 				}
 				else
@@ -172,9 +157,6 @@ serialized_get_key(HashingConfig config, int row, void *restrict key_ptr, bool *
 					memcpy(&serialized_key_storage[offset],
 						   DatumGetPointer(*column_values->output_value),
 						   VARSIZE_ANY(*column_values->output_value));
-
-					output_key_datums[column_index] =
-						PointerGetDatum(&serialized_key_storage[offset]);
 
 					offset += VARSIZE_ANY(*column_values->output_value);
 				}
@@ -198,10 +180,6 @@ serialized_get_key(HashingConfig config, int row, void *restrict key_ptr, bool *
 			memcpy(&serialized_key_storage[offset],
 				   ((char *) column_values->buffers[1]) + column_values->decompression_type * row,
 				   column_values->decompression_type);
-			memcpy(&output_key_datums[column_index],
-				   ((char *) column_values->buffers[1]) + column_values->decompression_type * row,
-				   column_values->decompression_type);
-
 			offset += column_values->decompression_type;
 
 			continue;
@@ -216,11 +194,9 @@ serialized_get_key(HashingConfig config, int row, void *restrict key_ptr, bool *
 		const uint32 start = ((uint32 *) column_values->buffers[1])[data_row];
 		const int32 value_bytes = ((uint32 *) column_values->buffers[1])[data_row + 1] - start;
 
-		void *datum_start;
 		if (value_bytes + VARHDRSZ_SHORT <= VARATT_SHORT_MAX)
 		{
 			/* Short varlena, unaligned. */
-			datum_start = &serialized_key_storage[offset];
 			const int32 total_bytes = value_bytes + VARHDRSZ_SHORT;
 			SET_VARSIZE_SHORT(&serialized_key_storage[offset], total_bytes);
 			offset += VARHDRSZ_SHORT;
@@ -229,15 +205,14 @@ serialized_get_key(HashingConfig config, int row, void *restrict key_ptr, bool *
 		{
 			/* Long varlena, requires alignment. */
 			offset = TYPEALIGN(4, offset);
-			datum_start = &serialized_key_storage[offset];
 			const int32 total_bytes = value_bytes + VARHDRSZ;
 			SET_VARSIZE(&serialized_key_storage[offset], total_bytes);
 			offset += VARHDRSZ;
 		}
-		output_key_datums[column_index] = PointerGetDatum(datum_start);
 		memcpy(&serialized_key_storage[offset],
 			   &((uint8 *) column_values->buffers[2])[start],
 			   value_bytes);
+
 		offset += value_bytes;
 	}
 
@@ -250,14 +225,6 @@ serialized_get_key(HashingConfig config, int row, void *restrict key_ptr, bool *
 	 */
 	offset += bitmap_bytes;
 	Assert(offset == num_bytes);
-
-	/*
-	 * The output keys also have a validity bitmap, copy it there.
-	 */
-	for (size_t i = 0; i < bitmap_bytes; i++)
-	{
-		output_key_validity_bitmap[i] = serialized_key_validity_bitmap[i];
-	}
 
 	DEBUG_PRINT("key is %d bytes: ", offset);
 	for (size_t i = 0; i < offset; i++)
@@ -288,6 +255,9 @@ serialized_store_key(GroupingPolicyHash *restrict policy, text *key)
 	Assert(policy->tmp_key_storage == (void *) key);
 	policy->tmp_key_storage = NULL;
 	policy->num_tmp_key_storage_bytes = 0;
+
+	gp_hash_output_keys(policy, policy->last_used_key_index)[0] = PointerGetDatum(key);
+
 	return key;
 }
 
@@ -295,6 +265,63 @@ static pg_attribute_always_inline void
 serialized_destroy_key(text *key)
 {
 	/* Noop, the memory will be reused by the subsequent key. */
+}
+
+static void
+serialized_emit_key(GroupingPolicyHash *policy, uint32 current_key, TupleTableSlot *aggregated_slot)
+{
+	const int num_key_columns = policy->num_grouping_columns;
+	const Datum serialized_key_datum = gp_hash_output_keys(policy, current_key)[0];
+	const uint8 *serialized_key = (const uint8 *) VARDATA_ANY(serialized_key_datum);
+	const int key_data_bytes = VARSIZE_ANY_EXHDR(serialized_key_datum);
+	const uint8 *restrict ptr = serialized_key;
+	const int bitmap_bytes = (num_key_columns + 7) / 8;
+	Assert(bitmap_bytes <= key_data_bytes);
+	const uint8 *restrict key_validity_bitmap = &serialized_key[key_data_bytes - bitmap_bytes];
+
+	DEBUG_PRINT("emit key #%d, without header %d bytes: ", current_key, key_data_bytes);
+	for (int i = 0; i < key_data_bytes; i++)
+	{
+		DEBUG_PRINT("%.2x.", ptr[i]);
+	}
+	DEBUG_PRINT("\n");
+
+	for (int column_index = 0; column_index < num_key_columns; column_index++)
+	{
+		const GroupingColumn *col = &policy->grouping_columns[column_index];
+		const bool isnull = !byte_bitmap_row_is_valid(key_validity_bitmap, column_index);
+
+		aggregated_slot->tts_isnull[col->output_offset] = isnull;
+
+		if (isnull)
+		{
+			continue;
+		}
+
+		Datum *output = &aggregated_slot->tts_values[col->output_offset];
+		if (col->by_value)
+		{
+			*output = 0;
+			memcpy(output, ptr, col->value_bytes);
+			ptr += col->value_bytes;
+		}
+		else
+		{
+			if (VARATT_IS_SHORT(ptr))
+			{
+				*output = PointerGetDatum(ptr);
+				ptr += VARSIZE_SHORT(ptr);
+			}
+			else
+			{
+				ptr = (const uint8 *) TYPEALIGN(4, ptr);
+				*output = PointerGetDatum(ptr);
+				ptr += VARSIZE(ptr);
+			}
+		}
+	}
+
+	Assert(ptr == key_validity_bitmap);
 }
 
 #define EXPLAIN_NAME "serialized"

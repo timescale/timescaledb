@@ -15,17 +15,21 @@
 
 typedef struct GroupingPolicyHash GroupingPolicyHash;
 
-typedef struct
+typedef struct HashingStrategy HashingStrategy;
+
+typedef struct HashingStrategy
 {
 	char *explain_name;
-	void *(*create)(MemoryContext context, uint32 initial_rows, void *data);
+	void (*init)(HashingStrategy *strategy, GroupingPolicyHash *policy);
 	void (*reset)(void *table);
 	uint32 (*get_num_keys)(void *table);
 	uint64 (*get_size_bytes)(void *table);
 	void (*prepare_for_batch)(GroupingPolicyHash *policy, DecompressBatchState *batch_state);
 	void (*fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
 						 int start_row, int end_row);
-} HashTableFunctions;
+	void (*emit_key)(GroupingPolicyHash *policy, uint32 current_key,
+					 TupleTableSlot *aggregated_slot);
+} HashingStrategy;
 
 /*
  * Hash grouping policy.
@@ -74,7 +78,7 @@ typedef struct GroupingPolicyHash
 	 * unique integer index.
 	 */
 	void *table;
-	HashTableFunctions functions;
+	HashingStrategy strategy;
 
 	/*
 	 * Temporary key storages. Some hashing strategies need to put the key in a
@@ -172,22 +176,9 @@ typedef struct GroupingPolicyHash
 static inline Datum *
 gp_hash_output_keys(GroupingPolicyHash *policy, int key_index)
 {
-	Assert(key_index != 0);
-
-	const size_t null_bitmap_bytes = (policy->num_grouping_columns + 7) / 8;
-	const size_t key_bytes = sizeof(Datum) * policy->num_grouping_columns;
-	const size_t serialized_key_bytes = TYPEALIGN(8, null_bitmap_bytes + key_bytes);
-	/* Bitmap goes to the end. */
-	return (Datum *) (serialized_key_bytes * key_index + (uint8 *) policy->output_keys);
-}
-
-static inline uint8 *
-gp_hash_key_validity_bitmap(GroupingPolicyHash *policy, int key_index)
-{
-	Assert(key_index != 0);
-
-	const size_t null_bitmap_bytes = (policy->num_grouping_columns + 7) / 8;
-	return ((uint8 *) gp_hash_output_keys(policy, key_index + 1)) - null_bitmap_bytes;
+	Assert(key_index > 0);
+	// Assert((size_t) key_index < policy->num_output_keys);
+	return key_index + (Datum *) policy->output_keys;
 }
 
 static pg_attribute_always_inline bool

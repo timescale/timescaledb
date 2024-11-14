@@ -32,7 +32,6 @@ FUNCTION_NAME(get_key)(HashingConfig config, int row, void *restrict key_ptr, bo
 	}
 
 	gp_hash_output_keys(policy, policy->last_used_key_index + 1)[0] = CTYPE_TO_DATUM(*key);
-	gp_hash_key_validity_bitmap(policy, policy->last_used_key_index + 1)[0] = *valid;
 }
 
 static pg_attribute_always_inline CTYPE
@@ -50,3 +49,5 @@ FUNCTION_NAME(destroy_key)(CTYPE key)
 #undef FUNCTION_NAME_HELPER2
 #undef FUNCTION_NAME_HELPER
 #undef FUNCTION_NAME
+
+#include "hash_single_helper.c"

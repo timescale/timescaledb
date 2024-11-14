@@ -238,12 +238,19 @@ FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *ba
 	FUNCTION_NAME(dispatch_for_config)(config, start_row, end_row);
 }
 
-HashTableFunctions FUNCTION_NAME(functions) = {
-	.create = (void *(*) (MemoryContext, uint32, void *) ) FUNCTION_NAME(create),
+static void
+FUNCTION_NAME(init)(HashingStrategy *strategy, GroupingPolicyHash *policy)
+{
+	policy->table = FUNCTION_NAME(create)(CurrentMemoryContext, policy->num_agg_state_rows, NULL);
+}
+
+HashingStrategy FUNCTION_NAME(strategy) = {
+	.init = FUNCTION_NAME(init),
 	.reset = (void (*)(void *)) FUNCTION_NAME(reset),
 	.get_num_keys = FUNCTION_NAME(get_num_keys),
 	.get_size_bytes = FUNCTION_NAME(get_size_bytes),
 	.fill_offsets = FUNCTION_NAME(fill_offsets),
+	.emit_key = FUNCTION_NAME(emit_key),
 	.explain_name = EXPLAIN_NAME,
 #ifdef HAVE_PREPARE_FUNCTION
 	.prepare_for_batch = FUNCTION_NAME(prepare_for_batch),

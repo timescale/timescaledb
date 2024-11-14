@@ -46,7 +46,7 @@ select *, ss::text as x from (
             -- null in entire batch
             when s = 2 then null
             -- null for some rows
-            when s = 3 and t % 1053 = 0 then null
+            when s = 3 and t % 1051 = 0 then null
             -- for some rows same as default
             when s = 4 and t % 1057 = 0 then 11
             -- not null for entire batch

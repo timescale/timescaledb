@@ -47,7 +47,7 @@ select *, ss::text as x from (
             -- null in entire batch
             when s = 2 then null
             -- null for some rows
-            when s = 3 and t % 1053 = 0 then null
+            when s = 3 and t % 1051 = 0 then null
             -- for some rows same as default
             when s = 4 and t % 1057 = 0 then 11
             -- not null for entire batch
@@ -666,7 +666,7 @@ select x, min(cint2) from agggroup group by x order by min(cint2), x limit 10;
  8  | -16382
  3  | -16381
  9  | -16375
-    | -16100
+    | -16295
 (10 rows)
 
 select count(*) from agggroup where cint2 > 0;
@@ -753,10 +753,10 @@ select s, cint2, count(*) from agggroup where cint2 > 0 group by s, cint2 order 
 select s, ss, count(*) from agggroup where cint2 > 0 group by s, ss order by count(*), s, ss limit 10;
  s | ss | count 
 ---+----+-------
- 3 |    |     7
+ 3 |    |     9
  4 | 11 |     9
  2 | 11 |  9868
- 3 |  3 |  9886
+ 3 |  3 |  9884
  6 |  6 |  9890
  4 |  4 |  9897
  8 |  8 |  9898
@@ -768,10 +768,10 @@ select s, ss, count(*) from agggroup where cint2 > 0 group by s, ss order by cou
 select s, x, count(*) from agggroup where cint2 > 0 group by s, x order by count(*), s, x limit 10;
  s | x  | count 
 ---+----+-------
- 3 |    |     7
+ 3 |    |     9
  4 | 11 |     9
  2 | 11 |  9868
- 3 | 3  |  9886
+ 3 | 3  |  9884
  6 | 6  |  9890
  4 | 4  |  9897
  8 | 8  |  9898
@@ -798,10 +798,10 @@ select ss, cint2, x, count(*) from agggroup where cint2 > 0 group by ss, cint2, 
 select ss, s, count(*) from agggroup where cint2 > 0 group by ss, s order by count(*), ss, s limit 10;
  ss | s | count 
 ----+---+-------
-    | 3 |     7
  11 | 4 |     9
+    | 3 |     9
  11 | 2 |  9868
-  3 | 3 |  9886
+  3 | 3 |  9884
   6 | 6 |  9890
   4 | 4 |  9897
   8 | 8 |  9898
@@ -843,8 +843,8 @@ select t, s, ss, x, cint2, cint4, cint8, count(*) from agggroup where cint2 > 0 
 select x, count(*) from agggroup where cint2 > 0 group by x order by count(*), x limit 10;
  x  | count 
 ----+-------
-    |     7
- 3  |  9886
+    |     9
+ 3  |  9884
  6  |  9890
  4  |  9897
  8  |  9898
@@ -939,10 +939,10 @@ select s, cint2, count(cint2) from agggroup where cint2 > 0 group by s, cint2 or
 select s, ss, count(cint2) from agggroup where cint2 > 0 group by s, ss order by count(cint2), s, ss limit 10;
  s | ss | count 
 ---+----+-------
- 3 |    |     7
+ 3 |    |     9
  4 | 11 |     9
  2 | 11 |  9868
- 3 |  3 |  9886
+ 3 |  3 |  9884
  6 |  6 |  9890
  4 |  4 |  9897
  8 |  8 |  9898
@@ -954,10 +954,10 @@ select s, ss, count(cint2) from agggroup where cint2 > 0 group by s, ss order by
 select s, x, count(cint2) from agggroup where cint2 > 0 group by s, x order by count(cint2), s, x limit 10;
  s | x  | count 
 ---+----+-------
- 3 |    |     7
+ 3 |    |     9
  4 | 11 |     9
  2 | 11 |  9868
- 3 | 3  |  9886
+ 3 | 3  |  9884
  6 | 6  |  9890
  4 | 4  |  9897
  8 | 8  |  9898
@@ -984,10 +984,10 @@ select ss, cint2, x, count(cint2) from agggroup where cint2 > 0 group by ss, cin
 select ss, s, count(cint2) from agggroup where cint2 > 0 group by ss, s order by count(cint2), ss, s limit 10;
  ss | s | count 
 ----+---+-------
-    | 3 |     7
  11 | 4 |     9
+    | 3 |     9
  11 | 2 |  9868
-  3 | 3 |  9886
+  3 | 3 |  9884
   6 | 6 |  9890
   4 | 4 |  9897
   8 | 8 |  9898
@@ -1029,8 +1029,8 @@ select t, s, ss, x, cint2, cint4, cint8, count(cint2) from agggroup where cint2 
 select x, count(cint2) from agggroup where cint2 > 0 group by x order by count(cint2), x limit 10;
  x  | count 
 ----+-------
-    |     7
- 3  |  9886
+    |     9
+ 3  |  9884
  6  |  9890
  4  |  9897
  8  |  9898
@@ -1224,7 +1224,7 @@ select x, min(cint2) from agggroup where cint2 > 0 group by x order by min(cint2
  6  |    3
  0  |    4
  4  |    4
-    | 3667
+    | 4895
 (10 rows)
 
 select count(*) from agggroup where cint2 is null;

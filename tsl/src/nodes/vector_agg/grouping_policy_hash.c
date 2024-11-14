@@ -31,11 +31,11 @@
 #define DEBUG_LOG(...)
 #endif
 
-extern HashTableFunctions single_fixed_2_functions;
-extern HashTableFunctions single_fixed_4_functions;
-extern HashTableFunctions single_fixed_8_functions;
-extern HashTableFunctions single_text_functions;
-extern HashTableFunctions serialized_functions;
+extern HashingStrategy single_fixed_2_strategy;
+extern HashingStrategy single_fixed_4_strategy;
+extern HashingStrategy single_fixed_8_strategy;
+extern HashingStrategy single_text_strategy;
+extern HashingStrategy serialized_strategy;
 
 static const GroupingPolicy grouping_policy_hash_functions;
 
@@ -73,17 +73,17 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 		switch (g->value_bytes)
 		{
 			case 8:
-				policy->functions = single_fixed_8_functions;
+				policy->strategy = single_fixed_8_strategy;
 				break;
 			case 4:
-				policy->functions = single_fixed_4_functions;
+				policy->strategy = single_fixed_4_strategy;
 				break;
 			case 2:
-				policy->functions = single_fixed_2_functions;
+				policy->strategy = single_fixed_2_strategy;
 				break;
 			case -1:
 				Assert(g->typid == TEXTOID);
-				policy->functions = single_text_functions;
+				policy->strategy = single_text_strategy;
 				break;
 			default:
 				Assert(false);
@@ -92,11 +92,10 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 	}
 	else
 	{
-		policy->functions = serialized_functions;
+		policy->strategy = serialized_strategy;
 	}
 
-	policy->table =
-		policy->functions.create(CurrentMemoryContext, policy->num_agg_state_rows, NULL);
+	policy->strategy.init(&policy->strategy, policy);
 
 	return &policy->funcs;
 }
@@ -110,7 +109,7 @@ gp_hash_reset(GroupingPolicy *obj)
 
 	policy->returning_results = false;
 
-	policy->functions.reset(policy->table);
+	policy->strategy.reset(policy->table);
 
 	/*
 	 * Have to reset this because it's in the key body context which is also
@@ -238,7 +237,7 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 	 * Match rows to aggregation states using a hash table.
 	 */
 	Assert((size_t) end_row <= policy->num_key_index_for_row);
-	policy->functions.fill_offsets(policy, batch_state, start_row, end_row);
+	policy->strategy.fill_offsets(policy, batch_state, start_row, end_row);
 
 	/*
 	 * Process the aggregate function states.
@@ -361,7 +360,7 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 	 * Call the per-batch initialization function of the hashing strategy, if
 	 * it has one.
 	 */
-	if (policy->functions.prepare_for_batch)
+	if (policy->strategy.prepare_for_batch)
 	{
 		/*
 		 * Remember which aggregation states have already existed, and which we
@@ -369,7 +368,7 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 		 */
 		const uint32 first_initialized_key_index = policy->last_used_key_index;
 
-		policy->functions.prepare_for_batch(policy, batch_state);
+		policy->strategy.prepare_for_batch(policy, batch_state);
 
 		if (policy->last_used_key_index > first_initialized_key_index)
 		{
@@ -472,7 +471,7 @@ gp_hash_should_emit(GroupingPolicy *gp)
 	 * work will be done by the final Postgres aggregation, so we should bail
 	 * out early here.
 	 */
-	return policy->functions.get_size_bytes(policy->table) > 128 * 1024;
+	return policy->strategy.get_size_bytes(policy->table) > 128 * 1024;
 }
 
 static bool
@@ -524,20 +523,9 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 							   &aggregated_slot->tts_isnull[agg_def->output_offset]);
 	}
 
-	const int num_key_columns = policy->num_grouping_columns;
-	for (int i = 0; i < num_key_columns; i++)
-	{
-		const GroupingColumn *col = &policy->grouping_columns[i];
-		aggregated_slot->tts_values[col->output_offset] =
-			gp_hash_output_keys(policy, current_key)[i];
-		aggregated_slot->tts_isnull[col->output_offset] =
-			!byte_bitmap_row_is_valid(gp_hash_key_validity_bitmap(policy, current_key), i);
-	}
+	policy->strategy.emit_key(policy, current_key, aggregated_slot);
 
-	DEBUG_PRINT("%p: output key index %d valid %lx\n",
-				policy,
-				current_key,
-				gp_hash_key_validity_bitmap(policy, current_key)[0]);
+	DEBUG_PRINT("%p: output key index %d\n", policy, current_key);
 
 	return true;
 }
@@ -546,7 +534,7 @@ static char *
 gp_hash_explain(GroupingPolicy *gp)
 {
 	GroupingPolicyHash *policy = (GroupingPolicyHash *) gp;
-	return psprintf("hashed with %s key", policy->functions.explain_name);
+	return psprintf("hashed with %s key", policy->strategy.explain_name);
 }
 
 static const GroupingPolicy grouping_policy_hash_functions = {

@@ -31,8 +31,7 @@ get_bytes_view(CompressedColumnValues *column_values, int arrow_row)
 static pg_attribute_always_inline void
 single_text_get_key(HashingConfig config, int row, void *restrict key_ptr, bool *restrict valid)
 {
-	GroupingPolicyHash *policy = config.policy;
-	Assert(policy->num_grouping_columns == 1);
+	Assert(config.policy->num_grouping_columns == 1);
 
 	BytesView *restrict key = (BytesView *) key_ptr;
 
@@ -58,9 +57,6 @@ single_text_get_key(HashingConfig config, int row, void *restrict key_ptr, bool 
 	{
 		pg_unreachable();
 	}
-
-	*(uint64 *restrict) gp_hash_key_validity_bitmap(policy, policy->last_used_key_index + 1) =
-		*valid;
 
 	DEBUG_PRINT("%p consider key row %d key index %d is %d bytes: ",
 				policy,
@@ -243,7 +239,6 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 	{
 		policy->null_key_index = ++policy->last_used_key_index;
 		gp_hash_output_keys(policy, policy->null_key_index)[0] = PointerGetDatum(NULL);
-		*(uint64 *restrict) gp_hash_key_validity_bitmap(policy, policy->null_key_index) = false;
 	}
 
 	policy->use_key_index_for_dict = true;
@@ -324,4 +319,7 @@ single_text_offsets_translate(HashingConfig config, int start_row, int end_row)
 #define STORE_HASH
 #define CTYPE BytesView
 #define HAVE_PREPARE_FUNCTION
+
+#include "hash_single_helper.c"
+
 #include "hash_table_functions_impl.c"

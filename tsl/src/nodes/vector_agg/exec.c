@@ -177,23 +177,34 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 			col->typid = desc->typid;
 			col->value_bytes = desc->value_bytes;
 			col->by_value = desc->by_value;
-			switch (desc->typalign)
+			if (col->value_bytes == -1)
 			{
-				case TYPALIGN_CHAR:
-					col->alignment_bytes = 1;
-					break;
-				case TYPALIGN_SHORT:
-					col->alignment_bytes = ALIGNOF_SHORT;
-					break;
-				case TYPALIGN_INT:
-					col->alignment_bytes = ALIGNOF_INT;
-					break;
-				case TYPALIGN_DOUBLE:
-					col->alignment_bytes = ALIGNOF_DOUBLE;
-					break;
-				default:
-					Assert(false);
-					col->alignment_bytes = 1;
+				/*
+				 * long varlena requires 4 byte alignment, not sure why text has 'i'
+				 * typalign in pg catalog.
+				 */
+				col->alignment_bytes = 4;
+			}
+			else
+			{
+				switch (desc->typalign)
+				{
+					case TYPALIGN_CHAR:
+						col->alignment_bytes = 1;
+						break;
+					case TYPALIGN_SHORT:
+						col->alignment_bytes = ALIGNOF_SHORT;
+						break;
+					case TYPALIGN_INT:
+						col->alignment_bytes = ALIGNOF_INT;
+						break;
+					case TYPALIGN_DOUBLE:
+						col->alignment_bytes = ALIGNOF_DOUBLE;
+						break;
+					default:
+						Assert(false);
+						col->alignment_bytes = 1;
+				}
 			}
 		}
 	}
