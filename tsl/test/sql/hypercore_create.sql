@@ -319,12 +319,11 @@ commit;
 select compress_chunk(ch, hypercore_use_access_method => true, if_not_compressed => false)
 from show_chunks('test2') ch;
 
-\set ON_ERROR_STOP 1
-
--- Compressing from hypercore not using access method should lead to
--- recompression of hypercore with a notice.
+-- Compressing from hypercore and not using access method should lead
+-- to an error since it is not supported.
 select compress_chunk(ch, hypercore_use_access_method => false)
 from show_chunks('test2') ch;
+\set ON_ERROR_STOP 1
 
 -- Compressing a hypercore should by default lead to
 -- recompression. First check that :chunk is a hypercore.
