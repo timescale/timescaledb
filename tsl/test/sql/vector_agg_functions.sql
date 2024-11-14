@@ -91,7 +91,8 @@ vacuum freeze analyze edges;
 -- so we'll assume we have int128 in all release builds.
 select case when setting::bool then 'require' else 'allow' end guc_value
 from pg_settings where name = 'timescaledb.debug_have_int128'
-union select 'require' guc_value
+union all select 'require' guc_value
+limit 1
 \gset
 
 set timescaledb.debug_require_vector_agg = :'guc_value';
@@ -141,7 +142,8 @@ from
         'cint2 is null']) with ordinality as condition(condition, n),
     unnest(array[
         null,
-        's']) with ordinality as grouping(grouping, n)
+        's',
+        'ss']) with ordinality as grouping(grouping, n)
 where
     true
     and (explain is null /* or condition is null and grouping = 's' */)
