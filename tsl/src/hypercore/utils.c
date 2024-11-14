@@ -12,10 +12,12 @@
 #include <catalog/pg_class.h>
 #include <commands/defrem.h>
 #include <nodes/makefuncs.h>
+#include <storage/lmgr.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 
+#include "compat/compat.h"
 #include "extension_constants.h"
 #include "utils.h"
 #include <src/utils.h>
@@ -30,14 +32,17 @@ hypercore_set_am(const RangeVar *rv)
 {
 	HeapTuple tp;
 	Oid relid = RangeVarGetRelid(rv, NoLock, false);
+	Relation class_rel = table_open(RelationRelationId, RowExclusiveLock);
 
-	tp = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+	tp = SearchSysCacheLockedCopy1(RELOID, ObjectIdGetDatum(relid));
+
 	if (HeapTupleIsValid(tp))
 	{
 		Form_pg_class reltup = (Form_pg_class) GETSTRUCT(tp);
 		Oid hypercore_amoid = get_table_am_oid(TS_HYPERCORE_TAM_NAME, false);
-		Relation class_rel = table_open(RelationRelationId, RowExclusiveLock);
-
+#ifdef SYSCACHE_TUPLE_LOCK_NEEDED
+		ItemPointerData otid = tp->t_self;
+#endif
 		elog(DEBUG1, "migrating table \"%s\" to hypercore", get_rel_name(relid));
 
 		reltup->relam = hypercore_amoid;
@@ -54,8 +59,7 @@ hypercore_set_am(const RangeVar *rv)
 		};
 
 		recordDependencyOn(&depender, &referenced, DEPENDENCY_NORMAL);
-		table_close(class_rel, RowExclusiveLock);
-		ReleaseSysCache(tp);
+		UnlockSysCacheTuple(class_rel, &otid);
 
 		/*
 		 * On compressed tables, indexes only contain non-compressed data, so
@@ -75,4 +79,6 @@ hypercore_set_am(const RangeVar *rv)
 		reindex_relation(relid, 0, &params);
 #endif
 	}
+
+	table_close(class_rel, RowExclusiveLock);
 }

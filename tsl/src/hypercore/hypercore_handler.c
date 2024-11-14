@@ -1958,7 +1958,14 @@ compress_and_swap_heap(Relation rel, Tuplesortstate *tuplesort, TransactionId *x
 	table_close(new_compressed_rel, NoLock);
 	table_close(old_compressed_rel, NoLock);
 
-	/* Update stats for the compressed relation */
+	/*
+	 * Update stats for the compressed relation.
+	 *
+	 * We have an AccessExclusivelock from above so no tuple lock is needed
+	 * during update of the pg_class catalog table.
+	 */
+	AssertSufficientPgClassUpdateLockHeld(new_compressed_relid);
+
 	Relation relRelation = table_open(RelationRelationId, RowExclusiveLock);
 	HeapTuple reltup = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(new_compressed_relid));
 	if (!HeapTupleIsValid(reltup))
