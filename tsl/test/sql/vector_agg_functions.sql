@@ -71,16 +71,17 @@ vacuum freeze analyze aggfns;
 
 
 create table edges(t int, s int, ss int, f1 int);
-select create_hypertable('edges', 't');
+select create_hypertable('edges', 't', chunk_time_interval => 100000);
 alter table edges set (timescaledb.compress, timescaledb.compress_segmentby='s');
 insert into edges select
-    s * 10000 + f1 as t,
+    s * 1000 + f1 as t,
     s,
     s,
     f1
 from generate_series(0, 12) s,
     lateral generate_series(0, 60 + s + (s / 5::int) * 64 + (s / 10::int) * 2048) f1
 ;
+insert into edges select 200000 t, 111 s, 111 ss, 1 f1;
 select count(compress_chunk(x)) from show_chunks('edges') x;
 vacuum freeze analyze edges;
 
@@ -153,6 +154,7 @@ order by explain, condition.n, variable, function, grouping.n
 
 -- Test edge cases for various batch sizes and the filter matching around batch
 -- end.
+select count(*) from edges;
 select s, count(*) from edges group by 1 order by 1;
 
 select s, count(*), min(f1) from edges where f1 = 63 group by 1 order by 1;
