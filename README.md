@@ -13,21 +13,22 @@ PostgreSQL extension, providing automatic partitioning across time and space
 > [!WARNING]
 >
 >  The latest Postgres minor releases (17.1, 16.5, 15.9, 14.14, 13.17, 12.21), released 2024-11-14, have an unexpected
->  breaking ABI change that will crash existing deployments of TimescaleDB, unless used with
->  a TimescaleDB binary explicitly built against those new minor PG versions.
->
->  If you are using TimescaleDB, we recommend NOT upgrading to these latest minor versions at this time.
->  We have temporarily paused our normal process of automatically upgrading customers of our managed clouds to those minor
->  releases, as well as paused our automated community/OSS builds, as we work with the PG community how to address in
->  upcoming versions.
->
->  See the thread on pgsql-hackers: https://www.postgresql.org/message-id/flat/CABOikdNmVBC1LL6pY26dyxAS2f%2BgLZvTsNt%3D2XbcyG7WxXVBBQ%40mail.gmail.com.
+>  breaking ABI change that may crash existing deployments of TimescaleDB, unless used with a TimescaleDB binary explicitly built against those new minor PG versions.
+>  
+>  
+>  Status and recommendations:
+>  - **Users of [Timescale Cloud](https://console.cloud.timescale.com/) are unaffected**. We are currently not upgrading cloud databases to these latest minor PG releases. But regardless, Timescale Cloud recompiles TimescaleDB against each new minor Postgres version, which would prevent any such incompatibility.
+>  - **Users to Timescale's [k8s docker image](https://github.com/timescale/timescaledb-docker-ha) are unaffected**.  We are currently not building a new release against these latest minor PG releases. But regardless, our docker image build process recompiles TimescaleDB against each new minor Postgres version, which would prevent any such incompatibility.
+>  - Users of other managed clouds (using TimescaleDB Apache-2 Edition) are recommended to not upgrade to these latest minor PG releases at this time, or discuss with their cloud provider how they build TimescaleDB with new minor releases.
+>  - Users who self-manage TimescaleDB are recommended to not upgrade to these latest minor PG releases at this time.
+> 
+>  We are working with the PG community about how best to address this issue.  See [this thread on pgsql-hackers](https://www.postgresql.org/message-id/flat/CABOikdNmVBC1LL6pY26dyxAS2f%2BgLZvTsNt%3D2XbcyG7WxXVBBQ%40mail.gmail.com) for more info.
 >
 >  Thanks for your understanding! 🙏
 
 
 If you prefer not to install or administer your instance of TimescaleDB, try the
-30 day free trial of [Timescale](https://console.cloud.timescale.com/signup), our fully managed cloud offering.
+30 day free trial of [Timescale Cloud](https://console.cloud.timescale.com/signup), our fully managed cloud offering.
 Timescale is pay-as-you-go. We don't charge for storage you dont use, backups, snapshots, ingress or egress.
 
 To determine which option is best for you, see [Timescale Products](https://tsdb.co/GitHubTimescaleProducts)
@@ -132,7 +133,7 @@ analysis that are not present in vanilla PostgreSQL. (For example, the `time_buc
 
 ### Installation
 
-[Timescale](https://tsdb.co/GitHubTimescale), a fully managed TimescaleDB in the cloud, is
+[Timescale Cloud](https://tsdb.co/GitHubTimescale), a fully-managed TimescaleDB in the cloud, is
 available via a free trial. Create a PostgreSQL database in the cloud with TimescaleDB pre-installed
 so you can power your application with TimescaleDB without the management overhead.
 
