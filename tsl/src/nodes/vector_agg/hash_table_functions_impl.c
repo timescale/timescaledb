@@ -4,6 +4,8 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
+#include "import/umash.h"
+
 #define FUNCTION_NAME_HELPER2(X, Y) X##_##Y
 #define FUNCTION_NAME_HELPER(X, Y) FUNCTION_NAME_HELPER2(X, Y)
 #define FUNCTION_NAME(Y) FUNCTION_NAME_HELPER(KEY_VARIANT, Y)
@@ -33,7 +35,7 @@ typedef struct
 #define SH_FILLFACTOR (0.5)
 #define SH_PREFIX KEY_VARIANT
 #define SH_ELEMENT_TYPE FUNCTION_NAME(entry)
-#define SH_KEY_TYPE FULL_KEY_TYPE
+#define SH_KEY_TYPE ABBREV_KEY_TYPE
 #define SH_KEY abbrev_key
 #define SH_HASH_KEY(tb, key) KEY_HASH(key)
 #define SH_EQUAL(tb, a, b) KEY_EQUAL(a, b)
@@ -243,6 +245,10 @@ static void
 FUNCTION_NAME(init)(HashingStrategy *strategy, GroupingPolicyHash *policy)
 {
 	policy->table = FUNCTION_NAME(create)(CurrentMemoryContext, policy->num_agg_state_rows, NULL);
+#ifdef UMASH
+	policy->umash_params = palloc0(sizeof(struct umash_params));
+	umash_params_derive(policy->umash_params, 0xabcdef1234567890ull, NULL);
+#endif
 }
 
 HashingStrategy FUNCTION_NAME(strategy) = {
@@ -266,8 +272,10 @@ HashingStrategy FUNCTION_NAME(strategy) = {
 #undef STORE_HASH
 #undef CHECK_PREVIOUS_KEY
 #undef FULL_KEY_TYPE
+#undef ABBREV_KEY_TYPE
 #undef DATUM_TO_FULL_KEY
 #undef FULL_KEY_TO_DATUM
+#undef UMASH
 
 #undef FUNCTION_NAME_HELPER2
 #undef FUNCTION_NAME_HELPER

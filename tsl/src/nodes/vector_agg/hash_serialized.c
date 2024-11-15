@@ -18,6 +18,13 @@
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
 
+#include "import/umash.h"
+
+#define UMASH
+#define ABBREV_KEY_TYPE struct umash_fp
+#define KEY_HASH(X) (X.hash[0])
+#define KEY_EQUAL(a, b) (a.hash[0] == b.hash[0] && a.hash[1] == b.hash[1])
+
 static pg_attribute_always_inline void
 serialized_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
 				   void *restrict abbrev_key_ptr, bool *restrict valid)
@@ -25,7 +32,7 @@ serialized_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
 	GroupingPolicyHash *policy = config.policy;
 
 	text **restrict full_key = (text **) full_key_ptr;
-	text **restrict abbrev_key = (text **) abbrev_key_ptr;
+	ABBREV_KEY_TYPE *restrict abbrev_key = (ABBREV_KEY_TYPE *) abbrev_key_ptr;
 
 	const int num_columns = config.num_grouping_columns;
 
@@ -246,11 +253,15 @@ serialized_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
 	 */
 	*valid = true;
 
-	*abbrev_key = *full_key;
+	*abbrev_key = umash_fprint(config.policy->umash_params,
+							   /* seed = */ -1ull,
+							   serialized_key_storage,
+							   num_bytes);
 }
 
-static pg_attribute_always_inline text *
-serialized_store_key(GroupingPolicyHash *restrict policy, text *full_key, text *abbrev_key)
+static pg_attribute_always_inline ABBREV_KEY_TYPE
+serialized_store_key(GroupingPolicyHash *restrict policy, text *full_key,
+					 ABBREV_KEY_TYPE abbrev_key)
 {
 	/*
 	 * We will store this key so we have to consume the temporary storage that
@@ -260,7 +271,7 @@ serialized_store_key(GroupingPolicyHash *restrict policy, text *full_key, text *
 	policy->tmp_key_storage = NULL;
 	policy->num_tmp_key_storage_bytes = 0;
 
-	gp_hash_output_keys(policy, policy->last_used_key_index)[0] = PointerGetDatum(abbrev_key);
+	gp_hash_output_keys(policy, policy->last_used_key_index)[0] = PointerGetDatum(full_key);
 
 	return abbrev_key;
 }
@@ -330,11 +341,6 @@ serialized_emit_key(GroupingPolicyHash *policy, uint32 current_key, TupleTableSl
 
 #define EXPLAIN_NAME "serialized"
 #define KEY_VARIANT serialized
-#define KEY_HASH(X) hash_bytes_view((BytesView){ .len = VARSIZE_4B(X), .data = (uint8 *) (X) })
-#define KEY_EQUAL(a, b)                                                                            \
-	(VARSIZE_4B(a) == VARSIZE_4B(b) &&                                                             \
-	 memcmp(VARDATA_4B(a), VARDATA_4B(b), VARSIZE_4B(a) - VARHDRSZ) == 0)
-#define STORE_HASH
 #define FULL_KEY_TYPE text *
-#define ABBREV_KEY_TYPE text *
+
 #include "hash_table_functions_impl.c"

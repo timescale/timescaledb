@@ -17,6 +17,8 @@ typedef struct GroupingPolicyHash GroupingPolicyHash;
 
 typedef struct HashingStrategy HashingStrategy;
 
+struct umash_params;
+
 typedef struct HashingStrategy
 {
 	char *explain_name;
@@ -79,6 +81,7 @@ typedef struct GroupingPolicyHash
 	 */
 	void *table;
 	HashingStrategy strategy;
+	struct umash_params *umash_params;
 
 	/*
 	 * Temporary key storages. Some hashing strategies need to put the key in a

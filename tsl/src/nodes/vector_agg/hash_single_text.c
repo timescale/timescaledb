@@ -18,6 +18,11 @@
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
 
+#include "import/umash.h"
+
+#define UMASH
+#define ABBREV_KEY_TYPE struct umash_fp
+
 static BytesView
 get_bytes_view(CompressedColumnValues *column_values, int arrow_row)
 {
@@ -35,7 +40,7 @@ single_text_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
 	Assert(config.policy->num_grouping_columns == 1);
 
 	BytesView *restrict full_key = (BytesView *) full_key_ptr;
-	BytesView *restrict abbrev_key = (BytesView *) abbrev_key_ptr;
+	ABBREV_KEY_TYPE *restrict abbrev_key = (ABBREV_KEY_TYPE *) abbrev_key_ptr;
 
 	if (unlikely(config.single_key.decompression_type == DT_Scalar))
 	{
@@ -71,11 +76,15 @@ single_text_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
 	}
 	DEBUG_PRINT("\n");
 
-	*abbrev_key = *full_key;
+	*abbrev_key = umash_fprint(config.policy->umash_params,
+							   /* seed = */ -1ull,
+							   full_key->data,
+							   full_key->len);
 }
 
-static pg_attribute_always_inline BytesView
-single_text_store_key(GroupingPolicyHash *restrict policy, BytesView full_key, BytesView abbrev_key)
+static pg_attribute_always_inline ABBREV_KEY_TYPE
+single_text_store_key(GroupingPolicyHash *restrict policy, BytesView full_key,
+					  ABBREV_KEY_TYPE abbrev_key)
 {
 	const int total_bytes = full_key.len + VARHDRSZ;
 	text *restrict stored = (text *) MemoryContextAlloc(policy->key_body_mctx, total_bytes);
@@ -83,7 +92,7 @@ single_text_store_key(GroupingPolicyHash *restrict policy, BytesView full_key, B
 	memcpy(VARDATA(stored), full_key.data, full_key.len);
 	full_key.data = (uint8 *) VARDATA(stored);
 	gp_hash_output_keys(policy, policy->last_used_key_index)[0] = PointerGetDatum(stored);
-	return full_key;
+	return abbrev_key;
 }
 
 static pg_attribute_always_inline void
@@ -318,13 +327,12 @@ single_text_offsets_translate(HashingConfig config, int start_row, int end_row)
 
 #define EXPLAIN_NAME "single text"
 #define KEY_VARIANT single_text
-#define KEY_HASH(X) hash_bytes_view(X)
-#define KEY_EQUAL(a, b) (a.len == b.len && memcmp(a.data, b.data, a.len) == 0)
-#define STORE_HASH
 #define FULL_KEY_TYPE BytesView
-#define ABBREV_KEY_TYPE BytesView
 #define HAVE_PREPARE_FUNCTION
 
 #include "hash_single_helper.c"
+
+#define KEY_HASH(X) (X.hash[0])
+#define KEY_EQUAL(a, b) (a.hash[0] == b.hash[0] && a.hash[1] == b.hash[1])
 
 #include "hash_table_functions_impl.c"
