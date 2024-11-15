@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 #include <catalog/heap.h>
+#include <catalog/indexing.h>
 #include <catalog/pg_am.h>
 #include <common/base64.h>
 #include <libpq/pqformat.h>
@@ -793,7 +794,7 @@ row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor
 											 ALLOCSET_DEFAULT_SIZES),
 		.compressed_table = compressed_table,
 		.bistate = need_bistate ? GetBulkInsertState() : NULL,
-		.resultRelInfo = ts_catalog_open_indexes(compressed_table),
+		.resultRelInfo = CatalogOpenIndexes(compressed_table),
 		.n_input_columns = RelationGetDescr(uncompressed_table)->natts,
 		.count_metadata_column_offset = AttrNumberGetAttrOffset(count_metadata_column_num),
 		.compressed_values = palloc(sizeof(Datum) * num_columns_in_compressed_table),
@@ -1124,7 +1125,7 @@ row_compressor_close(RowCompressor *row_compressor)
 {
 	if (row_compressor->bistate)
 		FreeBulkInsertState(row_compressor->bistate);
-	ts_catalog_close_indexes(row_compressor->resultRelInfo);
+	CatalogCloseIndexes(row_compressor->resultRelInfo);
 }
 
 /******************
@@ -1216,7 +1217,7 @@ build_decompressor(Relation in_rel, Relation out_rel)
 
 		.out_desc = out_desc,
 		.out_rel = out_rel,
-		.indexstate = ts_catalog_open_indexes(out_rel),
+		.indexstate = CatalogOpenIndexes(out_rel),
 
 		.mycid = GetCurrentCommandId(true),
 		.bistate = GetBulkInsertState(),
@@ -1266,7 +1267,7 @@ row_decompressor_close(RowDecompressor *decompressor)
 {
 	FreeBulkInsertState(decompressor->bistate);
 	MemoryContextDelete(decompressor->per_compressed_row_ctx);
-	ts_catalog_close_indexes(decompressor->indexstate);
+	CatalogCloseIndexes(decompressor->indexstate);
 	FreeExecutorState(decompressor->estate);
 	detoaster_close(&decompressor->detoaster);
 }

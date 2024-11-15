@@ -13,6 +13,7 @@
 #include <access/xact.h>
 #include <catalog/dependency.h>
 #include <catalog/index.h>
+#include <catalog/indexing.h>
 #include <commands/event_trigger.h>
 #include <commands/tablecmds.h>
 #include <commands/trigger.h>
@@ -1092,10 +1093,9 @@ get_compressed_chunk_index_for_recompression(Chunk *uncompressed_chunk)
 
 	CompressionSettings *settings = ts_compression_settings_get(compressed_chunk->table_id);
 
-	ResultRelInfo *indstate = ts_catalog_open_indexes(compressed_chunk_rel);
+	CatalogIndexState indstate = CatalogOpenIndexes(compressed_chunk_rel);
 	Oid index_oid = get_compressed_chunk_index(indstate, settings);
-
-	ts_catalog_close_indexes(indstate);
+	CatalogCloseIndexes(indstate);
 
 	table_close(compressed_chunk_rel, NoLock);
 	table_close(uncompressed_chunk_rel, NoLock);
