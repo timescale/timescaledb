@@ -10,15 +10,31 @@ time-series data.  It is engineered up from PostgreSQL and packaged as a
 PostgreSQL extension, providing automatic partitioning across time and space
 (partitioning key), as well as full SQL support.
 
-If you prefer not to install or administer your instance of TimescaleDB, try the 
-30 day free trial of [Timescale](https://console.cloud.timescale.com/signup), our fully managed cloud offering. 
-Timescale is pay-as-you-go. We don't charge for storage you dont use, backups, snapshots, ingress or egress. 
+> [!WARNING]
+>
+>  The latest Postgres minor releases (17.1, 16.5, 15.9, 14.14, 13.17, 12.21), released today, have an unexpected
+>  breaking ABI change that will crash existing deployments of TimescaleDB (and other extensions), unless used with
+>  a TimescaleDB binary explicitly built against those new minor PG versions.
+>
+>  If you are using TimescaleDB, we recommend NOT upgrading to these latest minor versions at this time.
+>  We have paused our normal process of automatically upgrading customers of our managed clouds to those minor
+>  releases, as well as paused our automated community/OSS builds, as we work with the PG community how to address in
+>  upcoming versions.
+>
+>  See the thread on pgsql-hackers: https://www.postgresql.org/message-id/flat/CABOikdNmVBC1LL6pY26dyxAS2f%2BgLZvTsNt%3D2XbcyG7WxXVBBQ%40mail.gmail.com.
+>
+>  Thanks for your understanding! 🙏
+
+
+If you prefer not to install or administer your instance of TimescaleDB, try the
+30 day free trial of [Timescale](https://console.cloud.timescale.com/signup), our fully managed cloud offering.
+Timescale is pay-as-you-go. We don't charge for storage you dont use, backups, snapshots, ingress or egress.
 
 To determine which option is best for you, see [Timescale Products](https://tsdb.co/GitHubTimescaleProducts)
-for more information about our Apache-2 version, TimescaleDB Community (self-hosted), and Timescale 
+for more information about our Apache-2 version, TimescaleDB Community (self-hosted), and Timescale
 Cloud (hosted), including: feature comparisons, FAQ, documentation, and support.
 
-Below is an introduction to TimescaleDB. For more information, please check out 
+Below is an introduction to TimescaleDB. For more information, please check out
 these other resources:
 - [Developer Documentation](https://docs.timescale.com/getting-started/latest/services/)
 - [Slack Channel](https://slack-login.timescale.com)
@@ -48,7 +64,7 @@ actual data. This single-table view, which we call a
 is comprised of many chunks, which are created by partitioning
 the hypertable's data in either one or two dimensions: by a time
 interval, and by an (optional) "partition key" such as
-device id, location, user id, etc. 
+device id, location, user id, etc.
 
 Virtually all user interactions with TimescaleDB are with
 hypertables. Creating tables and indexes, altering tables, inserting
@@ -63,7 +79,7 @@ such.
 
 PostgreSQL's out-of-the-box settings are typically too conservative for modern
 servers and TimescaleDB. You should make sure your `postgresql.conf`
-settings are tuned, either by using [timescaledb-tune](https://github.com/timescale/timescaledb-tune) 
+settings are tuned, either by using [timescaledb-tune](https://github.com/timescale/timescaledb-tune)
 or doing it manually.
 
 #### Creating a hypertable
@@ -120,7 +136,7 @@ analysis that are not present in vanilla PostgreSQL. (For example, the `time_buc
 available via a free trial. Create a PostgreSQL database in the cloud with TimescaleDB pre-installed
 so you can power your application with TimescaleDB without the management overhead.
 
-TimescaleDB is also available pre-packaged for several platforms such as Linux, Windows, MacOS, Docker, and 
+TimescaleDB is also available pre-packaged for several platforms such as Linux, Windows, MacOS, Docker, and
 Kubernetes. For more information, see [Install TimescaleDB](https://docs.timescale.com/self-hosted/latest/install/).
 
 To build from source, see [Building from source](https://github.com/timescale/timescaledb/blob/main/docs/BuildSource.md).
