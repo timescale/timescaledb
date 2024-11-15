@@ -25,7 +25,7 @@
 #define FULL_KEY_TO_DATUM Int16GetDatum
 
 #define ABBREVIATE(X) (X)
-#define KEY_HASH(X) hash64_crc(X)
+#define KEY_HASH(X) HASH64(X)
 
 #include "single_fixed_key_impl.c"
 
