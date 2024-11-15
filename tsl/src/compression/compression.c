@@ -10,6 +10,7 @@
 #include <catalog/pg_am.h>
 #include <common/base64.h>
 #include <libpq/pqformat.h>
+#include <nodes/execnodes.h>
 #include <storage/predicate.h>
 #include <utils/datum.h>
 #include <utils/snapmgr.h>
@@ -1582,12 +1583,24 @@ row_decompressor_decompress_row_to_table(RowDecompressor *decompressor)
 	 */
 	if (decompressor->indexstate->ri_NumIndices > 0)
 	{
-		ResultRelInfo indexstate_copy = *decompressor->indexstate;
 		Relation single_index_relation;
 		IndexInfo *single_index_info;
-		indexstate_copy.ri_NumIndices = 1;
-		indexstate_copy.ri_IndexRelationDescs = &single_index_relation;
-		indexstate_copy.ri_IndexRelationInfo = &single_index_info;
+
+		/* We overallocate memory for ResultRelInfo copy here because 17.1
+		 * added an extra field and when calling InitResultRelInfo() on a
+		 * ResultRelInfo object it will attempt to write after the end of the
+		 * structure allocated in the 17.0 server. */
+		union OverallocatedResultRelInfo
+		{
+			ResultRelInfo rri_copy;
+			char buffer[2 * sizeof(ResultRelInfo)];
+		} indexstate;
+
+		memset(indexstate.buffer, 0, sizeof(indexstate.buffer));
+
+		indexstate.rri_copy.ri_NumIndices = 1;
+		indexstate.rri_copy.ri_IndexRelationDescs = &single_index_relation;
+		indexstate.rri_copy.ri_IndexRelationInfo = &single_index_info;
 		for (int i = 0; i < decompressor->indexstate->ri_NumIndices; i++)
 		{
 			single_index_relation = decompressor->indexstate->ri_IndexRelationDescs[i];
@@ -1600,7 +1613,7 @@ row_decompressor_decompress_row_to_table(RowDecompressor *decompressor)
 
 				/* Arrange for econtext's scan tuple to be the tuple under test */
 				econtext->ecxt_scantuple = decompressed_slot;
-				ExecInsertIndexTuplesCompat(&indexstate_copy,
+				ExecInsertIndexTuplesCompat(&indexstate.rri_copy,
 											decompressed_slot,
 											estate,
 											false,
