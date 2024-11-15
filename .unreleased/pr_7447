@@ -1,1 +1,1 @@
-Fixes: #7447 Call InitResultRelInfo in ts_catalog_open_indexes
+Fixes: #7447 Fix issue resulting from PG 17.1 ResultRelInfo size change
