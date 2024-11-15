@@ -6,6 +6,7 @@
 #pragma once
 
 #include <postgres.h>
+#include <catalog/indexing.h>
 #include <executor/tuptable.h>
 #include <fmgr.h>
 #include <lib/stringinfo.h>
@@ -130,7 +131,7 @@ typedef struct RowDecompressor
 
 	TupleDesc out_desc;
 	Relation out_rel;
-	ResultRelInfo *indexstate;
+	CatalogIndexState indexstate;
 	EState *estate;
 
 	CommandId mycid;
