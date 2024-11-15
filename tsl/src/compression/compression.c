@@ -1570,11 +1570,15 @@ row_decompressor_decompress_row_to_table(RowDecompressor *decompressor)
 	 * insert the entire batch into one index, then into another, and so on.
 	 * Working with one index at a time gives better data access locality,
 	 * which reduces the load on shared buffers cache.
+	 *
 	 * The normal Postgres code inserts each row into all indexes, so to do it
 	 * the other way around, we create a temporary ResultRelInfo that only
-	 * references one index. Then we loop over indexes, and for each index we
-	 * set it to this temporary ResultRelInfo, and insert all rows into this
-	 * single index.
+	 * references one index. We need to re-open the index for the relation
+	 * here since the size of ResultRelInfo can change (this happened in 17.1)
+	 * and a blind copy of the ResultRelInfo will not copy the correct data.
+	 *
+	 * Then we loop over indexes, and for each index we set it to this
+	 * temporary ResultRelInfo, and insert all rows into this single index.
 	 */
 	if (decompressor->indexstate->ri_NumIndices > 0)
 	{

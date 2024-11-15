@@ -1,0 +1,1 @@
+Fixes: #7447 Call InitResultRelInfo in ts_catalog_open_indexes
