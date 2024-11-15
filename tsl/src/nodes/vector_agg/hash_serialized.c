@@ -20,10 +20,16 @@
 
 #include "import/umash.h"
 
+struct abbrev_key
+{
+	uint32 hash;
+	uint64 rest;
+} pg_attribute_packed;
+
 #define UMASH
-#define ABBREV_KEY_TYPE struct umash_fp
-#define KEY_HASH(X) (X.hash[0])
-#define KEY_EQUAL(a, b) (a.hash[0] == b.hash[0] && a.hash[1] == b.hash[1])
+#define ABBREV_KEY_TYPE struct abbrev_key
+#define KEY_HASH(X) (X.hash)
+#define KEY_EQUAL(a, b) (a.hash == b.hash && a.rest == b.rest)
 
 static pg_attribute_always_inline void
 serialized_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
@@ -253,10 +259,12 @@ serialized_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
 	 */
 	*valid = true;
 
-	*abbrev_key = umash_fprint(config.policy->umash_params,
-							   /* seed = */ -1ull,
-							   serialized_key_storage,
-							   num_bytes);
+	struct umash_fp fp = umash_fprint(config.policy->umash_params,
+									  /* seed = */ -1ull,
+									  serialized_key_storage,
+									  num_bytes);
+	abbrev_key->hash = fp.hash[0] & (~(uint32) 0);
+	abbrev_key->rest = fp.hash[1];
 }
 
 static pg_attribute_always_inline ABBREV_KEY_TYPE

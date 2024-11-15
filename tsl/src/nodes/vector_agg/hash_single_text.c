@@ -20,8 +20,16 @@
 
 #include "import/umash.h"
 
+struct abbrev_key
+{
+	uint32 hash;
+	uint64 rest;
+} __attribute__((packed));
+
 #define UMASH
-#define ABBREV_KEY_TYPE struct umash_fp
+#define ABBREV_KEY_TYPE struct abbrev_key
+#define KEY_HASH(X) (X.hash)
+#define KEY_EQUAL(a, b) (a.hash == b.hash && a.rest == b.rest)
 
 static BytesView
 get_bytes_view(CompressedColumnValues *column_values, int arrow_row)
@@ -76,10 +84,12 @@ single_text_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
 	}
 	DEBUG_PRINT("\n");
 
-	*abbrev_key = umash_fprint(config.policy->umash_params,
-							   /* seed = */ -1ull,
-							   full_key->data,
-							   full_key->len);
+	struct umash_fp fp = umash_fprint(config.policy->umash_params,
+									  /* seed = */ -1ull,
+									  full_key->data,
+									  full_key->len);
+	abbrev_key->hash = fp.hash[0] & (~ (uint32) 0);
+	abbrev_key->rest = fp.hash[1];
 }
 
 static pg_attribute_always_inline ABBREV_KEY_TYPE
@@ -331,8 +341,5 @@ single_text_offsets_translate(HashingConfig config, int start_row, int end_row)
 #define HAVE_PREPARE_FUNCTION
 
 #include "hash_single_helper.c"
-
-#define KEY_HASH(X) (X.hash[0])
-#define KEY_EQUAL(a, b) (a.hash[0] == b.hash[0] && a.hash[1] == b.hash[1])
 
 #include "hash_table_functions_impl.c"

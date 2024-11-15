@@ -18,6 +18,9 @@
  */
 typedef struct
 {
+	/* Key index 0 is invalid. */
+	uint32 key_index;
+
 	ABBREV_KEY_TYPE abbrev_key;
 
 #ifdef STORE_HASH
@@ -27,12 +30,9 @@ typedef struct
 	 */
 	uint32 hash;
 #endif
-
-	/* Key index 0 is invalid. */
-	uint32 key_index;
 } FUNCTION_NAME(entry);
 
-#define SH_FILLFACTOR (0.5)
+// #define SH_FILLFACTOR (0.5)
 #define SH_PREFIX KEY_VARIANT
 #define SH_ELEMENT_TYPE FUNCTION_NAME(entry)
 #define SH_KEY_TYPE ABBREV_KEY_TYPE

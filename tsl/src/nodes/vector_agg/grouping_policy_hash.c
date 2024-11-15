@@ -464,6 +464,15 @@ gp_hash_should_emit(GroupingPolicy *gp)
 {
 	GroupingPolicyHash *policy = (GroupingPolicyHash *) gp;
 
+	if (policy->last_used_key_index > UINT32_MAX - GLOBAL_MAX_ROWS_PER_COMPRESSION)
+	{
+		/*
+		 * The max valid key index is UINT32_MAX, so we have to spill if the next
+		 * batch can possibly lead to key index overflow.
+		 */
+		return true;
+	}
+
 	/*
 	 * Don't grow the hash table cardinality too much, otherwise we become bound
 	 * by memory reads. In general, when this first stage of grouping doesn't
@@ -471,7 +480,7 @@ gp_hash_should_emit(GroupingPolicy *gp)
 	 * work will be done by the final Postgres aggregation, so we should bail
 	 * out early here.
 	 */
-	return policy->strategy.get_size_bytes(policy->table) > 128 * 1024;
+	return policy->strategy.get_size_bytes(policy->table) > 512 * 1024;
 }
 
 static bool
