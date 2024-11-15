@@ -12,7 +12,7 @@ PostgreSQL extension, providing automatic partitioning across time and space
 
 > [!WARNING]
 >
->  The latest Postgres minor releases (17.1, 16.5, 15.9, 14.14, 13.17, 12.21), released today, have an unexpected
+>  The latest Postgres minor releases (17.1, 16.5, 15.9, 14.14, 13.17, 12.21), released 2024-11-14, have an unexpected
 >  breaking ABI change that will crash existing deployments of TimescaleDB (and other extensions), unless used with
 >  a TimescaleDB binary explicitly built against those new minor PG versions.
 >
