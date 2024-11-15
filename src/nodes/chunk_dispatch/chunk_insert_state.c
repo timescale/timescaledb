@@ -122,6 +122,9 @@ create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
 	}
 }
 
+#undef makeNode
+#define makeNode(_type_) ((_type_ *) newNode(2 * sizeof(_type_), T_##_type_))
+
 /*
  * Create a new ResultRelInfo for a chunk.
  *
