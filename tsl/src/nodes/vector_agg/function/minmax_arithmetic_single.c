@@ -30,7 +30,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 							 isnan((double) new_value));
 
 		outer_result = do_replace ? new_value : outer_result;
-		outer_isvalid |= do_replace;
+		outer_isvalid = outer_isvalid || do_replace;
 	}
 
 	state->isvalid = outer_isvalid;

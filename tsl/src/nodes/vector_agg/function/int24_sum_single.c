@@ -39,7 +39,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 	{
 		const bool row_ok = arrow_row_is_valid(filter, row);
 		batch_sum += values[row] * row_ok;
-		have_result |= row_ok;
+		have_result = have_result || row_ok;
 	}
 
 	if (unlikely(pg_add_s64_overflow(state->result, batch_sum, &state->result)))
@@ -48,7 +48,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE), errmsg("bigint out of range")));
 	}
 
-	state->isvalid |= have_result;
+	state->isvalid = state->isvalid || have_result;
 }
 
 static pg_attribute_always_inline void

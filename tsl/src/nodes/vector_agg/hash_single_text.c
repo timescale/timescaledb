@@ -88,7 +88,7 @@ single_text_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
 									  /* seed = */ -1ull,
 									  full_key->data,
 									  full_key->len);
-	abbrev_key->hash = fp.hash[0] & (~ (uint32) 0);
+	abbrev_key->hash = fp.hash[0] & (~(uint32) 0);
 	abbrev_key->rest = fp.hash[1];
 }
 
@@ -175,7 +175,7 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 	for (int inner = 0; inner < INNER_MAX; inner++)                                                \
 	{                                                                                              \
 		const int16 index = ((int16 *) config.single_key.buffers[3])[outer * 64 + inner];          \
-		tmp[index] |= (word & (1ull << inner));                                                    \
+		tmp[index] = tmp[index] || (word & (1ull << inner));                                       \
 	}
 
 			INNER_LOOP(64)
@@ -226,7 +226,8 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 			const size_t batch_words = (batch_rows + 63) / 64;
 			for (size_t i = 0; i < batch_words; i++)
 			{
-				have_null_key |=
+				have_null_key =
+					have_null_key ||
 					(row_filter[i] & (~((uint64 *) config.single_key.buffers[0])[i])) != 0;
 			}
 		}

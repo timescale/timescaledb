@@ -249,7 +249,8 @@ build_hashing_config(GroupingPolicyHash *policy, DecompressBatchState *batch_sta
 
 	for (int i = 0; i < policy->num_grouping_columns; i++)
 	{
-		config.have_scalar_columns |=
+		config.have_scalar_columns =
+			config.have_scalar_columns ||
 			(policy->grouping_column_values[i].decompression_type == DT_Scalar ||
 			 policy->grouping_column_values[i].buffers[0] != NULL);
 	}
