@@ -225,7 +225,7 @@ typedef struct HashingConfig
 	const CompressedColumnValues *grouping_column_values;
 	bool have_scalar_columns;
 
-	GroupingPolicyHash *policy;
+	GroupingPolicyHash *restrict policy;
 
 	uint32 *restrict result_key_indexes;
 } HashingConfig;

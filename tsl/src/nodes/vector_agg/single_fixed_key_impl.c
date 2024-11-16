@@ -35,10 +35,11 @@ FUNCTION_NAME(get_key)(HashingConfig config, int row, void *restrict full_key_pt
 }
 
 static pg_attribute_always_inline FULL_KEY_TYPE
-FUNCTION_NAME(store_key)(GroupingPolicyHash *restrict policy, FULL_KEY_TYPE full_key,
+FUNCTION_NAME(store_key)(HashingConfig config, int row, FULL_KEY_TYPE full_key,
 						 ABBREV_KEY_TYPE abbrev_key)
 {
-	gp_hash_output_keys(policy, policy->last_used_key_index)[0] = FULL_KEY_TO_DATUM(full_key);
+	gp_hash_output_keys(config.policy, config.policy->last_used_key_index)[0] =
+		FULL_KEY_TO_DATUM(full_key);
 	return abbrev_key;
 }
 

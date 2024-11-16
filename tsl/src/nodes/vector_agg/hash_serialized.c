@@ -35,11 +35,101 @@ static pg_attribute_always_inline void
 serialized_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
 				   void *restrict abbrev_key_ptr, bool *restrict valid)
 {
-	GroupingPolicyHash *policy = config.policy;
+	*(text **) full_key_ptr = NULL;
 
-	text **restrict full_key = (text **) full_key_ptr;
 	ABBREV_KEY_TYPE *restrict abbrev_key = (ABBREV_KEY_TYPE *) abbrev_key_ptr;
 
+	const int num_columns = config.num_grouping_columns;
+
+	/*
+	 * Loop through the grouping columns again and build the actual fingerprint.
+	 */
+	struct umash_fp_state fp_state;
+	umash_fp_init(&fp_state, config.policy->umash_params, /* seed = */ -1ull);
+
+	for (int column_index = 0; column_index < num_columns; column_index++)
+	{
+		const CompressedColumnValues *column_values = &config.grouping_column_values[column_index];
+
+		if (config.have_scalar_columns && column_values->decompression_type == DT_Scalar)
+		{
+			const bool is_valid = !*column_values->output_isnull;
+			umash_sink_update(&fp_state.sink, &is_valid, sizeof(is_valid));
+			if (is_valid)
+			{
+				const GroupingColumn *def = &config.policy->grouping_columns[column_index];
+				if (def->by_value)
+				{
+					umash_sink_update(&fp_state.sink,
+									  column_values->output_value,
+									  def->value_bytes);
+				}
+				else
+				{
+					const int32 value_bytes = VARSIZE_ANY_EXHDR(*column_values->output_value);
+					umash_sink_update(&fp_state.sink,
+						&value_bytes, sizeof(value_bytes));
+					umash_sink_update(&fp_state.sink,
+									  VARDATA_ANY(DatumGetPointer(*column_values->output_value)),
+									  value_bytes);
+				}
+			}
+			continue;
+		}
+
+		const bool is_valid =
+			!config.have_scalar_columns || arrow_row_is_valid(column_values->buffers[0], row);
+
+		umash_sink_update(&fp_state.sink, &is_valid, sizeof(is_valid));
+
+		if (!is_valid)
+		{
+			continue;
+		}
+
+		if (column_values->decompression_type > 0)
+		{
+			umash_sink_update(&fp_state.sink,
+							  ((char *) column_values->buffers[1]) +
+								  column_values->decompression_type * row,
+							  column_values->decompression_type);
+
+			continue;
+		}
+
+		Assert(column_values->decompression_type == DT_ArrowText ||
+			   column_values->decompression_type == DT_ArrowTextDict);
+
+		const uint32 data_row = column_values->decompression_type == DT_ArrowTextDict ?
+									((int16 *) column_values->buffers[3])[row] :
+									row;
+		const uint32 start = ((uint32 *) column_values->buffers[1])[data_row];
+		const int32 value_bytes = ((uint32 *) column_values->buffers[1])[data_row + 1] - start;
+
+		umash_sink_update(&fp_state.sink,
+			&value_bytes,
+			sizeof(value_bytes));
+
+		umash_sink_update(&fp_state.sink,
+						  &((uint8 *) column_values->buffers[2])[start],
+						  value_bytes);
+	}
+
+	/*
+	 * The multi-column key is always considered non-null, and the null flags
+	 * for the individual columns are stored in a bitmap that is part of the
+	 * key.
+	 */
+	*valid = true;
+
+	struct umash_fp fp = umash_fp_digest(&fp_state);
+	abbrev_key->hash = fp.hash[0] & (~(uint32) 0);
+	abbrev_key->rest = fp.hash[1];
+}
+
+static pg_attribute_always_inline ABBREV_KEY_TYPE
+serialized_store_key(HashingConfig config, int row, text *full_key, ABBREV_KEY_TYPE abbrev_key)
+{
 	const int num_columns = config.num_grouping_columns;
 
 	size_t bitmap_bytes = (num_columns + 7) / 8;
@@ -119,23 +209,13 @@ serialized_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
 	 */
 	num_bytes += bitmap_bytes;
 
-	/*
-	 * Use temporary storage for the new key, reallocate if it's too small.
-	 */
-	if (num_bytes > policy->num_tmp_key_storage_bytes)
-	{
-		if (policy->tmp_key_storage != NULL)
-		{
-			pfree(policy->tmp_key_storage);
-		}
-		policy->tmp_key_storage = MemoryContextAlloc(policy->key_body_mctx, num_bytes);
-		policy->num_tmp_key_storage_bytes = num_bytes;
-	}
-	uint8 *restrict serialized_key_storage = policy->tmp_key_storage;
+	uint8 *restrict serialized_key_storage =
+		MemoryContextAlloc(config.policy->key_body_mctx, num_bytes);
 
 	/*
 	 * Have to memset the key with zeros, so that the alignment bytes are zeroed
 	 * out.
+	 * FIXME no alignment anymore, remove?
 	 */
 	memset(serialized_key_storage, 0, num_bytes);
 
@@ -212,6 +292,7 @@ serialized_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
 		if (value_bytes + VARHDRSZ_SHORT <= VARATT_SHORT_MAX)
 		{
 			/* Short varlena, unaligned. */
+			/* FIXME only storing new keys now, remove? */
 			const int32 total_bytes = value_bytes + VARHDRSZ_SHORT;
 			SET_VARSIZE_SHORT(&serialized_key_storage[offset], total_bytes);
 			offset += VARHDRSZ_SHORT;
@@ -241,7 +322,7 @@ serialized_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
 	offset += bitmap_bytes;
 	Assert(offset == num_bytes);
 
-	DEBUG_PRINT("key is %d bytes: ", offset);
+	DEBUG_PRINT("new key is %d bytes: ", offset);
 	for (size_t i = 0; i < offset; i++)
 	{
 		DEBUG_PRINT("%.2x.", serialized_key_storage[i]);
@@ -250,36 +331,8 @@ serialized_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
 
 	SET_VARSIZE(serialized_key_storage, offset);
 
-	*full_key = (text *) serialized_key_storage;
-
-	/*
-	 * The multi-column key is always considered non-null, and the null flags
-	 * for the individual columns are stored in a bitmap that is part of the
-	 * key.
-	 */
-	*valid = true;
-
-	struct umash_fp fp = umash_fprint(config.policy->umash_params,
-									  /* seed = */ -1ull,
-									  serialized_key_storage,
-									  num_bytes);
-	abbrev_key->hash = fp.hash[0] & (~(uint32) 0);
-	abbrev_key->rest = fp.hash[1];
-}
-
-static pg_attribute_always_inline ABBREV_KEY_TYPE
-serialized_store_key(GroupingPolicyHash *restrict policy, text *full_key,
-					 ABBREV_KEY_TYPE abbrev_key)
-{
-	/*
-	 * We will store this key so we have to consume the temporary storage that
-	 * was used for it. The subsequent keys will need to allocate new memory.
-	 */
-	Assert(policy->tmp_key_storage == (void *) full_key);
-	policy->tmp_key_storage = NULL;
-	policy->num_tmp_key_storage_bytes = 0;
-
-	gp_hash_output_keys(policy, policy->last_used_key_index)[0] = PointerGetDatum(full_key);
+	gp_hash_output_keys(config.policy, config.policy->last_used_key_index)[0] =
+		PointerGetDatum(serialized_key_storage);
 
 	return abbrev_key;
 }
