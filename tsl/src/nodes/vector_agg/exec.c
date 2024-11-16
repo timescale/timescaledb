@@ -55,6 +55,25 @@ get_input_offset(DecompressChunkState *decompress_state, Var *var)
 	return index;
 }
 
+static int
+grouping_column_comparator(const void *a_ptr, const void *b_ptr)
+{
+	const GroupingColumn *a = (GroupingColumn *) a_ptr;
+	const GroupingColumn *b = (GroupingColumn *) b_ptr;
+
+	if (a->value_bytes == b->value_bytes)
+	{
+		return 0;
+	}
+
+	if (a->value_bytes > b->value_bytes)
+	{
+		return -1;
+	}
+
+	return 1;
+}
+
 static void
 vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 {
@@ -209,6 +228,19 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		}
 	}
 
+	/*
+	 * Sort grouping columns by descending column size, variable size last. This
+	 * helps improve branch predictability and key packing when we use hashed
+	 * serialized multi-column keys.
+	 */
+	qsort(vector_agg_state->grouping_columns,
+		  vector_agg_state->num_grouping_columns,
+		  sizeof(GroupingColumn),
+		  grouping_column_comparator);
+
+	/*
+	 * Determine which grouping policy we are going to use.
+	 */
 	bool all_segmentby = true;
 	for (int i = 0; i < vector_agg_state->num_grouping_columns; i++)
 	{

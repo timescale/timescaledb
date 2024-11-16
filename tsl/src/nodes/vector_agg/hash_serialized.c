@@ -324,12 +324,15 @@ serialized_emit_key(GroupingPolicyHash *policy, uint32 current_key, TupleTableSl
 		Datum *output = &aggregated_slot->tts_values[col->output_offset];
 		if (col->by_value)
 		{
+			Assert(col->value_bytes > 0);
+			Assert((size_t) col->value_bytes <= sizeof(Datum));
 			*output = 0;
 			memcpy(output, ptr, col->value_bytes);
 			ptr += col->value_bytes;
 		}
 		else
 		{
+			Assert(col->value_bytes == -1);
 			if (VARATT_IS_SHORT(ptr))
 			{
 				*output = PointerGetDatum(ptr);
