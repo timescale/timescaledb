@@ -93,15 +93,15 @@ single_text_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
 }
 
 static pg_attribute_always_inline ABBREV_KEY_TYPE
-single_text_store_key(HashingConfig config, int row, BytesView full_key, ABBREV_KEY_TYPE abbrev_key)
+single_text_store_key(GroupingPolicyHash *restrict policy, BytesView full_key,
+					  ABBREV_KEY_TYPE abbrev_key)
 {
 	const int total_bytes = full_key.len + VARHDRSZ;
-	text *restrict stored = (text *) MemoryContextAlloc(config.policy->key_body_mctx, total_bytes);
+	text *restrict stored = (text *) MemoryContextAlloc(policy->key_body_mctx, total_bytes);
 	SET_VARSIZE(stored, total_bytes);
 	memcpy(VARDATA(stored), full_key.data, full_key.len);
 	full_key.data = (uint8 *) VARDATA(stored);
-	gp_hash_output_keys(config.policy, config.policy->last_used_key_index)[0] =
-		PointerGetDatum(stored);
+	gp_hash_output_keys(policy, policy->last_used_key_index)[0] = PointerGetDatum(stored);
 	return abbrev_key;
 }
 
