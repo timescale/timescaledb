@@ -167,6 +167,11 @@ serialized_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
 				}
 				else
 				{
+					/*
+					 * FIXME this is not consistent with non-scalar values, add
+					 * a test (how??? it differentiates equal keys, not equates
+					 * different ones).
+					 */
 					offset = TYPEALIGN(4, offset);
 
 					memcpy(&serialized_key_storage[offset],

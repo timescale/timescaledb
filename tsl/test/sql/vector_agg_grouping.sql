@@ -100,7 +100,7 @@ from
         'ss, cint2, x',
         'ss, s',
         'ss, x, cint2',
-        't, s, ss, x, cint2, cint4, cint8',
+        't, s, ss, x, cint4, cint8, cint2',
         'x']) with ordinality as grouping(grouping, n)
 where
     true
