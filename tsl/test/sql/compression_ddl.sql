@@ -840,6 +840,7 @@ VALUES -- chunk1
 -- enable compression, compress all chunks
 ALTER TABLE test_partials SET (timescaledb.compress);
 SELECT compress_chunk(show_chunks('test_partials'));
+VACUUM ANALYZE test_partials;
 -- fully compressed
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
 -- test P, F, F
