@@ -44,7 +44,7 @@ FUNCTION_NAME(emit_key)(GroupingPolicyHash *policy, uint32 current_key,
 
 	const GroupingColumn *col = &policy->grouping_columns[0];
 	aggregated_slot->tts_values[col->output_offset] = hashing->output_keys[current_key];
-	aggregated_slot->tts_isnull[col->output_offset] = current_key == policy->null_key_index;
+	aggregated_slot->tts_isnull[col->output_offset] = current_key == hashing->null_key_index;
 }
 
 #undef FUNCTION_NAME_HELPER2

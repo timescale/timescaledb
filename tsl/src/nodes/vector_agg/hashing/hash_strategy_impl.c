@@ -71,8 +71,9 @@ FUNCTION_NAME(init)(HashingStrategy *strategy, GroupingPolicyHash *policy)
 static void
 FUNCTION_NAME(reset_strategy)(HashingStrategy *strategy)
 {
-	struct FUNCTION_NAME(hash) *hash = (struct FUNCTION_NAME(hash) *) strategy->table;
-	FUNCTION_NAME(reset)(hash);
+	struct FUNCTION_NAME(hash) *table = (struct FUNCTION_NAME(hash) *) strategy->table;
+	FUNCTION_NAME(reset)(table);
+	strategy->null_key_index = 0;
 }
 
 /*
@@ -82,6 +83,7 @@ static pg_attribute_always_inline void
 FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int end_row)
 {
 	GroupingPolicyHash *policy = params.policy;
+	HashingStrategy *hashing = &policy->strategy;
 
 	uint32 *restrict indexes = params.result_key_indexes;
 
@@ -106,12 +108,12 @@ FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int e
 		if (unlikely(!key_valid))
 		{
 			/* The key is null. */
-			if (policy->null_key_index == 0)
+			if (hashing->null_key_index == 0)
 			{
-				policy->null_key_index = ++policy->last_used_key_index;
+				hashing->null_key_index = ++policy->last_used_key_index;
 			}
-			indexes[row] = policy->null_key_index;
-			DEBUG_PRINT("%p: row %d null key index %d\n", policy, row, policy->null_key_index);
+			indexes[row] = hashing->null_key_index;
+			DEBUG_PRINT("%p: row %d null key index %d\n", policy, row, hashing->null_key_index);
 			continue;
 		}
 

@@ -284,10 +284,10 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 	 *
 	 * FIXME doesn't respect nulls last/first in GroupAggregate. Add a test.
 	 */
-	if (have_null_key && policy->null_key_index == 0)
+	if (have_null_key && policy->strategy.null_key_index == 0)
 	{
-		policy->null_key_index = ++policy->last_used_key_index;
-		policy->strategy.output_keys[policy->null_key_index] = PointerGetDatum(NULL);
+		policy->strategy.null_key_index = ++policy->last_used_key_index;
+		policy->strategy.output_keys[policy->strategy.null_key_index] = PointerGetDatum(NULL);
 	}
 
 	policy->use_key_index_for_dict = true;
@@ -351,7 +351,7 @@ single_text_offsets_translate_impl(BatchHashingParams params, int start_row, int
 		}
 		else
 		{
-			indexes_for_rows[row] = policy->null_key_index;
+			indexes_for_rows[row] = policy->strategy.null_key_index;
 		}
 
 		Assert(indexes_for_rows[row] != 0 || !arrow_row_is_valid(params.batch_filter, row));

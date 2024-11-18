@@ -120,14 +120,6 @@ typedef struct GroupingPolicyHash
 	uint32 last_used_key_index;
 
 	/*
-	 * In single-column grouping, we store the null key outside of the hash
-	 * table, and its index is given by this value. Key index 0 is invalid.
-	 * This is done to avoid having an "is null" flag in the hash table entries,
-	 * to reduce the hash table size.
-	 */
-	uint32 null_key_index;
-
-	/*
 	 * Temporary storage of unique key indexes corresponding to a given row of
 	 * the compressed batch that is currently being aggregated. We keep it in
 	 * the policy because it is potentially too big to keep on stack, and we

@@ -119,7 +119,6 @@ gp_hash_reset(GroupingPolicy *obj)
 	policy->tmp_key_storage = NULL;
 	policy->num_tmp_key_storage_bytes = 0;
 
-	policy->null_key_index = 0;
 	policy->last_used_key_index = 0;
 
 	policy->stat_input_valid_rows = 0;
