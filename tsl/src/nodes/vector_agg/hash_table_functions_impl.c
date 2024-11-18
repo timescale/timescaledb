@@ -104,7 +104,6 @@ FUNCTION_NAME(fill_offsets_impl)(
 			}
 			indexes[row] = policy->null_key_index;
 			DEBUG_PRINT("%p: row %d null key index %d\n", policy, row, policy->null_key_index);
-			FUNCTION_NAME(destroy_key)(output_key);
 			continue;
 		}
 
@@ -119,7 +118,6 @@ FUNCTION_NAME(fill_offsets_impl)(
 			 * for that case.
 			 */
 			indexes[row] = previous_key_index;
-			FUNCTION_NAME(destroy_key)(output_key);
 			policy->stat_consecutive_keys++;
 			DEBUG_PRINT("%p: row %d consecutive key index %d\n", policy, row, previous_key_index);
 			continue;
@@ -144,7 +142,6 @@ FUNCTION_NAME(fill_offsets_impl)(
 		else
 		{
 			DEBUG_PRINT("%p: row %d old key index %d\n", policy, row, entry->key_index);
-			FUNCTION_NAME(destroy_key)(output_key);
 		}
 		indexes[row] = entry->key_index;
 

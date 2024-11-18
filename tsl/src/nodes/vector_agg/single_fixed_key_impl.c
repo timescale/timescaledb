@@ -44,12 +44,6 @@ FUNCTION_NAME(store_output_key)(GroupingPolicyHash *restrict policy, uint32 new_
 	return hash_table_key;
 }
 
-static pg_attribute_always_inline void
-FUNCTION_NAME(destroy_key)(OUTPUT_KEY_TYPE key)
-{
-	/* Noop for fixed-size keys. */
-}
-
 static void
 FUNCTION_NAME(prepare_for_batch)(GroupingPolicyHash *policy, DecompressBatchState *batch_state)
 {

@@ -289,12 +289,6 @@ serialized_store_output_key(GroupingPolicyHash *restrict policy, uint32 new_key_
 	return hash_table_key;
 }
 
-static pg_attribute_always_inline void
-serialized_destroy_key(const text *key)
-{
-	/* Noop, the memory will be reused by the subsequent key. */
-}
-
 static void
 serialized_emit_key(GroupingPolicyHash *policy, uint32 current_key, TupleTableSlot *aggregated_slot)
 {

@@ -106,12 +106,6 @@ single_text_store_output_key(GroupingPolicyHash *restrict policy, uint32 new_key
 	return hash_table_key;
 }
 
-static pg_attribute_always_inline void
-single_text_destroy_key(BytesView key)
-{
-	/* Noop. */
-}
-
 /*
  * We use the standard single-key key output functions.
  */
