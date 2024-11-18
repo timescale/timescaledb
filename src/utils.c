@@ -1534,6 +1534,14 @@ ts_copy_relation_acl(const Oid source_relid, const Oid target_relid, const Oid o
 		new_repl[AttrNumberGetAttrOffset(Anum_pg_class_relacl)] = true;
 		new_val[AttrNumberGetAttrOffset(Anum_pg_class_relacl)] = PointerGetDatum(acl);
 
+		/*
+		 * ts_copy_relation_acl() is typically used to copy ACLs from the hypertable
+		 * to a newly created chunk. The creation is done via DefineRelation(),
+		 * which takes an AccessExclusiveLock and should be enough to handle any
+		 * inplace update issues.
+		 */
+		AssertSufficientPgClassUpdateLockHeld(target_relid);
+
 		/* Find the tuple for the target in `pg_class` */
 		target_tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(target_relid));
 		Assert(HeapTupleIsValid(target_tuple));
