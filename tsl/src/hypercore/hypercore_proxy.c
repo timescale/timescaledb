@@ -199,7 +199,7 @@ typedef struct HSProxyVacuumState
 } HSProxyVacuumState;
 
 #define HSPROXY_VACUUM_STATE_SIZE(nindexes)                                                        \
-	(sizeof(HSProxyVacuumState) + (sizeof(IndexBulkDeleteResult)) * (nindexes))
+	(sizeof(HSProxyVacuumState) + (sizeof(IndexBulkDeleteResult) * (nindexes)))
 
 /*
  * Bulkdelete. Called by vacuum on the compressed relation.

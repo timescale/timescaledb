@@ -16,7 +16,8 @@ static void
 FUNCTION_NAME(emit)(void *agg_state, Datum *out_result, bool *out_isnull)
 {
 	FloatSumState *state = (FloatSumState *) agg_state;
-	*out_result = CTYPE_TO_DATUM((CTYPE) state->result);
+	const CTYPE result_casted = state->result;
+	*out_result = CTYPE_TO_DATUM(result_casted);
 	*out_isnull = !state->isvalid;
 }
 

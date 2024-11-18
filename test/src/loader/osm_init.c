@@ -31,7 +31,7 @@ void
 _PG_init(void)
 {
 	elog(WARNING, "OSM-%s _PG_init", OSM_VERSION_MOD);
-	void *osm_lock_pointer = (LWLock **) find_rendezvous_variable(RENDEZVOUS_OSM_PARALLEL_LWLOCK);
+	void **osm_lock_pointer = find_rendezvous_variable(RENDEZVOUS_OSM_PARALLEL_LWLOCK);
 	if (osm_lock_pointer != NULL)
 	{
 		elog(WARNING, "got lwlock osm lock");

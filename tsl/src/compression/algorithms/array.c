@@ -634,7 +634,8 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 		Assert(current_notnull_element == -1);
 	}
 
-	ArrowArray *result = MemoryContextAllocZero(dest_mctx, sizeof(ArrowArray) + sizeof(void *) * 3);
+	ArrowArray *result =
+		MemoryContextAllocZero(dest_mctx, sizeof(ArrowArray) + (sizeof(void *) * 3));
 	const void **buffers = (const void **) &result[1];
 	buffers[0] = validity_bitmap;
 	buffers[1] = offsets;

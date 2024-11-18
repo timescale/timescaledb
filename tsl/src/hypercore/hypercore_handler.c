@@ -336,10 +336,10 @@ typedef struct HypercoreParallelScanDescData *HypercoreParallelScanDesc;
 
 typedef enum HypercoreScanState
 {
-	HYPERCORE_SCAN_START,
+	HYPERCORE_SCAN_START = 0,
 	HYPERCORE_SCAN_COMPRESSED = HYPERCORE_SCAN_START,
-	HYPERCORE_SCAN_NON_COMPRESSED,
-	HYPERCORE_SCAN_DONE,
+	HYPERCORE_SCAN_NON_COMPRESSED = 1,
+	HYPERCORE_SCAN_DONE = 2,
 } HypercoreScanState;
 
 const char *scan_state_name[] = {
@@ -2074,7 +2074,7 @@ hypercore_relation_copy_for_cluster(Relation OldHypercore, Relation NewCompressi
 		if (prev_cblock != cblock)
 		{
 			pgstat_progress_update_param(PROGRESS_CLUSTER_HEAP_BLKS_SCANNED,
-										 (cblock + nblocks - startblock) % nblocks + 1);
+										 ((cblock + nblocks - startblock) % nblocks) + 1);
 			prev_cblock = cblock;
 		}
 		/* Get the actual tuple from the child slot (either compressed or

@@ -151,7 +151,7 @@ typedef struct
 static bool *
 build_vector_attrs_array(const UncompressedColumnInfo *colinfo, const CompressionInfo *info)
 {
-	const unsigned short arrlen = info->chunk_rel->max_attr + 1;
+	const AttrNumber arrlen = info->chunk_rel->max_attr + 1;
 	bool *vector_attrs = palloc(sizeof(bool) * arrlen);
 
 	for (AttrNumber attno = 0; attno < arrlen; attno++)
