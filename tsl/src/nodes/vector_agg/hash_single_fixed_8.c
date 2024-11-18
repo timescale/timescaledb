@@ -19,12 +19,11 @@
 #define EXPLAIN_NAME "single 8-byte"
 #define KEY_VARIANT single_fixed_8
 #define KEY_BYTES 8
-#define FULL_KEY_TYPE int64
-#define ABBREV_KEY_TYPE int64
-#define DATUM_TO_FULL_KEY DatumGetInt64
-#define FULL_KEY_TO_DATUM Int64GetDatum
+#define OUTPUT_KEY_TYPE int64
+#define HASH_TABLE_KEY_TYPE int64
+#define DATUM_TO_output_key DatumGetInt64
+#define output_key_TO_DATUM Int64GetDatum
 
-#define ABBREVIATE(X) (X)
 #define KEY_HASH(X) HASH64(X)
 
 #include "single_fixed_key_impl.c"

@@ -19,12 +19,11 @@
 #define EXPLAIN_NAME "single 4-byte"
 #define KEY_VARIANT single_fixed_4
 #define KEY_BYTES 4
-#define FULL_KEY_TYPE int32
-#define ABBREV_KEY_TYPE int32
-#define DATUM_TO_FULL_KEY DatumGetInt32
-#define FULL_KEY_TO_DATUM Int32GetDatum
+#define OUTPUT_KEY_TYPE int32
+#define HASH_TABLE_KEY_TYPE int32
+#define DATUM_TO_output_key DatumGetInt32
+#define output_key_TO_DATUM Int32GetDatum
 
-#define ABBREVIATE(X) (X)
 #define KEY_HASH(X) HASH64(X)
 
 #include "single_fixed_key_impl.c"

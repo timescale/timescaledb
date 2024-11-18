@@ -4,54 +4,59 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
+#include "hash_single_output_key_helper.c"
+
 #define FUNCTION_NAME_HELPER2(X, Y) X##_##Y
 #define FUNCTION_NAME_HELPER(X, Y) FUNCTION_NAME_HELPER2(X, Y)
 #define FUNCTION_NAME(Y) FUNCTION_NAME_HELPER(KEY_VARIANT, Y)
 
 static pg_attribute_always_inline void
-FUNCTION_NAME(get_key)(HashingConfig config, int row, void *restrict full_key_ptr,
-					   void *restrict abbrev_key_ptr, bool *restrict valid)
+FUNCTION_NAME(get_key)(HashingConfig config, int row, void *restrict output_key_ptr,
+					   void *restrict hash_table_key_ptr, bool *restrict valid)
 {
-	FULL_KEY_TYPE *restrict full_key = (FULL_KEY_TYPE *) full_key_ptr;
-	ABBREV_KEY_TYPE *restrict abbrev_key = (ABBREV_KEY_TYPE *) abbrev_key_ptr;
+	OUTPUT_KEY_TYPE *restrict output_key = (OUTPUT_KEY_TYPE *) output_key_ptr;
+	HASH_TABLE_KEY_TYPE *restrict hash_table_key = (HASH_TABLE_KEY_TYPE *) hash_table_key_ptr;
 
 	if (unlikely(config.single_key.decompression_type == DT_Scalar))
 	{
-		*full_key = DATUM_TO_FULL_KEY(*config.single_key.output_value);
+		*output_key = DATUM_TO_output_key(*config.single_key.output_value);
 		*valid = !*config.single_key.output_isnull;
 	}
-	else if (config.single_key.decompression_type == sizeof(FULL_KEY_TYPE))
+	else if (config.single_key.decompression_type == sizeof(OUTPUT_KEY_TYPE))
 	{
-		const FULL_KEY_TYPE *values = config.single_key.buffers[1];
+		const OUTPUT_KEY_TYPE *values = config.single_key.buffers[1];
 		*valid = arrow_row_is_valid(config.single_key.buffers[0], row);
-		*full_key = values[row];
+		*output_key = values[row];
 	}
 	else
 	{
 		pg_unreachable();
 	}
 
-	*abbrev_key = ABBREVIATE(*full_key);
+	*hash_table_key = *output_key;
 }
 
-static pg_attribute_always_inline FULL_KEY_TYPE
-FUNCTION_NAME(store_key)(GroupingPolicyHash *restrict policy, FULL_KEY_TYPE full_key,
-						 ABBREV_KEY_TYPE abbrev_key)
+static pg_attribute_always_inline OUTPUT_KEY_TYPE
+FUNCTION_NAME(store_output_key)(GroupingPolicyHash *restrict policy, uint32 new_key_index,
+								OUTPUT_KEY_TYPE output_key, HASH_TABLE_KEY_TYPE hash_table_key)
 {
-	gp_hash_output_keys(policy, policy->last_used_key_index)[0] = FULL_KEY_TO_DATUM(full_key);
-	return abbrev_key;
+	policy->strategy.output_keys[new_key_index] = output_key_TO_DATUM(output_key);
+	return hash_table_key;
 }
 
 static pg_attribute_always_inline void
-FUNCTION_NAME(destroy_key)(FULL_KEY_TYPE key)
+FUNCTION_NAME(destroy_key)(OUTPUT_KEY_TYPE key)
 {
 	/* Noop for fixed-size keys. */
+}
+
+static void
+FUNCTION_NAME(prepare_for_batch)(GroupingPolicyHash *policy, DecompressBatchState *batch_state)
+{
+	FUNCTION_NAME(alloc_output_keys)(policy, batch_state);
 }
 
 #undef FUNCTION_NAME_HELPER2
 #undef FUNCTION_NAME_HELPER
 #undef FUNCTION_NAME
 
-#undef ABBREVIATE
-
-#include "hash_single_helper.c"

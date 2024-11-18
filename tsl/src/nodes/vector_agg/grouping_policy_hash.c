@@ -63,9 +63,8 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 		policy->per_agg_states[i] = palloc(agg_def->func.state_bytes * policy->num_agg_state_rows);
 	}
 
-	policy->grouping_column_values = palloc(sizeof(CompressedColumnValues) * num_grouping_columns);
-
-	policy->key_body_mctx = policy->agg_extra_mctx;
+	policy->current_batch_grouping_column_values =
+		palloc(sizeof(CompressedColumnValues) * num_grouping_columns);
 
 	if (num_grouping_columns == 1)
 	{
@@ -94,6 +93,8 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 	{
 		policy->strategy = serialized_strategy;
 	}
+
+	policy->strategy.key_body_mctx = policy->agg_extra_mctx;
 
 	policy->strategy.init(&policy->strategy, policy);
 
@@ -314,28 +315,6 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 	memset(policy->key_index_for_row, 0, n * sizeof(policy->key_index_for_row[0]));
 
 	/*
-	 * Allocate enough storage for keys, given that each row of the new
-	 * compressed batch might turn out to be a new grouping key.
-	 * We do this here to avoid allocations in the hot loop that fills the hash
-	 * table.
-	 */
-	const uint32 num_possible_keys = policy->last_used_key_index + 1 + n;
-	if (num_possible_keys > policy->num_output_keys)
-	{
-		policy->num_output_keys = num_possible_keys * 2 + 1;
-		const size_t new_bytes = (char *) gp_hash_output_keys(policy, policy->num_output_keys) -
-								 (char *) policy->output_keys;
-		if (policy->output_keys == NULL)
-		{
-			policy->output_keys = palloc(new_bytes);
-		}
-		else
-		{
-			policy->output_keys = repalloc(policy->output_keys, new_bytes);
-		}
-	}
-
-	/*
 	 * Allocate the temporary filter array for computing the combined results of
 	 * batch filter, aggregate filter and column validity.
 	 */
@@ -353,61 +332,25 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 	{
 		const GroupingColumn *def = &policy->grouping_columns[i];
 		const CompressedColumnValues *values = &batch_state->compressed_columns[def->input_offset];
-		policy->grouping_column_values[i] = *values;
+		policy->current_batch_grouping_column_values[i] = *values;
 	}
 
 	/*
-	 * Call the per-batch initialization function of the hashing strategy, if
-	 * it has one.
+	 * Call the per-batch initialization function of the hashing strategy.
 	 */
-	if (policy->strategy.prepare_for_batch)
-	{
-		/*
-		 * Remember which aggregation states have already existed, and which we
-		 * have to initialize. State index zero is invalid.
-		 */
-		const uint32 first_initialized_key_index = policy->last_used_key_index;
 
-		policy->strategy.prepare_for_batch(policy, batch_state);
+	policy->strategy.prepare_for_batch(policy, batch_state);
 
-		if (policy->last_used_key_index > first_initialized_key_index)
-		{
-			const uint64 new_aggstate_rows = policy->num_agg_state_rows * 2 + 1;
-			const int num_fns = policy->num_agg_defs;
-			for (int i = 0; i < num_fns; i++)
-			{
-				const VectorAggDef *agg_def = &policy->agg_defs[i];
-				if (policy->last_used_key_index >= policy->num_agg_state_rows)
-				{
-					policy->per_agg_states[i] =
-						repalloc(policy->per_agg_states[i],
-								 new_aggstate_rows * agg_def->func.state_bytes);
-				}
-
-				/*
-				 * Initialize the aggregate function states for the newly added keys.
-				 */
-				void *first_uninitialized_state =
-					agg_def->func.state_bytes * (first_initialized_key_index + 1) +
-					(char *) policy->per_agg_states[i];
-				agg_def->func.agg_init(first_uninitialized_state,
-									   policy->last_used_key_index - first_initialized_key_index);
-			}
-
-			/*
-			 * Record the newly allocated number of rows in case we had to reallocate.
-			 */
-			if (policy->last_used_key_index >= policy->num_agg_state_rows)
-			{
-				Assert(new_aggstate_rows > policy->num_agg_state_rows);
-				policy->num_agg_state_rows = new_aggstate_rows;
-			}
-		}
-	}
-
+	/*
+	 * Add the batch rows to aggregate function states.
+	 */
 	const uint64_t *restrict filter = batch_state->vector_qual_result;
 	if (filter == NULL)
 	{
+		/*
+		 * We don't have a filter on this batch, so aggregate it entirely in one
+		 * go.
+		 */
 		add_one_range(policy, batch_state, 0, n);
 	}
 	else

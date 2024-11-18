@@ -20,25 +20,25 @@
 
 #include "import/umash.h"
 
-struct abbrev_key
+struct hash_table_key
 {
 	uint32 hash;
 	uint64 rest;
 } pg_attribute_packed;
 
 #define UMASH
-#define ABBREV_KEY_TYPE struct abbrev_key
+#define HASH_TABLE_KEY_TYPE struct hash_table_key
 #define KEY_HASH(X) (X.hash)
 #define KEY_EQUAL(a, b) (a.hash == b.hash && a.rest == b.rest)
 
 static pg_attribute_always_inline void
-serialized_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
-				   void *restrict abbrev_key_ptr, bool *restrict valid)
+serialized_get_key(HashingConfig config, int row, void *restrict output_key_ptr,
+				   void *restrict hash_table_key_ptr, bool *restrict valid)
 {
 	GroupingPolicyHash *policy = config.policy;
 
-	text **restrict full_key = (text **) full_key_ptr;
-	ABBREV_KEY_TYPE *restrict abbrev_key = (ABBREV_KEY_TYPE *) abbrev_key_ptr;
+	text **restrict output_key = (text **) output_key_ptr;
+	HASH_TABLE_KEY_TYPE *restrict hash_table_key = (HASH_TABLE_KEY_TYPE *) hash_table_key_ptr;
 
 	const int num_columns = config.num_grouping_columns;
 
@@ -128,7 +128,7 @@ serialized_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
 		{
 			pfree(policy->tmp_key_storage);
 		}
-		policy->tmp_key_storage = MemoryContextAlloc(policy->key_body_mctx, num_bytes);
+		policy->tmp_key_storage = MemoryContextAlloc(policy->strategy.key_body_mctx, num_bytes);
 		policy->num_tmp_key_storage_bytes = num_bytes;
 	}
 	uint8 *restrict serialized_key_storage = policy->tmp_key_storage;
@@ -255,7 +255,7 @@ serialized_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
 
 	SET_VARSIZE(serialized_key_storage, offset);
 
-	*full_key = (text *) serialized_key_storage;
+	*output_key = (text *) serialized_key_storage;
 
 	/*
 	 * The multi-column key is always considered non-null, and the null flags
@@ -268,25 +268,25 @@ serialized_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
 									  /* seed = */ -1ull,
 									  serialized_key_storage,
 									  num_bytes);
-	abbrev_key->hash = fp.hash[0] & (~(uint32) 0);
-	abbrev_key->rest = fp.hash[1];
+	hash_table_key->hash = fp.hash[0] & (~(uint32) 0);
+	hash_table_key->rest = fp.hash[1];
 }
 
-static pg_attribute_always_inline ABBREV_KEY_TYPE
-serialized_store_key(GroupingPolicyHash *restrict policy, text *full_key,
-					 ABBREV_KEY_TYPE abbrev_key)
+static pg_attribute_always_inline HASH_TABLE_KEY_TYPE
+serialized_store_output_key(GroupingPolicyHash *restrict policy, uint32 new_key_index,
+							text *output_key, HASH_TABLE_KEY_TYPE hash_table_key)
 {
 	/*
 	 * We will store this key so we have to consume the temporary storage that
 	 * was used for it. The subsequent keys will need to allocate new memory.
 	 */
-	Assert(policy->tmp_key_storage == (void *) full_key);
+	Assert(policy->tmp_key_storage == (void *) output_key);
 	policy->tmp_key_storage = NULL;
 	policy->num_tmp_key_storage_bytes = 0;
 
-	gp_hash_output_keys(policy, policy->last_used_key_index)[0] = PointerGetDatum(full_key);
+	policy->strategy.output_keys[new_key_index] = PointerGetDatum(output_key);
 
-	return abbrev_key;
+	return hash_table_key;
 }
 
 static pg_attribute_always_inline void
@@ -299,7 +299,7 @@ static void
 serialized_emit_key(GroupingPolicyHash *policy, uint32 current_key, TupleTableSlot *aggregated_slot)
 {
 	const int num_key_columns = policy->num_grouping_columns;
-	const Datum serialized_key_datum = gp_hash_output_keys(policy, current_key)[0];
+	const Datum serialized_key_datum = policy->strategy.output_keys[current_key];
 	const uint8 *serialized_key = (const uint8 *) VARDATA_ANY(serialized_key_datum);
 	const int key_data_bytes = VARSIZE_ANY_EXHDR(serialized_key_datum);
 	const uint8 *restrict ptr = serialized_key;
@@ -355,8 +355,35 @@ serialized_emit_key(GroupingPolicyHash *policy, uint32 current_key, TupleTableSl
 	Assert(ptr == key_validity_bitmap);
 }
 
+static void
+serialized_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *batch_state)
+{
+	/*
+	 * Allocate enough storage for keys, given that each row of the new
+	 * compressed batch might turn out to be a new grouping key.
+	 * We do this here to avoid allocations in the hot loop that fills the hash
+	 * table.
+	 */
+	HashingStrategy *hashing = &policy->strategy;
+	const int n = batch_state->total_batch_rows;
+	const uint32 num_possible_keys = policy->last_used_key_index + 1 + n;
+	if (num_possible_keys > hashing->num_output_keys)
+	{
+		hashing->num_output_keys = num_possible_keys * 2 + 1;
+		const size_t new_bytes = sizeof(Datum) * hashing->num_output_keys;
+		if (hashing->output_keys == NULL)
+		{
+			hashing->output_keys = palloc(new_bytes);
+		}
+		else
+		{
+			hashing->output_keys = repalloc(hashing->output_keys, new_bytes);
+		}
+	}
+}
+
 #define EXPLAIN_NAME "serialized"
 #define KEY_VARIANT serialized
-#define FULL_KEY_TYPE text *
+#define OUTPUT_KEY_TYPE text *
 
 #include "hash_table_functions_impl.c"

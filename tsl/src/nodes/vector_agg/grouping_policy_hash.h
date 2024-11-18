@@ -31,6 +31,26 @@ typedef struct HashingStrategy
 						 int start_row, int end_row);
 	void (*emit_key)(GroupingPolicyHash *policy, uint32 current_key,
 					 TupleTableSlot *aggregated_slot);
+
+	/*
+	 * For each unique grouping key, we store the values of the grouping columns.
+	 * This is stored separately from hash table keys, because they might not
+	 * have the full column values, and also storing them contiguously here
+	 * leads to better memory access patterns when emitting the results.
+	 * The details of the key storage are managed by the hashing strategy.
+	 */
+	Datum *restrict output_keys;
+	uint64 num_output_keys;
+	MemoryContext key_body_mctx;
+
+	/*
+	 * In single-column grouping, we store the null key outside of the hash
+	 * table, and its index is given by this value. Key index 0 is invalid.
+	 * This is done to avoid having an "is null" flag in the hash table entries,
+	 * to reduce the hash table size.
+	 */
+	uint32 null_key_index;
+
 } HashingStrategy;
 
 /*
@@ -73,7 +93,11 @@ typedef struct GroupingPolicyHash
 	int num_grouping_columns;
 	const GroupingColumn *restrict grouping_columns;
 
-	CompressedColumnValues *restrict grouping_column_values;
+	/*
+	 * The values of the grouping columns picked from the compressed batch and
+	 * arranged in the order of grouping column definitions.
+	 */
+	CompressedColumnValues *restrict current_batch_grouping_column_values;
 
 	/*
 	 * The hash table we use for grouping. It matches each grouping key to its
@@ -149,18 +173,6 @@ typedef struct GroupingPolicyHash
 	MemoryContext agg_extra_mctx;
 
 	/*
-	 * For each unique grouping key, we store the values of the grouping columns
-	 * in Postgres format (i.e. Datum/isnull). They are used when emitting the
-	 * partial aggregation results. The details of this are managed by the
-	 * hashing strategy.
-	 *
-	 * FIXME
-	 */
-	void *restrict output_keys;
-	uint64 num_output_keys;
-	MemoryContext key_body_mctx;
-
-	/*
 	 * Whether we are in the mode of returning the partial aggregation results.
 	 * If we are, track the index of the last returned grouping key.
 	 */
@@ -175,14 +187,6 @@ typedef struct GroupingPolicyHash
 	uint64 stat_bulk_filtered_rows;
 	uint64 stat_consecutive_keys;
 } GroupingPolicyHash;
-
-static inline Datum *
-gp_hash_output_keys(GroupingPolicyHash *policy, int key_index)
-{
-	Assert(key_index > 0);
-	// Assert((size_t) key_index < policy->num_output_keys);
-	return key_index + (Datum *) policy->output_keys;
-}
 
 static pg_attribute_always_inline bool
 byte_bitmap_row_is_valid(const uint8 *bitmap, size_t row_number)
@@ -237,22 +241,22 @@ build_hashing_config(GroupingPolicyHash *policy, DecompressBatchState *batch_sta
 		.policy = policy,
 		.batch_filter = batch_state->vector_qual_result,
 		.num_grouping_columns = policy->num_grouping_columns,
-		.grouping_column_values = policy->grouping_column_values,
+		.grouping_column_values = policy->current_batch_grouping_column_values,
 		.result_key_indexes = policy->key_index_for_row,
 	};
 
 	Assert(policy->num_grouping_columns > 0);
 	if (policy->num_grouping_columns == 1)
 	{
-		config.single_key = policy->grouping_column_values[0];
+		config.single_key = policy->current_batch_grouping_column_values[0];
 	}
 
 	for (int i = 0; i < policy->num_grouping_columns; i++)
 	{
 		config.have_scalar_columns =
 			config.have_scalar_columns ||
-			(policy->grouping_column_values[i].decompression_type == DT_Scalar ||
-			 policy->grouping_column_values[i].buffers[0] != NULL);
+			(policy->current_batch_grouping_column_values[i].decompression_type == DT_Scalar ||
+			 policy->current_batch_grouping_column_values[i].buffers[0] != NULL);
 	}
 
 	return config;

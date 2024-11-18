@@ -21,7 +21,7 @@ typedef struct
 	/* Key index 0 is invalid. */
 	uint32 key_index;
 
-	ABBREV_KEY_TYPE abbrev_key;
+	HASH_TABLE_KEY_TYPE hash_table_key;
 
 #ifdef STORE_HASH
 	/*
@@ -35,8 +35,8 @@ typedef struct
 // #define SH_FILLFACTOR (0.5)
 #define SH_PREFIX KEY_VARIANT
 #define SH_ELEMENT_TYPE FUNCTION_NAME(entry)
-#define SH_KEY_TYPE ABBREV_KEY_TYPE
-#define SH_KEY abbrev_key
+#define SH_KEY_TYPE HASH_TABLE_KEY_TYPE
+#define SH_KEY hash_table_key
 #define SH_HASH_KEY(tb, key) KEY_HASH(key)
 #define SH_EQUAL(tb, a, b) KEY_EQUAL(a, b)
 #define SH_SCOPE static inline
@@ -79,7 +79,7 @@ FUNCTION_NAME(fill_offsets_impl)(
 
 	struct FUNCTION_NAME(hash) *restrict table = policy->table;
 
-	ABBREV_KEY_TYPE prev_abbrev_key;
+	HASH_TABLE_KEY_TYPE prev_hash_table_key;
 	uint32 previous_key_index = 0;
 	for (int row = start_row; row < end_row; row++)
 	{
@@ -91,9 +91,9 @@ FUNCTION_NAME(fill_offsets_impl)(
 		}
 
 		bool key_valid = false;
-		FULL_KEY_TYPE full_key = { 0 };
-		ABBREV_KEY_TYPE abbrev_key = { 0 };
-		FUNCTION_NAME(get_key)(config, row, &full_key, &abbrev_key, &key_valid);
+		OUTPUT_KEY_TYPE output_key = { 0 };
+		HASH_TABLE_KEY_TYPE hash_table_key = { 0 };
+		FUNCTION_NAME(get_key)(config, row, &output_key, &hash_table_key, &key_valid);
 
 		if (unlikely(!key_valid))
 		{
@@ -104,11 +104,11 @@ FUNCTION_NAME(fill_offsets_impl)(
 			}
 			indexes[row] = policy->null_key_index;
 			DEBUG_PRINT("%p: row %d null key index %d\n", policy, row, policy->null_key_index);
-			FUNCTION_NAME(destroy_key)(full_key);
+			FUNCTION_NAME(destroy_key)(output_key);
 			continue;
 		}
 
-		if (likely(previous_key_index != 0) && KEY_EQUAL(abbrev_key, prev_abbrev_key))
+		if (likely(previous_key_index != 0) && KEY_EQUAL(hash_table_key, prev_hash_table_key))
 		{
 			/*
 			 * In real data sets, we often see consecutive rows with the
@@ -119,7 +119,7 @@ FUNCTION_NAME(fill_offsets_impl)(
 			 * for that case.
 			 */
 			indexes[row] = previous_key_index;
-			FUNCTION_NAME(destroy_key)(full_key);
+			FUNCTION_NAME(destroy_key)(output_key);
 			policy->stat_consecutive_keys++;
 			DEBUG_PRINT("%p: row %d consecutive key index %d\n", policy, row, previous_key_index);
 			continue;
@@ -129,26 +129,27 @@ FUNCTION_NAME(fill_offsets_impl)(
 		 * Find the key using the hash table.
 		 */
 		bool found = false;
-		FUNCTION_NAME(entry) *restrict entry = FUNCTION_NAME(insert)(table, abbrev_key, &found);
+		FUNCTION_NAME(entry) *restrict entry = FUNCTION_NAME(insert)(table, hash_table_key, &found);
 		if (!found)
 		{
 			/*
 			 * New key, have to store it persistently.
 			 */
-			const int index = ++policy->last_used_key_index;
-			entry->abbrev_key = FUNCTION_NAME(store_key)(policy, full_key, abbrev_key);
+			const uint32 index = ++policy->last_used_key_index;
+			entry->hash_table_key =
+				FUNCTION_NAME(store_output_key)(policy, index, output_key, hash_table_key);
 			entry->key_index = index;
 			DEBUG_PRINT("%p: row %d new key index %d\n", policy, row, index);
 		}
 		else
 		{
 			DEBUG_PRINT("%p: row %d old key index %d\n", policy, row, entry->key_index);
-			FUNCTION_NAME(destroy_key)(full_key);
+			FUNCTION_NAME(destroy_key)(output_key);
 		}
 		indexes[row] = entry->key_index;
 
 		previous_key_index = entry->key_index;
-		prev_abbrev_key = entry->abbrev_key;
+		prev_hash_table_key = entry->hash_table_key;
 	}
 }
 
@@ -172,7 +173,7 @@ FUNCTION_NAME(fill_offsets_impl)(
 #define APPLY_FOR_TYPE(X, NAME, COND)                                                              \
 	APPLY_FOR_VALIDITY(X,                                                                          \
 					   NAME##_byval,                                                               \
-					   (COND) && config.single_key.decompression_type == sizeof(FULL_KEY_TYPE))    \
+					   (COND) && config.single_key.decompression_type == sizeof(OUTPUT_KEY_TYPE))  \
 	APPLY_FOR_VALIDITY(X,                                                                          \
 					   NAME##_text,                                                                \
 					   (COND) && config.single_key.decompression_type == DT_ArrowText)             \
@@ -230,9 +231,10 @@ FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *ba
 
 	HashingConfig config = build_hashing_config(policy, batch_state);
 
-#ifdef HAVE_PREPARE_FUNCTION
+#ifdef USE_DICT_HASHING
 	if (policy->use_key_index_for_dict)
 	{
+		Assert(config.single_key.decompression_type == DT_ArrowTextDict);
 		single_text_offsets_translate(config, start_row, end_row);
 		return;
 	}
@@ -259,9 +261,7 @@ HashingStrategy FUNCTION_NAME(strategy) = {
 	.fill_offsets = FUNCTION_NAME(fill_offsets),
 	.emit_key = FUNCTION_NAME(emit_key),
 	.explain_name = EXPLAIN_NAME,
-#ifdef HAVE_PREPARE_FUNCTION
 	.prepare_for_batch = FUNCTION_NAME(prepare_for_batch),
-#endif
 };
 
 #undef EXPLAIN_NAME
@@ -271,11 +271,12 @@ HashingStrategy FUNCTION_NAME(strategy) = {
 #undef KEY_EQUAL
 #undef STORE_HASH
 #undef CHECK_PREVIOUS_KEY
-#undef FULL_KEY_TYPE
-#undef ABBREV_KEY_TYPE
-#undef DATUM_TO_FULL_KEY
-#undef FULL_KEY_TO_DATUM
+#undef OUTPUT_KEY_TYPE
+#undef HASH_TABLE_KEY_TYPE
+#undef DATUM_TO_output_key
+#undef output_key_TO_DATUM
 #undef UMASH
+#undef USE_DICT_HASHING
 
 #undef FUNCTION_NAME_HELPER2
 #undef FUNCTION_NAME_HELPER

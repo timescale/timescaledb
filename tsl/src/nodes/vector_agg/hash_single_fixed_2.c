@@ -19,10 +19,10 @@
 #define EXPLAIN_NAME "single 2-byte"
 #define KEY_VARIANT single_fixed_2
 #define KEY_BYTES 2
-#define FULL_KEY_TYPE int16
-#define ABBREV_KEY_TYPE int16
-#define DATUM_TO_FULL_KEY DatumGetInt16
-#define FULL_KEY_TO_DATUM Int16GetDatum
+#define OUTPUT_KEY_TYPE int16
+#define HASH_TABLE_KEY_TYPE OUTPUT_KEY_TYPE
+#define DATUM_TO_output_key DatumGetInt16
+#define output_key_TO_DATUM Int16GetDatum
 
 #define ABBREVIATE(X) (X)
 #define KEY_HASH(X) HASH64(X)

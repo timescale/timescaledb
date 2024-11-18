@@ -20,14 +20,14 @@
 
 #include "import/umash.h"
 
-struct abbrev_key
+struct hash_table_key
 {
 	uint32 hash;
 	uint64 rest;
 } __attribute__((packed));
 
 #define UMASH
-#define ABBREV_KEY_TYPE struct abbrev_key
+#define HASH_TABLE_KEY_TYPE struct hash_table_key
 #define KEY_HASH(X) (X.hash)
 #define KEY_EQUAL(a, b) (a.hash == b.hash && a.rest == b.rest)
 
@@ -42,30 +42,30 @@ get_bytes_view(CompressedColumnValues *column_values, int arrow_row)
 }
 
 static pg_attribute_always_inline void
-single_text_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
-					void *restrict abbrev_key_ptr, bool *restrict valid)
+single_text_get_key(HashingConfig config, int row, void *restrict output_key_ptr,
+					void *restrict hash_table_key_ptr, bool *restrict valid)
 {
 	Assert(config.policy->num_grouping_columns == 1);
 
-	BytesView *restrict full_key = (BytesView *) full_key_ptr;
-	ABBREV_KEY_TYPE *restrict abbrev_key = (ABBREV_KEY_TYPE *) abbrev_key_ptr;
+	BytesView *restrict output_key = (BytesView *) output_key_ptr;
+	HASH_TABLE_KEY_TYPE *restrict hash_table_key = (HASH_TABLE_KEY_TYPE *) hash_table_key_ptr;
 
 	if (unlikely(config.single_key.decompression_type == DT_Scalar))
 	{
 		/* Already stored. */
-		full_key->len = VARSIZE_ANY_EXHDR(*config.single_key.output_value);
-		full_key->data = (const uint8 *) VARDATA_ANY(*config.single_key.output_value);
+		output_key->len = VARSIZE_ANY_EXHDR(*config.single_key.output_value);
+		output_key->data = (const uint8 *) VARDATA_ANY(*config.single_key.output_value);
 		*valid = !*config.single_key.output_isnull;
 	}
 	else if (config.single_key.decompression_type == DT_ArrowText)
 	{
-		*full_key = get_bytes_view(&config.single_key, row);
+		*output_key = get_bytes_view(&config.single_key, row);
 		*valid = arrow_row_is_valid(config.single_key.buffers[0], row);
 	}
 	else if (config.single_key.decompression_type == DT_ArrowTextDict)
 	{
 		const int16 index = ((int16 *) config.single_key.buffers[3])[row];
-		*full_key = get_bytes_view(&config.single_key, index);
+		*output_key = get_bytes_view(&config.single_key, index);
 		*valid = arrow_row_is_valid(config.single_key.buffers[0], row);
 	}
 	else
@@ -77,32 +77,33 @@ single_text_get_key(HashingConfig config, int row, void *restrict full_key_ptr,
 				policy,
 				row,
 				policy->last_used_key_index + 1,
-				full_key->len);
-	for (size_t i = 0; i < full_key->len; i++)
+				output_key->len);
+	for (size_t i = 0; i < output_key->len; i++)
 	{
-		DEBUG_PRINT("%.2x.", full_key->data[i]);
+		DEBUG_PRINT("%.2x.", output_key->data[i]);
 	}
 	DEBUG_PRINT("\n");
 
 	struct umash_fp fp = umash_fprint(config.policy->umash_params,
 									  /* seed = */ -1ull,
-									  full_key->data,
-									  full_key->len);
-	abbrev_key->hash = fp.hash[0] & (~(uint32) 0);
-	abbrev_key->rest = fp.hash[1];
+									  output_key->data,
+									  output_key->len);
+	hash_table_key->hash = fp.hash[0] & (~(uint32) 0);
+	hash_table_key->rest = fp.hash[1];
 }
 
-static pg_attribute_always_inline ABBREV_KEY_TYPE
-single_text_store_key(GroupingPolicyHash *restrict policy, BytesView full_key,
-					  ABBREV_KEY_TYPE abbrev_key)
+static pg_attribute_always_inline HASH_TABLE_KEY_TYPE
+single_text_store_output_key(GroupingPolicyHash *restrict policy, uint32 new_key_index,
+							 BytesView output_key, HASH_TABLE_KEY_TYPE hash_table_key)
 {
-	const int total_bytes = full_key.len + VARHDRSZ;
-	text *restrict stored = (text *) MemoryContextAlloc(policy->key_body_mctx, total_bytes);
+	const int total_bytes = output_key.len + VARHDRSZ;
+	text *restrict stored =
+		(text *) MemoryContextAlloc(policy->strategy.key_body_mctx, total_bytes);
 	SET_VARSIZE(stored, total_bytes);
-	memcpy(VARDATA(stored), full_key.data, full_key.len);
-	full_key.data = (uint8 *) VARDATA(stored);
-	gp_hash_output_keys(policy, policy->last_used_key_index)[0] = PointerGetDatum(stored);
-	return abbrev_key;
+	memcpy(VARDATA(stored), output_key.data, output_key.len);
+	output_key.data = (uint8 *) VARDATA(stored);
+	policy->strategy.output_keys[new_key_index] = PointerGetDatum(stored);
+	return hash_table_key;
 }
 
 static pg_attribute_always_inline void
@@ -111,12 +112,36 @@ single_text_destroy_key(BytesView key)
 	/* Noop. */
 }
 
+/*
+ * We use the standard single-key key output functions.
+ */
+#define EXPLAIN_NAME "single text"
+#define KEY_VARIANT single_text
+#define OUTPUT_KEY_TYPE BytesView
+
+#include "hash_single_output_key_helper.c"
+
+/*
+ * We use a special batch preparation function to sometimes hash the dictionary-
+ * encoded column using the dictionary.
+ */
+
+#define USE_DICT_HASHING
+
 static pg_attribute_always_inline void single_text_dispatch_for_config(HashingConfig config,
 																	   int start_row, int end_row);
 
 static void
 single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *batch_state)
 {
+	/*
+	 * Allocate the key storage.
+	 */
+	single_text_alloc_output_keys(policy, batch_state);
+
+	/*
+	 * Determine whether we're going to use the dictionary for hashing.
+	 */
 	policy->use_key_index_for_dict = false;
 
 	Assert(policy->num_grouping_columns == 1);
@@ -134,6 +159,12 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 	{
 		return;
 	}
+	/*
+	 * Remember which
+	 * aggregation states have already existed, and which we have to
+	 * initialize. State index zero is invalid.
+	 */
+	const uint32 first_initialized_key_index = policy->last_used_key_index;
 
 	/*
 	 * Initialize the array for storing the aggregate state offsets corresponding
@@ -258,14 +289,52 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 	/*
 	 * The dictionary doesn't store nulls, so add the null key separately if we
 	 * have one.
+	 *
+	 * FIXME doesn't respect nulls last/first in GroupAggregate. Add a test.
 	 */
 	if (have_null_key && policy->null_key_index == 0)
 	{
 		policy->null_key_index = ++policy->last_used_key_index;
-		gp_hash_output_keys(policy, policy->null_key_index)[0] = PointerGetDatum(NULL);
+		policy->strategy.output_keys[policy->null_key_index] = PointerGetDatum(NULL);
 	}
 
 	policy->use_key_index_for_dict = true;
+
+	/*
+	 * Initialize the new keys if we added any.
+	 */
+	if (policy->last_used_key_index > first_initialized_key_index)
+	{
+		const uint64 new_aggstate_rows = policy->num_agg_state_rows * 2 + 1;
+		const int num_fns = policy->num_agg_defs;
+		for (int i = 0; i < num_fns; i++)
+		{
+			const VectorAggDef *agg_def = &policy->agg_defs[i];
+			if (policy->last_used_key_index >= policy->num_agg_state_rows)
+			{
+				policy->per_agg_states[i] = repalloc(policy->per_agg_states[i],
+													 new_aggstate_rows * agg_def->func.state_bytes);
+			}
+
+			/*
+			 * Initialize the aggregate function states for the newly added keys.
+			 */
+			void *first_uninitialized_state =
+				agg_def->func.state_bytes * (first_initialized_key_index + 1) +
+				(char *) policy->per_agg_states[i];
+			agg_def->func.agg_init(first_uninitialized_state,
+								   policy->last_used_key_index - first_initialized_key_index);
+		}
+
+		/*
+		 * Record the newly allocated number of rows in case we had to reallocate.
+		 */
+		if (policy->last_used_key_index >= policy->num_agg_state_rows)
+		{
+			Assert(new_aggstate_rows > policy->num_agg_state_rows);
+			policy->num_agg_state_rows = new_aggstate_rows;
+		}
+	}
 
 	DEBUG_PRINT("computed the dict offsets\n");
 }
@@ -335,12 +404,5 @@ single_text_offsets_translate(HashingConfig config, int start_row, int end_row)
 #undef APPLY_FOR_SPECIALIZATIONS
 #undef APPLY_FOR_VALIDITY
 #undef APPLY_FOR_BATCH_FILTER
-
-#define EXPLAIN_NAME "single text"
-#define KEY_VARIANT single_text
-#define FULL_KEY_TYPE BytesView
-#define HAVE_PREPARE_FUNCTION
-
-#include "hash_single_helper.c"
 
 #include "hash_table_functions_impl.c"
