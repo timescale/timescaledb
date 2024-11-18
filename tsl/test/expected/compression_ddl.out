@@ -31,7 +31,7 @@ CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLE
 CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE2_PATH;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SET timezone TO 'America/Los_Angeles';
-CREATE TABLE test1 ("Time" timestamptz, i integer, b bigint, t text);
+CREATE TABLE test1 ("Time" timestamptz, i integer not null, b bigint, t text);
 SELECT table_name from create_hypertable('test1', 'Time', chunk_time_interval=> INTERVAL '1 day');
 NOTICE:  adding not-null constraint to column "Time"
  table_name 
@@ -2536,3 +2536,59 @@ ALTER TABLE compression_drop DROP COLUMN v0;
 ERROR:  cannot drop orderby or segmentby column from a chunk with compression enabled
 \set ON_ERROR_STOP 1
 DROP TABLE compression_drop;
+SET client_min_messages = ERROR;
+CREATE TABLE test2 (ts timestamptz, i integer not null, b bigint, t text);
+SELECT table_name from create_hypertable('test2', 'ts', chunk_time_interval=> INTERVAL '1 day');
+ table_name 
+------------
+ test2
+(1 row)
+
+INSERT INTO test2
+SELECT t,
+       gen_rand_minstd(),
+       gen_rand_minstd(),
+       gen_rand_minstd()::text
+FROM   generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-28 1:00', '1 hour') t;
+ALTER TABLE test2 SET (
+      timescaledb.compress,
+      timescaledb.compress_segmentby = 'b',
+      timescaledb.compress_orderby = 'ts DESC'
+);
+\set ON_ERROR_STOP 0
+INSERT INTO test2(ts,b,t) VALUES ('2024-11-18 18:04:51',99,'magic');
+ERROR:  null value in column "i" of relation "_hyper_44_180_chunk" violates not-null constraint
+\set ON_ERROR_STOP 1
+ALTER TABLE test2 ALTER COLUMN i DROP NOT NULL;
+INSERT INTO test2(ts,b,t) VALUES ('2024-11-18 18:04:51',99,'magic');
+SELECT count(*) FROM test2 WHERE i IS NULL;
+ count 
+-------
+     1
+(1 row)
+
+SELECT count(compress_chunk(ch)) FROM show_chunks('test2') ch;
+ count 
+-------
+    28
+(1 row)
+
+SELECT count(*) FROM test2 WHERE i IS NULL;
+ count 
+-------
+     1
+(1 row)
+
+SELECT count(decompress_chunk(ch)) FROM show_chunks('test2') ch;
+ count 
+-------
+    28
+(1 row)
+
+SELECT count(*) FROM test2 WHERE i IS NULL;
+ count 
+-------
+     1
+(1 row)
+
+SET client_min_messages = NOTICE;
