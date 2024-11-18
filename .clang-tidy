@@ -1,6 +1,0 @@
----
-Checks:          '-*,clang-analyzer-core.*,clang-diagnostic-*'
-WarningsAsErrors: 'clang-analyzer-unix.*,clang-analyzer-core.NullDereference'
-HeaderFilterRegex: ''
-AnalyzeTemporaryDtors: false
-...

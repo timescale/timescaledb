@@ -539,11 +539,8 @@ test_delta3(bool have_nulls, bool have_random)
 
 	/* Forward decompression. */
 	DecompressionIterator *iter =
-		delta_delta_decompression_iterator_from_datum_forward(PointerGetDatum((void *) compressed),
-															  INT8OID);
-	ArrowArray *bulk_result = delta_delta_decompress_all(PointerGetDatum((void *) compressed),
-														 INT8OID,
-														 CurrentMemoryContext);
+		delta_delta_decompression_iterator_from_datum_forward(compressed, INT8OID);
+	ArrowArray *bulk_result = delta_delta_decompress_all(compressed, INT8OID, CurrentMemoryContext);
 	for (int i = 0; i < TEST_ELEMENTS; i++)
 	{
 		DecompressResult r = delta_delta_decompression_iterator_try_next_forward(iter);
@@ -565,9 +562,7 @@ test_delta3(bool have_nulls, bool have_random)
 	TestAssertTrue(r.is_done);
 
 	/* Reverse decompression. */
-	iter =
-		delta_delta_decompression_iterator_from_datum_reverse(PointerGetDatum((void *) compressed),
-															  INT8OID);
+	iter = delta_delta_decompression_iterator_from_datum_reverse(compressed, INT8OID);
 	for (int i = TEST_ELEMENTS - 1; i >= 0; i--)
 	{
 		DecompressResult r = delta_delta_decompression_iterator_try_next_reverse(iter);

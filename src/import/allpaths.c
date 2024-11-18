@@ -152,7 +152,7 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 		AppendRelInfo *appinfo = (AppendRelInfo *) lfirst(l);
 
 		/* append_rel_list contains all append rels; ignore others */
-		if (appinfo->parent_relid != (Index) parent_rt_index)
+		if (appinfo->parent_relid != parent_rt_index)
 			continue;
 
 		/* Re-locate the child RTE and RelOptInfo */
