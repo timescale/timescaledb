@@ -13,50 +13,11 @@
 
 #include "nodes/decompress_chunk/compressed_batch.h"
 
+#include "hashing/hashing_strategy.h"
+
 typedef struct GroupingPolicyHash GroupingPolicyHash;
 
-typedef struct HashingStrategy HashingStrategy;
-
 struct umash_params;
-
-typedef struct HashingStrategy
-{
-	char *explain_name;
-	void (*init)(HashingStrategy *strategy, GroupingPolicyHash *policy);
-	void (*reset)(HashingStrategy *strategy);
-	uint64 (*get_size_bytes)(HashingStrategy *strategy);
-	void (*prepare_for_batch)(GroupingPolicyHash *policy, DecompressBatchState *batch_state);
-	void (*fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
-						 int start_row, int end_row);
-	void (*emit_key)(GroupingPolicyHash *policy, uint32 current_key,
-					 TupleTableSlot *aggregated_slot);
-
-	/*
-	 * The hash table we use for grouping. It matches each grouping key to its
-	 * unique integer index.
-	 */
-	void *table;
-
-	/*
-	 * For each unique grouping key, we store the values of the grouping columns.
-	 * This is stored separately from hash table keys, because they might not
-	 * have the full column values, and also storing them contiguously here
-	 * leads to better memory access patterns when emitting the results.
-	 * The details of the key storage are managed by the hashing strategy.
-	 */
-	Datum *restrict output_keys;
-	uint64 num_output_keys;
-	MemoryContext key_body_mctx;
-
-	/*
-	 * In single-column grouping, we store the null key outside of the hash
-	 * table, and its index is given by this value. Key index 0 is invalid.
-	 * This is done to avoid having an "is null" flag in the hash table entries,
-	 * to reduce the hash table size.
-	 */
-	uint32 null_key_index;
-
-} HashingStrategy;
 
 /*
  * Hash grouping policy.
@@ -68,11 +29,12 @@ typedef struct HashingStrategy
  * spans multiple input compressed batches, and is reset after the partial
  * aggregation results are emitted.
  *
- * 1) For each row of the new compressed batch, we obtain an integer index that
+ * 1) For each row of the new compressed batch, we obtain an index that
  * uniquely identifies its grouping key. This is done by matching the row's
  * grouping columns to the hash table recording the unique grouping keys and
  * their respective indexes. It is performed in bulk for all rows of the batch,
- * to improve memory locality.
+ * to improve memory locality. The details of this are managed by the hashing
+ * strategy.
  *
  * 2) The key indexes are used to locate the aggregate function states
  * corresponding to a given row, and update it. This is done in bulk for all
@@ -92,9 +54,15 @@ typedef struct GroupingPolicyHash
 	 */
 	GroupingPolicy funcs;
 
+	/*
+	 * Aggregate function definitions.
+	 */
 	int num_agg_defs;
 	const VectorAggDef *restrict agg_defs;
 
+	/*
+	 * Grouping column definitions.
+	 */
 	int num_grouping_columns;
 	const GroupingColumn *restrict grouping_columns;
 
@@ -104,15 +72,11 @@ typedef struct GroupingPolicyHash
 	 */
 	CompressedColumnValues *restrict current_batch_grouping_column_values;
 
-	HashingStrategy strategy;
-	struct umash_params *umash_params;
-
 	/*
-	 * Temporary key storages. Some hashing strategies need to put the key in a
-	 * separate memory area, we don't want to alloc/free it on each row.
+	 * Hashing strategy that is responsible for mapping the rows to the unique
+	 * indexes of their grouping keys.
 	 */
-	uint8 *tmp_key_storage;
-	uint64 num_tmp_key_storage_bytes;
+	HashingStrategy hashing;
 
 	/*
 	 * The last used index of an unique grouping key. Key index 0 is invalid.
@@ -120,22 +84,13 @@ typedef struct GroupingPolicyHash
 	uint32 last_used_key_index;
 
 	/*
-	 * Temporary storage of unique key indexes corresponding to a given row of
-	 * the compressed batch that is currently being aggregated. We keep it in
+	 * Temporary storage of unique indexes of keys corresponding to a given row
+	 * of the compressed batch that is currently being aggregated. We keep it in
 	 * the policy because it is potentially too big to keep on stack, and we
-	 * don't want to reallocate it each batch.
+	 * don't want to reallocate it for each batch.
 	 */
 	uint32 *restrict key_index_for_row;
 	uint64 num_key_index_for_row;
-
-	/*
-	 * For single text key that uses dictionary encoding, in some cases we first
-	 * calculate the key indexes for the dictionary entries, and then translate
-	 * it to the actual rows.
-	 */
-	uint32 *restrict key_index_for_dict;
-	uint64 num_key_index_for_dict;
-	bool use_key_index_for_dict;
 
 	/*
 	 * The temporary filter bitmap we use to combine the results of the
@@ -178,57 +133,30 @@ typedef struct GroupingPolicyHash
 	uint64 stat_input_valid_rows;
 	uint64 stat_bulk_filtered_rows;
 	uint64 stat_consecutive_keys;
+
+	/*
+	 * FIXME all the stuff below should be moved out.
+	 */
+	struct umash_params *umash_params;
+
+	/*
+	 * Temporary key storages. Some hashing strategies need to put the key in a
+	 * separate memory area, we don't want to alloc/free it on each row.
+	 */
+	uint8 *tmp_key_storage;
+	uint64 num_tmp_key_storage_bytes;
+
+	/*
+	 * For single text key that uses dictionary encoding, in some cases we first
+	 * calculate the key indexes for the dictionary entries, and then translate
+	 * it to the actual rows.
+	 */
+	uint32 *restrict key_index_for_dict;
+	uint64 num_key_index_for_dict;
+	bool use_key_index_for_dict;
 } GroupingPolicyHash;
 
 //#define DEBUG_PRINT(...) fprintf(stderr, __VA_ARGS__)
 #ifndef DEBUG_PRINT
 #define DEBUG_PRINT(...)
 #endif
-
-typedef struct BatchHashingParams
-{
-	const uint64 *batch_filter;
-	CompressedColumnValues single_key;
-
-	int num_grouping_columns;
-	const CompressedColumnValues *grouping_column_values;
-
-	/*
-	 * Whether we have any scalar or nullable grouping columns in the current
-	 * batch. This is used to select the more efficient implementation when we
-	 * have none.
-	 */
-	bool have_scalar_or_nullable_columns;
-
-	GroupingPolicyHash *restrict policy;
-
-	uint32 *restrict result_key_indexes;
-} BatchHashingParams;
-
-static pg_attribute_always_inline BatchHashingParams
-build_batch_hashing_params(GroupingPolicyHash *policy, DecompressBatchState *batch_state)
-{
-	BatchHashingParams params = {
-		.policy = policy,
-		.batch_filter = batch_state->vector_qual_result,
-		.num_grouping_columns = policy->num_grouping_columns,
-		.grouping_column_values = policy->current_batch_grouping_column_values,
-		.result_key_indexes = policy->key_index_for_row,
-	};
-
-	Assert(policy->num_grouping_columns > 0);
-	if (policy->num_grouping_columns == 1)
-	{
-		params.single_key = policy->current_batch_grouping_column_values[0];
-	}
-
-	for (int i = 0; i < policy->num_grouping_columns; i++)
-	{
-		params.have_scalar_or_nullable_columns =
-			params.have_scalar_or_nullable_columns ||
-			(policy->current_batch_grouping_column_values[i].decompression_type == DT_Scalar ||
-			 policy->current_batch_grouping_column_values[i].buffers[0] != NULL);
-	}
-
-	return params;
-}

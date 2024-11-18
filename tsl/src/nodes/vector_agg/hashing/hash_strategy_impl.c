@@ -4,11 +4,9 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
-#include "import/umash.h"
+#include "batch_hashing_params.h"
 
-#define FUNCTION_NAME_HELPER2(X, Y) X##_##Y
-#define FUNCTION_NAME_HELPER(X, Y) FUNCTION_NAME_HELPER2(X, Y)
-#define FUNCTION_NAME(Y) FUNCTION_NAME_HELPER(KEY_VARIANT, Y)
+#include "import/umash.h"
 
 /*
  * The hash table maps the value of the grouping key to its unique index.
@@ -52,16 +50,16 @@ typedef struct
 struct FUNCTION_NAME(hash);
 
 static uint64
-FUNCTION_NAME(get_size_bytes)(HashingStrategy *strategy)
+FUNCTION_NAME(get_size_bytes)(HashingStrategy *hashing)
 {
-	struct FUNCTION_NAME(hash) *hash = (struct FUNCTION_NAME(hash) *) strategy->table;
+	struct FUNCTION_NAME(hash) *hash = (struct FUNCTION_NAME(hash) *) hashing->table;
 	return hash->members * sizeof(FUNCTION_NAME(entry));
 }
 
 static void
-FUNCTION_NAME(init)(HashingStrategy *strategy, GroupingPolicyHash *policy)
+FUNCTION_NAME(init)(HashingStrategy *hashing, GroupingPolicyHash *policy)
 {
-	strategy->table = FUNCTION_NAME(create)(CurrentMemoryContext, policy->num_agg_state_rows, NULL);
+	hashing->table = FUNCTION_NAME(create)(CurrentMemoryContext, policy->num_agg_state_rows, NULL);
 #ifdef UMASH
 	policy->umash_params = palloc0(sizeof(struct umash_params));
 	umash_params_derive(policy->umash_params, 0xabcdef1234567890ull, NULL);
@@ -69,11 +67,11 @@ FUNCTION_NAME(init)(HashingStrategy *strategy, GroupingPolicyHash *policy)
 }
 
 static void
-FUNCTION_NAME(reset_strategy)(HashingStrategy *strategy)
+FUNCTION_NAME(reset_strategy)(HashingStrategy *hashing)
 {
-	struct FUNCTION_NAME(hash) *table = (struct FUNCTION_NAME(hash) *) strategy->table;
+	struct FUNCTION_NAME(hash) *table = (struct FUNCTION_NAME(hash) *) hashing->table;
 	FUNCTION_NAME(reset)(table);
-	strategy->null_key_index = 0;
+	hashing->null_key_index = 0;
 }
 
 /*
@@ -83,11 +81,11 @@ static pg_attribute_always_inline void
 FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int end_row)
 {
 	GroupingPolicyHash *policy = params.policy;
-	HashingStrategy *hashing = &policy->strategy;
+	HashingStrategy *hashing = &policy->hashing;
 
 	uint32 *restrict indexes = params.result_key_indexes;
 
-	struct FUNCTION_NAME(hash) *restrict table = policy->strategy.table;
+	struct FUNCTION_NAME(hash) *restrict table = hashing->table;
 
 	HASH_TABLE_KEY_TYPE prev_hash_table_key;
 	uint32 previous_key_index = 0;
@@ -289,7 +287,3 @@ HashingStrategy FUNCTION_NAME(strategy) = {
 #undef OUTPUT_KEY_TO_DATUM
 #undef UMASH
 #undef USE_DICT_HASHING
-
-#undef FUNCTION_NAME_HELPER2
-#undef FUNCTION_NAME_HELPER
-#undef FUNCTION_NAME

@@ -15,6 +15,7 @@
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
 #include "nodes/vector_agg/grouping_policy_hash.h"
+#include "template_helper.h"
 
 #define EXPLAIN_NAME "single 4-byte"
 #define KEY_VARIANT single_fixed_4
@@ -24,10 +25,9 @@
 #define DATUM_TO_OUTPUT_KEY DatumGetInt32
 #define OUTPUT_KEY_TO_DATUM Int32GetDatum
 
-#define KEY_HASH(X) HASH64(X)
-
 #include "hash_strategy_helper_single_fixed_key.c"
 
 #define KEY_EQUAL(a, b) a == b
+#define KEY_HASH(X) HASH64(X)
 
 #include "hash_strategy_impl.c"

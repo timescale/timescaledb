@@ -17,6 +17,9 @@
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
 #include "nodes/vector_agg/grouping_policy_hash.h"
+#include "template_helper.h"
+
+#include "batch_hashing_params.h"
 
 #include "import/umash.h"
 
@@ -97,12 +100,11 @@ single_text_store_output_key(GroupingPolicyHash *restrict policy, uint32 new_key
 							 BytesView output_key, HASH_TABLE_KEY_TYPE hash_table_key)
 {
 	const int total_bytes = output_key.len + VARHDRSZ;
-	text *restrict stored =
-		(text *) MemoryContextAlloc(policy->strategy.key_body_mctx, total_bytes);
+	text *restrict stored = (text *) MemoryContextAlloc(policy->hashing.key_body_mctx, total_bytes);
 	SET_VARSIZE(stored, total_bytes);
 	memcpy(VARDATA(stored), output_key.data, output_key.len);
 	output_key.data = (uint8 *) VARDATA(stored);
-	policy->strategy.output_keys[new_key_index] = PointerGetDatum(stored);
+	policy->hashing.output_keys[new_key_index] = PointerGetDatum(stored);
 	return hash_table_key;
 }
 
@@ -113,7 +115,8 @@ single_text_store_output_key(GroupingPolicyHash *restrict policy, uint32 new_key
 #define KEY_VARIANT single_text
 #define OUTPUT_KEY_TYPE BytesView
 
-#include "hash_strategy_helper_single_output_key.c"
+#include "output_key_helper_alloc.c"
+#include "output_key_helper_emit_single.c"
 
 /*
  * We use a special batch preparation function to sometimes hash the dictionary-
@@ -150,12 +153,13 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 	{
 		return;
 	}
+
 	/*
-	 * Remember which
-	 * aggregation states have already existed, and which we have to
-	 * initialize. State index zero is invalid.
+	 * Remember which aggregation states have already existed, and which we have
+	 * to initialize. State index zero is invalid.
 	 */
-	const uint32 first_initialized_key_index = policy->last_used_key_index;
+	const uint32 last_initialized_key_index = policy->last_used_key_index;
+	Assert(last_initialized_key_index <= policy->num_agg_state_rows);
 
 	/*
 	 * Initialize the array for storing the aggregate state offsets corresponding
@@ -284,10 +288,10 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 	 *
 	 * FIXME doesn't respect nulls last/first in GroupAggregate. Add a test.
 	 */
-	if (have_null_key && policy->strategy.null_key_index == 0)
+	if (have_null_key && policy->hashing.null_key_index == 0)
 	{
-		policy->strategy.null_key_index = ++policy->last_used_key_index;
-		policy->strategy.output_keys[policy->strategy.null_key_index] = PointerGetDatum(NULL);
+		policy->hashing.null_key_index = ++policy->last_used_key_index;
+		policy->hashing.output_keys[policy->hashing.null_key_index] = PointerGetDatum(NULL);
 	}
 
 	policy->use_key_index_for_dict = true;
@@ -295,7 +299,7 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 	/*
 	 * Initialize the new keys if we added any.
 	 */
-	if (policy->last_used_key_index > first_initialized_key_index)
+	if (policy->last_used_key_index > last_initialized_key_index)
 	{
 		const uint64 new_aggstate_rows = policy->num_agg_state_rows * 2 + 1;
 		const int num_fns = policy->num_agg_defs;
@@ -312,10 +316,10 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 			 * Initialize the aggregate function states for the newly added keys.
 			 */
 			void *first_uninitialized_state =
-				agg_def->func.state_bytes * (first_initialized_key_index + 1) +
+				agg_def->func.state_bytes * (last_initialized_key_index + 1) +
 				(char *) policy->per_agg_states[i];
 			agg_def->func.agg_init(first_uninitialized_state,
-								   policy->last_used_key_index - first_initialized_key_index);
+								   policy->last_used_key_index - last_initialized_key_index);
 		}
 
 		/*
@@ -351,7 +355,7 @@ single_text_offsets_translate_impl(BatchHashingParams params, int start_row, int
 		}
 		else
 		{
-			indexes_for_rows[row] = policy->strategy.null_key_index;
+			indexes_for_rows[row] = policy->hashing.null_key_index;
 		}
 
 		Assert(indexes_for_rows[row] != 0 || !arrow_row_is_valid(params.batch_filter, row));

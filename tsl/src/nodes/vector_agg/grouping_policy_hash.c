@@ -72,17 +72,17 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 		switch (g->value_bytes)
 		{
 			case 8:
-				policy->strategy = single_fixed_8_strategy;
+				policy->hashing = single_fixed_8_strategy;
 				break;
 			case 4:
-				policy->strategy = single_fixed_4_strategy;
+				policy->hashing = single_fixed_4_strategy;
 				break;
 			case 2:
-				policy->strategy = single_fixed_2_strategy;
+				policy->hashing = single_fixed_2_strategy;
 				break;
 			case -1:
 				Assert(g->typid == TEXTOID);
-				policy->strategy = single_text_strategy;
+				policy->hashing = single_text_strategy;
 				break;
 			default:
 				Assert(false);
@@ -91,12 +91,12 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 	}
 	else
 	{
-		policy->strategy = serialized_strategy;
+		policy->hashing = serialized_strategy;
 	}
 
-	policy->strategy.key_body_mctx = policy->agg_extra_mctx;
+	policy->hashing.key_body_mctx = policy->agg_extra_mctx;
 
-	policy->strategy.init(&policy->strategy, policy);
+	policy->hashing.init(&policy->hashing, policy);
 
 	return &policy->funcs;
 }
@@ -110,7 +110,7 @@ gp_hash_reset(GroupingPolicy *obj)
 
 	policy->returning_results = false;
 
-	policy->strategy.reset(&policy->strategy);
+	policy->hashing.reset(&policy->hashing);
 
 	/*
 	 * Have to reset this because it's in the key body context which is also
@@ -129,13 +129,15 @@ gp_hash_reset(GroupingPolicy *obj)
 
 static void
 compute_single_aggregate(GroupingPolicyHash *policy, const DecompressBatchState *batch_state,
-						 int start_row, int end_row, const VectorAggDef *agg_def, void *agg_states,
-						 const uint32 *offsets, MemoryContext agg_extra_mctx)
+						 int start_row, int end_row, const VectorAggDef *agg_def, void *agg_states)
 {
 	const ArrowArray *arg_arrow = NULL;
 	const uint64 *arg_validity_bitmap = NULL;
 	Datum arg_datum = 0;
 	bool arg_isnull = true;
+
+	const uint32 *offsets = policy->key_index_for_row;
+	MemoryContext agg_extra_mctx = policy->agg_extra_mctx;
 
 	/*
 	 * We have functions with one argument, and one function with no arguments
@@ -231,13 +233,14 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 	 * Remember which aggregation states have already existed, and which we
 	 * have to initialize. State index zero is invalid.
 	 */
-	const uint32 first_initialized_key_index = policy->last_used_key_index;
+	const uint32 last_initialized_key_index = policy->last_used_key_index;
+	Assert(last_initialized_key_index <= policy->num_agg_state_rows);
 
 	/*
 	 * Match rows to aggregation states using a hash table.
 	 */
 	Assert((size_t) end_row <= policy->num_key_index_for_row);
-	policy->strategy.fill_offsets(policy, batch_state, start_row, end_row);
+	policy->hashing.fill_offsets(policy, batch_state, start_row, end_row);
 
 	/*
 	 * Process the aggregate function states.
@@ -246,7 +249,7 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 	for (int i = 0; i < num_fns; i++)
 	{
 		const VectorAggDef *agg_def = &policy->agg_defs[i];
-		if (policy->last_used_key_index > first_initialized_key_index)
+		if (policy->last_used_key_index > last_initialized_key_index)
 		{
 			if (policy->last_used_key_index >= policy->num_agg_state_rows)
 			{
@@ -258,10 +261,10 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 			 * Initialize the aggregate function states for the newly added keys.
 			 */
 			void *first_uninitialized_state =
-				agg_def->func.state_bytes * (first_initialized_key_index + 1) +
+				agg_def->func.state_bytes * (last_initialized_key_index + 1) +
 				(char *) policy->per_agg_states[i];
 			agg_def->func.agg_init(first_uninitialized_state,
-								   policy->last_used_key_index - first_initialized_key_index);
+								   policy->last_used_key_index - last_initialized_key_index);
 		}
 
 		/*
@@ -272,9 +275,7 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 								 start_row,
 								 end_row,
 								 agg_def,
-								 policy->per_agg_states[i],
-								 policy->key_index_for_row,
-								 policy->agg_extra_mctx);
+								 policy->per_agg_states[i]);
 	}
 
 	/*
@@ -338,7 +339,7 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 	 * Call the per-batch initialization function of the hashing strategy.
 	 */
 
-	policy->strategy.prepare_for_batch(policy, batch_state);
+	policy->hashing.prepare_for_batch(policy, batch_state);
 
 	/*
 	 * Add the batch rows to aggregate function states.
@@ -422,7 +423,7 @@ gp_hash_should_emit(GroupingPolicy *gp)
 	 * work will be done by the final Postgres aggregation, so we should bail
 	 * out early here.
 	 */
-	return policy->strategy.get_size_bytes(&policy->strategy) > 512 * 1024;
+	return policy->hashing.get_size_bytes(&policy->hashing) > 512 * 1024;
 }
 
 static bool
@@ -474,7 +475,7 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 							   &aggregated_slot->tts_isnull[agg_def->output_offset]);
 	}
 
-	policy->strategy.emit_key(policy, current_key, aggregated_slot);
+	policy->hashing.emit_key(policy, current_key, aggregated_slot);
 
 	DEBUG_PRINT("%p: output key index %d\n", policy, current_key);
 
@@ -485,7 +486,7 @@ static char *
 gp_hash_explain(GroupingPolicy *gp)
 {
 	GroupingPolicyHash *policy = (GroupingPolicyHash *) gp;
-	return psprintf("hashed with %s key", policy->strategy.explain_name);
+	return psprintf("hashed with %s key", policy->hashing.explain_name);
 }
 
 static const GroupingPolicy grouping_policy_hash_functions = {

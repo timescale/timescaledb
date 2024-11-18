@@ -3,12 +3,10 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+#include "batch_hashing_params.h"
 
-#include "hash_strategy_helper_single_output_key.c"
-
-#define FUNCTION_NAME_HELPER2(X, Y) X##_##Y
-#define FUNCTION_NAME_HELPER(X, Y) FUNCTION_NAME_HELPER2(X, Y)
-#define FUNCTION_NAME(Y) FUNCTION_NAME_HELPER(KEY_VARIANT, Y)
+#include "output_key_helper_alloc.c"
+#include "output_key_helper_emit_single.c"
 
 static pg_attribute_always_inline void
 FUNCTION_NAME(get_key)(BatchHashingParams params, int row, void *restrict output_key_ptr,
@@ -40,7 +38,7 @@ static pg_attribute_always_inline OUTPUT_KEY_TYPE
 FUNCTION_NAME(store_output_key)(GroupingPolicyHash *restrict policy, uint32 new_key_index,
 								OUTPUT_KEY_TYPE output_key, HASH_TABLE_KEY_TYPE hash_table_key)
 {
-	policy->strategy.output_keys[new_key_index] = OUTPUT_KEY_TO_DATUM(output_key);
+	policy->hashing.output_keys[new_key_index] = OUTPUT_KEY_TO_DATUM(output_key);
 	return hash_table_key;
 }
 
@@ -49,7 +47,3 @@ FUNCTION_NAME(prepare_for_batch)(GroupingPolicyHash *policy, DecompressBatchStat
 {
 	FUNCTION_NAME(alloc_output_keys)(policy, batch_state);
 }
-
-#undef FUNCTION_NAME_HELPER2
-#undef FUNCTION_NAME_HELPER
-#undef FUNCTION_NAME
