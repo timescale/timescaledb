@@ -54,7 +54,8 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 	 * Make sure to filter out "dropped" chunks.
 	 */
 	ScanIterator chunk_it = ts_chunk_scan_iterator_create(orig_mcxt);
-	locked_chunks = MemoryContextAlloc(orig_mcxt, sizeof(Chunk *) * list_length(chunk_ids));
+	locked_chunks =
+		(Chunk **) MemoryContextAlloc(orig_mcxt, sizeof(Chunk *) * list_length(chunk_ids));
 	foreach (lc, chunk_ids)
 	{
 		int chunk_id = lfirst_int(lc);

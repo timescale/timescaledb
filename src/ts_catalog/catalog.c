@@ -416,9 +416,7 @@ ts_catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables,
 
 		for (j = 0; j < number_indexes; j++)
 		{
-			id = ts_get_relation_relid((char *) table_ary[i].schema_name,
-									   (char *) index_ary[i].names[j],
-									   true);
+			id = ts_get_relation_relid(table_ary[i].schema_name, index_ary[i].names[j], true);
 
 			if (!OidIsValid(id))
 				elog(ERROR, "OID lookup failed for table index \"%s\"", index_ary[i].names[j]);

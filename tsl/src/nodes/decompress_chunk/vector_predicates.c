@@ -48,6 +48,12 @@ get_vector_const_predicate(Oid pg_predicate)
 
 		case F_TEXTNE:
 			return vector_const_textne;
+
+		default:
+			/*
+			 * More checks below, this branch is to placate the static analyzers.
+			 */
+			break;
 	}
 
 	if (GetDatabaseEncoding() == PG_UTF8)
@@ -59,6 +65,11 @@ get_vector_const_predicate(Oid pg_predicate)
 				return vector_const_textlike_utf8;
 			case F_TEXTNLIKE:
 				return vector_const_textnlike_utf8;
+			default:
+				/*
+				 * This branch is to placate the static analyzers.
+				 */
+				break;
 		}
 	}
 
