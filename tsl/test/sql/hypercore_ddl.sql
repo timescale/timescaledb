@@ -28,9 +28,9 @@ set enable_incremental_sort = false;
 select setseed(1);
 
 create table readings(
-       time timestamptz unique,
-       location int,
-       device int,
+       time timestamptz not null unique,
+       location int not null,
+       device int not null,
        temp numeric(4,1),
        humidity float,
        jdata jsonb
@@ -86,3 +86,19 @@ select (select count(*) from readings) tuples,
        (select count(*) from show_chunks('readings')) chunks;
 
 
+\set ON_ERROR_STOP 0
+insert into readings(time,device,temp,humidity,jdata)
+values ('2024-01-01 00:00:00', 1, 99.0, 99.0, '{"magic": "yes"}'::jsonb);
+\set ON_ERROR_STOP 1
+
+-- Test altering column definitions
+alter table readings
+      alter column location drop not null;
+
+-- This should now work.
+insert into readings(time,device,temp,humidity,jdata)
+values ('2024-01-01 00:00:00', 1, 99.0, 99.0, '{"magic": "yes"}'::jsonb);
+
+select count(*) from readings where location is null;
+select compress_chunk(show_chunks('readings'), hypercore_use_access_method => true);
+select count(*) from readings where location is null;
