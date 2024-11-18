@@ -170,13 +170,13 @@ vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk, List *resolved_ta
 	vector_agg->scan.plan.extParam = bms_copy(agg->plan.extParam);
 	vector_agg->scan.plan.allParam = bms_copy(agg->plan.allParam);
 
-	List *grouping_col_offsets = NIL;
+	List *grouping_child_output_offsets = NIL;
 	for (int i = 0; i < agg->numCols; i++)
 	{
-		grouping_col_offsets =
-			lappend_int(grouping_col_offsets, AttrNumberGetAttrOffset(agg->grpColIdx[i]));
+		grouping_child_output_offsets =
+			lappend_int(grouping_child_output_offsets, AttrNumberGetAttrOffset(agg->grpColIdx[i]));
 	}
-	vector_agg->custom_private = list_make1(grouping_col_offsets);
+	vector_agg->custom_private = list_make1(grouping_child_output_offsets);
 
 	return (Plan *) vector_agg;
 }
