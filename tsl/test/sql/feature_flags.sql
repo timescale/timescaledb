@@ -4,6 +4,8 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
+SET timezone TO 'America/Los_Angeles';
+
 -- hypertable creation
 SHOW timescaledb.enable_hypertable_create;
 SET timescaledb.enable_hypertable_create TO off;

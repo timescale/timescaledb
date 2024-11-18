@@ -8,6 +8,7 @@
 -- * drop_chunk
 -- * attach_foreign_table_chunk
 -- * hypertable_osm_range_update
+\set EXPLAIN 'EXPLAIN (COSTS OFF)'
 CREATE OR REPLACE VIEW chunk_view AS
   SELECT
     ht.table_name AS hypertable_name,
@@ -30,6 +31,7 @@ INSERT INTO pg_extension(oid,extname,extowner,extnamespace,extrelocatable,extver
 CREATE SCHEMA test1;
 GRANT CREATE ON SCHEMA test1 TO :ROLE_DEFAULT_PERM_USER;
 GRANT USAGE ON SCHEMA test1 TO :ROLE_DEFAULT_PERM_USER;
+GRANT USAGE ON SCHEMA test1 TO :ROLE_4;
 -- mock hooks for OSM interaction with timescaledb
 CREATE OR REPLACE FUNCTION ts_setup_osm_hook( ) RETURNS VOID
 AS :TSL_MODULE_PATHNAME LANGUAGE C VOLATILE;
@@ -640,13 +642,13 @@ SELECT * from ht_try WHERE timec > '2020-01-01 01:00' ORDER BY 1;
 -- test ordered append
 BEGIN;
 -- before updating the ranges
-EXPLAIN SELECT * FROM ht_try ORDER BY 1;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on ht_try  (cost=100.00..202.29 rows=3276 width=24)
+:EXPLAIN SELECT * FROM ht_try ORDER BY 1;
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on ht_try
    Order: ht_try.timec
-   ->  Foreign Scan on child_fdw_table  (cost=100.00..166.59 rows=1706 width=24)
-   ->  Index Scan Backward using _hyper_5_10_chunk_ht_try_timec_idx on _hyper_5_10_chunk  (cost=0.15..35.70 rows=1570 width=24)
+   ->  Foreign Scan on child_fdw_table
+   ->  Index Scan Backward using _hyper_5_10_chunk_ht_try_timec_idx on _hyper_5_10_chunk
 (4 rows)
 
 -- range before update
@@ -680,13 +682,13 @@ WHERE c.table_name = 'child_fdw_table' AND cc.chunk_id = c.id AND ds.id = cc.dim
 (1 row)
 
 -- should be ordered append now
-EXPLAIN SELECT * FROM ht_try ORDER BY 1;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on ht_try  (cost=100.00..202.29 rows=3276 width=24)
+:EXPLAIN SELECT * FROM ht_try ORDER BY 1;
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on ht_try
    Order: ht_try.timec
-   ->  Foreign Scan on child_fdw_table  (cost=100.00..166.59 rows=1706 width=24)
-   ->  Index Scan Backward using _hyper_5_10_chunk_ht_try_timec_idx on _hyper_5_10_chunk  (cost=0.15..35.70 rows=1570 width=24)
+   ->  Foreign Scan on child_fdw_table
+   ->  Index Scan Backward using _hyper_5_10_chunk_ht_try_timec_idx on _hyper_5_10_chunk
 (4 rows)
 
 SELECT * FROM ht_try ORDER BY 1;
@@ -703,13 +705,13 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try');
  f
 (1 row)
 
-EXPLAIN SELECT * from ht_try ORDER BY 1;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
- Merge Append  (cost=100.16..235.06 rows=3276 width=24)
+:EXPLAIN SELECT * from ht_try ORDER BY 1;
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Merge Append
    Sort Key: _hyper_5_10_chunk.timec
-   ->  Index Scan Backward using _hyper_5_10_chunk_ht_try_timec_idx on _hyper_5_10_chunk  (cost=0.15..35.70 rows=1570 width=24)
-   ->  Foreign Scan on child_fdw_table  (cost=100.00..166.59 rows=1706 width=24)
+   ->  Index Scan Backward using _hyper_5_10_chunk_ht_try_timec_idx on _hyper_5_10_chunk
+   ->  Foreign Scan on child_fdw_table
 (4 rows)
 
 SELECT * from ht_try ORDER BY 1;
@@ -737,20 +739,20 @@ SELECT * FROM hypertable_approximate_size('ht_try');
 
 --TEST GUC variable to enable/disable OSM chunk
 SET timescaledb.enable_tiered_reads=false;
-EXPLAIN (COSTS OFF) SELECT * from ht_try;
+:EXPLAIN SELECT * from ht_try;
           QUERY PLAN           
 -------------------------------
  Seq Scan on _hyper_5_10_chunk
 (1 row)
 
-EXPLAIN (COSTS OFF) SELECT * from ht_try WHERE timec > '2022-01-01 01:00';
+:EXPLAIN SELECT * from ht_try WHERE timec > '2022-01-01 01:00';
                                     QUERY PLAN                                    
 ----------------------------------------------------------------------------------
  Index Scan using _hyper_5_10_chunk_ht_try_timec_idx on _hyper_5_10_chunk
    Index Cond: (timec > 'Sat Jan 01 01:00:00 2022 PST'::timestamp with time zone)
 (2 rows)
 
-EXPLAIN (COSTS OFF) SELECT * from ht_try WHERE timec < '2023-01-01 01:00';
+:EXPLAIN SELECT * from ht_try WHERE timec < '2023-01-01 01:00';
                                     QUERY PLAN                                    
 ----------------------------------------------------------------------------------
  Index Scan using _hyper_5_10_chunk_ht_try_timec_idx on _hyper_5_10_chunk
@@ -758,7 +760,7 @@ EXPLAIN (COSTS OFF) SELECT * from ht_try WHERE timec < '2023-01-01 01:00';
 (2 rows)
 
 SET timescaledb.enable_tiered_reads=true;
-EXPLAIN (COSTS OFF) SELECT * from ht_try;
+:EXPLAIN SELECT * from ht_try;
               QUERY PLAN               
 ---------------------------------------
  Append
@@ -767,14 +769,14 @@ EXPLAIN (COSTS OFF) SELECT * from ht_try;
 (3 rows)
 
 -- foreign chunk contains data from Jan 2020, so it is skipped during planning
-EXPLAIN (COSTS OFF) SELECT * from ht_try WHERE timec > '2022-01-01 01:00';
+:EXPLAIN SELECT * from ht_try WHERE timec > '2022-01-01 01:00';
                                     QUERY PLAN                                    
 ----------------------------------------------------------------------------------
  Index Scan using _hyper_5_10_chunk_ht_try_timec_idx on _hyper_5_10_chunk
    Index Cond: (timec > 'Sat Jan 01 01:00:00 2022 PST'::timestamp with time zone)
 (2 rows)
 
-EXPLAIN (COSTS OFF) SELECT * from ht_try WHERE timec < '2023-01-01 01:00';
+:EXPLAIN SELECT * from ht_try WHERE timec < '2023-01-01 01:00';
                                        QUERY PLAN                                       
 ----------------------------------------------------------------------------------------
  Append
@@ -803,7 +805,7 @@ DO $$
 DECLARE
     r RECORD;
 BEGIN
-	EXPLAIN UPDATE ht_try SET value = 2
+	EXPLAIN (COSTS OFF) UPDATE ht_try SET value = 2
 	WHERE acq_id = 10 AND timec > now() - '15 years'::interval INTO r;
 END
 $$ LANGUAGE plpgsql;
@@ -844,6 +846,82 @@ ERROR:  must be owner of hypertable "ht_try"
 CREATE TABLE non_ht (time bigint, temp float);
 SELECT _timescaledb_functions.attach_osm_table_chunk('non_ht', 'child_fdw_table');
 ERROR:  "non_ht" is not a hypertable
+-- TEST drop OSM chunk
+\c :TEST_DBNAME :ROLE_4
+-- We need the OSM chunk for other tests so we run the test in a single
+-- transaction so that we could roll it back in the end
+BEGIN;
+-- get OSM chunk id
+SELECT c.id as osm_chunk_id, c.table_name as osm_chunk_name, ds.id as osm_dimension_slice
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.hypertable ht ON ht.id = c.hypertable_id
+JOIN _timescaledb_catalog.chunk_constraint cc ON cc.chunk_id = c.id
+JOIN _timescaledb_catalog.dimension_slice ds ON ds.id = cc.dimension_slice_id
+WHERE ht.table_name = 'ht_try' AND osm_chunk = true \gset
+\echo :osm_chunk_id, :osm_chunk_name, :osm_dimension_slice
+11, child_fdw_table, 10
+-- drop OSM chunk
+SELECT _timescaledb_functions.drop_osm_chunk('ht_try');
+ drop_osm_chunk 
+----------------
+ t
+(1 row)
+
+-- status should be 0 meaning hypertable doesn't have an OSM chunk
+SELECT status FROM _timescaledb_catalog.hypertable WHERE table_name = 'ht_try';
+ status 
+--------
+      0
+(1 row)
+
+-- chunk, chunk_constraint and dimension slice should have been cleaned up
+SELECT FROM _timescaledb_catalog.chunk WHERE id = :osm_chunk_id;
+--
+(0 rows)
+
+SELECT FROM _timescaledb_catalog.chunk_constraint WHERE chunk_id = :osm_chunk_id;
+--
+(0 rows)
+
+SELECT FROM _timescaledb_catalog.dimension_slice WHERE id = :osm_dimension_slice;
+--
+(0 rows)
+
+-- foreign chunk no longer appears in the inheritance hierarchy
+\d+ ht_try
+                                           Table "public.ht_try"
+ Column |           Type           | Collation | Nullable | Default | Storage | Stats target | Description 
+--------+--------------------------+-----------+----------+---------+---------+--------------+-------------
+ timec  | timestamp with time zone |           | not null |         | plain   |              | 
+ acq_id | bigint                   |           |          |         | plain   |              | 
+ value  | bigint                   |           |          |         | plain   |              | 
+Indexes:
+    "ht_try_timec_idx" btree (timec DESC)
+Triggers:
+    ts_insert_blocker BEFORE INSERT ON ht_try FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker()
+Child tables: _timescaledb_internal._hyper_5_10_chunk,
+              _timescaledb_internal._hyper_5_12_chunk
+
+-- verify that still can read from the table after catalog manipulations
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM ht_try;
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Append (actual rows=3 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_5_10_chunk (actual rows=1 loops=1)
+         ->  Seq Scan on compress_hyper_6_13_chunk (actual rows=1 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_5_12_chunk (actual rows=1 loops=1)
+         ->  Seq Scan on compress_hyper_6_14_chunk (actual rows=1 loops=1)
+   ->  Seq Scan on _hyper_5_12_chunk (actual rows=1 loops=1)
+(6 rows)
+
+ROLLBACK;
+-- TEST error out when trying to drop an OSM chunk from a hypertable that
+-- doesn't have it
+SELECT _timescaledb_functions.drop_osm_chunk('test1.hyper1');
+ERROR:  chunk not found
+-- TEST error out when trying to drop an OSM chunk from a regular table
+SELECT _timescaledb_functions.drop_osm_chunk('non_ht');
+ERROR:  "non_ht" is not a hypertable or a continuous aggregate
 \set ON_ERROR_STOP 1
 -- TEST drop the hypertable and make sure foreign chunks are dropped as well --
 \c :TEST_DBNAME :ROLE_4;
@@ -942,8 +1020,11 @@ where conrelid = 'child_hyper_constr'::regclass ORDER BY 1;
 -- does not error out due to data in osm chunk
 \set ON_ERROR_STOP 0
 BEGIN;
+-- only show sqlstate here to hide constraint name difference
+\set VERBOSITY sqlstate
 DELETE FROM measure where id = 1;
-ERROR:  update or delete on table "measure" violates foreign key constraint "hyper_constr_mid_fkey" on table "hyper_constr"
+ERROR:  23503
+\set VERBOSITY terse
 ROLLBACK;
 \set ON_ERROR_STOP 1
 --this touches osm chunk. should succeed silently without deleting any data
@@ -1334,14 +1415,14 @@ WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_sl
 (3 rows)
 
 -- ordered append should be possible as ranges do not overlap
-EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
-                                                               QUERY PLAN                                                               
-----------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on test_chunkapp  (cost=0.15..270.31 rows=6355 width=12)
+:EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on test_chunkapp
    Order: test_chunkapp."time"
-   ->  Index Scan Backward using _hyper_16_26_chunk_test_chunkapp_time_idx on _hyper_16_26_chunk  (cost=0.15..42.75 rows=2040 width=12)
-   ->  Index Scan Backward using _hyper_16_27_chunk_test_chunkapp_time_idx on _hyper_16_27_chunk  (cost=0.15..42.75 rows=2040 width=12)
-   ->  Foreign Scan on test_chunkapp_fdw_child  (cost=100.00..184.80 rows=2275 width=12)
+   ->  Index Scan Backward using _hyper_16_26_chunk_test_chunkapp_time_idx on _hyper_16_26_chunk
+   ->  Index Scan Backward using _hyper_16_27_chunk_test_chunkapp_time_idx on _hyper_16_27_chunk
+   ->  Foreign Scan on test_chunkapp_fdw_child
 (5 rows)
 
 SELECT * FROM test_chunkapp ORDER BY 1;
@@ -1377,14 +1458,14 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('test_chunkapp',empty:
 (1 row)
 
 -- ordered append not possible because range is invalid and empty was not specified
-EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
-                                                               QUERY PLAN                                                               
-----------------------------------------------------------------------------------------------------------------------------------------
- Merge Append  (cost=100.33..352.47 rows=6355 width=12)
+:EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
+ Merge Append
    Sort Key: _hyper_16_26_chunk."time"
-   ->  Index Scan Backward using _hyper_16_26_chunk_test_chunkapp_time_idx on _hyper_16_26_chunk  (cost=0.15..42.75 rows=2040 width=12)
-   ->  Index Scan Backward using _hyper_16_27_chunk_test_chunkapp_time_idx on _hyper_16_27_chunk  (cost=0.15..42.75 rows=2040 width=12)
-   ->  Foreign Scan on test_chunkapp_fdw_child  (cost=100.00..184.80 rows=2275 width=12)
+   ->  Index Scan Backward using _hyper_16_26_chunk_test_chunkapp_time_idx on _hyper_16_26_chunk
+   ->  Index Scan Backward using _hyper_16_27_chunk_test_chunkapp_time_idx on _hyper_16_27_chunk
+   ->  Foreign Scan on test_chunkapp_fdw_child
 (5 rows)
 
 SELECT * FROM test_chunkapp ORDER BY 1;
@@ -1406,16 +1487,16 @@ WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_sl
 (3 rows)
 
 -- but also, OSM chunk should be included in the scan, since range is invalid and chunk is not empty
-EXPLAIN SELECT * FROM test_chunkapp WHERE time < '2023-01-01' ORDER BY 1;
-                                                              QUERY PLAN                                                               
----------------------------------------------------------------------------------------------------------------------------------------
- Merge Append  (cost=100.33..234.79 rows=2118 width=12)
+:EXPLAIN SELECT * FROM test_chunkapp WHERE time < '2023-01-01' ORDER BY 1;
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
+ Merge Append
    Sort Key: _hyper_16_26_chunk."time"
-   ->  Index Scan Backward using _hyper_16_26_chunk_test_chunkapp_time_idx on _hyper_16_26_chunk  (cost=0.15..23.05 rows=680 width=12)
+   ->  Index Scan Backward using _hyper_16_26_chunk_test_chunkapp_time_idx on _hyper_16_26_chunk
          Index Cond: ("time" < 'Sun Jan 01 00:00:00 2023 PST'::timestamp with time zone)
-   ->  Index Scan Backward using _hyper_16_27_chunk_test_chunkapp_time_idx on _hyper_16_27_chunk  (cost=0.15..23.05 rows=680 width=12)
+   ->  Index Scan Backward using _hyper_16_27_chunk_test_chunkapp_time_idx on _hyper_16_27_chunk
          Index Cond: ("time" < 'Sun Jan 01 00:00:00 2023 PST'::timestamp with time zone)
-   ->  Foreign Scan on test_chunkapp_fdw_child  (cost=100.00..161.29 rows=758 width=12)
+   ->  Foreign Scan on test_chunkapp_fdw_child
 (7 rows)
 
 SELECT * FROM test_chunkapp WHERE time < '2023-01-01' ORDER BY 1;
@@ -1436,14 +1517,14 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('test_chunkapp', NULL:
  f
 (1 row)
 
-EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
-                                                               QUERY PLAN                                                               
-----------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on test_chunkapp  (cost=0.15..270.31 rows=6355 width=12)
+:EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on test_chunkapp
    Order: test_chunkapp."time"
-   ->  Index Scan Backward using _hyper_16_26_chunk_test_chunkapp_time_idx on _hyper_16_26_chunk  (cost=0.15..42.75 rows=2040 width=12)
-   ->  Index Scan Backward using _hyper_16_27_chunk_test_chunkapp_time_idx on _hyper_16_27_chunk  (cost=0.15..42.75 rows=2040 width=12)
-   ->  Foreign Scan on test_chunkapp_fdw_child  (cost=100.00..184.80 rows=2275 width=12)
+   ->  Index Scan Backward using _hyper_16_26_chunk_test_chunkapp_time_idx on _hyper_16_26_chunk
+   ->  Index Scan Backward using _hyper_16_27_chunk_test_chunkapp_time_idx on _hyper_16_27_chunk
+   ->  Foreign Scan on test_chunkapp_fdw_child
 (5 rows)
 
 SELECT * FROM test_chunkapp ORDER BY 1;
@@ -1454,14 +1535,14 @@ SELECT * FROM test_chunkapp ORDER BY 1;
 (2 rows)
 
 -- should exclude the OSM chunk this time since it is empty
-EXPLAIN SELECT * FROM test_chunkapp WHERE time < '2023-01-01' ORDER BY 1;
-                                                              QUERY PLAN                                                               
----------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on test_chunkapp  (cost=0.15..46.11 rows=1360 width=12)
+:EXPLAIN SELECT * FROM test_chunkapp WHERE time < '2023-01-01' ORDER BY 1;
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on test_chunkapp
    Order: test_chunkapp."time"
-   ->  Index Scan Backward using _hyper_16_26_chunk_test_chunkapp_time_idx on _hyper_16_26_chunk  (cost=0.15..23.05 rows=680 width=12)
+   ->  Index Scan Backward using _hyper_16_26_chunk_test_chunkapp_time_idx on _hyper_16_26_chunk
          Index Cond: ("time" < 'Sun Jan 01 00:00:00 2023 PST'::timestamp with time zone)
-   ->  Index Scan Backward using _hyper_16_27_chunk_test_chunkapp_time_idx on _hyper_16_27_chunk  (cost=0.15..23.05 rows=680 width=12)
+   ->  Index Scan Backward using _hyper_16_27_chunk_test_chunkapp_time_idx on _hyper_16_27_chunk
          Index Cond: ("time" < 'Sun Jan 01 00:00:00 2023 PST'::timestamp with time zone)
 (6 rows)
 
@@ -1568,6 +1649,56 @@ psql:include/chunk_utils_internal_orderedappend.sql:178: ERROR:  Cannot insert i
 INSERT INTO osm_slice_update VALUES (1);
 psql:include/chunk_utils_internal_orderedappend.sql:179: ERROR:  Cannot insert into tiered chunk range of public.osm_slice_update - attempt to create new chunk with range  [0 10] failed
 \set ON_ERROR_STOP 1
+--TEST hypertable with foreign key into it
+\c :TEST_DBNAME :ROLE_4
+CREATE TABLE hyper_fk(ts timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('hyper_fk', 'ts');
+ table_name 
+------------
+ hyper_fk
+(1 row)
+
+INSERT INTO hyper_fk(ts, device, value) VALUES ('2020-01-01 00:00:00+00', 'd1', 1.0);
+\c postgres_fdw_db :ROLE_4
+CREATE TABLE fdw_hyper_fk(ts timestamptz NOT NULL, device text, value float);
+INSERT INTO fdw_hyper_fk VALUES( '2021-05-05 00:00:00+00', 'd2', 2.0);
+\c :TEST_DBNAME :ROLE_4
+-- this is a stand-in for the OSM table
+CREATE FOREIGN TABLE child_hyper_fk
+(ts timestamptz NOT NULL, device text, value float)
+ SERVER s3_server OPTIONS ( schema_name 'public', table_name 'fdw_hyper_fk');
+SELECT _timescaledb_functions.attach_osm_table_chunk('hyper_fk', 'child_hyper_fk');
+ attach_osm_table_chunk 
+------------------------
+ t
+(1 row)
+
+--create table with fk into hypertable
+CREATE TABLE event(ts timestamptz REFERENCES hyper_fk(ts) , info text);
+-- NOTE: current behavior is to allow inserts/deletes from PG tables when data
+-- references OSM table.
+--insert referencing OSM chunk
+INSERT INTO event VALUES( '2021-05-05 00:00:00+00' , 'osm_chunk_ts');
+--insert referencing non-existent value
+\set ON_ERROR_STOP 0
+INSERT INTO event VALUES( '2020-01-02 00:00:00+00' , 'does_not_exist_ts');
+ERROR:  insert or update on table "event" violates foreign key constraint "event_ts_fkey"
+\set ON_ERROR_STOP 1
+INSERT INTO event VALUES( '2020-01-01 00:00:00+00' , 'chunk_ts');
+SELECT * FROM event ORDER BY ts;
+              ts              |     info     
+------------------------------+--------------
+ Tue Dec 31 16:00:00 2019 PST | chunk_ts
+ Tue May 04 17:00:00 2021 PDT | osm_chunk_ts
+(2 rows)
+
+DELETE FROM event WHERE  info = 'osm_chunk_ts';
+DELETE FROM event WHERE  info = 'chunk_ts';
+SELECT * FROM event ORDER BY ts;
+ ts | info 
+----+------
+(0 rows)
+
 -- clean up databases created
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP DATABASE postgres_fdw_db WITH (FORCE);

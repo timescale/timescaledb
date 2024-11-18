@@ -1,6 +1,7 @@
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
+SET enable_seqscan TO off;
 \ir include/insert_two_partitions.sql
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
@@ -326,15 +327,15 @@ SELECT 1 \g | grep -v "Planning" | grep -v "Execution"
 
 -- INSERTs can exclude chunks based on constraints
 EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail;
-                      QUERY PLAN                       
--------------------------------------------------------
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
  Custom Scan (HypertableModify)
    ->  Insert on chunk_assert_fail
          ->  Custom Scan (ChunkDispatch)
                ->  Append
-                     ->  Seq Scan on _hyper_5_11_chunk
-                     ->  Seq Scan on _hyper_5_12_chunk
-                     ->  Seq Scan on _hyper_5_13_chunk
+                     ->  Index Only Scan using _hyper_5_11_chunk_chunk_assert_fail_j_i_idx on _hyper_5_11_chunk
+                     ->  Index Only Scan using _hyper_5_12_chunk_chunk_assert_fail_j_i_idx on _hyper_5_12_chunk
+                     ->  Index Only Scan using _hyper_5_13_chunk_chunk_assert_fail_j_i_idx on _hyper_5_13_chunk
 (7 rows)
 
 EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i < 1;
@@ -616,16 +617,16 @@ WHERE NOT EXISTS (
 	WHERE sensor_id = 1
 		AND toe = '2020-05-09 10:34:35.296288+00'
 );
-                  QUERY PLAN                   
------------------------------------------------
+                          QUERY PLAN                          
+--------------------------------------------------------------
  Custom Scan (HypertableModify)
-   InitPlan 1 (returns $0)
+   InitPlan 1
      ->  Result
            One-Time Filter: false
    ->  Insert on readings
          ->  Custom Scan (ChunkDispatch)
                ->  Result
-                     One-Time Filter: (NOT $0)
+                     One-Time Filter: (NOT (InitPlan 1).col1)
 (8 rows)
 
 INSERT INTO readings

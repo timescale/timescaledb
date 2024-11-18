@@ -30,7 +30,7 @@ SELECT * FROM alter_before;
 -- Show that deleted column is marked as dropped and that attnums are
 -- now different for the root table and the chunk
 -- PG17 made attstattarget NULLABLE and changed the default from -1 to NULL
-SELECT c.relname, a.attname, a.attnum, a.attoptions, CASE WHEN a.attstattarget = -1 THEN NULL ELSE a.attstattarget END attstattarget, a.attstorage FROM pg_attribute a, pg_class c
+SELECT c.relname, a.attname, a.attnum, a.attoptions, CASE WHEN a.attstattarget = -1 OR (a.attisdropped AND a.attstattarget = 0) THEN NULL ELSE a.attstattarget END attstattarget, a.attstorage FROM pg_attribute a, pg_class c
 WHERE a.attrelid = c.oid
 AND (c.relname LIKE '_hyper_1%_chunk' OR c.relname = 'alter_before')
 AND a.attnum > 0
@@ -42,7 +42,7 @@ ORDER BY c.relname, a.attnum;
  _hyper_1_1_chunk | colorid                      |      3 |                 |               | p
  _hyper_1_1_chunk | notes                        |      4 |                 |               | e
  _hyper_1_1_chunk | notes_2                      |      5 |                 |               | x
- alter_before     | ........pg.dropped.1........ |      1 |                 |             0 | p
+ alter_before     | ........pg.dropped.1........ |      1 |                 |               | p
  alter_before     | time                         |      2 |                 |               | p
  alter_before     | temp                         |      3 | {n_distinct=10} |           100 | p
  alter_before     | colorid                      |      4 |                 |               | p
@@ -128,14 +128,14 @@ ALTER TABLE  _timescaledb_internal._hyper_2_4_chunk ALTER COLUMN temp SET (n_dis
 ALTER TABLE  _timescaledb_internal._hyper_2_4_chunk ALTER COLUMN temp SET STATISTICS 201;
 ALTER TABLE  _timescaledb_internal._hyper_2_4_chunk ALTER COLUMN notes SET STORAGE EXTERNAL;
 -- PG17 made attstattarget NULLABLE and changed the default from -1 to NULL
-SELECT c.relname, a.attname, a.attnum, a.attoptions, CASE WHEN a.attstattarget = -1 THEN NULL ELSE a.attstattarget END attstattarget, a.attstorage FROM pg_attribute a, pg_class c
+SELECT c.relname, a.attname, a.attnum, a.attoptions, CASE WHEN a.attstattarget = -1 OR (a.attisdropped AND a.attstattarget = 0) THEN NULL ELSE a.attstattarget END attstattarget, a.attstorage FROM pg_attribute a, pg_class c
 WHERE a.attrelid = c.oid
 AND (c.relname LIKE '_hyper_2%_chunk' OR c.relname = 'alter_after')
 AND a.attnum > 0
 ORDER BY c.relname, a.attnum;
      relname      |           attname            | attnum |   attoptions    | attstattarget | attstorage 
 ------------------+------------------------------+--------+-----------------+---------------+------------
- _hyper_2_2_chunk | ........pg.dropped.1........ |      1 |                 |             0 | p
+ _hyper_2_2_chunk | ........pg.dropped.1........ |      1 |                 |               | p
  _hyper_2_2_chunk | time                         |      2 |                 |               | p
  _hyper_2_2_chunk | temp                         |      3 | {n_distinct=10} |               | p
  _hyper_2_2_chunk | colorid                      |      4 |                 |           101 | p
@@ -154,7 +154,7 @@ ORDER BY c.relname, a.attnum;
  _hyper_2_4_chunk | notes                        |      4 |                 |               | e
  _hyper_2_4_chunk | notes_2                      |      5 |                 |               | e
  _hyper_2_4_chunk | id                           |      6 |                 |               | p
- alter_after      | ........pg.dropped.1........ |      1 |                 |             0 | p
+ alter_after      | ........pg.dropped.1........ |      1 |                 |               | p
  alter_after      | time                         |      2 |                 |               | p
  alter_after      | temp                         |      3 | {n_distinct=10} |               | p
  alter_after      | colorid                      |      4 |                 |           101 | p

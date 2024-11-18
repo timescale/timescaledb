@@ -2,13 +2,6 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-
-SELECT _timescaledb_functions.stop_background_workers();
-
--- Cleanup any system job stats that can lead to flaky test
-DELETE FROM _timescaledb_internal.bgw_job_stat_history WHERE job_id < 1000;
-DELETE FROM _timescaledb_internal.bgw_job_stat WHERE job_id < 1000;
-
 CREATE SCHEMA IF NOT EXISTS test;
 GRANT USAGE ON SCHEMA test TO PUBLIC;
 
@@ -336,6 +329,27 @@ BEGIN
         END IF;
     END LOOP;
     RAISE INFO 'wait_for_job_to_run: timeout after % tries', spins;
+    RETURN false;
+END
+$BODY$;
+
+-- Wait for job to run or fail
+CREATE OR REPLACE FUNCTION test.wait_for_job_to_run_or_fail(job_param_id INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS)
+RETURNS BOOLEAN LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR i in 1..spins
+    LOOP
+        SELECT total_runs FROM _timescaledb_internal.bgw_job_stat WHERE job_id=job_param_id INTO r;
+        IF (r.total_runs > 0) THEN
+            RETURN true;
+        ELSE
+            PERFORM pg_sleep(0.1);
+        END IF;
+    END LOOP;
+    RAISE INFO 'wait_for_job_to_run_or_fail: timeout after % tries', spins;
     RETURN false;
 END
 $BODY$;

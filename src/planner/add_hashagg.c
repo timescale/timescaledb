@@ -142,6 +142,10 @@ ts_plan_add_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output
 	PathTarget *target = root->upper_targets[UPPERREL_GROUP_AGG];
 	bool try_parallel_aggregation;
 
+	/* Custom HashAgg is disabled by default */
+	if (!ts_guc_enable_custom_hashagg)
+		return;
+
 	if (parse->groupingSets || !parse->hasAggs || parse->groupClause == NIL)
 		return;
 

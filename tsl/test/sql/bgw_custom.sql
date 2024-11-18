@@ -549,7 +549,7 @@ INSERT INTO sensor_data
 		random() AS cpu,
 		random()* 100 AS temperature
 	FROM
-		generate_series(:'start_date_sd'::timestamptz - INTERVAL '1 months', :'start_date_sd'::timestamptz - INTERVAL '1 week', INTERVAL '1 minute') AS g1(time),
+		generate_series(:'start_date_sd'::timestamptz - INTERVAL '1 months', :'start_date_sd'::timestamptz - INTERVAL '1 week', INTERVAL '30 minute') AS g1(time),
 		generate_series(1, 50, 1 ) AS g2(sensor_id)
 	ORDER BY
 		time;
@@ -565,7 +565,7 @@ INSERT INTO sensor_data
 		random() AS cpu,
 		random()* 100 AS temperature
 	FROM
-		generate_series(:'start_date_sd'::timestamptz - INTERVAL '2 months', :'start_date_sd'::timestamptz - INTERVAL '2 week', INTERVAL '2 minute') AS g1(time),
+		generate_series(:'start_date_sd'::timestamptz - INTERVAL '2 months', :'start_date_sd'::timestamptz - INTERVAL '2 week', INTERVAL '60 minute') AS g1(time),
 		generate_series(1, 30, 1 ) AS g2(sensor_id)
 	ORDER BY
 		time;
@@ -665,7 +665,44 @@ SELECT _timescaledb_functions.stop_background_workers();
 CALL wait_for_job_status(:job_id_1, 'Scheduled');
 CALL wait_for_job_status(:job_id_2, 'Scheduled');
 CALL wait_for_job_status(:job_id_3, 'Scheduled');
+
 SELECT delete_job(:job_id_1);
 SELECT delete_job(:job_id_2);
 SELECT delete_job(:job_id_3);
 
+CREATE OR REPLACE FUNCTION ts_test_bgw_job_function_call_string(job_id INTEGER) RETURNS text
+AS :MODULE_PATHNAME LANGUAGE C STABLE STRICT;
+
+\set ON_ERROR_STOP 0
+SELECT ts_test_bgw_job_function_call_string(999999);
+\set ON_ERROR_STOP 1
+
+SELECT add_job('custom_func', '1h') AS job_func \gset
+SELECT add_job('custom_proc', '1h') AS job_proc \gset
+
+SELECT ts_test_bgw_job_function_call_string(:job_func);
+SELECT ts_test_bgw_job_function_call_string(:job_proc);
+
+SELECT delete_job(:job_func);
+SELECT delete_job(:job_proc);
+
+SELECT add_job('custom_func', '1h', config => '{"type":"function"}'::jsonb) AS job_func \gset
+SELECT add_job('custom_proc', '1h', config => '{"type":"procedure"}'::jsonb) AS job_proc \gset
+
+SELECT ts_test_bgw_job_function_call_string(:job_func);
+SELECT ts_test_bgw_job_function_call_string(:job_proc);
+
+-- Remove the procedure and let's check it fallingback to PROKIND_FUNCTION
+DROP PROCEDURE custom_proc(jobid int, args jsonb);
+SELECT ts_test_bgw_job_function_call_string(:job_proc);
+
+\set ON_ERROR_STOP 0
+-- Mess with pg catalog to don't identify the PROKIND
+BEGIN;
+UPDATE pg_catalog.pg_proc SET prokind = 'X' WHERE oid = 'custom_func(int,jsonb)'::regprocedure;
+SELECT ts_test_bgw_job_function_call_string(:job_func);
+ROLLBACK;
+\set ON_ERROR_STOP 1
+
+SELECT delete_job(:job_func);
+SELECT delete_job(:job_proc);

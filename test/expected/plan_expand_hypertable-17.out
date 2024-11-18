@@ -822,30 +822,30 @@ joins
 (7 rows)
 
 :PREFIX SELECT * FROM hyper_ts WHERE tag_id IN (SELECT id FROM tag WHERE tag.id=1) or (time < to_timestamp(10) and device_id = 'dev1') ORDER BY value;
-                                                                     QUERY PLAN                                                                     
-----------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                QUERY PLAN                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Sort Key: hyper_ts.value
    ->  Custom Scan (ChunkAppend) on hyper_ts
          ->  Seq Scan on _hyper_3_116_chunk
-               Filter: ((hashed SubPlan 1) OR (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text)))
+               Filter: ((ANY (tag_id = (hashed SubPlan 1).col1)) OR (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text)))
                SubPlan 1
                  ->  Seq Scan on tag
                        Filter: (id = 1)
          ->  Seq Scan on _hyper_3_117_chunk
-               Filter: ((hashed SubPlan 1) OR (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text)))
+               Filter: ((ANY (tag_id = (hashed SubPlan 1).col1)) OR (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text)))
          ->  Seq Scan on _hyper_3_118_chunk
-               Filter: ((hashed SubPlan 1) OR (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text)))
+               Filter: ((ANY (tag_id = (hashed SubPlan 1).col1)) OR (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text)))
          ->  Seq Scan on _hyper_3_119_chunk
-               Filter: ((hashed SubPlan 1) OR (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text)))
+               Filter: ((ANY (tag_id = (hashed SubPlan 1).col1)) OR (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text)))
          ->  Seq Scan on _hyper_3_120_chunk
-               Filter: ((hashed SubPlan 1) OR (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text)))
+               Filter: ((ANY (tag_id = (hashed SubPlan 1).col1)) OR (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text)))
          ->  Seq Scan on _hyper_3_121_chunk
-               Filter: ((hashed SubPlan 1) OR (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text)))
+               Filter: ((ANY (tag_id = (hashed SubPlan 1).col1)) OR (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text)))
          ->  Seq Scan on _hyper_3_122_chunk
-               Filter: ((hashed SubPlan 1) OR (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text)))
+               Filter: ((ANY (tag_id = (hashed SubPlan 1).col1)) OR (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text)))
          ->  Seq Scan on _hyper_3_123_chunk
-               Filter: ((hashed SubPlan 1) OR (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text)))
+               Filter: ((ANY (tag_id = (hashed SubPlan 1).col1)) OR (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text)))
 (22 rows)
 
 :PREFIX SELECT * FROM hyper_ts WHERE tag_id IN (SELECT id FROM tag WHERE tag.name='tag1') and time < to_timestamp(10) and device_id = 'dev1' ORDER BY value;

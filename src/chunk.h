@@ -66,6 +66,7 @@ typedef struct Chunk
 	char relkind;
 	Oid table_id;
 	Oid hypertable_relid;
+	Oid amoid; /* Table access method used by chunk */
 
 	/*
 	 * The hypercube defines the chunks position in the N-dimensional space.
@@ -177,11 +178,12 @@ extern TSDLLEXPORT void ts_chunk_free(Chunk *chunk);
 extern bool ts_chunk_exists(const char *schema_name, const char *table_name);
 extern TSDLLEXPORT int32 ts_chunk_get_hypertable_id_by_reloid(Oid reloid);
 extern TSDLLEXPORT FormData_chunk ts_chunk_get_formdata(int32 chunk_id);
-extern bool ts_chunk_simple_scan_by_reloid(Oid reloid, FormData_chunk *form, bool missing_ok);
+extern TSDLLEXPORT bool ts_chunk_simple_scan_by_reloid(Oid reloid, FormData_chunk *form,
+													   bool missing_ok);
 extern TSDLLEXPORT Oid ts_chunk_get_relid(int32 chunk_id, bool missing_ok);
 extern Oid ts_chunk_get_schema_id(int32 chunk_id, bool missing_ok);
-extern bool ts_chunk_get_id(const char *schema, const char *table, int32 *chunk_id,
-							bool missing_ok);
+extern TSDLLEXPORT bool ts_chunk_get_id(const char *schema, const char *table, int32 *chunk_id,
+										bool missing_ok);
 extern bool ts_chunk_exists_relid(Oid relid);
 extern TSDLLEXPORT bool ts_chunk_exists_with_compression(int32 hypertable_id);
 extern void ts_chunk_recreate_all_constraints_for_dimension(Hypertable *ht, int32 dimension_id);
@@ -276,19 +278,9 @@ extern TSDLLEXPORT void ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk 
  */
 #define CHUNK_STATUS_DEFAULT 0
 /*
- * Setting a Data-Node chunk as CHUNK_STATUS_COMPRESSED means that the corresponding
+ * Setting a chunk status field as CHUNK_STATUS_COMPRESSED means that the corresponding
  * compressed_chunk_id field points to a chunk that holds the compressed data. Otherwise,
  * the corresponding compressed_chunk_id is NULL.
- *
- * However, for Access-Nodes compressed_chunk_id is always NULL. CHUNK_STATUS_COMPRESSED being set
- * means that a remote compress_chunk() operation has taken place for this distributed
- * meta-chunk. On the other hand, if CHUNK_STATUS_COMPRESSED is cleared, then it is probable
- * that a remote compress_chunk() has not taken place, but not certain.
- *
- * For the above reason, this flag should not be assumed to be consistent (when it is cleared)
- * for Access-Nodes. When used in distributed hypertables one should take advantage of the
- * idempotent properties of remote compress_chunk() and distributed compression policy to
- * make progress.
  */
 #define CHUNK_STATUS_COMPRESSED 1
 /*

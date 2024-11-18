@@ -12,14 +12,44 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 
-#include "exec.h"
+#include "nodes/vector_agg/exec.h"
 
 #include "compression/arrow_c_data_interface.h"
-#include "functions.h"
 #include "guc.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/vector_agg.h"
+
+static int
+get_input_offset(DecompressChunkState *decompress_state, Var *var)
+{
+	DecompressContext *dcontext = &decompress_state->decompress_context;
+
+	CompressionColumnDescription *value_column_description = NULL;
+	for (int i = 0; i < dcontext->num_data_columns; i++)
+	{
+		/*
+		 * See the column lookup in compute_plain_qual() for the discussion of
+		 * which attribute numbers occur where. At the moment here it is
+		 * uncompressed_scan_attno, but it might be an oversight of not rewriting
+		 * the references into INDEX_VAR (or OUTER_VAR...?) when we create the
+		 * VectorAgg node.
+		 */
+		CompressionColumnDescription *current_column = &dcontext->compressed_chunk_columns[i];
+		if (current_column->uncompressed_chunk_attno == var->varattno)
+		{
+			value_column_description = current_column;
+			break;
+		}
+	}
+	Ensure(value_column_description != NULL, "aggregated compressed column not found");
+
+	Assert(value_column_description->type == COMPRESSED_COLUMN ||
+		   value_column_description->type == SEGMENTBY_COLUMN);
+
+	const int index = value_column_description - dcontext->compressed_chunk_columns;
+	return index;
+}
 
 static void
 vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
@@ -27,6 +57,117 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 	CustomScan *cscan = castNode(CustomScan, node->ss.ps.plan);
 	node->custom_ps =
 		lappend(node->custom_ps, ExecInitNode(linitial(cscan->custom_plans), estate, eflags));
+
+	VectorAggState *vector_agg_state = (VectorAggState *) node;
+	vector_agg_state->input_ended = false;
+
+	DecompressChunkState *decompress_state =
+		(DecompressChunkState *) linitial(vector_agg_state->custom.custom_ps);
+
+	/*
+	 * The aggregated targetlist with Aggrefs is in the custom scan targetlist
+	 * of the custom scan node that is performing the vectorized aggregation.
+	 * We do this to avoid projections at this node, because the postgres
+	 * projection functions complain when they see an Aggref in a custom
+	 * node output targetlist.
+	 * The output targetlist, in turn, consists of just the INDEX_VAR references
+	 * into the custom_scan_tlist.
+	 * Now, iterate through the aggregated targetlist to collect aggregates and
+	 * output grouping columns.
+	 */
+	List *aggregated_tlist =
+		castNode(CustomScan, vector_agg_state->custom.ss.ps.plan)->custom_scan_tlist;
+	const int tlist_length = list_length(aggregated_tlist);
+
+	/*
+	 * First, count how many grouping columns and aggregate functions we have.
+	 */
+	int agg_functions_counter = 0;
+	int grouping_column_counter = 0;
+	for (int i = 0; i < tlist_length; i++)
+	{
+		TargetEntry *tlentry = list_nth_node(TargetEntry, aggregated_tlist, i);
+		if (IsA(tlentry->expr, Aggref))
+		{
+			agg_functions_counter++;
+		}
+		else
+		{
+			/* This is a grouping column. */
+			Assert(IsA(tlentry->expr, Var));
+			grouping_column_counter++;
+		}
+	}
+	Assert(agg_functions_counter + grouping_column_counter == tlist_length);
+
+	/*
+	 * Allocate the storage for definitions of aggregate function and grouping
+	 * columns.
+	 */
+	vector_agg_state->num_agg_defs = agg_functions_counter;
+	vector_agg_state->agg_defs =
+		palloc0(sizeof(*vector_agg_state->agg_defs) * vector_agg_state->num_agg_defs);
+
+	vector_agg_state->num_grouping_columns = grouping_column_counter;
+	vector_agg_state->grouping_columns = palloc0(sizeof(*vector_agg_state->grouping_columns) *
+												 vector_agg_state->num_grouping_columns);
+
+	/*
+	 * Loop through the aggregated targetlist again and fill the definitions.
+	 */
+	agg_functions_counter = 0;
+	grouping_column_counter = 0;
+	for (int i = 0; i < tlist_length; i++)
+	{
+		TargetEntry *tlentry = list_nth_node(TargetEntry, aggregated_tlist, i);
+		if (IsA(tlentry->expr, Aggref))
+		{
+			/* This is an aggregate function. */
+			VectorAggDef *def = &vector_agg_state->agg_defs[agg_functions_counter++];
+			def->output_offset = i;
+
+			Aggref *aggref = castNode(Aggref, tlentry->expr);
+
+			VectorAggFunctions *func = get_vector_aggregate(aggref->aggfnoid);
+			Assert(func != NULL);
+			def->func = *func;
+
+			if (list_length(aggref->args) > 0)
+			{
+				Assert(list_length(aggref->args) == 1);
+
+				/* The aggregate should be a partial aggregate */
+				Assert(aggref->aggsplit == AGGSPLIT_INITIAL_SERIAL);
+
+				Var *var = castNode(Var, castNode(TargetEntry, linitial(aggref->args))->expr);
+				def->input_offset = get_input_offset(decompress_state, var);
+			}
+			else
+			{
+				def->input_offset = -1;
+			}
+		}
+		else
+		{
+			/* This is a grouping column. */
+			Assert(IsA(tlentry->expr, Var));
+
+			GroupingColumn *col = &vector_agg_state->grouping_columns[grouping_column_counter++];
+			col->output_offset = i;
+
+			Var *var = castNode(Var, tlentry->expr);
+			col->input_offset = get_input_offset(decompress_state, var);
+		}
+	}
+
+	/*
+	 * Currently the only grouping policy we use is per-batch grouping.
+	 */
+	vector_agg_state->grouping =
+		create_grouping_policy_batch(vector_agg_state->num_agg_defs,
+									 vector_agg_state->agg_defs,
+									 vector_agg_state->num_grouping_columns,
+									 vector_agg_state->grouping_columns);
 }
 
 static void
@@ -42,143 +183,141 @@ vector_agg_rescan(CustomScanState *node)
 		UpdateChangedParamSet(linitial(node->custom_ps), node->ss.ps.chgParam);
 
 	ExecReScan(linitial(node->custom_ps));
+
+	VectorAggState *state = (VectorAggState *) node;
+	state->input_ended = false;
+
+	state->grouping->gp_reset(state->grouping);
 }
 
 static TupleTableSlot *
-vector_agg_exec(CustomScanState *vector_agg_state)
+vector_agg_exec(CustomScanState *node)
 {
-	DecompressChunkState *decompress_state =
-		(DecompressChunkState *) linitial(vector_agg_state->custom_ps);
+	VectorAggState *vector_agg_state = (VectorAggState *) node;
+
+	TupleTableSlot *aggregated_slot = vector_agg_state->custom.ss.ps.ps_ResultTupleSlot;
+	ExecClearTuple(aggregated_slot);
+
+	GroupingPolicy *grouping = vector_agg_state->grouping;
+	if (grouping->gp_do_emit(grouping, aggregated_slot))
+	{
+		/* The grouping policy produced a partial aggregation result. */
+		return ExecStoreVirtualTuple(aggregated_slot);
+	}
+
+	if (vector_agg_state->input_ended)
+	{
+		/*
+		 * The partial aggregation results have ended, and the input has ended,
+		 * so we're done.
+		 */
+		return NULL;
+	}
 
 	/*
-	 * The aggregated targetlist with Aggrefs is in the custom scan targetlist
-	 * of the custom scan node that is performing the vectorized aggregation.
-	 * We do this to avoid projections at this node, because the postgres
-	 * projection functions complain when they see an Aggref in a custom
-	 * node output targetlist.
-	 * The output targetlist, in turn, consists of just the INDEX_VAR references
-	 * into the custom_scan_tlist.
+	 * Have no more partial aggregation results and still have input, have to
+	 * reset the grouping policy and start a new cycle of partial aggregation.
 	 */
-	List *aggregated_tlist = castNode(CustomScan, vector_agg_state->ss.ps.plan)->custom_scan_tlist;
-	Assert(list_length(aggregated_tlist) == 1);
+	grouping->gp_reset(grouping);
 
-	/* Checked by planner */
-	Assert(ts_guc_enable_vectorized_aggregation);
-	Assert(ts_guc_enable_bulk_decompression);
-
-	/* Determine which kind of vectorized aggregation we should perform */
-	TargetEntry *tlentry = (TargetEntry *) linitial(aggregated_tlist);
-	Assert(IsA(tlentry->expr, Aggref));
-	Aggref *aggref = castNode(Aggref, tlentry->expr);
-
-	Assert(list_length(aggref->args) == 1);
-
-	/* The aggregate should be a partial aggregate */
-	Assert(aggref->aggsplit == AGGSPLIT_INITIAL_SERIAL);
-
-	Var *var = castNode(Var, castNode(TargetEntry, linitial(aggref->args))->expr);
+	DecompressChunkState *decompress_state =
+		(DecompressChunkState *) linitial(vector_agg_state->custom.custom_ps);
 
 	DecompressContext *dcontext = &decompress_state->decompress_context;
-
-	CompressionColumnDescription *value_column_description = NULL;
-	for (int i = 0; i < dcontext->num_data_columns; i++)
-	{
-		CompressionColumnDescription *current_column = &dcontext->compressed_chunk_columns[i];
-		if (current_column->uncompressed_chunk_attno == var->varattno)
-		{
-			value_column_description = current_column;
-			break;
-		}
-	}
-	Ensure(value_column_description != NULL, "aggregated compressed column not found");
-
-	Assert(value_column_description->type == COMPRESSED_COLUMN ||
-		   value_column_description->type == SEGMENTBY_COLUMN);
 
 	BatchQueue *batch_queue = decompress_state->batch_queue;
 	DecompressBatchState *batch_state = batch_array_get_at(&batch_queue->batch_array, 0);
 
-	/* Get a reference the the output TupleTableSlot */
-	TupleTableSlot *aggregated_slot = vector_agg_state->ss.ps.ps_ResultTupleSlot;
-	Assert(aggregated_slot->tts_tupleDescriptor->natts == 1);
-
-	VectorAggregate *agg = get_vector_aggregate(aggref->aggfnoid);
-	Assert(agg != NULL);
-
-	agg->agg_init(&aggregated_slot->tts_values[0], &aggregated_slot->tts_isnull[0]);
-	ExecClearTuple(aggregated_slot);
-
 	/*
-	 * Have to skip the batches that are fully filtered out. This condition also
-	 * handles the batch that was consumed on the previous step.
+	 * Now we loop through the input compressed tuples, until they end or until
+	 * the grouping policy asks us to emit partials.
 	 */
-	while (batch_state->next_batch_row >= batch_state->total_batch_rows)
+	while (!grouping->gp_should_emit(grouping))
 	{
+		/*
+		 * We discard the previous compressed batch here and not earlier,
+		 * because the grouping column values returned by the batch grouping
+		 * policy are owned by the compressed batch memory context. This is done
+		 * to avoid generic value copying in the grouping policy to simplify its
+		 * code.
+		 */
+		compressed_batch_discard_tuples(batch_state);
+
 		TupleTableSlot *compressed_slot =
 			ExecProcNode(linitial(decompress_state->csstate.custom_ps));
 
 		if (TupIsNull(compressed_slot))
 		{
-			/* All values are processed. */
-			return NULL;
+			/* The input has ended. */
+			vector_agg_state->input_ended = true;
+			break;
 		}
 
 		compressed_batch_set_compressed_tuple(dcontext, batch_state, compressed_slot);
+
+		if (batch_state->next_batch_row >= batch_state->total_batch_rows)
+		{
+			/* This batch was fully filtered out. */
+			continue;
+		}
+
+		/*
+		 * Count rows filtered out by vectorized filters for EXPLAIN. Normally
+		 * this is done in tuple-by-tuple interface of DecompressChunk, so that
+		 * it doesn't say it filtered out more rows that were returned (e.g.
+		 * with LIMIT). Here we always work in full batches. The batches that
+		 * were fully filtered out, and their rows, were already counted in
+		 * compressed_batch_set_compressed_tuple().
+		 */
+		const int not_filtered_rows =
+			arrow_num_valid(batch_state->vector_qual_result, batch_state->total_batch_rows);
+		InstrCountFiltered1(dcontext->ps, batch_state->total_batch_rows - not_filtered_rows);
+		if (dcontext->ps->instrument)
+		{
+			/*
+			 * These values are normally updated by InstrStopNode(), and are
+			 * required so that the calculations in InstrEndLoop() run properly.
+			 */
+			dcontext->ps->instrument->running = true;
+			dcontext->ps->instrument->tuplecount += not_filtered_rows;
+		}
+
+		grouping->gp_add_batch(grouping, batch_state);
 	}
 
-	ArrowArray *arrow = NULL;
-	if (value_column_description->type == COMPRESSED_COLUMN)
+	if (grouping->gp_do_emit(grouping, aggregated_slot))
 	{
-		Assert(dcontext->enable_bulk_decompression);
-		Assert(value_column_description->bulk_decompression_supported);
-		CompressedColumnValues *values =
-			&batch_state->compressed_columns[value_column_description -
-											 dcontext->compressed_chunk_columns];
-		Assert(values->decompression_type != DT_Invalid);
-		arrow = values->arrow;
-	}
-	else
-	{
-		Assert(value_column_description->type == SEGMENTBY_COLUMN);
+		/* Have partial aggregation results. */
+		return ExecStoreVirtualTuple(aggregated_slot);
 	}
 
-	if (arrow == NULL)
+	if (vector_agg_state->input_ended)
 	{
 		/*
-		 * To calculate the sum for a segment by value or default compressed
-		 * column value, we need to multiply this value with the number of
-		 * passing decompressed tuples in this batch.
+		 * Have no partial aggregation results and the input has ended, so we're
+		 * done. We can get here only if we had no input at all, otherwise the
+		 * grouping policy would have produced some partials above.
 		 */
-		const int n =
-			arrow_num_valid(batch_state->vector_qual_result, batch_state->total_batch_rows);
-		Assert(n > 0);
-
-		int offs = AttrNumberGetAttrOffset(value_column_description->custom_scan_attno);
-		agg->agg_const(batch_state->decompressed_scan_slot_data.base.tts_values[offs],
-					   batch_state->decompressed_scan_slot_data.base.tts_isnull[offs],
-					   n,
-					   &aggregated_slot->tts_values[0],
-					   &aggregated_slot->tts_isnull[0]);
-	}
-	else
-	{
-		agg->agg_vector(arrow,
-						batch_state->vector_qual_result,
-						&aggregated_slot->tts_values[0],
-						&aggregated_slot->tts_isnull[0]);
+		return NULL;
 	}
 
-	compressed_batch_discard_tuples(batch_state);
-
-	ExecStoreVirtualTuple(aggregated_slot);
-
-	return aggregated_slot;
+	/*
+	 * We cannot get here. This would mean we still have input, and the
+	 * grouping policy asked us to stop but couldn't produce any partials.
+	 */
+	Assert(false);
+	pg_unreachable();
+	return NULL;
 }
 
 static void
 vector_agg_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
-	/* No additional output is needed. */
+	VectorAggState *state = (VectorAggState *) node;
+	if (es->verbose || es->format != EXPLAIN_FORMAT_TEXT)
+	{
+		ExplainPropertyText("Grouping Policy", state->grouping->gp_explain(state->grouping), es);
+	}
 }
 
 static struct CustomExecMethods exec_methods = {
@@ -193,7 +332,7 @@ static struct CustomExecMethods exec_methods = {
 Node *
 vector_agg_state_create(CustomScan *cscan)
 {
-	CustomScanState *state = makeNode(CustomScanState);
-	state->methods = &exec_methods;
+	VectorAggState *state = (VectorAggState *) newNode(sizeof(VectorAggState), T_CustomScanState);
+	state->custom.methods = &exec_methods;
 	return (Node *) state;
 }

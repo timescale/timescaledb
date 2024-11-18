@@ -80,6 +80,9 @@ propagate_fk(Relation ht_rel, HeapTuple fk_tuple, List *chunks)
 	foreach (lc, chunks)
 	{
 		Chunk *chunk = lfirst(lc);
+		if (chunk->fd.osm_chunk)
+			continue;
+
 		clone_constraint_on_chunk(chunk,
 								  ht_rel,
 								  fk,
@@ -547,7 +550,6 @@ get_fk_index(Relation rel, int nkeys, AttrNumber *confkeys)
 	{
 		Oid indexoid = lfirst_oid(lc);
 		Relation indexrel = index_open(indexoid, AccessShareLock);
-		bool match = true;
 
 		if (!indexrel->rd_index->indisunique || indexrel->rd_index->indnkeyatts != nkeys)
 		{
@@ -555,15 +557,25 @@ get_fk_index(Relation rel, int nkeys, AttrNumber *confkeys)
 			continue;
 		}
 
+		Bitmapset *con_keys = NULL;
+		Bitmapset *ind_keys = NULL;
+
 		for (int i = 0; i < nkeys; i++)
 		{
-			if (indexrel->rd_index->indkey.values[i] != confkeys[i])
-			{
-				match = false;
-			}
+			/*
+			 * Since ordering of the constraint definition and index definition can differ,
+			 * we need to check that all the columns in the constraint are present in the index
+			 */
+			con_keys = bms_add_member(con_keys, confkeys[i]);
+			ind_keys = bms_add_member(ind_keys, indexrel->rd_index->indkey.values[i]);
 		}
 
+		bool match = bms_equal(con_keys, ind_keys);
+
 		index_close(indexrel, AccessShareLock);
+		bms_free(con_keys);
+		bms_free(ind_keys);
+
 		if (match)
 		{
 			return indexoid;

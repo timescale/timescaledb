@@ -175,81 +175,6 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 	return restriction_added;
 }
 
-/*
- * for DIMENSION_TYPE_STATS entries, we need to use regular bounded strategies.
- * We can have multiple entries satisfying the inputs. It basically becomes a
- * problem of:
- *
- * "given an input value, find all ranges which encompass that value"
- *
- * For "column >= constant" (e.g id >= 9), the check has to be:
- *
- * start_range >= 9 OR end_range >= 9 (second check covers +INF)
- *
- * For "column <= constant" (e.g id <= 90), the check has to be:
- *
- * start_range <= 90 OR end_range <= 90 (first check covers -INF)
- *
- * For "column == constant" (e.g id = 9)
- *
- * start_range <= 9 OR end_range >= 9 (covers +INF to -INF)
- */
-static bool
-dimension_restrict_info_range_add(DimensionRestrictInfoOpen *dri, StrategyNumber strategy,
-								  Oid collation, DimensionValues *dimvalues)
-{
-	ListCell *item;
-	bool restriction_added = false;
-
-	/* can't handle IN/ANY with multiple values */
-	if (dimvalues->use_or && list_length(dimvalues->values) > 1)
-		return false;
-
-	foreach (item, dimvalues->values)
-	{
-		Oid restype;
-		Datum datum = ts_dimension_transform_value(dri->base.dimension,
-												   collation,
-												   PointerGetDatum(lfirst(item)),
-												   dimvalues->type,
-												   &restype);
-		int64 value = ts_time_value_to_internal_or_infinite(datum, restype);
-
-		switch (strategy)
-		{
-			case BTLessEqualStrategyNumber:
-			case BTLessStrategyNumber: /* e.g: id <= 90 */
-				if (dri->upper_strategy == InvalidStrategy || value < dri->upper_bound)
-				{
-					dri->upper_strategy = strategy;
-					dri->upper_bound = value;
-					restriction_added = true;
-				}
-				break;
-			case BTGreaterEqualStrategyNumber:
-			case BTGreaterStrategyNumber: /* e.g: id >= 9 */
-				if (dri->lower_strategy == InvalidStrategy || value > dri->lower_bound)
-				{
-					dri->lower_strategy = strategy;
-					dri->lower_bound = value;
-					restriction_added = true;
-				}
-				break;
-			case BTEqualStrategyNumber: /* e.g: id = 9 */
-				dri->lower_bound = value;
-				dri->upper_bound = value;
-				dri->lower_strategy = BTEqualStrategyNumber;
-				dri->upper_strategy = BTEqualStrategyNumber;
-				restriction_added = true;
-				break;
-			default:
-				/* unsupported strategy */
-				break;
-		}
-	}
-	return restriction_added;
-}
-
 static List *
 dimension_restrict_info_get_partitions(DimensionRestrictInfoClosed *dri, Oid collation,
 									   List *values)
@@ -330,10 +255,10 @@ dimension_restrict_info_add(DimensionRestrictInfo *dri, int strategy, Oid collat
 													values);
 		case DIMENSION_TYPE_STATS:
 			/* we reuse the DimensionRestrictInfoOpen structure for these */
-			return dimension_restrict_info_range_add((DimensionRestrictInfoOpen *) dri,
-													 strategy,
-													 collation,
-													 values);
+			return dimension_restrict_info_open_add((DimensionRestrictInfoOpen *) dri,
+													strategy,
+													collation,
+													values);
 		case DIMENSION_TYPE_CLOSED:
 			return dimension_restrict_info_closed_add((DimensionRestrictInfoClosed *) dri,
 													  strategy,
@@ -358,8 +283,15 @@ typedef struct HypertableRestrictInfo
 HypertableRestrictInfo *
 ts_hypertable_restrict_info_create(RelOptInfo *rel, Hypertable *ht)
 {
+	/* If chunk skipping is disabled, we have to empty range_space
+	 * in case it was cached earlier.
+	 */
+	ChunkRangeSpace *range_space = ht->range_space;
+	if (!ts_guc_enable_chunk_skipping)
+		range_space = NULL;
+
 	int num_dimensions =
-		ht->space->num_dimensions + (ht->range_space ? ht->range_space->num_range_cols : 0);
+		ht->space->num_dimensions + (range_space ? range_space->num_range_cols : 0);
 	HypertableRestrictInfo *res =
 		palloc0(sizeof(HypertableRestrictInfo) + sizeof(DimensionRestrictInfo *) * num_dimensions);
 	int i;
@@ -379,7 +311,7 @@ ts_hypertable_restrict_info_create(RelOptInfo *rel, Hypertable *ht)
 	 * We convert the range_space entries into dummy "DimensionRestrictInfo" entries. This allows
 	 * the hypertable restrict info machinery to consider these as well.
 	 */
-	for (i = 0; ht->range_space != NULL && i < ht->range_space->num_range_cols; i++)
+	for (i = 0; range_space != NULL && i < range_space->num_range_cols; i++)
 	{
 		DimensionRestrictInfo *dri =
 			chunk_column_stats_restrict_info_create(ht, &ht->range_space->range_cols[i]);

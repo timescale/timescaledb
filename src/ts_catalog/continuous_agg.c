@@ -1635,12 +1635,12 @@ ts_continuous_agg_get_query(ContinuousAgg *cagg)
 	Query *cagg_view_query;
 
 	/*
-	 * Get the direct_view definition for the finalized version because
+	 * Get the partial_view definition for the finalized version because
 	 * the user view doesn't have the "GROUP BY" clause anymore.
 	 */
 	if (ContinuousAggIsFinalized(cagg))
-		cagg_view_oid = ts_get_relation_relid(NameStr(cagg->data.direct_view_schema),
-											  NameStr(cagg->data.direct_view_name),
+		cagg_view_oid = ts_get_relation_relid(NameStr(cagg->data.partial_view_schema),
+											  NameStr(cagg->data.partial_view_name),
 											  false);
 	else
 		cagg_view_oid = ts_get_relation_relid(NameStr(cagg->data.user_view_schema),

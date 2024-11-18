@@ -16,14 +16,6 @@ typedef struct BgwJobStat
 	FormData_bgw_job_stat fd;
 } BgwJobStat;
 
-/* Positive result numbers reserved for success */
-typedef enum JobResult
-{
-	JOB_FAILURE_TO_START = -1,
-	JOB_FAILURE = 0,
-	JOB_SUCCESS = 1,
-} JobResult;
-
 extern TSDLLEXPORT BgwJobStat *ts_bgw_job_stat_find(int job_id);
 extern void ts_bgw_job_stat_delete(int job_id);
 extern TSDLLEXPORT void ts_bgw_job_stat_mark_start(BgwJob *job);

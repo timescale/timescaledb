@@ -1,0 +1,1 @@
+Implements: #7295: Support ALTER TABLE SET ACCESS METHOD on hypertable.

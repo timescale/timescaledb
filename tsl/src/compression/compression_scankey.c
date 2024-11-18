@@ -35,7 +35,6 @@ build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *settings, Relati
 	ScanKeyData *scankeys = NULL;
 	int key_index = 0;
 	TupleDesc out_desc = RelationGetDescr(out_rel);
-	TupleDesc in_desc = slot->tts_tupleDescriptor;
 
 	if (bms_is_empty(constraints->key_columns))
 	{
@@ -45,10 +44,9 @@ build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *settings, Relati
 
 	scankeys = palloc(sizeof(ScanKeyData) * bms_num_members(constraints->key_columns));
 
-	int i = -1;
-	while ((i = bms_next_member(constraints->key_columns, i)) > 0)
+	AttrNumber attno = -1;
+	while ((attno = bms_next_member(constraints->key_columns, attno)) > 0)
 	{
-		AttrNumber attno = i + FirstLowInvalidHeapAttributeNumber;
 		bool isnull;
 
 		/*
@@ -100,8 +98,9 @@ build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *settings, Relati
 							   isnull ? SK_ISNULL : 0,
 							   attno,
 							   BTEqualStrategyNumber,
-							   in_desc->attrs[AttrNumberGetAttrOffset(ht_attno)].atttypid,
-							   in_desc->attrs[AttrNumberGetAttrOffset(ht_attno)].attcollation,
+							   atttypid,
+							   TupleDescAttr(out_desc, AttrNumberGetAttrOffset(attno))
+								   ->attcollation,
 							   get_opcode(opr),
 							   isnull ? 0 : value);
 	}
@@ -125,10 +124,9 @@ build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 	if (!bms_is_empty(key_columns))
 	{
 		scankeys = palloc0(bms_num_members(key_columns) * 2 * sizeof(ScanKeyData));
-		int i = -1;
-		while ((i = bms_next_member(key_columns, i)) > 0)
+		AttrNumber attno = -1;
+		while ((attno = bms_next_member(key_columns, attno)) > 0)
 		{
-			AttrNumber attno = i + FirstLowInvalidHeapAttributeNumber;
 			char *attname = get_attname(out_rel->rd_id, attno, false);
 			bool isnull;
 			AttrNumber ht_attno = get_attnum(hypertable_relid, attname);
@@ -322,9 +320,10 @@ build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel, Relation 
 			AttrNumber idx_attnum = AttrOffsetGetAttrNumber(i);
 			AttrNumber in_attnum = index_rel->rd_index->indkey.values[i];
 			const NameData *attname = attnumAttName(in_rel, in_attnum);
+			AttrNumber column_attno = get_attnum(out_rel->rd_id, NameStr(*attname));
 
 			/* Make sure we find columns in key columns in order to select the right index */
-			if (!bms_is_member(get_attnum(out_rel->rd_id, NameStr(*attname)), key_columns))
+			if (!bms_is_member(column_attno, key_columns))
 			{
 				break;
 			}
@@ -335,6 +334,7 @@ build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel, Relation 
 
 			if (isnull)
 			{
+				*index_columns = bms_add_member(*index_columns, column_attno);
 				ScanKeyEntryInitialize(&scankeys[(*num_scan_keys)++],
 									   SK_ISNULL | SK_SEARCHNULL,
 									   idx_attnum,
@@ -375,6 +375,7 @@ build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel, Relation 
 			Ensure(OidIsValid(opcode),
 				   "no opcode found for column operator of a hypertable column");
 
+			*index_columns = bms_add_member(*index_columns, column_attno);
 			ScanKeyEntryInitialize(&scankeys[(*num_scan_keys)++],
 								   0, /* flags */
 								   idx_attnum,

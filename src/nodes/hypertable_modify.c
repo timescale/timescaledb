@@ -4,6 +4,8 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/tupdesc.h>
+#include <catalog/pg_attribute.h>
 #include <catalog/pg_type.h>
 #include <executor/execPartition.h>
 #include <executor/nodeModifyTable.h>
@@ -12,6 +14,7 @@
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <nodes/pg_list.h>
 #include <nodes/plannodes.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/plancat.h>
@@ -691,6 +694,31 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 		if (pstate->ps_ExprContext)
 			ResetExprContext(pstate->ps_ExprContext);
 
+#if PG17_GE
+		/*
+		 * If there is a pending MERGE ... WHEN NOT MATCHED [BY TARGET] action
+		 * to execute, do so now --- see the comments in ExecMerge().
+		 */
+		if (node->mt_merge_pending_not_matched != NULL)
+		{
+			context.planSlot = node->mt_merge_pending_not_matched;
+
+			slot = ht_ExecMergeNotMatched(&context, node->resultRelInfo, cds, node->canSetTag);
+
+			/* Clear the pending action */
+			node->mt_merge_pending_not_matched = NULL;
+
+			/*
+			 * If we got a RETURNING result, return it to the caller.  We'll
+			 * continue the work on next call.
+			 */
+			if (slot)
+				return slot;
+
+			continue; /* continue with the next tuple */
+		}
+#endif
+
 		context.planSlot = ExecProcNode(subplanstate);
 
 		if (cds && cds->rri && operation == CMD_INSERT && cds->skip_current_tuple)
@@ -736,8 +764,15 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 				if (operation == CMD_MERGE)
 				{
 					EvalPlanQualSetSlot(&node->mt_epqstate, context.planSlot);
-					ht_ExecMerge(&context, node->resultRelInfo, cds, NULL, node->canSetTag);
-					continue; /* no RETURNING support yet */
+					slot = ht_ExecMerge(&context,
+										node->resultRelInfo,
+										cds,
+										NULL,
+										NULL,
+										node->canSetTag);
+					if (slot)
+						return slot;
+					continue;
 				}
 #endif
 				elog(ERROR, "tableoid is NULL");
@@ -811,8 +846,15 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 					if (operation == CMD_MERGE)
 					{
 						EvalPlanQualSetSlot(&node->mt_epqstate, context.planSlot);
-						ht_ExecMerge(&context, node->resultRelInfo, cds, NULL, node->canSetTag);
-						continue; /* no RETURNING support yet */
+						slot = ht_ExecMerge(&context,
+											node->resultRelInfo,
+											cds,
+											NULL,
+											NULL,
+											node->canSetTag);
+						if (slot)
+							return slot;
+						continue;
 					}
 #endif
 					elog(ERROR, "ctid is NULL");
@@ -842,9 +884,29 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 			else if (AttributeNumberIsValid(resultRelInfo->ri_RowIdAttNo))
 			{
 				datum = ExecGetJunkAttribute(slot, resultRelInfo->ri_RowIdAttNo, &isNull);
+#if PG17_GE
+				if (isNull)
+				{
+					if (operation == CMD_MERGE)
+					{
+						EvalPlanQualSetSlot(&node->mt_epqstate, context.planSlot);
+						slot = ht_ExecMerge(&context,
+											node->resultRelInfo,
+											cds,
+											NULL,
+											NULL,
+											node->canSetTag);
+						if (slot)
+							return slot;
+						continue;
+					}
+					elog(ERROR, "wholerow is NULL");
+				}
+#else
 				/* shouldn't ever get a null result... */
 				if (isNull)
 					elog(ERROR, "wholerow is NULL");
+#endif
 
 				oldtupdata.t_data = DatumGetHeapTupleHeader(datum);
 				oldtupdata.t_len = HeapTupleHeaderGetDatumLength(oldtupdata.t_data);
@@ -870,7 +932,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 				if (unlikely(!resultRelInfo->ri_projectNewInfoValid))
 					ExecInitInsertProjection(node, resultRelInfo);
 				slot = ExecGetInsertNewTuple(resultRelInfo, context.planSlot);
-				slot = ExecInsert(&context, cds->rri, slot, node->canSetTag);
+				slot = ExecInsert(&context, resultRelInfo, cds, slot, node->canSetTag);
 				break;
 			case CMD_UPDATE:
 				/* Initialize projection info if first time for this table */
@@ -918,7 +980,8 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 				break;
 #if PG15_GE
 			case CMD_MERGE:
-				slot = ht_ExecMerge(&context, resultRelInfo, cds, tupleid, node->canSetTag);
+				slot =
+					ht_ExecMerge(&context, resultRelInfo, cds, tupleid, oldtuple, node->canSetTag);
 				break;
 #endif
 			default:
@@ -1371,8 +1434,8 @@ ExecGetUpdateNewTuple(ResultRelInfo *relinfo, TupleTableSlot *planSlot, TupleTab
  * copied and modified version of ExecInsert from executor/nodeModifyTable.c
  */
 TupleTableSlot *
-ExecInsert(ModifyTableContext *context, ResultRelInfo *resultRelInfo, TupleTableSlot *slot,
-		   bool canSetTag)
+ExecInsert(ModifyTableContext *context, ResultRelInfo *resultRelInfo, ChunkDispatchState *cds,
+		   TupleTableSlot *slot, bool canSetTag)
 {
 	ModifyTableState *mtstate = context->mtstate;
 	EState *estate = context->estate;
@@ -1386,6 +1449,36 @@ ExecInsert(ModifyTableContext *context, ResultRelInfo *resultRelInfo, TupleTable
 	MemoryContext oldContext;
 
 	Assert(!mtstate->mt_partition_tuple_routing);
+
+	/*
+	 * Fetch the chunk dispatch state similar to how it is done in
+	 * nodeModifyTable.c. For us, this is stored in the chunk insert state,
+	 * which we add in to the chunk dispatch state in chunk_dispatch_exec().
+	 *
+	 * We can probably improve this code by removing ChunkDispatch. It is
+	 * currently the immediate child of ModifyTable and placed between
+	 * ModifyTable and the original subplan of ModifyTable. This was
+	 * previously necessary because we didn't have our own version of
+	 * ModifyTable, but since PG14 we have our own version of
+	 * ModifyTable. This means that we can move the logic to make a
+	 * partition/chunk lookup into a separate function similar to how
+	 * ExecPrepareTupleRouting() does it in nodeModifyTable.c.
+	 *
+	 *    if (proute)
+	 *    {
+	 *        ResultRelInfo *partRelInfo;
+	 *
+	 *        slot = ExecPrepareTupleRouting(mtstate, estate, proute,
+	 *                                       resultRelInfo, slot,
+	 *                                       &partRelInfo);
+	 *        resultRelInfo = partRelInfo;
+	 *  }
+	 *
+	 * The current approach is a quick fix to avoid changing too much code at
+	 * the same time and risk introducing a bug.
+	 */
+	slot = ts_chunk_dispatch_prepare_tuple_routing(cds, slot);
+	resultRelInfo = cds->rri;
 
 	ExecMaterializeSlot(slot);
 
@@ -1548,7 +1641,12 @@ ExecInsert(ModifyTableContext *context, ResultRelInfo *resultRelInfo, TupleTable
 		 */
 		if (mtstate->operation == CMD_UPDATE)
 			wco_kind = WCO_RLS_UPDATE_CHECK;
-#if PG15_GE
+#if PG17_GE
+		else if (mtstate->operation == CMD_MERGE)
+			wco_kind = (mtstate->mt_merge_action->mas_action->commandType == CMD_UPDATE) ?
+						   WCO_RLS_UPDATE_CHECK :
+						   WCO_RLS_INSERT_CHECK;
+#elif PG15_GE
 		else if (mtstate->operation == CMD_MERGE)
 			wco_kind = (context->relaction->mas_action->commandType == CMD_UPDATE) ?
 						   WCO_RLS_UPDATE_CHECK :

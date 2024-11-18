@@ -30,7 +30,7 @@ CREATE OR REPLACE PROCEDURE custom_proc1(jobid int, config jsonb) LANGUAGE PLPGS
 $$
 BEGIN
   UPDATE custom_log set msg = 'msg1' where msg = 'msg0';
-  perform pg_sleep(10);
+  perform pg_sleep(5);
   COMMIT;
 END
 $$;
@@ -38,7 +38,6 @@ CREATE OR REPLACE PROCEDURE custom_proc2(jobid int, config jsonb) LANGUAGE PLPGS
 $$
 BEGIN
   UPDATE custom_log set msg = 'msg2' where msg = 'msg0';
-  perform pg_sleep(10);
   COMMIT;
 END
 $$;
@@ -49,7 +48,7 @@ select add_job('custom_proc1', '2 min', initial_start => now());
 (1 row)
 
 -- to make sure custom_log is first updated by custom_proc_1
-select add_job('custom_proc2', '2 min', initial_start => now() + interval '5 seconds');
+select add_job('custom_proc2', '2 min', initial_start => now() + interval '2 seconds');
  add_job 
 ---------
     1002
@@ -62,7 +61,7 @@ SELECT _timescaledb_functions.start_background_workers();
 (1 row)
 
 -- enough time to for job_fail to fail
-select pg_sleep(10);
+select pg_sleep(5);
  pg_sleep 
 ----------
  
@@ -81,7 +80,7 @@ select delete_job(:jobf_id);
  
 (1 row)
 
-select pg_sleep(20);
+select pg_sleep(5);
  pg_sleep 
 ----------
  
@@ -110,7 +109,7 @@ SELECT next_start FROM alter_job(3, next_start => '2060-01-01 00:00:00+00'::time
  Wed Dec 31 16:00:00 2059 PST
 (1 row)
 
-TRUNCATE TABLE _timescaledb_internal.bgw_job_stat_history;
+DELETE FROM _timescaledb_internal.bgw_job_stat_history;
 INSERT INTO _timescaledb_internal.bgw_job_stat_history(job_id, pid, succeeded, execution_start, execution_finish, data)
 VALUES (123, 12345, false, '2000-01-01 00:00:00+00'::timestamptz, '2000-01-01 00:00:10+00'::timestamptz, '{}'),
 (456, 45678, false, '2000-01-01 00:00:20+00'::timestamptz, '2000-01-01 00:00:40+00'::timestamptz, '{}'),
@@ -145,6 +144,64 @@ WHERE succeeded IS FALSE;
     123 | 23456 | f         | Fri Dec 31 16:00:00 2049 PST | Fri Dec 31 16:00:10 2049 PST | {}
 (1 row)
 
+-- test failure when starting jobs
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT _timescaledb_functions.stop_background_workers();
+ stop_background_workers 
+-------------------------
+ t
+(1 row)
+
+DELETE FROM _timescaledb_internal.bgw_job_stat;
+DELETE FROM _timescaledb_internal.bgw_job_stat_history;
+DELETE FROM _timescaledb_config.bgw_job CASCADE;
+SELECT _timescaledb_functions.start_background_workers();
+ start_background_workers 
+--------------------------
+ t
+(1 row)
+
+\set VERBOSITY default
+-- Setup Jobs
+DO
+$TEST$
+DECLARE
+  stmt TEXT;
+  njobs INT := 26;
+BEGIN
+  RAISE INFO 'Creating % jobs', njobs;
+  FOR stmt IN
+    SELECT format('CREATE PROCEDURE custom_job%s(job_id int, config jsonb) LANGUAGE PLPGSQL AS $$ BEGIN PERFORM pg_sleep(0.1); END; $$', i) FROM generate_series(1, njobs) AS i
+  LOOP
+    EXECUTE stmt;
+  END LOOP;
+
+  RAISE INFO 'Scheduling % jobs', njobs;
+  PERFORM add_job(format('custom_job%s', i)::regproc, schedule_interval => interval '1 hour', initial_start := now())
+  FROM generate_series(1, njobs) AS i;
+END;
+$TEST$;
+INFO:  Creating 26 jobs
+INFO:  Scheduling 26 jobs
+-- Wait for jobs to run
+DO
+$TEST$
+DECLARE
+  njobs INT := 26;
+BEGIN
+  RAISE INFO 'Waiting for the % jobs to run', njobs;
+  SET LOCAL client_min_messages TO WARNING;
+  PERFORM test.wait_for_job_to_run_or_fail(id) FROM _timescaledb_config.bgw_job WHERE id >= 1000;
+END;
+$TEST$;
+INFO:  Waiting for the 26 jobs to run
+SELECT count(*) > 0 FROM timescaledb_information.job_history WHERE succeeded IS FALSE AND err_message ~ 'failed to start job';
+ ?column? 
+----------
+ t
+(1 row)
+
+\set VERBOSITY terse
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 

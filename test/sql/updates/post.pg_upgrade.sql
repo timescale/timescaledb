@@ -5,7 +5,9 @@
 \pset format aligned
 \pset tuples_only off
 
+\set PG_UPGRADE_TEST true
 \ir post.catalog.sql
+\unset PG_UPGRADE_TEST
 \ir post.policies.sql
 \ir post.functions.sql
 

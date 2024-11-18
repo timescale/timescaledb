@@ -86,6 +86,9 @@
 #define REQ_IS_WAL_RECEIVER "is_wal_receiver"
 
 #define PG_PROMETHEUS "pg_prometheus"
+#define PG_VECTOR "vector"
+#define TS_AI "ai"
+#define TS_VECTORSCALE "vectorscale"
 #define PROMSCALE "promscale"
 #define POSTGIS "postgis"
 #define TIMESCALE_ANALYTICS "timescale_analytics"
@@ -95,7 +98,8 @@
 #define REQ_NUM_ERR_BY_SQLERRCODE "errors_by_sqlerrcode"
 
 static const char *related_extensions[] = {
-	PG_PROMETHEUS, PROMSCALE, POSTGIS, TIMESCALE_ANALYTICS, TIMESCALEDB_TOOLKIT,
+	PG_PROMETHEUS,		 PROMSCALE, POSTGIS, TIMESCALE_ANALYTICS,
+	TIMESCALEDB_TOOLKIT, PG_VECTOR, TS_AI,	 TS_VECTORSCALE,
 };
 
 /* This function counts background worker jobs by type. */
@@ -1181,7 +1185,8 @@ ts_telemetry_main(const char *host, const char *path, const char *service)
 		 * throw an error, so we capture the error here and print debugging
 		 * information. */
 		ereport(NOTICE,
-				(errmsg("malformed telemetry response body"),
+				(errcode(ERRCODE_DATA_EXCEPTION),
+				 errmsg("malformed telemetry response body"),
 				 errdetail("host=%s, service=%s, path=%s: %s",
 						   host,
 						   service,

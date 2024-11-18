@@ -3,6 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 -- test conflict handling on compressed hypertables with unique constraints
+set timescaledb.debug_compression_path_info to on;
 
 -- test 1: single column primary key
 CREATE TABLE comp_conflicts_1(time timestamptz, device text, value float, PRIMARY KEY(time));
@@ -160,15 +161,15 @@ INSERT INTO comp_conflicts_3 VALUES
 ('2020-01-01','d3', 'label', 0.3);
 -- should work the same without the index present
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d2', 'label', 0.2);
 ROLLBACK;
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
   INSERT INTO comp_conflicts_3 VALUES
   ('2020-01-01','d1', 'label', 0.1),
   ('2020-01-01','d2', 'label', 0.2),
@@ -177,50 +178,52 @@ ROLLBACK;
 
 -- using superuser to create indexes on compressed chunks
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+set timescaledb.debug_compression_path_info to on;
 -- ignore matching partial index
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
-  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, label, _ts_meta_sequence_num)
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
+  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, label, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC)
 	WHERE label LIKE 'missing';
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 
 -- ignore matching covering index
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
-  CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device) INCLUDE (label, _ts_meta_sequence_num);
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
+  CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device) INCLUDE (label, _ts_meta_min_1, _ts_meta_max_1);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 
--- ignore matching but out of order segmentby index
+-- out of order segmentby index, index is still usable
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
-  CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (label, device, _ts_meta_sequence_num);
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
+  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk (label, device, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 
--- ignore index with sequence number in the middle
+-- index with sequence number in the middle, index should be usable with single index scan key
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
-  CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, _ts_meta_sequence_num, label);
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
+  CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC, label);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 
 -- ignore expression index
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
-  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, lower(label), _ts_meta_sequence_num);
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
+  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, lower(label), _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 
 -- ignore non-btree index
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
-  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk USING brin (device, label, _ts_meta_sequence_num);
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
+  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk USING brin (device, label, _ts_meta_min_1, _ts_meta_max_1);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+set timescaledb.debug_compression_path_info to on;
 
 -- no data should be in uncompressed chunk since the inserts failed and their transaction rolled back
 SELECT count(*) FROM ONLY :CHUNK;
@@ -237,7 +240,7 @@ ROLLBACK;
 
 -- check if NULL handling works the same with the compressed index dropped
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01',NULL, 'label', 0.3);
 
   -- data for 1 segment (count = 1 value + 1 inserted) should be present in uncompressed chunk
@@ -260,7 +263,7 @@ ROLLBACK;
 -- should succeed since there are no conflicts in the values
 BEGIN;
 
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01 0:00:01','d1', 'label', 0.1);
 
   -- no data should have move into uncompressed chunk for conflict check
@@ -282,7 +285,7 @@ ROLLBACK;
 
 -- same as above but no index
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
   INSERT INTO comp_conflicts_3 VALUES
   ('2020-01-01 0:00:01','d1', 'label', 0.1),
   ('2020-01-01 0:00:01','d2', 'label', 0.2),
@@ -484,3 +487,34 @@ DO NOTHING;
 -- Even a regular insert will fail due to unique constrant checks for dml decompression
 INSERT INTO compressed_ht VALUES ('2022-01-24 01:10:28.192199+05:30', '7', 0.876, 4.123, 'new insert row');
 \set ON_ERROR_STOP 1
+
+RESET timescaledb.enable_dml_decompression;
+
+-- gh issue #7342
+CREATE TABLE test_collation (
+        time int8 NOT NULL,
+        device_id int4 NOT NULL,
+        name TEXT NOT NULL,
+        CONSTRAINT test_collation_pkey PRIMARY KEY (time, device_id, name)
+);
+SELECT create_hypertable('test_collation', 'time', chunk_time_interval => 2419200000);
+ALTER TABLE test_collation
+SET (
+        timescaledb.compress,
+        timescaledb.compress_segmentby = 'device_id',
+        timescaledb.compress_orderby = 'time DESC, name'
+);
+INSERT INTO "test_collation"
+  ("time", "device_id", "name")
+VALUES
+  (1609477200000, 41, 'val1'),
+  (1609478100000, 41, 'val1')
+ON CONFLICT DO NOTHING;
+SELECT compress_chunk(ch) FROM show_chunks('test_collation') ch;
+INSERT INTO "test_collation"
+  ("device_id", "time", "name")
+VALUES
+  (41, 1609477200000, 'val1'),
+  (41, 1609478100000, 'val1')
+ON CONFLICT DO NOTHING;
+

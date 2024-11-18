@@ -1,6 +1,6 @@
 # This section has to be equivalent to test/postgresql.conf
 
-autovacuum=false
+autovacuum=true
 datestyle='Postgres, MDY'
 hba_file='@TEST_PG_HBA_FILE@'
 log_destination='@TEST_PG_LOG_DESTINATION@'
@@ -31,3 +31,7 @@ log_min_messages='INFO'
 # This breaks isolation tests, not sure why the statements end in
 # the isolation tester output.
 log_statement='all'
+
+# It is necessary to have at least 2 more workers than `max_worker_processes`
+# in order to test failures starting bgworkers.
+timescaledb.max_background_workers=26

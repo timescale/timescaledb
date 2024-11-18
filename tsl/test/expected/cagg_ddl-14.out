@@ -22,6 +22,7 @@ SELECT table_name FROM create_hypertable('conditions', 'timec');
 
 -- schema tests
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+SET timezone TO PST8PDT;
 -- drop if the tablespace1 and/or tablespace2 exists
 SET client_min_messages TO error;
 DROP TABLESPACE IF EXISTS tablespace1;

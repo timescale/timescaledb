@@ -26,6 +26,7 @@
 #include <utils/builtins.h>
 #include <utils/elog.h>
 #include <utils/jsonb.h>
+#include <utils/lsyscache.h>
 #include <utils/memutils.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
@@ -41,10 +42,10 @@
 #include "extension.h"
 #include "job.h"
 #include "job_stat.h"
-#include "jsonb_utils.h"
 #include "license_guc.h"
 #include "scan_iterator.h"
 #include "scanner.h"
+#include "tss_callbacks.h"
 #include "utils.h"
 
 #ifdef USE_TELEMETRY
@@ -160,57 +161,6 @@ job_config_check(BgwJob *job, Jsonb *config)
 			 NameStr(job->fd.check_schema),
 			 NameStr(job->fd.check_name),
 			 job->fd.id);
-}
-
-/* this function fills in a jsonb with the non-null fields of
- the error data and also includes the proc name and schema in the jsonb
- we include these here to avoid adding these fields to the table */
-static Jsonb *
-ts_errdata_to_jsonb(ErrorData *edata, Name proc_schema, Name proc_name)
-{
-	JsonbParseState *parse_state = NULL;
-	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-	if (edata->sqlerrcode)
-		ts_jsonb_add_str(parse_state, "sqlerrcode", unpack_sql_state(edata->sqlerrcode));
-	if (edata->message)
-		ts_jsonb_add_str(parse_state, "message", edata->message);
-	if (edata->detail)
-		ts_jsonb_add_str(parse_state, "detail", edata->detail);
-	if (edata->hint)
-		ts_jsonb_add_str(parse_state, "hint", edata->hint);
-	if (edata->filename)
-		ts_jsonb_add_str(parse_state, "filename", edata->filename);
-	if (edata->lineno)
-		ts_jsonb_add_int32(parse_state, "lineno", edata->lineno);
-	if (edata->funcname)
-		ts_jsonb_add_str(parse_state, "funcname", edata->funcname);
-	if (edata->domain)
-		ts_jsonb_add_str(parse_state, "domain", edata->domain);
-	if (edata->context_domain)
-		ts_jsonb_add_str(parse_state, "context_domain", edata->context_domain);
-	if (edata->context)
-		ts_jsonb_add_str(parse_state, "context", edata->context);
-	if (edata->schema_name)
-		ts_jsonb_add_str(parse_state, "schema_name", edata->schema_name);
-	if (edata->table_name)
-		ts_jsonb_add_str(parse_state, "table_name", edata->table_name);
-	if (edata->column_name)
-		ts_jsonb_add_str(parse_state, "column_name", edata->column_name);
-	if (edata->datatype_name)
-		ts_jsonb_add_str(parse_state, "datatype_name", edata->datatype_name);
-	if (edata->constraint_name)
-		ts_jsonb_add_str(parse_state, "constraint_name", edata->constraint_name);
-	if (edata->internalquery)
-		ts_jsonb_add_str(parse_state, "internalquery", edata->internalquery);
-	if (edata->detail_log)
-		ts_jsonb_add_str(parse_state, "detail_log", edata->detail_log);
-	if (strlen(NameStr(*proc_schema)) > 0)
-		ts_jsonb_add_str(parse_state, "proc_schema", NameStr(*proc_schema));
-	if (strlen(NameStr(*proc_name)) > 0)
-		ts_jsonb_add_str(parse_state, "proc_name", NameStr(*proc_name));
-	/* we add the schema qualified name here as well*/
-	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
-	return JsonbValueToJsonb(result);
 }
 
 static BgwJob *
@@ -1011,6 +961,10 @@ void
 ts_bgw_job_validate_job_owner(Oid owner)
 {
 	HeapTuple role_tup = SearchSysCache1(AUTHOID, ObjectIdGetDatum(owner));
+
+	if (!HeapTupleIsValid(role_tup))
+		elog(ERROR, "cache lookup failed for role %u", owner);
+
 	Form_pg_authid rform = (Form_pg_authid) GETSTRUCT(role_tup);
 
 	if (!rform->rolcanlogin)
@@ -1037,7 +991,7 @@ ts_is_telemetry_job(BgwJob *job)
 }
 #endif
 
-bool
+JobResult
 ts_bgw_job_execute(BgwJob *job)
 {
 #ifdef USE_TELEMETRY
@@ -1106,13 +1060,66 @@ zero_guc(const char *guc_name)
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("could not set \"%s\" guc", guc_name)));
 }
 
+Oid
+ts_bgw_job_get_funcid(BgwJob *job)
+{
+	ObjectWithArgs *object = makeNode(ObjectWithArgs);
+	object->objname = list_make2(makeString(NameStr(job->fd.proc_schema)),
+								 makeString(NameStr(job->fd.proc_name)));
+	object->objargs = list_make2(SystemTypeName("int4"), SystemTypeName("jsonb"));
+
+	/* Return InvalidOid if don't found */
+	return LookupFuncWithArgs(OBJECT_ROUTINE, object, true);
+}
+
+const char *
+ts_bgw_job_function_call_string(BgwJob *job)
+{
+	Oid funcid = ts_bgw_job_get_funcid(job);
+	/* If do not found the function or procedure then fallback to PROKIND_FUNCTION */
+	char prokind = OidIsValid(funcid) ? get_func_prokind(funcid) : PROKIND_FUNCTION;
+	StringInfo stmt = makeStringInfo();
+	char *jsonb_str = "NULL";
+
+	if (job->fd.config)
+		jsonb_str = quote_literal_cstr(
+			JsonbToCString(NULL, &job->fd.config->root, VARSIZE(job->fd.config)));
+
+	switch (prokind)
+	{
+		case PROKIND_FUNCTION:
+			appendStringInfo(stmt,
+							 "SELECT %s.%s('%d', %s)",
+							 quote_identifier(NameStr(job->fd.proc_schema)),
+							 quote_identifier(NameStr(job->fd.proc_name)),
+							 job->fd.id,
+							 jsonb_str);
+			break;
+		case PROKIND_PROCEDURE:
+			appendStringInfo(stmt,
+							 "CALL %s.%s('%d', %s)",
+							 quote_identifier(NameStr(job->fd.proc_schema)),
+							 quote_identifier(NameStr(job->fd.proc_name)),
+							 job->fd.id,
+							 jsonb_str);
+			break;
+		default:
+			ereport(ERROR,
+					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					 errmsg("unsupported function type: %c", prokind)));
+			break;
+	}
+
+	return stmt->data;
+}
+
 extern Datum
 ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 {
 	Oid db_oid = DatumGetObjectId(MyBgworkerEntry->bgw_main_arg);
 	BgwParams params;
 	BgwJob *job;
-	JobResult res = JOB_FAILURE;
+	JobResult res = JOB_FAILURE_IN_EXECUTION;
 	bool got_lock;
 	instr_time start;
 	instr_time duration;
@@ -1166,6 +1173,10 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	pgstat_report_appname(NameStr(job->fd.application_name));
 	MemoryContext oldcontext = CurrentMemoryContext;
 
+	bool job_failed = false;
+	if (scheduler_test_hook == NULL)
+		ts_begin_tss_store_callback();
+
 	PG_TRY();
 	{
 		/*
@@ -1205,6 +1216,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 		/* switch away from error context to not lose the data */
 		MemoryContextSwitchTo(oldcontext);
+		job_failed = true;
 		edata = CopyErrorData();
 
 		/*
@@ -1228,7 +1240,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 			job->job_history.execution_start = params.job_history_execution_start;
 
 			ts_bgw_job_stat_mark_end(job,
-									 JOB_FAILURE,
+									 JOB_FAILURE_IN_EXECUTION,
 									 ts_errdata_to_jsonb(edata, &proc_schema, &proc_name));
 			ts_bgw_job_check_max_retries(job);
 			pfree(job);
@@ -1255,6 +1267,12 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	 * is launched
 	 */
 	ts_bgw_job_stat_mark_end(job, res, NULL);
+
+	if (!job_failed && ts_is_tss_enabled() && scheduler_test_hook == NULL)
+	{
+		const char *stmt = ts_bgw_job_function_call_string(job);
+		ts_end_tss_store_callback(stmt, -1, (int) strlen(stmt), 0, 0);
+	}
 
 	CommitTransactionCommand();
 
@@ -1315,7 +1333,7 @@ ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial
 	result = func();
 
 	if (mark)
-		ts_bgw_job_stat_mark_end(job, result ? JOB_SUCCESS : JOB_FAILURE, NULL);
+		ts_bgw_job_stat_mark_end(job, result ? JOB_SUCCESS : JOB_FAILURE_IN_EXECUTION, NULL);
 
 	/* Now update next_start. */
 	job_stat = ts_bgw_job_stat_find(job->fd.id);

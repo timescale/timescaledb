@@ -1,0 +1,1 @@
+Fixes: #7432 Verify that heap tuple is valid before using

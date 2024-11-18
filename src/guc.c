@@ -10,11 +10,13 @@
 #include <utils/regproc.h>
 #include <utils/varlena.h>
 
+#include "compat/compat.h"
 #include "config.h"
 #include "extension.h"
 #include "guc.h"
 #include "hypertable_cache.h"
 #include "license_guc.h"
+
 #ifdef USE_TELEMETRY
 #include "telemetry/telemetry.h"
 #endif
@@ -37,6 +39,34 @@ ts_function_telemetry_on()
 	return ts_guc_telemetry_level > TELEMETRY_NO_FUNCTIONS;
 }
 
+bool
+ts_is_whitelisted_indexam(const char *amname)
+{
+	ListCell *cell;
+	char *rawname = pstrdup(ts_guc_hypercore_indexam_whitelist);
+
+	List *namelist;
+	if (!SplitIdentifierString(rawname, ',', &namelist))
+	{
+		pfree(rawname);
+		list_free(namelist);
+		elog(ERROR, "List syntax is invalid");
+	}
+	foreach (cell, namelist)
+	{
+		const char *curname = (char *) lfirst(cell);
+		if (strcmp(curname, amname) == 0)
+		{
+			pfree(rawname);
+			list_free(namelist);
+			return true;
+		}
+	}
+	pfree(rawname);
+	list_free(namelist);
+	return false;
+}
+
 static const struct config_enum_entry telemetry_level_options[] = {
 	{ "off", TELEMETRY_OFF, false },
 	{ "no_functions", TELEMETRY_NO_FUNCTIONS, false },
@@ -53,6 +83,31 @@ static const struct config_enum_entry loglevel_options[] = {
 	{ "log", LOG, false },		 { NULL, 0, false }
 };
 
+/*
+ * Setting to enable or disable transparent decompression plans.
+ *
+ * The setting is an integer instead of boolean because it is possible to
+ * enable transparent decompression plans also when using the Hypercore table
+ * access method. But this is not enabled by default. The options are as
+ * follows:
+ *
+ * (0) = off, disabled completely.
+ *
+ * (1) = on, enabled for compressed tables but not tables using Hypercore
+ *       TAM. This is the default setting.
+ *
+ * (2) = hypercore, enabled for compressed tables and those using Hypercore
+ *       TAM. This is useful mostly for debugging/testing and as a fallback.
+ */
+static const struct config_enum_entry transparent_decompression_options[] = {
+	{ "on", 1, false },
+	{ "true", 1, false },
+	{ "off", 0, false },
+	{ "false", 0, false },
+	{ TS_HYPERCORE_TAM_NAME, 2, false },
+	{ NULL, 0, false }
+};
+
 bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
@@ -66,6 +121,9 @@ bool ts_guc_enable_qual_propagation = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 bool ts_guc_enable_now_constify = true;
 bool ts_guc_enable_foreign_key_propagation = true;
+#if PG16_GE
+TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown = true;
+#endif
 TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify = true;
 TSDLLEXPORT int ts_guc_cagg_max_individual_materializations = 10;
 bool ts_guc_enable_osm_reads = true;
@@ -73,14 +131,22 @@ TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering = true;
 TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml = 100000;
-TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
+TSDLLEXPORT int ts_guc_enable_transparent_decompression = 1;
 TSDLLEXPORT bool ts_guc_enable_compression_wal_markers = false;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
 bool ts_guc_enable_chunkwise_aggregation = true;
 bool ts_guc_enable_vectorized_aggregation = true;
+bool ts_guc_enable_custom_hashagg = false;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = false;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
+TSDLLEXPORT bool ts_guc_default_hypercore_use_access_method = false;
+bool ts_guc_enable_chunk_skipping = false;
+TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
+
+/* Enable of disable columnar scans for columnar-oriented storage engines. If
+ * disabled, regular sequence scans will be used instead. */
+TSDLLEXPORT bool ts_guc_enable_columnarscan = true;
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 static char *ts_guc_default_segmentby_fn = NULL;
@@ -88,9 +154,12 @@ static char *ts_guc_default_orderby_fn = NULL;
 TSDLLEXPORT bool ts_guc_enable_job_execution_logging = false;
 bool ts_guc_enable_tss_callbacks = true;
 TSDLLEXPORT bool ts_guc_enable_delete_after_compression = false;
+TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh = false;
+TSDLLEXPORT char *ts_guc_hypercore_indexam_whitelist;
 
-/* default value of ts_guc_max_open_chunks_per_insert and ts_guc_max_cached_chunks_per_hypertable
- * will be set as their respective boot-value when the GUC mechanism starts up */
+/* default value of ts_guc_max_open_chunks_per_insert and
+ * ts_guc_max_cached_chunks_per_hypertable will be set as their respective boot-value when the
+ * GUC mechanism starts up */
 int ts_guc_max_open_chunks_per_insert;
 int ts_guc_max_cached_chunks_per_hypertable;
 #ifdef USE_TELEMETRY
@@ -113,16 +182,21 @@ char *ts_current_timestamp_mock = NULL;
 int ts_guc_debug_toast_tuple_target = 128;
 
 #ifdef TS_DEBUG
-static const struct config_enum_entry require_vector_qual_options[] = {
-	{ "allow", RVQ_Allow, false },
-	{ "forbid", RVQ_Forbid, false },
-	{ "only", RVQ_Only, false },
-	{ NULL, 0, false }
-};
+
+bool ts_guc_debug_have_int128;
+
+static const struct config_enum_entry debug_require_options[] = { { "allow", DRO_Allow, false },
+																  { "forbid", DRO_Forbid, false },
+																  { "require", DRO_Require, false },
+																  { NULL, 0, false } };
+
+DebugRequireOption ts_guc_debug_require_vector_qual = DRO_Allow;
+
+DebugRequireOption ts_guc_debug_require_vector_agg = DRO_Allow;
 #endif
 
-DebugRequireVectorQual ts_guc_debug_require_vector_qual = RVQ_Allow;
 bool ts_guc_debug_compression_path_info = false;
+bool ts_guc_enable_rowlevel_compression_locking = false;
 
 static bool ts_guc_enable_hypertable_create = true;
 static bool ts_guc_enable_hypertable_compression = true;
@@ -252,10 +326,38 @@ get_segmentby_func(char *input_name)
 }
 
 static bool
+check_indexam_whitelist(char **newval, void **extra, GucSource source)
+{
+	char *rawname;
+	List *namelist;
+
+	/* Need a modifiable copy of string */
+	rawname = pstrdup(*newval);
+
+	/* Parse string into list of identifiers */
+	if (!SplitIdentifierString(rawname, ',', &namelist))
+	{
+		/* syntax error in name list */
+		GUC_check_errdetail("List syntax is invalid.");
+		pfree(rawname);
+		list_free(namelist);
+		return false;
+	}
+
+	/* We might not be in a transaction when setting this so cannot consult
+	 * the systems catalog. We just require the list of index access methods
+	 * to be syntactically correct. */
+
+	pfree(rawname);
+	list_free(namelist);
+	return true;
+}
+
+static bool
 check_segmentby_func(char **newval, void **extra, GucSource source)
 {
 	/* if the extension doesn't exist you can't check for the function, have to take it on faith */
-	if (ts_extension_is_loaded())
+	if (ts_extension_is_loaded_and_not_upgrading())
 	{
 		Oid segment_func_oid = get_segmentby_func(*newval);
 
@@ -297,7 +399,7 @@ static bool
 check_orderby_func(char **newval, void **extra, GucSource source)
 {
 	/* if the extension doesn't exist you can't check for the function, have to take it on faith */
-	if (ts_extension_is_loaded())
+	if (ts_extension_is_loaded_and_not_upgrading())
 	{
 		Oid func_oid = get_orderby_func(*newval);
 
@@ -492,11 +594,12 @@ _guc_init(void)
 							NULL,
 							NULL);
 
-	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_transparent_decompression"),
+	DefineCustomEnumVariable(MAKE_EXTOPTION("enable_transparent_decompression"),
 							 "Enable transparent decompression",
 							 "Enable transparent decompression when querying hypertable",
 							 &ts_guc_enable_transparent_decompression,
-							 true,
+							 1,
+							 transparent_decompression_options,
 							 PGC_USERSET,
 							 0,
 							 NULL,
@@ -560,10 +663,57 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+#if PG16_GE
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_cagg_sort_pushdown"),
+							 "Enable sort pushdown for continuous aggregates",
+							 "Enable pushdown of ORDER BY clause for continuous aggregates",
+							 &ts_guc_enable_cagg_sort_pushdown,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+#endif
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_cagg_watermark_constify"),
 							 "Enable cagg watermark constify",
 							 "Enable constifying cagg watermark for real-time caggs",
 							 &ts_guc_enable_cagg_watermark_constify,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_merge_on_cagg_refresh"),
+							 "Enable MERGE statement on cagg refresh",
+							 "Enable MERGE statement on cagg refresh",
+							 &ts_guc_enable_merge_on_cagg_refresh,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_chunk_skipping"),
+							 "Enable chunk skipping functionality",
+							 "Enable using chunk column stats to filter chunks based on column "
+							 "filters",
+							 &ts_guc_enable_chunk_skipping,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_segmentwise_recompression"),
+							 "Enable segmentwise recompression functionality",
+							 "Enable segmentwise recompression",
+							 &ts_guc_enable_segmentwise_recompression,
 							 true,
 							 PGC_USERSET,
 							 0,
@@ -615,6 +765,17 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_custom_hashagg"),
+							 "Enable custom hash aggregation",
+							 "Enable creating custom hash aggregation plans",
+							 &ts_guc_enable_custom_hashagg,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_vectorized_aggregation"),
 							 "Enable vectorized aggregation",
 							 "Enable vectorized aggregation for compressed data",
@@ -655,6 +816,21 @@ _guc_init(void)
 							 "suitable sparse indexes when compressed. Must be set at the moment "
 							 "of chunk compression, e.g. when the `compress_chunk()` is called.",
 							 &ts_guc_auto_sparse_indexes,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnarscan"),
+							 "Enable columnar-optimized scans for supported access methods",
+							 "A columnar scan replaces sequence scans for columnar-oriented "
+							 "storage "
+							 "and enables storage-specific optimizations like vectorized filters. "
+							 "Disabling columnar scan will make PostgreSQL fall back to regular "
+							 "sequence scans.",
+							 &ts_guc_enable_columnarscan,
 							 true,
 							 PGC_USERSET,
 							 0,
@@ -819,6 +995,17 @@ _guc_init(void)
 							 /* assign_hook= */ NULL,
 							 /* show_hook= */ NULL);
 
+	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("enable_rowlevel_compression_locking"),
+							 /* short_desc= */ "Use rowlevel locking during compression",
+							 /* long_desc= */ "Use only if you know what you are doing",
+							 /* valueAddr= */ &ts_guc_enable_rowlevel_compression_locking,
+							 /* bootValue= */ false,
+							 /* context= */ PGC_USERSET,
+							 /* flags= */ 0,
+							 /* check_hook= */ NULL,
+							 /* assign_hook= */ NULL,
+							 /* show_hook= */ NULL);
+
 #ifdef USE_TELEMETRY
 	DefineCustomStringVariable(/* name= */ "timescaledb_telemetry.cloud",
 							   /* short_desc= */ "cloud provider",
@@ -831,6 +1018,19 @@ _guc_init(void)
 							   /* assign_hook= */ NULL,
 							   /* show_hook= */ NULL);
 #endif
+
+	DefineCustomStringVariable(MAKE_EXTOPTION("hypercore_indexam_whitelist"),
+							   gettext_noop(
+								   "Whitelist for index access methods supported by hypercore."),
+							   gettext_noop(
+								   "List of index access method names supported by hypercore."),
+							   /* valueAddr= */ &ts_guc_hypercore_indexam_whitelist,
+							   /* Value= */ "btree,hash",
+							   /* context= */ PGC_SIGHUP,
+							   /* flags= */ GUC_LIST_INPUT | GUC_SUPERUSER_ONLY,
+							   /* check_hook= */ check_indexam_whitelist,
+							   /* assign_hook= */ NULL,
+							   /* show_hook= */ NULL);
 
 #ifdef TS_DEBUG
 	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("shutdown_bgw_scheduler"),
@@ -868,6 +1068,34 @@ _guc_init(void)
 							/* assign_hook= */ NULL,
 							/* show_hook= */ NULL);
 
+	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("debug_have_int128"),
+							 /* short_desc= */ "whether we have int128 support",
+							 /* long_desc= */ "this is for debugging purposes",
+							 /* valueAddr= */ &ts_guc_debug_have_int128,
+#ifdef HAVE_INT128
+							 /* bootValue= */ true,
+#else
+							 /* bootValue= */ false,
+#endif
+							 /* context= */ PGC_INTERNAL,
+							 /* flags= */ 0,
+							 /* check_hook= */ NULL,
+							 /* assign_hook= */ NULL,
+							 /* show_hook= */ NULL);
+
+	DefineCustomEnumVariable(/* name= */ MAKE_EXTOPTION("debug_require_vector_agg"),
+							 /* short_desc= */
+							 "ensure that vectorized aggregation is used or not",
+							 /* long_desc= */ "this is for debugging purposes",
+							 /* valueAddr= */ (int *) &ts_guc_debug_require_vector_agg,
+							 /* bootValue= */ DRO_Allow,
+							 /* options = */ debug_require_options,
+							 /* context= */ PGC_USERSET,
+							 /* flags= */ 0,
+							 /* check_hook= */ NULL,
+							 /* assign_hook= */ NULL,
+							 /* show_hook= */ NULL);
+
 	DefineCustomEnumVariable(/* name= */ MAKE_EXTOPTION("debug_require_vector_qual"),
 							 /* short_desc= */
 							 "ensure that non-vectorized or vectorized filters are used in "
@@ -878,8 +1106,8 @@ _guc_init(void)
 							 "and "
 							 "using the test templates is a pain",
 							 /* valueAddr= */ (int *) &ts_guc_debug_require_vector_qual,
-							 /* bootValue= */ RVQ_Allow,
-							 /* options = */ require_vector_qual_options,
+							 /* bootValue= */ DRO_Allow,
+							 /* options = */ debug_require_options,
 							 /* context= */ PGC_USERSET,
 							 /* flags= */ 0,
 							 /* check_hook= */ NULL,
@@ -908,6 +1136,18 @@ _guc_init(void)
 							 /* assign_hook= */ NULL,
 							 /* show_hook= */ NULL);
 #endif
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("default_hypercore_use_access_method"),
+							 gettext_noop("Enable to always use Hypercore TAM when compressing."),
+							 gettext_noop("Sets the global default for using Hypercore TAM when "
+										  "compressing chunks."),
+							 &ts_guc_default_hypercore_use_access_method,
+							 false,
+							 /* context= */ PGC_USERSET,
+							 /* flags= */ 0,
+							 /* check_hook= */ NULL,
+							 /* assign_hook= */ NULL,
+							 /* show_hook= */ NULL);
 
 	/* register feature flags */
 	ts_feature_flag_add(FEATURE_HYPERTABLE);

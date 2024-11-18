@@ -49,20 +49,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ 14, 15, 16 ]
+        pg: [ 14, 15, 16, 17 ]
         os: [ windows-2022 ]
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
         ignores: ["chunk_adaptive metadata telemetry"]
         tsl_ignores: ["compression_algos"]
         tsl_skips: ["bgw_db_scheduler bgw_db_scheduler_fixed"]
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
-        include:
-          - pg: 14
-            tsl_skips_version: telemetry_stats-14
-          - pg: 15
-            tsl_skips_version: telemetry_stats-15
-          - pg: 16
-            tsl_skips_version: telemetry_stats-16
     env:
       # PostgreSQL configuration
       PGPORT: 55432
@@ -71,7 +64,7 @@ jobs:
       TABLESPACE2: D:\tablespace2\
     steps:
     - name: Setup WSL
-      uses: Vampire/setup-wsl@v3
+      uses: Vampire/setup-wsl@v3.1.1
       with:
         additional-packages:
           cmake
@@ -120,13 +113,20 @@ jobs:
         key: "${{ runner.os }}-build-pg${{ matrix.pkg_version }}\
           -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
 
+    # Force install PostgreSQL 17 since the package still on moderation
+    # https://community.chocolatey.org/packages/postgresql17
     - name: Install PostgreSQL ${{ matrix.pg }}
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
         choco feature disable --name=usePackageExitCodes
         choco feature disable --name=showDownloadProgress
-        choco install postgresql${{ matrix.pg }} `
-          --force -y --install-args="'--prefix $HOME\PostgreSQL\${{ matrix.pg }} --extract-only yes'"
+        if(${{ matrix.pg }} -eq 17) {
+          choco install postgresql${{ matrix.pg }} --version 17.0.0 `
+            --force -y --install-args="'--prefix $HOME\PostgreSQL\${{ matrix.pg }} --extract-only yes'"
+        } else {
+          choco install postgresql${{ matrix.pg }} `
+            --force -y --install-args="'--prefix $HOME\PostgreSQL\${{ matrix.pg }} --extract-only yes'"
+        }
 
     - name: Configure TimescaleDB
       run: cmake -B build_win -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `

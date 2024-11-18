@@ -41,7 +41,7 @@ function(GET_PG_CONFIG var)
   # Only call pg_config if the variable didn't already have a value.
   if(NOT ${var})
     execute_process(
-      COMMAND ${PG_CONFIG} ${ARGN}
+      COMMAND ${CMAKE_COMMAND} -E env LC_MESSAGES=C ${PG_CONFIG} ${ARGN}
       OUTPUT_VARIABLE _temp
       OUTPUT_STRIP_TRAILING_WHITESPACE)
   endif()
@@ -350,9 +350,9 @@ message(
 # Ensure that PostgreSQL version is supported and consistent with src/compat.h
 # version check
 if((${PG_VERSION_MAJOR} LESS "14")
-   OR (${PG_VERSION_MAJOR} GREATER "16")
+   OR (${PG_VERSION_MAJOR} GREATER "17")
    AND NOT (${EXPERIMENTAL}))
-  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 14, 15 and 16")
+  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 14, 15, 16 and 17")
 endif()
 
 # Get PostgreSQL configuration from pg_config
@@ -397,18 +397,6 @@ if(PG_SOURCE_DIR)
 endif(PG_SOURCE_DIR)
 
 set(EXT_CONTROL_FILE ${PROJECT_NAME}.control)
-
-# When building apt or rpm packages we build a separate loader package that will
-# be used by both the apache and community editions. Having the edition in the
-# description would be misleading so we remove it for these cases.
-set(GENERIC_LOADER_METHOD apt rpm)
-if(PROJECT_INSTALL_METHOD IN_LIST GENERIC_LOADER_METHOD)
-  set(COMMENT_SUFFIX "")
-elseif(APACHE_ONLY)
-  set(COMMENT_SUFFIX " (Apache 2 Edition)")
-else()
-  set(COMMENT_SUFFIX " (Community Edition)")
-endif()
 configure_file(${EXT_CONTROL_FILE}.in ${EXT_CONTROL_FILE})
 
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${EXT_CONTROL_FILE}

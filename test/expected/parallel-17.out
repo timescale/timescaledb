@@ -70,21 +70,22 @@ FROM "test"
 GROUP BY sec
 ORDER BY sec
 LIMIT 5;
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
- Gather
-   Workers Planned: 1
-   Single Copy: true
-   ->  Limit
-         ->  Sort
-               Sort Key: (time_bucket('@ 1 sec'::interval, _hyper_1_1_chunk.ts))
-               ->  HashAggregate
-                     Group Key: time_bucket('@ 1 sec'::interval, _hyper_1_1_chunk.ts)
-                     ->  Result
-                           ->  Append
-                                 ->  Seq Scan on _hyper_1_1_chunk
-                                 ->  Seq Scan on _hyper_1_2_chunk
-(12 rows)
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
+ Limit
+   ->  Finalize GroupAggregate
+         Group Key: (time_bucket('@ 1 sec'::interval, _hyper_1_1_chunk.ts))
+         ->  Gather Merge
+               Workers Planned: 2
+               ->  Partial GroupAggregate
+                     Group Key: (time_bucket('@ 1 sec'::interval, _hyper_1_1_chunk.ts))
+                     ->  Sort
+                           Sort Key: (time_bucket('@ 1 sec'::interval, _hyper_1_1_chunk.ts))
+                           ->  Result
+                                 ->  Parallel Append
+                                       ->  Parallel Seq Scan on _hyper_1_1_chunk
+                                       ->  Parallel Seq Scan on _hyper_1_2_chunk
+(13 rows)
 
 -- test single copy parallel plan with parallel chunk append
 :PREFIX SELECT time_bucket('1 second', ts) sec, last(i, j)
@@ -93,28 +94,29 @@ WHERE length(version()) > 0
 GROUP BY sec
 ORDER BY sec
 LIMIT 5;
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
- Gather
-   Workers Planned: 1
-   Single Copy: true
-   ->  Limit
-         ->  Sort
-               Sort Key: (time_bucket('@ 1 sec'::interval, test.ts))
-               ->  HashAggregate
-                     Group Key: time_bucket('@ 1 sec'::interval, test.ts)
-                     ->  Result
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
+ Limit
+   ->  Finalize GroupAggregate
+         Group Key: (time_bucket('@ 1 sec'::interval, test.ts))
+         ->  Gather Merge
+               Workers Planned: 2
+               ->  Partial GroupAggregate
+                     Group Key: (time_bucket('@ 1 sec'::interval, test.ts))
+                     ->  Sort
+                           Sort Key: (time_bucket('@ 1 sec'::interval, test.ts))
                            ->  Result
-                                 One-Time Filter: (length(version()) > 0)
-                                 ->  Custom Scan (ChunkAppend) on test
-                                       Chunks excluded during startup: 0
-                                       ->  Result
-                                             One-Time Filter: (length(version()) > 0)
-                                             ->  Seq Scan on _hyper_1_1_chunk
-                                       ->  Result
-                                             One-Time Filter: (length(version()) > 0)
-                                             ->  Seq Scan on _hyper_1_2_chunk
-(19 rows)
+                                 ->  Result
+                                       One-Time Filter: (length(version()) > 0)
+                                       ->  Parallel Custom Scan (ChunkAppend) on test
+                                             Chunks excluded during startup: 0
+                                             ->  Result
+                                                   One-Time Filter: (length(version()) > 0)
+                                                   ->  Parallel Seq Scan on _hyper_1_1_chunk
+                                             ->  Result
+                                                   One-Time Filter: (length(version()) > 0)
+                                                   ->  Parallel Seq Scan on _hyper_1_2_chunk
+(20 rows)
 
 SELECT time_bucket('1 second', ts) sec, last(i, j)
 FROM "test"

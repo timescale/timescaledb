@@ -642,7 +642,7 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 		context.rootquery = parse;
 		context.current_query = parse;
 
-		if (ts_extension_is_loaded())
+		if (ts_extension_is_loaded_and_not_upgrading())
 		{
 #ifdef USE_TELEMETRY
 			ts_telemetry_function_info_gather(parse);
@@ -653,7 +653,7 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 			preprocess_query((Node *) parse, &context);
 
 			if (ts_guc_enable_optimizations)
-				ts_cm_functions->preprocess_query_tsl(parse);
+				ts_cm_functions->preprocess_query_tsl(parse, &cursor_opts);
 		}
 
 		if (prev_planner_hook != NULL)
@@ -663,7 +663,7 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 			/* Call the standard planner */
 			stmt = standard_planner(parse, query_string, cursor_opts, bound_params);
 
-		if (ts_extension_is_loaded())
+		if (ts_extension_is_loaded_and_not_upgrading())
 		{
 			/*
 			 * Our top-level HypertableInsert plan node that wraps ModifyTable needs
@@ -1254,7 +1254,7 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 static bool
 valid_hook_call(void)
 {
-	return ts_extension_is_loaded() && planner_hcache_exists();
+	return ts_extension_is_loaded_and_not_upgrading() && planner_hcache_exists();
 }
 
 static bool
@@ -1417,14 +1417,13 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 											 !TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht);
 			const bool is_child_chunk_in_update =
 				(type == TS_REL_CHUNK_CHILD) && IS_UPDL_CMD(query);
+
 			if (use_transparent_decompression && (is_standalone_chunk || is_child_chunk_in_update))
 			{
-				TimescaleDBPrivate *fdw_private = (TimescaleDBPrivate *) rel->fdw_private;
-				Assert(fdw_private->cached_chunk_struct == NULL);
-				fdw_private->cached_chunk_struct =
-					ts_chunk_get_by_relid(rte->relid, /* fail_if_not_found = */ true);
-				if (!ts_chunk_is_partial(fdw_private->cached_chunk_struct) &&
-					ts_chunk_is_compressed(fdw_private->cached_chunk_struct))
+				const Chunk *chunk = ts_planner_chunk_fetch(root, rel);
+
+				if (!ts_chunk_is_partial(chunk) && ts_chunk_is_compressed(chunk) &&
+					!ts_is_hypercore_am(chunk->amoid))
 				{
 					rel->indexlist = NIL;
 				}
@@ -1598,7 +1597,7 @@ timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
 	if (prev_create_upper_paths_hook != NULL)
 		prev_create_upper_paths_hook(root, stage, input_rel, output_rel, extra);
 
-	if (!ts_extension_is_loaded())
+	if (!ts_extension_is_loaded_and_not_upgrading())
 		return;
 
 	if (input_rel != NULL)
