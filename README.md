@@ -40,7 +40,7 @@ these other resources:
 - [Developer Documentation](https://docs.timescale.com/getting-started/latest/services/)
 - [Slack Channel](https://slack-login.timescale.com)
 - [Timescale Community Forum](https://www.timescale.com/forum/)
-- [Timescale Release Notes & Future Plans](https://tsdb.co/GitHubTimescaleReleaseNotes)
+- [Timescale Release Notes & Future Plans](https://tsdb.co/GitHubTimescaleDocsReleaseNotes)
 
 For reference and clarity, all code files in this repository reference
 licensing in their header (either the Apache-2-open-source license
@@ -174,7 +174,7 @@ multiple workers.
 
 ### Releases & updates
 
- - [Timescale Release Notes](https://tsdb.co/GitHubTimescaleReleaseNotes): see detailed information about current and past
+ - [Timescale Release Notes](https://tsdb.co/GitHubTimescaleDocsReleaseNotes): see detailed information about current and past
    versions and subscribe to get
    notified about new releases, fixes, and early access/beta programs.
 
