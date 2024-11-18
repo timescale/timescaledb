@@ -71,7 +71,7 @@ create_grouping_policy_batch(int num_agg_defs, VectorAggDef *agg_defs, int num_g
 	policy->agg_extra_mctx =
 		AllocSetContextCreate(CurrentMemoryContext, "agg extra", ALLOCSET_DEFAULT_SIZES);
 
-	policy->agg_states = palloc(sizeof(*policy->agg_states) * policy->num_agg_defs);
+	policy->agg_states = (void **) palloc(sizeof(*policy->agg_states) * policy->num_agg_defs);
 	for (int i = 0; i < policy->num_agg_defs; i++)
 	{
 		VectorAggDef *agg_def = &policy->agg_defs[i];
@@ -190,7 +190,7 @@ gp_batch_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 	const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
 	if (num_words > policy->num_tmp_filter_words)
 	{
-		const size_t new_words = num_words * 2 + 1;
+		const size_t new_words = (num_words * 2) + 1;
 		if (policy->tmp_filter != NULL)
 		{
 			pfree(policy->tmp_filter);

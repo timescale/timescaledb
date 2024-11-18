@@ -235,8 +235,8 @@ ts_get_next_scheduled_execution_slot(BgwJob *job, TimestampTz finish_time)
 			DirectFunctionCall2(timestamptz_part, CStringGetTextDatum("month"), timebucket_fini);
 
 		/* convert everything to months */
-		float8 month_diff = DatumGetFloat8(year_fini) * 12 + DatumGetFloat8(month_fini) -
-							(DatumGetFloat8(year_init) * 12 + DatumGetFloat8(month_init));
+		float8 month_diff = (DatumGetFloat8(year_fini) * 12) + DatumGetFloat8(month_fini) -
+							((DatumGetFloat8(year_init) * 12) + DatumGetFloat8(month_init));
 
 		Datum months_to_add = DirectFunctionCall2(interval_mul,
 												  IntervalPGetDatum(&one_month),

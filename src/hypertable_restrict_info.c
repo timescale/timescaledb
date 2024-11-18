@@ -292,8 +292,8 @@ ts_hypertable_restrict_info_create(RelOptInfo *rel, Hypertable *ht)
 
 	int num_dimensions =
 		ht->space->num_dimensions + (range_space ? range_space->num_range_cols : 0);
-	HypertableRestrictInfo *res =
-		palloc0(sizeof(HypertableRestrictInfo) + sizeof(DimensionRestrictInfo *) * num_dimensions);
+	HypertableRestrictInfo *res = palloc0(sizeof(HypertableRestrictInfo) +
+										  (sizeof(DimensionRestrictInfo *) * num_dimensions));
 	int i;
 	int range_index = 0;
 

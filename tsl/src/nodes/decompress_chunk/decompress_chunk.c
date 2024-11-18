@@ -554,7 +554,7 @@ cost_batch_sorted_merge(PlannerInfo *root, CompressionInfo *compression_info,
 	 */
 	const double sort_path_cost_for_startup =
 		sort_path.startup_cost +
-		(sort_path.total_cost - sort_path.startup_cost) * (open_batches_clamped / sort_path.rows);
+		((sort_path.total_cost - sort_path.startup_cost) * (open_batches_clamped / sort_path.rows));
 	Assert(sort_path_cost_for_startup >= 0);
 	dcpath->custom_path.path.startup_cost = sort_path_cost_for_startup + work_mem_penalty;
 
