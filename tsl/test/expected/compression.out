@@ -1764,6 +1764,7 @@ SELECT compress_chunk(i) FROM show_chunks('f_sensor_data') i;
 (1 row)
 
 CALL reindex_compressed_hypertable('f_sensor_data');
+VACUUM ANALYZE f_sensor_data;
 -- Encourage use of parallel plans
 SET parallel_setup_cost = 0;
 SET parallel_tuple_cost = 0;
@@ -1826,7 +1827,7 @@ SELECT * FROM f_sensor_data WHERE sensor_id > 100;
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Gather
    Output: _hyper_37_73_chunk."time", _hyper_37_73_chunk.sensor_id, _hyper_37_73_chunk.cpu, _hyper_37_73_chunk.temperature
-   Workers Planned: 2
+   Workers Planned: 3
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_73_chunk
          Output: _hyper_37_73_chunk."time", _hyper_37_73_chunk.sensor_id, _hyper_37_73_chunk.cpu, _hyper_37_73_chunk.temperature
          ->  Parallel Index Scan using compress_hyper_38_74_chunk_sensor_id__ts_meta_min_1__ts_met_idx on _timescaledb_internal.compress_hyper_38_74_chunk

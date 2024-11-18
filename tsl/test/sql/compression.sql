@@ -794,6 +794,8 @@ ALTER TABLE f_sensor_data SET (timescaledb.compress, timescaledb.compress_segmen
 SELECT compress_chunk(i) FROM show_chunks('f_sensor_data') i;
 CALL reindex_compressed_hypertable('f_sensor_data');
 
+VACUUM ANALYZE f_sensor_data;
+
 -- Encourage use of parallel plans
 SET parallel_setup_cost = 0;
 SET parallel_tuple_cost = 0;
