@@ -21,18 +21,7 @@
 
 #include "batch_hashing_params.h"
 
-#include "import/umash.h"
-
-struct hash_table_key
-{
-	uint32 hash;
-	uint64 rest;
-} __attribute__((packed));
-
-#define UMASH
-#define HASH_TABLE_KEY_TYPE struct hash_table_key
-#define KEY_HASH(X) (X.hash)
-#define KEY_EQUAL(a, b) (a.hash == b.hash && a.rest == b.rest)
+#include "umash_fingerprint_key.h"
 
 static BytesView
 get_bytes_view(CompressedColumnValues *column_values, int arrow_row)
@@ -87,12 +76,11 @@ single_text_get_key(BatchHashingParams params, int row, void *restrict output_ke
 	}
 	DEBUG_PRINT("\n");
 
-	struct umash_fp fp = umash_fprint(params.policy->umash_params,
-									  /* seed = */ -1ull,
-									  output_key->data,
-									  output_key->len);
-	hash_table_key->hash = fp.hash[0] & (~(uint32) 0);
-	hash_table_key->rest = fp.hash[1];
+	const struct umash_fp fp = umash_fprint(params.policy->umash_params,
+											/* seed = */ -1ull,
+											output_key->data,
+											output_key->len);
+	*hash_table_key = umash_fingerprint_get_key(fp);
 }
 
 static pg_attribute_always_inline HASH_TABLE_KEY_TYPE

@@ -21,22 +21,11 @@
 
 #include "batch_hashing_params.h"
 
-#include "import/umash.h"
+#include "umash_fingerprint_key.h"
 
 #define EXPLAIN_NAME "serialized"
 #define KEY_VARIANT serialized
 #define OUTPUT_KEY_TYPE text *
-
-struct hash_table_key
-{
-	uint32 hash;
-	uint64 rest;
-} pg_attribute_packed;
-
-#define UMASH
-#define HASH_TABLE_KEY_TYPE struct hash_table_key
-#define KEY_HASH(X) (X.hash)
-#define KEY_EQUAL(a, b) (a.hash == b.hash && a.rest == b.rest)
 
 static pg_attribute_always_inline bool
 byte_bitmap_row_is_valid(const uint8 *bitmap, size_t row_number)
@@ -300,12 +289,11 @@ serialized_get_key(BatchHashingParams params, int row, void *restrict output_key
 	 */
 	*valid = true;
 
-	struct umash_fp fp = umash_fprint(params.policy->umash_params,
-									  /* seed = */ -1ull,
-									  serialized_key_storage,
-									  num_bytes);
-	hash_table_key->hash = fp.hash[0] & (~(uint32) 0);
-	hash_table_key->rest = fp.hash[1];
+	const struct umash_fp fp = umash_fprint(params.policy->umash_params,
+											/* seed = */ -1ull,
+											serialized_key_storage,
+											num_bytes);
+	*hash_table_key = umash_fingerprint_get_key(fp);
 }
 
 static pg_attribute_always_inline HASH_TABLE_KEY_TYPE
