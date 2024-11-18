@@ -25,14 +25,17 @@ typedef struct
 } FUNCTION_NAME(state);
 
 static void
-FUNCTION_NAME(init)(void *agg_state)
+FUNCTION_NAME(init)(void *restrict agg_states, int n)
 {
-	FUNCTION_NAME(state) *state = (FUNCTION_NAME(state) *) agg_state;
-	state->N = 0;
-	state->sumX = 0;
+	FUNCTION_NAME(state) *states = (FUNCTION_NAME(state) *) agg_states;
+	for (int i = 0; i < n; i++)
+	{
+		states[i].N = 0;
+		states[i].sumX = 0;
 #ifdef NEED_SUMX2
-	state->sumX2 = 0;
+		states[i].sumX2 = 0;
 #endif
+	}
 }
 
 static void
@@ -69,8 +72,8 @@ FUNCTION_NAME(emit)(void *agg_state, Datum *out_result, bool *out_isnull)
 }
 
 static pg_attribute_always_inline void
-FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *valid1,
-						   const uint64 *valid2, MemoryContext agg_extra_mctx)
+FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *filter,
+						   MemoryContext agg_extra_mctx)
 {
 	int64 N = 0;
 	int128 sumX = 0;
@@ -79,7 +82,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 #endif
 	for (int row = 0; row < n; row++)
 	{
-		const bool row_ok = arrow_row_both_valid(valid1, valid2, row);
+		const bool row_ok = arrow_row_is_valid(filter, row);
 		const CTYPE value = values[row];
 		N += row_ok;
 		sumX += value * row_ok;
@@ -96,14 +99,25 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 #endif
 }
 
-#include "agg_const_helper.c"
+static pg_attribute_always_inline void
+FUNCTION_NAME(one)(void *restrict agg_state, const CTYPE value)
+{
+	FUNCTION_NAME(state) *state = (FUNCTION_NAME(state) *) agg_state;
+	state->N++;
+	state->sumX += value;
+#ifdef NEED_SUMX2
+	state->sumX2 += ((int128) value) * ((int128) value);
+#endif
+}
+
+#include "agg_scalar_helper.c"
 #include "agg_vector_validity_helper.c"
 
 VectorAggFunctions FUNCTION_NAME(argdef) = {
 	.state_bytes = sizeof(FUNCTION_NAME(state)),
 	.agg_init = FUNCTION_NAME(init),
 	.agg_emit = FUNCTION_NAME(emit),
-	.agg_const = FUNCTION_NAME(const),
+	.agg_scalar = FUNCTION_NAME(scalar),
 	.agg_vector = FUNCTION_NAME(vector),
 };
 

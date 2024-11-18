@@ -132,6 +132,7 @@ select * from attrstats_same;
 alter table :chunk2 set access method hypercore;
 update :hypertable set device_id = 2 where device_id = 1;
 select * from relstats where relid = :'chunk2'::regclass;
+vacuum analyze :chunk2;
 select * from attrstats where relid = :'chunk2'::regclass;
 select count(*) from :chunk2;
 

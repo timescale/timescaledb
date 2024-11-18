@@ -19,15 +19,18 @@
 typedef struct
 {
 	double result;
-	bool isnull;
+	bool isvalid;
 } FloatSumState;
 
 static void
-float_sum_init(void *agg_state)
+float_sum_init(void *restrict agg_states, int n)
 {
-	FloatSumState *state = (FloatSumState *) agg_state;
-	state->result = 0;
-	state->isnull = true;
+	FloatSumState *states = (FloatSumState *) agg_states;
+	for (int i = 0; i < n; i++)
+	{
+		states[i].result = 0;
+		states[i].isvalid = false;
+	}
 }
 #endif
 

@@ -875,6 +875,16 @@ static void
 chunk_set_replica_identity(const Chunk *chunk)
 {
 	Relation ht_rel = relation_open(chunk->hypertable_relid, AccessShareLock);
+	Relation ch_rel = relation_open(chunk->table_id, AccessShareLock);
+
+	/* Do nothing if REPLICA IDENTITY of hypertable and chunk are equal */
+	if (ht_rel->rd_rel->relreplident == ch_rel->rd_rel->relreplident)
+	{
+		table_close(ch_rel, NoLock);
+		table_close(ht_rel, NoLock);
+		return;
+	}
+
 	ReplicaIdentityStmt stmt = {
 		.type = T_ReplicaIdentityStmt,
 		.identity_type = ht_rel->rd_rel->relreplident,
@@ -900,8 +910,9 @@ chunk_set_replica_identity(const Chunk *chunk)
 	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	AlterTableInternal(chunk->table_id, list_make1(&cmd), false);
+	ts_alter_table_with_event_trigger(chunk->table_id, NULL, list_make1(&cmd), false);
 	ts_catalog_restore_user(&sec_ctx);
+	table_close(ch_rel, NoLock);
 	table_close(ht_rel, NoLock);
 }
 

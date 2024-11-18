@@ -889,8 +889,12 @@ static void
 find_vectorized_quals(DecompressionMapContext *context, DecompressChunkPath *path, List *qual_list,
 					  List **vectorized, List **nonvectorized)
 {
-	ListCell *lc;
+	VectorQualInfo vqi = {
+		.vector_attrs = build_vector_attrs_array(context->uncompressed_attno_info, path->info),
+		.rti = path->info->chunk_rel->relid,
+	};
 
+	ListCell *lc;
 	foreach (lc, qual_list)
 	{
 		Node *source_qual = lfirst(lc);
@@ -903,14 +907,7 @@ find_vectorized_quals(DecompressionMapContext *context, DecompressChunkPath *pat
 		 */
 		Node *transformed_comparison =
 			(Node *) ts_transform_cross_datatype_comparison((Expr *) source_qual);
-		VectorQualInfoDecompressChunk vqidc = {
-			.vqinfo = {
-				.vector_attrs = build_vector_attrs_array(context->uncompressed_attno_info, path->info),
-				.rti = path->info->chunk_rel->relid,
-			},
-			.colinfo = context->uncompressed_attno_info,
-		};
-		Node *vectorized_qual = vector_qual_make(transformed_comparison, &vqidc.vqinfo);
+		Node *vectorized_qual = vector_qual_make(transformed_comparison, &vqi);
 		if (vectorized_qual)
 		{
 			*vectorized = lappend(*vectorized, vectorized_qual);
@@ -919,9 +916,9 @@ find_vectorized_quals(DecompressionMapContext *context, DecompressChunkPath *pat
 		{
 			*nonvectorized = lappend(*nonvectorized, source_qual);
 		}
-
-		pfree(vqidc.vqinfo.vector_attrs);
 	}
+
+	pfree(vqi.vector_attrs);
 }
 
 /*

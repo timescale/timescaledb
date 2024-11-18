@@ -341,10 +341,18 @@ select * from relstats where relid = :'chunk2'::regclass;
  _timescaledb_internal._hyper_1_2_chunk |      2016
 (1 row)
 
+vacuum analyze :chunk2;
 select * from attrstats where relid = :'chunk2'::regclass;
- relid | attname | n_distinct | most_common_vals 
--------+---------+------------+------------------
-(0 rows)
+                 relid                  |   attname   | n_distinct |                                most_common_vals                                
+----------------------------------------+-------------+------------+--------------------------------------------------------------------------------
+ _timescaledb_internal._hyper_1_2_chunk | created_at  |         -1 | 
+ _timescaledb_internal._hyper_1_2_chunk | device_id   |         29 | 2,27,4,21,24,28,5,30,29,7,10,11,23,26,9,6,3,8,13,19,20,15,17,18,22,25,12,14,16
+ _timescaledb_internal._hyper_1_2_chunk | humidity    |         -1 | 
+ _timescaledb_internal._hyper_1_2_chunk | location_id |         10 | 9,2,6,10,7,4,1,3,5,8
+ _timescaledb_internal._hyper_1_2_chunk | metric_id   |         -1 | 
+ _timescaledb_internal._hyper_1_2_chunk | owner_id    |          5 | 5,4,1,2,3
+ _timescaledb_internal._hyper_1_2_chunk | temp        |         -1 | 
+(7 rows)
 
 select count(*) from :chunk2;
  count 
