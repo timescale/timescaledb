@@ -14,7 +14,7 @@ FUNCTION_NAME(alloc_output_keys)(GroupingPolicyHash *policy, DecompressBatchStat
 	/*
 	 * Allocate enough storage for keys, given that each row of the new
 	 * compressed batch might turn out to be a new grouping key.
-	 * We do this here to avoid allocations in the hot loop that fills the hash
+	 * We do this separately to avoid allocations in the hot loop that fills the hash
 	 * table.
 	 */
 	HashingStrategy *hashing = &policy->strategy;

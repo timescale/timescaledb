@@ -11,23 +11,23 @@
 #include <postgres.h>
 
 #include "compression/arrow_c_data_interface.h"
-#include "grouping_policy_hash.h"
 #include "hash64.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
+#include "nodes/vector_agg/grouping_policy_hash.h"
 
-#define EXPLAIN_NAME "single 4-byte"
-#define KEY_VARIANT single_fixed_4
-#define KEY_BYTES 4
-#define OUTPUT_KEY_TYPE int32
-#define HASH_TABLE_KEY_TYPE int32
-#define DATUM_TO_output_key DatumGetInt32
-#define output_key_TO_DATUM Int32GetDatum
+#define EXPLAIN_NAME "single 2-byte"
+#define KEY_VARIANT single_fixed_2
+#define KEY_BYTES 2
+#define OUTPUT_KEY_TYPE int16
+#define HASH_TABLE_KEY_TYPE OUTPUT_KEY_TYPE
+#define DATUM_TO_OUTPUT_KEY DatumGetInt16
+#define OUTPUT_KEY_TO_DATUM Int16GetDatum
 
+#define ABBREVIATE(X) (X)
 #define KEY_HASH(X) HASH64(X)
 
-#include "single_fixed_key_impl.c"
+#include "hash_strategy_helper_single_fixed_key.c"
 
 #define KEY_EQUAL(a, b) a == b
-
-#include "hash_table_functions_impl.c"
+#include "hash_strategy_impl.c"

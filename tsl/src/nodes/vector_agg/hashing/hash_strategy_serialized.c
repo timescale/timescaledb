@@ -14,9 +14,9 @@
 
 #include "bytes_view.h"
 #include "compression/arrow_c_data_interface.h"
-#include "grouping_policy_hash.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
+#include "nodes/vector_agg/grouping_policy_hash.h"
 
 #include "import/umash.h"
 
@@ -31,16 +31,43 @@ struct hash_table_key
 #define KEY_HASH(X) (X.hash)
 #define KEY_EQUAL(a, b) (a.hash == b.hash && a.rest == b.rest)
 
+static pg_attribute_always_inline bool
+byte_bitmap_row_is_valid(const uint8 *bitmap, size_t row_number)
+{
+	if (likely(bitmap == NULL))
+	{
+		return true;
+	}
+
+	const size_t byte_index = row_number / 8;
+	const size_t bit_index = row_number % 8;
+	const uint8 mask = ((uint8) 1) << bit_index;
+	return bitmap[byte_index] & mask;
+}
+
 static pg_attribute_always_inline void
-serialized_get_key(HashingConfig config, int row, void *restrict output_key_ptr,
+byte_bitmap_set_row_validity(uint8 *bitmap, size_t row_number, bool value)
+{
+	const size_t byte_index = row_number / 8;
+	const size_t bit_index = row_number % 8;
+	const uint8 mask = ((uint8) 1) << bit_index;
+	const uint8 new_bit = ((uint8) value) << bit_index;
+
+	bitmap[byte_index] = (bitmap[byte_index] & ~mask) | new_bit;
+
+	Assert(byte_bitmap_row_is_valid(bitmap, row_number) == value);
+}
+
+static pg_attribute_always_inline void
+serialized_get_key(BatchHashingParams params, int row, void *restrict output_key_ptr,
 				   void *restrict hash_table_key_ptr, bool *restrict valid)
 {
-	GroupingPolicyHash *policy = config.policy;
+	GroupingPolicyHash *policy = params.policy;
 
 	text **restrict output_key = (text **) output_key_ptr;
 	HASH_TABLE_KEY_TYPE *restrict hash_table_key = (HASH_TABLE_KEY_TYPE *) hash_table_key_ptr;
 
-	const int num_columns = config.num_grouping_columns;
+	const int num_columns = params.num_grouping_columns;
 
 	size_t bitmap_bytes = (num_columns + 7) / 8;
 	uint8 *restrict serialized_key_validity_bitmap;
@@ -53,13 +80,14 @@ serialized_get_key(HashingConfig config, int row, void *restrict output_key_ptr,
 	num_bytes += VARHDRSZ;
 	for (int column_index = 0; column_index < num_columns; column_index++)
 	{
-		const CompressedColumnValues *column_values = &config.grouping_column_values[column_index];
+		const CompressedColumnValues *column_values = &params.grouping_column_values[column_index];
 
-		if (config.have_scalar_columns && column_values->decompression_type == DT_Scalar)
+		if (params.have_scalar_or_nullable_columns &&
+			column_values->decompression_type == DT_Scalar)
 		{
 			if (!*column_values->output_isnull)
 			{
-				const GroupingColumn *def = &config.policy->grouping_columns[column_index];
+				const GroupingColumn *def = &params.policy->grouping_columns[column_index];
 				if (def->by_value)
 				{
 					num_bytes += def->value_bytes;
@@ -73,8 +101,8 @@ serialized_get_key(HashingConfig config, int row, void *restrict output_key_ptr,
 			continue;
 		}
 
-		const bool is_valid =
-			!config.have_scalar_columns || arrow_row_is_valid(column_values->buffers[0], row);
+		const bool is_valid = !params.have_scalar_or_nullable_columns ||
+							  arrow_row_is_valid(column_values->buffers[0], row);
 		if (!is_valid)
 		{
 			continue;
@@ -148,15 +176,16 @@ serialized_get_key(HashingConfig config, int row, void *restrict output_key_ptr,
 	offset += VARHDRSZ;
 	for (int column_index = 0; column_index < num_columns; column_index++)
 	{
-		const CompressedColumnValues *column_values = &config.grouping_column_values[column_index];
+		const CompressedColumnValues *column_values = &params.grouping_column_values[column_index];
 
-		if (config.have_scalar_columns && column_values->decompression_type == DT_Scalar)
+		if (params.have_scalar_or_nullable_columns &&
+			column_values->decompression_type == DT_Scalar)
 		{
 			const bool is_valid = !*column_values->output_isnull;
 			byte_bitmap_set_row_validity(serialized_key_validity_bitmap, column_index, is_valid);
 			if (is_valid)
 			{
-				const GroupingColumn *def = &config.policy->grouping_columns[column_index];
+				const GroupingColumn *def = &params.policy->grouping_columns[column_index];
 				if (def->by_value)
 				{
 					memcpy(&serialized_key_storage[offset],
@@ -184,8 +213,8 @@ serialized_get_key(HashingConfig config, int row, void *restrict output_key_ptr,
 			continue;
 		}
 
-		const bool is_valid =
-			!config.have_scalar_columns || arrow_row_is_valid(column_values->buffers[0], row);
+		const bool is_valid = !params.have_scalar_or_nullable_columns ||
+							  arrow_row_is_valid(column_values->buffers[0], row);
 		byte_bitmap_set_row_validity(serialized_key_validity_bitmap, column_index, is_valid);
 
 		if (!is_valid)
@@ -264,7 +293,7 @@ serialized_get_key(HashingConfig config, int row, void *restrict output_key_ptr,
 	 */
 	*valid = true;
 
-	struct umash_fp fp = umash_fprint(config.policy->umash_params,
+	struct umash_fp fp = umash_fprint(params.policy->umash_params,
 									  /* seed = */ -1ull,
 									  serialized_key_storage,
 									  num_bytes);
@@ -380,4 +409,4 @@ serialized_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *b
 #define KEY_VARIANT serialized
 #define OUTPUT_KEY_TYPE text *
 
-#include "hash_table_functions_impl.c"
+#include "hash_strategy_impl.c"

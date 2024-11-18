@@ -51,39 +51,47 @@ typedef struct
 
 struct FUNCTION_NAME(hash);
 
-static uint32
-FUNCTION_NAME(get_num_keys)(void *table)
+static uint64
+FUNCTION_NAME(get_size_bytes)(HashingStrategy *strategy)
 {
-	struct FUNCTION_NAME(hash) *hash = (struct FUNCTION_NAME(hash) *) table;
-	return hash->members;
+	struct FUNCTION_NAME(hash) *hash = (struct FUNCTION_NAME(hash) *) strategy->table;
+	return hash->members * sizeof(FUNCTION_NAME(entry));
 }
 
-static uint64
-FUNCTION_NAME(get_size_bytes)(void *table)
+static void
+FUNCTION_NAME(init)(HashingStrategy *strategy, GroupingPolicyHash *policy)
 {
-	struct FUNCTION_NAME(hash) *hash = (struct FUNCTION_NAME(hash) *) table;
-	return hash->members * sizeof(FUNCTION_NAME(entry));
+	strategy->table = FUNCTION_NAME(create)(CurrentMemoryContext, policy->num_agg_state_rows, NULL);
+#ifdef UMASH
+	policy->umash_params = palloc0(sizeof(struct umash_params));
+	umash_params_derive(policy->umash_params, 0xabcdef1234567890ull, NULL);
+#endif
+}
+
+static void
+FUNCTION_NAME(reset_strategy)(HashingStrategy *strategy)
+{
+	struct FUNCTION_NAME(hash) *hash = (struct FUNCTION_NAME(hash) *) strategy->table;
+	FUNCTION_NAME(reset)(hash);
 }
 
 /*
  * Fill the unique key indexes for all rows using a hash table.
  */
 static pg_attribute_always_inline void
-FUNCTION_NAME(fill_offsets_impl)(
-
-	HashingConfig config, int start_row, int end_row)
+FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int end_row)
 {
-	GroupingPolicyHash *policy = config.policy;
+	GroupingPolicyHash *policy = params.policy;
 
-	uint32 *restrict indexes = config.result_key_indexes;
+	uint32 *restrict indexes = params.result_key_indexes;
 
-	struct FUNCTION_NAME(hash) *restrict table = policy->table;
+	struct FUNCTION_NAME(hash) *restrict table = policy->strategy.table;
 
 	HASH_TABLE_KEY_TYPE prev_hash_table_key;
 	uint32 previous_key_index = 0;
 	for (int row = start_row; row < end_row; row++)
 	{
-		if (!arrow_row_is_valid(config.batch_filter, row))
+		if (!arrow_row_is_valid(params.batch_filter, row))
 		{
 			/* The row doesn't pass the filter. */
 			DEBUG_PRINT("%p: row %d doesn't pass batch filter\n", policy, row);
@@ -93,7 +101,7 @@ FUNCTION_NAME(fill_offsets_impl)(
 		bool key_valid = false;
 		OUTPUT_KEY_TYPE output_key = { 0 };
 		HASH_TABLE_KEY_TYPE hash_table_key = { 0 };
-		FUNCTION_NAME(get_key)(config, row, &output_key, &hash_table_key, &key_valid);
+		FUNCTION_NAME(get_key)(params, row, &output_key, &hash_table_key, &key_valid);
 
 		if (unlikely(!key_valid))
 		{
@@ -156,40 +164,46 @@ FUNCTION_NAME(fill_offsets_impl)(
  * when all the batch and key rows are valid.
  */
 #define APPLY_FOR_BATCH_FILTER(X, NAME, COND)                                                      \
-	X(NAME##_nofilter, (COND) && (config.batch_filter == NULL))                                    \
-	X(NAME##_filter, (COND) && (config.batch_filter != NULL))
+	X(NAME##_nofilter, (COND) && (params.batch_filter == NULL))                                    \
+	X(NAME##_filter, (COND) && (params.batch_filter != NULL))
 
-#define APPLY_FOR_VALIDITY(X, NAME, COND)                                                          \
-	APPLY_FOR_BATCH_FILTER(X, NAME##_notnull, (COND) && config.single_key.buffers[0] == NULL)      \
-	APPLY_FOR_BATCH_FILTER(X, NAME##_nullable, (COND) && config.single_key.buffers[0] != NULL)
+#define APPLY_FOR_NULLABILITY(X, NAME, COND)                                                       \
+	APPLY_FOR_BATCH_FILTER(X, NAME##_notnull, (COND) && params.single_key.buffers[0] == NULL)      \
+	APPLY_FOR_BATCH_FILTER(X, NAME##_nullable, (COND) && params.single_key.buffers[0] != NULL)
 
 #define APPLY_FOR_SCALARS(X, NAME, COND)                                                           \
-	APPLY_FOR_BATCH_FILTER(X, NAME##_noscalar, (COND) && !config.have_scalar_columns)              \
-	APPLY_FOR_BATCH_FILTER(X, NAME##_scalar, (COND) && config.have_scalar_columns)
+	APPLY_FOR_BATCH_FILTER(X,                                                                      \
+						   NAME##_noscalar_notnull,                                                \
+						   (COND) && !params.have_scalar_or_nullable_columns)                      \
+	APPLY_FOR_BATCH_FILTER(X,                                                                      \
+						   NAME##_scalar_or_nullable,                                              \
+						   (COND) && params.have_scalar_or_nullable_columns)
 
 #define APPLY_FOR_TYPE(X, NAME, COND)                                                              \
-	APPLY_FOR_VALIDITY(X,                                                                          \
-					   NAME##_byval,                                                               \
-					   (COND) && config.single_key.decompression_type == sizeof(OUTPUT_KEY_TYPE))  \
-	APPLY_FOR_VALIDITY(X,                                                                          \
-					   NAME##_text,                                                                \
-					   (COND) && config.single_key.decompression_type == DT_ArrowText)             \
-	APPLY_FOR_VALIDITY(X,                                                                          \
-					   NAME##_dict,                                                                \
-					   (COND) && config.single_key.decompression_type == DT_ArrowTextDict)         \
-	APPLY_FOR_SCALARS(X, NAME##_multi, (COND) && config.single_key.decompression_type == DT_Invalid)
+	APPLY_FOR_NULLABILITY(X,                                                                       \
+						  NAME##_byval,                                                            \
+						  (COND) &&                                                                \
+							  params.single_key.decompression_type == sizeof(OUTPUT_KEY_TYPE))     \
+	APPLY_FOR_NULLABILITY(X,                                                                       \
+						  NAME##_text,                                                             \
+						  (COND) && params.single_key.decompression_type == DT_ArrowText)          \
+	APPLY_FOR_NULLABILITY(X,                                                                       \
+						  NAME##_dict,                                                             \
+						  (COND) && params.single_key.decompression_type == DT_ArrowTextDict)      \
+	APPLY_FOR_SCALARS(X, NAME##_multi, (COND) && params.single_key.decompression_type == DT_Invalid)
 
 #define APPLY_FOR_SPECIALIZATIONS(X) APPLY_FOR_TYPE(X, index, true)
 
 #define DEFINE(NAME, CONDITION)                                                                    \
-	static pg_noinline void FUNCTION_NAME(NAME)(HashingConfig config, int start_row, int end_row)  \
+	static pg_noinline void FUNCTION_NAME(                                                         \
+		NAME)(BatchHashingParams params, int start_row, int end_row)                               \
 	{                                                                                              \
 		if (!(CONDITION))                                                                          \
 		{                                                                                          \
 			pg_unreachable();                                                                      \
 		}                                                                                          \
                                                                                                    \
-		FUNCTION_NAME(fill_offsets_impl)(config, start_row, end_row);                              \
+		FUNCTION_NAME(fill_offsets_impl)(params, start_row, end_row);                              \
 	}
 
 APPLY_FOR_SPECIALIZATIONS(DEFINE)
@@ -197,19 +211,29 @@ APPLY_FOR_SPECIALIZATIONS(DEFINE)
 #undef DEFINE
 
 static void
-FUNCTION_NAME(dispatch_for_config)(HashingConfig config, int start_row, int end_row)
+FUNCTION_NAME(dispatch_for_params)(BatchHashingParams params, int start_row, int end_row)
 {
+	if (params.num_grouping_columns == 0)
+	{
+		pg_unreachable();
+	}
+
+	if ((params.num_grouping_columns == 1) != (params.single_key.decompression_type != DT_Invalid))
+	{
+		pg_unreachable();
+	}
+
 #define DISPATCH(NAME, CONDITION)                                                                  \
 	if (CONDITION)                                                                                 \
 	{                                                                                              \
-		FUNCTION_NAME(NAME)(config, start_row, end_row);                                           \
+		FUNCTION_NAME(NAME)(params, start_row, end_row);                                           \
 	}                                                                                              \
 	else
 
 	APPLY_FOR_SPECIALIZATIONS(DISPATCH)
 	{
 		/* Use a generic implementation if no specializations matched. */
-		FUNCTION_NAME(fill_offsets_impl)(config, start_row, end_row);
+		FUNCTION_NAME(fill_offsets_impl)(params, start_row, end_row);
 	}
 #undef DISPATCH
 }
@@ -226,34 +250,23 @@ FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *ba
 {
 	Assert((size_t) end_row <= policy->num_key_index_for_row);
 
-	HashingConfig config = build_hashing_config(policy, batch_state);
+	BatchHashingParams params = build_batch_hashing_params(policy, batch_state);
 
 #ifdef USE_DICT_HASHING
 	if (policy->use_key_index_for_dict)
 	{
-		Assert(config.single_key.decompression_type == DT_ArrowTextDict);
-		single_text_offsets_translate(config, start_row, end_row);
+		Assert(params.single_key.decompression_type == DT_ArrowTextDict);
+		single_text_offsets_translate(params, start_row, end_row);
 		return;
 	}
 #endif
 
-	FUNCTION_NAME(dispatch_for_config)(config, start_row, end_row);
-}
-
-static void
-FUNCTION_NAME(init)(HashingStrategy *strategy, GroupingPolicyHash *policy)
-{
-	policy->table = FUNCTION_NAME(create)(CurrentMemoryContext, policy->num_agg_state_rows, NULL);
-#ifdef UMASH
-	policy->umash_params = palloc0(sizeof(struct umash_params));
-	umash_params_derive(policy->umash_params, 0xabcdef1234567890ull, NULL);
-#endif
+	FUNCTION_NAME(dispatch_for_params)(params, start_row, end_row);
 }
 
 HashingStrategy FUNCTION_NAME(strategy) = {
 	.init = FUNCTION_NAME(init),
-	.reset = (void (*)(void *)) FUNCTION_NAME(reset),
-	.get_num_keys = FUNCTION_NAME(get_num_keys),
+	.reset = FUNCTION_NAME(reset_strategy),
 	.get_size_bytes = FUNCTION_NAME(get_size_bytes),
 	.fill_offsets = FUNCTION_NAME(fill_offsets),
 	.emit_key = FUNCTION_NAME(emit_key),
@@ -270,8 +283,8 @@ HashingStrategy FUNCTION_NAME(strategy) = {
 #undef CHECK_PREVIOUS_KEY
 #undef OUTPUT_KEY_TYPE
 #undef HASH_TABLE_KEY_TYPE
-#undef DATUM_TO_output_key
-#undef output_key_TO_DATUM
+#undef DATUM_TO_OUTPUT_KEY
+#undef OUTPUT_KEY_TO_DATUM
 #undef UMASH
 #undef USE_DICT_HASHING
 

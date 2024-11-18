@@ -110,7 +110,7 @@ gp_hash_reset(GroupingPolicy *obj)
 
 	policy->returning_results = false;
 
-	policy->strategy.reset(policy->table);
+	policy->strategy.reset(&policy->strategy);
 
 	/*
 	 * Have to reset this because it's in the key body context which is also
@@ -423,7 +423,7 @@ gp_hash_should_emit(GroupingPolicy *gp)
 	 * work will be done by the final Postgres aggregation, so we should bail
 	 * out early here.
 	 */
-	return policy->strategy.get_size_bytes(policy->table) > 512 * 1024;
+	return policy->strategy.get_size_bytes(&policy->strategy) > 512 * 1024;
 }
 
 static bool

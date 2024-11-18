@@ -14,9 +14,9 @@
 
 #include "bytes_view.h"
 #include "compression/arrow_c_data_interface.h"
-#include "grouping_policy_hash.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
+#include "nodes/vector_agg/grouping_policy_hash.h"
 
 #include "import/umash.h"
 
@@ -42,31 +42,31 @@ get_bytes_view(CompressedColumnValues *column_values, int arrow_row)
 }
 
 static pg_attribute_always_inline void
-single_text_get_key(HashingConfig config, int row, void *restrict output_key_ptr,
+single_text_get_key(BatchHashingParams params, int row, void *restrict output_key_ptr,
 					void *restrict hash_table_key_ptr, bool *restrict valid)
 {
-	Assert(config.policy->num_grouping_columns == 1);
+	Assert(params.policy->num_grouping_columns == 1);
 
 	BytesView *restrict output_key = (BytesView *) output_key_ptr;
 	HASH_TABLE_KEY_TYPE *restrict hash_table_key = (HASH_TABLE_KEY_TYPE *) hash_table_key_ptr;
 
-	if (unlikely(config.single_key.decompression_type == DT_Scalar))
+	if (unlikely(params.single_key.decompression_type == DT_Scalar))
 	{
 		/* Already stored. */
-		output_key->len = VARSIZE_ANY_EXHDR(*config.single_key.output_value);
-		output_key->data = (const uint8 *) VARDATA_ANY(*config.single_key.output_value);
-		*valid = !*config.single_key.output_isnull;
+		output_key->len = VARSIZE_ANY_EXHDR(*params.single_key.output_value);
+		output_key->data = (const uint8 *) VARDATA_ANY(*params.single_key.output_value);
+		*valid = !*params.single_key.output_isnull;
 	}
-	else if (config.single_key.decompression_type == DT_ArrowText)
+	else if (params.single_key.decompression_type == DT_ArrowText)
 	{
-		*output_key = get_bytes_view(&config.single_key, row);
-		*valid = arrow_row_is_valid(config.single_key.buffers[0], row);
+		*output_key = get_bytes_view(&params.single_key, row);
+		*valid = arrow_row_is_valid(params.single_key.buffers[0], row);
 	}
-	else if (config.single_key.decompression_type == DT_ArrowTextDict)
+	else if (params.single_key.decompression_type == DT_ArrowTextDict)
 	{
-		const int16 index = ((int16 *) config.single_key.buffers[3])[row];
-		*output_key = get_bytes_view(&config.single_key, index);
-		*valid = arrow_row_is_valid(config.single_key.buffers[0], row);
+		const int16 index = ((int16 *) params.single_key.buffers[3])[row];
+		*output_key = get_bytes_view(&params.single_key, index);
+		*valid = arrow_row_is_valid(params.single_key.buffers[0], row);
 	}
 	else
 	{
@@ -84,7 +84,7 @@ single_text_get_key(HashingConfig config, int row, void *restrict output_key_ptr
 	}
 	DEBUG_PRINT("\n");
 
-	struct umash_fp fp = umash_fprint(config.policy->umash_params,
+	struct umash_fp fp = umash_fprint(params.policy->umash_params,
 									  /* seed = */ -1ull,
 									  output_key->data,
 									  output_key->len);
@@ -113,7 +113,7 @@ single_text_store_output_key(GroupingPolicyHash *restrict policy, uint32 new_key
 #define KEY_VARIANT single_text
 #define OUTPUT_KEY_TYPE BytesView
 
-#include "hash_single_output_key_helper.c"
+#include "hash_strategy_helper_single_output_key.c"
 
 /*
  * We use a special batch preparation function to sometimes hash the dictionary-
@@ -122,7 +122,7 @@ single_text_store_output_key(GroupingPolicyHash *restrict policy, uint32 new_key
 
 #define USE_DICT_HASHING
 
-static pg_attribute_always_inline void single_text_dispatch_for_config(HashingConfig config,
+static pg_attribute_always_inline void single_text_dispatch_for_params(BatchHashingParams params,
 																	   int start_row, int end_row);
 
 static void
@@ -138,16 +138,13 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 	 */
 	policy->use_key_index_for_dict = false;
 
-	Assert(policy->num_grouping_columns == 1);
-
-	HashingConfig config = build_hashing_config(policy, batch_state);
-
-	if (config.single_key.decompression_type != DT_ArrowTextDict)
+	BatchHashingParams params = build_batch_hashing_params(policy, batch_state);
+	if (params.single_key.decompression_type != DT_ArrowTextDict)
 	{
 		return;
 	}
 
-	const int dict_rows = config.single_key.arrow->dictionary->length;
+	const int dict_rows = params.single_key.arrow->dictionary->length;
 	if ((size_t) dict_rows >
 		arrow_num_valid(batch_state->vector_qual_result, batch_state->total_batch_rows))
 	{
@@ -199,7 +196,7 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 	const uint64 word = row_filter[outer];                                                         \
 	for (int inner = 0; inner < INNER_MAX; inner++)                                                \
 	{                                                                                              \
-		const int16 index = ((int16 *) config.single_key.buffers[3])[outer * 64 + inner];          \
+		const int16 index = ((int16 *) params.single_key.buffers[3])[outer * 64 + inner];          \
 		tmp[index] = tmp[index] || (word & (1ull << inner));                                       \
 	}
 
@@ -230,11 +227,11 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 		}
 #undef INNER_LOOP
 
-		config.batch_filter = dict_filter;
+		params.batch_filter = dict_filter;
 	}
 	else
 	{
-		config.batch_filter = NULL;
+		params.batch_filter = NULL;
 	}
 
 	/*
@@ -245,23 +242,23 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 	bool have_null_key = false;
 	if (batch_state->vector_qual_result != NULL)
 	{
-		if (config.single_key.arrow->null_count > 0)
+		if (params.single_key.arrow->null_count > 0)
 		{
-			Assert(config.single_key.buffers[0] != NULL);
+			Assert(params.single_key.buffers[0] != NULL);
 			const size_t batch_words = (batch_rows + 63) / 64;
 			for (size_t i = 0; i < batch_words; i++)
 			{
 				have_null_key =
 					have_null_key ||
-					(row_filter[i] & (~((uint64 *) config.single_key.buffers[0])[i])) != 0;
+					(row_filter[i] & (~((uint64 *) params.single_key.buffers[0])[i])) != 0;
 			}
 		}
 	}
 	else
 	{
-		if (config.single_key.arrow->null_count > 0)
+		if (params.single_key.arrow->null_count > 0)
 		{
-			Assert(config.single_key.buffers[0] != NULL);
+			Assert(params.single_key.buffers[0] != NULL);
 			have_null_key = true;
 		}
 	}
@@ -270,15 +267,16 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 	 * Build key indexes for the dictionary entries as for normal non-nullable
 	 * text values.
 	 */
-	Assert(config.single_key.decompression_type = DT_ArrowTextDict);
-	config.single_key.decompression_type = DT_ArrowText;
-	config.single_key.buffers[0] = NULL;
-
+	Assert(params.single_key.decompression_type = DT_ArrowTextDict);
 	Assert((size_t) dict_rows <= policy->num_key_index_for_dict);
-	config.result_key_indexes = policy->key_index_for_dict;
 	memset(policy->key_index_for_dict, 0, sizeof(*policy->key_index_for_dict) * dict_rows);
 
-	single_text_dispatch_for_config(config, 0, dict_rows);
+	params.single_key.decompression_type = DT_ArrowText;
+	params.single_key.buffers[0] = NULL;
+	params.have_scalar_or_nullable_columns = false;
+	params.result_key_indexes = policy->key_index_for_dict;
+
+	single_text_dispatch_for_params(params, 0, dict_rows);
 
 	/*
 	 * The dictionary doesn't store nulls, so add the null key separately if we
@@ -334,18 +332,18 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 }
 
 static pg_attribute_always_inline void
-single_text_offsets_translate_impl(HashingConfig config, int start_row, int end_row)
+single_text_offsets_translate_impl(BatchHashingParams params, int start_row, int end_row)
 {
-	GroupingPolicyHash *policy = config.policy;
+	GroupingPolicyHash *policy = params.policy;
 	Assert(policy->use_key_index_for_dict);
 
-	uint32 *restrict indexes_for_rows = config.result_key_indexes;
+	uint32 *restrict indexes_for_rows = params.result_key_indexes;
 	uint32 *restrict indexes_for_dict = policy->key_index_for_dict;
 
 	for (int row = start_row; row < end_row; row++)
 	{
-		const bool row_valid = arrow_row_is_valid(config.single_key.buffers[0], row);
-		const int16 dict_index = ((int16 *) config.single_key.buffers[3])[row];
+		const bool row_valid = arrow_row_is_valid(params.single_key.buffers[0], row);
+		const int16 dict_index = ((int16 *) params.single_key.buffers[3])[row];
 
 		if (row_valid)
 		{
@@ -356,25 +354,25 @@ single_text_offsets_translate_impl(HashingConfig config, int start_row, int end_
 			indexes_for_rows[row] = policy->null_key_index;
 		}
 
-		Assert(indexes_for_rows[row] != 0 || !arrow_row_is_valid(config.batch_filter, row));
+		Assert(indexes_for_rows[row] != 0 || !arrow_row_is_valid(params.batch_filter, row));
 	}
 }
 
 #define APPLY_FOR_VALIDITY(X, NAME, COND)                                                          \
-	X(NAME##_notnull, (COND) && (config.single_key.buffers[0] == NULL))                            \
-	X(NAME##_nullable, (COND) && (config.single_key.buffers[0] != NULL))
+	X(NAME##_notnull, (COND) && (params.single_key.buffers[0] == NULL))                            \
+	X(NAME##_nullable, (COND) && (params.single_key.buffers[0] != NULL))
 
 #define APPLY_FOR_SPECIALIZATIONS(X) APPLY_FOR_VALIDITY(X, single_text_offsets_translate, true)
 
 #define DEFINE(NAME, CONDITION)                                                                    \
-	static pg_noinline void NAME(HashingConfig config, int start_row, int end_row)                 \
+	static pg_noinline void NAME(BatchHashingParams params, int start_row, int end_row)            \
 	{                                                                                              \
 		if (!(CONDITION))                                                                          \
 		{                                                                                          \
 			pg_unreachable();                                                                      \
 		}                                                                                          \
                                                                                                    \
-		single_text_offsets_translate_impl(config, start_row, end_row);                            \
+		single_text_offsets_translate_impl(params, start_row, end_row);                            \
 	}
 
 APPLY_FOR_SPECIALIZATIONS(DEFINE)
@@ -382,12 +380,12 @@ APPLY_FOR_SPECIALIZATIONS(DEFINE)
 #undef DEFINE
 
 static void
-single_text_offsets_translate(HashingConfig config, int start_row, int end_row)
+single_text_offsets_translate(BatchHashingParams params, int start_row, int end_row)
 {
 #define DISPATCH(NAME, CONDITION)                                                                  \
 	if (CONDITION)                                                                                 \
 	{                                                                                              \
-		NAME(config, start_row, end_row);                                                          \
+		NAME(params, start_row, end_row);                                                          \
 	}                                                                                              \
 	else
 
@@ -399,4 +397,4 @@ single_text_offsets_translate(HashingConfig config, int start_row, int end_row)
 #undef APPLY_FOR_VALIDITY
 #undef APPLY_FOR_BATCH_FILTER
 
-#include "hash_table_functions_impl.c"
+#include "hash_strategy_impl.c"
