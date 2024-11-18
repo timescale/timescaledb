@@ -178,7 +178,7 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 	}
 
 	/*
-	 * We shouldn't add the dictionary entries that are not used by any mathching
+	 * We shouldn't add the dictionary entries that are not used by any matching
 	 * rows. Translate the batch filter bitmap to dictionary rows.
 	 */
 	const int batch_rows = batch_state->total_batch_rows;

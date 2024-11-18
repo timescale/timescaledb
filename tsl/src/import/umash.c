@@ -1,3 +1,17 @@
+/*
+ * This file and its contents are licensed under the Timescale License.
+ * Please see the included NOTICE for copyright information and
+ * LICENSE-TIMESCALE for a copy of the license.
+ */
+
+/*
+ * This file contains source code that was copied and/or modified from
+ * the UMASH hash implementation at https://github.com/backtrace-labs/umash.
+ *
+ * This is a copy of umash.c, git commit sha
+ * fc4c5b6ca1f06c308e96c43aa080bd766238e092.
+ */
+
 #include "umash.h"
 
 /*
