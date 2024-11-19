@@ -462,6 +462,11 @@ has_vector_agg_node(Plan *plan, bool *has_normal_agg)
 			append_plans = custom->custom_plans;
 		}
 	}
+	else if (IsA(plan, SubqueryScan))
+	{
+		SubqueryScan *subquery = castNode(SubqueryScan, plan);
+		append_plans = list_make1(subquery->subplan);
+	}
 
 	if (append_plans)
 	{
@@ -518,6 +523,11 @@ try_insert_vector_agg_node(Plan *plan)
 		{
 			append_plans = custom->custom_plans;
 		}
+	}
+	else if (IsA(plan, SubqueryScan))
+	{
+		SubqueryScan *subquery = castNode(SubqueryScan, plan);
+		append_plans = list_make1(subquery->subplan);
 	}
 
 	if (append_plans)
