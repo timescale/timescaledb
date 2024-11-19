@@ -86,7 +86,7 @@ serialized_get_key(BatchHashingParams params, int row, void *restrict output_key
 				const GroupingColumn *def = &params.policy->grouping_columns[column_index];
 				if (def->by_value)
 				{
-					num_bytes += def->value_bytes;
+					num_bytes = TYPEALIGN(def->value_bytes, num_bytes) + def->value_bytes;
 				}
 				else
 				{
@@ -106,6 +106,7 @@ serialized_get_key(BatchHashingParams params, int row, void *restrict output_key
 
 		if (column_values->decompression_type > 0)
 		{
+			num_bytes = TYPEALIGN(column_values->decompression_type, num_bytes);
 			num_bytes += column_values->decompression_type;
 		}
 		else
@@ -184,6 +185,7 @@ serialized_get_key(BatchHashingParams params, int row, void *restrict output_key
 				const GroupingColumn *def = &params.policy->grouping_columns[column_index];
 				if (def->by_value)
 				{
+					offset = TYPEALIGN(def->value_bytes, offset);
 					memcpy(&serialized_key_storage[offset],
 						   column_values->output_value,
 						   def->value_bytes);
@@ -221,10 +223,28 @@ serialized_get_key(BatchHashingParams params, int row, void *restrict output_key
 		if (column_values->decompression_type > 0)
 		{
 			Assert(offset <= UINT_MAX - column_values->decompression_type);
+			offset = TYPEALIGN(column_values->decompression_type, offset);
+			Assert(offset <= UINT_MAX - column_values->decompression_type);
 
-			memcpy(&serialized_key_storage[offset],
-				   ((char *) column_values->buffers[1]) + column_values->decompression_type * row,
-				   column_values->decompression_type);
+			switch ((int) column_values->decompression_type)
+			{
+				case 2:
+					*(int16 *) &serialized_key_storage[offset] =
+						((int16 *) column_values->buffers[1])[row];
+					break;
+				case 4:
+					*(int32 *) &serialized_key_storage[offset] =
+						((int32 *) column_values->buffers[1])[row];
+					break;
+				case 8:
+					*(int64 *) &serialized_key_storage[offset] =
+						((int64 *) column_values->buffers[1])[row];
+					break;
+				default:
+					pg_unreachable();
+					break;
+			}
+
 			offset += column_values->decompression_type;
 
 			continue;
@@ -345,12 +365,29 @@ serialized_emit_key(GroupingPolicyHash *policy, uint32 current_key, TupleTableSl
 		}
 
 		Datum *output = &aggregated_slot->tts_values[col->output_offset];
-		if (col->by_value)
+		if (col->value_bytes > 0)
 		{
-			Assert(col->value_bytes > 0);
+			Assert(col->by_value);
 			Assert((size_t) col->value_bytes <= sizeof(Datum));
-			*output = 0;
-			memcpy(output, ptr, col->value_bytes);
+
+			ptr = (const uint8 *) TYPEALIGN(col->value_bytes, ptr);
+
+			switch (col->value_bytes)
+			{
+				case 2:
+					*(int16 *) output = *(int16 *) ptr;
+					break;
+				case 4:
+					*(int32 *) output = *(int32 *) ptr;
+					break;
+				case 8:
+					*(int64 *) output = *(int64 *) ptr;
+					break;
+				default:
+					pg_unreachable();
+					break;
+			}
+
 			ptr += col->value_bytes;
 		}
 		else
