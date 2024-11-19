@@ -35,7 +35,7 @@ select count(compress_chunk(x)) from show_chunks('mvagg') x;
 vacuum analyze mvagg;
 -- We are going to log memory usage as a function of number of aggregated elements
 -- here.
-create table log(n int, bytes int, a bigint, b bigint, c bigint, d bigint, e bigint);
+create table log(n int, bytes int, a bigint, b bigint, c bigint, d bigint, e bigint, f bigint);
 -- First, ensure that the underlying decompression has constant memory usage.
 explain (costs off) select distinct on (s0, s1) ts_debug_allocated_bytes() bytes,
         s0, s1, t
@@ -63,8 +63,8 @@ select * from log where (
     -- small spurious changes to make this test more robust.
     select regr_slope(bytes, n) > 1/65536 from log
 );
- n | bytes | a | b | c | d | e 
----+-------+---+---+---+---+---
+ n | bytes | a | b | c | d | e | f 
+---+-------+---+---+---+---+---+---
 (0 rows)
 
 -- Test the vectorized aggregation with grouping by segmentby with various number
@@ -77,7 +77,7 @@ set timescaledb.debug_require_vector_agg = 'require';
 -- (see issue #6836). Limit the memory consumed by tuplesort.
 set work_mem = '64kB';
 explain (costs off) select ts_debug_allocated_bytes() bytes,
-        count(*) a, count(t) b, sum(t) c, avg(t) d, stddev(t) e
+        count(*) a, count(t) b, sum(t) c, avg(t) d, min(t) e, max(t) f
             from mvagg where t >= -1 and t < 1000000 group by s1;
                                                                     QUERY PLAN                                                                    
 --------------------------------------------------------------------------------------------------------------------------------------------------
@@ -114,8 +114,8 @@ select * from log where (
     -- to unrelated planning bugs.
     select regr_slope(bytes, n) > 0.05 from log
 );
- n | bytes | a | b | c | d | e 
----+-------+---+---+---+---+---
+ n | bytes | a | b | c | d | e | f 
+---+-------+---+---+---+---+---+---
 (0 rows)
 
 reset timescaledb.debug_require_vector_agg;
