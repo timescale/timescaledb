@@ -186,3 +186,17 @@ explain
 select time, device+device as device_x2 from :chunk limit 1;
 select time, device+device as device_x2 from :chunk limit 1;
 
+-- Test sort using Bump memory context on PG17. This didn't use to
+-- work on PG17 because it introduced a Bump memory context for
+-- per-tuple processing on which compressed data was detoasted. This
+-- doesn't work because Bump doesn't support pfree(), which is needed
+-- by detoasting.
+--
+-- Need to convert all chunks to Hypercore TAM.
+select compress_chunk(ch, hypercore_use_access_method=>true) from show_chunks('readings') ch;
+
+-- Just test that this query doesn't fail with an error about Bump
+-- allocator not supporting pfree. Redirect output to a temporary
+-- table.
+create temp table test_bump as
+select * from readings order by time, device;
