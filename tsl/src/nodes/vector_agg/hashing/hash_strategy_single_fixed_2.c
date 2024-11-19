@@ -19,13 +19,12 @@
 
 #define EXPLAIN_NAME "single 2-byte"
 #define KEY_VARIANT single_fixed_2
-#define KEY_BYTES 2
 #define OUTPUT_KEY_TYPE int16
 #define HASH_TABLE_KEY_TYPE OUTPUT_KEY_TYPE
 #define DATUM_TO_OUTPUT_KEY DatumGetInt16
 #define OUTPUT_KEY_TO_DATUM Int16GetDatum
 
-#include "hash_strategy_helper_single_fixed_key.c"
+#include "hash_strategy_impl_single_fixed_key.c"
 
 #define KEY_EQUAL(a, b) a == b
 #define KEY_HASH(X) HASH64(X)

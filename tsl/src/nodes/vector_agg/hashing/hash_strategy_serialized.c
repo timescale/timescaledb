@@ -289,7 +289,7 @@ serialized_get_key(BatchHashingParams params, int row, void *restrict output_key
 	 */
 	*valid = true;
 
-	const struct umash_fp fp = umash_fprint(params.policy->umash_params,
+	const struct umash_fp fp = umash_fprint(params.policy->hashing.umash_params,
 											/* seed = */ -1ull,
 											serialized_key_storage,
 											num_bytes);
@@ -373,7 +373,7 @@ serialized_emit_key(GroupingPolicyHash *policy, uint32 current_key, TupleTableSl
 	Assert(ptr == key_validity_bitmap);
 }
 
-#include "output_key_helper_alloc.c"
+#include "output_key_alloc.c"
 
 static void
 serialized_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *batch_state)

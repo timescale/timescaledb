@@ -9,9 +9,6 @@
  * We can use crc32 as a hash function, it has bad properties but takes only one
  * cycle, which is why it is sometimes used in the existing hash table
  * implementations.
- */
-
-/*
  * When we don't have the crc32 instruction, use the SplitMix64 finalizer.
  */
 static pg_attribute_always_inline uint64

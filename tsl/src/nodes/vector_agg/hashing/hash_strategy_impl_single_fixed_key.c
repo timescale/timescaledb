@@ -5,8 +5,8 @@
  */
 #include "batch_hashing_params.h"
 
-#include "output_key_helper_alloc.c"
-#include "output_key_helper_emit_single.c"
+#include "output_key_alloc.c"
+#include "output_key_emit_single.c"
 
 static pg_attribute_always_inline void
 FUNCTION_NAME(get_key)(BatchHashingParams params, int row, void *restrict output_key_ptr,

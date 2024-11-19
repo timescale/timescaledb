@@ -14,20 +14,12 @@
  * of the hash table randomly, and want it to be as small as possible to fit the
  * caches.
  */
-typedef struct
+typedef struct FUNCTION_NAME(entry)
 {
 	/* Key index 0 is invalid. */
 	uint32 key_index;
 
 	HASH_TABLE_KEY_TYPE hash_table_key;
-
-#ifdef STORE_HASH
-	/*
-	 * We store hash for non-POD types, because it's slow to recalculate it
-	 * on inserts for the existing values.
-	 */
-	uint32 hash;
-#endif
 } FUNCTION_NAME(entry);
 
 // #define SH_FILLFACTOR (0.5)
@@ -61,8 +53,8 @@ FUNCTION_NAME(init)(HashingStrategy *hashing, GroupingPolicyHash *policy)
 {
 	hashing->table = FUNCTION_NAME(create)(CurrentMemoryContext, policy->num_agg_state_rows, NULL);
 #ifdef UMASH
-	policy->umash_params = palloc0(sizeof(struct umash_params));
-	umash_params_derive(policy->umash_params, 0xabcdef1234567890ull, NULL);
+	hashing->umash_params = palloc0(sizeof(struct umash_params));
+	umash_params_derive(hashing->umash_params, 0xabcdef1234567890ull, NULL);
 #endif
 }
 
@@ -265,22 +257,19 @@ FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *ba
 }
 
 HashingStrategy FUNCTION_NAME(strategy) = {
-	.init = FUNCTION_NAME(init),
-	.reset = FUNCTION_NAME(reset_strategy),
-	.get_size_bytes = FUNCTION_NAME(get_size_bytes),
-	.fill_offsets = FUNCTION_NAME(fill_offsets),
 	.emit_key = FUNCTION_NAME(emit_key),
 	.explain_name = EXPLAIN_NAME,
+	.fill_offsets = FUNCTION_NAME(fill_offsets),
+	.get_size_bytes = FUNCTION_NAME(get_size_bytes),
+	.init = FUNCTION_NAME(init),
 	.prepare_for_batch = FUNCTION_NAME(prepare_for_batch),
+	.reset = FUNCTION_NAME(reset_strategy),
 };
 
 #undef EXPLAIN_NAME
 #undef KEY_VARIANT
-#undef KEY_BYTES
-#undef KEY_HASH
 #undef KEY_EQUAL
 #undef STORE_HASH
-#undef CHECK_PREVIOUS_KEY
 #undef OUTPUT_KEY_TYPE
 #undef HASH_TABLE_KEY_TYPE
 #undef DATUM_TO_OUTPUT_KEY

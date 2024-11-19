@@ -44,7 +44,6 @@ single_text_get_key(BatchHashingParams params, int row, void *restrict output_ke
 
 	if (unlikely(params.single_key.decompression_type == DT_Scalar))
 	{
-		/* Already stored. */
 		output_key->len = VARSIZE_ANY_EXHDR(*params.single_key.output_value);
 		output_key->data = (const uint8 *) VARDATA_ANY(*params.single_key.output_value);
 		*valid = !*params.single_key.output_isnull;
@@ -76,7 +75,7 @@ single_text_get_key(BatchHashingParams params, int row, void *restrict output_ke
 	}
 	DEBUG_PRINT("\n");
 
-	const struct umash_fp fp = umash_fprint(params.policy->umash_params,
+	const struct umash_fp fp = umash_fprint(params.policy->hashing.umash_params,
 											/* seed = */ -1ull,
 											output_key->data,
 											output_key->len);
@@ -103,8 +102,8 @@ single_text_store_output_key(GroupingPolicyHash *restrict policy, uint32 new_key
 #define KEY_VARIANT single_text
 #define OUTPUT_KEY_TYPE BytesView
 
-#include "output_key_helper_alloc.c"
-#include "output_key_helper_emit_single.c"
+#include "output_key_alloc.c"
+#include "output_key_emit_single.c"
 
 /*
  * We use a special batch preparation function to sometimes hash the dictionary-

@@ -17,8 +17,6 @@
 
 typedef struct GroupingPolicyHash GroupingPolicyHash;
 
-struct umash_params;
-
 /*
  * Hash grouping policy.
  *
@@ -137,7 +135,6 @@ typedef struct GroupingPolicyHash
 	/*
 	 * FIXME all the stuff below should be moved out.
 	 */
-	struct umash_params *umash_params;
 
 	/*
 	 * Temporary key storages. Some hashing strategies need to put the key in a

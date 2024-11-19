@@ -46,4 +46,8 @@ typedef struct HashingStrategy
 	 */
 	uint32 null_key_index;
 
+	/*
+	 * UMASH fingerprinting parameters.
+	 */
+	struct umash_params *umash_params;
 } HashingStrategy;
