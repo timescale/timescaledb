@@ -77,19 +77,24 @@ FUNCTION_NAME(emit)(void *agg_state, Datum *out_result, bool *out_isnull)
 	result->elemtype = FLOAT8OID;
 	ARR_DIMS(result)[0] = 3;
 	ARR_LBOUND(result)[0] = 1;
-	((Datum *) ARR_DATA_PTR(result))[0] = Float8GetDatumFast(state->N);
-	((Datum *) ARR_DATA_PTR(result))[1] = Float8GetDatumFast(state->Sx);
-	((Datum *) ARR_DATA_PTR(result))[2] =
+
+	/*
+	 * The array elements are stored by value, regardless of if the float8
+	 * itself is by-value on this platform.
+	 */
+	((float8 *) ARR_DATA_PTR(result))[0] = state->N;
+	((float8 *) ARR_DATA_PTR(result))[1] = state->Sx;
+	((float8 *) ARR_DATA_PTR(result))[2] =
 		/*
 		 * Sxx should be NaN if any of the inputs are infinite or NaN. This is
 		 * checked by float8_combine even if it's not used for the actual
 		 * calculations.
 		 */
-		Float8GetDatum(0. * state->Sx
+		0. * state->Sx
 #ifdef NEED_SXX
-					   + state->Sxx
+		+ state->Sxx
 #endif
-		);
+		;
 
 	*out_result = PointerGetDatum(result);
 	*out_isnull = false;

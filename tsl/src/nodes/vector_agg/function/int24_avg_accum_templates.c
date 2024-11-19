@@ -50,8 +50,13 @@ int24_avg_accum_emit(void *agg_state, Datum *out_result, bool *out_isnull)
 	result->elemtype = INT8OID;
 	ARR_DIMS(result)[0] = 2;
 	ARR_LBOUND(result)[0] = 1;
-	((Datum *) ARR_DATA_PTR(result))[0] = Int64GetDatumFast(state->count);
-	((Datum *) ARR_DATA_PTR(result))[1] = Int64GetDatumFast(state->sum);
+
+	/*
+	 * The array elements are stored by value, regardless of if the int8 itself
+	 * is by-value on this platform.
+	 */
+	((int64 *) ARR_DATA_PTR(result))[0] = state->count;
+	((int64 *) ARR_DATA_PTR(result))[1] = state->sum;
 
 	*out_result = PointerGetDatum(result);
 	*out_isnull = false;
