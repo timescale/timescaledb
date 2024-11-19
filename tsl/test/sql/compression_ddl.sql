@@ -1069,4 +1069,12 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('test2') ch;
 SELECT count(*) FROM test2 WHERE i IS NULL;
 SELECT count(decompress_chunk(ch)) FROM show_chunks('test2') ch;
 SELECT count(*) FROM test2 WHERE i IS NULL;
-SET client_min_messages = NOTICE;
+SELECT count(compress_chunk(ch)) FROM show_chunks('test2') ch;
+SELECT count(*) FROM test2 WHERE i IS NULL;
+
+\set ON_ERROR_STOP 0
+ALTER TABLE test2 ALTER COLUMN i SET NOT NULL;
+DELETE FROM test2 WHERE i IS NULL;
+SELECT count(*) FROM test2 WHERE i IS NULL;
+ALTER TABLE test2 ALTER COLUMN i SET NOT NULL;
+\set ON_ERROR_STOP 1
