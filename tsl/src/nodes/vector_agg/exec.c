@@ -195,6 +195,7 @@ vector_agg_exec(CustomScanState *node)
 {
 	VectorAggState *vector_agg_state = (VectorAggState *) node;
 	ExprContext *econtext = node->ss.ps.ps_ExprContext;
+	ResetExprContext(econtext);
 
 	TupleTableSlot *aggregated_slot = vector_agg_state->custom.ss.ps.ps_ResultTupleSlot;
 	ExecClearTuple(aggregated_slot);
