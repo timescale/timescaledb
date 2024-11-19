@@ -16,9 +16,7 @@
 
 </div>
 
-|Linux/macOS|Linux i386|Windows|Coverity|Code Coverage|OpenSSF|
-|:---:|:---:|:---:|:---:|:---:|:---:|
-|[![Build Status Linux/macOS](https://github.com/timescale/timescaledb/actions/workflows/linux-build-and-test.yaml/badge.svg?branch=main&event=schedule)](https://github.com/timescale/timescaledb/actions/workflows/linux-build-and-test.yaml?query=workflow%3ARegression+branch%3Amain+event%3Aschedule)|[![Build Status Linux i386](https://github.com/timescale/timescaledb/actions/workflows/linux-32bit-build-and-test.yaml/badge.svg?branch=main&event=schedule)](https://github.com/timescale/timescaledb/actions/workflows/linux-32bit-build-and-test.yaml?query=workflow%3ARegression+branch%3Amain+event%3Aschedule)|[![Windows build status](https://github.com/timescale/timescaledb/actions/workflows/windows-build-and-test.yaml/badge.svg?branch=main&event=schedule)](https://github.com/timescale/timescaledb/actions/workflows/windows-build-and-test.yaml?query=workflow%3ARegression+branch%3Amain+event%3Aschedule)|[![Coverity Scan Build Status](https://scan.coverity.com/projects/timescale-timescaledb/badge.svg)](https://scan.coverity.com/projects/timescale-timescaledb)|[![Code Coverage](https://codecov.io/gh/timescale/timescaledb/branch/main/graphs/badge.svg?branch=main)](https://codecov.io/gh/timescale/timescaledb)|[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/8012/badge)](https://www.bestpractices.dev/projects/8012)|
+TimescaleDB scales PostgreSQL for time-series data with the help of [hypertables](https://docs.timescale.com/use-timescale/latest/hypertables/about-hypertables/). Hypertables are PostgreSQL tables that automatically partition your data by time. You interact with a hypertable in the same way as regular PostgreSQL table. Behind the scenes, the database performs the work of setting up and maintaining the hypertable's partitions.
 
 > [!WARNING]
 >
@@ -36,19 +34,15 @@
 >
 >  Thanks for your understanding! 🙏
 
-# Overview
-
-TimescaleDB scales PostgreSQL for time-series data with the help of [hypertables](https://docs.timescale.com/use-timescale/latest/hypertables/about-hypertables/). Hypertables are PostgreSQL tables that automatically partition your data by time. You interact with a hypertable in the same way as regular PostgreSQL table. Behind the scenes, the database performs the work of setting up and maintaining the hypertable's partitions.
-
 From the perspective of both use and management, TimescaleDB looks and feels like PostgreSQL, and can be managed and queried as
 such. However, it provides a range of features and optimizations that make managing your time-series data easier and more efficient.
 
-TimescaleDB is available as a self-hosted solution or a managed cloud offering. The self-hosted TimescaleDB comes in two editions:
+TimescaleDB is available as a self-hosted solution or a managed cloud offering. The self-hosted TimescaleDB comes in the following editions:
 
 - Apache 2 Edition
 - Community Edition
 
-See [Documentation](https://docs.timescale.com/about/latest/timescaledb-editions/) for differences between the editions.
+See the [documentation](https://docs.timescale.com/about/latest/timescaledb-editions/) for differences between the editions.
 
 For reference and clarity, all code files in this repository reference [licensing](https://github.com/timescale/timescaledb/blob/main/tsl/LICENSE-TIMESCALE) in their header. Apache-2 licensed binaries can be built by passing `-DAPACHE_ONLY=1` to `bootstrap`.
 
@@ -64,9 +58,7 @@ TimescaleDB is pay-as-you-go. We don't charge for storage you don't use, backups
 - [GitHub issues](https://github.com/timescale/timescaledb/issues)
 - [Timescale support](https://tsdb.co/GitHubTimescaleSupport)
 
-# Getting started
-
-## Install TimescaleDB
+# Install TimescaleDB
 
 Get TimescaleDB in either of the following ways:
 
@@ -80,18 +72,14 @@ Get TimescaleDB in either of the following ways:
     - Install the [platform-specific package](https://docs.timescale.com/self-hosted/latest/install/).
     - [Build from source](https://docs.timescale.com/self-hosted/latest/install/installation-source/).
 
-## Use TimescaleDB
+  PostgreSQL's out-of-the-box settings are typically too conservative for modern
+  servers and TimescaleDB. Make sure your `postgresql.conf`
+  settings are tuned, by either using [timescaledb-tune](https://github.com/timescale/timescaledb-tune)
+  or doing it manually.
 
-You use TimescaleDB by creating regular tables, then converting them into hypertables. Once converted, you can proceed to execute regular SQL read and write operations on data, as well as using TimescaleDB-specific functions.
+# Create a hypertable
 
-### Prerequisites
-
-PostgreSQL's out-of-the-box settings are typically too conservative for modern
-servers and TimescaleDB. Make sure your `postgresql.conf`
-settings are tuned, by either using [timescaledb-tune](https://github.com/timescale/timescaledb-tune)
-or doing it manually.
-
-### Create a hypertable
+You create a regular table and then convert it into a hypertable.
 
 ```sql
 -- Create timescaledb extension
@@ -114,7 +102,7 @@ See more:
 - [About hypertables](https://docs.timescale.com/use-timescale/latest/hypertables/)
 - [API reference](https://docs.timescale.com/api/latest/hypertable/)
 
-### Insert and query data
+# Insert and query data
 
 Insert and query data in a hypertable via regular SQL commands.
 
@@ -140,11 +128,7 @@ See more:
 - [Query data](https://docs.timescale.com/use-timescale/latest/query-data/)
 - [Write data](https://docs.timescale.com/use-timescale/latest/write-data/)
 
-### Use TimescaleDB-specific functions
-
-TimescaleDB includes additional functions for time-series analysis that are not present in vanilla PostgreSQL.
-
-#### Time buckets
+# Time buckets
 
 Time buckets enable you to aggregate data in hypertables by time interval and calculate summary values.
 
@@ -165,7 +149,7 @@ See more:
 - [All TimescaleDB features](https://docs.timescale.com/use-timescale/latest/)
 - [Tutorials](https://docs.timescale.com/tutorials/latest/)
 
-#### Continuous aggregates
+# Continuous aggregates
 
 Continuous aggregates are designed to make queries on very large datasets run faster. They use PostgreSQL [materialized views](https://www.postgresql.org/docs/current/rules-materializedviews.html) to continuously and incrementally refresh a query in the background, so that when you run the query, only the data that has changed needs to be computed, not the entire dataset.
 
@@ -174,7 +158,7 @@ See more:
 - [About continuous aggregates](https://docs.timescale.com/use-timescale/latest/continuous-aggregates/)
 - [API reference](https://docs.timescale.com/api/latest/continuous-aggregates/create_materialized_view/)
 
-#### Tiered storage
+# Tiered storage
 
 TimescaleDB tiered storage architecture includes a standard high-performance storage tier and a low-cost object storage tier. You can migrate rarely used data to the object storage to cut costs. Data is tiered on the level of chunks, that is, individual parts of tables. This means that a single table can be spread among storage tiers for ultimate cost optimization.
 
@@ -182,13 +166,20 @@ See more:
 
 - [About tiered storage](https://docs.timescale.com/use-timescale/latest/data-tiering/)
 
-#### High availability
+# High availability
 
 For services with different downtime tolerance, TimescaleDB offers high-availability (HA) and read replicas. HA replicas are exact, up-to-date copies of your database. They automatically take over operations if the original primary data node becomes unavailable. Read replicas are read-only copies of the primary data instance. Queries on read replicas have minimal impact on the performance of the primary data instance.
 
 See more:
 
 - [About high availability and read replication](https://docs.timescale.com/use-timescale/latest/ha-replicas/)
+
+## Build status
+
+|Linux/macOS|Linux i386|Windows|Coverity|Code Coverage|OpenSSF|
+|:---:|:---:|:---:|:---:|:---:|:---:|
+|[![Build Status Linux/macOS](https://github.com/timescale/timescaledb/actions/workflows/linux-build-and-test.yaml/badge.svg?branch=main&event=schedule)](https://github.com/timescale/timescaledb/actions/workflows/linux-build-and-test.yaml?query=workflow%3ARegression+branch%3Amain+event%3Aschedule)|[![Build Status Linux i386](https://github.com/timescale/timescaledb/actions/workflows/linux-32bit-build-and-test.yaml/badge.svg?branch=main&event=schedule)](https://github.com/timescale/timescaledb/actions/workflows/linux-32bit-build-and-test.yaml?query=workflow%3ARegression+branch%3Amain+event%3Aschedule)|[![Windows build status](https://github.com/timescale/timescaledb/actions/workflows/windows-build-and-test.yaml/badge.svg?branch=main&event=schedule)](https://github.com/timescale/timescaledb/actions/workflows/windows-build-and-test.yaml?query=workflow%3ARegression+branch%3Amain+event%3Aschedule)|[![Coverity Scan Build Status](https://scan.coverity.com/projects/timescale-timescaledb/badge.svg)](https://scan.coverity.com/projects/timescale-timescaledb)|[![Code Coverage](https://codecov.io/gh/timescale/timescaledb/branch/main/graphs/badge.svg?branch=main)](https://codecov.io/gh/timescale/timescaledb)|[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/8012/badge)](https://www.bestpractices.dev/projects/8012)|
+
 
 ## Get involved
 
