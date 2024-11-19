@@ -12,6 +12,7 @@
 #include <catalog/pg_class.h>
 #include <commands/defrem.h>
 #include <nodes/makefuncs.h>
+#include <postgres_ext.h>
 #include <storage/lmgr.h>
 #include <storage/lockdefs.h>
 #include <utils/builtins.h>

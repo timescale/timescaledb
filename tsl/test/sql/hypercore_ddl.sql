@@ -48,17 +48,69 @@ from generate_series('2022-06-01'::timestamptz, '2022-06-04'::timestamptz, '5m')
 
 select compress_chunk(show_chunks('readings'), hypercore_use_access_method => true);
 
--- Insert some extra data to get some non-compressed data as well.
-insert into readings (time, location, device, temp, humidity, jdata)
-select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100, '{"a":1,"b":2}'::jsonb
-from generate_series('2022-06-01 00:01:00'::timestamptz, '2022-06-04'::timestamptz, '5m') t;
-
 select chunk, amname from chunk_info where hypertable = 'readings'::regclass;
 
--- Pick a chunk to truncate that is not the first chunk. This is
+-- Pick a chunk to play with that is not the first chunk. This is
 -- mostly a precaution to make sure that there is no bias towards the
 -- first chunk and we could just as well pick the first chunk.
 select chunk from show_chunks('readings') x(chunk) limit 1 offset 3 \gset
+
+----------------------------------------------------------------
+-- Test ALTER TABLE .... ALTER COLUMN commands
+
+-- This should fail since "location" is NOT NULL
+\set ON_ERROR_STOP 0
+insert into readings(time,device,temp,humidity,jdata)
+values ('2024-01-01 00:00:10', 1, 99.0, 99.0, '{"magic": "yes"}'::jsonb);
+\set ON_ERROR_STOP 1
+
+-- Test altering column definitions to drop NOT NULL and check that it
+-- propagates to the chunks. We just pick one chunk here and check
+-- that the setting propagates.
+alter table readings alter column location drop not null;
+\d readings
+\d :chunk
+
+-- This should now work since we allow NULL values
+insert into readings(time,device,temp,humidity,jdata)
+values ('2024-01-01 00:00:10', 1, 99.0, 99.0, '{"magic": "yes"}'::jsonb);
+
+select count(*) from readings where location is null;
+select compress_chunk(show_chunks('readings'), hypercore_use_access_method => true);
+select count(*) from readings where location is null;
+
+-- We insert another row with nulls, that will end up in the
+-- non-compressed region.
+insert into readings(time,device,temp,humidity,jdata)
+values ('2024-01-02 00:00:10', 1, 66.0, 66.0, '{"magic": "more"}'::jsonb);
+
+-- We should not be able to set the not null before we have removed
+-- the null rows in the table. This works for hypercore-compressed
+-- chunks but not for heap-compressed chunks.
+\set ON_ERROR_STOP 0
+alter table readings alter column location set not null;
+\set ON_ERROR_STOP 1
+delete from readings where location is null;
+-- Compress the data to make sure that we are not working on
+-- non-compressed data.
+select compress_chunk(show_chunks('readings'), hypercore_use_access_method => true);
+select count(*) from readings where location is null;
+alter table readings alter column location set not null;
+\d readings
+\d :chunk
+select count(*) from readings where location is null;
+
+----------------------------------------------------------------
+-- TRUNCATE test
+-- We keep the truncate test last in the file to avoid having to
+-- re-populate it.
+
+-- Insert some extra data to get some non-compressed data as
+-- well. This checks that truncate will deal with with write-store
+-- (WS) and read-store (RS)
+insert into readings (time, location, device, temp, humidity, jdata)
+select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100, '{"a":1,"b":2}'::jsonb
+from generate_series('2022-06-01 00:01:00'::timestamptz, '2022-06-04'::timestamptz, '5m') t;
 
 -- Check that the number of bytes in the table before and after the
 -- truncate.
@@ -84,21 +136,3 @@ select (select count(*) from readings) tuples,
 truncate readings;
 select (select count(*) from readings) tuples,
        (select count(*) from show_chunks('readings')) chunks;
-
-
-\set ON_ERROR_STOP 0
-insert into readings(time,device,temp,humidity,jdata)
-values ('2024-01-01 00:00:00', 1, 99.0, 99.0, '{"magic": "yes"}'::jsonb);
-\set ON_ERROR_STOP 1
-
--- Test altering column definitions
-alter table readings
-      alter column location drop not null;
-
--- This should now work.
-insert into readings(time,device,temp,humidity,jdata)
-values ('2024-01-01 00:00:00', 1, 99.0, 99.0, '{"magic": "yes"}'::jsonb);
-
-select count(*) from readings where location is null;
-select compress_chunk(show_chunks('readings'), hypercore_use_access_method => true);
-select count(*) from readings where location is null;

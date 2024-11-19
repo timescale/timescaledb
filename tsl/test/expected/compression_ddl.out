@@ -2591,4 +2591,28 @@ SELECT count(*) FROM test2 WHERE i IS NULL;
      1
 (1 row)
 
-SET client_min_messages = NOTICE;
+SELECT count(compress_chunk(ch)) FROM show_chunks('test2') ch;
+ count 
+-------
+    28
+(1 row)
+
+SELECT count(*) FROM test2 WHERE i IS NULL;
+ count 
+-------
+     1
+(1 row)
+
+\set ON_ERROR_STOP 0
+ALTER TABLE test2 ALTER COLUMN i SET NOT NULL;
+ERROR:  operation not supported on compressed chunks not using the "hypercore" table access method
+DELETE FROM test2 WHERE i IS NULL;
+SELECT count(*) FROM test2 WHERE i IS NULL;
+ count 
+-------
+     0
+(1 row)
+
+ALTER TABLE test2 ALTER COLUMN i SET NOT NULL;
+ERROR:  operation not supported on compressed chunks not using the "hypercore" table access method
+\set ON_ERROR_STOP 1
