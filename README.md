@@ -1,8 +1,24 @@
+<p style="text-align:center;">
+<picture align=center>
+    <source media="(prefers-color-scheme: dark)" srcset="https://assets.timescale.com/docs/images/timescale-logo-dark-mode.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://assets.timescale.com/docs/images/timescale-logo-light-mode.svg">
+    <img alt="Timescale logo" >
+</picture>
+</p>
+
+<div align=center>
+
+<h3>TimescaleDB is an extension for PostgreSQL that enables time-series workloads while increasing ingest, query, storage, and analytics performance.</h3>
+
+[![Docs](https://img.shields.io/badge/Read_the_Timescale_docs-black?style=for-the-badge&logo=readthedocs&logoColor=white)](https://docs.timescale.com/)
+[![SLACK](https://img.shields.io/badge/Ask_the_Timescale_community-black?style=for-the-badge&logo=slack&logoColor=white)](https://timescaledb.slack.com/archives/C4GT3N90X)
+[![Try TimescaleDB for free](https://img.shields.io/badge/Try_Timescale_for_free-black?style=for-the-badge&logo=timescale&logoColor=white)](https://console.cloud.timescale.com/signup)
+
+</div>
+
 |Linux/macOS|Linux i386|Windows|Coverity|Code Coverage|OpenSSF|
 |:---:|:---:|:---:|:---:|:---:|:---:|
 |[![Build Status Linux/macOS](https://github.com/timescale/timescaledb/actions/workflows/linux-build-and-test.yaml/badge.svg?branch=main&event=schedule)](https://github.com/timescale/timescaledb/actions/workflows/linux-build-and-test.yaml?query=workflow%3ARegression+branch%3Amain+event%3Aschedule)|[![Build Status Linux i386](https://github.com/timescale/timescaledb/actions/workflows/linux-32bit-build-and-test.yaml/badge.svg?branch=main&event=schedule)](https://github.com/timescale/timescaledb/actions/workflows/linux-32bit-build-and-test.yaml?query=workflow%3ARegression+branch%3Amain+event%3Aschedule)|[![Windows build status](https://github.com/timescale/timescaledb/actions/workflows/windows-build-and-test.yaml/badge.svg?branch=main&event=schedule)](https://github.com/timescale/timescaledb/actions/workflows/windows-build-and-test.yaml?query=workflow%3ARegression+branch%3Amain+event%3Aschedule)|[![Coverity Scan Build Status](https://scan.coverity.com/projects/timescale-timescaledb/badge.svg)](https://scan.coverity.com/projects/timescale-timescaledb)|[![Code Coverage](https://codecov.io/gh/timescale/timescaledb/branch/main/graphs/badge.svg?branch=main)](https://codecov.io/gh/timescale/timescaledb)|[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/8012/badge)](https://www.bestpractices.dev/projects/8012)|
-
-TimescaleDB is an extension for PostgreSQL that enables time-series workloads, increasing ingest, query, storage, and analytics performance.
 
 > [!WARNING]
 >
@@ -27,7 +43,7 @@ TimescaleDB scales PostgreSQL for time-series data with the help of [hypertables
 From the perspective of both use and management, TimescaleDB looks and feels like PostgreSQL, and can be managed and queried as
 such. However, it provides a range of features and optimizations that make managing your time-series data easier and more efficient.
 
-TimescaleDB is available as a self-hosted solution or a fully managed cloud offering (Timescale Cloud). The self-hosted TimescaleDB comes in two editions:
+TimescaleDB is available as a self-hosted solution or a managed cloud offering. The self-hosted TimescaleDB comes in two editions:
 
 - Apache 2 Edition
 - Community Edition
@@ -48,30 +64,32 @@ TimescaleDB is pay-as-you-go. We don't charge for storage you don't use, backups
 - [GitHub issues](https://github.com/timescale/timescaledb/issues)
 - [Timescale support](https://tsdb.co/GitHubTimescaleSupport)
 
-**Contribute**: We welcome contributions to TimescaleDB! See [Contributing](https://github.com/timescale/timescaledb/blob/main/CONTRIBUTING.md) and [Code style guide](https://github.com/timescale/timescaledb/blob/main/docs/StyleGuide.md) for details.
-
 # Getting started
-
-## Prerequisites
-
-PostgreSQL's out-of-the-box settings are typically too conservative for modern
-servers and TimescaleDB. Make sure your `postgresql.conf`
-settings are tuned, by either using [timescaledb-tune](https://github.com/timescale/timescaledb-tune)
-or doing it manually.
 
 ## Install TimescaleDB
 
 Get TimescaleDB in either of the following ways:
 
-- Install the [platform-specific package](https://docs.timescale.com/self-hosted/latest/install/).
+- As a cloud solution:
 
-- Get a free-trial of [Timescale Cloud](https://console.cloud.timescale.com/signup), a fully-managed TimescaleDB.
+    - Get a free trial of [Timescale Cloud](https://console.cloud.timescale.com/signup) - TimescaleDB hosted on AWS and fully managed by Timescale.
+    - Get a free trial of [Managed Service for TimescaleDB](https://docs.timescale.com/mst/latest/) - TimescaleDB hosted on Azure and GCP and offered in partnership with [Aiven](https://aiven.io/).
 
-- [Build from source](https://docs.timescale.com/self-hosted/latest/install/installation-source/).
+- As a self-hosted solution:
+
+    - Install the [platform-specific package](https://docs.timescale.com/self-hosted/latest/install/).
+    - [Build from source](https://docs.timescale.com/self-hosted/latest/install/installation-source/).
 
 ## Use TimescaleDB
 
 You use TimescaleDB by creating regular tables, then converting them into hypertables. Once converted, you can proceed to execute regular SQL read and write operations on data, as well as using TimescaleDB-specific functions.
+
+### Prerequisites
+
+PostgreSQL's out-of-the-box settings are typically too conservative for modern
+servers and TimescaleDB. Make sure your `postgresql.conf`
+settings are tuned, by either using [timescaledb-tune](https://github.com/timescale/timescaledb-tune)
+or doing it manually.
 
 ### Create a hypertable
 
@@ -102,20 +120,20 @@ Insert and query data in a hypertable via regular SQL commands.
 
 - Insert data into a hypertable named `conditions`:
 
-```sql
-INSERT INTO conditions
-  VALUES
-    (NOW(), 'office', 70.0, 50.0),
-    (NOW(), 'basement', 66.5, 60.0),
-    (NOW(), 'garage', 77.0, 65.2);
-```
+    ```sql
+    INSERT INTO conditions
+      VALUES
+        (NOW(), 'office', 70.0, 50.0),
+        (NOW(), 'basement', 66.5, 60.0),
+        (NOW(), 'garage', 77.0, 65.2);
+    ```
 
 - Return the number of entries written to the table conditions in the last 12 hours:
 
-```sql
-SELECT COUNT(*) FROM conditions
-  WHERE time > NOW() - INTERVAL '12 hours';
-```
+    ```sql
+    SELECT COUNT(*) FROM conditions
+      WHERE time > NOW() - INTERVAL '12 hours';
+    ```
 
 See more:
 
@@ -124,7 +142,11 @@ See more:
 
 ### Use TimescaleDB-specific functions
 
-TimescaleDB includes additional functions for time-series analysis that are not present in vanilla PostgreSQL. For example, the `time_bucket` function. Time buckets enable you to aggregate data in hypertables by time interval and calculate summary values.
+TimescaleDB includes additional functions for time-series analysis that are not present in vanilla PostgreSQL.
+
+#### Time buckets
+
+Time buckets enable you to aggregate data in hypertables by time interval and calculate summary values.
 
 For example, calculate the average daily temperature in a table named `weather_conditions`. The table has a `time` and `temperature` columns:
 
@@ -137,9 +159,47 @@ ORDER BY bucket ASC;
 ```
 
 See more:
+
 - [About time buckets](https://docs.timescale.com/use-timescale/latest/time-buckets/about-time-buckets/)
 - [API reference](https://docs.timescale.com/api/latest/hyperfunctions/time_bucket/)
 - [All TimescaleDB features](https://docs.timescale.com/use-timescale/latest/)
 - [Tutorials](https://docs.timescale.com/tutorials/latest/)
+
+#### Continuous aggregates
+
+Continuous aggregates are designed to make queries on very large datasets run faster. They use PostgreSQL [materialized views](https://www.postgresql.org/docs/current/rules-materializedviews.html) to continuously and incrementally refresh a query in the background, so that when you run the query, only the data that has changed needs to be computed, not the entire dataset.
+
+See more:
+
+- [About continuous aggregates](https://docs.timescale.com/use-timescale/latest/continuous-aggregates/)
+- [API reference](https://docs.timescale.com/api/latest/continuous-aggregates/create_materialized_view/)
+
+#### Tiered storage
+
+TimescaleDB tiered storage architecture includes a standard high-performance storage tier and a low-cost object storage tier. You can migrate rarely used data to the object storage to cut costs. Data is tiered on the level of chunks, that is, individual parts of tables. This means that a single table can be spread among storage tiers for ultimate cost optimization.
+
+See more:
+
+- [About tiered storage](https://docs.timescale.com/use-timescale/latest/data-tiering/)
+
+#### High availability
+
+For services with different downtime tolerance, TimescaleDB offers high-availability (HA) and read replicas. HA replicas are exact, up-to-date copies of your database. They automatically take over operations if the original primary data node becomes unavailable. Read replicas are read-only copies of the primary data instance. Queries on read replicas have minimal impact on the performance of the primary data instance.
+
+See more:
+
+- [About high availability and read replication](https://docs.timescale.com/use-timescale/latest/ha-replicas/)
+
+## Get involved
+
+We welcome contributions to TimescaleDB! See [Contributing](https://github.com/timescale/timescaledb/blob/main/CONTRIBUTING.md) and [Code style guide](https://github.com/timescale/timescaledb/blob/main/docs/StyleGuide.md) for details.
+
+## About Timescale
+
+Timescale is a PostgreSQL database company. To learn more, visit [timescale.com](https://www.timescale.com).
+
+Timescale Cloud is a high-performance, developer focused, cloud platform that provides PostgreSQL services
+for the most demanding AI, time-series, analytics, and event workloads. Timescale Cloud is ideal for production applications and provides high availability, streaming backups, upgrades over time, roles and permissions, and great security.
+
 
 
