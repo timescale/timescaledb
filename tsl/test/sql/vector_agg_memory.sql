@@ -27,6 +27,8 @@ insert into mvagg select -1 t, 1 s0, 1 s1;
 
 select count(compress_chunk(x)) from show_chunks('mvagg') x;
 
+vacuum analyze mvagg;
+
 -- We are going to log memory usage as a function of number of aggregated elements
 -- here.
 create table log(n int, bytes int, a bigint, b bigint, c bigint, d bigint, e bigint);
