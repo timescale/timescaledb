@@ -42,13 +42,17 @@ int24_avg_accum_emit(void *agg_state, Datum *out_result, bool *out_isnull)
 {
 	Int24AvgAccumState *state = (Int24AvgAccumState *) agg_state;
 
-	Datum transdatums[2] = {
-		Int64GetDatumFast(state->count),
-		Int64GetDatumFast(state->sum),
-	};
+	const size_t nbytes = 2 * sizeof(int64) + ARR_OVERHEAD_NONULLS(/* ndims = */ 1);
+	ArrayType *result = palloc(nbytes);
+	SET_VARSIZE(result, nbytes);
+	result->ndim = 1;
+	result->dataoffset = 0;
+	result->elemtype = INT8OID;
+	ARR_DIMS(result)[0] = 2;
+	ARR_LBOUND(result)[0] = 1;
+	((Datum *) ARR_DATA_PTR(result))[0] = Int64GetDatumFast(state->count);
+	((Datum *) ARR_DATA_PTR(result))[1] = Int64GetDatumFast(state->sum);
 
-	ArrayType *result =
-		construct_array(transdatums, 2, INT8OID, sizeof(int64), FLOAT8PASSBYVAL, TYPALIGN_DOUBLE);
 	*out_result = PointerGetDatum(result);
 	*out_isnull = false;
 }
