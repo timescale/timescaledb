@@ -8,7 +8,7 @@
 
 <div align=center>
 
-<h3>TimescaleDB is an extension for PostgreSQL that enables time-series workloads while increasing ingest, query, storage, and analytics performance.</h3>
+<h3>TimescaleDB is an extension for PostgreSQL that enables time-series workloads while increasing ingest, query, storage, and analytics performance</h3>
 
 [![Docs](https://img.shields.io/badge/Read_the_Timescale_docs-black?style=for-the-badge&logo=readthedocs&logoColor=white)](https://docs.timescale.com/)
 [![SLACK](https://img.shields.io/badge/Ask_the_Timescale_community-black?style=for-the-badge&logo=slack&logoColor=white)](https://timescaledb.slack.com/archives/C4GT3N90X)
@@ -16,11 +16,14 @@
 
 </div>
 
-TimescaleDB scales PostgreSQL for time-series data with the help of [hypertables](https://docs.timescale.com/use-timescale/latest/hypertables/about-hypertables/). Hypertables are PostgreSQL tables that automatically partition your data by time. You interact with a hypertable in the same way as regular PostgreSQL table. Behind the scenes, the database performs the work of setting up and maintaining the hypertable's partitions.
+TimescaleDB scales PostgreSQL for time-series data with the help of [hypertables](https://docs.timescale.com/use-timescale/latest/hypertables/about-hypertables/). Hypertables are PostgreSQL tables that automatically partition your data by time and space. You interact with a hypertable in the same way as regular PostgreSQL table. Behind the scenes, the database performs the work of setting up and maintaining the hypertable's partitions.
+
+From the perspective of both use and management, TimescaleDB looks and feels like PostgreSQL, and can be managed and queried as
+such. However, it provides a range of features and optimizations that make managing your time-series data easier and more efficient.
 
 > [!WARNING]
 >
->  The latest Postgres minor releases (17.1, 16.5, 15.9, 14.14, 13.17, 12.21), released 2024-11-14, have an unexpected
+>  The latest Postgres minor releases (17.1, 16.5, 15.9, 14.14, 13.17, 12.21), released on 2024-11-14, have an unexpected
 >  breaking ABI change that may crash existing deployments of TimescaleDB, unless used with a TimescaleDB binary explicitly built against those new minor PG versions.
 >
 >
@@ -33,9 +36,6 @@ TimescaleDB scales PostgreSQL for time-series data with the help of [hypertables
 >  We are working with the PG community about how best to address this issue.  See [this thread on pgsql-hackers](https://www.postgresql.org/message-id/flat/CABOikdNmVBC1LL6pY26dyxAS2f%2BgLZvTsNt%3D2XbcyG7WxXVBBQ%40mail.gmail.com) for more info.
 >
 >  Thanks for your understanding! 🙏
-
-From the perspective of both use and management, TimescaleDB looks and feels like PostgreSQL, and can be managed and queried as
-such. However, it provides a range of features and optimizations that make managing your time-series data easier and more efficient.
 
 TimescaleDB is available as a self-hosted solution or a managed cloud offering. The self-hosted TimescaleDB comes in the following editions:
 
@@ -53,7 +53,6 @@ TimescaleDB is pay-as-you-go. We don't charge for storage you don't use, backups
 - [Developer documentation](https://docs.timescale.com/)
 - [Release notes](https://tsdb.co/GitHubTimescaleDocsReleaseNotes)
 - [Testing TimescaleDB](test/README.md)
-- [Slack channel](https://slack-login.timescale.com)
 - [Timescale community forum](https://www.timescale.com/forum/)
 - [GitHub issues](https://github.com/timescale/timescaledb/issues)
 - [Timescale support](https://tsdb.co/GitHubTimescaleSupport)
