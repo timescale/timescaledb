@@ -1,10 +1,10 @@
-<p style="text-align:center;">
+<div align=center>
 <picture align=center>
     <source media="(prefers-color-scheme: dark)" srcset="https://assets.timescale.com/docs/images/timescale-logo-dark-mode.svg">
     <source media="(prefers-color-scheme: light)" srcset="https://assets.timescale.com/docs/images/timescale-logo-light-mode.svg">
     <img alt="Timescale logo" >
 </picture>
-</p>
+</div>
 
 <div align=center>
 
