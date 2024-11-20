@@ -3464,6 +3464,14 @@ convert_to_hypercore_finish(Oid relid)
 		return;
 	}
 
+#ifdef USE_ASSERT_CHECKING
+	/* Blow away relation cache to test that the tuple sort state works across
+	 * relcache invalidations. Previously there was sometimes a crash here
+	 * because the tuple sort state had a reference to a tuple descriptor in
+	 * the relcache. */
+	RelationCacheInvalidate(false);
+#endif
+
 	Chunk *chunk = ts_chunk_get_by_relid(conversionstate->relid, true);
 	Relation relation = table_open(conversionstate->relid, AccessShareLock);
 	TupleDesc tupdesc = RelationGetDescr(relation);
