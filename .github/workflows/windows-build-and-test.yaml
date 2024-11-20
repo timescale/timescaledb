@@ -56,6 +56,15 @@ jobs:
         tsl_ignores: ["compression_algos"]
         tsl_skips: ["bgw_db_scheduler bgw_db_scheduler_fixed"]
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
+        include:
+          - pg: 14
+            pg_version: 14.13
+          - pg: 15
+            pg_version: 15.8
+          - pg: 16
+            pg_version: 16.4
+          - pg: 17
+            pg_version: 17.0
     env:
       # PostgreSQL configuration
       PGPORT: 55432
@@ -115,18 +124,22 @@ jobs:
 
     # Force install PostgreSQL 17 since the package still on moderation
     # https://community.chocolatey.org/packages/postgresql17
-    - name: Install PostgreSQL ${{ matrix.pg }}
-      if: steps.cache-postgresql.outputs.cache-hit != 'true'
+    - name: Install PostgreSQL ${{ matrix.pg }} (using ${{ matrix.pg_version }})
+      if: github.event_name != 'schedule' && steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
         choco feature disable --name=usePackageExitCodes
         choco feature disable --name=showDownloadProgress
-        if(${{ matrix.pg }} -eq 17) {
-          choco install postgresql${{ matrix.pg }} --version 17.0.0 `
-            --force -y --install-args="'--prefix $HOME\PostgreSQL\${{ matrix.pg }} --extract-only yes'"
-        } else {
-          choco install postgresql${{ matrix.pg }} `
-            --force -y --install-args="'--prefix $HOME\PostgreSQL\${{ matrix.pg }} --extract-only yes'"
-        }
+        choco install postgresql${{ matrix.pg }} --version ${{ matrix.pg_version }} `
+          --force -y --install-args="'--prefix $HOME\PostgreSQL\${{ matrix.pg }} --extract-only yes'"
+
+    # This is for nightly builds. Here we pick the latest version of the package.
+    - name: Install PostgreSQL ${{ matrix.pg }}
+      if: github.event_name == 'schedule' && steps.cache-postgresql.outputs.cache-hit != 'true'
+      run: |
+        choco feature disable --name=usePackageExitCodes
+        choco feature disable --name=showDownloadProgress
+        choco install postgresql${{ matrix.pg }} `
+          --force -y --install-args="'--prefix $HOME\PostgreSQL\${{ matrix.pg }} --extract-only yes'"
 
     - name: Configure TimescaleDB
       run: cmake -B build_win -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
