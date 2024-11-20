@@ -184,7 +184,7 @@ TSCopyMultiInsertBufferInit(ChunkInsertState *cis, Point *point)
 	TSCopyMultiInsertBuffer *buffer;
 
 	buffer = (TSCopyMultiInsertBuffer *) palloc(sizeof(TSCopyMultiInsertBuffer));
-	memset(buffer->slots, 0, sizeof(TupleTableSlot *) * MAX_BUFFERED_TUPLES);
+	memset((void *) buffer->slots, 0, sizeof(TupleTableSlot *) * MAX_BUFFERED_TUPLES);
 	buffer->bistate = GetBulkInsertState();
 	buffer->nused = 0;
 
@@ -447,7 +447,17 @@ TSCmpBuffersByUsage(const ListCell *a, const ListCell *b)
 	Assert(b1 >= 0);
 	Assert(b2 >= 0);
 
-	return (b1 > b2) ? 1 : (b1 == b2) ? 0 : -1;
+	if (b1 > b2)
+	{
+		return 1;
+	}
+
+	if (b1 == b2)
+	{
+		return 0;
+	}
+
+	return -1;
 }
 
 /*

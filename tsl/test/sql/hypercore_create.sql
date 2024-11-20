@@ -5,6 +5,29 @@
 \ir include/hypercore_helpers.sql
 select setseed(0.3);
 
+-- View to get information about chunks and associated compressed
+-- chunks.
+create or replace view test_chunk_info as
+with
+  ht_and_chunk as (
+    select format('%I.%I', ht.schema_name, ht.table_name)::regclass as hypertable,
+           format('%I.%I', ch.schema_name, ch.table_name)::regclass as chunk,
+           case when cc.table_name is not null then
+                format('%I.%I', cc.schema_name, cc.table_name)::regclass
+                else null
+           end as compressed_chunk
+      from _timescaledb_catalog.chunk ch
+      left join _timescaledb_catalog.chunk cc on ch.compressed_chunk_id = cc.id
+      join _timescaledb_catalog.hypertable ht on ch.hypertable_id = ht.id
+     where ht.compression_state != 2
+  )
+select hypertable,
+       chunk,
+       (select reloptions from pg_class where oid = chunk) as chunk_reloptions,
+       compressed_chunk,
+       (select reloptions from pg_class where oid = compressed_chunk) as compressed_reloptions
+  from ht_and_chunk;
+
 -- Testing the basic API for creating a hypercore
 
 -- This should just fail because you cannot create a plain table with
@@ -118,13 +141,22 @@ alter table :chunk set access method hypercore;
 
 -- Add compression settings
 alter table test3 set (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='');
+\x on
+select * from test_chunk_info where chunk = :'chunk'::regclass;
 alter table :chunk set access method hypercore;
+select * from test_chunk_info where chunk = :'chunk'::regclass;
+\x off
 
 -- Check that chunk is using hypercore
 select * from amrels where rel=:'chunk'::regclass;
 
--- Try same thing with compress_chunk()
+-- Try same thing with compress_chunk(), and check the reloptions
+-- before and after
+\x on
+select * from test_chunk_info where chunk = :'chunk'::regclass;
 alter table :chunk set access method heap;
+select * from test_chunk_info where chunk = :'chunk'::regclass;
+\x off
 select compress_chunk(:'chunk', hypercore_use_access_method => true);
 
 -- Check that chunk is using hypercore
@@ -166,8 +198,12 @@ select count(ch) from show_chunks('test4') ch;
 select ch as chunk from show_chunks('test4') ch limit 1 \gset
 
 alter table test4 set (timescaledb.compress);
+\x on
+select * from test_chunk_info where chunk = :'chunk'::regclass;
 alter table :chunk set access method hypercore;
+select * from test_chunk_info where chunk = :'chunk'::regclass;
 select * from amrels where relparent='test4'::regclass;
+\x off
 
 -- test that alter table on the hypertable works
 alter table test4 add column magic int;
@@ -283,7 +319,11 @@ select compress_chunk(ch, hypercore_use_access_method => true) from chunks;
 -- compressed chunks.
 select ch as alter_chunk from show_chunks('test2') ch limit 1 \gset
 insert into :alter_chunk values ('2022-06-01 10:00', 4, 4, 4.0, 4.0);
+\x on
+select * from test_chunk_info where chunk = :'alter_chunk'::regclass;
 alter table :alter_chunk set access method hypercore;
+select * from test_chunk_info where chunk = :'alter_chunk'::regclass;
+\x off
 
 reset client_min_messages;
 
@@ -319,12 +359,11 @@ commit;
 select compress_chunk(ch, hypercore_use_access_method => true, if_not_compressed => false)
 from show_chunks('test2') ch;
 
-\set ON_ERROR_STOP 1
-
--- Compressing from hypercore not using access method should lead to
--- recompression of hypercore with a notice.
+-- Compressing from hypercore and not using access method should lead
+-- to an error since it is not supported.
 select compress_chunk(ch, hypercore_use_access_method => false)
 from show_chunks('test2') ch;
+\set ON_ERROR_STOP 1
 
 -- Compressing a hypercore should by default lead to
 -- recompression. First check that :chunk is a hypercore.

@@ -32,7 +32,7 @@ vector_const_text_comparison(const ArrowArray *arrow, const Datum constdatum, bo
 		uint64 word = 0;
 		for (size_t inner = 0; inner < 64; inner++)
 		{
-			const size_t row = outer * 64 + inner;
+			const size_t row = (outer * 64) + inner;
 			const size_t bit_index = inner;
 #define INNER_LOOP                                                                                 \
 	const uint32 start = offsets[row];                                                             \
@@ -122,7 +122,7 @@ vector_const_like_impl(const ArrowArray *arrow, const Datum constdatum, uint64 *
 		uint64 word = 0;
 		for (size_t inner = 0; inner < 64; inner++)
 		{
-			const size_t row = outer * 64 + inner;
+			const size_t row = (outer * 64) + inner;
 			const size_t bit_index = inner;
 			/*
 			 * The inner loop could have been an inline function, but it would have 5

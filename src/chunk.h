@@ -152,7 +152,7 @@ extern ChunkVec *ts_chunk_vec_create(int32 capacity);
 extern ChunkVec *ts_chunk_vec_sort(ChunkVec **chunks);
 extern ChunkVec *ts_chunk_vec_add_from_tuple(ChunkVec **chunks, TupleInfo *ti);
 
-#define CHUNK_VEC_SIZE(num_chunks) (sizeof(ChunkVec) + sizeof(Chunk) * num_chunks)
+#define CHUNK_VEC_SIZE(num_chunks) (sizeof(ChunkVec) + (sizeof(Chunk) * num_chunks))
 #define DEFAULT_CHUNK_VEC_SIZE 10
 
 extern void ts_chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti);
