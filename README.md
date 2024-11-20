@@ -37,17 +37,6 @@ such. However, it provides a range of features and optimizations that make manag
 >
 >  Thanks for your understanding! 🙏
 
-TimescaleDB is available as a self-hosted solution or a managed cloud offering. The self-hosted TimescaleDB comes in the following editions:
-
-- Apache 2 Edition
-- Community Edition
-
-See the [documentation](https://docs.timescale.com/about/latest/timescaledb-editions/) for differences between the editions.
-
-For reference and clarity, all code files in this repository reference [licensing](https://github.com/timescale/timescaledb/blob/main/tsl/LICENSE-TIMESCALE) in their header. Apache-2 licensed binaries can be built by passing `-DAPACHE_ONLY=1` to `bootstrap`.
-
-TimescaleDB is pay-as-you-go. We don't charge for storage you don't use, backups, snapshots, ingress, or egress.
-
 **Learn more about TimescaleDB**:
 
 - [Developer documentation](https://docs.timescale.com/)
@@ -59,7 +48,7 @@ TimescaleDB is pay-as-you-go. We don't charge for storage you don't use, backups
 
 # Install TimescaleDB
 
-Get TimescaleDB in either of the following ways:
+TimescaleDB is available as a self-hosted solution or a managed cloud offering. Get TimescaleDB in either of the following ways:
 
 - As a cloud solution:
 
@@ -70,6 +59,10 @@ Get TimescaleDB in either of the following ways:
 
     - Install the [platform-specific package](https://docs.timescale.com/self-hosted/latest/install/).
     - [Build from source](https://docs.timescale.com/self-hosted/latest/install/installation-source/).
+
+  The self-hosted TimescaleDB comes in the following editions: Apache 2 and Community. See the [documentation](https://docs.timescale.com/about/latest/timescaledb-editions/) for differences between the editions.
+
+  For reference and clarity, all code files in this repository reference [licensing](https://github.com/timescale/timescaledb/blob/main/tsl/LICENSE-TIMESCALE) in their header. Apache-2 licensed binaries can be built by passing `-DAPACHE_ONLY=1` to `bootstrap`.
 
   PostgreSQL's out-of-the-box settings are typically too conservative for modern
   servers and TimescaleDB. Make sure your `postgresql.conf`
@@ -127,7 +120,7 @@ See more:
 - [Query data](https://docs.timescale.com/use-timescale/latest/query-data/)
 - [Write data](https://docs.timescale.com/use-timescale/latest/write-data/)
 
-# Time buckets
+# Create time buckets
 
 Time buckets enable you to aggregate data in hypertables by time interval and calculate summary values.
 
@@ -148,32 +141,38 @@ See more:
 - [All TimescaleDB features](https://docs.timescale.com/use-timescale/latest/)
 - [Tutorials](https://docs.timescale.com/tutorials/latest/)
 
-# Continuous aggregates
+# Create continuous aggregates
 
 Continuous aggregates are designed to make queries on very large datasets run faster. They use PostgreSQL [materialized views](https://www.postgresql.org/docs/current/rules-materializedviews.html) to continuously and incrementally refresh a query in the background, so that when you run the query, only the data that has changed needs to be computed, not the entire dataset.
+
+<img height="200" src="https://assets.timescale.com/docs/images/continuous-aggregates.png" alt="pgai"/>
 
 See more:
 
 - [About continuous aggregates](https://docs.timescale.com/use-timescale/latest/continuous-aggregates/)
 - [API reference](https://docs.timescale.com/api/latest/continuous-aggregates/create_materialized_view/)
 
-# Tiered storage
+# Tier data
 
 TimescaleDB tiered storage architecture includes a standard high-performance storage tier and a low-cost object storage tier. You can migrate rarely used data to the object storage to cut costs. Data is tiered on the level of chunks, that is, individual parts of tables. This means that a single table can be spread among storage tiers for ultimate cost optimization.
+
+<img height="200" src="https://assets.timescale.com/docs/images/tiered-storage-widget.png" alt="pgai"/>
 
 See more:
 
 - [About tiered storage](https://docs.timescale.com/use-timescale/latest/data-tiering/)
 
-# High availability
+# Ensure high availability
 
 For services with different downtime tolerance, TimescaleDB offers high-availability (HA) and read replicas. HA replicas are exact, up-to-date copies of your database. They automatically take over operations if the original primary data node becomes unavailable. Read replicas are read-only copies of the primary data instance. Queries on read replicas have minimal impact on the performance of the primary data instance.
+
+<img height="200" src="https://assets.timescale.com/docs/images/high-availability-replicas.png" alt="pgai"/>
 
 See more:
 
 - [About high availability and read replication](https://docs.timescale.com/use-timescale/latest/ha-replicas/)
 
-## Build status
+# Check build status
 
 |Linux/macOS|Linux i386|Windows|Coverity|Code Coverage|OpenSSF|
 |:---:|:---:|:---:|:---:|:---:|:---:|
@@ -184,7 +183,7 @@ See more:
 
 We welcome contributions to TimescaleDB! See [Contributing](https://github.com/timescale/timescaledb/blob/main/CONTRIBUTING.md) and [Code style guide](https://github.com/timescale/timescaledb/blob/main/docs/StyleGuide.md) for details.
 
-## About Timescale
+## Learn about Timescale
 
 Timescale is a PostgreSQL database company. To learn more, visit [timescale.com](https://www.timescale.com).
 
