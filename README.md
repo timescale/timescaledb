@@ -145,8 +145,6 @@ See more:
 
 Continuous aggregates are designed to make queries on very large datasets run faster. They use PostgreSQL [materialized views](https://www.postgresql.org/docs/current/rules-materializedviews.html) to continuously and incrementally refresh a query in the background, so that when you run the query, only the data that has changed needs to be computed, not the entire dataset.
 
-<img height="200" src="https://assets.timescale.com/docs/images/continuous-aggregates.png" alt="pgai"/>
-
 See more:
 
 - [About continuous aggregates](https://docs.timescale.com/use-timescale/latest/continuous-aggregates/)
@@ -156,7 +154,7 @@ See more:
 
 TimescaleDB tiered storage architecture includes a standard high-performance storage tier and a low-cost object storage tier. You can migrate rarely used data to the object storage to cut costs. Data is tiered on the level of chunks, that is, individual parts of tables. This means that a single table can be spread among storage tiers for ultimate cost optimization.
 
-<img height="200" src="https://assets.timescale.com/docs/images/tiered-storage-widget.png" alt="pgai"/>
+<img src="https://assets.timescale.com/docs/images/tiered-storage.png" alt="tiered-storage"/>
 
 See more:
 
@@ -166,7 +164,7 @@ See more:
 
 For services with different downtime tolerance, TimescaleDB offers high-availability (HA) and read replicas. HA replicas are exact, up-to-date copies of your database. They automatically take over operations if the original primary data node becomes unavailable. Read replicas are read-only copies of the primary data instance. Queries on read replicas have minimal impact on the performance of the primary data instance.
 
-<img height="200" src="https://assets.timescale.com/docs/images/high-availability-replicas.png" alt="pgai"/>
+<img src="https://assets.timescale.com/docs/images/high-availability.png" alt="high availability"/>
 
 See more:
 
