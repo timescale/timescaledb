@@ -560,7 +560,10 @@ compression_create_tuplesort_state(CompressionSettings *settings, Relation rel)
 													 &nulls_first[n]);
 	}
 
-	return tuplesort_begin_heap(tupdesc,
+	/* Make a copy of the tuple descriptor so that it is allocated on the same
+	 * memory context as the tuple sort instead of pointing into the relcache
+	 * entry that could be blown away. */
+	return tuplesort_begin_heap(CreateTupleDescCopy(tupdesc),
 								n_keys,
 								sort_keys,
 								sort_operators,
