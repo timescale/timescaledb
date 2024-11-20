@@ -505,7 +505,7 @@ arrow_create_with_buffers(MemoryContext mcxt, int n_buffers)
 		ArrowArray array;
 		const void *buffers[FLEXIBLE_ARRAY_MEMBER];
 	} *array_with_buffers =
-		MemoryContextAllocZero(mcxt, sizeof(ArrowArray) + sizeof(const void *) * n_buffers);
+		MemoryContextAllocZero(mcxt, sizeof(ArrowArray) + (sizeof(const void *) * n_buffers));
 
 	ArrowArray *array = &array_with_buffers->array;
 

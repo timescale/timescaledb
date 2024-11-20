@@ -310,3 +310,96 @@ SELECT sum(_ts_meta_count) FROM :cchunk;
 SELECT count(*) FROM :chunk;
 
 drop table readings;
+
+---------------------------------------------
+-- Test recompression via compress_chunk() --
+---------------------------------------------
+show timescaledb.enable_transparent_decompression;
+
+create table recompress (time timestamptz, value int);
+select create_hypertable('recompress', 'time', create_default_indexes => false);
+insert into recompress values ('2024-01-01 01:00', 1), ('2024-01-01 02:00', 2);
+
+select format('%I.%I', chunk_schema, chunk_name)::regclass as unique_chunk
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = 'recompress'::regclass
+ order by unique_chunk asc
+ limit 1 \gset
+
+alter table recompress set (timescaledb.compress_orderby='time');
+alter table :unique_chunk set access method hypercore;
+
+-- Should already be compressed
+select compress_chunk(:'unique_chunk');
+
+-- Insert something to compress
+insert into recompress values ('2024-01-01 03:00', 3);
+
+select compress_chunk(:'unique_chunk');
+
+-- Make sure we see the data after recompression and everything is
+-- compressed
+select _timescaledb_debug.is_compressed_tid(ctid), * from recompress order by time;
+
+-- Add a time index to test recompression with index scan. Index scans
+-- during compression is actually disabled for Hypercore TAM since the
+-- index covers also compressed data, so this is only a check that the
+-- GUC can be set without negative consequences.
+create index on recompress (time);
+set timescaledb.enable_compression_indexscan=true;
+
+-- Insert another value to compress
+insert into recompress values ('2024-01-02 04:00', 4);
+select compress_chunk(:'unique_chunk');
+select _timescaledb_debug.is_compressed_tid(ctid), * from recompress order by time;
+
+-- Test using delete instead of truncate when compressing
+set timescaledb.enable_delete_after_compression=true;
+
+-- Insert another value to compress
+insert into recompress values ('2024-01-02 05:00', 5);
+
+select compress_chunk(:'unique_chunk');
+select _timescaledb_debug.is_compressed_tid(ctid), * from recompress order by time;
+
+-- Add a segmentby key to test segmentwise recompression
+-- Insert another value to compress that goes into same segment
+alter table :unique_chunk set access method heap;
+alter table recompress set (timescaledb.compress_orderby='time', timescaledb.compress_segmentby='value');
+alter table :unique_chunk set access method hypercore;
+insert into recompress values ('2024-01-02 06:00', 5);
+
+select compress_chunk(:'unique_chunk');
+select _timescaledb_debug.is_compressed_tid(ctid), * from recompress order by time;
+
+--------------------------------------
+-- C-native tests for hypercore TAM --
+--------------------------------------
+
+-- Test rescan functionality and ability to return only non-compressed data
+create table rescan (time timestamptz, device int, temp float);
+select create_hypertable('rescan', 'time');
+alter table rescan set (timescaledb.compress_orderby='time', timescaledb.compress_segmentby='device');
+insert into rescan values ('2024-11-01 01:00', 1, 1.0), ('2024-11-01 02:00', 1, 2.0), ('2024-11-01 03:00', 1, 3.0), ('2024-11-01 06:00', 1, 4.0), ('2024-11-01 05:00', 1, 5.0);
+
+select format('%I.%I', chunk_schema, chunk_name)::regclass as rescan_chunk
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = 'rescan'::regclass
+ order by rescan_chunk asc
+ limit 1 \gset
+
+select compress_chunk(:'rescan_chunk', hypercore_use_access_method => true);
+
+select relname, amname
+  from show_chunks('rescan') as chunk
+  join pg_class on (pg_class.oid = chunk)
+  join pg_am on (relam = pg_am.oid);
+
+insert into rescan values ('2024-11-02 01:00', 2, 1.0), ('2024-11-02 02:00', 2, 2.0), ('2024-11-02 03:00', 1, 3.0), ('2024-11-02 05:00', 2, 4.0);
+
+reset role;
+create function test_hypercore(relid regclass)
+returns void as :TSL_MODULE_PATHNAME, 'ts_test_hypercore' language c;
+set role :ROLE_DEFAULT_PERM_USER;
+
+select test_hypercore(:'rescan_chunk');

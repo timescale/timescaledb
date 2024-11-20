@@ -64,7 +64,6 @@
 #include "debug_assert.h"
 #include "guc.h"
 #include "hypercore_handler.h"
-#include "process_utility.h"
 #include "relstats.h"
 #include "trigger.h"
 #include "ts_catalog/array_utils.h"
@@ -81,6 +80,28 @@ static void convert_to_hypercore_finish(Oid relid);
 static List *partially_compressed_relids = NIL; /* Relids that needs to have
 												 * updated status set at end of
 												 * transaction */
+
+static bool hypercore_truncate_compressed = true;
+
+/*
+ * Configure whether a TRUNCATE on Hypercore TAM should truncate all data
+ * (both compressed and non-compressed) or only non-compressed data.
+ *
+ * This is used during re-compression where non-compressed data gets folded
+ * into existing compressed data. In that case, the existing compressed data
+ * should remain, but the non-compressed data that got compressed should be
+ * truncated.
+ *
+ * Note that this setting is sticky so it needs to be reset after the truncate
+ * operation completes.
+ */
+bool
+hypercore_set_truncate_compressed(bool onoff)
+{
+	bool old_value = hypercore_truncate_compressed;
+	hypercore_truncate_compressed = onoff;
+	return old_value;
+}
 
 #define HYPERCORE_AM_INFO_SIZE(natts)                                                              \
 	(sizeof(HypercoreInfo) + (sizeof(ColumnCompressionSettings) * (natts)))
@@ -336,10 +357,10 @@ typedef struct HypercoreParallelScanDescData *HypercoreParallelScanDesc;
 
 typedef enum HypercoreScanState
 {
-	HYPERCORE_SCAN_START,
+	HYPERCORE_SCAN_START = 0,
 	HYPERCORE_SCAN_COMPRESSED = HYPERCORE_SCAN_START,
-	HYPERCORE_SCAN_NON_COMPRESSED,
-	HYPERCORE_SCAN_DONE,
+	HYPERCORE_SCAN_NON_COMPRESSED = 1,
+	HYPERCORE_SCAN_DONE = 2,
 } HypercoreScanState;
 
 const char *scan_state_name[] = {
@@ -516,6 +537,7 @@ hypercore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey key
 		 * from the compressed chunk, so avoid reading it again here.
 		 */
 		scan->hs_scan_state = HYPERCORE_SCAN_NON_COMPRESSED;
+		scan->rs_base.rs_flags |= SO_HYPERCORE_SKIP_COMPRESSED;
 	}
 
 	initscan(scan, keys, nkeys);
@@ -559,9 +581,23 @@ hypercore_rescan(TableScanDesc sscan, ScanKey key, bool set_params, bool allow_s
 
 	initscan(scan, key, scan->rs_base.rs_nkeys);
 	scan->reset = true;
-	scan->hs_scan_state = HYPERCORE_SCAN_START;
 
-	table_rescan(scan->cscan_desc, key);
+	/* Check if there's a change in "skip compressed" */
+	if (key)
+	{
+		if (key->sk_flags & SK_NO_COMPRESSED)
+			scan->rs_base.rs_flags = SO_HYPERCORE_SKIP_COMPRESSED;
+		else
+			scan->rs_base.rs_flags &= ~SO_HYPERCORE_SKIP_COMPRESSED;
+	}
+
+	if (scan->rs_base.rs_flags & SO_HYPERCORE_SKIP_COMPRESSED)
+		scan->hs_scan_state = HYPERCORE_SCAN_NON_COMPRESSED;
+	else
+		scan->hs_scan_state = HYPERCORE_SCAN_START;
+
+	if (scan->cscan_desc)
+		table_rescan(scan->cscan_desc, key);
 
 	Relation relation = scan->uscan_desc->rs_rd;
 	const TableAmRoutine *oldtam = switch_to_heapam(relation);
@@ -1644,7 +1680,7 @@ hypercore_tuple_delete(Relation relation, ItemPointer tid, CommandId cid, Snapsh
 {
 	TM_Result result = TM_Ok;
 
-	if (is_compressed_tid(tid))
+	if (is_compressed_tid(tid) && hypercore_truncate_compressed)
 	{
 		HypercoreInfo *caminfo = RelationGetHypercoreInfo(relation);
 		Relation crel = table_open(caminfo->compressed_relid, RowExclusiveLock);
@@ -1828,7 +1864,7 @@ hypercore_relation_set_new_filelocator(Relation rel, const RelFileLocator *newrl
 	 * change the rel file number for it as well. This can happen if you, for
 	 * example, execute a transactional TRUNCATE. */
 	Oid compressed_relid = chunk_get_compressed_chunk_relid(RelationGetRelid(rel));
-	if (OidIsValid(compressed_relid))
+	if (OidIsValid(compressed_relid) && hypercore_truncate_compressed)
 	{
 		Relation compressed_rel = table_open(compressed_relid, AccessExclusiveLock);
 #if PG16_GE
@@ -1848,7 +1884,7 @@ hypercore_relation_nontransactional_truncate(Relation rel)
 	rel->rd_tableam = oldtam;
 
 	Oid compressed_relid = chunk_get_compressed_chunk_relid(RelationGetRelid(rel));
-	if (OidIsValid(compressed_relid))
+	if (OidIsValid(compressed_relid) && hypercore_truncate_compressed)
 	{
 		Relation crel = table_open(compressed_relid, AccessShareLock);
 		crel->rd_tableam->relation_nontransactional_truncate(crel);
@@ -1922,7 +1958,14 @@ compress_and_swap_heap(Relation rel, Tuplesortstate *tuplesort, TransactionId *x
 	table_close(new_compressed_rel, NoLock);
 	table_close(old_compressed_rel, NoLock);
 
-	/* Update stats for the compressed relation */
+	/*
+	 * Update stats for the compressed relation.
+	 *
+	 * We have an AccessExclusivelock from above so no tuple lock is needed
+	 * during update of the pg_class catalog table.
+	 */
+	AssertSufficientPgClassUpdateLockHeld(new_compressed_relid);
+
 	Relation relRelation = table_open(RelationRelationId, RowExclusiveLock);
 	HeapTuple reltup = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(new_compressed_relid));
 	if (!HeapTupleIsValid(reltup))
@@ -2074,7 +2117,7 @@ hypercore_relation_copy_for_cluster(Relation OldHypercore, Relation NewCompressi
 		if (prev_cblock != cblock)
 		{
 			pgstat_progress_update_param(PROGRESS_CLUSTER_HEAP_BLKS_SCANNED,
-										 (cblock + nblocks - startblock) % nblocks + 1);
+										 ((cblock + nblocks - startblock) % nblocks) + 1);
 			prev_cblock = cblock;
 		}
 		/* Get the actual tuple from the child slot (either compressed or
@@ -3465,6 +3508,9 @@ convert_to_hypercore_finish(Oid relid)
 	ts_chunk_constraints_create(ht_compressed, c_chunk);
 	ts_trigger_create_all_on_chunk(c_chunk);
 	create_proxy_vacuum_index(relation, RelationGetRelid(compressed_rel));
+	/* We use makeInteger since makeBoolean does not exist prior to PG15 */
+	List *options = list_make1(makeDefElem("autovacuum_enabled", (Node *) makeInteger(0), -1));
+	ts_relation_set_reloption(compressed_rel, options, RowExclusiveLock);
 
 	table_close(relation, NoLock);
 	table_close(compressed_rel, NoLock);

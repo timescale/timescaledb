@@ -163,10 +163,10 @@ bucket_month(int32 period, DateADT date, DateADT origin)
 	int32 result;
 
 	j2date(date + POSTGRES_EPOCH_JDATE, &year, &month, &day);
-	int32 timestamp = year * 12 + month - 1;
+	int32 timestamp = (year * 12) + month - 1;
 
 	j2date(origin + POSTGRES_EPOCH_JDATE, &year, &month, &day);
-	int32 offset = year * 12 + month - 1;
+	int32 offset = (year * 12) + month - 1;
 
 	TIME_BUCKET(period, timestamp, offset, PG_INT32_MIN, PG_INT32_MAX, result);
 
@@ -684,8 +684,8 @@ ts_time_bucket_ng_date(PG_FUNCTION_ARGS)
 
 		j2date(date + POSTGRES_EPOCH_JDATE, &year, &month, &day);
 		int32 result;
-		int32 offset = origin_year * 12 + origin_month - 1;
-		int32 timestamp = year * 12 + month - 1;
+		int32 offset = (origin_year * 12) + origin_month - 1;
+		int32 timestamp = (year * 12) + month - 1;
 		TIME_BUCKET(interval->month, timestamp, offset, PG_INT32_MIN, PG_INT32_MAX, result);
 
 		year = result / 12;

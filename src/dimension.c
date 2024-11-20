@@ -1886,7 +1886,7 @@ ts_dimensions_rename_schema_name(const char *old_name, const char *new_name)
 		.nkeys = 1,
 		.scankey = scankey,
 		.tuple_found = dimension_rename_schema_name,
-		.data = names,
+		.data = (void *) names,
 		.lockmode = RowExclusiveLock,
 		.scandirection = ForwardScanDirection,
 	};

@@ -172,6 +172,12 @@ transform_int_op_const(OpExpr *op)
 								return copyObject(nonconst);
 						}
 						break;
+					default:
+						/*
+						 * Do nothing for unknown operators. The explicit empty
+						 * branch is to placate the static analyzers.
+						 */
+						break;
 				}
 			}
 		}

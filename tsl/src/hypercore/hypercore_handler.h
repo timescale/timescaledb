@@ -18,6 +18,13 @@
  * individual access methods, so use bit 16. */
 #define SK_NO_COMPRESSED 0x8000
 
+typedef enum HypercoreScanOptions
+{
+	/* Normal scan options stretch to 9th bit. Start at bit 15 out of 32 to be
+	 * safe. */
+	SO_HYPERCORE_SKIP_COMPRESSED = 1 << 15,
+} HypercoreScanOptions;
+
 extern void hypercore_set_analyze_relid(Oid relid);
 extern const TableAmRoutine *hypercore_routine(void);
 extern void hypercore_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht);
@@ -25,6 +32,7 @@ extern void hypercore_alter_access_method_begin(Oid relid, bool to_other_am);
 extern void hypercore_alter_access_method_finish(Oid relid, bool to_other_am);
 extern Datum hypercore_handler(PG_FUNCTION_ARGS);
 extern void hypercore_xact_event(XactEvent event, void *arg);
+extern bool hypercore_set_truncate_compressed(bool onoff);
 
 typedef struct ColumnCompressionSettings
 {
@@ -55,5 +63,7 @@ typedef struct HypercoreInfo
 	/* Per-column information follows. */
 	ColumnCompressionSettings columns[FLEXIBLE_ARRAY_MEMBER];
 } HypercoreInfo;
+
+#define REL_IS_HYPERCORE(rel) ((rel)->rd_tableam == hypercore_routine())
 
 extern HypercoreInfo *RelationGetHypercoreInfo(Relation rel);
