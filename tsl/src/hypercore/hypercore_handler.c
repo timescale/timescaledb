@@ -3491,7 +3491,11 @@ convert_to_hypercore_finish(Oid relid)
 	 * relcache invalidations. Previously there was sometimes a crash here
 	 * because the tuple sort state had a reference to a tuple descriptor in
 	 * the relcache. */
+#if (PG_VERSION_NUM >= 140001)
 	RelationCacheInvalidate(false);
+#else
+	RelationCacheInvalidate();
+#endif
 #endif
 
 	Chunk *chunk = ts_chunk_get_by_relid(conversionstate->relid, true);
