@@ -360,12 +360,15 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 		 * filter bitmap are zero. This improves performance for highly
 		 * selective filters.
 		 */
-		int stat_range_rows = 0;
+		int statistics_range_row = 0;
 		int start_word = 0;
 		int end_word = 0;
 		int past_the_end_word = (n - 1) / 64 + 1;
 		for (;;)
 		{
+			/*
+			 * Skip the bitmap words which are zero.
+			 */
 			for (start_word = end_word; start_word < past_the_end_word && filter[start_word] == 0;
 				 start_word++)
 				;
@@ -375,10 +378,20 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 				break;
 			}
 
+			/*
+			 * Collect the consecutive bitmap words which are nonzero.
+			 */
 			for (end_word = start_word + 1; end_word < past_the_end_word && filter[end_word] != 0;
 				 end_word++)
 				;
 
+			/*
+			 * Now we have the [start, end] range of bitmap words that are
+			 * nonzero.
+			 *
+			 * Determine starting and ending rows, also skipping the starting
+			 * and trailing zero bits at the ends of the range.
+			 */
 			const int start_row = start_word * 64 + pg_rightmost_one_pos64(filter[start_word]);
 			Assert(start_row <= n);
 
@@ -391,11 +404,11 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 				(end_word - 1) * 64 + pg_leftmost_one_pos64(filter[end_word - 1]) + 1;
 			Assert(end_row <= n);
 
-			stat_range_rows += end_row - start_row;
+			statistics_range_row += end_row - start_row;
 
 			add_one_range(policy, batch_state, start_row, end_row);
 		}
-		policy->stat_bulk_filtered_rows += batch_state->total_batch_rows - stat_range_rows;
+		policy->stat_bulk_filtered_rows += batch_state->total_batch_rows - statistics_range_row;
 	}
 
 	policy->stat_input_total_rows += batch_state->total_batch_rows;
