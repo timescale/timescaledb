@@ -220,31 +220,6 @@ compute_single_aggregate(GroupingPolicyHash *policy, const DecompressBatchState 
 	}
 }
 
-static VectorQualSummary
-get_filter_word_summary(const uint64 *filter, int word, int total_rows)
-{
-	uint64 all_pass = ~((uint64) 0);
-	if ((word + 1) * 64 > total_rows)
-	{
-		Assert((word + 1) * 64 - total_rows < 64);
-		all_pass >>= 64 - total_rows % 64;
-
-		//		fprintf(stderr, "last word! ap %lx bitmap %lx\n", all_pass, filter[word]);
-	}
-
-	if (filter[word] == 0)
-	{
-		return NoRowsPass;
-	}
-
-	if (filter[word] == all_pass)
-	{
-		return AllRowsPass;
-	}
-
-	return SomeRowsPass;
-}
-
 static void
 add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, const int start_row,
 			  const int end_row)
@@ -380,54 +355,47 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 	}
 	else
 	{
-		const int past_the_end_word = (n - 1) / 64 + 1;
-
-		int range_end_word;
-		for (int range_start_word = 0; range_start_word < past_the_end_word;
-			 range_start_word = range_end_word)
+		/*
+		 * If we have a filter, skip the rows for which the entire words of the
+		 * filter bitmap are zero. This improves performance for highly
+		 * selective filters.
+		 */
+		int stat_range_rows = 0;
+		int start_word = 0;
+		int end_word = 0;
+		int past_the_end_word = (n - 1) / 64 + 1;
+		for (;;)
 		{
-			VectorQualSummary range_start_summary =
-				get_filter_word_summary(filter, range_start_word, n);
-			VectorQualSummary range_end_summary = range_start_summary;
-			for (range_end_word = range_start_word + 1; range_end_word < past_the_end_word;
-				 range_end_word++)
+			for (start_word = end_word; start_word < past_the_end_word && filter[start_word] == 0;
+				 start_word++)
+				;
+
+			if (start_word >= past_the_end_word)
 			{
-				range_end_summary = get_filter_word_summary(filter, range_end_word, n);
-				if (range_end_summary != range_start_summary)
-				{
-					/*
-					 * We have different vector qual summary for this word than the
-					 * current range. Add it and start the new one.
-					 */
-					break;
-				}
+				break;
 			}
 
-			Assert(range_end_word > range_start_word);
-			// fprintf(stderr, "range [%d,%d) summary %d\n", range_start_word, range_end_word,
-			// range_start_summary);
-			if (range_start_summary != NoRowsPass)
-			{
-				if (range_start_summary == SomeRowsPass)
-				{
-					batch_state->vector_qual_result = filter;
-				}
-				else
-				{
-					Assert(range_start_summary == AllRowsPass);
-					batch_state->vector_qual_result = NULL;
-				}
-				add_one_range(policy,
-							  batch_state,
-							  range_start_word * 64,
-							  MIN(range_end_word * 64, n));
-			}
-			else
-			{
-				policy->stat_bulk_filtered_rows +=
-					MIN(range_end_word * 64, n) - range_start_word * 64;
-			}
+			for (end_word = start_word + 1; end_word < past_the_end_word && filter[end_word] != 0;
+				 end_word++)
+				;
+
+			const int start_row = start_word * 64 + pg_rightmost_one_pos64(filter[start_word]);
+			Assert(start_row <= n);
+
+			/*
+			 * The bits for past-the-end rows must be set to zero, so this
+			 * calculation should yield no more than n.
+			 */
+			Assert(end_word > start_word);
+			const int end_row =
+				(end_word - 1) * 64 + pg_leftmost_one_pos64(filter[end_word - 1]) + 1;
+			Assert(end_row <= n);
+
+			stat_range_rows += end_row - start_row;
+
+			add_one_range(policy, batch_state, start_row, end_row);
 		}
+		policy->stat_bulk_filtered_rows += batch_state->total_batch_rows - stat_range_rows;
 	}
 
 	policy->stat_input_total_rows += batch_state->total_batch_rows;
