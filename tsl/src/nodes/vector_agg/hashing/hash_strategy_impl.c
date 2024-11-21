@@ -66,16 +66,6 @@ FUNCTION_NAME(reset_strategy)(HashingStrategy *hashing)
 	hashing->null_key_index = 0;
 }
 
-static void
-expand_validity(const uint64 *filter, int start_row, bool *restrict dest)
-{
-	const int start_word = start_row / 64;
-	for (int i = 0; i < 64; i++)
-	{
-		dest[i] = arrow_row_is_valid(filter, start_word * 64 + i);
-	}
-}
-
 /*
  * Fill the unique key indexes for all rows using a hash table.
  */
@@ -91,20 +81,9 @@ FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int e
 
 	HASH_TABLE_KEY_TYPE prev_hash_table_key;
 	uint32 previous_key_index = 0;
-	bool validity_cache[64];
 	for (int row = start_row; row < end_row; row++)
 	{
-		if (row % 64 == 0 || row == start_row)
-		{
-			if (params.batch_filter != NULL && params.batch_filter[row / 64] == 0)
-			{
-				row += 64;
-				continue;
-			}
-			expand_validity(params.batch_filter, row, validity_cache);
-		}
-
-		if (!validity_cache[row % 64])
+		if (!arrow_row_is_valid(params.batch_filter, row))
 		{
 			/* The row doesn't pass the filter. */
 			DEBUG_PRINT("%p: row %d doesn't pass batch filter\n", policy, row);
