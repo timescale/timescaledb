@@ -136,8 +136,12 @@ hypercore_tid_encode(ItemPointerData *out_tid, const ItemPointerData *in_tid, ui
 	Assert(offset < OFFSET_LIMIT);
 	Assert(tuple_index != InvalidTupleIndex);
 
-	/* Ensure that we are not using the compressed flag in the encoded tid */
-	Ensure((COMPRESSED_FLAG | encoded_tid) != encoded_tid, "block number too large");
+	/* Ensure that we are not using the compressed flag in the encoded tid and
+	 * that the most significant bits of the block number was not truncated
+	 * from the shifting. If that happens, we have a block number that is too
+	 * large for the encoding. */
+	Ensure((COMPRESSED_FLAG | encoded_tid) != encoded_tid && (encoded_tid >> OFFSET_BITS) == block,
+		   "block number too large");
 
 	ItemPointerSet(out_tid, COMPRESSED_FLAG | encoded_tid, tuple_index);
 }
