@@ -3081,7 +3081,10 @@ static void
 hypercore_index_validate_scan(Relation compressionRelation, Relation indexRelation,
 							  IndexInfo *indexInfo, Snapshot snapshot, ValidateIndexState *state)
 {
-	FEATURE_NOT_SUPPORTED;
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("concurrent index creation on is not supported on tables using hypercore table "
+					"access method")));
 }
 
 /* ------------------------------------------------------------------------

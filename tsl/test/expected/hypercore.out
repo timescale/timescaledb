@@ -8,6 +8,9 @@ show timescaledb.hypercore_indexam_whitelist;
  btree,hash
 (1 row)
 
+-- We need this to be able to create an index for a chunk as a default
+-- user.
+grant all on schema _timescaledb_internal to :ROLE_DEFAULT_PERM_USER;
 set role :ROLE_DEFAULT_PERM_USER;
 SET timescaledb.arrow_cache_maxsize = 4;
 CREATE TABLE readings(
@@ -138,17 +141,27 @@ WHERE time = '2022-06-01'::timestamptz;
 
 -- Create a new index on a compressed column
 CREATE INDEX ON readings (location);
--- Check that we error out on unsupported index types
 \set ON_ERROR_STOP 0
+-- Check that we error out on unsupported index types
 create index on readings using brin (device);
 ERROR:  index access method "brin" not supported
 create index on readings using gin (jdata);
 ERROR:  index access method "gin" not supported
 create index on readings using magicam (device);
 ERROR:  access method "magicam" does not exist
+-- Check that we error out when trying to build index concurrently.
+create index concurrently on readings (device);
+ERROR:  hypertables do not support concurrent index creation
+create index concurrently invalid_index on :chunk (device);
+ERROR:  concurrent index creation on is not supported on tables using hypercore table access method
+-- This will also create the index on the chunk (this is how it works,
+-- see validate_index() in index.c for more information), but that
+-- index is not valid, so we just drop it explicitly here to keep the
+-- rest of the test clean.
+drop index _timescaledb_internal.invalid_index;
 \set ON_ERROR_STOP 1
 -- Index added on location
-SELECT * FROM test.show_indexes(:'chunk');
+SELECT * FROM test.show_indexes(:'chunk') ORDER BY "Index"::text;
                             Index                             |  Columns   | Expr | Unique | Primary | Exclusion | Tablespace 
 --------------------------------------------------------------+------------+------+--------+---------+-----------+------------
  _timescaledb_internal."1_1_readings_time_key"                | {time}     |      | t      | f       | f         | 

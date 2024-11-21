@@ -4,6 +4,9 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 show timescaledb.hypercore_indexam_whitelist;
+-- We need this to be able to create an index for a chunk as a default
+-- user.
+grant all on schema _timescaledb_internal to :ROLE_DEFAULT_PERM_USER;
 set role :ROLE_DEFAULT_PERM_USER;
 
 SET timescaledb.arrow_cache_maxsize = 4;
@@ -93,15 +96,24 @@ WHERE time = '2022-06-01'::timestamptz;
 -- Create a new index on a compressed column
 CREATE INDEX ON readings (location);
 
--- Check that we error out on unsupported index types
 \set ON_ERROR_STOP 0
+-- Check that we error out on unsupported index types
 create index on readings using brin (device);
 create index on readings using gin (jdata);
 create index on readings using magicam (device);
+
+-- Check that we error out when trying to build index concurrently.
+create index concurrently on readings (device);
+create index concurrently invalid_index on :chunk (device);
+-- This will also create the index on the chunk (this is how it works,
+-- see validate_index() in index.c for more information), but that
+-- index is not valid, so we just drop it explicitly here to keep the
+-- rest of the test clean.
+drop index _timescaledb_internal.invalid_index;
 \set ON_ERROR_STOP 1
 
 -- Index added on location
-SELECT * FROM test.show_indexes(:'chunk');
+SELECT * FROM test.show_indexes(:'chunk') ORDER BY "Index"::text;
 
 -- Query by location should be an index scan
 EXPLAIN (verbose, costs off)
