@@ -65,15 +65,15 @@ serialized_get_key(BatchHashingParams params, int row, void *restrict output_key
 
 	const int num_columns = params.num_grouping_columns;
 
-	size_t bitmap_bytes = (num_columns + 7) / 8;
-	uint8 *restrict serialized_key_validity_bitmap;
+	const size_t bitmap_bytes = (num_columns + 7) / 8;
 
 	/*
 	 * Loop through the grouping columns to determine the length of the key. We
 	 * need that to allocate memory to store it.
+	 *
+	 * The key has the null bitmap at the beginning.
 	 */
-	size_t num_bytes = 0;
-	num_bytes += VARHDRSZ;
+	size_t num_bytes = bitmap_bytes;
 	for (int column_index = 0; column_index < num_columns; column_index++)
 	{
 		const CompressedColumnValues *column_values = &params.grouping_column_values[column_index];
@@ -90,7 +90,23 @@ serialized_get_key(BatchHashingParams params, int row, void *restrict output_key
 				}
 				else
 				{
-					num_bytes = TYPEALIGN(4, num_bytes) + VARSIZE_ANY(*column_values->output_value);
+					/*
+					 * The default value always has a long varlena header, but
+					 * we are going to use short if it fits.
+					 */
+					const int32 value_bytes = VARSIZE_ANY_EXHDR(*column_values->output_value);
+					if (value_bytes + VARHDRSZ_SHORT <= VARATT_SHORT_MAX)
+					{
+						/* Short varlena, unaligned. */
+						const int total_bytes = value_bytes + VARHDRSZ_SHORT;
+						num_bytes += total_bytes;
+					}
+					else
+					{
+						/* Long varlena, requires alignment. */
+						const int total_bytes = value_bytes + VARHDRSZ;
+						num_bytes = TYPEALIGN(4, num_bytes) + total_bytes;
+					}
 				}
 			}
 
@@ -118,30 +134,37 @@ serialized_get_key(BatchHashingParams params, int row, void *restrict output_key
 			const uint32 data_row = (column_values->decompression_type == DT_ArrowTextDict) ?
 										((int16 *) column_values->buffers[3])[row] :
 										row;
-
 			const uint32 start = ((uint32 *) column_values->buffers[1])[data_row];
 			const int32 value_bytes = ((uint32 *) column_values->buffers[1])[data_row + 1] - start;
 
-			int32 total_bytes;
 			if (value_bytes + VARHDRSZ_SHORT <= VARATT_SHORT_MAX)
 			{
 				/* Short varlena, unaligned. */
-				total_bytes = value_bytes + VARHDRSZ_SHORT;
+				const int total_bytes = value_bytes + VARHDRSZ_SHORT;
 				num_bytes += total_bytes;
 			}
 			else
 			{
 				/* Long varlena, requires alignment. */
-				total_bytes = value_bytes + VARHDRSZ;
+				const int total_bytes = value_bytes + VARHDRSZ;
 				num_bytes = TYPEALIGN(4, num_bytes) + total_bytes;
 			}
 		}
 	}
 
 	/*
-	 * The key has a null bitmap at the end.
+	 * The key has short or long varlena header. This is a little tricky, we
+	 * decide the header length after we have counted all the columns, but we
+	 * put it at the beginning. Technically it could change the length because
+	 * of the alignment. In practice, we only use alignment by 4 bytes for long
+	 * varlena strings, and if we have at least one long varlena string column,
+	 * the key is also going to use the long varlena header which is 4 bytes, so
+	 * the alignment is not affected. If we use the short varlena header for the
+	 * key, it necessarily means that there were no long varlena columns and
+	 * therefore no alignment is needed.
 	 */
-	num_bytes += bitmap_bytes;
+	const bool key_uses_short_header = num_bytes + VARHDRSZ_SHORT <= VARATT_SHORT_MAX;
+	num_bytes += key_uses_short_header ? VARHDRSZ_SHORT : VARHDRSZ;
 
 	/*
 	 * Use temporary storage for the new key, reallocate if it's too small.
@@ -158,18 +181,23 @@ serialized_get_key(BatchHashingParams params, int row, void *restrict output_key
 	uint8 *restrict serialized_key_storage = policy->tmp_key_storage;
 
 	/*
-	 * Have to memset the key with zeros, so that the alignment bytes are zeroed
-	 * out.
-	 */
-	memset(serialized_key_storage, 0, num_bytes);
-
-	serialized_key_validity_bitmap = &serialized_key_storage[num_bytes - bitmap_bytes];
-
-	/*
-	 * Loop through the grouping columns again and build the actual key.
+	 * Build the actual grouping key.
 	 */
 	uint32 offset = 0;
-	offset += VARHDRSZ;
+	offset += key_uses_short_header ? VARHDRSZ_SHORT : VARHDRSZ;
+
+	/*
+	 * We must always save the validity bitmap, even when there are no
+	 * null words, so that the key is uniquely deserializable. Otherwise a key
+	 * with some nulls might collide with a key with no nulls.
+	 */
+	uint8 *restrict serialized_key_validity_bitmap = &serialized_key_storage[offset];
+	offset += bitmap_bytes;
+
+	/*
+	 * Loop through the grouping columns again and add their values to the
+	 * grouping key.
+	 */
 	for (int column_index = 0; column_index < num_columns; column_index++)
 	{
 		const CompressedColumnValues *column_values = &params.grouping_column_values[column_index];
@@ -193,17 +221,32 @@ serialized_get_key(BatchHashingParams params, int row, void *restrict output_key
 				else
 				{
 					/*
-					 * FIXME this is not consistent with non-scalar values, add
-					 * a test (how??? it differentiates equal keys, not equates
-					 * different ones).
+					 * The default value always has a long varlena header, but
+					 * we are going to use short if it fits.
 					 */
-					offset = TYPEALIGN(4, offset);
+					const int32 value_bytes = VARSIZE_ANY_EXHDR(*column_values->output_value);
+					if (value_bytes + VARHDRSZ_SHORT <= VARATT_SHORT_MAX)
+					{
+						/* Short varlena, no alignment. */
+						const int32 total_bytes = value_bytes + VARHDRSZ_SHORT;
+						SET_VARSIZE_SHORT(&serialized_key_storage[offset], total_bytes);
+						offset += VARHDRSZ_SHORT;
+					}
+					else
+					{
+						/* Long varlena, requires alignment. Zero out the alignment bytes. */
+						memset(&serialized_key_storage[offset], 0, 4);
+						offset = TYPEALIGN(4, offset);
+						const int32 total_bytes = value_bytes + VARHDRSZ;
+						SET_VARSIZE(&serialized_key_storage[offset], total_bytes);
+						offset += VARHDRSZ;
+					}
 
 					memcpy(&serialized_key_storage[offset],
-						   DatumGetPointer(*column_values->output_value),
-						   VARSIZE_ANY(*column_values->output_value));
+						   VARDATA_ANY(*column_values->output_value),
+						   value_bytes);
 
-					offset += VARSIZE_ANY(*column_values->output_value);
+					offset += value_bytes;
 				}
 			}
 			continue;
@@ -222,9 +265,28 @@ serialized_get_key(BatchHashingParams params, int row, void *restrict output_key
 		{
 			Assert(offset <= UINT_MAX - column_values->decompression_type);
 
-			memcpy(&serialized_key_storage[offset],
-				   ((char *) column_values->buffers[1]) + column_values->decompression_type * row,
-				   column_values->decompression_type);
+			switch ((int) column_values->decompression_type)
+			{
+				case 2:
+					memcpy(&serialized_key_storage[offset],
+						   row + (int16 *) column_values->buffers[1],
+						   2);
+					break;
+				case 4:
+					memcpy(&serialized_key_storage[offset],
+						   row + (int32 *) column_values->buffers[1],
+						   4);
+					break;
+				case 8:
+					memcpy(&serialized_key_storage[offset],
+						   row + (int64 *) column_values->buffers[1],
+						   8);
+					break;
+				default:
+					pg_unreachable();
+					break;
+			}
+
 			offset += column_values->decompression_type;
 
 			continue;
@@ -248,7 +310,8 @@ serialized_get_key(BatchHashingParams params, int row, void *restrict output_key
 		}
 		else
 		{
-			/* Long varlena, requires alignment. */
+			/* Long varlena, requires alignment. Zero out the alignment bytes. */
+			memset(&serialized_key_storage[offset], 0, 4);
 			offset = TYPEALIGN(4, offset);
 			const int32 total_bytes = value_bytes + VARHDRSZ;
 			SET_VARSIZE(&serialized_key_storage[offset], total_bytes);
@@ -261,15 +324,16 @@ serialized_get_key(BatchHashingParams params, int row, void *restrict output_key
 		offset += value_bytes;
 	}
 
-	Assert(&serialized_key_storage[offset] == (void *) serialized_key_validity_bitmap);
-
-	/*
-	 * Note that we must always save the validity bitmap, even when there are no
-	 * null words, so that the key is uniquely deserializable. Otherwise a key
-	 * with some nulls might collide with a key with no nulls.
-	 */
-	offset += bitmap_bytes;
 	Assert(offset == num_bytes);
+
+	if (key_uses_short_header)
+	{
+		SET_VARSIZE_SHORT(serialized_key_storage, offset);
+	}
+	else
+	{
+		SET_VARSIZE(serialized_key_storage, offset);
+	}
 
 	DEBUG_PRINT("key is %d bytes: ", offset);
 	for (size_t i = 0; i < offset; i++)
@@ -278,9 +342,9 @@ serialized_get_key(BatchHashingParams params, int row, void *restrict output_key
 	}
 	DEBUG_PRINT("\n");
 
-	SET_VARSIZE(serialized_key_storage, offset);
-
 	*output_key = (text *) serialized_key_storage;
+
+	Assert(VARSIZE_ANY(*output_key) == num_bytes);
 
 	/*
 	 * The multi-column key is always considered non-null, and the null flags
@@ -319,16 +383,24 @@ serialized_emit_key(GroupingPolicyHash *policy, uint32 current_key, TupleTableSl
 	const int num_key_columns = policy->num_grouping_columns;
 	const Datum serialized_key_datum = policy->hashing.output_keys[current_key];
 	const uint8 *serialized_key = (const uint8 *) VARDATA_ANY(serialized_key_datum);
-	const int key_data_bytes = VARSIZE_ANY_EXHDR(serialized_key_datum);
+	PG_USED_FOR_ASSERTS_ONLY const int key_data_bytes = VARSIZE_ANY_EXHDR(serialized_key_datum);
 	const uint8 *restrict ptr = serialized_key;
+
+	/*
+	 * We have the column validity bitmap at the beginning of the key.
+	 */
 	const int bitmap_bytes = (num_key_columns + 7) / 8;
 	Assert(bitmap_bytes <= key_data_bytes);
-	const uint8 *restrict key_validity_bitmap = &serialized_key[key_data_bytes - bitmap_bytes];
+	const uint8 *restrict key_validity_bitmap = serialized_key;
+	ptr += bitmap_bytes;
 
-	DEBUG_PRINT("emit key #%d, without header %d bytes: ", current_key, key_data_bytes);
-	for (int i = 0; i < key_data_bytes; i++)
+	DEBUG_PRINT("emit key #%d, with header %ld without %d bytes: ",
+				current_key,
+				VARSIZE_ANY(serialized_key_datum),
+				key_data_bytes);
+	for (size_t i = 0; i < VARSIZE_ANY(serialized_key_datum); i++)
 	{
-		DEBUG_PRINT("%.2x.", ptr[i]);
+		DEBUG_PRINT("%.2x.", ((const uint8 *) serialized_key_datum)[i]);
 	}
 	DEBUG_PRINT("\n");
 
@@ -345,9 +417,9 @@ serialized_emit_key(GroupingPolicyHash *policy, uint32 current_key, TupleTableSl
 		}
 
 		Datum *output = &aggregated_slot->tts_values[col->output_offset];
-		if (col->by_value)
+		if (col->value_bytes > 0)
 		{
-			Assert(col->value_bytes > 0);
+			Assert(col->by_value);
 			Assert((size_t) col->value_bytes <= sizeof(Datum));
 			*output = 0;
 			memcpy(output, ptr, col->value_bytes);
@@ -356,6 +428,7 @@ serialized_emit_key(GroupingPolicyHash *policy, uint32 current_key, TupleTableSl
 		else
 		{
 			Assert(col->value_bytes == -1);
+			Assert(!col->by_value);
 			if (VARATT_IS_SHORT(ptr))
 			{
 				*output = PointerGetDatum(ptr);
@@ -370,7 +443,7 @@ serialized_emit_key(GroupingPolicyHash *policy, uint32 current_key, TupleTableSl
 		}
 	}
 
-	Assert(ptr == key_validity_bitmap);
+	Assert(ptr == serialized_key + key_data_bytes);
 }
 
 #include "output_key_alloc.c"

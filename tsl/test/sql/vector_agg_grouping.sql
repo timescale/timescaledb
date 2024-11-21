@@ -109,3 +109,18 @@ order by explain, condition.n, variable, function, grouping.n
 \gexec
 
 reset timescaledb.debug_require_vector_agg;
+
+
+create table long(t int, a text, b text, c text, d text);
+select create_hypertable('long', 't');
+insert into long select n, x, x, x, x from (
+    select n, repeat('1', 100 * 4 + n) x
+    from generate_series(1, 4) n) t
+;
+insert into long values (-1, 'a', 'b', 'c', 'd');
+alter table long set (timescaledb.compress);
+select count(compress_chunk(x)) from show_chunks('long') x;
+
+set timescaledb.debug_require_vector_agg = 'require';
+select count(*) from long group by a, b, c, d order by 1 limit 10;
+reset timescaledb.debug_require_vector_agg;

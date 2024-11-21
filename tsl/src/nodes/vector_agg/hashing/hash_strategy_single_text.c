@@ -65,9 +65,9 @@ single_text_get_key(BatchHashingParams params, int row, void *restrict output_ke
 	}
 
 	DEBUG_PRINT("%p consider key row %d key index %d is %d bytes: ",
-				policy,
+				params.policy,
 				row,
-				policy->last_used_key_index + 1,
+				params.policy->last_used_key_index + 1,
 				output_key->len);
 	for (size_t i = 0; i < output_key->len; i++)
 	{
