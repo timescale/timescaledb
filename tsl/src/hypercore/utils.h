@@ -8,3 +8,4 @@
 #include <postgres.h>
 
 extern void hypercore_set_am(const RangeVar *rv);
+extern void hypercore_set_reloptions(Chunk *chunk);

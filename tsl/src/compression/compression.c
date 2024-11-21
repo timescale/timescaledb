@@ -183,12 +183,8 @@ static void
 RelationDeleteAllRows(Relation rel, Snapshot snap)
 {
 	TupleTableSlot *slot = table_slot_create(rel, NULL);
-	ScanKeyData scankey = {
-		/* Let compression TAM know it should only return tuples from the
-		 * non-compressed relation. No actual scankey necessary */
-		.sk_flags = SK_NO_COMPRESSED,
-	};
-	TableScanDesc scan = table_beginscan(rel, snap, 0, &scankey);
+	TableScanDesc scan = table_beginscan(rel, snap, 0, NULL);
+	hypercore_scan_set_skip_compressed(scan, true);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
 	{
@@ -560,7 +556,10 @@ compression_create_tuplesort_state(CompressionSettings *settings, Relation rel)
 													 &nulls_first[n]);
 	}
 
-	return tuplesort_begin_heap(tupdesc,
+	/* Make a copy of the tuple descriptor so that it is allocated on the same
+	 * memory context as the tuple sort instead of pointing into the relcache
+	 * entry that could be blown away. */
+	return tuplesort_begin_heap(CreateTupleDescCopy(tupdesc),
 								n_keys,
 								sort_keys,
 								sort_operators,
@@ -577,13 +576,9 @@ compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
 	Tuplesortstate *tuplesortstate;
 	TableScanDesc scan;
 	TupleTableSlot *slot;
-	ScanKeyData scankey = {
-		/* Let compression TAM know it should only return tuples from the
-		 * non-compressed relation. No actual scankey necessary */
-		.sk_flags = SK_NO_COMPRESSED,
-	};
 	tuplesortstate = compression_create_tuplesort_state(settings, in_rel);
-	scan = table_beginscan(in_rel, GetLatestSnapshot(), 0, &scankey);
+	scan = table_beginscan(in_rel, GetLatestSnapshot(), 0, NULL);
+	hypercore_scan_set_skip_compressed(scan, true);
 	slot = table_slot_create(in_rel, NULL);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))

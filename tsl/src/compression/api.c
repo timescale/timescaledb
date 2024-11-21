@@ -823,6 +823,7 @@ compress_hypercore(Chunk *chunk, bool rel_is_hypercore, UseAccessMethod useam,
 		/* Do quick migration to hypercore of already compressed data by
 		 * simply changing the access method to hypercore in pg_am. */
 		hypercore_set_am(rv);
+		hypercore_set_reloptions(chunk);
 		return chunk->table_id;
 	}
 
@@ -1140,13 +1141,8 @@ fetch_unmatched_uncompressed_chunk_into_tuplesort(Tuplesortstate *segment_tuples
 	TableScanDesc scan;
 	TupleTableSlot *slot = table_slot_create(uncompressed_chunk_rel, NULL);
 	Snapshot snapshot = GetLatestSnapshot();
-	ScanKeyData scankey = {
-		/* Let compression TAM know it should only return tuples from the
-		 * non-compressed relation. No actual scankey necessary */
-		.sk_flags = SK_NO_COMPRESSED,
-	};
-
-	scan = table_beginscan(uncompressed_chunk_rel, snapshot, 0, &scankey);
+	scan = table_beginscan(uncompressed_chunk_rel, snapshot, 0, NULL);
+	hypercore_scan_set_skip_compressed(scan, true);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
 	{
@@ -1215,8 +1211,9 @@ fetch_matching_uncompressed_chunk_into_tuplesort(Tuplesortstate *segment_tupleso
 	snapshot = GetLatestSnapshot();
 	/* Let compression TAM know it should only return tuples from the
 	 * non-compressed relation. */
-	scankey->sk_flags = SK_NO_COMPRESSED;
+
 	scan = table_beginscan(uncompressed_chunk_rel, snapshot, nsegbycols_nonnull, scankey);
+	hypercore_scan_set_skip_compressed(scan, true);
 	TupleTableSlot *slot = table_slot_create(uncompressed_chunk_rel, NULL);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
