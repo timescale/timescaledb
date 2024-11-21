@@ -356,6 +356,13 @@ verify_offsets(const ArrowArray *array)
 ArrowArray *
 arrow_from_compressed(Datum compressed, Oid typid, MemoryContext dest_mcxt, MemoryContext tmp_mcxt)
 {
+	/*
+	 * Need to detoast on our temporary memory context because
+	 * CurrentMemoryContext can be a per-tuple memory context which uses Bump
+	 * allocator on PG17. The Bump allocator doesn't support pfree(), which is
+	 * needed by detoasting since it does some catalog scans.
+	 */
+	MemoryContext oldcxt = MemoryContextSwitchTo(tmp_mcxt);
 	const CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
 	DecompressAllFunction decompress_all =
 		arrow_get_decompress_all(header->compression_algorithm, typid);
@@ -364,7 +371,6 @@ arrow_from_compressed(Datum compressed, Oid typid, MemoryContext dest_mcxt, Memo
 				 format_type_be(typid),
 				 NameStr(*compression_get_algorithm_name(header->compression_algorithm)));
 
-	MemoryContext oldcxt = MemoryContextSwitchTo(tmp_mcxt);
 	ArrowArray *array = decompress_all(PointerGetDatum(header), typid, dest_mcxt);
 
 	Assert(verify_offsets(array));
