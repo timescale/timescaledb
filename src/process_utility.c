@@ -2960,10 +2960,10 @@ typedef enum HypertableIndexFlags
 } HypertableIndexFlags;
 
 static const WithClauseDefinition index_with_clauses[] = {
-	[HypertableIndexFlagMultiTransaction] = {.arg_name = "transaction_per_chunk", .type_id = BOOLOID,},
+	[HypertableIndexFlagMultiTransaction] = {.arg_names = {"transaction_per_chunk", NULL}, .type_id = BOOLOID,},
 #ifdef DEBUG
-	[HypertableIndexFlagBarrierTable] = {.arg_name = "barrier_table", .type_id = REGCLASSOID,},
-	[HypertableIndexFlagMaxChunks] = {.arg_name = "max_chunks", .type_id = INT4OID, .default_val = (Datum)-1},
+	[HypertableIndexFlagBarrierTable] = {.arg_names = {"barrier_table", NULL}, .type_id = REGCLASSOID,},
+	[HypertableIndexFlagMaxChunks] = {.arg_names = {"max_chunks", NULL}, .type_id = INT4OID, .default_val = (Datum)-1},
 #endif
 };
 
