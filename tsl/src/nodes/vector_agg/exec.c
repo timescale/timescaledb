@@ -194,23 +194,31 @@ static TupleTableSlot *
 vector_agg_exec(CustomScanState *node)
 {
 	VectorAggState *vector_agg_state = (VectorAggState *) node;
+	ExprContext *econtext = node->ss.ps.ps_ExprContext;
+	ResetExprContext(econtext);
 
 	TupleTableSlot *aggregated_slot = vector_agg_state->custom.ss.ps.ps_ResultTupleSlot;
 	ExecClearTuple(aggregated_slot);
 
+	/*
+	 * If we have more partial aggregation results, continue returning them.
+	 */
 	GroupingPolicy *grouping = vector_agg_state->grouping;
-	if (grouping->gp_do_emit(grouping, aggregated_slot))
+	MemoryContext old_context = MemoryContextSwitchTo(econtext->ecxt_per_tuple_memory);
+	bool have_partial = grouping->gp_do_emit(grouping, aggregated_slot);
+	MemoryContextSwitchTo(old_context);
+	if (have_partial)
 	{
 		/* The grouping policy produced a partial aggregation result. */
 		return ExecStoreVirtualTuple(aggregated_slot);
 	}
 
+	/*
+	 * If the partial aggregation results have ended, and the input has ended,
+	 * we're done.
+	 */
 	if (vector_agg_state->input_ended)
 	{
-		/*
-		 * The partial aggregation results have ended, and the input has ended,
-		 * so we're done.
-		 */
 		return NULL;
 	}
 
@@ -285,7 +293,13 @@ vector_agg_exec(CustomScanState *node)
 		grouping->gp_add_batch(grouping, batch_state);
 	}
 
-	if (grouping->gp_do_emit(grouping, aggregated_slot))
+	/*
+	 * If we have partial aggregation results, start returning them.
+	 */
+	old_context = MemoryContextSwitchTo(econtext->ecxt_per_tuple_memory);
+	have_partial = grouping->gp_do_emit(grouping, aggregated_slot);
+	MemoryContextSwitchTo(old_context);
+	if (have_partial)
 	{
 		/* Have partial aggregation results. */
 		return ExecStoreVirtualTuple(aggregated_slot);
