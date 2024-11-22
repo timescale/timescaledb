@@ -10,23 +10,6 @@ time-series data.  It is engineered up from PostgreSQL and packaged as a
 PostgreSQL extension, providing automatic partitioning across time and space
 (partitioning key), as well as full SQL support.
 
-> [!WARNING]
->
->  The latest Postgres minor releases (17.1, 16.5, 15.9, 14.14, 13.17, 12.21), released 2024-11-14, have an unexpected
->  breaking ABI change that may crash existing deployments of TimescaleDB, unless used with a TimescaleDB binary explicitly built against those new minor PG versions.
->  
->  
->  Status and recommendations:
->  - **Users of [Timescale Cloud](https://console.cloud.timescale.com/) are unaffected**. We are currently not upgrading cloud databases to these latest minor PG releases. But regardless, Timescale Cloud recompiles TimescaleDB against each new minor Postgres version, which would prevent any such incompatibility.
->  - **Users to Timescale's [k8s docker image](https://github.com/timescale/timescaledb-docker-ha) are unaffected**.  We are currently not building a new release against these latest minor PG releases. But regardless, our docker image build process recompiles TimescaleDB against each new minor Postgres version, which would prevent any such incompatibility.
->  - Users of other managed clouds (using TimescaleDB Apache-2 Edition) are recommended to not upgrade to these latest minor PG releases at this time, or discuss with their cloud provider how they build TimescaleDB with new minor releases.
->  - Users who self-manage TimescaleDB are recommended to not upgrade to these latest minor PG releases at this time.
-> 
->  We are working with the PG community about how best to address this issue.  See [this thread on pgsql-hackers](https://www.postgresql.org/message-id/flat/CABOikdNmVBC1LL6pY26dyxAS2f%2BgLZvTsNt%3D2XbcyG7WxXVBBQ%40mail.gmail.com) for more info.
->
->  Thanks for your understanding! 🙏
-
-
 If you prefer not to install or administer your instance of TimescaleDB, try the
 30 day free trial of [Timescale Cloud](https://console.cloud.timescale.com/signup), our fully managed cloud offering.
 Timescale is pay-as-you-go. We don't charge for storage you dont use, backups, snapshots, ingress or egress.
@@ -133,14 +116,20 @@ analysis that are not present in vanilla PostgreSQL. (For example, the `time_buc
 
 ### Installation
 
-[Timescale Cloud](https://tsdb.co/GitHubTimescale), a fully-managed TimescaleDB in the cloud, is
-available via a free trial. Create a PostgreSQL database in the cloud with TimescaleDB pre-installed
-so you can power your application with TimescaleDB without the management overhead.
+Installation options are:
 
-TimescaleDB is also available pre-packaged for several platforms such as Linux, Windows, MacOS, Docker, and
-Kubernetes. For more information, see [Install TimescaleDB](https://docs.timescale.com/self-hosted/latest/install/).
+- **[Timescale Cloud](https://tsdb.co/GitHubTimescale)**: a fully-managed TimescaleDB in the cloud, is
+  available via a free trial. Create a PostgreSQL database in the cloud with TimescaleDB pre-installed
+  so you can power your application with TimescaleDB without the management overhead.
 
-To build from source, see [Building from source](https://github.com/timescale/timescaledb/blob/main/docs/BuildSource.md).
+- **Platform packages**: TimescaleDB is also available pre-packaged for several platforms such as
+  Linux, Windows, MacOS, Docker, and Kubernetes. For more information, see [Install TimescaleDB](https://docs.timescale.com/self-hosted/latest/install/).
+
+- **Build from source**: see [Building from source](https://github.com/timescale/timescaledb/blob/main/docs/BuildSource.md).
+
+  PostgreSQL 17.1 [introduced a breaking change][postgres-breaking-change] that is incompatible with TimescaleDB. When you
+  build from source, best practice is to build with PostgreSQL 17.2 and higher. Do not build against PostgreSQL 17.1.
+  Users of  [Timescale Cloud](https://console.cloud.timescale.com/) and Platform packages are unaffected
 
 ## Resources
 
@@ -183,3 +172,4 @@ multiple workers.
 - [Contributor instructions](https://github.com/timescale/timescaledb/blob/main/CONTRIBUTING.md)
 - [Code style guide](https://github.com/timescale/timescaledb/blob/main/docs/StyleGuide.md)
 
+[postgres-breaking-change]: https://www.postgresql.org/about/news/postgresql-172-166-1510-1415-1318-and-1222-released-2965/
