@@ -118,7 +118,7 @@ analysis that are not present in vanilla PostgreSQL. (For example, the `time_buc
 
 Installation options are:
 
-- **[Timescale Cloud](https://tsdb.co/GitHubTimescale)**: a fully-managed TimescaleDB in the cloud, is
+- **[Timescale Cloud](https://tsdb.co/GitHubTimescale)**: A fully-managed TimescaleDB in the cloud, is
   available via a free trial. Create a PostgreSQL database in the cloud with TimescaleDB pre-installed
   so you can power your application with TimescaleDB without the management overhead.
 
