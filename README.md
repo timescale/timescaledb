@@ -125,7 +125,7 @@ Installation options are:
 - **Platform packages**: TimescaleDB is also available pre-packaged for several platforms such as
   Linux, Windows, MacOS, Docker, and Kubernetes. For more information, see [Install TimescaleDB](https://docs.timescale.com/self-hosted/latest/install/).
 
-- **Build from source**: see [Building from source](https://github.com/timescale/timescaledb/blob/main/docs/BuildSource.md).
+- **Build from source**: See [Building from source](https://github.com/timescale/timescaledb/blob/main/docs/BuildSource.md).
 
   PostgreSQL 17.1 [introduced a breaking change][postgres-breaking-change] that is incompatible with TimescaleDB. When you
   build from source, best practice is to build with PostgreSQL 17.2 and higher. Do not build against PostgreSQL 17.1.
