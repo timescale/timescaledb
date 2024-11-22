@@ -5,7 +5,7 @@ set -eu
 # This script build a CHANGELOG.md entry for a new release
 #
 
-REPO="$(readlink -e "$(dirname "${BASH_SOURCE[0]}")/..")"
+REPO="$(greadlink -e "$(dirname "${BASH_SOURCE[0]}")/..")"
 RELEASE_NOTES_HEADER_TEMPLATE="$REPO/scripts/changelog/RELEASE_NOTES_HEADER.md.j2"
 
 echo_changelog() {
