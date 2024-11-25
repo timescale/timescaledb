@@ -25,16 +25,19 @@ get_input_offset(DecompressChunkState *decompress_state, Var *var)
 {
 	DecompressContext *dcontext = &decompress_state->decompress_context;
 
+	/*
+	 * All variable references in the vectorized aggregation node were
+	 * translated to uncompressed chunk variables when it was created.
+	 */
+	CustomScan *cscan = castNode(CustomScan, decompress_state->csstate.ss.ps.plan);
+	Ensure((Index) var->varno == (Index) cscan->scan.scanrelid,
+		   "got vector varno %d expected %d",
+		   var->varno,
+		   cscan->scan.scanrelid);
+
 	CompressionColumnDescription *value_column_description = NULL;
 	for (int i = 0; i < dcontext->num_data_columns; i++)
 	{
-		/*
-		 * See the column lookup in compute_plain_qual() for the discussion of
-		 * which attribute numbers occur where. At the moment here it is
-		 * uncompressed_scan_attno, but it might be an oversight of not rewriting
-		 * the references into INDEX_VAR (or OUTER_VAR...?) when we create the
-		 * VectorAgg node.
-		 */
 		CompressionColumnDescription *current_column = &dcontext->compressed_chunk_columns[i];
 		if (current_column->uncompressed_chunk_attno == var->varattno)
 		{
