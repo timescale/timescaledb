@@ -86,7 +86,7 @@ CREATE TABLE conditions (
 );
 
 -- Convert the table into a hypertable that is partitioned by time
-SELECT create_hypertable('conditions', 'time');
+SELECT create_hypertable('conditions', by_range('time'));
 ```
 
 See more:
