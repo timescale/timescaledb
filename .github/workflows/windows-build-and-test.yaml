@@ -58,13 +58,13 @@ jobs:
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
         include:
           - pg: 14
-            pg_version: 14.13
+            pg_version: "14.15"
           - pg: 15
-            pg_version: 15.8
+            pg_version: "15.10"
           - pg: 16
-            pg_version: 16.4
+            pg_version: "16.6"
           - pg: 17
-            pg_version: 17.0
+            pg_version: "17.2"
     env:
       # PostgreSQL configuration
       PGPORT: 55432
