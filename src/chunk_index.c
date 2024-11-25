@@ -525,7 +525,7 @@ chunk_index_mapping_from_tuple(TupleInfo *ti, ChunkIndexMapping *cim)
 static ScanTupleResult
 chunk_index_collect(TupleInfo *ti, void *data)
 {
-	List **mappings = data;
+	List **mappings = (List **) data;
 	ChunkIndexMapping *cim;
 	MemoryContext oldmctx;
 
@@ -560,7 +560,7 @@ ts_chunk_index_get_mappings(Hypertable *ht, Oid hypertable_indexrelid)
 					 2,
 					 chunk_index_collect,
 					 NULL,
-					 &mappings,
+					 (void *) &mappings,
 					 AccessShareLock);
 
 	return mappings;

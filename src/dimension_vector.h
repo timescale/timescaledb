@@ -24,7 +24,7 @@ typedef struct DimensionVec
 } DimensionVec;
 
 #define DIMENSION_VEC_SIZE(num_slices)                                                             \
-	(sizeof(DimensionVec) + sizeof(DimensionSlice *) * num_slices)
+	(sizeof(DimensionVec) + (sizeof(DimensionSlice *) * num_slices))
 
 #define DIMENSION_VEC_DEFAULT_SIZE 10
 

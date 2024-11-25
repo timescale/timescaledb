@@ -416,9 +416,7 @@ ts_catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables,
 
 		for (j = 0; j < number_indexes; j++)
 		{
-			id = ts_get_relation_relid((char *) table_ary[i].schema_name,
-									   (char *) index_ary[i].names[j],
-									   true);
+			id = ts_get_relation_relid(table_ary[i].schema_name, index_ary[i].names[j], true);
 
 			if (!OidIsValid(id))
 				elog(ERROR, "OID lookup failed for table index \"%s\"", index_ary[i].names[j]);
@@ -789,28 +787,6 @@ ts_catalog_scan_all(CatalogTable table, int indexid, ScanKeyData *scankey, int n
 	};
 
 	ts_scanner_scan(&scanctx);
-}
-
-extern TSDLLEXPORT ResultRelInfo *
-ts_catalog_open_indexes(Relation heapRel)
-{
-	ResultRelInfo *resultRelInfo;
-
-	resultRelInfo = makeNode(ResultRelInfo);
-	resultRelInfo->ri_RangeTableIndex = 0; /* dummy */
-	resultRelInfo->ri_RelationDesc = heapRel;
-	resultRelInfo->ri_TrigDesc = NULL; /* we don't fire triggers */
-
-	ExecOpenIndices(resultRelInfo, false);
-
-	return resultRelInfo;
-}
-
-extern TSDLLEXPORT void
-ts_catalog_close_indexes(ResultRelInfo *indstate)
-{
-	ExecCloseIndices(indstate);
-	pfree(indstate);
 }
 
 /*

@@ -327,6 +327,10 @@ process_timebucket_parameters(FuncExpr *fe, ContinuousAggsBucketFunction *bf, bo
 					bf->bucket_time_origin = DatumGetTimestampTz(constval->constvalue);
 				}
 			}
+			break;
+		default:
+			/* Nothing to do for integer time column. */
+			break;
 	}
 	if (process_checks && custom_origin && TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
 	{

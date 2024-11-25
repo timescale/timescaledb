@@ -239,7 +239,7 @@ DETAIL:  Cannot drop column that is a hypertable partitioning (space or time) di
 ALTER TABLE foo DROP COLUMN b;
 ERROR:  cannot drop orderby or segmentby column from a hypertable with compression enabled
 ALTER TABLE foo ALTER COLUMN t SET NOT NULL;
-ERROR:  operation not supported on hypertables that have compression enabled
+ERROR:  column "t" of relation "_hyper_10_2_chunk" contains null values
 ALTER TABLE foo RESET (timescaledb.compress);
 ERROR:  compression options cannot be reset
 --can add constraints as long as no data is compressed

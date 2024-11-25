@@ -308,7 +308,7 @@ lock_result_ok_or_abort(TupleInfo *ti)
 static ScanTupleResult
 dimension_vec_tuple_found_list(TupleInfo *ti, void *data)
 {
-	List **slices = data;
+	List **slices = (List **) data;
 	DimensionSlice *slice;
 	MemoryContext old;
 
@@ -339,7 +339,7 @@ dimension_vec_tuple_found_list(TupleInfo *ti, void *data)
 static ScanTupleResult
 dimension_vec_tuple_found(TupleInfo *ti, void *data)
 {
-	DimensionVec **slices = data;
+	DimensionVec **slices = (DimensionVec **) data;
 	DimensionSlice *slice;
 	MemoryContext old;
 
@@ -455,7 +455,7 @@ ts_dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit,
 										scankey,
 										3,
 										dimension_vec_tuple_found,
-										&slices,
+										(void *) &slices,
 										limit,
 										AccessShareLock,
 										tuplock,
@@ -499,7 +499,7 @@ ts_dimension_slice_scan_list(int32 dimension_id, int64 coordinate, List **matchi
 										scankey,
 										3,
 										dimension_vec_tuple_found_list,
-										matching_dimension_slices,
+										(void *) matching_dimension_slices,
 										/* limit = */ 0,
 										AccessShareLock,
 										&tuplock,
@@ -669,7 +669,7 @@ ts_dimension_slice_collision_scan_limit(int32 dimension_id, int64 range_start, i
 										scankey,
 										3,
 										dimension_vec_tuple_found,
-										&slices,
+										(void *) &slices,
 										limit,
 										AccessShareLock,
 										NULL,
@@ -694,7 +694,7 @@ ts_dimension_slice_scan_by_dimension(int32 dimension_id, int limit)
 										scankey,
 										1,
 										dimension_vec_tuple_found,
-										&slices,
+										(void *) &slices,
 										limit,
 										AccessShareLock,
 										NULL,
@@ -737,7 +737,7 @@ ts_dimension_slice_scan_by_dimension_before_point(int32 dimension_id, int64 poin
 		scankey,
 		3,
 		dimension_vec_tuple_found,
-		&slices,
+		(void *) &slices,
 		limit,
 		scandir,
 		AccessShareLock,
@@ -813,7 +813,7 @@ ts_dimension_slice_delete_by_dimension_id(int32 dimension_id, bool delete_constr
 		scankey,
 		1,
 		dimension_slice_tuple_delete,
-		&delete_constraints,
+		(void *) &delete_constraints,
 		0,
 		RowExclusiveLock,
 		&scantuplock,
@@ -841,7 +841,7 @@ dimension_slice_fill(TupleInfo *ti, void *data)
 		case TM_SelfModified:
 		case TM_Ok:
 		{
-			DimensionSlice **slice = data;
+			DimensionSlice **slice = (DimensionSlice **) data;
 			bool should_free;
 			HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 
@@ -898,7 +898,7 @@ ts_dimension_slice_scan_for_existing(const DimensionSlice *slice, const ScanTupL
 		scankey,
 		3,
 		dimension_slice_fill,
-		(DimensionSlice **) &slice,
+		(void *) &slice,
 		1,
 		AccessShareLock,
 		tuplock,
@@ -922,7 +922,7 @@ ts_dimension_slice_from_tuple(TupleInfo *ti)
 static ScanTupleResult
 dimension_slice_tuple_found(TupleInfo *ti, void *data)
 {
-	DimensionSlice **slice = data;
+	DimensionSlice **slice = (DimensionSlice **) data;
 	*slice = ts_dimension_slice_from_tuple(ti);
 	return SCAN_DONE;
 }
@@ -949,7 +949,7 @@ ts_dimension_slice_scan_by_id_and_lock(int32 dimension_slice_id, const ScanTupLo
 										scankey,
 										1,
 										dimension_slice_tuple_found,
-										&slice,
+										(void *) &slice,
 										1,
 										lockmode,
 										tuplock,
@@ -1178,7 +1178,7 @@ ts_dimension_slice_insert(DimensionSlice *slice)
 static ScanTupleResult
 dimension_slice_nth_tuple_found(TupleInfo *ti, void *data)
 {
-	DimensionSlice **slice = data;
+	DimensionSlice **slice = (DimensionSlice **) data;
 	MemoryContext old = MemoryContextSwitchTo(ti->mctx);
 
 	*slice = dimension_slice_from_slot(ti->slot);
@@ -1204,7 +1204,7 @@ ts_dimension_slice_nth_latest_slice(int32 dimension_id, int n)
 		scankey,
 		1,
 		dimension_slice_nth_tuple_found,
-		&ret,
+		(void *) &ret,
 		n,
 		BackwardScanDirection,
 		AccessShareLock,

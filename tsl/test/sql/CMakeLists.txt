@@ -114,6 +114,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     recompress_chunk_segmentwise.sql
     feature_flags.sql
     vector_agg_default.sql
+    vector_agg_memory.sql
     vector_agg_segmentby.sql)
 
   list(
@@ -135,14 +136,13 @@ endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
   if(CMAKE_BUILD_TYPE MATCHES Debug)
-    list(APPEND TEST_FILES bgw_scheduler_control.sql)
+    list(APPEND TEST_FILES bgw_scheduler_control.sql hypercore.sql)
   endif()
   list(
     APPEND
     TEST_FILES
     merge_compress.sql
     cagg_refresh_using_merge.sql
-    hypercore.sql
     hypercore_columnar.sql
     hypercore_copy.sql
     hypercore_create.sql

@@ -443,7 +443,16 @@ static double
 smoothstep(double x, double start, double end)
 {
 	x = (x - start) / (end - start);
-	x = x < 0 ? 0 : x > 1 ? 1 : x;
+
+	if (x < 0)
+	{
+		x = 0;
+	}
+	else if (x > 1)
+	{
+		x = 1;
+	}
+
 	return x * x * (3.0F - 2.0F * x);
 }
 
@@ -522,7 +531,7 @@ cost_batch_sorted_merge(PlannerInfo *root, CompressionInfo *compression_info,
 	 * we often read a small subset of columns in analytical queries. The
 	 * compressed chunk is never projected so we can't use it for that.
 	 */
-	const double work_mem_bytes = work_mem * (double) 1024.0;
+	const double work_mem_bytes = work_mem * 1024.0;
 	const double needed_memory_bytes = open_batches_clamped * TARGET_COMPRESSED_BATCH_SIZE *
 									   dcpath->custom_path.path.pathtarget->width;
 
@@ -545,7 +554,7 @@ cost_batch_sorted_merge(PlannerInfo *root, CompressionInfo *compression_info,
 	 */
 	const double sort_path_cost_for_startup =
 		sort_path.startup_cost +
-		(sort_path.total_cost - sort_path.startup_cost) * (open_batches_clamped / sort_path.rows);
+		((sort_path.total_cost - sort_path.startup_cost) * (open_batches_clamped / sort_path.rows));
 	Assert(sort_path_cost_for_startup >= 0);
 	dcpath->custom_path.path.startup_cost = sort_path_cost_for_startup + work_mem_penalty;
 
@@ -1506,7 +1515,7 @@ has_compressed_vars_walker(Node *node, CompressionInfo *info)
 	if (IsA(node, Var))
 	{
 		Var *var = castNode(Var, node);
-		if ((Index) var->varno != (Index) info->compressed_rel->relid)
+		if ((Index) var->varno != info->compressed_rel->relid)
 		{
 			return false;
 		}

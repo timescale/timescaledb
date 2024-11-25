@@ -16,7 +16,8 @@ static void
 FUNCTION_NAME(emit)(void *agg_state, Datum *out_result, bool *out_isnull)
 {
 	FloatSumState *state = (FloatSumState *) agg_state;
-	*out_result = CTYPE_TO_DATUM((CTYPE) state->result);
+	const CTYPE result_casted = state->result;
+	*out_result = CTYPE_TO_DATUM(result_casted);
 	*out_isnull = !state->isvalid;
 }
 
@@ -54,7 +55,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 	} u = { .f = values[row] };                                                                    \
 	u.m &= row_valid ? ~(MASKTYPE) 0 : (MASKTYPE) 0;                                               \
 	*dest += u.f;                                                                                  \
-	*have_result |= row_valid;
+	*have_result = *have_result || row_valid;
 
 			INNER_LOOP
 		}
@@ -70,13 +71,13 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 	for (int i = 1; i < UNROLL_SIZE; i++)
 	{
 		sum_accu[0] += sum_accu[i];
-		have_result_accu[0] |= have_result_accu[i];
+		have_result_accu[0] = have_result_accu[0] || have_result_accu[i];
 	}
 #undef UNROLL_SIZE
 #undef INNER_LOOP
 
 	FloatSumState *state = (FloatSumState *) agg_state;
-	state->isvalid |= have_result_accu[0];
+	state->isvalid = state->isvalid || have_result_accu[0];
 	state->result += sum_accu[0];
 }
 
