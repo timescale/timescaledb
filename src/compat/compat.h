@@ -26,10 +26,19 @@
 
 #define PG_MAJOR_MIN 14
 
-#define is_supported_pg_version_14(version) ((version >= 140000) && (version < 150000))
-#define is_supported_pg_version_15(version) ((version >= 150000) && (version < 160000))
-#define is_supported_pg_version_16(version) ((version >= 160000) && (version < 170000))
-#define is_supported_pg_version_17(version) ((version >= 170000) && (version < 180000))
+/*
+ * Prevent building against upstream versions that had ABI breaking change (14.14, 15.9, 16.5, 17.1)
+ * that was reverted in the following release.
+ */
+
+#define is_supported_pg_version_14(version)                                                        \
+	((version >= 140000) && (version < 150000) && (version != 140014))
+#define is_supported_pg_version_15(version)                                                        \
+	((version >= 150000) && (version < 160000) && (version != 150009))
+#define is_supported_pg_version_16(version)                                                        \
+	((version >= 160000) && (version < 170000) && (version != 160005))
+#define is_supported_pg_version_17(version)                                                        \
+	((version >= 170000) && (version < 180000) && (version != 170001))
 
 /*
  * PG16 support is a WIP and not complete yet.
