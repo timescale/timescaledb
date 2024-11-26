@@ -168,19 +168,15 @@ serialized_get_key(BatchHashingParams params, int row, void *restrict output_key
 
 	/*
 	 * Use temporary storage for the new key, reallocate if it's too small.
-	 * Allow for overflow of up to 8 bytes, so that we can always use fixed-size
-	 * memcpy.
 	 */
-	const size_t num_bytes_overflow = num_bytes + 8;
 	if (num_bytes > policy->num_tmp_key_storage_bytes)
 	{
 		if (policy->tmp_key_storage != NULL)
 		{
 			pfree(policy->tmp_key_storage);
 		}
-		policy->tmp_key_storage =
-			MemoryContextAlloc(policy->hashing.key_body_mctx, num_bytes_overflow);
-		policy->num_tmp_key_storage_bytes = num_bytes_overflow;
+		policy->tmp_key_storage = MemoryContextAlloc(policy->hashing.key_body_mctx, num_bytes);
+		policy->num_tmp_key_storage_bytes = num_bytes;
 	}
 	uint8 *restrict serialized_key_storage = policy->tmp_key_storage;
 
@@ -268,17 +264,31 @@ serialized_get_key(BatchHashingParams params, int row, void *restrict output_key
 		if (column_values->decompression_type > 0)
 		{
 			Assert(offset <= UINT_MAX - column_values->decompression_type);
-			Assert(column_values->decompression_type <= 8);
 
-			/*
-			 * We can always use a 8-byte memcpy, because our source and
-			 * destination allow overflows.
-			 */
-			memcpy(&serialized_key_storage[offset],
-				   column_values->decompression_type * row + (uint8 *) column_values->buffers[1],
-				   8);
+			switch ((int) column_values->decompression_type)
+			{
+				case 2:
+					memcpy(&serialized_key_storage[offset],
+						   row + (int16 *) column_values->buffers[1],
+						   2);
+					break;
+				case 4:
+					memcpy(&serialized_key_storage[offset],
+						   row + (int32 *) column_values->buffers[1],
+						   4);
+					break;
+				case 8:
+					memcpy(&serialized_key_storage[offset],
+						   row + (int64 *) column_values->buffers[1],
+						   8);
+					break;
+				default:
+					pg_unreachable();
+					break;
+			}
 
 			offset += column_values->decompression_type;
+
 			continue;
 		}
 
