@@ -183,6 +183,69 @@ vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk, List *resolved_ta
 }
 
 /*
+ * Map the custom scan attribute number to the uncompressed chunk attribute
+ * number.
+ */
+static int
+custom_scan_to_uncompressed_chunk_attno(List *custom_scan_tlist, int custom_scan_attno)
+{
+	if (custom_scan_tlist == NIL)
+	{
+		return custom_scan_attno;
+	}
+
+	Var *var =
+		castNode(Var,
+				 castNode(TargetEntry,
+						  list_nth(custom_scan_tlist, AttrNumberGetAttrOffset(custom_scan_attno)))
+					 ->expr);
+	return var->varattno;
+}
+
+/*
+ * Whether the given compressed column index corresponds to a vector variable.
+ */
+static bool
+is_vector_compressed_column(CustomScan *custom, int compressed_column_index, bool *out_is_segmentby)
+{
+	List *bulk_decompression_column = list_nth(custom->custom_private, DCP_BulkDecompressionColumn);
+	const bool bulk_decompression_enabled_for_column =
+		list_nth_int(bulk_decompression_column, compressed_column_index);
+
+	/*
+	 * Bulk decompression can be disabled for all columns in the DecompressChunk
+	 * node settings, we can't do vectorized aggregation for compressed columns
+	 * in that case. For segmentby columns it's still possible.
+	 */
+	List *settings = linitial(custom->custom_private);
+	const bool bulk_decompression_enabled_globally =
+		list_nth_int(settings, DCS_EnableBulkDecompression);
+
+	/*
+	 * Check if this column is a segmentby.
+	 */
+	List *is_segmentby_column = list_nth(custom->custom_private, DCP_IsSegmentbyColumn);
+	const bool is_segmentby = list_nth_int(is_segmentby_column, compressed_column_index);
+	if (out_is_segmentby)
+	{
+		*out_is_segmentby = is_segmentby;
+	}
+
+	/*
+	 * We support vectorized aggregation either for segmentby columns or for
+	 * columns with bulk decompression enabled.
+	 */
+	if (!is_segmentby &&
+		!(bulk_decompression_enabled_for_column && bulk_decompression_enabled_globally))
+	{
+		/* Vectorized aggregation not possible for this particular column. */
+		return false;
+	}
+
+	return true;
+}
+
+/*
  * Whether the expression can be used for vectorized processing: must be a Var
  * that refers to either a bulk-decompressed or a segmentby column.
  */
@@ -230,20 +293,8 @@ is_vector_var(CustomScan *custom, Expr *expr, bool *out_is_segmentby)
 			continue;
 		}
 
-		int uncompressed_chunk_attno = 0;
-		if (custom->custom_scan_tlist == NIL)
-		{
-			uncompressed_chunk_attno = custom_scan_attno;
-		}
-		else
-		{
-			Var *var = castNode(Var,
-								castNode(TargetEntry,
-										 list_nth(custom->custom_scan_tlist,
-												  AttrNumberGetAttrOffset(custom_scan_attno)))
-									->expr);
-			uncompressed_chunk_attno = var->varattno;
-		}
+		const int uncompressed_chunk_attno =
+			custom_scan_to_uncompressed_chunk_attno(custom->custom_scan_tlist, custom_scan_attno);
 
 		if (uncompressed_chunk_attno == decompressed_var->varattno)
 		{
@@ -251,46 +302,72 @@ is_vector_var(CustomScan *custom, Expr *expr, bool *out_is_segmentby)
 		}
 	}
 	Ensure(compressed_column_index < list_length(decompression_map), "compressed column not found");
-
-	List *bulk_decompression_column = list_nth(custom->custom_private, DCP_BulkDecompressionColumn);
-	Assert(list_length(decompression_map) == list_length(bulk_decompression_column));
-	const bool bulk_decompression_enabled_for_column =
-		list_nth_int(bulk_decompression_column, compressed_column_index);
-
-	/*
-	 * Bulk decompression can be disabled for all columns in the DecompressChunk
-	 * node settings, we can't do vectorized aggregation for compressed columns
-	 * in that case. For segmentby columns it's still possible.
-	 */
-	List *settings = linitial(custom->custom_private);
-	const bool bulk_decompression_enabled_globally =
-		list_nth_int(settings, DCS_EnableBulkDecompression);
-
-	/*
-	 * Check if this column is a segmentby.
-	 */
-	List *is_segmentby_column = list_nth(custom->custom_private, DCP_IsSegmentbyColumn);
-	Assert(list_length(is_segmentby_column) == list_length(decompression_map));
-	const bool is_segmentby = list_nth_int(is_segmentby_column, compressed_column_index);
-	if (out_is_segmentby)
-	{
-		*out_is_segmentby = is_segmentby;
-	}
-
-	/*
-	 * We support vectorized aggregation either for segmentby columns or for
-	 * columns with bulk decompression enabled.
-	 */
-	if (!is_segmentby &&
-		!(bulk_decompression_enabled_for_column && bulk_decompression_enabled_globally))
-	{
-		/* Vectorized aggregation not possible for this particular column. */
-		return false;
-	}
-
-	return true;
+	return is_vector_compressed_column(custom, compressed_column_index, out_is_segmentby);
 }
 
+/*
+ * Build supplementary info to determine whether we can vectorize the
+ * aggregate FILTER clauses.
+ */
+static VectorQualInfo
+build_aggfilter_vector_qual_info(CustomScan *custom)
+{
+	VectorQualInfo vqi = { .rti = custom->scan.scanrelid };
+
+	/*
+	 * Now, we have to translate the decompressed varno into the compressed
+	 * column index, to check if the column supports bulk decompression.
+	 */
+	List *decompression_map = list_nth(custom->custom_private, DCP_DecompressionMap);
+
+	/*
+	 * There's no easy way to determine maximum attribute number for uncompressed
+	 * chunk at this stage, so we'll have to go through all the compressed columns
+	 * for this.
+	 */
+	int maxattno = 0;
+	for (int compressed_column_index = 0; compressed_column_index < list_length(decompression_map);
+		 compressed_column_index++)
+	{
+		const int custom_scan_attno = list_nth_int(decompression_map, compressed_column_index);
+		if (custom_scan_attno <= 0)
+		{
+			continue;
+		}
+
+		const int uncompressed_chunk_attno =
+			custom_scan_to_uncompressed_chunk_attno(custom->custom_scan_tlist, custom_scan_attno);
+
+		if (uncompressed_chunk_attno > maxattno)
+		{
+			maxattno = uncompressed_chunk_attno;
+		}
+	}
+
+	vqi.vector_attrs = (bool *) palloc0(sizeof(bool) * (maxattno + 1));
+
+	for (int compressed_column_index = 0; compressed_column_index < list_length(decompression_map);
+		 compressed_column_index++)
+	{
+		const int custom_scan_attno = list_nth_int(decompression_map, compressed_column_index);
+		if (custom_scan_attno <= 0)
+		{
+			continue;
+		}
+
+		const int uncompressed_chunk_attno =
+			custom_scan_to_uncompressed_chunk_attno(custom->custom_scan_tlist, custom_scan_attno);
+
+		vqi.vector_attrs[uncompressed_chunk_attno] =
+			is_vector_compressed_column(custom, compressed_column_index, NULL);
+	}
+
+	return vqi;
+}
+
+/*
+ * Whether we can vectorize this particular aggregate.
+ */
 static bool
 can_vectorize_aggref(Aggref *aggref, CustomScan *custom, VectorQualInfo *vqi)
 {
@@ -318,8 +395,6 @@ can_vectorize_aggref(Aggref *aggref, CustomScan *custom, VectorQualInfo *vqi)
 		Node *aggfilter_vectorized = vector_qual_make((Node *) aggref->aggfilter, vqi);
 		if (aggfilter_vectorized == NULL)
 		{
-			//			fprintf(stderr, "not vectorizable:\n");
-			//			my_print(aggref->aggfilter);
 			return false;
 		}
 		aggref->aggfilter = (Expr *) aggfilter_vectorized;
@@ -462,11 +537,6 @@ has_vector_agg_node(Plan *plan, bool *has_normal_agg)
 			append_plans = custom->custom_plans;
 		}
 	}
-	else if (IsA(plan, SubqueryScan))
-	{
-		SubqueryScan *subquery = castNode(SubqueryScan, plan);
-		append_plans = list_make1(subquery->subplan);
-	}
 
 	if (append_plans)
 	{
@@ -523,11 +593,6 @@ try_insert_vector_agg_node(Plan *plan)
 		{
 			append_plans = custom->custom_plans;
 		}
-	}
-	else if (IsA(plan, SubqueryScan))
-	{
-		SubqueryScan *subquery = castNode(SubqueryScan, plan);
-		append_plans = list_make1(subquery->subplan);
 	}
 
 	if (append_plans)
@@ -614,105 +679,11 @@ try_insert_vector_agg_node(Plan *plan)
 		return plan;
 	}
 
-	// VectorQualInfo vqi = { .rti = OUTER_VAR };
-	VectorQualInfo vqi = { .rti = custom->scan.scanrelid };
-
 	/*
-	 * Bulk decompression can be disabled for all columns in the DecompressChunk
-	 * node settings, we can't do vectorized aggregation for compressed columns
-	 * in that case. For segmentby columns it's still possible.
+	 * Build supplementary info to determine whether we can vectorize the
+	 * aggregate FILTER clauses.
 	 */
-	List *settings = linitial(custom->custom_private);
-	const bool bulk_decompression_enabled_globally =
-		list_nth_int(settings, DCS_EnableBulkDecompression);
-	/*
-	 * Now, we have to translate the decompressed varno into the compressed
-	 * column index, to check if the column supports bulk decompression.
-	 */
-	List *decompression_map = list_nth(custom->custom_private, DCP_DecompressionMap);
-	List *is_segmentby_column = list_nth(custom->custom_private, DCP_IsSegmentbyColumn);
-	List *bulk_decompression_column = list_nth(custom->custom_private, DCP_BulkDecompressionColumn);
-
-	int maxattno = 0;
-	for (int compressed_column_index = 0; compressed_column_index < list_length(decompression_map);
-		 compressed_column_index++)
-	{
-		const int custom_scan_attno = list_nth_int(decompression_map, compressed_column_index);
-		if (custom_scan_attno <= 0)
-		{
-			continue;
-		}
-
-		int uncompressed_chunk_attno = 0;
-		if (custom->custom_scan_tlist == NIL)
-		{
-			uncompressed_chunk_attno = custom_scan_attno;
-		}
-		else
-		{
-			Var *var = castNode(Var,
-								castNode(TargetEntry,
-										 list_nth(custom->custom_scan_tlist,
-												  AttrNumberGetAttrOffset(custom_scan_attno)))
-									->expr);
-			uncompressed_chunk_attno = var->varattno;
-		}
-
-		if (uncompressed_chunk_attno > maxattno)
-		{
-			maxattno = uncompressed_chunk_attno;
-		}
-	}
-
-	vqi.vector_attrs = (bool *) palloc0(sizeof(bool) * (maxattno + 1));
-
-	for (int compressed_column_index = 0; compressed_column_index < list_length(decompression_map);
-		 compressed_column_index++)
-	{
-		const bool bulk_decompression_enabled_for_column =
-			list_nth_int(bulk_decompression_column, compressed_column_index);
-
-		const int custom_scan_attno = list_nth_int(decompression_map, compressed_column_index);
-		if (custom_scan_attno <= 0)
-		{
-			continue;
-		}
-
-		int uncompressed_chunk_attno = 0;
-		if (custom->custom_scan_tlist == NIL)
-		{
-			uncompressed_chunk_attno = custom_scan_attno;
-		}
-		else
-		{
-			Var *var = castNode(Var,
-								castNode(TargetEntry,
-										 list_nth(custom->custom_scan_tlist,
-												  AttrNumberGetAttrOffset(custom_scan_attno)))
-									->expr);
-			uncompressed_chunk_attno = var->varattno;
-		}
-
-		/*
-		 * Check if this column is a segmentby.
-		 */
-		const bool is_segmentby = list_nth_int(is_segmentby_column, compressed_column_index);
-
-		/*
-		 * We support vectorized aggregation either for segmentby columns or for
-		 * columns with bulk decompression enabled.
-		 */
-		const bool is_vector_var = (is_segmentby || (bulk_decompression_enabled_for_column &&
-													 bulk_decompression_enabled_globally));
-		vqi.vector_attrs[uncompressed_chunk_attno] = is_vector_var;
-
-		//		fprintf(stderr,
-		//				"compressed %d -> uncompressed %d custom scan %d vector %d\n",
-		//				compressed_column_index,
-		//				uncompressed_chunk_attno,
-		//				custom_scan_attno,
-		//				is_vector_var);
-	}
+	VectorQualInfo vqi = build_aggfilter_vector_qual_info(custom);
 
 	/* Now check the output targetlist. */
 	ListCell *lc;
