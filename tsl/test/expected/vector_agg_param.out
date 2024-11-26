@@ -21,8 +21,10 @@ select count(compress_chunk(x)) from show_chunks('pvagg') x;
 (1 row)
 
 analyze pvagg;
--- Uncomment to generate reference
---set timescaledb.enable_vectorized_aggregation to off;
+-- The reference for this test is generated using the standard Postgres
+-- aggregation. When you change this test, recheck the results against the
+-- Postgres aggregation by uncommenting the below GUC.
+-- set timescaledb.enable_vectorized_aggregation to off;
 explain (verbose, costs off)
 select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a) from pvagg where s = x) xx;
                                                                                                         QUERY PLAN                                                                                                         

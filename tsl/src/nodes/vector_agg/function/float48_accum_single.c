@@ -69,27 +69,32 @@ FUNCTION_NAME(emit)(void *agg_state, Datum *out_result, bool *out_isnull)
 {
 	FUNCTION_NAME(state) *state = (FUNCTION_NAME(state) *) agg_state;
 
-	Datum transdatums[3] = {
-		Float8GetDatumFast(state->N),
-		Float8GetDatumFast(state->Sx),
+	const size_t nbytes = 3 * sizeof(float8) + ARR_OVERHEAD_NONULLS(/* ndims = */ 1);
+	ArrayType *result = palloc(nbytes);
+	SET_VARSIZE(result, nbytes);
+	result->ndim = 1;
+	result->dataoffset = 0;
+	result->elemtype = FLOAT8OID;
+	ARR_DIMS(result)[0] = 3;
+	ARR_LBOUND(result)[0] = 1;
+
+	/*
+	 * The array elements are stored by value, regardless of if the float8
+	 * itself is by-value on this platform.
+	 */
+	((float8 *) ARR_DATA_PTR(result))[0] = state->N;
+	((float8 *) ARR_DATA_PTR(result))[1] = state->Sx;
+	((float8 *) ARR_DATA_PTR(result))[2] =
 		/*
 		 * Sxx should be NaN if any of the inputs are infinite or NaN. This is
 		 * checked by float8_combine even if it's not used for the actual
 		 * calculations.
 		 */
-		Float8GetDatum(0. * state->Sx
+		0. * state->Sx
 #ifdef NEED_SXX
-					   + state->Sxx
+		+ state->Sxx
 #endif
-					   ),
-	};
-
-	ArrayType *result = construct_array(transdatums,
-										3,
-										FLOAT8OID,
-										sizeof(float8),
-										FLOAT8PASSBYVAL,
-										TYPALIGN_DOUBLE);
+		;
 
 	*out_result = PointerGetDatum(result);
 	*out_isnull = false;

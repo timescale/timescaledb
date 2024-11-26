@@ -26,16 +26,19 @@ get_input_offset(DecompressChunkState *decompress_state, Var *var)
 {
 	DecompressContext *dcontext = &decompress_state->decompress_context;
 
+	/*
+	 * All variable references in the vectorized aggregation node were
+	 * translated to uncompressed chunk variables when it was created.
+	 */
+	CustomScan *cscan = castNode(CustomScan, decompress_state->csstate.ss.ps.plan);
+	Ensure((Index) var->varno == (Index) cscan->scan.scanrelid,
+		   "got vector varno %d expected %d",
+		   var->varno,
+		   cscan->scan.scanrelid);
+
 	CompressionColumnDescription *value_column_description = NULL;
 	for (int i = 0; i < dcontext->num_data_columns; i++)
 	{
-		/*
-		 * See the column lookup in compute_plain_qual() for the discussion of
-		 * which attribute numbers occur where. At the moment here it is
-		 * uncompressed_scan_attno, but it might be an oversight of not rewriting
-		 * the references into INDEX_VAR (or OUTER_VAR...?) when we create the
-		 * VectorAgg node.
-		 */
 		CompressionColumnDescription *current_column = &dcontext->compressed_chunk_columns[i];
 		if (current_column->uncompressed_chunk_attno == var->varattno)
 		{
@@ -200,23 +203,31 @@ static TupleTableSlot *
 vector_agg_exec(CustomScanState *node)
 {
 	VectorAggState *vector_agg_state = (VectorAggState *) node;
+	ExprContext *econtext = node->ss.ps.ps_ExprContext;
+	ResetExprContext(econtext);
 
 	TupleTableSlot *aggregated_slot = vector_agg_state->custom.ss.ps.ps_ResultTupleSlot;
 	ExecClearTuple(aggregated_slot);
 
+	/*
+	 * If we have more partial aggregation results, continue returning them.
+	 */
 	GroupingPolicy *grouping = vector_agg_state->grouping;
-	if (grouping->gp_do_emit(grouping, aggregated_slot))
+	MemoryContext old_context = MemoryContextSwitchTo(econtext->ecxt_per_tuple_memory);
+	bool have_partial = grouping->gp_do_emit(grouping, aggregated_slot);
+	MemoryContextSwitchTo(old_context);
+	if (have_partial)
 	{
 		/* The grouping policy produced a partial aggregation result. */
 		return ExecStoreVirtualTuple(aggregated_slot);
 	}
 
+	/*
+	 * If the partial aggregation results have ended, and the input has ended,
+	 * we're done.
+	 */
 	if (vector_agg_state->input_ended)
 	{
-		/*
-		 * The partial aggregation results have ended, and the input has ended,
-		 * so we're done.
-		 */
 		return NULL;
 	}
 
@@ -322,7 +333,13 @@ vector_agg_exec(CustomScanState *node)
 		grouping->gp_add_batch(grouping, batch_state);
 	}
 
-	if (grouping->gp_do_emit(grouping, aggregated_slot))
+	/*
+	 * If we have partial aggregation results, start returning them.
+	 */
+	old_context = MemoryContextSwitchTo(econtext->ecxt_per_tuple_memory);
+	have_partial = grouping->gp_do_emit(grouping, aggregated_slot);
+	MemoryContextSwitchTo(old_context);
+	if (have_partial)
 	{
 		/* Have partial aggregation results. */
 		return ExecStoreVirtualTuple(aggregated_slot);

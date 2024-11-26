@@ -4,6 +4,9 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 show timescaledb.hypercore_indexam_whitelist;
+-- We need this to be able to create an index for a chunk as a default
+-- user.
+grant all on schema _timescaledb_internal to :ROLE_DEFAULT_PERM_USER;
 set role :ROLE_DEFAULT_PERM_USER;
 
 SET timescaledb.arrow_cache_maxsize = 4;
@@ -14,7 +17,8 @@ CREATE TABLE readings(
        device int,
        temp numeric(4,1),
        humidity float,
-       jdata jsonb
+       jdata jsonb,
+       temp_far float8 generated always as (9 * temp / 5 + 32) stored
 );
 
 SELECT create_hypertable('readings', by_range('time', '1d'::interval));
@@ -92,15 +96,24 @@ WHERE time = '2022-06-01'::timestamptz;
 -- Create a new index on a compressed column
 CREATE INDEX ON readings (location);
 
--- Check that we error out on unsupported index types
 \set ON_ERROR_STOP 0
+-- Check that we error out on unsupported index types
 create index on readings using brin (device);
 create index on readings using gin (jdata);
 create index on readings using magicam (device);
+
+-- Check that we error out when trying to build index concurrently.
+create index concurrently on readings (device);
+create index concurrently invalid_index on :chunk (device);
+-- This will also create the index on the chunk (this is how it works,
+-- see validate_index() in index.c for more information), but that
+-- index is not valid, so we just drop it explicitly here to keep the
+-- rest of the test clean.
+drop index _timescaledb_internal.invalid_index;
 \set ON_ERROR_STOP 1
 
 -- Index added on location
-SELECT * FROM test.show_indexes(:'chunk');
+SELECT * FROM test.show_indexes(:'chunk') ORDER BY "Index"::text;
 
 -- Query by location should be an index scan
 EXPLAIN (verbose, costs off)
@@ -117,56 +130,56 @@ SET enable_indexscan = false;
 -- Columnar scan with qual on segmentby where filtering should be
 -- turned into scankeys
 EXPLAIN (costs off, timing off, summary off)
-SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
-SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
 
 -- Show with indexscan
 SET enable_indexscan = true;
 SET enable_seqscan = false;
 SET timescaledb.enable_columnarscan = false;
 EXPLAIN (costs off, timing off, summary off)
-SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
-SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
 SET enable_indexscan = false;
 
 -- Compare the output to transparent decompression. Heap output is
 -- shown further down.
 SET timescaledb.enable_transparent_decompression TO 'hypercore';
 EXPLAIN (costs off, timing off, summary off)
-SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
-SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
 SET timescaledb.enable_transparent_decompression TO false;
 
 -- Qual on compressed column with index
 SET timescaledb.enable_columnarscan = true;
 EXPLAIN (costs off, timing off, summary off)
-SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
-SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
 
 -- With index scan
 SET enable_indexscan = true;
 SET timescaledb.enable_columnarscan = false;
 EXPLAIN (costs off, timing off, summary off)
-SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
-SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
 SET enable_indexscan = false;
 SET enable_seqscan = true;
 SET timescaledb.enable_columnarscan = true;
 
 -- With transparent decompression
 SET timescaledb.enable_transparent_decompression TO 'hypercore';
-SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
 SET timescaledb.enable_transparent_decompression TO false;
 
 -- Ordering on compressed column that has index
 SET enable_indexscan = true;
 EXPLAIN (costs off, timing off, summary off)
-SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
-SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk ORDER BY location ASC LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk ORDER BY location ASC LIMIT 5;
 
 -- Show with transparent decompression
 SET timescaledb.enable_transparent_decompression TO 'hypercore';
-SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk ORDER BY location ASC LIMIT 5;
 SET timescaledb.enable_transparent_decompression TO false;
 
 -- We should be able to change it back to heap.
@@ -201,6 +214,10 @@ SELECT count(*) FROM _timescaledb_catalog.compression_chunk_size ccs
 INNER JOIN _timescaledb_catalog.chunk c ON (c.id = ccs.chunk_id)
 WHERE format('%I.%I', c.schema_name, c.table_name)::regclass = :'chunk'::regclass;
 
+-- Check that the generated columns contain the correct data before
+-- compression.
+select temp, temp_far from :chunk where temp_far != 9 * temp / 5 + 32;
+
 SELECT compress_chunk(:'chunk');
 
 -- A new compressed chunk should be created
@@ -209,8 +226,12 @@ FROM _timescaledb_catalog.chunk c1
 INNER JOIN _timescaledb_catalog.chunk c2
 ON (c1.compressed_chunk_id = c2.id);
 
+-- Check that the generated columns contain the correct data after
+-- compression.
+select temp, temp_far from :chunk where temp_far != 9 * temp / 5 + 32;
+
 -- Show same output as first query above but for heap
-SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
 
 -- Show access method used on chunk
 SELECT c.relname, a.amname FROM pg_class c
@@ -238,6 +259,9 @@ ON (c1.compressed_chunk_id = c2.id) LIMIT 1 \gset
 SELECT range_start, range_end
 FROM timescaledb_information.chunks
 WHERE format('%I.%I', chunk_schema, chunk_name)::regclass = :'chunk'::regclass;
+
+-- Drop the generated column to make tests below easier.
+alter table readings drop column temp_far;
 
 --
 -- ADD COLUMN
@@ -285,14 +309,14 @@ EXPLAIN (verbose, costs off)
 SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
 SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
 
--- Drop column and add again
+-- Drop column and add again, with a default this time
 ALTER TABLE readings DROP COLUMN pressure;
 
 EXPLAIN (verbose, costs off)
 SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
 SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
 
-ALTER TABLE readings ADD COLUMN pressure float;
+ALTER TABLE readings ADD COLUMN pressure float default 1.0;
 
 EXPLAIN (verbose, costs off)
 SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
