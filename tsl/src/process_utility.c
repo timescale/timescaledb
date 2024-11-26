@@ -67,6 +67,7 @@ tsl_ddl_command_start(ProcessUtilityArgs *args)
 							if (!is_hypercore && ts_chunk_is_compressed(chunk))
 							{
 								hypercore_set_am(stmt->relation);
+								hypercore_set_reloptions(chunk);
 								/* Skip this command in the alter table
 								 * statement since we process it via quick
 								 * migration */

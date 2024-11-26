@@ -17,7 +17,7 @@ CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLE
 
 SET timezone TO 'America/Los_Angeles';
 
-CREATE TABLE test1 ("Time" timestamptz, i integer, b bigint, t text);
+CREATE TABLE test1 ("Time" timestamptz, i integer not null, b bigint, t text);
 SELECT table_name from create_hypertable('test1', 'Time', chunk_time_interval=> INTERVAL '1 day');
 
 INSERT INTO test1 SELECT t,  gen_rand_minstd(), gen_rand_minstd(), gen_rand_minstd()::text FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-28 1:00', '1 hour') t;
@@ -1041,3 +1041,40 @@ ALTER TABLE compression_drop DROP COLUMN v0;
 \set ON_ERROR_STOP 1
 
 DROP TABLE compression_drop;
+
+SET client_min_messages = ERROR;
+CREATE TABLE test2 (ts timestamptz, i integer not null, b bigint, t text);
+SELECT table_name from create_hypertable('test2', 'ts', chunk_time_interval=> INTERVAL '1 day');
+
+INSERT INTO test2
+SELECT t,
+       gen_rand_minstd(),
+       gen_rand_minstd(),
+       gen_rand_minstd()::text
+FROM   generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-28 1:00', '1 hour') t;
+
+ALTER TABLE test2 SET (
+      timescaledb.compress,
+      timescaledb.compress_segmentby = 'b',
+      timescaledb.compress_orderby = 'ts DESC'
+);
+
+\set ON_ERROR_STOP 0
+INSERT INTO test2(ts,b,t) VALUES ('2024-11-18 18:04:51',99,'magic');
+\set ON_ERROR_STOP 1
+ALTER TABLE test2 ALTER COLUMN i DROP NOT NULL;
+INSERT INTO test2(ts,b,t) VALUES ('2024-11-18 18:04:51',99,'magic');
+SELECT count(*) FROM test2 WHERE i IS NULL;
+SELECT count(compress_chunk(ch)) FROM show_chunks('test2') ch;
+SELECT count(*) FROM test2 WHERE i IS NULL;
+SELECT count(decompress_chunk(ch)) FROM show_chunks('test2') ch;
+SELECT count(*) FROM test2 WHERE i IS NULL;
+SELECT count(compress_chunk(ch)) FROM show_chunks('test2') ch;
+SELECT count(*) FROM test2 WHERE i IS NULL;
+
+\set ON_ERROR_STOP 0
+ALTER TABLE test2 ALTER COLUMN i SET NOT NULL;
+DELETE FROM test2 WHERE i IS NULL;
+SELECT count(*) FROM test2 WHERE i IS NULL;
+ALTER TABLE test2 ALTER COLUMN i SET NOT NULL;
+\set ON_ERROR_STOP 1
