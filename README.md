@@ -46,28 +46,31 @@ such. However, it provides a range of features and optimizations that make manag
 - [GitHub issues](https://github.com/timescale/timescaledb/issues)
 - [Timescale support](https://tsdb.co/GitHubTimescaleSupport)
 
+**Get started with TimescaleDB**:
+
+- [Install](#install-timescaledb)
+- [Create a hypertable](#create-a-hypertable)
+- [Insert and query data](#insert-and-query-data)
+- [Compress data](#compress-data)
+- [Create time buckets](#create-time-buckets)
+- [Create continuous aggregates](#create-continuous-aggregates)
+- [Back up and replicate data](#back-up-replicate-and-restore-data)
+
 # Install TimescaleDB
 
-TimescaleDB is available as a self-hosted solution or a managed cloud offering. Get TimescaleDB in either of the following ways:
+Get TimescaleDB in one of the following ways:
 
-- As a cloud solution:
+- Install the [platform-specific package](https://docs.timescale.com/self-hosted/latest/install/).
+- [Build from source](https://docs.timescale.com/self-hosted/latest/install/installation-source/).
 
-    - Get a free trial of [Timescale Cloud](https://console.cloud.timescale.com/signup) - TimescaleDB hosted on AWS and fully managed by Timescale.
-    - Get a free trial of [Managed Service for TimescaleDB](https://docs.timescale.com/mst/latest/) - TimescaleDB hosted on Azure and GCP and offered in partnership with [Aiven](https://aiven.io/).
+TimescaleDB comes in the following editions: Apache 2 and Community. See the [documentation](https://docs.timescale.com/about/latest/timescaledb-editions/) for differences between them.
 
-- As a self-hosted solution:
+For reference and clarity, all code files in this repository reference [licensing](https://github.com/timescale/timescaledb/blob/main/tsl/LICENSE-TIMESCALE) in their header. Apache-2 licensed binaries can be built by passing `-DAPACHE_ONLY=1` to `bootstrap`.
 
-    - Install the [platform-specific package](https://docs.timescale.com/self-hosted/latest/install/).
-    - [Build from source](https://docs.timescale.com/self-hosted/latest/install/installation-source/).
-
-  The self-hosted TimescaleDB comes in the following editions: Apache 2 and Community. See the [documentation](https://docs.timescale.com/about/latest/timescaledb-editions/) for differences between the editions.
-
-  For reference and clarity, all code files in this repository reference [licensing](https://github.com/timescale/timescaledb/blob/main/tsl/LICENSE-TIMESCALE) in their header. Apache-2 licensed binaries can be built by passing `-DAPACHE_ONLY=1` to `bootstrap`.
-
-  PostgreSQL's out-of-the-box settings are typically too conservative for modern
-  servers and TimescaleDB. Make sure your `postgresql.conf`
-  settings are tuned, by either using [timescaledb-tune](https://github.com/timescale/timescaledb-tune)
-  or doing it manually.
+PostgreSQL's out-of-the-box settings are typically too conservative for modern
+servers and TimescaleDB. Make sure your `postgresql.conf`
+settings are tuned, by either using [timescaledb-tune](https://github.com/timescale/timescaledb-tune)
+or doing it manually.
 
 # Create a hypertable
 
@@ -96,7 +99,7 @@ See more:
 
 # Insert and query data
 
-Insert and query data in a hypertable via regular SQL commands.
+Insert and query data in a hypertable via regular SQL commands. For example:
 
 - Insert data into a hypertable named `conditions`:
 
@@ -119,6 +122,15 @@ See more:
 
 - [Query data](https://docs.timescale.com/use-timescale/latest/query-data/)
 - [Write data](https://docs.timescale.com/use-timescale/latest/write-data/)
+
+# Compress data
+
+You compress your time-series data to reduce its size by more than 90%. This cuts storage costs and keeps your queries operating at lightning speed.
+
+When you enable compression, the data in your hypertable is compressed chunk by chunk. When the chunk is compressed, multiple records are grouped into a single row. The columns of this row hold an array-like structure that stores all the data. This means that instead of using lots of rows to store the data, it stores the same data in a single row. Because a single row takes up less disk space than many rows, it decreases the amount of disk space required, and can also speed up your queries.
+
+- [About compression](https://docs.timescale.com/use-timescale/latest/compression/)
+- [API reference](https://docs.timescale.com/api/latest/compression/)
 
 # Create time buckets
 
@@ -150,25 +162,23 @@ See more:
 - [About continuous aggregates](https://docs.timescale.com/use-timescale/latest/continuous-aggregates/)
 - [API reference](https://docs.timescale.com/api/latest/continuous-aggregates/create_materialized_view/)
 
-# Tier data
+# Back up, replicate, and restore data
 
-TimescaleDB tiered storage architecture includes a standard high-performance storage tier and a low-cost object storage tier. You can migrate rarely used data to the object storage to cut costs. Data is tiered on the level of chunks, that is, individual parts of tables. This means that a single table can be spread among storage tiers for ultimate cost optimization.
-
-<img src="https://assets.timescale.com/docs/images/tiered-storage.png" alt="tiered-storage"/>
+TimescaleDB takes advantage of the reliable backup, restore, and replication functionality provided by PostgreSQL.
 
 See more:
 
-- [About tiered storage](https://docs.timescale.com/use-timescale/latest/data-tiering/)
+- [Backup and restore](https://docs.timescale.com/self-hosted/latest/backup-and-restore/)
+- [Replication and high availability](https://docs.timescale.com/self-hosted/latest/replication-and-ha/)
 
-# Ensure high availability
+# Want TimescaleDB hosted and managed for you? Try Timescale Cloud
 
-For services with different downtime tolerance, TimescaleDB offers high-availability (HA) and read replicas. HA replicas are exact, up-to-date copies of your database. They automatically take over operations if the original primary data node becomes unavailable. Read replicas are read-only copies of the primary data instance. Queries on read replicas have minimal impact on the performance of the primary data instance.
+[Timescale Cloud](https://docs.timescale.com/getting-started/latest/) is a cloud-based PostgreSQL platform for resource-intensive workloads. We help you build faster, scale further, and stay under budget. A Timescale Cloud service is a single optimized 100% PostgreSQL database instance that you use as is, or extend with capabilities specific to your business needs. The available capabilities are:
 
-<img src="https://assets.timescale.com/docs/images/high-availability.png" alt="high availability"/>
-
-See more:
-
-- [About high availability and read replication](https://docs.timescale.com/use-timescale/latest/ha-replicas/)
+- Time-series and analytics: PostgreSQL with TimescaleDB. The PostgreSQL you know and love, supercharged with functionality for storing and querying time-series data at scale for analytics and other use cases. Get faster time-based queries with hypertables, continuous aggregates, and columnar storage. Save on storage with native compression, data retention policies, and bottomless data tiering to Amazon S3.
+- AI and vector: PostgreSQL with vector extensions. Use PostgreSQL as a vector database with purpose built extensions for building AI applications from start to scale. Get fast and accurate similarity search with the pgvector and pgvectorscale extensions. Create vector embeddings and perform LLM reasoning on your data with the pgai extension.
+- PostgreSQL: the trusted industry-standard RDBMS. Ideal for applications requiring strong data consistency, complex relationships, and advanced querying capabilities. Get ACID compliance, extensive SQL support, JSON handling, and extensibility through custom functions, data types, and extensions.
+All services include all the cloud tooling you'd expect for production use: [automatic backups](https://docs.timescale.com/use-timescale/latest/backup-restore/backup-restore-cloud/), [high availability](https://docs.timescale.com/use-timescale/latest/ha-replicas/), [read replicas](https://docs.timescale.com/use-timescale/latest/ha-replicas/read-scaling/), [data forking](https://docs.timescale.com/use-timescale/latest/services/service-management/#fork-a-service), [connection pooling](https://docs.timescale.com/use-timescale/latest/services/connection-pooling/), [tiered storage](https://docs.timescale.com/use-timescale/latest/data-tiering/), [usage-based storage](https://docs.timescale.com/about/latest/pricing-and-account-management/), and much more.
 
 # Check build status
 
@@ -176,17 +186,14 @@ See more:
 |:---:|:---:|:---:|:---:|:---:|:---:|
 |[![Build Status Linux/macOS](https://github.com/timescale/timescaledb/actions/workflows/linux-build-and-test.yaml/badge.svg?branch=main&event=schedule)](https://github.com/timescale/timescaledb/actions/workflows/linux-build-and-test.yaml?query=workflow%3ARegression+branch%3Amain+event%3Aschedule)|[![Build Status Linux i386](https://github.com/timescale/timescaledb/actions/workflows/linux-32bit-build-and-test.yaml/badge.svg?branch=main&event=schedule)](https://github.com/timescale/timescaledb/actions/workflows/linux-32bit-build-and-test.yaml?query=workflow%3ARegression+branch%3Amain+event%3Aschedule)|[![Windows build status](https://github.com/timescale/timescaledb/actions/workflows/windows-build-and-test.yaml/badge.svg?branch=main&event=schedule)](https://github.com/timescale/timescaledb/actions/workflows/windows-build-and-test.yaml?query=workflow%3ARegression+branch%3Amain+event%3Aschedule)|[![Coverity Scan Build Status](https://scan.coverity.com/projects/timescale-timescaledb/badge.svg)](https://scan.coverity.com/projects/timescale-timescaledb)|[![Code Coverage](https://codecov.io/gh/timescale/timescaledb/branch/main/graphs/badge.svg?branch=main)](https://codecov.io/gh/timescale/timescaledb)|[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/8012/badge)](https://www.bestpractices.dev/projects/8012)|
 
-
 # Get involved
 
 We welcome contributions to TimescaleDB! See [Contributing](https://github.com/timescale/timescaledb/blob/main/CONTRIBUTING.md) and [Code style guide](https://github.com/timescale/timescaledb/blob/main/docs/StyleGuide.md) for details.
 
 # Learn about Timescale
 
-Timescale is a PostgreSQL database company. To learn more, visit [timescale.com](https://www.timescale.com).
+Timescale is PostgreSQL made powerful. To learn more about the company and its products, visit [timescale.com](https://www.timescale.com).
 
-Timescale Cloud is a high-performance, developer focused, cloud platform that provides PostgreSQL services
-for the most demanding AI, time-series, analytics, and event workloads. Timescale Cloud is ideal for production applications and provides high availability, streaming backups, upgrades over time, roles and permissions, and great security.
 
 
 
