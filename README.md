@@ -8,7 +8,7 @@
 
 <div align=center>
 
-<h3>TimescaleDB is an extension for PostgreSQL that enables time-series, events, and analytics workloads, while increasing ingest, query, storage, and  performance</h3>
+<h3>TimescaleDB is an extension for PostgreSQL that enables time-series, events, and analytics workloads, while increasing ingest, query, and storage performance</h3>
 
 [![Docs](https://img.shields.io/badge/Read_the_Timescale_docs-black?style=for-the-badge&logo=readthedocs&logoColor=white)](https://docs.timescale.com/)
 [![SLACK](https://img.shields.io/badge/Ask_the_Timescale_community-black?style=for-the-badge&logo=slack&logoColor=white)](https://timescaledb.slack.com/archives/C4GT3N90X)
