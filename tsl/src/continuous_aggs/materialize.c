@@ -29,6 +29,24 @@
 #define CHUNKIDFROMRELID "chunk_id_from_relid"
 #define CONTINUOUS_AGG_CHUNK_ID_COL_NAME "chunk_id"
 
+typedef enum MaterializationType
+{
+	MATERIALIZE_SELECT,
+	MATERIALIZE_INSERT,
+	MATERIALIZE_DELETE,
+	MATERIALIZE_UPDATE,
+	MATERIALIZE_EXISTS,
+	MATERIALIZE_MERGE,
+	MATERIALIZE_MERGE_DELETE,
+	_MAX_MATERIALIZE_TYPES
+} MaterializationType;
+
+static SPIPlanPtr spi_plans[_MAX_MATERIALIZE_TYPES + 1] = {
+	[MATERIALIZE_SELECT] = NULL,	  [MATERIALIZE_INSERT] = NULL, [MATERIALIZE_DELETE] = NULL,
+	[MATERIALIZE_UPDATE] = NULL,	  [MATERIALIZE_EXISTS] = NULL, [MATERIALIZE_MERGE] = NULL,
+	[MATERIALIZE_MERGE_DELETE] = NULL
+};
+
 static bool ranges_overlap(InternalTimeRange invalidation_range,
 						   InternalTimeRange new_materialization_range);
 static TimeRange internal_time_range_to_time_range(InternalTimeRange internal);
@@ -43,6 +61,9 @@ static char *build_merge_update_clause(List *column_names);
 /***************************
  * materialization support *
  ***************************/
+static void spi_reset_plan(MaterializationType plan_type);
+static void spi_prepare_plan(MaterializationType plan_type, const char *query, int nargs,
+							 Oid *argtypes);
 static void spi_update_watermark(Hypertable *mat_ht, SchemaAndName materialization_table,
 								 const NameData *time_column_name, TimeRange materialization_range,
 								 const char *const chunk_condition);
@@ -330,6 +351,31 @@ build_merge_update_clause(List *column_names)
 	return ret->data;
 }
 
+void
+spi_reset_plan(MaterializationType plan_type)
+{
+	if (spi_plans[plan_type] != NULL)
+	{
+		SPI_freeplan(spi_plans[plan_type]);
+		spi_plans[plan_type] = NULL;
+	}
+}
+
+static void
+spi_prepare_plan(MaterializationType plan_type, const char *query, int nargs, Oid *argtypes)
+{
+	if (spi_plans[plan_type] == NULL)
+	{
+		SPIPlanPtr plan = SPI_prepare(query, nargs, argtypes);
+		if (plan == NULL)
+			elog(ERROR, "SPI_prepare failed: %s", query);
+
+		spi_plans[plan_type] = plan;
+	}
+
+	SPI_keepplan(spi_plans[plan_type]);
+}
+
 static void
 spi_update_watermark(Hypertable *mat_ht, SchemaAndName materialization_table,
 					 const NameData *time_column_name, TimeRange materialization_range,
@@ -457,19 +503,20 @@ spi_exists_materializations(SchemaAndName materialization_table, const NameData 
 					 quote_identifier(NameStr(*time_column_name)));
 
 	elog(DEBUG2, "%s", command->data);
-	res = SPI_execute_with_args(command->data,
-								2,
-								types,
-								values,
-								nulls,
-								true /* read_only */,
-								0 /* count */);
+	spi_prepare_plan(MATERIALIZE_EXISTS, command->data, 2, types);
+	res = SPI_execute_plan(spi_plans[MATERIALIZE_EXISTS],
+						   values,
+						   nulls,
+						   true /* read_only */,
+						   0 /* count */);
 
 	if (res < 0)
 		elog(ERROR,
 			 "could not check the materialization table \"%s.%s\"",
 			 NameStr(*materialization_table.schema),
 			 NameStr(*materialization_table.name));
+
+	spi_reset_plan(MATERIALIZE_EXISTS);
 
 	return (SPI_processed > 0);
 }
@@ -565,13 +612,12 @@ spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 					 build_merge_insert_columns(all_columns, ", ", "P."));
 
 	elog(DEBUG2, "%s: %s", __func__, command->data);
-	res = SPI_execute_with_args(command->data,
-								2,
-								types,
-								values,
-								nulls,
-								false /* read_only */,
-								0 /* count */);
+	spi_prepare_plan(MATERIALIZE_MERGE, command->data, 2, types);
+	res = SPI_execute_plan(spi_plans[MATERIALIZE_MERGE],
+						   values,
+						   nulls,
+						   false /* read_only */,
+						   0 /* count */);
 
 	if (res < 0)
 		elog(ERROR,
@@ -586,6 +632,8 @@ spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 			 NameStr(*materialization_table.name));
 
 	rows_processed += SPI_processed;
+
+	spi_reset_plan(MATERIALIZE_MERGE);
 
 	/* DELETE rows from the materialization hypertable when necessary */
 	resetStringInfo(command);
@@ -617,13 +665,12 @@ spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 					 quote_identifier(NameStr(*time_column_name)));
 
 	elog(DEBUG2, "%s: %s", __func__, command->data);
-	res = SPI_execute_with_args(command->data,
-								2,
-								types,
-								values,
-								nulls,
-								false /* read_only */,
-								0 /* count */);
+	spi_prepare_plan(MATERIALIZE_MERGE_DELETE, command->data, 2, types);
+	res = SPI_execute_plan(spi_plans[MATERIALIZE_MERGE_DELETE],
+						   values,
+						   nulls,
+						   false /* read_only */,
+						   0 /* count */);
 
 	if (res < 0)
 		elog(ERROR,
@@ -638,6 +685,8 @@ spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 			 NameStr(*materialization_table.name));
 
 	rows_processed += SPI_processed;
+
+	spi_reset_plan(MATERIALIZE_MERGE_DELETE);
 
 	return rows_processed;
 }
@@ -662,13 +711,12 @@ spi_delete_materializations(SchemaAndName materialization_table, const NameData 
 					 chunk_condition);
 
 	elog(DEBUG2, "%s: %s", __func__, command->data);
-	res = SPI_execute_with_args(command->data,
-								2,
-								types,
-								values,
-								nulls,
-								false /* read_only */,
-								0 /* count */);
+	spi_prepare_plan(MATERIALIZE_DELETE, command->data, 2, types);
+	res = SPI_execute_plan(spi_plans[MATERIALIZE_DELETE],
+						   values,
+						   nulls,
+						   false /* read_only */,
+						   0 /* count */);
 
 	if (res < 0)
 		elog(ERROR,
@@ -681,6 +729,8 @@ spi_delete_materializations(SchemaAndName materialization_table, const NameData 
 			 SPI_processed,
 			 NameStr(*materialization_table.schema),
 			 NameStr(*materialization_table.name));
+
+	spi_reset_plan(MATERIALIZE_DELETE);
 
 	return SPI_processed;
 }
@@ -709,13 +759,12 @@ spi_insert_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 					 chunk_condition);
 
 	elog(DEBUG2, "%s: %s", __func__, command->data);
-	res = SPI_execute_with_args(command->data,
-								2,
-								types,
-								values,
-								nulls,
-								false /* read_only */,
-								0 /* count */);
+	spi_prepare_plan(MATERIALIZE_INSERT, command->data, 2, types);
+	res = SPI_execute_plan(spi_plans[MATERIALIZE_INSERT],
+						   values,
+						   nulls,
+						   false /* read_only */,
+						   0 /* count */);
 
 	if (res < 0)
 		elog(ERROR,
@@ -728,6 +777,8 @@ spi_insert_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 			 SPI_processed,
 			 NameStr(*materialization_table.schema),
 			 NameStr(*materialization_table.name));
+
+	spi_reset_plan(MATERIALIZE_INSERT);
 
 	return SPI_processed;
 }
