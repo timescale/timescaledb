@@ -21,32 +21,42 @@ TimescaleDB scales PostgreSQL for time-series data with the help of [hypertables
 From the perspective of both use and management, TimescaleDB looks and feels like PostgreSQL, and can be managed and queried as
 such. However, it provides a range of features and optimizations that make managing your time-series data easier and more efficient.
 
-| **Get started with TimescaleDB** |**Learn more about TimescaleDB**|
-|---|--|
-| <ul><li>[Install](#install-timescaledb)</li><li>[Create a hypertable](#create-a-hypertable)</li><li>[Insert and query data](#insert-and-query-data)</li><li>[Compress data](#compress-data)</li><li>[Create time buckets](#create-time-buckets)</li><li>[Create continuous aggregates](#create-continuous-aggregates)</li><li>[Back up and replicate data](#back-up-replicate-and-restore-data)</li></ul> | <ul><li>[Developer documentation](https://docs.timescale.com/)</li><li>[Release notes](https://tsdb.co/GitHubTimescaleDocsReleaseNotes)</li><li>[Testing TimescaleDB](test/README.md)</li><li>[Timescale community forum](https://www.timescale.com/forum/)</li><li>[GitHub issues](https://github.com/timescale/timescaledb/issues)</li><li>[Timescale support](https://tsdb.co/GitHubTimescaleSupport)</li></ul>|
+<table style="width:100%;">
+<thead>
+  <tr>
+    <th>Get started with TimescaleDB</th>
+    <th>Learn more about TimescaleDB</th>
+  </tr>
+</thead>
+<tbody>
+  <tr>
+    <td><ul><li>[Install](#install-timescaledb)</li><li>[Create a hypertable](#create-a-hypertable)</li><li>[Insert and query data](#insert-and-query-data)</li><li>[Compress data](#compress-data)</li><li>[Create time buckets](#create-time-buckets)</li><li>[Create continuous aggregates](#create-continuous-aggregates)</li><li>[Back up and replicate data](#back-up-replicate-and-restore-data)</li></ul></td>
+    <td><ul><li>[Developer documentation](https://docs.timescale.com/)</li><li>[Release notes](https://tsdb.co/GitHubTimescaleDocsReleaseNotes)</li><li>[Testing TimescaleDB](test/README.md)</li><li>[Timescale community forum](https://www.timescale.com/forum/)</li><li>[GitHub issues](https://github.com/timescale/timescaledb/issues)</li><li>[Timescale support](https://tsdb.co/GitHubTimescaleSupport)</li></ul></td>
+  </tr>
+</tbody>
+</table>
 
 # Install TimescaleDB
 
 Installation options are:
 
-- Install the [platform-specific package](https://docs.timescale.com/self-hosted/latest/install/).
-- [Build from source](https://docs.timescale.com/self-hosted/latest/install/installation-source/).
+- **Platform packages**: TimescaleDB is also available pre-packaged for several platforms such as
+  Linux, Windows, MacOS, Docker, and Kubernetes. For more information, see [Install TimescaleDB](https://docs.timescale.com/self-hosted/latest/install/).
 
-We recommend not using TimescaleDB with PostgreSQL 17.1, 16.5, 15.9, 14.14, 13.17, 12.21.
-These minor versions [introduced a breaking binary interface change][postgres-breaking-change] that,
-once identified, was reverted in subsequent minor PostgreSQL versions 17.2, 16.6, 15.10, 14.15, 13.18, and 12.22.
-When you build from source, best practice is to build with PostgreSQL 17.2, 16.6, etc and higher.
-Users of [Timescale Cloud](https://console.cloud.timescale.com/) and Platform packages built and
-distributed by Timescale are unaffected.
+- **Build from source**: See [Building from source](https://docs.timescale.com/self-hosted/latest/install/installation-source/).
 
-TimescaleDB comes in the following editions: Apache 2 and Community. See the [documentation](https://docs.timescale.com/about/latest/timescaledb-editions/) for differences between them.
+   We recommend not using TimescaleDB with PostgreSQL 17.1, 16.5, 15.9, 14.14, 13.17, 12.21.
+   These minor versions [introduced a breaking binary interface change][postgres-breaking-change] that,
+   once identified, was reverted in subsequent minor PostgreSQL versions 17.2, 16.6, 15.10, 14.15, 13.18, and 12.22.
+   When you build from source, best practice is to build with PostgreSQL 17.2, 16.6, etc and higher.
+   Users of [Timescale Cloud](https://console.cloud.timescale.com/) and Platform packages built and
+   distributed by Timescale are unaffected.
 
-For reference and clarity, all code files in this repository reference [licensing](https://github.com/timescale/timescaledb/blob/main/tsl/LICENSE-TIMESCALE) in their header. Apache-2 licensed binaries can be built by passing `-DAPACHE_ONLY=1` to `bootstrap`.
+- **[Timescale Cloud](https://tsdb.co/GitHubTimescale)**: A fully-managed TimescaleDB in the cloud, is
+  available via a free trial. Create a PostgreSQL database in the cloud with TimescaleDB pre-installed
+  so you can power your application with TimescaleDB without the management overhead. [Learn more](#want-timescaledb-hosted-and-managed-for-you-try-timescale-cloud) about Timescale Cloud.
 
-PostgreSQL's out-of-the-box settings are typically too conservative for modern
-servers and TimescaleDB. Make sure your `postgresql.conf`
-settings are tuned, by either using [timescaledb-tune](https://github.com/timescale/timescaledb-tune)
-or doing it manually.
+TimescaleDB comes in the following editions: Apache 2 and Community. See the [documentation](https://docs.timescale.com/about/latest/timescaledb-editions/) for differences between them. For reference and clarity, all code files in this repository reference [licensing](https://github.com/timescale/timescaledb/blob/main/tsl/LICENSE-TIMESCALE) in their header. Apache-2 licensed binaries can be built by passing `-DAPACHE_ONLY=1` to `bootstrap`.
 
 # Create a hypertable
 
@@ -103,7 +113,21 @@ See more:
 
 You compress your time-series data to reduce its size by more than 90%. This cuts storage costs and keeps your queries operating at lightning speed.
 
-When you enable compression, the data in your hypertable is compressed chunk by chunk. When the chunk is compressed, multiple records are grouped into a single row. The columns of this row hold an array-like structure that stores all the data. This means that instead of using lots of rows to store the data, it stores the same data in a single row. Because a single row takes up less disk space than many rows, it decreases the amount of disk space required, and can also speed up your queries.
+When you enable compression, the data in your hypertable is compressed chunk by chunk. When the chunk is compressed, multiple records are grouped into a single row. The columns of this row hold an array-like structure that stores all the data. This means that instead of using lots of rows to store the data, it stores the same data in a single row. Because a single row takes up less disk space than many rows, it decreases the amount of disk space required, and can also speed up your queries. For example:
+
+- Compress a specific hypertable chunk manually:
+
+    ```sql
+    SELECT compress_chunk( '<chunk_name>');
+    ```
+
+- Create a policy to compress chunks that are older than seven days automatically:
+
+    ```sql
+    SELECT add_compression_policy('<hypertable_name>', INTERVAL '7 days');
+    ```
+
+See more:
 
 - [About compression](https://docs.timescale.com/use-timescale/latest/compression/)
 - [API reference](https://docs.timescale.com/api/latest/compression/)
@@ -133,6 +157,30 @@ See more:
 
 Continuous aggregates are designed to make queries on very large datasets run faster. They use PostgreSQL [materialized views](https://www.postgresql.org/docs/current/rules-materializedviews.html) to continuously and incrementally refresh a query in the background, so that when you run the query, only the data that has changed needs to be computed, not the entire dataset.
 
+For example, create a continuous aggregate view for daily weather data in two simple steps:
+
+1. Create a materialized view:
+
+   ```sql
+   CREATE MATERIALIZED VIEW conditions_summary_daily
+   WITH (timescaledb.continuous) AS
+   SELECT device,
+   time_bucket(INTERVAL '1 day', time) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature)
+   FROM conditions
+   GROUP BY device, bucket;
+   ```
+
+1. Create a policy to refresh the view every hour:
+
+   ```sql
+   SELECT add_continuous_aggregate_policy('conditions_summary_daily',
+   start_offset => INTERVAL '1 month',
+   end_offset => INTERVAL '1 day',
+   schedule_interval => INTERVAL '1 hour');
+   ```
 See more:
 
 - [About continuous aggregates](https://docs.timescale.com/use-timescale/latest/continuous-aggregates/)
