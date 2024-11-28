@@ -21,7 +21,7 @@ TimescaleDB scales PostgreSQL for time-series data with the help of [hypertables
 From the perspective of both use and management, TimescaleDB looks and feels like PostgreSQL, and can be managed and queried as
 such. However, it provides a range of features and optimizations that make managing your time-series data easier and more efficient.
 
-<table style="width:100%;">
+<table style="width:100%;" markdown="1">
 <thead>
   <tr>
     <th>Get started with TimescaleDB</th>
@@ -36,7 +36,7 @@ such. However, it provides a range of features and optimizations that make manag
 </tbody>
 </table>
 
-# Install TimescaleDB
+## Install TimescaleDB
 
 Installation options are:
 
@@ -58,7 +58,7 @@ Installation options are:
 
 TimescaleDB comes in the following editions: Apache 2 and Community. See the [documentation](https://docs.timescale.com/about/latest/timescaledb-editions/) for differences between them. For reference and clarity, all code files in this repository reference [licensing](https://github.com/timescale/timescaledb/blob/main/tsl/LICENSE-TIMESCALE) in their header. Apache-2 licensed binaries can be built by passing `-DAPACHE_ONLY=1` to `bootstrap`.
 
-# Create a hypertable
+## Create a hypertable
 
 You create a regular table and then convert it into a hypertable.
 
@@ -83,7 +83,7 @@ See more:
 - [About hypertables](https://docs.timescale.com/use-timescale/latest/hypertables/)
 - [API reference](https://docs.timescale.com/api/latest/hypertable/)
 
-# Insert and query data
+## Insert and query data
 
 Insert and query data in a hypertable via regular SQL commands. For example:
 
@@ -109,7 +109,7 @@ See more:
 - [Query data](https://docs.timescale.com/use-timescale/latest/query-data/)
 - [Write data](https://docs.timescale.com/use-timescale/latest/write-data/)
 
-# Compress data
+## Compress data
 
 You compress your time-series data to reduce its size by more than 90%. This cuts storage costs and keeps your queries operating at lightning speed.
 
@@ -132,7 +132,7 @@ See more:
 - [About compression](https://docs.timescale.com/use-timescale/latest/compression/)
 - [API reference](https://docs.timescale.com/api/latest/compression/)
 
-# Create time buckets
+## Create time buckets
 
 Time buckets enable you to aggregate data in hypertables by time interval and calculate summary values.
 
@@ -153,7 +153,7 @@ See more:
 - [All TimescaleDB features](https://docs.timescale.com/use-timescale/latest/)
 - [Tutorials](https://docs.timescale.com/tutorials/latest/)
 
-# Create continuous aggregates
+## Create continuous aggregates
 
 Continuous aggregates are designed to make queries on very large datasets run faster. They use PostgreSQL [materialized views](https://www.postgresql.org/docs/current/rules-materializedviews.html) to continuously and incrementally refresh a query in the background, so that when you run the query, only the data that has changed needs to be computed, not the entire dataset.
 
@@ -186,7 +186,7 @@ See more:
 - [About continuous aggregates](https://docs.timescale.com/use-timescale/latest/continuous-aggregates/)
 - [API reference](https://docs.timescale.com/api/latest/continuous-aggregates/create_materialized_view/)
 
-# Back up, replicate, and restore data
+## Back up, replicate, and restore data
 
 TimescaleDB takes advantage of the reliable backup, restore, and replication functionality provided by PostgreSQL.
 
@@ -195,26 +195,26 @@ See more:
 - [Backup and restore](https://docs.timescale.com/self-hosted/latest/backup-and-restore/)
 - [Replication and high availability](https://docs.timescale.com/self-hosted/latest/replication-and-ha/)
 
-# Want TimescaleDB hosted and managed for you? Try Timescale Cloud
+## Want TimescaleDB hosted and managed for you? Try Timescale Cloud
 
 [Timescale Cloud](https://docs.timescale.com/getting-started/latest/) is a cloud-based PostgreSQL platform for resource-intensive workloads. We help you build faster, scale further, and stay under budget. A Timescale Cloud service is a single optimized 100% PostgreSQL database instance that you use as is, or extend with capabilities specific to your business needs. The available capabilities are:
 
-- Time-series and analytics: PostgreSQL with TimescaleDB. The PostgreSQL you know and love, supercharged with functionality for storing and querying time-series data at scale for analytics and other use cases. Get faster time-based queries with hypertables, continuous aggregates, and columnar storage. Save on storage with native compression, data retention policies, and bottomless data tiering to Amazon S3.
-- AI and vector: PostgreSQL with vector extensions. Use PostgreSQL as a vector database with purpose built extensions for building AI applications from start to scale. Get fast and accurate similarity search with the pgvector and pgvectorscale extensions. Create vector embeddings and perform LLM reasoning on your data with the pgai extension.
-- PostgreSQL: the trusted industry-standard RDBMS. Ideal for applications requiring strong data consistency, complex relationships, and advanced querying capabilities. Get ACID compliance, extensive SQL support, JSON handling, and extensibility through custom functions, data types, and extensions.
+- **Time-series and analytics**: PostgreSQL with TimescaleDB. The PostgreSQL you know and love, supercharged with functionality for storing and querying time-series data at scale for analytics and other use cases. Get faster time-based queries with hypertables, continuous aggregates, and columnar storage. Save on storage with native compression, data retention policies, and bottomless data tiering to Amazon S3.
+- **AI and vector**: PostgreSQL with vector extensions. Use PostgreSQL as a vector database with purpose built extensions for building AI applications from start to scale. Get fast and accurate similarity search with the pgvector and pgvectorscale extensions. Create vector embeddings and perform LLM reasoning on your data with the pgai extension.
+- **PostgreSQL**: the trusted industry-standard RDBMS. Ideal for applications requiring strong data consistency, complex relationships, and advanced querying capabilities. Get ACID compliance, extensive SQL support, JSON handling, and extensibility through custom functions, data types, and extensions.
 All services include all the cloud tooling you'd expect for production use: [automatic backups](https://docs.timescale.com/use-timescale/latest/backup-restore/backup-restore-cloud/), [high availability](https://docs.timescale.com/use-timescale/latest/ha-replicas/), [read replicas](https://docs.timescale.com/use-timescale/latest/ha-replicas/read-scaling/), [data forking](https://docs.timescale.com/use-timescale/latest/services/service-management/#fork-a-service), [connection pooling](https://docs.timescale.com/use-timescale/latest/services/connection-pooling/), [tiered storage](https://docs.timescale.com/use-timescale/latest/data-tiering/), [usage-based storage](https://docs.timescale.com/about/latest/pricing-and-account-management/), and much more.
 
-# Check build status
+## Check build status
 
 |Linux/macOS|Linux i386|Windows|Coverity|Code Coverage|OpenSSF|
 |:---:|:---:|:---:|:---:|:---:|:---:|
 |[![Build Status Linux/macOS](https://github.com/timescale/timescaledb/actions/workflows/linux-build-and-test.yaml/badge.svg?branch=main&event=schedule)](https://github.com/timescale/timescaledb/actions/workflows/linux-build-and-test.yaml?query=workflow%3ARegression+branch%3Amain+event%3Aschedule)|[![Build Status Linux i386](https://github.com/timescale/timescaledb/actions/workflows/linux-32bit-build-and-test.yaml/badge.svg?branch=main&event=schedule)](https://github.com/timescale/timescaledb/actions/workflows/linux-32bit-build-and-test.yaml?query=workflow%3ARegression+branch%3Amain+event%3Aschedule)|[![Windows build status](https://github.com/timescale/timescaledb/actions/workflows/windows-build-and-test.yaml/badge.svg?branch=main&event=schedule)](https://github.com/timescale/timescaledb/actions/workflows/windows-build-and-test.yaml?query=workflow%3ARegression+branch%3Amain+event%3Aschedule)|[![Coverity Scan Build Status](https://scan.coverity.com/projects/timescale-timescaledb/badge.svg)](https://scan.coverity.com/projects/timescale-timescaledb)|[![Code Coverage](https://codecov.io/gh/timescale/timescaledb/branch/main/graphs/badge.svg?branch=main)](https://codecov.io/gh/timescale/timescaledb)|[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/8012/badge)](https://www.bestpractices.dev/projects/8012)|
 
-# Get involved
+## Get involved
 
 We welcome contributions to TimescaleDB! See [Contributing](https://github.com/timescale/timescaledb/blob/main/CONTRIBUTING.md) and [Code style guide](https://github.com/timescale/timescaledb/blob/main/docs/StyleGuide.md) for details.
 
-# Learn about Timescale
+## Learn about Timescale
 
 Timescale is PostgreSQL made powerful. To learn more about the company and its products, visit [timescale.com](https://www.timescale.com).
 
