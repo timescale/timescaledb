@@ -21,47 +21,23 @@ TimescaleDB scales PostgreSQL for time-series data with the help of [hypertables
 From the perspective of both use and management, TimescaleDB looks and feels like PostgreSQL, and can be managed and queried as
 such. However, it provides a range of features and optimizations that make managing your time-series data easier and more efficient.
 
-> [!WARNING]
->
->  The latest Postgres minor releases (17.1, 16.5, 15.9, 14.14, 13.17, 12.21), released on 2024-11-14, have an unexpected
->  breaking ABI change that may crash existing deployments of TimescaleDB, unless used with a TimescaleDB binary explicitly built against those new minor PG versions.
->
->
->  Status and recommendations:
->  - **Users of [Timescale Cloud](https://console.cloud.timescale.com/) are unaffected**. We are currently not upgrading cloud databases to these latest minor PG releases. But regardless, Timescale Cloud recompiles TimescaleDB against each new minor Postgres version, which would prevent any such incompatibility.
->  - **Users to Timescale's [k8s docker image](https://github.com/timescale/timescaledb-docker-ha) are unaffected**.  We are currently not building a new release against these latest minor PG releases. But regardless, our docker image build process recompiles TimescaleDB against each new minor Postgres version, which would prevent any such incompatibility.
->  - Users of other managed clouds (using TimescaleDB Apache-2 Edition) are recommended to not upgrade to these latest minor PG releases at this time, or discuss with their cloud provider how they build TimescaleDB with new minor releases.
->  - Users who self-manage TimescaleDB are recommended to not upgrade to these latest minor PG releases at this time.
->
->  We are working with the PG community about how best to address this issue.  See [this thread on pgsql-hackers](https://www.postgresql.org/message-id/flat/CABOikdNmVBC1LL6pY26dyxAS2f%2BgLZvTsNt%3D2XbcyG7WxXVBBQ%40mail.gmail.com) for more info.
->
->  Thanks for your understanding! 🙏
-
-**Learn more about TimescaleDB**:
-
-- [Developer documentation](https://docs.timescale.com/)
-- [Release notes](https://tsdb.co/GitHubTimescaleDocsReleaseNotes)
-- [Testing TimescaleDB](test/README.md)
-- [Timescale community forum](https://www.timescale.com/forum/)
-- [GitHub issues](https://github.com/timescale/timescaledb/issues)
-- [Timescale support](https://tsdb.co/GitHubTimescaleSupport)
-
-**Get started with TimescaleDB**:
-
-- [Install](#install-timescaledb)
-- [Create a hypertable](#create-a-hypertable)
-- [Insert and query data](#insert-and-query-data)
-- [Compress data](#compress-data)
-- [Create time buckets](#create-time-buckets)
-- [Create continuous aggregates](#create-continuous-aggregates)
-- [Back up and replicate data](#back-up-replicate-and-restore-data)
+| **Get started with TimescaleDB** |**Learn more about TimescaleDB**|
+|---|--|
+| <ul><li>[Install](#install-timescaledb)</li><li>[Create a hypertable](#create-a-hypertable)</li><li>[Insert and query data](#insert-and-query-data)</li><li>[Compress data](#compress-data)</li><li>[Create time buckets](#create-time-buckets)</li><li>[Create continuous aggregates](#create-continuous-aggregates)</li><li>[Back up and replicate data](#back-up-replicate-and-restore-data)</li></ul> | <ul><li>[Developer documentation](https://docs.timescale.com/)</li><li>[Release notes](https://tsdb.co/GitHubTimescaleDocsReleaseNotes)</li><li>[Testing TimescaleDB](test/README.md)</li><li>[Timescale community forum](https://www.timescale.com/forum/)</li><li>[GitHub issues](https://github.com/timescale/timescaledb/issues)</li><li>[Timescale support](https://tsdb.co/GitHubTimescaleSupport)</li></ul>|
 
 # Install TimescaleDB
 
-Get TimescaleDB in one of the following ways:
+Installation options are:
 
 - Install the [platform-specific package](https://docs.timescale.com/self-hosted/latest/install/).
 - [Build from source](https://docs.timescale.com/self-hosted/latest/install/installation-source/).
+
+We recommend not using TimescaleDB with PostgreSQL 17.1, 16.5, 15.9, 14.14, 13.17, 12.21.
+These minor versions [introduced a breaking binary interface change][postgres-breaking-change] that,
+once identified, was reverted in subsequent minor PostgreSQL versions 17.2, 16.6, 15.10, 14.15, 13.18, and 12.22.
+When you build from source, best practice is to build with PostgreSQL 17.2, 16.6, etc and higher.
+Users of [Timescale Cloud](https://console.cloud.timescale.com/) and Platform packages built and
+distributed by Timescale are unaffected.
 
 TimescaleDB comes in the following editions: Apache 2 and Community. See the [documentation](https://docs.timescale.com/about/latest/timescaledb-editions/) for differences between them.
 
