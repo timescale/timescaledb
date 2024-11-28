@@ -428,6 +428,7 @@ can_vectorize_aggref(Aggref *aggref, CustomScan *custom, VectorQualInfo *vqi)
 
 /*
  * Whether we can perform vectorized aggregation with a given grouping.
+ * Currently supports either no grouping or grouping by segmentby columns.
  */
 static bool
 can_vectorize_grouping(Agg *agg, CustomScan *custom, List *resolved_targetlist)
@@ -496,6 +497,11 @@ has_vector_agg_node(Plan *plan, bool *has_normal_agg)
 			append_plans = custom->custom_plans;
 		}
 	}
+	else if (IsA(plan, SubqueryScan))
+	{
+		SubqueryScan *subquery = castNode(SubqueryScan, plan);
+		append_plans = list_make1(subquery->subplan);
+	}
 
 	if (append_plans)
 	{
@@ -552,6 +558,11 @@ try_insert_vector_agg_node(Plan *plan)
 		{
 			append_plans = custom->custom_plans;
 		}
+	}
+	else if (IsA(plan, SubqueryScan))
+	{
+		SubqueryScan *subquery = castNode(SubqueryScan, plan);
+		append_plans = list_make1(subquery->subplan);
 	}
 
 	if (append_plans)
