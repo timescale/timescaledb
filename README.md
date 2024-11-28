@@ -197,3 +197,4 @@ Timescale is PostgreSQL made powerful. To learn more about the company and its p
 
 
 
+[postgres-breaking-change]: https://www.postgresql.org/about/news/postgresql-172-166-1510-1415-1318-and-1222-released-2965/
