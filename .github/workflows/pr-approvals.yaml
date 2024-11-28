@@ -38,7 +38,7 @@ jobs:
             # Get modified files, but exclude those that are workflow
             # files or are related to Hypercore table access
             # method. These require only a single reviewer.
-            files=$(gh pr view $PR_NUMBER --json files --jq '.files.[].path | select(startswith(".github") or test("hypercore|columnar_scan") | not)')
+            files=$(gh pr view $PR_NUMBER --json files --jq '.files.[].path | select(startswith(".github") or test("hypercore|columnar_scan") or endswith("CMakeLists.txt") | not)')
 
             # Get the number of approvals in this pull request
             echo "Reviews: "
