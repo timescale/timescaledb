@@ -313,11 +313,18 @@ SELECT create_hypertable('transition_test','time');
 DROP TRIGGER t1 ON transition_test;
 SELECT create_hypertable('transition_test','time');
 
+-- Insert some rows to create a chunk
+INSERT INTO transition_test values ('2020-01-10');
+SELECT chunk FROM show_chunks('transition_test') tbl(chunk) limit 1 \gset
+
 -- test creating trigger with transition tables on existing hypertable
 \set ON_ERROR_STOP 0
 CREATE TRIGGER t2 AFTER INSERT ON transition_test REFERENCING NEW TABLE AS new_trans FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
 CREATE TRIGGER t3 AFTER UPDATE ON transition_test REFERENCING NEW TABLE AS new_trans OLD TABLE AS old_trans FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
 CREATE TRIGGER t4 AFTER DELETE ON transition_test REFERENCING OLD TABLE AS old_trans FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER t2 AFTER INSERT ON :chunk REFERENCING NEW TABLE AS new_trans FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER t3 AFTER UPDATE ON :chunk REFERENCING NEW TABLE AS new_trans OLD TABLE AS old_trans FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER t4 AFTER DELETE ON :chunk REFERENCING OLD TABLE AS old_trans FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
 
 CREATE TRIGGER t2 AFTER INSERT ON transition_test REFERENCING NEW TABLE AS new_trans FOR EACH ROW EXECUTE FUNCTION test_trigger();
 CREATE TRIGGER t3 AFTER UPDATE ON transition_test REFERENCING NEW TABLE AS new_trans OLD TABLE AS old_trans FOR EACH ROW EXECUTE FUNCTION test_trigger();

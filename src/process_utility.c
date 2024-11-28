@@ -280,6 +280,8 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			case AT_ReplicaIdentity:
 			case AT_ReAddStatistics:
 			case AT_SetCompression:
+			case AT_DropNotNull:
+			case AT_SetNotNull:
 #if PG15_GE
 			case AT_SetAccessMethod:
 #endif
@@ -2562,10 +2564,49 @@ process_altertable_validate_constraint_end(Hypertable *ht, AlterTableCmd *cmd)
 	foreach_chunk(ht, validate_hypertable_constraint, cmd);
 }
 
+/*
+ * Validate that SET NOT NULL is ok for this chunk.
+ *
+ * Throws an error if SET NOT NULL on this chunk is not allowed, right now,
+ * SET NOT NULL is allowed on chunks that are either a fully decompressed, or
+ * are using the Hypercore table access method.
+ */
 static void
-process_altertable_drop_not_null(Hypertable *ht, AlterTableCmd *cmd)
+validate_set_not_null(Hypertable *ht, Oid chunk_relid, void *arg)
+{
+	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+	if (ts_chunk_is_compressed(chunk) && !ts_is_hypercore_am(chunk->amoid))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("operation not supported on compressed chunks not using the "
+						"\"hypercore\" table access method"),
+				 errdetail("Chunk %s.%s is using the heap table access method and has compressed "
+						   "data.",
+						   NameStr(chunk->fd.schema_name),
+						   NameStr(chunk->fd.table_name)),
+				 errhint("Either decompress all chunks of the hypertable or use \"ALTER TABLE "
+						 "%s.%s SET ACCESS METHOD hypercore\" on all chunks to change access "
+						 "method.",
+						 NameStr(chunk->fd.schema_name),
+						 NameStr(chunk->fd.table_name))));
+	}
+}
+
+/*
+ * This function checks that we are not dropping NOT NULL from bad columns and
+ * that all chunks support the modification.
+ */
+static void
+process_altertable_alter_not_null_start(Hypertable *ht, AlterTableCmd *cmd)
 {
 	int i;
+
+	if (cmd->subtype == AT_SetNotNull)
+		foreach_chunk(ht, validate_set_not_null, cmd);
+
+	if (cmd->subtype != AT_DropNotNull)
+		return;
 
 	for (i = 0; i < ht->space->num_dimensions; i++)
 	{
@@ -3802,9 +3843,10 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 					verify_constraint_hypertable(ht, cmd->def);
 			}
 			break;
+			case AT_SetNotNull:
 			case AT_DropNotNull:
 				if (ht != NULL)
-					process_altertable_drop_not_null(ht, cmd);
+					process_altertable_alter_not_null_start(ht, cmd);
 				break;
 			case AT_AddColumn:
 #if PG16_LT
@@ -4186,6 +4228,8 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_DropCluster:
 			foreach_chunk(ht, process_altertable_chunk, cmd);
 			break;
+		case AT_SetNotNull:
+		case AT_DropNotNull:
 		case AT_SetRelOptions:
 		case AT_ResetRelOptions:
 		case AT_ReplaceRelOptions:
@@ -4212,8 +4256,6 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_SetStorage:
 		case AT_ColumnDefault:
 		case AT_CookedColumnDefault:
-		case AT_SetNotNull:
-		case AT_DropNotNull:
 		case AT_AddOf:
 		case AT_DropOf:
 		case AT_AddIdentity:
@@ -4410,6 +4452,12 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("triggers are not supported on continuous aggregate")));
 
+		if (stmt->transitionRels)
+			if (ts_chunk_get_by_relid(relid, false) != NULL)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg(
+							 "trigger with transition tables not supported on hypertable chunks")));
 		return DDL_CONTINUE;
 	}
 
@@ -4493,8 +4541,8 @@ process_reassign_owned_start(ProcessUtilityArgs *args)
 			Oid newrole_oid = get_rolespec_oid(stmt->newrole, false);
 			HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 
-			/* We do not need to check privileges here since ReassignOwnedObjects() will check the
-			 * privileges and error out if they are not correct. */
+			/* We do not need to check privileges here since ReassignOwnedObjects() will check
+			 * the privileges and error out if they are not correct. */
 			ts_bgw_job_update_owner(ti->scanrel, tuple, ts_scanner_get_tupledesc(ti), newrole_oid);
 
 			if (should_free)
@@ -4630,8 +4678,8 @@ process_create_stmt(ProcessUtilityArgs *args)
 				errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				errmsg("hypercore access method not supported on \"%s\"", stmt->relation->relname),
 				errdetail("The hypercore access method is only supported for hypertables."),
-				errhint("It does not make sense to set the default access method for all tables "
-						"to \"%s\" since it is only supported for hypertables.",
+				errhint("It does not make sense to set the default access method for all "
+						"tables to \"%s\" since it is only supported for hypertables.",
 						TS_HYPERCORE_TAM_NAME));
 
 	return DDL_CONTINUE;

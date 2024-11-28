@@ -1865,9 +1865,12 @@ relation_set_reloption_impl(Relation rel, List *options, LOCKMODE lockmode)
 
 	Relation pgclass = table_open(RelationRelationId, RowExclusiveLock);
 	Oid relid = RelationGetRelid(rel);
-	HeapTuple tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+	HeapTuple tuple = SearchSysCacheLockedCopy1(RELOID, ObjectIdGetDatum(relid));
 	if (!HeapTupleIsValid(tuple))
 		elog(ERROR, "cache lookup failed for relation %u", relid);
+#ifdef SYSCACHE_TUPLE_LOCK_NEEDED
+	ItemPointerData otid = tuple->t_self;
+#endif
 
 	/* Get the old reloptions */
 	Datum datum = SysCacheGetAttr(RELOID, tuple, Anum_pg_class_reloptions, &isnull);
@@ -1892,8 +1895,9 @@ relation_set_reloption_impl(Relation rel, List *options, LOCKMODE lockmode)
 	/* Not sure if we need this one, but keeping it as a precaution */
 	InvokeObjectPostAlterHook(RelationRelationId, RelationGetRelid(rel), 0);
 
+	UnlockSysCacheTuple(pgclass, &otid);
 	heap_freetuple(newtuple);
-	ReleaseSysCache(tuple);
+	heap_freetuple(tuple);
 	table_close(pgclass, RowExclusiveLock);
 }
 

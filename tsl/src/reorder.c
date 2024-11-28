@@ -926,9 +926,6 @@ swap_relation_files(Oid r1, Oid r2, bool swap_toast_by_content, bool is_internal
 	Oid swaptemp;
 	char swptmpchr;
 
-	AssertSufficientPgClassUpdateLockHeld(r1);
-	AssertSufficientPgClassUpdateLockHeld(r2);
-
 	/* We need writable copies of both pg_class tuples. */
 	relRelation = table_open(RelationRelationId, RowExclusiveLock);
 

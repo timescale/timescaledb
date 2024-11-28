@@ -108,6 +108,12 @@ static const struct config_enum_entry transparent_decompression_options[] = {
 	{ NULL, 0, false }
 };
 
+static const struct config_enum_entry hypercore_copy_to_options[] = {
+	{ "all_data", HYPERCORE_COPY_ALL_DATA, false },
+	{ "no_compressed_data", HYPERCORE_COPY_NO_COMPRESSED_DATA, false },
+	{ NULL, 0, false }
+};
+
 bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
@@ -156,6 +162,8 @@ bool ts_guc_enable_tss_callbacks = true;
 TSDLLEXPORT bool ts_guc_enable_delete_after_compression = false;
 TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh = false;
 TSDLLEXPORT char *ts_guc_hypercore_indexam_whitelist;
+TSDLLEXPORT HypercoreCopyToBehavior ts_guc_hypercore_copy_to_behavior =
+	HYPERCORE_COPY_NO_COMPRESSED_DATA;
 
 /* default value of ts_guc_max_open_chunks_per_insert and
  * ts_guc_max_cached_chunks_per_hypertable will be set as their respective boot-value when the
@@ -172,6 +180,7 @@ char *ts_last_tune_time = NULL;
 char *ts_last_tune_version = NULL;
 
 bool ts_guc_debug_require_batch_sorted_merge = false;
+
 bool ts_guc_debug_allow_cagg_with_deprecated_funcs = false;
 
 #ifdef TS_DEBUG
@@ -1031,6 +1040,20 @@ _guc_init(void)
 							   /* check_hook= */ check_indexam_whitelist,
 							   /* assign_hook= */ NULL,
 							   /* show_hook= */ NULL);
+
+	DefineCustomEnumVariable(MAKE_EXTOPTION("hypercore_copy_to_behavior"),
+							 "The behavior of COPY TO on a hypercore table",
+							 "Set to 'all_data' to return both compressed and uncompressed data "
+							 "via the Hypercore table when using COPY TO. Set to "
+							 "'no_compressed_data' to skip compressed data.",
+							 /* valueAddr= */ (int *) &ts_guc_hypercore_copy_to_behavior,
+							 /* bootValue= */ HYPERCORE_COPY_NO_COMPRESSED_DATA,
+							 /* options= */ hypercore_copy_to_options,
+							 /* context= */ PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 
 #ifdef TS_DEBUG
 	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("shutdown_bgw_scheduler"),
