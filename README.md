@@ -21,7 +21,7 @@ TimescaleDB scales PostgreSQL for time-series data with the help of [hypertables
 From the perspective of both use and management, TimescaleDB looks and feels like PostgreSQL, and can be managed and queried as
 such. However, it provides a range of features and optimizations that make managing your time-series data easier and more efficient.
 
-<table style="width:100%;" markdown="1">
+<table style="width:100%;">
 <thead>
   <tr>
     <th>Get started with TimescaleDB</th>
@@ -30,8 +30,8 @@ such. However, it provides a range of features and optimizations that make manag
 </thead>
 <tbody>
   <tr>
-    <td><ul><li>[Install](#install-timescaledb)</li><li>[Create a hypertable](#create-a-hypertable)</li><li>[Insert and query data](#insert-and-query-data)</li><li>[Compress data](#compress-data)</li><li>[Create time buckets](#create-time-buckets)</li><li>[Create continuous aggregates](#create-continuous-aggregates)</li><li>[Back up and replicate data](#back-up-replicate-and-restore-data)</li></ul></td>
-    <td><ul><li>[Developer documentation](https://docs.timescale.com/)</li><li>[Release notes](https://tsdb.co/GitHubTimescaleDocsReleaseNotes)</li><li>[Testing TimescaleDB](test/README.md)</li><li>[Timescale community forum](https://www.timescale.com/forum/)</li><li>[GitHub issues](https://github.com/timescale/timescaledb/issues)</li><li>[Timescale support](https://tsdb.co/GitHubTimescaleSupport)</li></ul></td>
+    <td><ul><li><a href="https://github.com/timescale/timescaledb/tree/main?tab=readme-ov-file#install-timescaledb">Install</a></li><li><a href="https://github.com/timescale/timescaledb/tree/main?tab=readme-ov-file#create-a-hypertable">Create a hypertable</a></li><li><a href="https://github.com/timescale/timescaledb/tree/main?tab=readme-ov-file#insert-and-query-data">Insert and query data</a></li><li><a href="https://github.com/timescale/timescaledb/tree/main?tab=readme-ov-file#compress-data">Compress data</a></li><li><a href="https://github.com/timescale/timescaledb/tree/main?tab=readme-ov-file#create-time-buckets">Create time buckets</a></li><li><a href="https://github.com/timescale/timescaledb/tree/main?tab=readme-ov-file#create-continuous-aggregates">Create continuous aggregates</a></li><li><a href="https://github.com/timescale/timescaledb/tree/main?tab=readme-ov-file#back-up-replicate-and-restore-data">Back up and replicate data</a></li></ul></td>
+    <td><ul><li><a href="https://docs.timescale.com/">Developer documentation</a></li><li><a href="https://tsdb.co/GitHubTimescaleDocsReleaseNotes">Release notes</a></li><li><a href="https://github.com/timescale/timescaledb/blob/main/test/README.md">Testing TimescaleDB</a></li><li><a href="https://www.timescale.com/forum/">Timescale community forum</a></li><li><a href="https://github.com/timescale/timescaledb/issues">GitHub issues</a></li><li><a href="https://tsdb.co/GitHubTimescaleSupport">Timescale support</a></li></ul></td>
   </tr>
 </tbody>
 </table>
