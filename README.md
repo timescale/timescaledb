@@ -24,8 +24,8 @@ such. However, it provides a range of features and optimizations that make manag
 <table style="width:100%;">
 <thead>
   <tr>
-    <th>Get started with TimescaleDB</th>
-    <th>Learn more about TimescaleDB</th>
+    <th width="500px">Get started with TimescaleDB</th>
+    <th width="500px">Learn more about TimescaleDB</th>
   </tr>
 </thead>
 <tbody>
