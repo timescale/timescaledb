@@ -62,6 +62,7 @@ CREATE USER not_priv;
 -- A user with no ownership on the Cagg cannot create index on it. -- This should fail
 \set ON_ERROR_STOP 0
 CREATE INDEX cagg_idx on mat_refresh_test(humidity);
+\set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP USER not_priv;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -182,6 +183,7 @@ group by time_bucket(100, timec), location WITH NO DATA;
 --this should fail
 CALL refresh_continuous_aggregate('mat_perm_view_test', NULL, NULL);
 DROP MATERIALIZED VIEW mat_perm_view_test;
+\set ON_ERROR_STOP 1
 
 --can create a mat view on something with select and trigger grants
 CREATE MATERIALIZED VIEW mat_perm_view_test
@@ -202,8 +204,10 @@ insert into conditions_for_perm_check_w_grant
 select generate_series(100, 130, 10), 'POR', 65, 85, 30, 90, NULL;
 
 \c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
 --refresh mat view should now fail due to lack of permissions
 CALL refresh_continuous_aggregate('mat_perm_view_test', NULL, NULL);
+\set ON_ERROR_STOP 1
 
 --but the old data will still be there
 SELECT * FROM mat_perm_view_test;
