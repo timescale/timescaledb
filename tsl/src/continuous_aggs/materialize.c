@@ -62,8 +62,8 @@ typedef struct MaterializationPlan
 {
 	const char *query;
 	SPIPlanPtr plan;
-	int nargs;
 	Oid *argtypes;
+	int nargs;
 	bool read_only;
 } MaterializationPlan;
 
@@ -118,7 +118,7 @@ static MaterializationPlan *create_materialization_plan(MaterializationPlanType 
 														const char *query);
 static void set_materialization_plan_argtypes(MaterializationPlanType plan_type, Oid *argtypes);
 static int execute_materialization_plan(MaterializationPlanType plan_type, const char *query,
-										Datum *values, const char *nulls);
+										Datum *values, const char *nulls, uint64 *rows_processed);
 static void free_materialization_plan(MaterializationPlanType plan_type);
 static void free_all_materialization_plans();
 
@@ -263,11 +263,13 @@ set_materialization_plan_argtypes(MaterializationPlanType plan_type, Oid *argtyp
 
 static int
 execute_materialization_plan(MaterializationPlanType plan_type, const char *query, Datum *values,
-							 const char *nulls)
+							 const char *nulls, uint64 *rows_processed)
 {
 	MaterializationPlan *materialization = create_materialization_plan(plan_type, query);
 
 	int res = SPI_execute_plan(materialization->plan, values, nulls, materialization->read_only, 0);
+
+	*rows_processed = SPI_processed;
 
 	free_materialization_plan(plan_type);
 
@@ -563,6 +565,7 @@ exists_materializations(MaterializationContext *context)
 	Oid types[] = { context->materialization_range.type, context->materialization_range.type };
 	Datum values[] = { context->materialization_range.start, context->materialization_range.end };
 	char nulls[] = { false, false };
+	uint64 rows_processed;
 
 	set_materialization_plan_argtypes(PLAN_TYPE_EXISTS, types);
 
@@ -574,7 +577,11 @@ exists_materializations(MaterializationContext *context)
 					 quote_identifier(NameStr(*context->time_column_name)));
 
 	elog(DEBUG2, "%s", command->data);
-	res = execute_materialization_plan(PLAN_TYPE_EXISTS, command->data, values, nulls);
+	res = execute_materialization_plan(PLAN_TYPE_EXISTS,
+									   command->data,
+									   values,
+									   nulls,
+									   &rows_processed);
 
 	if (res < 0)
 		elog(ERROR,
@@ -582,7 +589,7 @@ exists_materializations(MaterializationContext *context)
 			 NameStr(*context->materialization_table.schema),
 			 NameStr(*context->materialization_table.name));
 
-	return (SPI_processed > 0);
+	return (rows_processed > 0);
 }
 
 static uint64
@@ -607,7 +614,7 @@ merge_materializations(MaterializationContext *context)
 	List *agg_colnames =
 		cagg_find_aggref_and_var_cols((ContinuousAgg *) context->cagg, context->mat_ht);
 	List *all_columns = NIL;
-	uint64 rows_processed = 0;
+	uint64 rows_processed = 0, all_processed = 0;
 
 	/* Concat both lists into a single one*/
 	all_columns = list_concat(all_columns, grp_colnames);
@@ -659,7 +666,11 @@ merge_materializations(MaterializationContext *context)
 					 build_merge_insert_columns(all_columns, ", ", "P."));
 
 	elog(DEBUG2, "%s: %s", __func__, command->data);
-	res = execute_materialization_plan(PLAN_TYPE_MERGE, command->data, values, nulls);
+	res = execute_materialization_plan(PLAN_TYPE_MERGE,
+									   command->data,
+									   values,
+									   nulls,
+									   &rows_processed);
 
 	if (res < 0)
 		elog(ERROR,
@@ -673,7 +684,7 @@ merge_materializations(MaterializationContext *context)
 			 NameStr(*context->materialization_table.schema),
 			 NameStr(*context->materialization_table.name));
 
-	rows_processed += SPI_processed;
+	all_processed += rows_processed;
 
 	set_materialization_plan_argtypes(PLAN_TYPE_MERGE_DELETE, types);
 
@@ -703,7 +714,11 @@ merge_materializations(MaterializationContext *context)
 					 quote_identifier(NameStr(*context->time_column_name)));
 
 	elog(DEBUG2, "%s: %s", __func__, command->data);
-	res = execute_materialization_plan(PLAN_TYPE_MERGE_DELETE, command->data, values, nulls);
+	res = execute_materialization_plan(PLAN_TYPE_MERGE_DELETE,
+									   command->data,
+									   values,
+									   nulls,
+									   &rows_processed);
 
 	if (res < 0)
 		elog(ERROR,
@@ -717,9 +732,9 @@ merge_materializations(MaterializationContext *context)
 			 NameStr(*context->materialization_table.schema),
 			 NameStr(*context->materialization_table.name));
 
-	rows_processed += SPI_processed;
+	all_processed += rows_processed;
 
-	return rows_processed;
+	return all_processed;
 }
 
 static uint64
@@ -730,6 +745,7 @@ delete_materializations(MaterializationContext *context)
 	Oid types[] = { context->materialization_range.type, context->materialization_range.type };
 	Datum values[] = { context->materialization_range.start, context->materialization_range.end };
 	char nulls[] = { false, false };
+	uint64 rows_processed;
 
 	set_materialization_plan_argtypes(PLAN_TYPE_DELETE, types);
 
@@ -742,7 +758,11 @@ delete_materializations(MaterializationContext *context)
 					 context->chunk_condition);
 
 	elog(DEBUG2, "%s: %s", __func__, command->data);
-	res = execute_materialization_plan(PLAN_TYPE_DELETE, command->data, values, nulls);
+	res = execute_materialization_plan(PLAN_TYPE_DELETE,
+									   command->data,
+									   values,
+									   nulls,
+									   &rows_processed);
 
 	if (res < 0)
 		elog(ERROR,
@@ -756,7 +776,7 @@ delete_materializations(MaterializationContext *context)
 			 NameStr(*context->materialization_table.schema),
 			 NameStr(*context->materialization_table.name));
 
-	return SPI_processed;
+	return rows_processed;
 }
 
 static uint64
@@ -767,6 +787,7 @@ insert_materializations(MaterializationContext *context)
 	Oid types[] = { context->materialization_range.type, context->materialization_range.type };
 	Datum values[] = { context->materialization_range.start, context->materialization_range.end };
 	char nulls[] = { false, false };
+	uint64 rows_processed;
 
 	set_materialization_plan_argtypes(PLAN_TYPE_INSERT, types);
 
@@ -781,7 +802,11 @@ insert_materializations(MaterializationContext *context)
 					 context->chunk_condition);
 
 	elog(DEBUG2, "%s: %s", __func__, command->data);
-	res = execute_materialization_plan(PLAN_TYPE_INSERT, command->data, values, nulls);
+	res = execute_materialization_plan(PLAN_TYPE_INSERT,
+									   command->data,
+									   values,
+									   nulls,
+									   &rows_processed);
 
 	if (res < 0)
 		elog(ERROR,
@@ -795,5 +820,5 @@ insert_materializations(MaterializationContext *context)
 			 NameStr(*context->materialization_table.schema),
 			 NameStr(*context->materialization_table.name));
 
-	return SPI_processed;
+	return rows_processed;
 }
