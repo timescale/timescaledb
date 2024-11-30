@@ -62,8 +62,6 @@ typedef struct MaterializationPlan
 {
 	const char *query;
 	SPIPlanPtr plan;
-	Oid *argtypes;
-	int nargs;
 	bool read_only;
 } MaterializationPlan;
 
@@ -71,21 +69,15 @@ static MaterializationPlan _materialization_plans[_MAX_MATERIALIZATION_PLAN_TYPE
 	[PLAN_TYPE_INSERT] = { .query = "INSERT INTO %s.%s SELECT * FROM %s.%s AS I "
 									"WHERE I.%s >= $1 AND I.%s < $2 %s;",
 						   .plan = NULL,
-						   .nargs = 2,
-						   .argtypes = NULL,
 						   .read_only = false },
 	[PLAN_TYPE_DELETE] = { .query = "DELETE FROM %s.%s AS D "
 									"WHERE D.%s >= $1 AND D.%s < $2 %s;",
 						   .plan = NULL,
-						   .nargs = 2,
-						   .argtypes = NULL,
 						   .read_only = false },
 	[PLAN_TYPE_EXISTS] = { .query = "SELECT 1 FROM %s.%s AS M "
 									"WHERE M.%s >= $1 AND M.%s < $2 "
 									"LIMIT 1;",
 						   .plan = NULL,
-						   .nargs = 2,
-						   .argtypes = NULL,
 						   .read_only = true },
 	[PLAN_TYPE_MERGE] = { .query = "WITH partial AS ( "
 								   "  SELECT * "
@@ -98,8 +90,6 @@ static MaterializationPlan _materialization_plans[_MAX_MATERIALIZATION_PLAN_TYPE
 								   "  WHEN NOT MATCHED THEN "
 								   "    INSERT (%s) VALUES (%s) ",
 						  .plan = NULL,
-						  .nargs = 2,
-						  .argtypes = NULL,
 						  .read_only = false },
 	[PLAN_TYPE_MERGE_DELETE] = { .query = "DELETE "
 										  "FROM %s.%s M "
@@ -108,19 +98,8 @@ static MaterializationPlan _materialization_plans[_MAX_MATERIALIZATION_PLAN_TYPE
 										  " SELECT FROM %s.%s P "
 										  " WHERE %s AND P.%s >= $1 AND P.%s < $2) ",
 								 .plan = NULL,
-								 .nargs = 2,
-								 .argtypes = NULL,
 								 .read_only = false },
 };
-
-static MaterializationPlan *get_materialization_plan(MaterializationPlanType plan_type);
-static MaterializationPlan *create_materialization_plan(MaterializationPlanType plan_type,
-														const char *query);
-static void set_materialization_plan_argtypes(MaterializationPlanType plan_type, Oid *argtypes);
-static int execute_materialization_plan(MaterializationPlanType plan_type, const char *query,
-										Datum *values, const char *nulls, uint64 *rows_processed);
-static void free_materialization_plan(MaterializationPlanType plan_type);
-static void free_all_materialization_plans();
 
 typedef struct MaterializationContext
 {
@@ -132,6 +111,16 @@ typedef struct MaterializationContext
 	TimeRange materialization_range;
 	char *chunk_condition;
 } MaterializationContext;
+
+static MaterializationPlan *get_materialization_plan(MaterializationPlanType plan_type);
+static char *create_materialization_plan_query(MaterializationContext *context,
+											   MaterializationPlanType plan_type);
+static MaterializationPlan *create_materialization_plan(MaterializationContext *context,
+														MaterializationPlanType plan_type);
+static int execute_materialization_plan(MaterializationContext *context,
+										MaterializationPlanType plan_type, uint64 *rows_processed);
+static void free_materialization_plan(MaterializationPlanType plan_type);
+static void free_all_materialization_plans();
 
 static void update_watermark(MaterializationContext *context);
 static void update_materializations(MaterializationContext *context);
@@ -232,15 +221,154 @@ get_materialization_plan(MaterializationPlanType plan_type)
 	return &_materialization_plans[plan_type];
 }
 
+static char *
+create_materialization_plan_query(MaterializationContext *context,
+								  MaterializationPlanType plan_type)
+{
+	StringInfo query = makeStringInfo();
+
+	switch (plan_type)
+	{
+		/* Create INSERT query statement */
+		case PLAN_TYPE_INSERT:
+			appendStringInfo(query,
+							 get_materialization_plan(PLAN_TYPE_INSERT)->query,
+							 quote_identifier(NameStr(*context->materialization_table.schema)),
+							 quote_identifier(NameStr(*context->materialization_table.name)),
+							 quote_identifier(NameStr(*context->partial_view.schema)),
+							 quote_identifier(NameStr(*context->partial_view.name)),
+							 quote_identifier(NameStr(*context->time_column_name)),
+							 quote_identifier(NameStr(*context->time_column_name)),
+							 context->chunk_condition);
+			break;
+
+		/* Create DELETE query statement */
+		case PLAN_TYPE_DELETE:
+			appendStringInfo(query,
+							 get_materialization_plan(PLAN_TYPE_DELETE)->query,
+							 quote_identifier(NameStr(*context->materialization_table.schema)),
+							 quote_identifier(NameStr(*context->materialization_table.name)),
+							 quote_identifier(NameStr(*context->time_column_name)),
+							 quote_identifier(NameStr(*context->time_column_name)),
+							 context->chunk_condition);
+
+			break;
+
+		/* Create SELECT EXISTS query statement */
+		case PLAN_TYPE_EXISTS:
+			appendStringInfo(query,
+							 get_materialization_plan(PLAN_TYPE_EXISTS)->query,
+							 quote_identifier(NameStr(*context->materialization_table.schema)),
+							 quote_identifier(NameStr(*context->materialization_table.name)),
+							 quote_identifier(NameStr(*context->time_column_name)),
+							 quote_identifier(NameStr(*context->time_column_name)));
+			break;
+
+		/* Create MERGE query statement */
+		case PLAN_TYPE_MERGE:
+		{
+			List *grp_colnames =
+				cagg_find_groupingcols((ContinuousAgg *) context->cagg, context->mat_ht);
+			List *agg_colnames =
+				cagg_find_aggref_and_var_cols((ContinuousAgg *) context->cagg, context->mat_ht);
+			List *all_columns = NIL;
+
+			/* Concat both lists into a single one*/
+			all_columns = list_concat(all_columns, grp_colnames);
+			all_columns = list_concat(all_columns, agg_colnames);
+
+			StringInfo merge_update = makeStringInfo();
+			char *merge_update_clause = build_merge_update_clause(all_columns);
+
+			/* It make no sense but is possible to create a cagg only with time bucket (without
+			 * aggregate functions) */
+			if (merge_update_clause != NULL)
+			{
+				appendStringInfo(merge_update,
+								 "  WHEN MATCHED AND ROW(M.*) IS DISTINCT FROM ROW(P.*) THEN "
+								 "    UPDATE SET %s ",
+								 merge_update_clause);
+			}
+
+			/* MERGE statement to UPDATE affected buckets and INSERT new ones */
+			appendStringInfo(query,
+							 get_materialization_plan(PLAN_TYPE_MERGE)->query,
+
+							 /* partial VIEW */
+							 quote_identifier(NameStr(*context->partial_view.schema)),
+							 quote_identifier(NameStr(*context->partial_view.name)),
+
+							 /* partial WHERE */
+							 quote_identifier(NameStr(*context->time_column_name)),
+							 quote_identifier(NameStr(*context->time_column_name)),
+
+							 /* materialization hypertable */
+							 quote_identifier(NameStr(*context->materialization_table.schema)),
+							 quote_identifier(NameStr(*context->materialization_table.name)),
+
+							 /* MERGE JOIN condition */
+							 build_merge_join_clause(grp_colnames),
+
+							 /* extra MERGE JOIN condition with primary dimension */
+							 quote_identifier(NameStr(*context->time_column_name)),
+							 quote_identifier(NameStr(*context->time_column_name)),
+
+							 /* UPDATE */
+							 merge_update->data,
+
+							 /* INSERT */
+							 build_merge_insert_columns(all_columns, ", ", NULL),
+							 build_merge_insert_columns(all_columns, ", ", "P."));
+			break;
+		}
+		/* Create DELETE after MERGE query statement */
+		case PLAN_TYPE_MERGE_DELETE:
+		{
+			List *grp_colnames =
+				cagg_find_groupingcols((ContinuousAgg *) context->cagg, context->mat_ht);
+
+			appendStringInfo(query,
+							 get_materialization_plan(PLAN_TYPE_MERGE_DELETE)->query,
+
+							 /* materialization hypertable */
+							 quote_identifier(NameStr(*context->materialization_table.schema)),
+							 quote_identifier(NameStr(*context->materialization_table.name)),
+
+							 /* materialization hypertable WHERE */
+							 quote_identifier(NameStr(*context->time_column_name)),
+							 quote_identifier(NameStr(*context->time_column_name)),
+
+							 /* partial VIEW */
+							 quote_identifier(NameStr(*context->partial_view.schema)),
+							 quote_identifier(NameStr(*context->partial_view.name)),
+
+							 /* MERGE JOIN condition */
+							 build_merge_join_clause(grp_colnames),
+
+							 /* partial WHERE */
+							 quote_identifier(NameStr(*context->time_column_name)),
+							 quote_identifier(NameStr(*context->time_column_name)));
+			break;
+		}
+		default:
+			pg_unreachable();
+			break;
+	}
+
+	elog(DEBUG2, "%pS: %s", __builtin_return_address(0), query->data);
+	return query->data;
+}
+
 static MaterializationPlan *
-create_materialization_plan(MaterializationPlanType plan_type, const char *query)
+create_materialization_plan(MaterializationContext *context, MaterializationPlanType plan_type)
 {
 	MaterializationPlan *materialization = get_materialization_plan(plan_type);
+	char *query = create_materialization_plan_query(context, plan_type);
+	Oid types[] = { context->materialization_range.type, context->materialization_range.type };
 
 	if (materialization->plan == NULL)
 	{
-		materialization->plan =
-			SPI_prepare(query, materialization->nargs, materialization->argtypes);
+		materialization->plan = SPI_prepare(query, 2, types);
 		if (materialization->plan == NULL)
 			elog(ERROR, "%s: SPI_prepare failed: %s", __func__, query);
 
@@ -250,22 +378,13 @@ create_materialization_plan(MaterializationPlanType plan_type, const char *query
 	return materialization;
 }
 
-static void
-set_materialization_plan_argtypes(MaterializationPlanType plan_type, Oid *argtypes)
-{
-	MaterializationPlan *materialization = get_materialization_plan(plan_type);
-
-	if (materialization->plan == NULL)
-	{
-		materialization->argtypes = argtypes;
-	}
-}
-
 static int
-execute_materialization_plan(MaterializationPlanType plan_type, const char *query, Datum *values,
-							 const char *nulls, uint64 *rows_processed)
+execute_materialization_plan(MaterializationContext *context, MaterializationPlanType plan_type,
+							 uint64 *rows_processed)
 {
-	MaterializationPlan *materialization = create_materialization_plan(plan_type, query);
+	MaterializationPlan *materialization = create_materialization_plan(context, plan_type);
+	Datum values[] = { context->materialization_range.start, context->materialization_range.end };
+	char nulls[] = { false, false };
 
 	int res = SPI_execute_plan(materialization->plan, values, nulls, materialization->read_only, 0);
 
@@ -285,7 +404,6 @@ free_materialization_plan(MaterializationPlanType plan_type)
 	{
 		SPI_freeplan(materialization->plan);
 		materialization->plan = NULL;
-		materialization->argtypes = NULL;
 	}
 }
 
@@ -562,27 +680,9 @@ static bool
 exists_materializations(MaterializationContext *context)
 {
 	int res;
-	StringInfo command = makeStringInfo();
-	Oid types[] = { context->materialization_range.type, context->materialization_range.type };
-	Datum values[] = { context->materialization_range.start, context->materialization_range.end };
-	char nulls[] = { false, false };
 	uint64 rows_processed;
 
-	set_materialization_plan_argtypes(PLAN_TYPE_EXISTS, types);
-
-	appendStringInfo(command,
-					 get_materialization_plan(PLAN_TYPE_EXISTS)->query,
-					 quote_identifier(NameStr(*context->materialization_table.schema)),
-					 quote_identifier(NameStr(*context->materialization_table.name)),
-					 quote_identifier(NameStr(*context->time_column_name)),
-					 quote_identifier(NameStr(*context->time_column_name)));
-
-	elog(DEBUG2, "%s", command->data);
-	res = execute_materialization_plan(PLAN_TYPE_EXISTS,
-									   command->data,
-									   values,
-									   nulls,
-									   &rows_processed);
+	res = execute_materialization_plan(context, PLAN_TYPE_EXISTS, &rows_processed);
 
 	if (res < 0)
 		elog(ERROR,
@@ -606,72 +706,10 @@ merge_materializations(MaterializationContext *context)
 		return insert_materializations(context);
 	}
 
-	StringInfo command = makeStringInfo();
 	int res;
-	Oid types[] = { context->materialization_range.type, context->materialization_range.type };
-	Datum values[] = { context->materialization_range.start, context->materialization_range.end };
-	char nulls[] = { false, false };
-	List *grp_colnames = cagg_find_groupingcols((ContinuousAgg *) context->cagg, context->mat_ht);
-	List *agg_colnames =
-		cagg_find_aggref_and_var_cols((ContinuousAgg *) context->cagg, context->mat_ht);
-	List *all_columns = NIL;
 	uint64 rows_processed = 0, all_processed = 0;
 
-	/* Concat both lists into a single one*/
-	all_columns = list_concat(all_columns, grp_colnames);
-	all_columns = list_concat(all_columns, agg_colnames);
-
-	StringInfo merge_update = makeStringInfo();
-	char *merge_update_clause = build_merge_update_clause(all_columns);
-
-	/* It make no sense but is possible to create a cagg only with time bucket (without aggregate
-	 * functions) */
-	if (merge_update_clause != NULL)
-	{
-		appendStringInfo(merge_update,
-						 "  WHEN MATCHED AND ROW(M.*) IS DISTINCT FROM ROW(P.*) THEN "
-						 "    UPDATE SET %s ",
-						 merge_update_clause);
-	}
-
-	set_materialization_plan_argtypes(PLAN_TYPE_MERGE, types);
-
-	/* MERGE statement to UPDATE affected buckets and INSERT new ones */
-	appendStringInfo(command,
-					 get_materialization_plan(PLAN_TYPE_MERGE)->query,
-
-					 /* partial VIEW */
-					 quote_identifier(NameStr(*context->partial_view.schema)),
-					 quote_identifier(NameStr(*context->partial_view.name)),
-
-					 /* partial WHERE */
-					 quote_identifier(NameStr(*context->time_column_name)),
-					 quote_identifier(NameStr(*context->time_column_name)),
-
-					 /* materialization hypertable */
-					 quote_identifier(NameStr(*context->materialization_table.schema)),
-					 quote_identifier(NameStr(*context->materialization_table.name)),
-
-					 /* MERGE JOIN condition */
-					 build_merge_join_clause(grp_colnames),
-
-					 /* extra MERGE JOIN condition with primary dimension */
-					 quote_identifier(NameStr(*context->time_column_name)),
-					 quote_identifier(NameStr(*context->time_column_name)),
-
-					 /* UPDATE */
-					 merge_update->data,
-
-					 /* INSERT */
-					 build_merge_insert_columns(all_columns, ", ", NULL),
-					 build_merge_insert_columns(all_columns, ", ", "P."));
-
-	elog(DEBUG2, "%s: %s", __func__, command->data);
-	res = execute_materialization_plan(PLAN_TYPE_MERGE,
-									   command->data,
-									   values,
-									   nulls,
-									   &rows_processed);
+	res = execute_materialization_plan(context, PLAN_TYPE_MERGE, &rows_processed);
 
 	if (res < 0)
 		elog(ERROR,
@@ -687,39 +725,9 @@ merge_materializations(MaterializationContext *context)
 
 	all_processed += rows_processed;
 
-	set_materialization_plan_argtypes(PLAN_TYPE_MERGE_DELETE, types);
-
 	/* DELETE buckets from the target materialization hypertable when not exists in the source
 	 * hypertable or continuous aggregate (in case of hierarchical) */
-	resetStringInfo(command);
-	appendStringInfo(command,
-					 get_materialization_plan(PLAN_TYPE_MERGE_DELETE)->query,
-
-					 /* materialization hypertable */
-					 quote_identifier(NameStr(*context->materialization_table.schema)),
-					 quote_identifier(NameStr(*context->materialization_table.name)),
-
-					 /* materialization hypertable WHERE */
-					 quote_identifier(NameStr(*context->time_column_name)),
-					 quote_identifier(NameStr(*context->time_column_name)),
-
-					 /* partial VIEW */
-					 quote_identifier(NameStr(*context->partial_view.schema)),
-					 quote_identifier(NameStr(*context->partial_view.name)),
-
-					 /* MERGE JOIN condition */
-					 build_merge_join_clause(grp_colnames),
-
-					 /* partial WHERE */
-					 quote_identifier(NameStr(*context->time_column_name)),
-					 quote_identifier(NameStr(*context->time_column_name)));
-
-	elog(DEBUG2, "%s: %s", __func__, command->data);
-	res = execute_materialization_plan(PLAN_TYPE_MERGE_DELETE,
-									   command->data,
-									   values,
-									   nulls,
-									   &rows_processed);
+	res = execute_materialization_plan(context, PLAN_TYPE_MERGE_DELETE, &rows_processed);
 
 	if (res < 0)
 		elog(ERROR,
@@ -742,28 +750,9 @@ static uint64
 delete_materializations(MaterializationContext *context)
 {
 	int res;
-	StringInfo command = makeStringInfo();
-	Oid types[] = { context->materialization_range.type, context->materialization_range.type };
-	Datum values[] = { context->materialization_range.start, context->materialization_range.end };
-	char nulls[] = { false, false };
 	uint64 rows_processed;
 
-	set_materialization_plan_argtypes(PLAN_TYPE_DELETE, types);
-
-	appendStringInfo(command,
-					 get_materialization_plan(PLAN_TYPE_DELETE)->query,
-					 quote_identifier(NameStr(*context->materialization_table.schema)),
-					 quote_identifier(NameStr(*context->materialization_table.name)),
-					 quote_identifier(NameStr(*context->time_column_name)),
-					 quote_identifier(NameStr(*context->time_column_name)),
-					 context->chunk_condition);
-
-	elog(DEBUG2, "%s: %s", __func__, command->data);
-	res = execute_materialization_plan(PLAN_TYPE_DELETE,
-									   command->data,
-									   values,
-									   nulls,
-									   &rows_processed);
+	res = execute_materialization_plan(context, PLAN_TYPE_DELETE, &rows_processed);
 
 	if (res < 0)
 		elog(ERROR,
@@ -784,30 +773,9 @@ static uint64
 insert_materializations(MaterializationContext *context)
 {
 	int res;
-	StringInfo command = makeStringInfo();
-	Oid types[] = { context->materialization_range.type, context->materialization_range.type };
-	Datum values[] = { context->materialization_range.start, context->materialization_range.end };
-	char nulls[] = { false, false };
 	uint64 rows_processed;
 
-	set_materialization_plan_argtypes(PLAN_TYPE_INSERT, types);
-
-	appendStringInfo(command,
-					 get_materialization_plan(PLAN_TYPE_INSERT)->query,
-					 quote_identifier(NameStr(*context->materialization_table.schema)),
-					 quote_identifier(NameStr(*context->materialization_table.name)),
-					 quote_identifier(NameStr(*context->partial_view.schema)),
-					 quote_identifier(NameStr(*context->partial_view.name)),
-					 quote_identifier(NameStr(*context->time_column_name)),
-					 quote_identifier(NameStr(*context->time_column_name)),
-					 context->chunk_condition);
-
-	elog(DEBUG2, "%s: %s", __func__, command->data);
-	res = execute_materialization_plan(PLAN_TYPE_INSERT,
-									   command->data,
-									   values,
-									   nulls,
-									   &rows_processed);
+	res = execute_materialization_plan(context, PLAN_TYPE_INSERT, &rows_processed);
 
 	if (res < 0)
 		elog(ERROR,
