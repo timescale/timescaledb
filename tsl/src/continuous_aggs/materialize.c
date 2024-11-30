@@ -285,6 +285,7 @@ free_materialization_plan(MaterializationPlanType plan_type)
 	{
 		SPI_freeplan(materialization->plan);
 		materialization->plan = NULL;
+		materialization->argtypes = NULL;
 	}
 }
 
