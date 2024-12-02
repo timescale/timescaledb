@@ -7,6 +7,10 @@
 CREATE OR REPLACE FUNCTION mix(x anyelement) RETURNS float8 AS $$
     SELECT hashfloat8(x::float8) / pow(2, 32)
 $$ LANGUAGE SQL;
+-- non-vectorizable equality operator
+create operator === (function = 'int4eq', rightarg = int4, leftarg = int4);
+-- an abs() function that is stable not immutable
+create function stable_abs(x int4) returns int4 as 'int4abs' language internal stable;
 
 \set CHUNKS 2::int
 \set CHUNK_ROWS 100000::int
@@ -58,8 +62,7 @@ vacuum freeze analyze aggfilter;
 
 
 set timescaledb.debug_require_vector_agg = 'require';
----- Uncomment to generate reference. Note that there are minor discrepancies
----- on float4 due to different numeric stability in our and PG implementations.
+---- Uncomment to generate reference.
 --set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
 
 select
@@ -105,3 +108,15 @@ where
     and (variable != '*' or function = 'count')
 order by explain, condition.n, variable, function, grouping.n, agg_filter.n
 \gexec
+
+reset timescaledb.debug_require_vector_agg;
+
+-- FILTER that is not vectorizable
+set timescaledb.debug_require_vector_agg = 'forbid';
+select count(*) filter (where cint2 === 0) from aggfilter;
+-- FILTER with stable function
+set timescaledb.debug_require_vector_agg = 'require';
+select count(*) filter (where cint2 = stable_abs(0)) from aggfilter;
+
+reset timescaledb.debug_require_vector_agg;
+

@@ -4452,6 +4452,12 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("triggers are not supported on continuous aggregate")));
 
+		if (stmt->transitionRels)
+			if (ts_chunk_get_by_relid(relid, false) != NULL)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg(
+							 "trigger with transition tables not supported on hypertable chunks")));
 		return DDL_CONTINUE;
 	}
 
