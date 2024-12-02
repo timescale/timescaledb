@@ -11,6 +11,7 @@
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <optimizer/optimizer.h>
 
 #include "nodes/vector_agg/exec.h"
 
@@ -67,6 +68,17 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 
 	DecompressChunkState *decompress_state =
 		(DecompressChunkState *) linitial(vector_agg_state->custom.custom_ps);
+
+	/*
+	 * Set up the helper structures used to evaluate stable expressions in
+	 * vectorized FILTER clauses.
+	 */
+	PlannerGlobal glob = {
+		.boundParams = node->ss.ps.state->es_param_list_info,
+	};
+	PlannerInfo root = {
+		.glob = &glob,
+	};
 
 	/*
 	 * The aggregated targetlist with Aggrefs is in the custom scan targetlist
@@ -153,7 +165,8 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 
 			if (aggref->aggfilter != NULL)
 			{
-				def->filter_clauses = list_make1(aggref->aggfilter);
+				Node *constified = estimate_expression_value(&root, (Node *) aggref->aggfilter);
+				def->filter_clauses = list_make1(constified);
 			}
 		}
 		else
