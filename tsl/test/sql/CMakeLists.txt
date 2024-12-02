@@ -142,7 +142,6 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
   list(
     APPEND
     TEST_FILES
-    merge_compress.sql
     cagg_refresh_using_merge.sql
     hypercore_columnar.sql
     hypercore_copy.sql
@@ -150,6 +149,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     hypercore_cursor.sql
     hypercore_ddl.sql
     hypercore_delete.sql
+    hypercore_dump_restore.sql
     hypercore_index_btree.sql
     hypercore_index_hash.sql
     hypercore_insert.sql
@@ -158,9 +158,11 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     hypercore_policy.sql
     hypercore_scans.sql
     hypercore_stats.sql
+    hypercore_trigger.sql
     hypercore_types.sql
     hypercore_update.sql
     hypercore_vacuum.sql
+    merge_compress.sql
     hypercore_vacuum_full.sql)
 endif()
 
