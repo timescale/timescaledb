@@ -86,20 +86,23 @@ ts_with_clauses_parse(const List *def_elems, const WithClauseDefinition *args, S
 
 		for (i = 0; i < nargs; i++)
 		{
-			if (pg_strcasecmp(def->defname, args[i].arg_name) == 0)
+			for (int j = 0; args[i].arg_names[j] != NULL; ++j)
 			{
-				argument_recognized = true;
+				if (pg_strcasecmp(def->defname, args[i].arg_names[j]) == 0)
+				{
+					argument_recognized = true;
 
-				if (!results[i].is_default)
-					ereport(ERROR,
-							(errcode(ERRCODE_AMBIGUOUS_PARAMETER),
-							 errmsg("duplicate parameter \"%s.%s\"",
-									def->defnamespace,
-									def->defname)));
+					if (!results[i].is_default)
+						ereport(ERROR,
+								(errcode(ERRCODE_AMBIGUOUS_PARAMETER),
+								 errmsg("duplicate parameter \"%s.%s\"",
+										def->defnamespace,
+										def->defname)));
 
-				results[i].parsed = parse_arg(args[i], def);
-				results[i].is_default = false;
-				break;
+					results[i].parsed = parse_arg(args[i], def);
+					results[i].is_default = false;
+					break;
+				}
 			}
 		}
 

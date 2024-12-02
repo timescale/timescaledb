@@ -44,3 +44,16 @@ LANGUAGE C VOLATILE;
 DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression_execute(job_id INTEGER, htid INTEGER, lag ANYELEMENT, maxchunks INTEGER, verbose_log BOOLEAN, recompress_enabled  BOOLEAN, use_creation_time BOOLEAN, useam BOOLEAN);
 
 DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression(job_id INTEGER, config JSONB);
+DROP PROCEDURE IF EXISTS @extschema@.convert_to_columnstore(REGCLASS, BOOLEAN, BOOLEAN, BOOLEAN);
+DROP PROCEDURE IF EXISTS @extschema@.convert_to_rowstore(REGCLASS, BOOLEAN);
+DROP PROCEDURE IF EXISTS @extschema@.add_columnstore_policy(REGCLASS, "any", BOOL, INTERVAL, TIMESTAMPTZ, TEXT, INTERVAL, BOOL);
+DROP PROCEDURE IF EXISTS @extschema@.remove_columnstore_policy(REGCLASS, BOOL);
+DROP FUNCTION IF EXISTS @extschema@.hypertable_columnstore_stats(REGCLASS);
+DROP FUNCTION IF EXISTS @extschema@.chunk_columnstore_stats(REGCLASS);
+
+ALTER EXTENSION timescaledb DROP VIEW timescaledb_information.hypertable_columnstore_settings;
+ALTER EXTENSION timescaledb DROP VIEW timescaledb_information.chunk_columnstore_settings;
+
+DROP VIEW timescaledb_information.hypertable_columnstore_settings;
+DROP VIEW timescaledb_information.chunk_columnstore_settings;
+
