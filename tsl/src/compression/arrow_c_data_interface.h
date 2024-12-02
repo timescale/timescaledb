@@ -192,7 +192,7 @@ arrow_combine_validity(size_t num_words, uint64 *restrict storage, const uint64 
 {
 	/*
 	 * Any and all of the filters can be null. For simplicity, move the non-null
-	 * filters to the front.
+	 * filters to the leading positions.
 	 */
 	const uint64 *tmp;
 #define SWAP(X, Y)                                                                                 \
@@ -200,17 +200,28 @@ arrow_combine_validity(size_t num_words, uint64 *restrict storage, const uint64 
 	(X) = (Y);                                                                                     \
 	(Y) = tmp;
 
-	if (filter2 == NULL)
-	{
-		SWAP(filter2, filter3);
-	}
-
 	if (filter1 == NULL)
 	{
-		SWAP(filter1, filter2);
+		/*
+		 * We have at least one NULL that goes to the last position.
+		 */
+		SWAP(filter1, filter3);
 
+		if (filter1 == NULL)
+		{
+			/*
+			 * We have another NULL that goes to the second position.
+			 */
+			SWAP(filter1, filter2);
+		}
+	}
+	else
+	{
 		if (filter2 == NULL)
 		{
+			/*
+			 * We have at least one NULL that goes to the last position.
+			 */
 			SWAP(filter2, filter3);
 		}
 	}
