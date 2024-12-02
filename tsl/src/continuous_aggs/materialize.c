@@ -355,7 +355,7 @@ create_materialization_plan_query(MaterializationContext *context,
 			break;
 	}
 
-	elog(DEBUG2, "%pS: %s", __builtin_return_address(0), query->data);
+	elog(DEBUG2, "Materialization Plan Type (%d): %s", plan_type, query->data);
 	return query->data;
 }
 
