@@ -15,6 +15,10 @@ typedef struct DecompressBatchState DecompressBatchState;
 
 typedef struct TupleTableSlot TupleTableSlot;
 
+/*
+ * The hashing strategy manages the details of how the grouping keys are stored
+ * in a hash table.
+ */
 typedef struct HashingStrategy
 {
 	char *explain_name;
@@ -38,12 +42,10 @@ typedef struct HashingStrategy
 	 * This is stored separately from hash table keys, because they might not
 	 * have the full column values, and also storing them contiguously here
 	 * leads to better memory access patterns when emitting the results.
-	 * The details of the key storage are managed by the hashing strategy. The
-	 * by-reference keys can use a separate memory context for dense storage.
+	 * The details of the key storage are managed by the hashing strategy.
 	 */
 	Datum *restrict output_keys;
 	uint64 num_allocated_output_keys;
-	MemoryContext key_body_mctx;
 
 	/*
 	 * In single-column grouping, we store the null key outside of the hash
@@ -52,11 +54,6 @@ typedef struct HashingStrategy
 	 * to reduce the hash table size.
 	 */
 	uint32 null_key_index;
-
-	/*
-	 * UMASH fingerprinting parameters.
-	 */
-	struct umash_params *umash_params;
 } HashingStrategy;
 
 void hash_strategy_output_key_alloc(GroupingPolicyHash *policy, DecompressBatchState *batch_state);

@@ -157,92 +157,6 @@ FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int e
 	}
 }
 
-/*
- * For some configurations of hashing, we want to generate dedicated
- * implementations that will be more efficient. For example, for 2-byte keys
- * when all the batch and key rows are valid.
- */
-#define APPLY_FOR_BATCH_FILTER(X, NAME, COND)                                                      \
-	X(NAME##_nofilter, (COND) && (params.batch_filter == NULL))                                    \
-	X(NAME##_filter, (COND) && (params.batch_filter != NULL))
-
-#define APPLY_FOR_NULLABILITY(X, NAME, COND)                                                       \
-	APPLY_FOR_BATCH_FILTER(X, NAME##_notnull, (COND) && params.single_key.buffers[0] == NULL)      \
-	APPLY_FOR_BATCH_FILTER(X, NAME##_nullable, (COND) && params.single_key.buffers[0] != NULL)
-
-#define APPLY_FOR_SCALARS(X, NAME, COND)                                                           \
-	APPLY_FOR_BATCH_FILTER(X,                                                                      \
-						   NAME##_noscalar_notnull,                                                \
-						   (COND) && !params.have_scalar_or_nullable_columns)                      \
-	APPLY_FOR_BATCH_FILTER(X,                                                                      \
-						   NAME##_scalar_or_nullable,                                              \
-						   (COND) && params.have_scalar_or_nullable_columns)
-
-#define APPLY_FOR_TYPE(X, NAME, COND)                                                              \
-	APPLY_FOR_NULLABILITY(X,                                                                       \
-						  NAME##_byval,                                                            \
-						  (COND) &&                                                                \
-							  params.single_key.decompression_type == sizeof(OUTPUT_KEY_TYPE))     \
-	APPLY_FOR_NULLABILITY(X,                                                                       \
-						  NAME##_text,                                                             \
-						  (COND) && params.single_key.decompression_type == DT_ArrowText)          \
-	APPLY_FOR_NULLABILITY(X,                                                                       \
-						  NAME##_dict,                                                             \
-						  (COND) && params.single_key.decompression_type == DT_ArrowTextDict)      \
-	APPLY_FOR_SCALARS(X, NAME##_multi, (COND) && params.single_key.decompression_type == DT_Invalid)
-
-#define APPLY_FOR_SPECIALIZATIONS(X) APPLY_FOR_TYPE(X, index, true)
-
-#define DEFINE(NAME, CONDITION)                                                                    \
-	static pg_noinline void FUNCTION_NAME(                                                         \
-		NAME)(BatchHashingParams params, int start_row, int end_row)                               \
-	{                                                                                              \
-		if (!(CONDITION))                                                                          \
-		{                                                                                          \
-			pg_unreachable();                                                                      \
-		}                                                                                          \
-                                                                                                   \
-		FUNCTION_NAME(fill_offsets_impl)(params, start_row, end_row);                              \
-	}
-
-APPLY_FOR_SPECIALIZATIONS(DEFINE)
-
-#undef DEFINE
-
-static void
-FUNCTION_NAME(dispatch_for_params)(BatchHashingParams params, int start_row, int end_row)
-{
-	if (params.num_grouping_columns == 0)
-	{
-		pg_unreachable();
-	}
-
-	if ((params.num_grouping_columns == 1) != (params.single_key.decompression_type != DT_Invalid))
-	{
-		pg_unreachable();
-	}
-
-#define DISPATCH(NAME, CONDITION)                                                                  \
-	if (CONDITION)                                                                                 \
-	{                                                                                              \
-		FUNCTION_NAME(NAME)(params, start_row, end_row);                                           \
-	}                                                                                              \
-	else
-
-	APPLY_FOR_SPECIALIZATIONS(DISPATCH)
-	{
-		/* Use a generic implementation if no specializations matched. */
-		FUNCTION_NAME(fill_offsets_impl)(params, start_row, end_row);
-	}
-#undef DISPATCH
-}
-
-#undef APPLY_FOR_SPECIALIZATIONS
-
-/*
- * In some special cases we call a more efficient specialization of the grouping
- * function.
- */
 static void
 FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
 							int start_row, int end_row)
@@ -251,16 +165,7 @@ FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *ba
 
 	BatchHashingParams params = build_batch_hashing_params(policy, batch_state);
 
-#ifdef USE_DICT_HASHING
-	if (policy->use_key_index_for_dict)
-	{
-		Assert(params.single_key.decompression_type == DT_ArrowTextDict);
-		single_text_offsets_translate(params, start_row, end_row);
-		return;
-	}
-#endif
-
-	FUNCTION_NAME(dispatch_for_params)(params, start_row, end_row);
+	FUNCTION_NAME(fill_offsets_impl)(params, start_row, end_row);
 }
 
 HashingStrategy FUNCTION_NAME(strategy) = {

@@ -34,8 +34,6 @@
 extern HashingStrategy single_fixed_2_strategy;
 extern HashingStrategy single_fixed_4_strategy;
 extern HashingStrategy single_fixed_8_strategy;
-extern HashingStrategy single_text_strategy;
-extern HashingStrategy serialized_strategy;
 
 static const GroupingPolicy grouping_policy_hash_functions;
 
@@ -85,8 +83,6 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 			Assert(false);
 			break;
 	}
-
-	policy->hashing.key_body_mctx = policy->agg_extra_mctx;
 
 	policy->hashing.init(&policy->hashing, policy);
 
