@@ -30,6 +30,7 @@ begin
 	     insert into saved_rows select n.*, true, tg_op from new_table n;
 	     insert into saved_rows select o.*, false, tg_op from old_table o;
    end case;
+   return null;
 end;
 $$ language plpgsql;
 
@@ -87,8 +88,12 @@ insert into sample(created_at, location_id, device_id, owner_id, temp, humidity)
 -- this case, the trigger will just save away the rows into a separate
 -- table and check that we get the same number of rows with the same
 -- values.
-create trigger save_insert_row_trg before insert on :chunk1 for each row execute function save_row();
-create trigger count_inserts_trg before insert on :chunk1 for each statement execute function count_ops();
+create trigger save_insert_row_trg
+       before insert on :chunk1
+       for each row execute function save_row();
+create trigger count_inserts_trg
+       before insert on :chunk1
+       for each statement execute function count_ops();
 
 insert into :chunk1(created_at, location_id, device_id, owner_id, temp, humidity)
 select created_at, location_id, device_id, owner_id, temp, humidity from sample limit 2;
@@ -106,9 +111,16 @@ select sum(inserts), sum(updates), sum(deletes) from count_stmt;
 
 truncate saved_rows, count_stmt;
 
+drop trigger save_insert_row_trg on :chunk1;
+drop trigger count_inserts_trg on :chunk1;
+
 -- Run update and upsert tests
-create trigger save_update_row_trg before update on :chunk1 for each row execute function save_row();
-create trigger count_update_trg before update on :chunk1 for each statement execute function count_ops();
+create trigger save_update_row_trg
+       before update on :chunk1
+       for each row execute function save_row();
+create trigger count_update_trg
+       before update on :chunk1
+       for each statement execute function count_ops();
 
 update :chunk1 set temp = 9.99 where device_id = 666;
 
@@ -127,39 +139,111 @@ select sum(inserts), sum(updates), sum(deletes) from count_stmt;
 
 truncate saved_rows, count_stmt;
 
+drop trigger save_update_row_trg on :chunk1;
+drop trigger count_update_trg on :chunk1;
+
 -- Run delete tests
-create trigger save_delete_row_trg before delete on :chunk1 for each row execute function save_row();
-create trigger count_delete_trg before delete on :chunk1 for each statement execute function count_ops();
+create trigger save_delete_row_trg
+       before delete on :chunk1
+       for each row execute function save_row();
+create trigger count_delete_trg
+       before delete on :chunk1
+       for each statement execute function count_ops();
 
 delete from :chunk1 where device_id = 666;
 
 select * from saved_rows where kind = 'DELETE';
 select sum(inserts), sum(updates), sum(deletes) from count_stmt;
 
-truncate saved_rows;
+truncate saved_rows, count_stmt;
 
--- TODO(#1084): Transition tables do not work currently for chunks at
--- all. Once this is implemented, we should get values saved in the
--- saved_rows table, so keeping the function around for the time being
--- and right now just to test that we get a proper error.
+drop trigger save_delete_row_trg on :chunk1;
+drop trigger count_delete_trg on :chunk1;
+
+-- Checking that transition tables on triggers is not supported on
+-- individual chunks.
 \set ON_ERROR_STOP 0
-create trigger save_insert_transition_table_trg
+create trigger row_insert_transition_table_trg
        after insert on :chunk1
        referencing new table as new_table
        for each statement execute function save_transition_table();
+create trigger row_update_transition_table_trg
+       after update on :chunk1
+       referencing new table as new_table
+       for each statement execute function save_transition_table();
+create trigger row_delete_transition_table_trg
+       after delete on :chunk1
+       referencing new table as new_table
+       for each statement execute function save_transition_table();
+create trigger row_insert_transition_table_trg
+       after insert on :chunk1
+       referencing new table as new_table
+       for each row execute function save_transition_table();
+create trigger row_update_transition_table_trg
+       after update on :chunk1
+       referencing new table as new_table
+       for each row execute function save_transition_table();
+create trigger row_delete_transition_table_trg
+       after delete on :chunk1
+       referencing new table as new_table
+       for each row execute function save_transition_table();
+\set ON_ERROR_STOP 1
+
+-- Remove duplicates from readings table so that we can run the tests
+-- below.
+delete from readings where created_at in (select created_at from sample);
+
+-- Test transition tables on hypertables using hypercore access method
+create trigger save_insert_transition_table_trg
+       after insert on readings
+       referencing new table as new_table
+       for each statement execute function save_transition_table();
+
+insert into readings(created_at, location_id, device_id, owner_id, temp, humidity)
+select created_at, location_id, device_id, owner_id, temp, humidity from sample
+order by created_at limit 2;
+
+select * from saved_rows;
+
+truncate saved_rows;
+
+copy readings(created_at, location_id, device_id, owner_id, temp, humidity) from stdin with (format csv);
+"2022-06-01 00:01:35",999,666,111,3.14,3.14
+\.
+
+select * from saved_rows;
+
+truncate saved_rows;
 
 create trigger save_update_transition_table_trg
-       after update on :chunk1
+       after update on readings
        referencing new table as new_table old table as old_table
        for each statement execute function save_transition_table();
 
+select * from readings where location_id = 999;
+
+update readings set humidity = 99.99 where location_id = 999;
+
+select * from saved_rows;
+
+truncate saved_rows;
+
 create trigger save_delete_transition_table_trg
-       after delete on :chunk1
+       after delete on readings
        referencing old table as old_table
        for each statement execute function save_transition_table();
-\set ON_ERROR_STOP 1
+
+select * from readings where location_id = 999;
+
+delete from readings where location_id = 999;
+
+select * from saved_rows;
+
+truncate saved_rows;
 
 -- Check truncate trigger
-create trigger notify_truncate after truncate on :chunk1 for each statement execute function notify_action();
+create trigger notify_truncate
+       after truncate on readings
+       for each statement execute function notify_action();
 
-truncate :chunk1;
+truncate readings;
