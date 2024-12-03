@@ -3,6 +3,11 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+
+/*
+ * Key handling function for a single fixed-size grouping key.
+ */
+
 #include "batch_hashing_params.h"
 
 static pg_attribute_always_inline void
@@ -28,6 +33,10 @@ FUNCTION_NAME(get_key)(BatchHashingParams params, int row, void *restrict output
 		pg_unreachable();
 	}
 
+	/*
+	 * For the fixed-size hash grouping, we use the output key as the hash table
+	 * key as well.
+	 */
 	*hash_table_key = *output_key;
 }
 
@@ -48,5 +57,5 @@ static void
 FUNCTION_NAME(emit_key)(GroupingPolicyHash *policy, uint32 current_key,
 						TupleTableSlot *aggregated_slot)
 {
-	return hash_strategy_output_key_single_emit(policy, current_key, aggregated_slot);
+	hash_strategy_output_key_single_emit(policy, current_key, aggregated_slot);
 }
