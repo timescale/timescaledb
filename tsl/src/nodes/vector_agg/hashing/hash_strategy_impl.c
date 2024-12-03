@@ -80,7 +80,7 @@ FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int e
 
 	struct FUNCTION_NAME(hash) *restrict table = hashing->table;
 
-	HASH_TABLE_KEY_TYPE prev_hash_table_key;
+	HASH_TABLE_KEY_TYPE prev_hash_table_key = { 0 };
 	uint32 previous_key_index = 0;
 	for (int row = start_row; row < end_row; row++)
 	{
