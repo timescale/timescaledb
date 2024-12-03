@@ -22,7 +22,6 @@ struct umash_fingerprint_key
 	uint64 rest;
 } pg_attribute_packed();
 
-#define UMASH
 #define HASH_TABLE_KEY_TYPE struct umash_fingerprint_key
 #define KEY_HASH(X) (X.hash)
 #define KEY_EQUAL(a, b) (a.hash == b.hash && a.rest == b.rest)
@@ -35,4 +34,12 @@ umash_fingerprint_get_key(struct umash_fp fp)
 		.rest = fp.hash[1],
 	};
 	return key;
+}
+
+static inline struct umash_params *
+umash_key_hashing_init()
+{
+	struct umash_params *params = palloc0(sizeof(struct umash_params));
+	umash_params_derive(params, 0xabcdef1234567890ull, NULL);
+	return params;
 }

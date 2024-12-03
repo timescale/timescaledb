@@ -102,13 +102,13 @@ typedef struct GroupingPolicyHash
 	/*
 	 * Aggregate function states. Each element is an array of states for the
 	 * respective function from agg_defs. These arrays are indexed by the unique
-	 * grouping key indexes. The state index 0 is invalid, so the corresponding
+	 * grouping key indexes. The key index 0 is invalid, so the corresponding
 	 * states are unused.
 	 * The states of each aggregate function are stored separately and
 	 * contiguously, to achieve better memory locality when updating them.
 	 */
-	void **per_agg_states;
-	uint64 num_agg_state_rows;
+	void **per_agg_per_key_states;
+	uint64 num_allocated_per_key_agg_states;
 
 	/*
 	 * A memory context for aggregate functions to allocate additional data,

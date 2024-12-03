@@ -51,16 +51,18 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 
 	policy->agg_extra_mctx =
 		AllocSetContextCreate(CurrentMemoryContext, "agg extra", ALLOCSET_DEFAULT_SIZES);
-	policy->num_agg_state_rows = TARGET_COMPRESSED_BATCH_SIZE;
+	policy->num_allocated_per_key_agg_states = TARGET_COMPRESSED_BATCH_SIZE;
 
 	policy->num_agg_defs = num_agg_defs;
 	policy->agg_defs = agg_defs;
 
-	policy->per_agg_states = palloc(sizeof(*policy->per_agg_states) * policy->num_agg_defs);
+	policy->per_agg_per_key_states =
+		palloc(sizeof(*policy->per_agg_per_key_states) * policy->num_agg_defs);
 	for (int i = 0; i < policy->num_agg_defs; i++)
 	{
 		const VectorAggDef *agg_def = &policy->agg_defs[i];
-		policy->per_agg_states[i] = palloc(agg_def->func.state_bytes * policy->num_agg_state_rows);
+		policy->per_agg_per_key_states[i] =
+			palloc(agg_def->func.state_bytes * policy->num_allocated_per_key_agg_states);
 	}
 
 	policy->current_batch_grouping_column_values =
@@ -234,7 +236,7 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 	 * have to initialize. State index zero is invalid.
 	 */
 	const uint32 last_initialized_key_index = policy->last_used_key_index;
-	Assert(last_initialized_key_index <= policy->num_agg_state_rows);
+	Assert(last_initialized_key_index <= policy->num_allocated_per_key_agg_states);
 
 	/*
 	 * Match rows to aggregation states using a hash table.
@@ -243,48 +245,56 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 	policy->hashing.fill_offsets(policy, batch_state, start_row, end_row);
 
 	/*
-	 * Process the aggregate function states.
+	 * Process the aggregate function states. We are processing single aggregate
+	 * function for the entire batch to improve the memory locality.
 	 */
-	const uint64 new_aggstate_rows = policy->num_agg_state_rows * 2 + 1;
-	for (int i = 0; i < num_fns; i++)
+	const uint64 new_aggstate_rows = policy->num_allocated_per_key_agg_states * 2 + 1;
+	for (int agg_index = 0; agg_index < num_fns; agg_index++)
 	{
-		const VectorAggDef *agg_def = &policy->agg_defs[i];
+		const VectorAggDef *agg_def = &policy->agg_defs[agg_index];
+		/*
+		 * If we added new keys, initialize the aggregate function states for
+		 * them.
+		 */
 		if (policy->last_used_key_index > last_initialized_key_index)
 		{
-			if (policy->last_used_key_index >= policy->num_agg_state_rows)
+			/*
+			 * If the aggregate function states don't fit into the existing
+			 * storage, reallocate it.
+			 */
+			if (policy->last_used_key_index >= policy->num_allocated_per_key_agg_states)
 			{
-				policy->per_agg_states[i] = repalloc(policy->per_agg_states[i],
-													 new_aggstate_rows * agg_def->func.state_bytes);
+				policy->per_agg_per_key_states[agg_index] =
+					repalloc(policy->per_agg_per_key_states[agg_index],
+							 new_aggstate_rows * agg_def->func.state_bytes);
 			}
 
-			/*
-			 * Initialize the aggregate function states for the newly added keys.
-			 */
 			void *first_uninitialized_state =
 				agg_def->func.state_bytes * (last_initialized_key_index + 1) +
-				(char *) policy->per_agg_states[i];
+				(char *) policy->per_agg_per_key_states[agg_index];
 			agg_def->func.agg_init(first_uninitialized_state,
 								   policy->last_used_key_index - last_initialized_key_index);
 		}
 
 		/*
-		 * Update the aggregate function states.
+		 * Add this batch to the states of this aggregate function.
 		 */
 		compute_single_aggregate(policy,
 								 batch_state,
 								 start_row,
 								 end_row,
 								 agg_def,
-								 policy->per_agg_states[i]);
+								 policy->per_agg_per_key_states[agg_index]);
 	}
 
 	/*
-	 * Record the newly allocated number of rows in case we had to reallocate.
+	 * Record the newly allocated number of aggregate function states in case we
+	 * had to reallocate.
 	 */
-	if (policy->last_used_key_index >= policy->num_agg_state_rows)
+	if (policy->last_used_key_index >= policy->num_allocated_per_key_agg_states)
 	{
-		Assert(new_aggstate_rows > policy->num_agg_state_rows);
-		policy->num_agg_state_rows = new_aggstate_rows;
+		Assert(new_aggstate_rows > policy->num_allocated_per_key_agg_states);
+		policy->num_allocated_per_key_agg_states = new_aggstate_rows;
 	}
 }
 
@@ -481,7 +491,7 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 	for (int i = 0; i < naggs; i++)
 	{
 		const VectorAggDef *agg_def = &policy->agg_defs[i];
-		void *agg_states = policy->per_agg_states[i];
+		void *agg_states = policy->per_agg_per_key_states[i];
 		void *agg_state = current_key * agg_def->func.state_bytes + (char *) agg_states;
 		agg_def->func.agg_emit(agg_state,
 							   &aggregated_slot->tts_values[agg_def->output_offset],

@@ -6,8 +6,6 @@
 
 #include "batch_hashing_params.h"
 
-#include "import/umash.h"
-
 /*
  * The hash table maps the value of the grouping key to its unique index.
  * We don't store any extra information here, because we're accessing the memory
@@ -22,7 +20,6 @@ typedef struct FUNCTION_NAME(entry)
 	HASH_TABLE_KEY_TYPE hash_table_key;
 } FUNCTION_NAME(entry);
 
-// #define SH_FILLFACTOR (0.5)
 #define SH_PREFIX KEY_VARIANT
 #define SH_ELEMENT_TYPE FUNCTION_NAME(entry)
 #define SH_KEY_TYPE HASH_TABLE_KEY_TYPE
@@ -33,10 +30,6 @@ typedef struct FUNCTION_NAME(entry)
 #define SH_DECLARE
 #define SH_DEFINE
 #define SH_ENTRY_EMPTY(entry) ((entry)->key_index == 0)
-#ifdef STORE_HASH
-#define SH_GET_HASH(tb, entry) entry->hash
-#define SH_STORE_HASH
-#endif
 #include "import/ts_simplehash.h"
 
 struct FUNCTION_NAME(hash);
@@ -49,25 +42,32 @@ FUNCTION_NAME(get_size_bytes)(HashingStrategy *hashing)
 }
 
 static void
-FUNCTION_NAME(init)(HashingStrategy *hashing, GroupingPolicyHash *policy)
+FUNCTION_NAME(hash_strategy_init)(HashingStrategy *hashing, GroupingPolicyHash *policy)
 {
-	hashing->table = FUNCTION_NAME(create)(CurrentMemoryContext, policy->num_agg_state_rows, NULL);
-#ifdef UMASH
-	hashing->umash_params = palloc0(sizeof(struct umash_params));
-	umash_params_derive(hashing->umash_params, 0xabcdef1234567890ull, NULL);
-#endif
+	hashing->table =
+		FUNCTION_NAME(create)(CurrentMemoryContext, policy->num_allocated_per_key_agg_states, NULL);
+
+	FUNCTION_NAME(key_hashing_init)(hashing);
 }
 
 static void
-FUNCTION_NAME(reset_strategy)(HashingStrategy *hashing)
+FUNCTION_NAME(hash_strategy_reset)(HashingStrategy *hashing)
 {
 	struct FUNCTION_NAME(hash) *table = (struct FUNCTION_NAME(hash) *) hashing->table;
 	FUNCTION_NAME(reset)(table);
 	hashing->null_key_index = 0;
 }
 
+static void
+FUNCTION_NAME(hash_strategy_prepare_for_batch)(GroupingPolicyHash *policy,
+											   DecompressBatchState *batch_state)
+{
+	hash_strategy_output_key_alloc(policy, batch_state);
+	FUNCTION_NAME(key_hashing_prepare_for_batch)(policy, batch_state);
+}
+
 /*
- * Fill the unique key indexes for all rows using a hash table.
+ * Fill the unique key indexes for all rows of the batch, using a hash table.
  */
 static pg_attribute_always_inline void
 FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int end_row)
@@ -90,10 +90,15 @@ FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int e
 			continue;
 		}
 
+		/*
+		 * Get the key for the given row. For some hashing strategies, the key
+		 * that is used for the hash table is different from actual values of
+		 * the grouping columns, termed "output key" here.
+		 */
 		bool key_valid = false;
 		OUTPUT_KEY_TYPE output_key = { 0 };
 		HASH_TABLE_KEY_TYPE hash_table_key = { 0 };
-		FUNCTION_NAME(get_key)(params, row, &output_key, &hash_table_key, &key_valid);
+		FUNCTION_NAME(key_hashing_get_key)(params, row, &output_key, &hash_table_key, &key_valid);
 
 		if (unlikely(!key_valid))
 		{
@@ -118,7 +123,9 @@ FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int e
 			 * for that case.
 			 */
 			indexes[row] = previous_key_index;
+#ifndef NDEBUG
 			policy->stat_consecutive_keys++;
+#endif
 			DEBUG_PRINT("%p: row %d consecutive key index %d\n", policy, row, previous_key_index);
 			continue;
 		}
@@ -135,7 +142,7 @@ FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int e
 			 */
 			const uint32 index = ++policy->last_used_key_index;
 			entry->key_index = index;
-			FUNCTION_NAME(store_new_output_key)(policy, index, output_key);
+			FUNCTION_NAME(key_hashing_store_new)(policy, index, output_key);
 			DEBUG_PRINT("%p: row %d new key index %d\n", policy, row, index);
 		}
 		else
@@ -260,18 +267,14 @@ HashingStrategy FUNCTION_NAME(strategy) = {
 	.explain_name = EXPLAIN_NAME,
 	.fill_offsets = FUNCTION_NAME(fill_offsets),
 	.get_size_bytes = FUNCTION_NAME(get_size_bytes),
-	.init = FUNCTION_NAME(init),
-	.prepare_for_batch = FUNCTION_NAME(prepare_for_batch),
-	.reset = FUNCTION_NAME(reset_strategy),
+	.init = FUNCTION_NAME(hash_strategy_init),
+	.prepare_for_batch = FUNCTION_NAME(hash_strategy_prepare_for_batch),
+	.reset = FUNCTION_NAME(hash_strategy_reset),
 };
 
 #undef EXPLAIN_NAME
 #undef KEY_VARIANT
 #undef KEY_EQUAL
-#undef STORE_HASH
 #undef OUTPUT_KEY_TYPE
 #undef HASH_TABLE_KEY_TYPE
-#undef DATUM_TO_OUTPUT_KEY
-#undef OUTPUT_KEY_TO_DATUM
-#undef UMASH
 #undef USE_DICT_HASHING

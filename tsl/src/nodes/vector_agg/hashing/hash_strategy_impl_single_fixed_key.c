@@ -10,9 +10,21 @@
 
 #include "batch_hashing_params.h"
 
+static void
+FUNCTION_NAME(key_hashing_init)(HashingStrategy *hashing)
+{
+}
+
+static void
+FUNCTION_NAME(key_hashing_prepare_for_batch)(GroupingPolicyHash *policy,
+											 DecompressBatchState *batch_state)
+{
+}
+
 static pg_attribute_always_inline void
-FUNCTION_NAME(get_key)(BatchHashingParams params, int row, void *restrict output_key_ptr,
-					   void *restrict hash_table_key_ptr, bool *restrict valid)
+FUNCTION_NAME(key_hashing_get_key)(BatchHashingParams params, int row,
+								   void *restrict output_key_ptr, void *restrict hash_table_key_ptr,
+								   bool *restrict valid)
 {
 	OUTPUT_KEY_TYPE *restrict output_key = (OUTPUT_KEY_TYPE *) output_key_ptr;
 	HASH_TABLE_KEY_TYPE *restrict hash_table_key = (HASH_TABLE_KEY_TYPE *) hash_table_key_ptr;
@@ -41,16 +53,10 @@ FUNCTION_NAME(get_key)(BatchHashingParams params, int row, void *restrict output
 }
 
 static pg_attribute_always_inline void
-FUNCTION_NAME(store_new_output_key)(GroupingPolicyHash *restrict policy, uint32 new_key_index,
-									OUTPUT_KEY_TYPE output_key)
+FUNCTION_NAME(key_hashing_store_new)(GroupingPolicyHash *restrict policy, uint32 new_key_index,
+									 OUTPUT_KEY_TYPE output_key)
 {
 	policy->hashing.output_keys[new_key_index] = OUTPUT_KEY_TO_DATUM(output_key);
-}
-
-static void
-FUNCTION_NAME(prepare_for_batch)(GroupingPolicyHash *policy, DecompressBatchState *batch_state)
-{
-	hash_strategy_output_key_alloc(policy, batch_state);
 }
 
 static void
@@ -59,3 +65,6 @@ FUNCTION_NAME(emit_key)(GroupingPolicyHash *policy, uint32 current_key,
 {
 	hash_strategy_output_key_single_emit(policy, current_key, aggregated_slot);
 }
+
+#undef DATUM_TO_OUTPUT_KEY
+#undef OUTPUT_KEY_TO_DATUM

@@ -27,6 +27,12 @@
 #define KEY_VARIANT single_text
 #define OUTPUT_KEY_TYPE BytesView
 
+static void
+single_text_key_hashing_init(HashingStrategy *hashing)
+{
+	hashing->umash_params = umash_key_hashing_init();
+}
+
 static BytesView
 get_bytes_view(CompressedColumnValues *column_values, int arrow_row)
 {
@@ -38,8 +44,8 @@ get_bytes_view(CompressedColumnValues *column_values, int arrow_row)
 }
 
 static pg_attribute_always_inline void
-single_text_get_key(BatchHashingParams params, int row, void *restrict output_key_ptr,
-					void *restrict hash_table_key_ptr, bool *restrict valid)
+single_text_key_hashing_get_key(BatchHashingParams params, int row, void *restrict output_key_ptr,
+								void *restrict hash_table_key_ptr, bool *restrict valid)
 {
 	Assert(params.policy->num_grouping_columns == 1);
 
@@ -87,8 +93,8 @@ single_text_get_key(BatchHashingParams params, int row, void *restrict output_ke
 }
 
 static pg_attribute_always_inline void
-single_text_store_new_output_key(GroupingPolicyHash *restrict policy, uint32 new_key_index,
-								 BytesView output_key)
+single_text_key_hashing_store_new(GroupingPolicyHash *restrict policy, uint32 new_key_index,
+								  BytesView output_key)
 {
 	const int total_bytes = output_key.len + VARHDRSZ;
 	text *restrict stored = (text *) MemoryContextAlloc(policy->hashing.key_body_mctx, total_bytes);
@@ -119,13 +125,9 @@ static pg_attribute_always_inline void single_text_dispatch_for_params(BatchHash
 																	   int start_row, int end_row);
 
 static void
-single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *batch_state)
+single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy,
+										  DecompressBatchState *batch_state)
 {
-	/*
-	 * Allocate the key storage.
-	 */
-	hash_strategy_output_key_alloc(policy, batch_state);
-
 	/*
 	 * Determine whether we're going to use the dictionary for hashing.
 	 */
@@ -149,7 +151,7 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 	 * to initialize. State index zero is invalid.
 	 */
 	const uint32 last_initialized_key_index = policy->last_used_key_index;
-	Assert(last_initialized_key_index <= policy->num_agg_state_rows);
+	Assert(last_initialized_key_index <= policy->num_allocated_per_key_agg_states);
 
 	/*
 	 * Initialize the array for storing the aggregate state offsets corresponding
@@ -291,15 +293,16 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 	 */
 	if (policy->last_used_key_index > last_initialized_key_index)
 	{
-		const uint64 new_aggstate_rows = policy->num_agg_state_rows * 2 + 1;
+		const uint64 new_aggstate_rows = policy->num_allocated_per_key_agg_states * 2 + 1;
 		const int num_fns = policy->num_agg_defs;
 		for (int i = 0; i < num_fns; i++)
 		{
 			const VectorAggDef *agg_def = &policy->agg_defs[i];
-			if (policy->last_used_key_index >= policy->num_agg_state_rows)
+			if (policy->last_used_key_index >= policy->num_allocated_per_key_agg_states)
 			{
-				policy->per_agg_states[i] = repalloc(policy->per_agg_states[i],
-													 new_aggstate_rows * agg_def->func.state_bytes);
+				policy->per_agg_per_key_states[i] =
+					repalloc(policy->per_agg_per_key_states[i],
+							 new_aggstate_rows * agg_def->func.state_bytes);
 			}
 
 			/*
@@ -307,7 +310,7 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 			 */
 			void *first_uninitialized_state =
 				agg_def->func.state_bytes * (last_initialized_key_index + 1) +
-				(char *) policy->per_agg_states[i];
+				(char *) policy->per_agg_per_key_states[i];
 			agg_def->func.agg_init(first_uninitialized_state,
 								   policy->last_used_key_index - last_initialized_key_index);
 		}
@@ -315,10 +318,10 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 		/*
 		 * Record the newly allocated number of rows in case we had to reallocate.
 		 */
-		if (policy->last_used_key_index >= policy->num_agg_state_rows)
+		if (policy->last_used_key_index >= policy->num_allocated_per_key_agg_states)
 		{
-			Assert(new_aggstate_rows > policy->num_agg_state_rows);
-			policy->num_agg_state_rows = new_aggstate_rows;
+			Assert(new_aggstate_rows > policy->num_allocated_per_key_agg_states);
+			policy->num_allocated_per_key_agg_states = new_aggstate_rows;
 		}
 	}
 

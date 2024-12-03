@@ -27,6 +27,18 @@
 #define KEY_VARIANT serialized
 #define OUTPUT_KEY_TYPE text *
 
+static void
+serialized_key_hashing_init(HashingStrategy *hashing)
+{
+	hashing->umash_params = umash_key_hashing_init();
+}
+
+static void
+serialized_key_hashing_prepare_for_batch(GroupingPolicyHash *policy,
+										 DecompressBatchState *batch_state)
+{
+}
+
 static pg_attribute_always_inline bool
 byte_bitmap_row_is_valid(const uint8 *bitmap, size_t row_number)
 {
@@ -55,8 +67,8 @@ byte_bitmap_set_row_validity(uint8 *bitmap, size_t row_number, bool value)
 }
 
 static pg_attribute_always_inline void
-serialized_get_key(BatchHashingParams params, int row, void *restrict output_key_ptr,
-				   void *restrict hash_table_key_ptr, bool *restrict valid)
+serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restrict output_key_ptr,
+							   void *restrict hash_table_key_ptr, bool *restrict valid)
 {
 	GroupingPolicyHash *policy = params.policy;
 
@@ -361,8 +373,8 @@ serialized_get_key(BatchHashingParams params, int row, void *restrict output_key
 }
 
 static pg_attribute_always_inline void
-serialized_store_new_output_key(GroupingPolicyHash *restrict policy, uint32 new_key_index,
-								text *output_key)
+serialized_key_hashing_store_new(GroupingPolicyHash *restrict policy, uint32 new_key_index,
+								 text *output_key)
 {
 	/*
 	 * We will store this key so we have to consume the temporary storage that
@@ -442,12 +454,6 @@ serialized_emit_key(GroupingPolicyHash *policy, uint32 current_key, TupleTableSl
 	}
 
 	Assert(ptr == serialized_key + key_data_bytes);
-}
-
-static void
-serialized_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *batch_state)
-{
-	hash_strategy_output_key_alloc(policy, batch_state);
 }
 
 #include "hash_strategy_impl.c"
