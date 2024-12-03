@@ -698,6 +698,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	uint64 processed = 0;
 	bool has_before_insert_row_trig;
 	bool has_instead_insert_row_trig;
+	bool has_after_insert_statement_trig;
 	ExprState *qualexpr = NULL;
 	ChunkDispatch *dispatch = ccstate->dispatch;
 
@@ -808,6 +809,19 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	/* Prepare to catch AFTER triggers. */
 	AfterTriggerBeginQuery();
 
+	/*
+	 * If there are any triggers with transition tables on the named relation,
+	 * we need to be prepared to capture transition tuples. Note that
+	 * ccstate->cstate is null when we migrate from an existing table in a
+	 * call from create_hypertable(), so we do not need a transition capture
+	 * state in this case.
+	 */
+	if (ccstate->cstate)
+		ccstate->cstate->transition_capture =
+			MakeTransitionCaptureState(ccstate->rel->trigdesc,
+									   RelationGetRelid(ccstate->rel),
+									   CMD_INSERT);
+
 	if (ccstate->where_clause)
 		qualexpr = ExecInitQual(castNode(List, ccstate->where_clause), NULL);
 
@@ -848,8 +862,12 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	has_instead_insert_row_trig =
 		(resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->trig_insert_instead_row);
 
+	has_after_insert_statement_trig =
+		(resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->trig_insert_new_table);
+
 	/* Depending on the configured trigger, enable or disable the multi-insert buffers */
-	if (has_before_insert_row_trig || has_instead_insert_row_trig)
+	if (has_after_insert_statement_trig || has_before_insert_row_trig ||
+		has_instead_insert_row_trig)
 	{
 		insertMethod = CIM_SINGLE;
 		ereport(DEBUG1,
@@ -1043,12 +1061,15 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 																 NULL,
 																 NIL,
 																 false);
-				/* AFTER ROW INSERT Triggers */
-				ExecARInsertTriggers(estate,
-									 resultRelInfo,
-									 myslot,
-									 recheckIndexes,
-									 NULL /* transition capture */);
+				/* AFTER ROW INSERT Triggers. We do not need to do this if we
+				 * are migrating data from an existing table in a call from
+				 * create_hypertable(). */
+				if (ccstate->cstate)
+					ExecARInsertTriggers(estate,
+										 resultRelInfo,
+										 myslot,
+										 recheckIndexes,
+										 ccstate->cstate->transition_capture);
 			}
 			else
 			{
@@ -1105,8 +1126,15 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 
 	MemoryContextSwitchTo(oldcontext);
 
-	/* Execute AFTER STATEMENT insertion triggers */
-	ExecASInsertTriggers(estate, resultRelInfo, NULL);
+	/*
+	 * Execute AFTER STATEMENT insertion triggers.
+	 *
+	 * We do not need to do this ccstate->cstate is NULL, which is the case
+	 * when migrating data from an existing table in a call from
+	 * create_hypertable().
+	 */
+	if (ccstate->cstate)
+		ExecASInsertTriggers(estate, resultRelInfo, ccstate->cstate->transition_capture);
 
 	/* Handle queued AFTER triggers */
 	AfterTriggerEndQuery(estate);
