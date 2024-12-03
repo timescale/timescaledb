@@ -110,11 +110,13 @@ create_trigger_handler(const Trigger *trigger, void *arg)
 {
 	const Chunk *chunk = arg;
 
-	if (TRIGGER_USES_TRANSITION_TABLE(trigger->tgnewtable) ||
-		TRIGGER_USES_TRANSITION_TABLE(trigger->tgoldtable))
+	if ((TRIGGER_USES_TRANSITION_TABLE(trigger->tgoldtable) ||
+		 TRIGGER_USES_TRANSITION_TABLE(trigger->tgnewtable)) &&
+		TRIGGER_FOR_ROW(trigger->tgtype))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("hypertables do not support transition tables in triggers")));
+				 errmsg("ROW triggers with transition tables are not supported on hypertable "
+						"chunks")));
 
 	if (trigger_is_chunk_trigger(trigger))
 		ts_trigger_create_on_chunk(trigger->tgoid,
@@ -164,24 +166,21 @@ ts_trigger_create_all_on_chunk(const Chunk *chunk)
 static bool
 check_for_transition_table(const Trigger *trigger, void *arg)
 {
-	bool *found = arg;
-
-	if (TRIGGER_USES_TRANSITION_TABLE(trigger->tgnewtable) ||
-		TRIGGER_USES_TRANSITION_TABLE(trigger->tgoldtable))
+	if ((TRIGGER_USES_TRANSITION_TABLE(trigger->tgnewtable) ||
+		 TRIGGER_USES_TRANSITION_TABLE(trigger->tgoldtable)) &&
+		TRIGGER_FOR_ROW(trigger->tgtype))
 	{
-		*found = true;
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("ROW triggers with transition tables are not supported on hypertables")));
 		return false;
 	}
 
 	return true;
 }
 
-bool
-ts_relation_has_transition_table_trigger(Oid relid)
+void
+ts_check_unsupported_triggers(Oid relid)
 {
-	bool found = false;
-
-	for_each_trigger(relid, check_for_transition_table, &found);
-
-	return found;
+	for_each_trigger(relid, check_for_transition_table, NULL);
 }
