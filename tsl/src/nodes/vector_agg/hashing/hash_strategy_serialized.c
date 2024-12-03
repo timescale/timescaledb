@@ -360,9 +360,9 @@ serialized_get_key(BatchHashingParams params, int row, void *restrict output_key
 	*hash_table_key = umash_fingerprint_get_key(fp);
 }
 
-static pg_attribute_always_inline HASH_TABLE_KEY_TYPE
+static pg_attribute_always_inline void
 serialized_store_new_output_key(GroupingPolicyHash *restrict policy, uint32 new_key_index,
-								text *output_key, HASH_TABLE_KEY_TYPE hash_table_key)
+								text *output_key)
 {
 	/*
 	 * We will store this key so we have to consume the temporary storage that
@@ -373,8 +373,6 @@ serialized_store_new_output_key(GroupingPolicyHash *restrict policy, uint32 new_
 	policy->num_tmp_key_storage_bytes = 0;
 
 	policy->hashing.output_keys[new_key_index] = PointerGetDatum(output_key);
-
-	return hash_table_key;
 }
 
 static void

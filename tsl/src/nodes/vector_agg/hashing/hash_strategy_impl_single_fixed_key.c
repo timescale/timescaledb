@@ -31,12 +31,11 @@ FUNCTION_NAME(get_key)(BatchHashingParams params, int row, void *restrict output
 	*hash_table_key = *output_key;
 }
 
-static pg_attribute_always_inline OUTPUT_KEY_TYPE
+static pg_attribute_always_inline void
 FUNCTION_NAME(store_new_output_key)(GroupingPolicyHash *restrict policy, uint32 new_key_index,
-									OUTPUT_KEY_TYPE output_key, HASH_TABLE_KEY_TYPE hash_table_key)
+									OUTPUT_KEY_TYPE output_key)
 {
 	policy->hashing.output_keys[new_key_index] = OUTPUT_KEY_TO_DATUM(output_key);
-	return hash_table_key;
 }
 
 static void

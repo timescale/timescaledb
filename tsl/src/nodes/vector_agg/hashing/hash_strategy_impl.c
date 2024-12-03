@@ -134,9 +134,8 @@ FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int e
 			 * New key, have to store it persistently.
 			 */
 			const uint32 index = ++policy->last_used_key_index;
-			entry->hash_table_key =
-				FUNCTION_NAME(store_new_output_key)(policy, index, output_key, hash_table_key);
 			entry->key_index = index;
+			FUNCTION_NAME(store_new_output_key)(policy, index, output_key);
 			DEBUG_PRINT("%p: row %d new key index %d\n", policy, row, index);
 		}
 		else

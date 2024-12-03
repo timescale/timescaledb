@@ -86,9 +86,9 @@ single_text_get_key(BatchHashingParams params, int row, void *restrict output_ke
 	*hash_table_key = umash_fingerprint_get_key(fp);
 }
 
-static pg_attribute_always_inline HASH_TABLE_KEY_TYPE
+static pg_attribute_always_inline void
 single_text_store_new_output_key(GroupingPolicyHash *restrict policy, uint32 new_key_index,
-								 BytesView output_key, HASH_TABLE_KEY_TYPE hash_table_key)
+								 BytesView output_key)
 {
 	const int total_bytes = output_key.len + VARHDRSZ;
 	text *restrict stored = (text *) MemoryContextAlloc(policy->hashing.key_body_mctx, total_bytes);
@@ -96,7 +96,6 @@ single_text_store_new_output_key(GroupingPolicyHash *restrict policy, uint32 new
 	memcpy(VARDATA(stored), output_key.data, output_key.len);
 	output_key.data = (uint8 *) VARDATA(stored);
 	policy->hashing.output_keys[new_key_index] = PointerGetDatum(stored);
-	return hash_table_key;
 }
 
 /*
