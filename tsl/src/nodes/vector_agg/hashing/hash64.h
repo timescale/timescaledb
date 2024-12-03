@@ -8,8 +8,8 @@
 /*
  * We can use crc32 as a hash function, it has bad properties but takes only one
  * cycle, which is why it is sometimes used in the existing hash table
- * implementations.
- * When we don't have the crc32 instruction, use the SplitMix64 finalizer.
+ * implementations. When we don't have the crc32 instruction, use the SplitMix64
+ * finalizer.
  */
 static pg_attribute_always_inline uint64
 hash64_splitmix(uint64 x)
@@ -34,25 +34,3 @@ hash64_crc(uint64 x)
 #else
 #define HASH64 hash64_splitmix
 #endif
-
-static pg_attribute_always_inline uint32
-hash32(uint32 x)
-{
-	x ^= x >> 16;
-	x *= 0x7feb352d;
-	x ^= x >> 15;
-	x *= 0x846ca68b;
-	x ^= x >> 16;
-	return x;
-}
-
-static pg_attribute_always_inline uint16
-hash16(uint16 x)
-{
-	x ^= x >> 8;
-	x *= 0x88b5U;
-	x ^= x >> 7;
-	x *= 0xdb2dU;
-	x ^= x >> 9;
-	return x;
-}
