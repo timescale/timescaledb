@@ -180,15 +180,15 @@ typedef enum TestArgs
 } TestArgs;
 
 static WithClauseDefinition test_args[] = {
-	[TestArgUnimpl] = { .arg_name = "unimplemented",
+	[TestArgUnimpl] = { .arg_names = {"unimplemented", NULL},
 						.type_id = InvalidOid, },
-	[TestArgBool] = { .arg_name = "bool", .type_id = BOOLOID, },
-	[TestArgInt32] = { .arg_name = "int32", .type_id = INT4OID, },
-	[TestArgDefault] = { .arg_name = "default",
+	[TestArgBool] = { .arg_names = {"bool", NULL}, .type_id = BOOLOID, },
+	[TestArgInt32] = { .arg_names = {"int32", NULL}, .type_id = INT4OID, },
+	[TestArgDefault] = { .arg_names = {"default", NULL},
 						 .type_id = INT4OID,
 						 .default_val = (Datum)-100 },
-	[TestArgName] = { .arg_name = "name", .type_id = NAMEOID, },
-	[TestArgRegclass] = { .arg_name = "regclass",
+	[TestArgName] = { .arg_names = {"name", NULL}, .type_id = NAMEOID, },
+	[TestArgRegclass] = { .arg_names = {"regclass", NULL},
 						  .type_id = REGCLASSOID },
 };
 
@@ -247,7 +247,7 @@ TS_TEST_FN(ts_test_with_clause_parse)
 	nulls = palloc(sizeof(*nulls) * funcctx->tuple_desc->natts);
 	memset(nulls, true, sizeof(*nulls) * funcctx->tuple_desc->natts);
 
-	values[0] = CStringGetTextDatum(test_args[result->i].arg_name);
+	values[0] = CStringGetTextDatum(test_args[result->i].arg_names[0]);
 	nulls[0] = false;
 	if (!result->parsed[result->i].is_default || result->i == TestArgDefault)
 	{

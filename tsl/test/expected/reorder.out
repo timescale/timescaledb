@@ -1273,9 +1273,10 @@ CREATE INDEX ct2_time_idx ON ct2(time DESC);
 CLUSTER ct2 USING ct2_time_idx;
 -- deleted chunks are removed correctly
 DELETE FROM ct2 where time < 2 OR val < 2;
+VACUUM ct2;
 SELECT reorder_chunk('_timescaledb_internal._hyper_2_3_chunk', verbose => TRUE);
 INFO:  reordering "_timescaledb_internal._hyper_2_3_chunk" using sequential scan and sort
-INFO:  "_hyper_2_3_chunk": found 2 removable, 3 nonremovable row versions in 1 pages
+INFO:  "_hyper_2_3_chunk": found 0 removable, 3 nonremovable row versions in 1 pages
  reorder_chunk 
 ---------------
  

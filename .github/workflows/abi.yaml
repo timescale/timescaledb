@@ -44,43 +44,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        dir: [ "forward", "backward" ]
         pg: [ 14, 15, 16, 17 ]
         include:
-          - dir: backward
-            pg: 14
-            builder: ${{ fromJson(needs.config.outputs.pg14_latest) }}-alpine3.19
-            tester: ${{ fromJson(needs.config.outputs.pg14_abi_min) }}-alpine
-            ignores: memoize
-          - dir: forward
-            pg: 14
+          - pg: 14
             builder: ${{ fromJson(needs.config.outputs.pg14_abi_min) }}-alpine
             tester: ${{ fromJson(needs.config.outputs.pg14_latest) }}-alpine3.19
-          - dir: backward
-            pg: 15
-            builder: ${{ fromJson(needs.config.outputs.pg15_latest) }}-alpine3.19
-            tester: ${{ fromJson(needs.config.outputs.pg15_abi_min) }}-alpine
-          - dir: forward
-            pg: 15
+          - pg: 15
             builder: ${{ fromJson(needs.config.outputs.pg15_abi_min) }}-alpine
             tester: ${{ fromJson(needs.config.outputs.pg15_latest) }}-alpine3.19
-          - dir: backward
-            pg: 16
-            builder: ${{ fromJson(needs.config.outputs.pg16_latest) }}-alpine3.19
-            tester: ${{ fromJson(needs.config.outputs.pg16_abi_min) }}-alpine
-            # this test has issues with 16.0 version of pg_dump binary
-            # which affects backwards test only 
-            ignores: pg_dump_unprivileged
-          - dir: forward
-            pg: 16
+          - pg: 16
             builder: ${{ fromJson(needs.config.outputs.pg16_abi_min) }}-alpine
             tester: ${{ fromJson(needs.config.outputs.pg16_latest) }}-alpine3.19
-          - dir: backward
-            pg: 17
-            builder: ${{ fromJson(needs.config.outputs.pg17_latest) }}-alpine3.19
-            tester: ${{ fromJson(needs.config.outputs.pg17_abi_min) }}-alpine
-          - dir: forward
-            pg: 17
+          - pg: 17
             builder: ${{ fromJson(needs.config.outputs.pg17_abi_min) }}-alpine
             tester: ${{ fromJson(needs.config.outputs.pg17_latest) }}-alpine3.19
 
@@ -89,7 +64,7 @@ jobs:
     - name: Checkout TimescaleDB
       uses: actions/checkout@v4
 
-    - name: Build extension
+    - name: Build extension with ${{ matrix.builder }}
       run: |
         BUILDER_IMAGE="postgres:${{matrix.builder}}"
 
@@ -113,7 +88,7 @@ jobs:
           cp `pg_config --pkglibdir`/timescaledb*.so build_abi/install_lib
         EOF
 
-    - name: Run tests
+    - name: Run tests on server ${{ matrix.tester }}
       run: |
         TEST_IMAGE="postgres:${{ matrix.tester }}"
 
