@@ -130,26 +130,6 @@ typedef struct GroupingPolicyHash
 	uint64 stat_input_total_rows;
 	uint64 stat_input_valid_rows;
 	uint64 stat_consecutive_keys;
-
-	/*
-	 * FIXME all the stuff below should be moved out.
-	 */
-
-	/*
-	 * Temporary key storages. Some hashing strategies need to put the key in a
-	 * separate memory area, we don't want to alloc/free it on each row.
-	 */
-	uint8 *tmp_key_storage;
-	uint64 num_tmp_key_storage_bytes;
-
-	/*
-	 * For single text key that uses dictionary encoding, in some cases we first
-	 * calculate the key indexes for the dictionary entries, and then translate
-	 * it to the actual rows.
-	 */
-	uint32 *restrict key_index_for_dict;
-	uint64 num_key_index_for_dict;
-	bool use_key_index_for_dict;
 } GroupingPolicyHash;
 
 //#define DEBUG_PRINT(...) fprintf(stderr, __VA_ARGS__)
