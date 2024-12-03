@@ -7,6 +7,7 @@
 
 set -e
 set -u
+CURRENT_DIR=$(dirname $0)
 
 ISOLATIONTEST=$1
 shift
@@ -18,7 +19,4 @@ shift
 # the chunk numbers influence the names of indexes if they are long enough to be
 # truncated, so the only way to get a stable explain output is to run such a test
 # in a separate database.
-$ISOLATIONTEST "$@" | \
-   sed -e 's!_[0-9]\{1,\}_[0-9]\{1,\}_chunk!_X_X_chunk!g' \
-    -e 's!hypertable_[0-9]\{1,\}!hypertable_X!g'
- 
+$ISOLATIONTEST "$@" | ${CURRENT_DIR}/runner_cleanup_output.sh "isolation"

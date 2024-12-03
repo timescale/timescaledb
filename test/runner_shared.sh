@@ -79,18 +79,4 @@ ${PSQL} -U ${TEST_PGUSER} \
      -v ROLE_DEFAULT_PERM_USER_2=${TEST_ROLE_DEFAULT_PERM_USER_2} \
      -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" \
      -v TSL_MODULE_PATHNAME="'timescaledb-tsl-${EXT_VERSION}'" \
-     "$@" -d ${TEST_DBNAME} 2>&1 | \
-          sed  -e '/<exclude_from_test>/,/<\/exclude_from_test>/d' \
-               -e 's!_[0-9]\{1,\}_[0-9]\{1,\}_chunk!_X_X_chunk!g' \
-               -e 's!^ \{1,\}QUERY PLAN \{1,\}$!QUERY PLAN!' \
-               -e 's!:  actual rows!: actual rows!' \
-               -e '/^-\{1,\}$/d' \
-               -e 's! Memory: [0-9]\{1,\}kB!!' \
-               -e 's! Memory Usage: [0-9]\{1,\}kB!!' \
-               -e 's! Average  Peak Memory: [0-9]\{1,\}kB!!' | \
-          grep -v 'DEBUG:  rehashing catalog cache id' | \
-          grep -v 'DEBUG:  compacted fsync request queue from' | \
-          grep -v 'DEBUG:  creating and filling new WAL file' | \
-          grep -v 'DEBUG:  done creating and filling new WAL file' | \
-          grep -v 'DEBUG:  flushed relation because a checkpoint occurred concurrently' | \
-          grep -v 'NOTICE:  cancelling the background worker for job'
+     "$@" -d ${TEST_DBNAME} 2>&1 | ${CURRENT_DIR}/runner_cleanup_output.sh "shared"
