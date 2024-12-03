@@ -361,8 +361,8 @@ serialized_get_key(BatchHashingParams params, int row, void *restrict output_key
 }
 
 static pg_attribute_always_inline HASH_TABLE_KEY_TYPE
-serialized_store_output_key(GroupingPolicyHash *restrict policy, uint32 new_key_index,
-							text *output_key, HASH_TABLE_KEY_TYPE hash_table_key)
+serialized_store_new_output_key(GroupingPolicyHash *restrict policy, uint32 new_key_index,
+								text *output_key, HASH_TABLE_KEY_TYPE hash_table_key)
 {
 	/*
 	 * We will store this key so we have to consume the temporary storage that
@@ -446,12 +446,10 @@ serialized_emit_key(GroupingPolicyHash *policy, uint32 current_key, TupleTableSl
 	Assert(ptr == serialized_key + key_data_bytes);
 }
 
-#include "output_key_alloc.c"
-
 static void
 serialized_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *batch_state)
 {
-	serialized_alloc_output_keys(policy, batch_state);
+	hash_strategy_output_key_alloc(policy, batch_state);
 }
 
 #include "hash_strategy_impl.c"

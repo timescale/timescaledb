@@ -23,6 +23,10 @@
 
 #include "umash_fingerprint_key.h"
 
+#define EXPLAIN_NAME "single text"
+#define KEY_VARIANT single_text
+#define OUTPUT_KEY_TYPE BytesView
+
 static BytesView
 get_bytes_view(CompressedColumnValues *column_values, int arrow_row)
 {
@@ -83,8 +87,8 @@ single_text_get_key(BatchHashingParams params, int row, void *restrict output_ke
 }
 
 static pg_attribute_always_inline HASH_TABLE_KEY_TYPE
-single_text_store_output_key(GroupingPolicyHash *restrict policy, uint32 new_key_index,
-							 BytesView output_key, HASH_TABLE_KEY_TYPE hash_table_key)
+single_text_store_new_output_key(GroupingPolicyHash *restrict policy, uint32 new_key_index,
+								 BytesView output_key, HASH_TABLE_KEY_TYPE hash_table_key)
 {
 	const int total_bytes = output_key.len + VARHDRSZ;
 	text *restrict stored = (text *) MemoryContextAlloc(policy->hashing.key_body_mctx, total_bytes);
@@ -98,12 +102,12 @@ single_text_store_output_key(GroupingPolicyHash *restrict policy, uint32 new_key
 /*
  * We use the standard single-key key output functions.
  */
-#define EXPLAIN_NAME "single text"
-#define KEY_VARIANT single_text
-#define OUTPUT_KEY_TYPE BytesView
-
-#include "output_key_alloc.c"
-#include "output_key_emit_single.c"
+static void
+single_text_emit_key(GroupingPolicyHash *policy, uint32 current_key,
+					 TupleTableSlot *aggregated_slot)
+{
+	return hash_strategy_output_key_single_emit(policy, current_key, aggregated_slot);
+}
 
 /*
  * We use a special batch preparation function to sometimes hash the dictionary-
@@ -121,7 +125,7 @@ single_text_prepare_for_batch(GroupingPolicyHash *policy, DecompressBatchState *
 	/*
 	 * Allocate the key storage.
 	 */
-	single_text_alloc_output_keys(policy, batch_state);
+	hash_strategy_output_key_alloc(policy, batch_state);
 
 	/*
 	 * Determine whether we're going to use the dictionary for hashing.

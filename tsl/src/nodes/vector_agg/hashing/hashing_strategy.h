@@ -5,9 +5,15 @@
  */
 #pragma once
 
+#include <postgres.h>
+
 typedef struct GroupingPolicyHash GroupingPolicyHash;
 
 typedef struct HashingStrategy HashingStrategy;
+
+typedef struct DecompressBatchState DecompressBatchState;
+
+typedef struct TupleTableSlot TupleTableSlot;
 
 typedef struct HashingStrategy
 {
@@ -32,10 +38,11 @@ typedef struct HashingStrategy
 	 * This is stored separately from hash table keys, because they might not
 	 * have the full column values, and also storing them contiguously here
 	 * leads to better memory access patterns when emitting the results.
-	 * The details of the key storage are managed by the hashing strategy.
+	 * The details of the key storage are managed by the hashing strategy. The
+	 * by-reference keys can use a separate memory context for dense storage.
 	 */
 	Datum *restrict output_keys;
-	uint64 num_output_keys;
+	uint64 num_allocated_output_keys;
 	MemoryContext key_body_mctx;
 
 	/*
@@ -51,3 +58,7 @@ typedef struct HashingStrategy
 	 */
 	struct umash_params *umash_params;
 } HashingStrategy;
+
+void hash_strategy_output_key_alloc(GroupingPolicyHash *policy, DecompressBatchState *batch_state);
+void hash_strategy_output_key_single_emit(GroupingPolicyHash *policy, uint32 current_key,
+										  TupleTableSlot *aggregated_slot);
