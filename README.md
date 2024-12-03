@@ -19,7 +19,7 @@
 TimescaleDB scales PostgreSQL for time-series data with the help of [hypertables](https://docs.timescale.com/use-timescale/latest/hypertables/about-hypertables/). Hypertables are PostgreSQL tables that automatically partition your data by time and space. You interact with a hypertable in the same way as regular PostgreSQL table. Behind the scenes, the database performs the work of setting up and maintaining the hypertable's partitions.
 
 From the perspective of both use and management, TimescaleDB looks and feels like PostgreSQL, and can be managed and queried as
-such. However, it provides a range of features and optimizations that make managing your time-series data easier and more efficient.
+such. However, it provides a range of features and optimizations that make managing your time-series data easier and more efficient. For example, our hybrid row-columnar engine makes queries up to 350x faster, ingests 44% faster, and reduces storage by 95% over RDS.
 
 <table style="width:100%;">
 <thead>
@@ -155,7 +155,7 @@ See more:
 
 ## Create continuous aggregates
 
-Continuous aggregates are designed to make queries on very large datasets run faster. They use PostgreSQL [materialized views](https://www.postgresql.org/docs/current/rules-materializedviews.html) to continuously and incrementally refresh a query in the background, so that when you run the query, only the data that has changed needs to be computed, not the entire dataset.
+Continuous aggregates are designed to make queries on very large datasets run faster. They continuously and incrementally refresh a query in the background, so that when you run such query, only the data that has changed needs to be computed, not the entire dataset. This is what makes them different from regular PostgreSQL [materialized views](https://www.postgresql.org/docs/current/rules-materializedviews.html), which cannot be incrementally materialized and have to be rebuilt from scratch every time you want to refresh it.
 
 For example, create a continuous aggregate view for daily weather data in two simple steps:
 
