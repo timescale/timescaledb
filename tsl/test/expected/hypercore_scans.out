@@ -511,3 +511,26 @@ select time, device+device as device_x2 from :chunk limit 1;
  Wed Jun 01 00:55:00 2022 PDT |         2
 (1 row)
 
+-- Test sort using Bump memory context on PG17. This didn't use to
+-- work on PG17 because it introduced a Bump memory context for
+-- per-tuple processing on which compressed data was detoasted. This
+-- doesn't work because Bump doesn't support pfree(), which is needed
+-- by detoasting.
+--
+-- Need to convert all chunks to Hypercore TAM.
+select compress_chunk(ch, hypercore_use_access_method=>true) from show_chunks('readings') ch;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+(6 rows)
+
+-- Just test that this query doesn't fail with an error about Bump
+-- allocator not supporting pfree. Redirect output to a temporary
+-- table.
+create temp table test_bump as
+select * from readings order by time, device;

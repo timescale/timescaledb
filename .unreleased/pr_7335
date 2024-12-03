@@ -1,2 +1,0 @@
-Fixes: #7335 Change log level used in compression
-Thanks: @gmilamjr for reporting an issue with the log level of compression messages

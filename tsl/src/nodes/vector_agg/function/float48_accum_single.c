@@ -69,27 +69,32 @@ FUNCTION_NAME(emit)(void *agg_state, Datum *out_result, bool *out_isnull)
 {
 	FUNCTION_NAME(state) *state = (FUNCTION_NAME(state) *) agg_state;
 
-	Datum transdatums[3] = {
-		Float8GetDatumFast(state->N),
-		Float8GetDatumFast(state->Sx),
+	const size_t nbytes = 3 * sizeof(float8) + ARR_OVERHEAD_NONULLS(/* ndims = */ 1);
+	ArrayType *result = palloc(nbytes);
+	SET_VARSIZE(result, nbytes);
+	result->ndim = 1;
+	result->dataoffset = 0;
+	result->elemtype = FLOAT8OID;
+	ARR_DIMS(result)[0] = 3;
+	ARR_LBOUND(result)[0] = 1;
+
+	/*
+	 * The array elements are stored by value, regardless of if the float8
+	 * itself is by-value on this platform.
+	 */
+	((float8 *) ARR_DATA_PTR(result))[0] = state->N;
+	((float8 *) ARR_DATA_PTR(result))[1] = state->Sx;
+	((float8 *) ARR_DATA_PTR(result))[2] =
 		/*
 		 * Sxx should be NaN if any of the inputs are infinite or NaN. This is
 		 * checked by float8_combine even if it's not used for the actual
 		 * calculations.
 		 */
-		Float8GetDatum(0. * state->Sx
+		0. * state->Sx
 #ifdef NEED_SXX
-					   + state->Sxx
+		+ state->Sxx
 #endif
-					   ),
-	};
-
-	ArrayType *result = construct_array(transdatums,
-										3,
-										FLOAT8OID,
-										sizeof(float8),
-										FLOAT8PASSBYVAL,
-										TYPALIGN_DOUBLE);
+		;
 
 	*out_result = PointerGetDatum(result);
 	*out_isnull = false;
@@ -99,8 +104,7 @@ FUNCTION_NAME(emit)(void *agg_state, Datum *out_result, bool *out_isnull)
  * Youngs-Cramer update for rows after the first.
  */
 static pg_attribute_always_inline void
-FUNCTION_NAME(update)(const uint64 *valid1, const uint64 *valid2, const CTYPE *values, int row,
-					  double *N, double *Sx
+FUNCTION_NAME(update)(const uint64 *filter, const CTYPE *values, int row, double *N, double *Sx
 #ifdef NEED_SXX
 					  ,
 					  double *Sxx
@@ -108,7 +112,7 @@ FUNCTION_NAME(update)(const uint64 *valid1, const uint64 *valid2, const CTYPE *v
 )
 {
 	const CTYPE newval = values[row];
-	if (!arrow_row_both_valid(valid1, valid2, row))
+	if (!arrow_row_is_valid(filter, row))
 	{
 		return;
 	}
@@ -185,20 +189,19 @@ FUNCTION_NAME(combine)(double *inout_N, double *inout_Sx,
 }
 
 #ifdef NEED_SXX
-#define UPDATE(valid1, valid2, values, row, N, Sx, Sxx)                                            \
-	FUNCTION_NAME(update)(valid1, valid2, values, row, N, Sx, Sxx)
+#define UPDATE(filter, values, row, N, Sx, Sxx)                                                    \
+	FUNCTION_NAME(update)(filter, values, row, N, Sx, Sxx)
 #define COMBINE(inout_N, inout_Sx, inout_Sxx, N2, Sx2, Sxx2)                                       \
 	FUNCTION_NAME(combine)(inout_N, inout_Sx, inout_Sxx, N2, Sx2, Sxx2)
 #else
-#define UPDATE(valid1, valid2, values, row, N, Sx, Sxx)                                            \
-	FUNCTION_NAME(update)(valid1, valid2, values, row, N, Sx)
+#define UPDATE(filter, values, row, N, Sx, Sxx) FUNCTION_NAME(update)(filter, values, row, N, Sx)
 #define COMBINE(inout_N, inout_Sx, inout_Sxx, N2, Sx2, Sxx2)                                       \
 	FUNCTION_NAME(combine)(inout_N, inout_Sx, N2, Sx2)
 #endif
 
 static pg_attribute_always_inline void
-FUNCTION_NAME(vector_impl)(void *agg_state, size_t n, const CTYPE *values, const uint64 *valid1,
-						   const uint64 *valid2, MemoryContext agg_extra_mctx)
+FUNCTION_NAME(vector_impl)(void *agg_state, size_t n, const CTYPE *values, const uint64 *filter,
+						   MemoryContext agg_extra_mctx)
 {
 	/*
 	 * Vector registers can be up to 512 bits wide.
@@ -228,7 +231,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, size_t n, const CTYPE *values, const
 		for (; row < n; row++)
 		{
 			const CTYPE newval = values[row];
-			if (arrow_row_both_valid(valid1, valid2, row))
+			if (arrow_row_is_valid(filter, row))
 			{
 				Narray[inner] = 1;
 				Sxarray[inner] = newval;
@@ -246,7 +249,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, size_t n, const CTYPE *values, const
 	for (size_t inner = row % UNROLL_SIZE; inner > 0 && inner < UNROLL_SIZE && row < n;
 		 inner++, row++)
 	{
-		UPDATE(valid1, valid2, values, row, &Narray[inner], &Sxarray[inner], &Sxxarray[inner]);
+		UPDATE(filter, values, row, &Narray[inner], &Sxarray[inner], &Sxxarray[inner]);
 	}
 #endif
 
@@ -258,13 +261,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, size_t n, const CTYPE *values, const
 	{
 		for (size_t inner = 0; inner < UNROLL_SIZE; inner++)
 		{
-			UPDATE(valid1,
-				   valid2,
-				   values,
-				   row + inner,
-				   &Narray[inner],
-				   &Sxarray[inner],
-				   &Sxxarray[inner]);
+			UPDATE(filter, values, row + inner, &Narray[inner], &Sxarray[inner], &Sxxarray[inner]);
 		}
 	}
 
@@ -274,7 +271,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, size_t n, const CTYPE *values, const
 	for (; row < n; row++)
 	{
 		const size_t inner = row % UNROLL_SIZE;
-		UPDATE(valid1, valid2, values, row, &Narray[inner], &Sxarray[inner], &Sxxarray[inner]);
+		UPDATE(filter, values, row, &Narray[inner], &Sxarray[inner], &Sxxarray[inner]);
 	}
 
 	/*
@@ -319,7 +316,6 @@ FUNCTION_NAME(one)(void *restrict agg_state, const CTYPE value)
 	state->Sx = newSx;
 }
 
-#include "agg_many_vector_helper.c"
 #include "agg_scalar_helper.c"
 #include "agg_vector_validity_helper.c"
 
@@ -329,7 +325,6 @@ VectorAggFunctions FUNCTION_NAME(argdef) = {
 	.agg_emit = FUNCTION_NAME(emit),
 	.agg_scalar = FUNCTION_NAME(scalar),
 	.agg_vector = FUNCTION_NAME(vector),
-	.agg_many_vector = FUNCTION_NAME(many_vector),
 };
 #undef UPDATE
 #undef COMBINE

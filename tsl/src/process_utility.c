@@ -16,11 +16,98 @@
 
 #include "compression/create.h"
 #include "continuous_aggs/create.h"
+#include "guc.h"
 #include "hypercore/hypercore_handler.h"
 #include "hypercore/utils.h"
 #include "hypertable_cache.h"
 #include "process_utility.h"
 #include "ts_catalog/continuous_agg.h"
+
+/*
+ * Process a COPY (TO) on a table using Hypercore TAM.
+ *
+ * A table using Hypercore TAM stores data in two relations; one for
+ * compressed data and one for non-compressed data. Normally, a COPY returns
+ * all data (compressed and non-compressed in the Hypercore TAM case) via the
+ * TAM. However, a pg_dump will also separately dump the internal compressed
+ * relation, which risks dumping compressed data twice.
+ *
+ * When detecting a COPY TO command, we can do one of:
+ *
+ * 1. Return all data via the TAM but nothing via the internal relation.
+ * 2. Return only non-compressed data via the TAM and compressed data (in
+ * compressed format) via the internal relation.
+ *
+ * Option 2 is the default as that is compatible with compression without
+ * Hypercore TAM.
+ */
+static DDLResult
+process_copy(ProcessUtilityArgs *args)
+{
+	CopyStmt *stmt = castNode(CopyStmt, args->parsetree);
+
+	if (!stmt->relation || stmt->is_from)
+		return DDL_CONTINUE;
+
+	Oid relid = RangeVarGetRelid(stmt->relation, NoLock, false);
+	Oid amoid = ts_get_rel_am(relid);
+
+	/* Check if the is the user-facing Hypercore TAM relation */
+	if (ts_is_hypercore_am(amoid))
+	{
+		if (ts_guc_hypercore_copy_to_behavior == HYPERCORE_COPY_NO_COMPRESSED_DATA)
+		{
+			hypercore_skip_compressed_data_for_relation(relid);
+			ereport(NOTICE,
+					(errmsg("skipping compressed data when copying \"%s\"", get_rel_name(relid)),
+					 errdetail(
+						 "Use timescaledb.hypercore_copy_to_behavior to change this behavior.")));
+		}
+	}
+	else if (ts_guc_hypercore_copy_to_behavior == HYPERCORE_COPY_ALL_DATA)
+	{
+		/* Check if this is the internal compressed relation of a Hypercore
+		 * TAM */
+		const Chunk *chunk = ts_chunk_get_by_relid(relid, false);
+
+		if (!chunk)
+			return DDL_CONTINUE;
+
+		const Chunk *parent = ts_chunk_get_compressed_chunk_parent(chunk);
+
+		if (parent && ts_is_hypercore_am(ts_get_rel_am(parent->table_id)))
+		{
+			/* To avoid returning compressed data twice in a pg_dump, replace
+			 * the 'COPY <relation> TO' with 'COPY (select where false) TO' so
+			 * that the COPY on the internal compressed relation returns no
+			 * data. The data is instead returned in uncompressed form via the
+			 * parent hypercore relation. */
+			SelectStmt *select = makeNode(SelectStmt);
+			A_Const *aconst = makeNode(A_Const);
+#if PG15_LT
+			aconst->val.type = T_Integer;
+			aconst->val.val.ival = 0;
+#else
+			aconst->val.boolval.boolval = false;
+			aconst->val.boolval.type = T_Boolean;
+#endif
+			select->whereClause = (Node *) aconst;
+			stmt->relation = NULL;
+			stmt->attlist = NIL;
+			stmt->query = (Node *) select;
+			ereport(NOTICE,
+					(errmsg("skipping data for internal Hypercore relation \"%s\"",
+							get_rel_name(chunk->table_id)),
+					 errdetail("Use COPY TO on Hypercore relation \"%s\" to return data in "
+							   "uncompressed form"
+							   " or use timescaledb.hypercore_copy_to_behavior "
+							   "to change this behavior.",
+							   get_rel_name(parent->table_id))));
+		}
+	}
+
+	return DDL_CONTINUE;
+}
 
 DDLResult
 tsl_ddl_command_start(ProcessUtilityArgs *args)
@@ -67,6 +154,7 @@ tsl_ddl_command_start(ProcessUtilityArgs *args)
 							if (!is_hypercore && ts_chunk_is_compressed(chunk))
 							{
 								hypercore_set_am(stmt->relation);
+								hypercore_set_reloptions(chunk);
 								/* Skip this command in the alter table
 								 * statement since we process it via quick
 								 * migration */
@@ -98,6 +186,9 @@ tsl_ddl_command_start(ProcessUtilityArgs *args)
 				result = DDL_DONE;
 			break;
 		}
+		case T_CopyStmt:
+			result = process_copy(args);
+			break;
 		default:
 			break;
 	}

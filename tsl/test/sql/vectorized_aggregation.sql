@@ -403,3 +403,7 @@ SET max_parallel_workers_per_gather = 0;
 SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 1000 AND int_value > 1000;
 
 RESET max_parallel_workers_per_gather;
+
+
+-- Can't group by a system column
+SELECT sum(float_value) FROM testtable2 GROUP BY tableoid ORDER BY 1 LIMIT 1;

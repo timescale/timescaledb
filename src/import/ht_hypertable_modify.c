@@ -11,6 +11,7 @@
  * the PostgreSQL License.
  */
 #include <postgres.h>
+#include "debug_assert.h"
 #include <catalog/pg_type.h>
 #include <executor/nodeModifyTable.h>
 #include <executor/tuptable.h>
@@ -460,6 +461,12 @@ lmerge_matched:;
 	 * visible to our MVCC snapshot.
 	 */
 
+#if PG17_GE
+	if (oldtuple != NULL)
+		ExecForceStoreHeapTuple(oldtuple, resultRelInfo->ri_oldTupleSlot,
+								false);
+	else
+#endif
 	if (!table_tuple_fetch_row_version(resultRelInfo->ri_RelationDesc,
 					   tupleid,
 					   SnapshotAny,
@@ -743,6 +750,7 @@ lmerge_matched:;
 					 * tuple, for the refetch we do at
 					 * the top.
 					 */
+					Ensure(tupleid != NULL, "matched tupleid during merge cannot be null");
 					ItemPointerCopy(&context->tmfd.ctid, tupleid);
 					goto lmerge_matched;
 

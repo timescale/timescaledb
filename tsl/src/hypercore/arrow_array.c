@@ -13,6 +13,7 @@
 #include "arrow_array.h"
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
+#include "src/utils.h"
 
 #define TYPLEN_VARLEN (-1)
 
@@ -355,6 +356,13 @@ verify_offsets(const ArrowArray *array)
 ArrowArray *
 arrow_from_compressed(Datum compressed, Oid typid, MemoryContext dest_mcxt, MemoryContext tmp_mcxt)
 {
+	/*
+	 * Need to detoast on our temporary memory context because
+	 * CurrentMemoryContext can be a per-tuple memory context which uses Bump
+	 * allocator on PG17. The Bump allocator doesn't support pfree(), which is
+	 * needed by detoasting since it does some catalog scans.
+	 */
+	MemoryContext oldcxt = MemoryContextSwitchTo(tmp_mcxt);
 	const CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
 	DecompressAllFunction decompress_all =
 		arrow_get_decompress_all(header->compression_algorithm, typid);
@@ -363,7 +371,6 @@ arrow_from_compressed(Datum compressed, Oid typid, MemoryContext dest_mcxt, Memo
 				 format_type_be(typid),
 				 NameStr(*compression_get_algorithm_name(header->compression_algorithm)));
 
-	MemoryContext oldcxt = MemoryContextSwitchTo(tmp_mcxt);
 	ArrowArray *array = decompress_all(PointerGetDatum(header), typid, dest_mcxt);
 
 	Assert(verify_offsets(array));
@@ -470,7 +477,7 @@ arrow_get_datum_fixlen(const ArrowArray *array, Oid typid, int16 typlen, uint16 
 	/* In order to handle fixed-length values of arbitrary size that are byref
 	 * and byval, we use fetch_all() rather than rolling our own. This is
 	 * taken from utils/adt/rangetypes.c */
-	Datum datum = fetch_att(&values[index * typlen], apriv->typbyval, typlen);
+	Datum datum = ts_fetch_att(&values[index * typlen], apriv->typbyval, typlen);
 
 	TS_DEBUG_LOG("retrieved fixlen value %s row %u from offset %u"
 				 " in memory context %s",
@@ -504,7 +511,7 @@ arrow_create_with_buffers(MemoryContext mcxt, int n_buffers)
 		ArrowArray array;
 		const void *buffers[FLEXIBLE_ARRAY_MEMBER];
 	} *array_with_buffers =
-		MemoryContextAllocZero(mcxt, sizeof(ArrowArray) + sizeof(const void *) * n_buffers);
+		MemoryContextAllocZero(mcxt, sizeof(ArrowArray) + (sizeof(const void *) * n_buffers));
 
 	ArrowArray *array = &array_with_buffers->array;
 

@@ -24,7 +24,7 @@
 typedef struct
 {
 	int64 result;
-	bool isnull;
+	bool isvalid;
 } Int24SumState;
 
 static void
@@ -34,7 +34,7 @@ int_sum_init(void *restrict agg_states, int n)
 	for (int i = 0; i < n; i++)
 	{
 		states[i].result = 0;
-		states[i].isnull = true;
+		states[i].isvalid = false;
 	}
 }
 
@@ -43,7 +43,7 @@ int_sum_emit(void *agg_state, Datum *out_result, bool *out_isnull)
 {
 	Int24SumState *state = (Int24SumState *) agg_state;
 	*out_result = Int64GetDatum(state->result);
-	*out_isnull = state->isnull;
+	*out_isnull = !state->isvalid;
 }
 #endif
 

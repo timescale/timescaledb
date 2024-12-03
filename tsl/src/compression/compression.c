@@ -4,7 +4,9 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/skey.h>
 #include <catalog/heap.h>
+#include <catalog/indexing.h>
 #include <catalog/pg_am.h>
 #include <common/base64.h>
 #include <libpq/pqformat.h>
@@ -27,6 +29,7 @@
 #include "debug_assert.h"
 #include "debug_point.h"
 #include "guc.h"
+#include "hypercore/hypercore_handler.h"
 #include "nodes/chunk_dispatch/chunk_insert_state.h"
 #include "segment_meta.h"
 #include "ts_catalog/array_utils.h"
@@ -180,7 +183,8 @@ static void
 RelationDeleteAllRows(Relation rel, Snapshot snap)
 {
 	TupleTableSlot *slot = table_slot_create(rel, NULL);
-	TableScanDesc scan = table_beginscan(rel, snap, 0, (ScanKey) NULL);
+	TableScanDesc scan = table_beginscan(rel, snap, 0, NULL);
+	hypercore_scan_set_skip_compressed(scan, true);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
 	{
@@ -291,8 +295,14 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	 * The following code is trying to find an existing index that
 	 * matches the configuration so that we can skip sequential scan and
 	 * tuplesort.
+	 *
+	 * Note that Hypercore TAM doesn't support (re-)compression via index at
+	 * this point because the index covers also existing compressed tuples. It
+	 * could be supported for initial compression when there is no compressed
+	 * data, but for now just avoid it altogether since compression indexscan
+	 * isn't enabled by default anyway.
 	 */
-	if (ts_guc_enable_compression_indexscan)
+	if (ts_guc_enable_compression_indexscan && !REL_IS_HYPERCORE(in_rel))
 	{
 		List *in_rel_index_oids = RelationGetIndexList(in_rel);
 		foreach (lc, in_rel_index_oids)
@@ -442,6 +452,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	{
 		int64 nrows_processed = 0;
 
+		Assert(!REL_IS_HYPERCORE(in_rel));
 		elog(ts_guc_debug_compression_path_info ? INFO : DEBUG1,
 			 "using index \"%s\" to scan rows for compression",
 			 get_rel_name(matched_index_rel->rd_id));
@@ -545,7 +556,10 @@ compression_create_tuplesort_state(CompressionSettings *settings, Relation rel)
 													 &nulls_first[n]);
 	}
 
-	return tuplesort_begin_heap(tupdesc,
+	/* Make a copy of the tuple descriptor so that it is allocated on the same
+	 * memory context as the tuple sort instead of pointing into the relcache
+	 * entry that could be blown away. */
+	return tuplesort_begin_heap(CreateTupleDescCopy(tupdesc),
 								n_keys,
 								sort_keys,
 								sort_operators,
@@ -562,9 +576,9 @@ compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
 	Tuplesortstate *tuplesortstate;
 	TableScanDesc scan;
 	TupleTableSlot *slot;
-
 	tuplesortstate = compression_create_tuplesort_state(settings, in_rel);
-	scan = table_beginscan(in_rel, GetLatestSnapshot(), 0, (ScanKey) NULL);
+	scan = table_beginscan(in_rel, GetLatestSnapshot(), 0, NULL);
+	hypercore_scan_set_skip_compressed(scan, true);
 	slot = table_slot_create(in_rel, NULL);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
@@ -793,7 +807,7 @@ row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor
 											 ALLOCSET_DEFAULT_SIZES),
 		.compressed_table = compressed_table,
 		.bistate = need_bistate ? GetBulkInsertState() : NULL,
-		.resultRelInfo = ts_catalog_open_indexes(compressed_table),
+		.resultRelInfo = CatalogOpenIndexes(compressed_table),
 		.n_input_columns = RelationGetDescr(uncompressed_table)->natts,
 		.count_metadata_column_offset = AttrNumberGetAttrOffset(count_metadata_column_num),
 		.compressed_values = palloc(sizeof(Datum) * num_columns_in_compressed_table),
@@ -1124,7 +1138,7 @@ row_compressor_close(RowCompressor *row_compressor)
 {
 	if (row_compressor->bistate)
 		FreeBulkInsertState(row_compressor->bistate);
-	ts_catalog_close_indexes(row_compressor->resultRelInfo);
+	CatalogCloseIndexes(row_compressor->resultRelInfo);
 }
 
 /******************
@@ -1216,7 +1230,7 @@ build_decompressor(Relation in_rel, Relation out_rel)
 
 		.out_desc = out_desc,
 		.out_rel = out_rel,
-		.indexstate = ts_catalog_open_indexes(out_rel),
+		.indexstate = CatalogOpenIndexes(out_rel),
 
 		.mycid = GetCurrentCommandId(true),
 		.bistate = GetBulkInsertState(),
@@ -1233,7 +1247,8 @@ build_decompressor(Relation in_rel, Relation out_rel)
 														ALLOCSET_DEFAULT_SIZES),
 		.estate = CreateExecutorState(),
 
-		.decompressed_slots = palloc0(sizeof(void *) * TARGET_COMPRESSED_BATCH_SIZE),
+		.decompressed_slots =
+			(TupleTableSlot **) palloc0(sizeof(void *) * TARGET_COMPRESSED_BATCH_SIZE),
 	};
 
 	create_per_compressed_column(&decompressor);
@@ -1265,7 +1280,7 @@ row_decompressor_close(RowDecompressor *decompressor)
 {
 	FreeBulkInsertState(decompressor->bistate);
 	MemoryContextDelete(decompressor->per_compressed_row_ctx);
-	ts_catalog_close_indexes(decompressor->indexstate);
+	CatalogCloseIndexes(decompressor->indexstate);
 	FreeExecutorState(decompressor->estate);
 	detoaster_close(&decompressor->detoaster);
 }
@@ -1814,6 +1829,9 @@ tsl_compressed_data_info(PG_FUNCTION_ARGS)
 			break;
 		case COMPRESSION_ALGORITHM_ARRAY:
 			has_nulls = array_compressed_has_nulls(header);
+			break;
+		default:
+			elog(ERROR, "unknown compression algorithm %d", header->compression_algorithm);
 			break;
 	}
 

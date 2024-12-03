@@ -222,7 +222,7 @@ select created_at, location_id, temp from :chunk2 where location_id=1 and temp=2
  Wed Jun 01 17:00:00 2022 PDT |           1 |    2
 (1 row)
 
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
+select compress_chunk(show_chunks(:'hypertable'), hypercore_use_access_method => true);
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk

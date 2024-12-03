@@ -11,8 +11,8 @@ case PG_AGG_OID_HELPER(AGG_NAME, PG_TYPE):
 #else
 
 static pg_attribute_always_inline void
-FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *valid1,
-						   const uint64 *valid2, MemoryContext agg_extra_mctx)
+FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *filter,
+						   MemoryContext agg_extra_mctx)
 {
 	Int24SumState *state = (Int24SumState *) agg_state;
 
@@ -37,9 +37,9 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 	bool have_result = false;
 	for (int row = 0; row < n; row++)
 	{
-		const bool row_ok = arrow_row_both_valid(valid1, valid2, row);
+		const bool row_ok = arrow_row_is_valid(filter, row);
 		batch_sum += values[row] * row_ok;
-		have_result |= row_ok;
+		have_result = have_result || row_ok;
 	}
 
 	if (unlikely(pg_add_s64_overflow(state->result, batch_sum, &state->result)))
@@ -48,7 +48,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE), errmsg("bigint out of range")));
 	}
 
-	state->isnull &= !have_result;
+	state->isvalid = state->isvalid || have_result;
 }
 
 static pg_attribute_always_inline void
@@ -56,12 +56,11 @@ FUNCTION_NAME(one)(void *restrict agg_state, const CTYPE value)
 {
 	Int24SumState *state = (Int24SumState *) agg_state;
 	state->result += value;
-	state->isnull = false;
+	state->isvalid = true;
 }
 
 typedef Int24SumState FUNCTION_NAME(state);
 
-#include "agg_many_vector_helper.c"
 #include "agg_scalar_helper.c"
 #include "agg_vector_validity_helper.c"
 

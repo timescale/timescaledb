@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 SET timescaledb.enable_transparent_decompression to OFF;
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 \set PREFIX 'EXPLAIN (analyze, verbose, costs off, timing off, summary off)'
 \ir include/rand_generator.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -1498,7 +1498,7 @@ SET reltuples = 0, relpages = 0
   WHERE ht.table_name = 'stattest2' AND ch.hypertable_id = ht.id
         AND ch.compressed_chunk_id > 0 );
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 -- reltuples is initially -1 on PG14 before VACUUM/ANALYZE has been run
 SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, relpages, relallvisible FROM pg_class
  WHERE relname in ( SELECT ch.table_name FROM
@@ -1764,6 +1764,7 @@ SELECT compress_chunk(i) FROM show_chunks('f_sensor_data') i;
 (1 row)
 
 CALL reindex_compressed_hypertable('f_sensor_data');
+VACUUM ANALYZE f_sensor_data;
 -- Encourage use of parallel plans
 SET parallel_setup_cost = 0;
 SET parallel_tuple_cost = 0;
@@ -1808,11 +1809,12 @@ SELECT sum(cpu) FROM f_sensor_data;
          Workers Planned: 4
          ->  Custom Scan (VectorAgg)
                Output: (PARTIAL sum(_hyper_37_73_chunk.cpu))
+               Grouping Policy: all compressed batches
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_73_chunk
                      Output: _hyper_37_73_chunk.cpu
                      ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_38_74_chunk
                            Output: compress_hyper_38_74_chunk._ts_meta_count, compress_hyper_38_74_chunk.sensor_id, compress_hyper_38_74_chunk._ts_meta_min_1, compress_hyper_38_74_chunk._ts_meta_max_1, compress_hyper_38_74_chunk."time", compress_hyper_38_74_chunk.cpu, compress_hyper_38_74_chunk.temperature
-(11 rows)
+(12 rows)
 
 -- Encourage use of Index Scan
 SET enable_seqscan = false;
@@ -1826,7 +1828,7 @@ SELECT * FROM f_sensor_data WHERE sensor_id > 100;
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Gather
    Output: _hyper_37_73_chunk."time", _hyper_37_73_chunk.sensor_id, _hyper_37_73_chunk.cpu, _hyper_37_73_chunk.temperature
-   Workers Planned: 2
+   Workers Planned: 3
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_73_chunk
          Output: _hyper_37_73_chunk."time", _hyper_37_73_chunk.sensor_id, _hyper_37_73_chunk.cpu, _hyper_37_73_chunk.temperature
          ->  Parallel Index Scan using compress_hyper_38_74_chunk_sensor_id__ts_meta_min_1__ts_met_idx on _timescaledb_internal.compress_hyper_38_74_chunk
@@ -1863,11 +1865,12 @@ SELECT sum(cpu) FROM f_sensor_data;
                            Output: _hyper_37_73_chunk.cpu
                ->  Custom Scan (VectorAgg)
                      Output: (PARTIAL sum(_hyper_37_73_chunk.cpu))
+                     Grouping Policy: all compressed batches
                      ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_73_chunk
                            Output: _hyper_37_73_chunk.cpu
                            ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_38_74_chunk
                                  Output: compress_hyper_38_74_chunk._ts_meta_count, compress_hyper_38_74_chunk.sensor_id, compress_hyper_38_74_chunk._ts_meta_min_1, compress_hyper_38_74_chunk._ts_meta_max_1, compress_hyper_38_74_chunk."time", compress_hyper_38_74_chunk.cpu, compress_hyper_38_74_chunk.temperature
-(16 rows)
+(17 rows)
 
 :explain
 SELECT * FROM f_sensor_data WHERE sensor_id > 100;

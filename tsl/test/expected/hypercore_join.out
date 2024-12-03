@@ -108,6 +108,8 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
 -- We disable columnar scan for these tests since we have a dedicated
 -- test for this.
 set timescaledb.enable_columnarscan to false;
+-- Discourage seqscan to make sure we predictibly use indexscan
+set enable_seqscan to false;
 set enable_memoize to false;
 -- Create a hypercore with a few rows and use the big table to join
 -- with it. This should put the hypercore as the inner relation and
@@ -139,7 +141,7 @@ alter table the_hypercore set (
       timescaledb.compress_segmentby = '',
       timescaledb.compress_orderby = 'updated_at desc'
 );
-select compress_chunk(show_chunks('the_hypercore'), compress_using => 'hypercore');
+select compress_chunk(show_chunks('the_hypercore'), hypercore_use_access_method => true);
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_3_7_chunk

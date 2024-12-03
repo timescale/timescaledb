@@ -16,13 +16,14 @@ static void
 FUNCTION_NAME(emit)(void *agg_state, Datum *out_result, bool *out_isnull)
 {
 	FloatSumState *state = (FloatSumState *) agg_state;
-	*out_result = CTYPE_TO_DATUM((CTYPE) state->result);
-	*out_isnull = state->isnull;
+	const CTYPE result_casted = state->result;
+	*out_result = CTYPE_TO_DATUM(result_casted);
+	*out_isnull = !state->isvalid;
 }
 
 static pg_attribute_always_inline void
-FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *valid1,
-						   const uint64 *valid2, MemoryContext agg_extra_mctx)
+FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *filter,
+						   MemoryContext agg_extra_mctx)
 {
 	/*
 	 * Vector registers can be up to 512 bits wide.
@@ -46,15 +47,15 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 			 * infinities and NaNs.
 			 */
 #define INNER_LOOP                                                                                 \
-	const bool valid = arrow_row_both_valid(valid1, valid2, row);                                  \
+	const bool row_valid = arrow_row_is_valid(filter, row);                                        \
 	union                                                                                          \
 	{                                                                                              \
 		CTYPE f;                                                                                   \
 		MASKTYPE m;                                                                                \
 	} u = { .f = values[row] };                                                                    \
-	u.m &= valid ? ~(MASKTYPE) 0 : (MASKTYPE) 0;                                                   \
+	u.m &= row_valid ? ~(MASKTYPE) 0 : (MASKTYPE) 0;                                               \
 	*dest += u.f;                                                                                  \
-	*have_result |= valid;
+	*have_result = *have_result || row_valid;
 
 			INNER_LOOP
 		}
@@ -70,13 +71,13 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 	for (int i = 1; i < UNROLL_SIZE; i++)
 	{
 		sum_accu[0] += sum_accu[i];
-		have_result_accu[0] |= have_result_accu[i];
+		have_result_accu[0] = have_result_accu[0] || have_result_accu[i];
 	}
 #undef UNROLL_SIZE
 #undef INNER_LOOP
 
 	FloatSumState *state = (FloatSumState *) agg_state;
-	state->isnull &= !have_result_accu[0];
+	state->isvalid = state->isvalid || have_result_accu[0];
 	state->result += sum_accu[0];
 }
 
@@ -86,11 +87,10 @@ static pg_attribute_always_inline void
 FUNCTION_NAME(one)(void *restrict agg_state, const CTYPE value)
 {
 	FUNCTION_NAME(state) *state = (FUNCTION_NAME(state) *) agg_state;
-	state->isnull = false;
+	state->isvalid = true;
 	state->result += value;
 }
 
-#include "agg_many_vector_helper.c"
 #include "agg_scalar_helper.c"
 #include "agg_vector_validity_helper.c"
 

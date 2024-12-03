@@ -67,6 +67,8 @@ create index normaltable_location_id_idx on normaltable (location_id);
 
 -- Relstats should be the same for both tables, except for pages since
 -- a hypercore is compressed. Column stats is not updated.
+analyze :chunk1;
+analyze normaltable;
 select * from relstats_compare;
 select * from attrstats_compare;
 
@@ -98,6 +100,8 @@ select * from normaltable where location_id = 1;
 delete from :chunk1 where location_id=1;
 delete from normaltable where location_id=1;
 
+analyze :chunk1;
+analyze normaltable;
 select * from relstats_compare;
 select * from attrstats_same;
 
@@ -128,6 +132,7 @@ select * from attrstats_same;
 alter table :chunk2 set access method hypercore;
 update :hypertable set device_id = 2 where device_id = 1;
 select * from relstats where relid = :'chunk2'::regclass;
+vacuum analyze :chunk2;
 select * from attrstats where relid = :'chunk2'::regclass;
 select count(*) from :chunk2;
 

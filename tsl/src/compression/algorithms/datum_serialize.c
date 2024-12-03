@@ -19,6 +19,7 @@
 
 #include <compat/compat.h>
 #include "datum_serialize.h"
+#include "src/utils.h"
 #include <compression/compression.h>
 
 typedef struct DatumSerializer
@@ -167,6 +168,11 @@ datum_to_bytes_and_advance(DatumSerializer *serializer, char *start, Size *max_s
 		start = align_and_zero(start, serializer->type_align, max_size);
 		data_length = serializer->type_len;
 		check_allowed_data_len(data_length, *max_size);
+
+		/* Data length should be set to something sensible, otherwise an error
+		 * will be raised inside store_att_byval, so we assert here to get a
+		 * stack. */
+		Assert(data_length > 0 && data_length <= 8);
 		store_att_byval(start, datum, data_length);
 	}
 	else if (serializer->type_len == -1)
@@ -322,7 +328,7 @@ bytes_to_datum_and_advance(DatumDeserializer *deserializer, const char **ptr)
 		CheckCompressedData((VARATT_IS_1B(*ptr) && VARSIZE_1B(*ptr) >= VARHDRSZ_SHORT) ||
 							(VARSIZE_4B(*ptr) > VARHDRSZ));
 	}
-	res = fetch_att(*ptr, deserializer->type_by_val, deserializer->type_len);
+	res = ts_fetch_att(*ptr, deserializer->type_by_val, deserializer->type_len);
 	*ptr = att_addlength_pointer(*ptr, deserializer->type_len, *ptr);
 	return res;
 }

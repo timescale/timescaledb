@@ -8,6 +8,9 @@ show timescaledb.hypercore_indexam_whitelist;
  btree,hash
 (1 row)
 
+-- We need this to be able to create an index for a chunk as a default
+-- user.
+grant all on schema _timescaledb_internal to :ROLE_DEFAULT_PERM_USER;
 set role :ROLE_DEFAULT_PERM_USER;
 SET timescaledb.arrow_cache_maxsize = 4;
 CREATE TABLE readings(
@@ -16,7 +19,8 @@ CREATE TABLE readings(
        device int,
        temp numeric(4,1),
        humidity float,
-       jdata jsonb
+       jdata jsonb,
+       temp_far float8 generated always as (9 * temp / 5 + 32) stored
 );
 SELECT create_hypertable('readings', by_range('time', '1d'::interval));
 NOTICE:  adding not-null constraint to column "time"
@@ -137,17 +141,27 @@ WHERE time = '2022-06-01'::timestamptz;
 
 -- Create a new index on a compressed column
 CREATE INDEX ON readings (location);
--- Check that we error out on unsupported index types
 \set ON_ERROR_STOP 0
+-- Check that we error out on unsupported index types
 create index on readings using brin (device);
 ERROR:  index access method "brin" not supported
 create index on readings using gin (jdata);
 ERROR:  index access method "gin" not supported
 create index on readings using magicam (device);
 ERROR:  access method "magicam" does not exist
+-- Check that we error out when trying to build index concurrently.
+create index concurrently on readings (device);
+ERROR:  hypertables do not support concurrent index creation
+create index concurrently invalid_index on :chunk (device);
+ERROR:  concurrent index creation on is not supported on tables using hypercore table access method
+-- This will also create the index on the chunk (this is how it works,
+-- see validate_index() in index.c for more information), but that
+-- index is not valid, so we just drop it explicitly here to keep the
+-- rest of the test clean.
+drop index _timescaledb_internal.invalid_index;
 \set ON_ERROR_STOP 1
 -- Index added on location
-SELECT * FROM test.show_indexes(:'chunk');
+SELECT * FROM test.show_indexes(:'chunk') ORDER BY "Index"::text;
                             Index                             |  Columns   | Expr | Unique | Primary | Exclusion | Tablespace 
 --------------------------------------------------------------+------------+------+--------+---------+-----------+------------
  _timescaledb_internal."1_1_readings_time_key"                | {time}     |      | t      | f       | f         | 
@@ -180,7 +194,7 @@ SET enable_indexscan = false;
 -- Columnar scan with qual on segmentby where filtering should be
 -- turned into scankeys
 EXPLAIN (costs off, timing off, summary off)
-SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
                          QUERY PLAN                         
 ------------------------------------------------------------
  Limit
@@ -190,7 +204,7 @@ SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
                Scankey: (device < 4)
 (5 rows)
 
-SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
              time             | location | device | temp |     humidity     |      jdata       
 ------------------------------+----------+--------+------+------------------+------------------
  Wed Jun 01 00:55:00 2022 PDT |        1 |      1 | 18.1 | 93.2399098726618 | {"a": 1, "b": 2}
@@ -205,7 +219,7 @@ SET enable_indexscan = true;
 SET enable_seqscan = false;
 SET timescaledb.enable_columnarscan = false;
 EXPLAIN (costs off, timing off, summary off)
-SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
                                 QUERY PLAN                                
 --------------------------------------------------------------------------
  Limit
@@ -215,7 +229,7 @@ SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
                Filter: (device < 4)
 (5 rows)
 
-SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
              time             | location | device | temp |     humidity     |      jdata       
 ------------------------------+----------+--------+------+------------------+------------------
  Wed Jun 01 00:55:00 2022 PDT |        1 |      1 | 18.1 | 93.2399098726618 | {"a": 1, "b": 2}
@@ -230,7 +244,7 @@ SET enable_indexscan = false;
 -- shown further down.
 SET timescaledb.enable_transparent_decompression TO 'hypercore';
 EXPLAIN (costs off, timing off, summary off)
-SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
                                 QUERY PLAN                                
 --------------------------------------------------------------------------
  Limit
@@ -243,7 +257,7 @@ SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
                            Filter: (device < 4)
 (8 rows)
 
-SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
              time             | location | device | temp |     humidity     |      jdata       
 ------------------------------+----------+--------+------+------------------+------------------
  Wed Jun 01 00:55:00 2022 PDT |        1 |      1 | 18.1 | 93.2399098726618 | {"a": 1, "b": 2}
@@ -257,7 +271,7 @@ SET timescaledb.enable_transparent_decompression TO false;
 -- Qual on compressed column with index
 SET timescaledb.enable_columnarscan = true;
 EXPLAIN (costs off, timing off, summary off)
-SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
                          QUERY PLAN                         
 ------------------------------------------------------------
  Limit
@@ -267,7 +281,7 @@ SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
                Vectorized Filter: (location < 4)
 (5 rows)
 
-SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
              time             | location | device | temp |     humidity     |      jdata       
 ------------------------------+----------+--------+------+------------------+------------------
  Wed Jun 01 00:25:00 2022 PDT |        3 |      5 | 23.5 |  76.360064629636 | {"a": 1, "b": 2}
@@ -281,7 +295,7 @@ SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
 SET enable_indexscan = true;
 SET timescaledb.enable_columnarscan = false;
 EXPLAIN (costs off, timing off, summary off)
-SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
                                        QUERY PLAN                                        
 -----------------------------------------------------------------------------------------
  Limit
@@ -291,7 +305,7 @@ SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
                Index Cond: (location < 4)
 (5 rows)
 
-SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
              time             | location | device | temp |     humidity     |      jdata       
 ------------------------------+----------+--------+------+------------------+------------------
  Wed Jun 01 00:25:00 2022 PDT |        3 |      5 | 23.5 |  76.360064629636 | {"a": 1, "b": 2}
@@ -306,7 +320,7 @@ SET enable_seqscan = true;
 SET timescaledb.enable_columnarscan = true;
 -- With transparent decompression
 SET timescaledb.enable_transparent_decompression TO 'hypercore';
-SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
              time             | location | device | temp |     humidity     |      jdata       
 ------------------------------+----------+--------+------+------------------+------------------
  Wed Jun 01 00:25:00 2022 PDT |        3 |      5 | 23.5 |  76.360064629636 | {"a": 1, "b": 2}
@@ -320,14 +334,14 @@ SET timescaledb.enable_transparent_decompression TO false;
 -- Ordering on compressed column that has index
 SET enable_indexscan = true;
 EXPLAIN (costs off, timing off, summary off)
-SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk ORDER BY location ASC LIMIT 5;
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
  Limit
    ->  Index Scan using _hyper_1_1_chunk_readings_location_idx on _hyper_1_1_chunk
 (2 rows)
 
-SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk ORDER BY location ASC LIMIT 5;
              time             | location | device | temp |     humidity     |      jdata       
 ------------------------------+----------+--------+------+------------------+------------------
  Wed Jun 01 00:55:00 2022 PDT |        1 |      1 | 18.1 | 93.2399098726618 | {"a": 1, "b": 2}
@@ -339,7 +353,7 @@ SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
 
 -- Show with transparent decompression
 SET timescaledb.enable_transparent_decompression TO 'hypercore';
-SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk ORDER BY location ASC LIMIT 5;
              time             | location | device | temp |     humidity     |      jdata       
 ------------------------------+----------+--------+------+------------------+------------------
  Wed Jun 01 13:40:00 2022 PDT |        1 |      4 | 12.8 | 37.4106484592863 | {"a": 1, "b": 2}
@@ -399,6 +413,13 @@ WHERE format('%I.%I', c.schema_name, c.table_name)::regclass = :'chunk'::regclas
      0
 (1 row)
 
+-- Check that the generated columns contain the correct data before
+-- compression.
+select temp, temp_far from :chunk where temp_far != 9 * temp / 5 + 32;
+ temp | temp_far 
+------+----------
+(0 rows)
+
 SELECT compress_chunk(:'chunk');
              compress_chunk             
 ----------------------------------------
@@ -415,8 +436,15 @@ ON (c1.compressed_chunk_id = c2.id);
  _timescaledb_internal.compress_hyper_2_33_chunk
 (1 row)
 
+-- Check that the generated columns contain the correct data after
+-- compression.
+select temp, temp_far from :chunk where temp_far != 9 * temp / 5 + 32;
+ temp | temp_far 
+------+----------
+(0 rows)
+
 -- Show same output as first query above but for heap
-SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
              time             | location | device | temp |     humidity     |      jdata       
 ------------------------------+----------+--------+------+------------------+------------------
  Wed Jun 01 00:55:00 2022 PDT |        1 |      1 | 18.1 | 93.2399098726618 | {"a": 1, "b": 2}
@@ -461,6 +489,8 @@ WHERE format('%I.%I', chunk_schema, chunk_name)::regclass = :'chunk'::regclass;
  Tue May 31 17:00:00 2022 PDT | Wed Jun 01 17:00:00 2022 PDT
 (1 row)
 
+-- Drop the generated column to make tests below easier.
+alter table readings drop column temp_far;
 --
 -- ADD COLUMN
 --
@@ -538,7 +568,7 @@ SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
  Wed Jun 01 00:06:15 2022 PDT |        2 |     24 | 36.7 | 74.3169985385593 |       | 7.30696097227121
 (1 row)
 
--- Drop column and add again
+-- Drop column and add again, with a default this time
 ALTER TABLE readings DROP COLUMN pressure;
 EXPLAIN (verbose, costs off)
 SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
@@ -555,7 +585,7 @@ SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
  Wed Jun 01 00:06:15 2022 PDT |        2 |     24 | 36.7 | 74.3169985385593 | 
 (1 row)
 
-ALTER TABLE readings ADD COLUMN pressure float;
+ALTER TABLE readings ADD COLUMN pressure float default 1.0;
 EXPLAIN (verbose, costs off)
 SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
                                              QUERY PLAN                                             
@@ -568,7 +598,7 @@ SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
 SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
              time             | location | device | temp |     humidity     | jdata | pressure 
 ------------------------------+----------+--------+------+------------------+-------+----------
- Wed Jun 01 00:06:15 2022 PDT |        2 |     24 | 36.7 | 74.3169985385593 |       |         
+ Wed Jun 01 00:06:15 2022 PDT |        2 |     24 | 36.7 | 74.3169985385593 |       |        1
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -592,3 +622,167 @@ SELECT count(*) FROM :chunk;
 (1 row)
 
 drop table readings;
+---------------------------------------------
+-- Test recompression via compress_chunk() --
+---------------------------------------------
+show timescaledb.enable_transparent_decompression;
+ timescaledb.enable_transparent_decompression 
+----------------------------------------------
+ off
+(1 row)
+
+create table recompress (time timestamptz, value int);
+select create_hypertable('recompress', 'time', create_default_indexes => false);
+NOTICE:  adding not-null constraint to column "time"
+    create_hypertable    
+-------------------------
+ (3,public,recompress,t)
+(1 row)
+
+insert into recompress values ('2024-01-01 01:00', 1), ('2024-01-01 02:00', 2);
+select format('%I.%I', chunk_schema, chunk_name)::regclass as unique_chunk
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = 'recompress'::regclass
+ order by unique_chunk asc
+ limit 1 \gset
+alter table recompress set (timescaledb.compress_orderby='time');
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "recompress" is set to ""
+alter table :unique_chunk set access method hypercore;
+-- Should already be compressed
+select compress_chunk(:'unique_chunk');
+NOTICE:  chunk "_hyper_3_34_chunk" is already compressed
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_3_34_chunk
+(1 row)
+
+-- Insert something to compress
+insert into recompress values ('2024-01-01 03:00', 3);
+select compress_chunk(:'unique_chunk');
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_3_34_chunk
+(1 row)
+
+-- Make sure we see the data after recompression and everything is
+-- compressed
+select _timescaledb_debug.is_compressed_tid(ctid), * from recompress order by time;
+ is_compressed_tid |             time             | value 
+-------------------+------------------------------+-------
+ t                 | Mon Jan 01 01:00:00 2024 PST |     1
+ t                 | Mon Jan 01 02:00:00 2024 PST |     2
+ t                 | Mon Jan 01 03:00:00 2024 PST |     3
+(3 rows)
+
+-- Add a time index to test recompression with index scan. Index scans
+-- during compression is actually disabled for Hypercore TAM since the
+-- index covers also compressed data, so this is only a check that the
+-- GUC can be set without negative consequences.
+create index on recompress (time);
+set timescaledb.enable_compression_indexscan=true;
+-- Insert another value to compress
+insert into recompress values ('2024-01-02 04:00', 4);
+select compress_chunk(:'unique_chunk');
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_3_34_chunk
+(1 row)
+
+select _timescaledb_debug.is_compressed_tid(ctid), * from recompress order by time;
+ is_compressed_tid |             time             | value 
+-------------------+------------------------------+-------
+ t                 | Mon Jan 01 01:00:00 2024 PST |     1
+ t                 | Mon Jan 01 02:00:00 2024 PST |     2
+ t                 | Mon Jan 01 03:00:00 2024 PST |     3
+ t                 | Tue Jan 02 04:00:00 2024 PST |     4
+(4 rows)
+
+-- Test using delete instead of truncate when compressing
+set timescaledb.enable_delete_after_compression=true;
+-- Insert another value to compress
+insert into recompress values ('2024-01-02 05:00', 5);
+select compress_chunk(:'unique_chunk');
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_3_34_chunk
+(1 row)
+
+select _timescaledb_debug.is_compressed_tid(ctid), * from recompress order by time;
+ is_compressed_tid |             time             | value 
+-------------------+------------------------------+-------
+ t                 | Mon Jan 01 01:00:00 2024 PST |     1
+ t                 | Mon Jan 01 02:00:00 2024 PST |     2
+ t                 | Mon Jan 01 03:00:00 2024 PST |     3
+ t                 | Tue Jan 02 04:00:00 2024 PST |     4
+ t                 | Tue Jan 02 05:00:00 2024 PST |     5
+(5 rows)
+
+-- Add a segmentby key to test segmentwise recompression
+-- Insert another value to compress that goes into same segment
+alter table :unique_chunk set access method heap;
+alter table recompress set (timescaledb.compress_orderby='time', timescaledb.compress_segmentby='value');
+alter table :unique_chunk set access method hypercore;
+insert into recompress values ('2024-01-02 06:00', 5);
+select compress_chunk(:'unique_chunk');
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_3_34_chunk
+(1 row)
+
+select _timescaledb_debug.is_compressed_tid(ctid), * from recompress order by time;
+ is_compressed_tid |             time             | value 
+-------------------+------------------------------+-------
+ t                 | Mon Jan 01 01:00:00 2024 PST |     1
+ t                 | Mon Jan 01 02:00:00 2024 PST |     2
+ t                 | Mon Jan 01 03:00:00 2024 PST |     3
+ t                 | Tue Jan 02 04:00:00 2024 PST |     4
+ t                 | Tue Jan 02 05:00:00 2024 PST |     5
+ t                 | Tue Jan 02 06:00:00 2024 PST |     5
+(6 rows)
+
+--------------------------------------
+-- C-native tests for hypercore TAM --
+--------------------------------------
+-- Test rescan functionality and ability to return only non-compressed data
+create table rescan (time timestamptz, device int, temp float);
+select create_hypertable('rescan', 'time');
+NOTICE:  adding not-null constraint to column "time"
+  create_hypertable  
+---------------------
+ (5,public,rescan,t)
+(1 row)
+
+alter table rescan set (timescaledb.compress_orderby='time', timescaledb.compress_segmentby='device');
+insert into rescan values ('2024-11-01 01:00', 1, 1.0), ('2024-11-01 02:00', 1, 2.0), ('2024-11-01 03:00', 1, 3.0), ('2024-11-01 06:00', 1, 4.0), ('2024-11-01 05:00', 1, 5.0);
+select format('%I.%I', chunk_schema, chunk_name)::regclass as rescan_chunk
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = 'rescan'::regclass
+ order by rescan_chunk asc
+ limit 1 \gset
+select compress_chunk(:'rescan_chunk', hypercore_use_access_method => true);
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_5_40_chunk
+(1 row)
+
+select relname, amname
+  from show_chunks('rescan') as chunk
+  join pg_class on (pg_class.oid = chunk)
+  join pg_am on (relam = pg_am.oid);
+      relname      |  amname   
+-------------------+-----------
+ _hyper_5_40_chunk | hypercore
+(1 row)
+
+insert into rescan values ('2024-11-02 01:00', 2, 1.0), ('2024-11-02 02:00', 2, 2.0), ('2024-11-02 03:00', 1, 3.0), ('2024-11-02 05:00', 2, 4.0);
+reset role;
+create function test_hypercore(relid regclass)
+returns void as :TSL_MODULE_PATHNAME, 'ts_test_hypercore' language c;
+set role :ROLE_DEFAULT_PERM_USER;
+select test_hypercore(:'rescan_chunk');
+ test_hypercore 
+----------------
+ 
+(1 row)
+

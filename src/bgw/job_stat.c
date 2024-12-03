@@ -34,7 +34,7 @@ bgw_job_stat_next_start_was_set(FormData_bgw_job_stat *fd)
 static ScanTupleResult
 bgw_job_stat_tuple_found(TupleInfo *ti, void *const data)
 {
-	BgwJobStat **job_stat_pp = data;
+	BgwJobStat **job_stat_pp = (BgwJobStat **) data;
 
 	*job_stat_pp = STRUCT_FROM_SLOT(ti->slot, ti->mctx, BgwJobStat, FormData_bgw_job_stat);
 
@@ -94,7 +94,7 @@ ts_bgw_job_stat_find(int32 bgw_job_id)
 	bgw_job_stat_scan_job_id(bgw_job_id,
 							 bgw_job_stat_tuple_found,
 							 NULL,
-							 &job_stat,
+							 (void *) &job_stat,
 							 AccessShareLock);
 
 	return job_stat;
@@ -235,8 +235,8 @@ ts_get_next_scheduled_execution_slot(BgwJob *job, TimestampTz finish_time)
 			DirectFunctionCall2(timestamptz_part, CStringGetTextDatum("month"), timebucket_fini);
 
 		/* convert everything to months */
-		float8 month_diff = DatumGetFloat8(year_fini) * 12 + DatumGetFloat8(month_fini) -
-							(DatumGetFloat8(year_init) * 12 + DatumGetFloat8(month_init));
+		float8 month_diff = (DatumGetFloat8(year_fini) * 12) + DatumGetFloat8(month_fini) -
+							((DatumGetFloat8(year_init) * 12) + DatumGetFloat8(month_init));
 
 		Datum months_to_add = DirectFunctionCall2(interval_mul,
 												  IntervalPGetDatum(&one_month),

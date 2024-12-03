@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 CREATE TABLE sensor_data(
 time timestamptz not null,

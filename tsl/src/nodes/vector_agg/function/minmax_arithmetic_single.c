@@ -10,8 +10,8 @@ case PG_AGG_OID_HELPER(AGG_NAME, PG_TYPE):
 	return &FUNCTION_NAME(argdef);
 #else
 static pg_attribute_always_inline void
-FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *valid1,
-						   const uint64 *valid2, MemoryContext agg_extra_mctx)
+FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *filter,
+						   MemoryContext agg_extra_mctx)
 {
 	MinMaxState *state = (MinMaxState *) agg_state;
 
@@ -20,7 +20,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 	for (int row = 0; row < n; row++)
 	{
 		const CTYPE new_value = values[row];
-		const bool new_value_ok = arrow_row_both_valid(valid1, valid2, row);
+		const bool new_value_ok = arrow_row_is_valid(filter, row);
 
 		/*
 		 * Note that we have to properly handle NaNs and Infinities for floats.
@@ -30,7 +30,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 							 isnan((double) new_value));
 
 		outer_result = do_replace ? new_value : outer_result;
-		outer_isvalid |= do_replace;
+		outer_isvalid = outer_isvalid || do_replace;
 	}
 
 	state->isvalid = outer_isvalid;
@@ -58,7 +58,6 @@ FUNCTION_NAME(one)(void *restrict agg_state, const CTYPE value)
 	}
 }
 
-#include "agg_many_vector_helper.c"
 #include "agg_scalar_helper.c"
 #include "agg_vector_validity_helper.c"
 
@@ -68,7 +67,6 @@ VectorAggFunctions FUNCTION_NAME(argdef) = {
 	.agg_emit = minmax_emit,
 	.agg_scalar = FUNCTION_NAME(scalar),
 	.agg_vector = FUNCTION_NAME(vector),
-	.agg_many_vector = FUNCTION_NAME(many_vector),
 };
 #endif
 

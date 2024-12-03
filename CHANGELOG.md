@@ -4,6 +4,36 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.17.2 (2024-11-06)
+
+This release contains bug fixes since the 2.17.1 release. We recommend that you
+upgrade at the next available opportunity.
+
+**Bugfixes**
+* #7384 Fix "negative bitmapset member not allowed" and performance degradation
+on queries to compressed tables with ORDER BY clause matching the order of the
+compressed data
+* #7388 Use-after-free in vectorized grouping by segmentby columns
+
+**Thanks**
+* @dx034 for reporting an issue with negative bitmapset members due to large OIDs
+
+## 2.17.1 (2024-10-21)
+
+This release contains performance improvements and bug fixes since
+the 2.17.0 release. We recommend that you upgrade at the next
+available opportunity.
+
+**Features**
+* #7360 Add chunk skipping GUC
+
+**Bugfixes**
+* #7335 Change log level used in compression
+* #7342 Fix collation for in-memory tuple filtering
+
+**Thanks**
+* @gmilamjr for reporting an issue with the log level of compression messages
+* @hackbnw for reporting an issue with collation during tuple filtering
 
 ## 2.17.0 (2024-10-08)
 

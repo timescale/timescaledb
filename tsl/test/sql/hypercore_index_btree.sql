@@ -93,6 +93,10 @@ and (attname='location_id' or attname='device_id' or attname='owner_id');
 
 -- the query should not use index-only scan on the hypestore chunk
 -- (number 2) because it is not supported on segmentby indexes
+--
+-- first, drop one of the indexes on location_id to make the index to
+-- pick predictible
+drop index hypertable_location_id_include_humidity_idx;
 select explain_anonymize(format($$
        select location_id, count(*) into comp from %s
        where location_id in (3,4,5) group by location_id
@@ -131,7 +135,7 @@ select explain_anonymize(format($$
 $$, :'chunk2'));
 select created_at, location_id, temp from :chunk2 where location_id=1 and temp=2.0;
 
-select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hypercore');
+select compress_chunk(show_chunks(:'hypertable'), hypercore_use_access_method => true);
 
 vacuum analyze :hypertable;
 
@@ -213,6 +217,10 @@ $$, :'chunk1'));
 -- Analyze will run the queries so we are satisfied with this right
 -- now and do not run the queries separately since they can generate
 -- different results depending on table contents.
+
+-- Add back covering index on location_id
+create index hypertable_location_id_include_humidity_idx on :hypertable (location_id) include (humidity);
+
 select explain_analyze_anonymize(format($$
     select location_id, avg(humidity) from %s where location_id between 5 and 10
     group by location_id order by location_id
@@ -370,7 +378,7 @@ select * from nullvalues where only_nulls is null;
 select * from only_nulls_null;
 
 -- Convert all chunks to hypercore and run same queries
-select compress_chunk(ch, compress_using=>'hypercore') from show_chunks('nullvalues') ch;
+select compress_chunk(ch, hypercore_use_access_method => true) from show_chunks('nullvalues') ch;
 
 select c.relname, a.amname FROM pg_class c
 join pg_am a on (c.relam = a.oid)

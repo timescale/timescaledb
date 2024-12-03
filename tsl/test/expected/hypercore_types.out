@@ -97,7 +97,7 @@ from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
 -- table and a heap table produce the same result.
 create table :saved_table as select * from :the_table;
 -- Compress the rows in the hypercore.
-select compress_chunk(show_chunks(:'the_table'), compress_using => 'hypercore');
+select compress_chunk(show_chunks(:'the_table'), hypercore_use_access_method => true);
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -169,7 +169,7 @@ from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
 -- table and a heap table produce the same result.
 create table :saved_table as select * from :the_table;
 -- Compress the rows in the hypercore.
-select compress_chunk(show_chunks(:'the_table'), compress_using => 'hypercore');
+select compress_chunk(show_chunks(:'the_table'), hypercore_use_access_method => true);
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_3_7_chunk
@@ -240,7 +240,7 @@ from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
 -- table and a heap table produce the same result.
 create table :saved_table as select * from :the_table;
 -- Compress the rows in the hypercore.
-select compress_chunk(show_chunks(:'the_table'), compress_using => 'hypercore');
+select compress_chunk(show_chunks(:'the_table'), hypercore_use_access_method => true);
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_5_13_chunk
@@ -313,7 +313,7 @@ from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
 -- table and a heap table produce the same result.
 create table :saved_table as select * from :the_table;
 -- Compress the rows in the hypercore.
-select compress_chunk(show_chunks(:'the_table'), compress_using => 'hypercore');
+select compress_chunk(show_chunks(:'the_table'), hypercore_use_access_method => true);
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_7_19_chunk
@@ -386,7 +386,7 @@ from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
 -- table and a heap table produce the same result.
 create table :saved_table as select * from :the_table;
 -- Compress the rows in the hypercore.
-select compress_chunk(show_chunks(:'the_table'), compress_using => 'hypercore');
+select compress_chunk(show_chunks(:'the_table'), hypercore_use_access_method => true);
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_9_25_chunk
@@ -460,7 +460,7 @@ from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
 -- table and a heap table produce the same result.
 create table :saved_table as select * from :the_table;
 -- Compress the rows in the hypercore.
-select compress_chunk(show_chunks(:'the_table'), compress_using => 'hypercore');
+select compress_chunk(show_chunks(:'the_table'), hypercore_use_access_method => true);
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_11_31_chunk
@@ -534,7 +534,7 @@ from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
 -- table and a heap table produce the same result.
 create table :saved_table as select * from :the_table;
 -- Compress the rows in the hypercore.
-select compress_chunk(show_chunks(:'the_table'), compress_using => 'hypercore');
+select compress_chunk(show_chunks(:'the_table'), hypercore_use_access_method => true);
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_13_37_chunk

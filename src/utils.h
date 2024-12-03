@@ -188,6 +188,16 @@ extern TSDLLEXPORT List *ts_get_reloptions(Oid relid);
 		.value = 0, .isnull = true                                                                 \
 	}
 
+static inline Datum
+ts_fetch_att(const void *T, bool attbyval, int attlen)
+{
+	/* Length should be set to something sensible, otherwise an error will be
+	 * raised by fetch_att, so we assert this here to get a stack for
+	 * violations. */
+	Assert(!attbyval || (attlen > 0 && attlen <= 8));
+	return fetch_att(T, attbyval, attlen);
+}
+
 static inline int64
 int64_min(int64 a, int64 b)
 {
@@ -378,5 +388,6 @@ extern TSDLLEXPORT void ts_get_rel_info_by_name(const char *relnamespace, const 
 												Oid *relid, Oid *amoid, char *relkind);
 extern TSDLLEXPORT void ts_get_rel_info(Oid relid, Oid *amoid, char *relkind);
 extern TSDLLEXPORT Oid ts_get_rel_am(Oid relid);
+extern TSDLLEXPORT void ts_relation_set_reloption(Relation rel, List *options, LOCKMODE lockmode);
 extern TSDLLEXPORT bool ts_is_hypercore_am(Oid amoid);
 extern TSDLLEXPORT Jsonb *ts_errdata_to_jsonb(ErrorData *edata, Name proc_schema, Name proc_name);

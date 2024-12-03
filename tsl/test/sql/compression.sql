@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 SET timescaledb.enable_transparent_decompression to OFF;
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 \set PREFIX 'EXPLAIN (analyze, verbose, costs off, timing off, summary off)'
 
@@ -631,7 +631,7 @@ SET reltuples = 0, relpages = 0
         AND ch.compressed_chunk_id > 0 );
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 -- reltuples is initially -1 on PG14 before VACUUM/ANALYZE has been run
 SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, relpages, relallvisible FROM pg_class
@@ -793,6 +793,8 @@ ALTER TABLE f_sensor_data SET (timescaledb.compress, timescaledb.compress_segmen
 
 SELECT compress_chunk(i) FROM show_chunks('f_sensor_data') i;
 CALL reindex_compressed_hypertable('f_sensor_data');
+
+VACUUM ANALYZE f_sensor_data;
 
 -- Encourage use of parallel plans
 SET parallel_setup_cost = 0;

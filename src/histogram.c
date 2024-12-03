@@ -36,7 +36,8 @@ TS_FUNCTION_INFO_V1(ts_hist_serializefunc);
 TS_FUNCTION_INFO_V1(ts_hist_deserializefunc);
 TS_FUNCTION_INFO_V1(ts_hist_finalfunc);
 
-#define HISTOGRAM_SIZE(state, nbuckets) (sizeof(*(state)) + (nbuckets) * sizeof(*(state)->buckets))
+#define HISTOGRAM_SIZE(state, nbuckets)                                                            \
+	(sizeof(*(state)) + ((nbuckets) * sizeof(*(state)->buckets)))
 
 typedef struct Histogram
 {
