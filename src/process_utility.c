@@ -4443,6 +4443,7 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 
 	hcache = ts_hypertable_cache_pin();
 	ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
+
 	if (ht == NULL)
 	{
 		ts_cache_release(hcache);
@@ -4452,21 +4453,7 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("triggers are not supported on continuous aggregate")));
 
-		if (stmt->transitionRels)
-			if (ts_chunk_get_by_relid(relid, false) != NULL)
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg(
-							 "trigger with transition tables not supported on hypertable chunks")));
 		return DDL_CONTINUE;
-	}
-
-	if (stmt->transitionRels)
-	{
-		ts_cache_release(hcache);
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("trigger with transition tables not supported on hypertables")));
 	}
 
 	add_hypertable_to_process_args(args, ht);
