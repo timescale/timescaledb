@@ -38,6 +38,7 @@ FUNCTION_NAME(one)(void *restrict agg_state, const CTYPE value)
 	state->sum += value;
 }
 
+#include "agg_many_vector_helper.c"
 #include "agg_scalar_helper.c"
 #include "agg_vector_validity_helper.c"
 

@@ -366,13 +366,11 @@ can_vectorize_grouping(Agg *agg, CustomScan *custom, List *resolved_targetlist)
 	/*
 	 * We support hashed vectorized grouping by one fixed-size by-value
 	 * compressed column.
-	 * We cannot use it when the plan has GroupAggregate because the
-	 * latter requires sorted output.
 	 */
-	if (agg->numCols == 1 && agg->aggstrategy == AGG_HASHED)
+	if (agg->numCols == 1)
 	{
 		int offset = AttrNumberGetAttrOffset(agg->grpColIdx[0]);
-		TargetEntry *entry = list_nth(agg->plan.targetlist, offset);
+		TargetEntry *entry = list_nth(resolved_targetlist, offset);
 
 		bool is_segmentby = false;
 		if (is_vector_var(custom, entry->expr, &is_segmentby))

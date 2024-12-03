@@ -52,20 +52,61 @@ count_star_scalar(void *agg_state, Datum constvalue, bool constisnull, int n,
 	state->count += n;
 }
 
-static void
-count_star_many_scalar(void *restrict agg_states, uint32 *restrict offsets, int start_row,
-					   int end_row, Datum constvalue, bool constisnull,
-					   MemoryContext agg_extra_mctx)
+static pg_attribute_always_inline void
+count_star_many_scalar_impl(void *restrict agg_states, const uint32 *offsets, const uint64 *filter,
+							int start_row, int end_row, Datum constvalue, bool constisnull,
+							MemoryContext agg_extra_mctx)
 {
 	CountState *states = (CountState *) agg_states;
 	for (int row = start_row; row < end_row; row++)
 	{
-		if (offsets[row] == 0)
+		if (arrow_row_is_valid(filter, row))
 		{
-			continue;
+			states[offsets[row]].count++;
 		}
+	}
+}
 
-		states[offsets[row]].count++;
+static pg_noinline void
+count_star_many_scalar_nofilter(void *restrict agg_states, const uint32 *offsets, int start_row,
+								int end_row, Datum constvalue, bool constisnull,
+								MemoryContext agg_extra_mctx)
+{
+	count_star_many_scalar_impl(agg_states,
+								offsets,
+								NULL,
+								start_row,
+								end_row,
+								constvalue,
+								constisnull,
+								agg_extra_mctx);
+}
+
+static void
+count_star_many_scalar(void *restrict agg_states, const uint32 *offsets, const uint64 *filter,
+					   int start_row, int end_row, Datum constvalue, bool constisnull,
+					   MemoryContext agg_extra_mctx)
+{
+	if (filter == NULL)
+	{
+		count_star_many_scalar_nofilter(agg_states,
+										offsets,
+										start_row,
+										end_row,
+										constvalue,
+										constisnull,
+										agg_extra_mctx);
+	}
+	else
+	{
+		count_star_many_scalar_impl(agg_states,
+									offsets,
+									filter,
+									start_row,
+									end_row,
+									constvalue,
+									constisnull,
+									agg_extra_mctx);
 	}
 }
 
@@ -94,8 +135,8 @@ count_any_scalar(void *agg_state, Datum constvalue, bool constisnull, int n,
 }
 
 static void
-count_any_many_vector(void *agg_state, const ArrowArray *vector, const uint64 *filter,
-					  MemoryContext agg_extra_mctx)
+count_any_vector(void *agg_state, const ArrowArray *vector, const uint64 *filter,
+				 MemoryContext agg_extra_mctx)
 {
 	CountState *state = (CountState *) agg_state;
 	const int n = vector->length;
@@ -129,16 +170,14 @@ count_any_many_vector(void *agg_state, const ArrowArray *vector, const uint64 *f
 }
 
 static void
-count_any_many(void *restrict agg_states, uint32 *restrict offsets, int start_row, int end_row,
-			   const ArrowArray *vector, MemoryContext agg_extra_mctx)
+count_any_many_vector(void *restrict agg_states, const uint32 *offsets, const uint64 *filter,
+					  int start_row, int end_row, const ArrowArray *vector,
+					  MemoryContext agg_extra_mctx)
 {
-	const uint64 *valid = vector->buffers[0];
 	for (int row = start_row; row < end_row; row++)
 	{
 		CountState *state = (offsets[row] + (CountState *) agg_states);
-		const bool row_passes = (offsets[row] != 0);
-		const bool value_notnull = arrow_row_is_valid(valid, row);
-		if (row_passes && value_notnull)
+		if (arrow_row_is_valid(filter, row))
 		{
 			state->count++;
 		}
@@ -151,6 +190,7 @@ VectorAggFunctions count_any_agg = {
 	.agg_emit = count_emit,
 	.agg_scalar = count_any_scalar,
 	.agg_vector = count_any_vector,
+	.agg_many_vector = count_any_many_vector,
 };
 
 /*

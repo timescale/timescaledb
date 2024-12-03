@@ -28,6 +28,9 @@ typedef struct GroupingPolicy
 	 */
 	void (*gp_reset)(GroupingPolicy *gp);
 
+	/*
+	 * Aggregate a single compressed batch.
+	 */
 	void (*gp_add_batch)(GroupingPolicy *gp, DecompressBatchState *batch_state);
 
 	/*
@@ -54,3 +57,7 @@ typedef struct GroupingPolicy
 extern GroupingPolicy *create_grouping_policy_batch(int num_agg_defs, VectorAggDef *agg_defs,
 													int num_grouping_columns,
 													GroupingColumn *grouping_columns);
+
+extern GroupingPolicy *create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs,
+												   int num_grouping_columns,
+												   GroupingColumn *grouping_columns);

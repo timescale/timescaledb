@@ -160,17 +160,51 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 
 			Var *var = castNode(Var, tlentry->expr);
 			col->input_offset = get_input_offset(decompress_state, var);
+			DecompressContext *dcontext = &decompress_state->decompress_context;
+			CompressionColumnDescription *desc =
+				&dcontext->compressed_chunk_columns[col->input_offset];
+			col->value_bytes = desc->value_bytes;
 		}
 	}
 
 	/*
-	 * Currently the only grouping policy we use is per-batch grouping.
+	 * Determine which grouping policy we are going to use.
 	 */
-	vector_agg_state->grouping =
-		create_grouping_policy_batch(vector_agg_state->num_agg_defs,
-									 vector_agg_state->agg_defs,
-									 vector_agg_state->num_grouping_columns,
-									 vector_agg_state->grouping_columns);
+	bool all_segmentby = true;
+	for (int i = 0; i < vector_agg_state->num_grouping_columns; i++)
+	{
+		GroupingColumn *col = &vector_agg_state->grouping_columns[i];
+		DecompressContext *dcontext = &decompress_state->decompress_context;
+		CompressionColumnDescription *desc = &dcontext->compressed_chunk_columns[col->input_offset];
+		if (desc->type != SEGMENTBY_COLUMN)
+		{
+			all_segmentby = false;
+			break;
+		}
+	}
+
+	if (all_segmentby)
+	{
+		/*
+		 * Per-batch grouping.
+		 */
+		vector_agg_state->grouping =
+			create_grouping_policy_batch(vector_agg_state->num_agg_defs,
+										 vector_agg_state->agg_defs,
+										 vector_agg_state->num_grouping_columns,
+										 vector_agg_state->grouping_columns);
+	}
+	else
+	{
+		/*
+		 * Hash grouping.
+		 */
+		vector_agg_state->grouping =
+			create_grouping_policy_hash(vector_agg_state->num_agg_defs,
+										vector_agg_state->agg_defs,
+										vector_agg_state->num_grouping_columns,
+										vector_agg_state->grouping_columns);
+	}
 }
 
 static void
