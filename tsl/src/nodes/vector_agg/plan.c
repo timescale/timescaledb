@@ -356,9 +356,67 @@ static bool
 can_vectorize_grouping(Agg *agg, CustomScan *custom, List *resolved_targetlist)
 {
 	/*
+	 * The Agg->numCols value can be less than the number of the non-aggregated
+	 * vars in the aggregated targetlist, if some of them are equated to a
+	 * constant. This behavior started with PG 16. This case is not very
+	 * important, so we treat all non-aggregated columns as grouping columns to
+	 * keep the vectorized aggregation node simple.
+	 */
+	int num_grouping_columns = 0;
+	bool all_segmentby = true;
+	Var *single_grouping_var = NULL;
+
+	ListCell *lc;
+	foreach (lc, resolved_targetlist)
+	{
+		TargetEntry *target_entry = lfirst_node(TargetEntry, lc);
+		if (IsA(target_entry->expr, Aggref))
+		{
+			continue;
+		}
+
+		if (!IsA(target_entry->expr, Var))
+		{
+			/*
+			 * We shouldn't see anything except Vars or Aggrefs in the
+			 * aggregated targetlists. Just say it's not vectorizable, because
+			 * here we are working with arbitrary plans that we don't control.
+			 */
+			return false;
+		}
+
+		num_grouping_columns++;
+
+		Var *var = castNode(Var, target_entry->expr);
+		bool is_segmentby;
+		if (!is_vector_var(custom, (Expr *) var, &is_segmentby))
+		{
+			return false;
+		}
+
+		all_segmentby &= is_segmentby;
+
+		/*
+		 * If we have a single grouping column, record it for the additional
+		 * checks later.
+		 */
+		if (num_grouping_columns == 1)
+		{
+			single_grouping_var = var;
+		}
+		else
+		{
+			single_grouping_var = NULL;
+		}
+	}
+
+	Assert(num_grouping_columns == 1 || single_grouping_var == NULL);
+	Assert(num_grouping_columns >= agg->numCols);
+
+	/*
 	 * We support vectorized aggregation without grouping.
 	 */
-	if (agg->numCols == 0)
+	if (num_grouping_columns == 0)
 	{
 		return true;
 	}
@@ -367,46 +425,21 @@ can_vectorize_grouping(Agg *agg, CustomScan *custom, List *resolved_targetlist)
 	 * We support hashed vectorized grouping by one fixed-size by-value
 	 * compressed column.
 	 */
-	if (agg->numCols == 1)
+	if (num_grouping_columns == 1)
 	{
-		int offset = AttrNumberGetAttrOffset(agg->grpColIdx[0]);
-		TargetEntry *entry = list_nth(resolved_targetlist, offset);
-
-		bool is_segmentby = false;
-		if (is_vector_var(custom, entry->expr, &is_segmentby))
+		int16 typlen;
+		bool typbyval;
+		get_typlenbyval(single_grouping_var->vartype, &typlen, &typbyval);
+		if (typbyval && typlen > 0 && (size_t) typlen <= sizeof(Datum))
 		{
-			Var *var = castNode(Var, entry->expr);
-			int16 typlen;
-			bool typbyval;
-			get_typlenbyval(var->vartype, &typlen, &typbyval);
-			if (typbyval && typlen > 0 && (size_t) typlen <= sizeof(Datum))
-			{
-				return true;
-			}
+			return true;
 		}
 	}
 
 	/*
 	 * We support grouping by any number of columns if all of them are segmentby.
 	 */
-	for (int i = 0; i < agg->numCols; i++)
-	{
-		int offset = AttrNumberGetAttrOffset(agg->grpColIdx[i]);
-		TargetEntry *entry = list_nth_node(TargetEntry, resolved_targetlist, offset);
-
-		bool is_segmentby = false;
-		if (!is_vector_var(custom, entry->expr, &is_segmentby))
-		{
-			return false;
-		}
-
-		if (!is_segmentby)
-		{
-			return false;
-		}
-	}
-
-	return true;
+	return all_segmentby;
 }
 
 /*
@@ -593,7 +626,7 @@ try_insert_vector_agg_node(Plan *plan)
 
 	if (!can_vectorize_grouping(agg, custom, resolved_targetlist))
 	{
-		/* No GROUP BY support for now. */
+		/* The grouping is not vectorizable. */
 		return plan;
 	}
 
@@ -601,7 +634,7 @@ try_insert_vector_agg_node(Plan *plan)
 	ListCell *lc;
 	foreach (lc, resolved_targetlist)
 	{
-		TargetEntry *target_entry = castNode(TargetEntry, lfirst(lc));
+		TargetEntry *target_entry = lfirst_node(TargetEntry, lc);
 		if (IsA(target_entry->expr, Aggref))
 		{
 			Aggref *aggref = castNode(Aggref, target_entry->expr);
