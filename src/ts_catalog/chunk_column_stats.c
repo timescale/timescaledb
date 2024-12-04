@@ -739,7 +739,8 @@ ts_chunk_column_stats_lookup(int32 hypertable_id, int32 chunk_id, const char *co
  * updated.
  */
 int
-ts_chunk_column_stats_calculate(const Hypertable *ht, const Chunk *chunk)
+ts_chunk_column_stats_calculate(const Hypertable *ht, const Chunk *chunk,
+								ChunkColumnStats **statsarray)
 {
 	Size i = 0;
 	ChunkRangeSpace *rs = ht->range_space;
@@ -755,22 +756,38 @@ ts_chunk_column_stats_calculate(const Hypertable *ht, const Chunk *chunk)
 
 	for (int range_index = 0; range_index < rs->num_range_cols; range_index++)
 	{
-		Datum minmax[2];
+		const Form_chunk_column_stats form = &rs->range_cols[range_index];
+		const ChunkColumnStats *colstats = NULL;
+		ChunkColumnStats computed_stats;
+
 		AttrNumber attno;
-		char *col_name = NameStr(rs->range_cols[range_index].column_name);
+		const char *col_name = NameStr(form->column_name);
 		Oid col_type;
 
 		/* Get the attribute number in the HT for this column, and map to the chunk */
+		/* TODO: fix unnecessary mapping */
 		attno = get_attnum(ht->main_table_relid, col_name);
 		attno = ts_map_attno(ht->main_table_relid, chunk->table_id, attno);
 		col_type = get_atttype(ht->main_table_relid, attno);
 
+		if (statsarray)
+			colstats = statsarray[AttrNumberGetAttrOffset(attno)];
+
+		if (NULL == colstats && ts_chunk_get_minmax(chunk->table_id,
+													col_type,
+													attno,
+													"column range",
+													computed_stats.minmax))
+		{
+			colstats = &computed_stats;
+		}
+
 		/* calculate the min/max range for this column on this chunk */
-		if (ts_chunk_get_minmax(chunk->table_id, col_type, attno, "column range", minmax))
+		if (colstats)
 		{
 			Form_chunk_column_stats range;
-			int64 min = ts_time_value_to_internal(minmax[0], col_type);
-			int64 max = ts_time_value_to_internal(minmax[1], col_type);
+			int64 min = ts_time_value_to_internal(colstats->minmax[0], col_type);
+			int64 max = ts_time_value_to_internal(colstats->minmax[1], col_type);
 
 			/* The end value is exclusive to the range, so incr by 1 */
 			if (max != DIMENSION_SLICE_MAXVALUE)
@@ -821,7 +838,8 @@ ts_chunk_column_stats_calculate(const Hypertable *ht, const Chunk *chunk)
 			}
 		}
 		else
-			ereport(WARNING, errmsg("unable to calculate min/max values for column ranges"));
+			ereport(WARNING,
+					errmsg("unable to calculate min/max column range for \"%s\"", col_name));
 	}
 
 	MemoryContextSwitchTo(orig_mcxt);
