@@ -83,6 +83,7 @@ DECLARE
     _bucket_column_type TEXT;
     _interval_type TEXT;
     _interval_value TEXT;
+    _nbuckets INTEGER := 10; -- number of buckets per transaction
 BEGIN
     IF _timescaledb_functions.cagg_migrate_plan_exists(_cagg_data.mat_hypertable_id) IS TRUE THEN
         RAISE EXCEPTION 'plan already exists for materialized hypertable %', _cagg_data.mat_hypertable_id;
@@ -118,8 +119,12 @@ BEGIN
     AND hypertable_name = _matht.table_name
     AND dimension_type = 'Time';
 
+    -- Get the current cagg bucket width
+    SELECT bucket_width
+    INTO _interval_value
+    FROM _timescaledb_functions.cagg_get_bucket_function_info(_cagg_data.mat_hypertable_id);
+
     IF _integer_interval IS NOT NULL THEN
-        _interval_value := _integer_interval::TEXT;
         _interval_type  := _bucket_column_type;
         IF _bucket_column_type = 'bigint' THEN
             _watermark := COALESCE(_timescaledb_functions.cagg_watermark(_cagg_data.mat_hypertable_id)::bigint, '-9223372036854775808'::bigint)::TEXT;
@@ -129,7 +134,6 @@ BEGIN
             _watermark := COALESCE(_timescaledb_functions.cagg_watermark(_cagg_data.mat_hypertable_id)::smallint, '-32768'::smallint)::TEXT;
         END IF;
     ELSE
-        _interval_value := _time_interval::TEXT;
         _interval_type  := 'interval';
 
         -- We expect an ISO date later in parsing (i.e., min value has to be '4714-11-24 00:53:28+00:53:28 BC')
@@ -177,16 +181,17 @@ BEGIN
             'COPY DATA',
             jsonb_build_object (
                 'start_ts', start::text,
-                'end_ts', (start + CAST(%8$L AS %9$s))::text,
+                'end_ts', (start + (CAST(%8$L AS %9$s) * %10$s) )::text,
                 'bucket_column_name', bucket_column_name,
                 'bucket_column_type', bucket_column_type,
                 'cagg_name_new', cagg_name_new
             )
         FROM boundaries,
-             LATERAL generate_series(min, max, CAST(%8$L AS %9$s)) AS start;
+             LATERAL generate_series(min, max, (CAST(%8$L AS %9$s) * %10$s)) AS start;
         $$,
-        _bucket_column_name, _bucket_column_type, _cagg_name_new, _cagg_data.user_view_schema,
-        _cagg_data.user_view_name, _watermark, _cagg_data.mat_hypertable_id, _interval_value, _interval_type
+        _bucket_column_name, _bucket_column_type, _cagg_name_new, _matht.schema_name,
+        _matht.table_name, _watermark, _cagg_data.mat_hypertable_id, _interval_value,
+        _interval_type, _nbuckets
     );
 
     EXECUTE _sql;
@@ -355,6 +360,14 @@ BEGIN
 END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.cagg_migrate_update_watermark(_mat_hypertable_id INTEGER)
+LANGUAGE sql AS
+$BODY$
+    INSERT INTO _timescaledb_catalog.continuous_aggs_watermark
+    VALUES (_mat_hypertable_id, _timescaledb_functions.cagg_watermark_materialized(_mat_hypertable_id))
+    ON CONFLICT (mat_hypertable_id) DO UPDATE SET watermark = excluded.watermark;
+$BODY$ SECURITY DEFINER SET search_path TO pg_catalog, pg_temp;
+
 -- Refresh new cagg created by the migration
 CREATE OR REPLACE PROCEDURE _timescaledb_functions.cagg_migrate_execute_refresh_new_cagg (
     _cagg_data _timescaledb_catalog.continuous_agg,
@@ -365,6 +378,7 @@ $BODY$
 DECLARE
     _cagg_name TEXT;
     _override BOOLEAN;
+    _mat_hypertable_id INTEGER;
 BEGIN
     SELECT (config->>'override')::BOOLEAN
     INTO _override
@@ -377,6 +391,18 @@ BEGIN
     IF _override IS TRUE THEN
         _cagg_name = _cagg_data.user_view_name;
     END IF;
+
+    --
+    -- Update new cagg watermark
+    --
+    SELECT h.id
+    INTO _mat_hypertable_id
+    FROM _timescaledb_catalog.continuous_agg ca
+    JOIN _timescaledb_catalog.hypertable h ON (h.id = ca.mat_hypertable_id)
+    WHERE user_view_schema = _cagg_data.user_view_schema
+    AND user_view_name = _plan_step.config->>'cagg_name_new';
+
+    CALL _timescaledb_functions.cagg_migrate_update_watermark(_mat_hypertable_id);
 
     --
     -- Since we're still having problems with the `refresh_continuous_aggregate` executed inside procedures
@@ -407,6 +433,11 @@ DECLARE
     _stmt TEXT;
     _mat_schema_name TEXT;
     _mat_table_name TEXT;
+    _mat_schema_name_old TEXT;
+    _mat_table_name_old TEXT;
+    _query TEXT;
+    _select_columns TEXT;
+    _groupby_columns TEXT;
 BEGIN
     SELECT h.schema_name, h.table_name
     INTO _mat_schema_name, _mat_table_name
@@ -415,17 +446,59 @@ BEGIN
     WHERE user_view_schema = _cagg_data.user_view_schema
     AND user_view_name = _plan_step.config->>'cagg_name_new';
 
-    _stmt := format(
-        'INSERT INTO %I.%I SELECT * FROM %I.%I WHERE %I >= %L AND %I < %L',
-        _mat_schema_name,
-        _mat_table_name,
-        _cagg_data.user_view_schema,
-        _cagg_data.user_view_name,
-        _plan_step.config->>'bucket_column_name',
-        _plan_step.config->>'start_ts',
-        _plan_step.config->>'bucket_column_name',
-        _plan_step.config->>'end_ts'
-    );
+    -- For realtime CAggs we need to read direct from the materialization hypertable
+    IF _cagg_data.materialized_only IS FALSE THEN
+        SELECT h.schema_name, h.table_name
+        INTO _mat_schema_name_old, _mat_table_name_old
+        FROM _timescaledb_catalog.continuous_agg ca
+        JOIN _timescaledb_catalog.hypertable h ON (h.id = ca.mat_hypertable_id)
+        WHERE user_view_schema = _cagg_data.user_view_schema
+        AND user_view_name = _cagg_data.user_view_name;
+
+        _query :=
+            split_part(
+                pg_get_viewdef(format('%I.%I', _cagg_data.user_view_schema, _cagg_data.user_view_name)),
+                'UNION ALL',
+                1);
+
+        _groupby_columns :=
+            split_part(
+                _query,
+                'GROUP BY ',
+                2);
+
+        _select_columns :=
+            split_part(
+                _query,
+                format('FROM %I.%I', _mat_schema_name_old, _mat_table_name_old),
+                1);
+
+        _stmt := format(
+            'INSERT INTO %I.%I %s FROM %I.%I WHERE %I >= %L AND %I < %L GROUP BY %s',
+            _mat_schema_name,
+            _mat_table_name,
+            _select_columns,
+            _mat_schema_name_old,
+            _mat_table_name_old,
+            _plan_step.config->>'bucket_column_name',
+            _plan_step.config->>'start_ts',
+            _plan_step.config->>'bucket_column_name',
+            _plan_step.config->>'end_ts',
+            _groupby_columns
+        );
+    ELSE
+        _stmt := format(
+            'INSERT INTO %I.%I SELECT * FROM %I.%I WHERE %I >= %L AND %I < %L',
+            _mat_schema_name,
+            _mat_table_name,
+            _mat_schema_name_old,
+            _mat_table_name_old,
+            _plan_step.config->>'bucket_column_name',
+            _plan_step.config->>'start_ts',
+            _plan_step.config->>'bucket_column_name',
+            _plan_step.config->>'end_ts'
+        );
+    END IF;
 
     EXECUTE _stmt;
 END;
@@ -600,4 +673,4 @@ $BODY$;
 -- Migrate a CAgg which is using the experimental time_bucket_ng function
 -- into a CAgg using the regular time_bucket function
 CREATE OR REPLACE PROCEDURE _timescaledb_functions.cagg_migrate_to_time_bucket(cagg REGCLASS)
-   AS '@MODULE_PATHNAME@', 'ts_continuous_agg_migrate_to_time_bucket' LANGUAGE C;
+AS '@MODULE_PATHNAME@', 'ts_continuous_agg_migrate_to_time_bucket' LANGUAGE C;
