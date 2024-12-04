@@ -29,15 +29,15 @@ FUNCTION_NAME(key_hashing_get_key)(BatchHashingParams params, int row,
 	OUTPUT_KEY_TYPE *restrict output_key = (OUTPUT_KEY_TYPE *) output_key_ptr;
 	HASH_TABLE_KEY_TYPE *restrict hash_table_key = (HASH_TABLE_KEY_TYPE *) hash_table_key_ptr;
 
-	if (unlikely(params.single_key.decompression_type == DT_Scalar))
+	if (unlikely(params.single_grouping_column.decompression_type == DT_Scalar))
 	{
-		*output_key = DATUM_TO_OUTPUT_KEY(*params.single_key.output_value);
-		*valid = !*params.single_key.output_isnull;
+		*output_key = DATUM_TO_OUTPUT_KEY(*params.single_grouping_column.output_value);
+		*valid = !*params.single_grouping_column.output_isnull;
 	}
-	else if (params.single_key.decompression_type == sizeof(OUTPUT_KEY_TYPE))
+	else if (params.single_grouping_column.decompression_type == sizeof(OUTPUT_KEY_TYPE))
 	{
-		const OUTPUT_KEY_TYPE *values = params.single_key.buffers[1];
-		*valid = arrow_row_is_valid(params.single_key.buffers[0], row);
+		const OUTPUT_KEY_TYPE *values = params.single_grouping_column.buffers[1];
+		*valid = arrow_row_is_valid(params.single_grouping_column.buffers[0], row);
 		*output_key = values[row];
 	}
 	else
