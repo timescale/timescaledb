@@ -8,7 +8,8 @@ RUNNER=${1:-""}
 sed  -e '/<exclude_from_test>/,/<\/exclude_from_test>/d' \
      -e 's! Memory: [0-9]\{1,\}kB!!' \
      -e 's! Memory Usage: [0-9]\{1,\}kB!!' \
-     -e 's! Average  Peak Memory: [0-9]\{1,\}kB!!' | \
+     -e 's! Average  Peak Memory: [0-9]\{1,\}kB!!' \
+     -e '/Heap Fetches: [0-9]\{1,\}/d' | \
 grep -v 'DEBUG:  rehashing catalog cache id' | \
 grep -v 'DEBUG:  compacted fsync request queue from' | \
 grep -v 'DEBUG:  creating and filling new WAL file' | \
