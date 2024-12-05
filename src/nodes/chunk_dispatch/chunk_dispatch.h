@@ -72,10 +72,23 @@ typedef struct ChunkDispatchState
 	 */
 	ChunkDispatch *dispatch;
 	ResultRelInfo *rri;
+
+	/*
+	 * Keep the chunk insert state available to pass it from
+	 * ExecGetInsertNewTuple() to ExecInsert(), where the actual slot to
+	 * use is decided.
+	 */
+	ChunkInsertState *cis;
+
 	/* flag to represent dropped attributes */
 	bool is_dropped_attr_exists;
+	int64 batches_deleted;
+	int64 batches_filtered;
 	int64 batches_decompressed;
 	int64 tuples_decompressed;
+
+	/* Should this INSERT be skipped due to ON CONFLICT DO NOTHING */
+	bool skip_current_tuple;
 } ChunkDispatchState;
 
 extern TSDLLEXPORT bool ts_is_chunk_dispatch_state(PlanState *state);
@@ -93,6 +106,8 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p,
 extern void ts_chunk_dispatch_decompress_batches_for_insert(ChunkDispatch *dispatch,
 															ChunkInsertState *cis,
 															TupleTableSlot *slot);
+extern TupleTableSlot *ts_chunk_dispatch_prepare_tuple_routing(ChunkDispatchState *state,
+															   TupleTableSlot *slot);
 
 extern TSDLLEXPORT Path *ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath,
 													   Index hypertable_rti, int subpath_index);

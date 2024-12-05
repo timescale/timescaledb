@@ -14,6 +14,7 @@ typedef enum
 	DCS_Reverse = 2,
 	DCS_BatchSortedMerge = 3,
 	DCS_EnableBulkDecompression = 4,
+	DCS_HasRowMarks = 5,
 	DCS_Count
 } DecompressChunkSettingsIndex;
 

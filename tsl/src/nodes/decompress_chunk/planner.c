@@ -34,6 +34,7 @@
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
+#include "nodes/decompress_chunk/vector_quals.h"
 #include "nodes/vector_agg/exec.h"
 #include "ts_catalog/array_utils.h"
 #include "vector_predicates.h"
@@ -60,7 +61,9 @@ check_for_system_columns(Bitmapset *attrs_used)
 			bit = bms_next_member(attrs_used, bit);
 
 		if (bit > 0 && bit + FirstLowInvalidHeapAttributeNumber < 0)
-			elog(ERROR, "transparent decompression only supports tableoid system column");
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+					 errmsg("transparent decompression only supports tableoid system column")));
 	}
 }
 
@@ -144,6 +147,26 @@ typedef struct
 	List *bulk_decompression_column;
 
 } DecompressionMapContext;
+
+typedef struct VectorQualInfoDecompressChunk
+{
+	VectorQualInfo vqinfo;
+	const UncompressedColumnInfo *colinfo;
+} VectorQualInfoDecompressChunk;
+
+static bool *
+build_vector_attrs_array(const UncompressedColumnInfo *colinfo, const CompressionInfo *info)
+{
+	const AttrNumber arrlen = info->chunk_rel->max_attr + 1;
+	bool *vector_attrs = palloc(sizeof(bool) * arrlen);
+
+	for (AttrNumber attno = 0; attno < arrlen; attno++)
+	{
+		vector_attrs[attno] = colinfo[attno].bulk_decompression_possible;
+	}
+
+	return vector_attrs;
+}
 
 /*
  * Try to make the custom scan targetlist that follows the order of the
@@ -241,7 +264,6 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_scan_
 	 * targetlist.
 	 */
 	bool missing_count = true;
-	bool missing_sequence = path->needs_sequence_num;
 	Bitmapset *uncompressed_attrs_found = NULL;
 	Bitmapset *selectedCols = NULL;
 
@@ -365,12 +387,6 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_scan_
 				destination_attno = DECOMPRESS_CHUNK_COUNT_ID;
 				missing_count = false;
 			}
-			else if (path->needs_sequence_num &&
-					 strcmp(column_name, COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME) == 0)
-			{
-				destination_attno = DECOMPRESS_CHUNK_SEQUENCE_NUM_ID;
-				missing_sequence = false;
-			}
 		}
 
 		const bool is_segment = ts_array_is_member(info->settings->fd.segmentby, column_name);
@@ -426,11 +442,6 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_scan_
 	if (missing_count)
 	{
 		elog(ERROR, "the count column was not found in the compressed targetlist");
-	}
-
-	if (missing_sequence)
-	{
-		elog(ERROR, "the sequence column was not found in the compressed scan targetlist");
 	}
 
 	/*
@@ -660,8 +671,8 @@ is_not_runtime_constant(Node *node)
  * Try to check if the current qual is vectorizable, and if needed make a
  * commuted copy. If not, return NULL.
  */
-static Node *
-make_vectorized_qual(DecompressionMapContext *context, DecompressChunkPath *path, Node *qual)
+Node *
+vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 {
 	/*
 	 * We can vectorize BoolExpr (AND/OR/NOT).
@@ -685,7 +696,7 @@ make_vectorized_qual(DecompressionMapContext *context, DecompressChunkPath *path
 		foreach (lc, boolexpr->args)
 		{
 			Node *arg = lfirst(lc);
-			Node *vectorized_arg = make_vectorized_qual(context, path, arg);
+			Node *vectorized_arg = vector_qual_make(arg, vqinfo);
 			if (vectorized_arg == NULL)
 			{
 				return NULL;
@@ -781,7 +792,7 @@ make_vectorized_qual(DecompressionMapContext *context, DecompressChunkPath *path
 	}
 
 	Var *var = castNode(Var, arg1);
-	if ((Index) var->varno != path->info->chunk_rel->relid)
+	if ((Index) var->varno != vqinfo->rti)
 	{
 		/*
 		 * We have a Var from other relation (join clause), can't vectorize it
@@ -802,7 +813,7 @@ make_vectorized_qual(DecompressionMapContext *context, DecompressChunkPath *path
 	 * ExecQual is performed before ExecProject and operates on the decompressed
 	 * scan slot, so the qual attnos are the uncompressed chunk attnos.
 	 */
-	if (!context->uncompressed_attno_info[var->varattno].bulk_decompression_possible)
+	if (!vqinfo->vector_attrs[var->varattno])
 	{
 		/* This column doesn't support bulk decompression. */
 		return NULL;
@@ -878,6 +889,11 @@ static void
 find_vectorized_quals(DecompressionMapContext *context, DecompressChunkPath *path, List *qual_list,
 					  List **vectorized, List **nonvectorized)
 {
+	VectorQualInfo vqi = {
+		.vector_attrs = build_vector_attrs_array(context->uncompressed_attno_info, path->info),
+		.rti = path->info->chunk_rel->relid,
+	};
+
 	ListCell *lc;
 	foreach (lc, qual_list)
 	{
@@ -891,8 +907,7 @@ find_vectorized_quals(DecompressionMapContext *context, DecompressChunkPath *pat
 		 */
 		Node *transformed_comparison =
 			(Node *) ts_transform_cross_datatype_comparison((Expr *) source_qual);
-
-		Node *vectorized_qual = make_vectorized_qual(context, path, transformed_comparison);
+		Node *vectorized_qual = vector_qual_make(transformed_comparison, &vqi);
 		if (vectorized_qual)
 		{
 			*vectorized = lappend(*vectorized, vectorized_qual);
@@ -902,6 +917,8 @@ find_vectorized_quals(DecompressionMapContext *context, DecompressChunkPath *pat
 			*nonvectorized = lappend(*nonvectorized, source_qual);
 		}
 	}
+
+	pfree(vqi.vector_attrs);
 }
 
 /*
@@ -1281,11 +1298,11 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	}
 
 #ifdef TS_DEBUG
-	if (ts_guc_debug_require_vector_qual == RVQ_Forbid && list_length(vectorized_quals) > 0)
+	if (ts_guc_debug_require_vector_qual == DRO_Forbid && list_length(vectorized_quals) > 0)
 	{
 		elog(ERROR, "debug: encountered vector quals when they are disabled");
 	}
-	else if (ts_guc_debug_require_vector_qual == RVQ_Only)
+	else if (ts_guc_debug_require_vector_qual == DRO_Require)
 	{
 		if (list_length(decompress_plan->scan.plan.qual) > 0)
 		{
@@ -1304,6 +1321,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	lfirst_int(list_nth_cell(settings, DCS_Reverse)) = dcpath->reverse;
 	lfirst_int(list_nth_cell(settings, DCS_BatchSortedMerge)) = dcpath->batch_sorted_merge;
 	lfirst_int(list_nth_cell(settings, DCS_EnableBulkDecompression)) = enable_bulk_decompression;
+	lfirst_int(list_nth_cell(settings, DCS_HasRowMarks)) = root->parse->rowMarks != NIL;
 
 	/*
 	 * Vectorized quals must go into custom_exprs, because Postgres has to see

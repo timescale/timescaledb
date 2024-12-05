@@ -46,6 +46,11 @@ UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan
 UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan_nulls'::regclass;
 UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan_ht'::regclass;
 UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid IN (select inhrelid from pg_inherits where inhparent='skip_scan_ht'::regclass);
+-- Turn off autovacuum to not trigger new vacuums that restores the
+-- adjusted statistics
+alter table skip_scan set (autovacuum_enabled = off);
+alter table skip_scan_nulls set (autovacuum_enabled = off);
+alter table skip_scan_ht set (autovacuum_enabled = off);
 -- we want to run with analyze here so we can see counts in the nodes
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
 \set TABLE skip_scan
@@ -3828,13 +3833,13 @@ SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
 (1 row)
 
 :PREFIX SELECT DISTINCT ON (dev) dev, dev_name FROM :TABLE;
-                                                                   QUERY PLAN                                                                   
-------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                       QUERY PLAN                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=2538 loops=1)
          Sort Key: _hyper_1_1_chunk.dev
          ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=2505 loops=1)
-               ->  Index Scan using compress_hyper_2_5_chunk_dev__ts_meta_sequence_num_idx on compress_hyper_2_5_chunk (actual rows=11 loops=1)
+               ->  Index Scan using compress_hyper_2_5_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_2_5_chunk (actual rows=11 loops=1)
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                ->  Index Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx1 on _hyper_1_2_chunk (actual rows=11 loops=1)
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)

@@ -11,6 +11,7 @@ TEST_PGUSER=${TEST_PGUSER:-postgres}
 TEST_INPUT_DIR=${TEST_INPUT_DIR:-${EXE_DIR}}
 TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR:-${EXE_DIR}}
 TEST_SUPPORT_FILE=${CURRENT_DIR}/sql/utils/testsupport.sql
+TEST_SUPPORT_FILE_INIT=${CURRENT_DIR}/sql/utils/testsupport_init.sql
 
 # Read the extension version from version.config
 read -r VERSION < ${CURRENT_DIR}/../version.config
@@ -50,6 +51,7 @@ if mkdir ${TEST_OUTPUT_DIR}/.pg_init 2>/dev/null; then
      -v TEST_INPUT_DIR=${TEST_INPUT_DIR} \
      -v TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR} \
      -v TEST_SUPPORT_FILE=${TEST_SUPPORT_FILE} \
+     -v TEST_SUPPORT_FILE_INIT=${TEST_SUPPORT_FILE_INIT} \
      -v TSL_MODULE_PATHNAME="'timescaledb-tsl-${EXT_VERSION}'" \
      "$@" -d ${TEST_DBNAME} < ${TEST_INPUT_DIR}/shared/sql/include/shared_setup.sql >/dev/null
   touch ${TEST_OUTPUT_DIR}/.pg_init/done
@@ -90,4 +92,5 @@ ${PSQL} -U ${TEST_PGUSER} \
           grep -v 'DEBUG:  compacted fsync request queue from' | \
           grep -v 'DEBUG:  creating and filling new WAL file' | \
           grep -v 'DEBUG:  done creating and filling new WAL file' | \
+          grep -v 'DEBUG:  flushed relation because a checkpoint occurred concurrently' | \
           grep -v 'NOTICE:  cancelling the background worker for job'

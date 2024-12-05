@@ -10,9 +10,40 @@
 
 #include <nodes/execnodes.h>
 
-typedef struct VectorAggState
+#include "function/functions.h"
+#include "grouping_policy.h"
+
+typedef struct VectorAggDef
+{
+	VectorAggFunctions func;
+	int input_offset;
+	int output_offset;
+} VectorAggDef;
+
+typedef struct GroupingColumn
+{
+	int input_offset;
+	int output_offset;
+} GroupingColumn;
+
+typedef struct
 {
 	CustomScanState custom;
+
+	int num_agg_defs;
+	VectorAggDef *agg_defs;
+
+	int num_grouping_columns;
+	GroupingColumn *grouping_columns;
+
+	/*
+	 * We can't call the underlying scan after it has ended, or it will be
+	 * restarted. This is the behavior of Postgres heap scans. So we have to
+	 * track whether it has ended to avoid this.
+	 */
+	bool input_ended;
+
+	GroupingPolicy *grouping;
 } VectorAggState;
 
 extern Node *vector_agg_state_create(CustomScan *cscan);

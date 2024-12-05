@@ -21,16 +21,15 @@ file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/testtablespace)
 
 # Tests to ignore
 set(PG_IGNORE_TESTS
-    advisory_lock
+    amutils
+    database
     event_trigger
-    foreign_data
-    identity
+    jsonb_jsonpath
     opr_sanity
-    rolenames
-    rules
     sanity_check
-    security_label
-    type_sanity)
+    type_sanity
+    create_am
+    psql)
 
 # Modify the test schedule to ignore some tests
 foreach(IGNORE_TEST ${PG_IGNORE_TESTS})
@@ -44,6 +43,8 @@ foreach(IGNORE_TEST ${PG_IGNORE_TESTS})
     string(REPLACE "test: ${IGNORE_TEST}\n" "" PG_TEST_SCHEDULE
                    "${PG_TEST_SCHEDULE}")
     string(REPLACE " ${IGNORE_TEST} " " " PG_TEST_SCHEDULE
+                   "${PG_TEST_SCHEDULE}")
+    string(REPLACE " ${IGNORE_TEST}\n" "\n" PG_TEST_SCHEDULE
                    "${PG_TEST_SCHEDULE}")
   endif()
 endforeach(IGNORE_TEST)

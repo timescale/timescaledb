@@ -506,6 +506,25 @@ FROM q1
     INNER JOIN q2 ON q1.time = q2.time
 ORDER BY q1.time;
 
+:PREFIX WITH q1 AS (
+    SELECT time,
+        v1
+    FROM :TEST_TABLE
+    WHERE device_id = 1
+    ORDER BY time
+	LIMIT 5
+),
+q2 AS (
+    SELECT time,
+        v2
+    FROM :TEST_TABLE
+    WHERE device_id = 2
+    ORDER BY time
+	LIMIT 5
+)
+SELECT *
+FROM q1, q2;
+
 -- test prepared statement
 PREPARE prep AS
 SELECT count(time)

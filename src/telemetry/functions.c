@@ -297,7 +297,7 @@ function_telemetry_increment(Oid func_id, HTAB **local_counts)
 static bool
 function_gather_checker(Oid func_id, void *context)
 {
-	function_telemetry_increment(func_id, context);
+	function_telemetry_increment(func_id, (HTAB **) context);
 	return false;
 }
 
@@ -325,7 +325,7 @@ static HTAB *
 record_function_counts(Query *query)
 {
 	HTAB *query_function_counts = NULL;
-	query_tree_walker(query, function_gather_walker, &query_function_counts, 0);
+	query_tree_walker(query, function_gather_walker, (void *) &query_function_counts, 0);
 	return query_function_counts;
 }
 

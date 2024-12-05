@@ -344,6 +344,31 @@ SELECT pg_reload_conf();
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+-- The GUC is PGC_SIGHUP context so only ALTER SYSTEM is allowed
+\set ON_ERROR_STOP 0
+SHOW timescaledb.enable_job_execution_logging;
+ timescaledb.enable_job_execution_logging 
+------------------------------------------
+ off
+(1 row)
+
+SET timescaledb.enable_job_execution_logging TO OFF;
+ERROR:  parameter "timescaledb.enable_job_execution_logging" cannot be changed now
+SHOW timescaledb.enable_job_execution_logging;
+ timescaledb.enable_job_execution_logging 
+------------------------------------------
+ off
+(1 row)
+
+ALTER DATABASE :TEST_DBNAME SET timescaledb.enable_job_execution_logging TO ON;
+ERROR:  parameter "timescaledb.enable_job_execution_logging" cannot be changed now
+SHOW timescaledb.enable_job_execution_logging;
+ timescaledb.enable_job_execution_logging 
+------------------------------------------
+ off
+(1 row)
+
+\set ON_ERROR_STOP 1
 SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------

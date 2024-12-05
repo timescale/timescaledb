@@ -242,7 +242,7 @@ ts_shm_mq_wait_for_attach(MessageQueue *queue, shm_mq_handle *ack_queue_handle)
 		WaitLatch(MyLatch,
 				  WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
 				  BGW_MQ_WAIT_INTERVAL,
-				  WAIT_EVENT_MQ_INTERNAL);
+				  WAIT_EVENT_MESSAGE_QUEUE_INTERNAL);
 
 		ResetLatch(MyLatch);
 		CHECK_FOR_INTERRUPTS();
@@ -286,7 +286,7 @@ enqueue_message_wait_for_ack(MessageQueue *queue, BgwMessage *message,
 		WaitLatch(MyLatch,
 				  WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
 				  BGW_ACK_WAIT_INTERVAL,
-				  WAIT_EVENT_MQ_INTERNAL);
+				  WAIT_EVENT_MESSAGE_QUEUE_INTERNAL);
 		ResetLatch(MyLatch);
 		CHECK_FOR_INTERRUPTS();
 	}
@@ -383,7 +383,7 @@ send_ack(dsm_segment *seg, bool success)
 		WaitLatch(MyLatch,
 				  WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
 				  BGW_ACK_WAIT_INTERVAL,
-				  WAIT_EVENT_MQ_INTERNAL);
+				  WAIT_EVENT_MESSAGE_QUEUE_INTERNAL);
 		ResetLatch(MyLatch);
 		CHECK_FOR_INTERRUPTS();
 	}

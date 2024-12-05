@@ -37,10 +37,9 @@ INSERT INTO ht_with_fk SELECT '2000-01-01 0:00:01';
 ERROR:  insert or update on table "_hyper_1_2_chunk" violates foreign key constraint "2_2_keys"
 \set ON_ERROR_STOP 1
 SELECT conrelid::regclass,conname,confrelid::regclass FROM pg_constraint WHERE contype = 'f' AND confrelid = 'keys'::regclass ORDER BY conrelid::regclass::text COLLATE "C",conname;
-                    conrelid                    | conname  | confrelid 
-------------------------------------------------+----------+-----------
- _timescaledb_internal._hyper_1_2_chunk         | 2_2_keys | keys
- _timescaledb_internal.compress_hyper_2_3_chunk | keys     | keys
- ht_with_fk                                     | keys     | keys
-(3 rows)
+                conrelid                | conname  | confrelid 
+----------------------------------------+----------+-----------
+ _timescaledb_internal._hyper_1_2_chunk | 2_2_keys | keys
+ ht_with_fk                             | keys     | keys
+(2 rows)
 

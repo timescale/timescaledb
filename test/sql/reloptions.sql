@@ -13,12 +13,9 @@ INSERT INTO reloptions_test VALUES (4, 24.3, 1), (9, 13.3, 2);
 SELECT relname, reloptions FROM pg_class
 WHERE relname ~ '^_hyper.*' AND relkind = 'r';
 
--- Alter reloptions
+-- Alter reloptions. We support multiple options for the ALTER TABLE
 ALTER TABLE reloptions_test SET (fillfactor=80, parallel_workers=8);
-
-\set ON_ERROR_STOP 0
 ALTER TABLE reloptions_test SET (fillfactor=80), SET (parallel_workers=8);
-\set ON_ERROR_STOP 1
 
 SELECT relname, reloptions FROM pg_class
 WHERE relname ~ '^_hyper.*' AND relkind = 'r';

@@ -188,10 +188,20 @@ minmax_indexscan(Relation rel, Relation idxrel, AttrNumber attnum, Datum minmax[
 	TupleTableSlot *slot = table_slot_create(rel, NULL);
 	bool nulls[2] = { true, true };
 	int i;
+	ScanDirection directions[2] = { ForwardScanDirection /* min */,
+									BackwardScanDirection /* max */ };
+	int16 option = idxrel->rd_indoption[0];
+	bool index_orderby_asc = ((option & INDOPTION_DESC) == 0);
+
+	/* default index ordering is ASC, check if that's not the case */
+	if (!index_orderby_asc)
+	{
+		directions[0] = BackwardScanDirection;
+		directions[1] = ForwardScanDirection;
+	}
 
 	for (i = 0; i < 2; i++)
 	{
-		static ScanDirection directions[2] = { BackwardScanDirection, ForwardScanDirection };
 		bool found_tuple;
 		bool isnull;
 
@@ -266,8 +276,9 @@ table_has_minmax_index(Oid relid, Oid atttype, Name attname, AttrNumber attnum)
  *
  * Returns true iff min and max is found, otherwise false.
  */
-static bool
-chunk_get_minmax(Oid relid, Oid atttype, AttrNumber attnum, Datum minmax[2])
+bool
+ts_chunk_get_minmax(Oid relid, Oid atttype, AttrNumber attnum, const char *call_context,
+					Datum minmax[2])
 {
 	Relation rel = table_open(relid, AccessShareLock);
 	NameData attname;
@@ -279,11 +290,11 @@ chunk_get_minmax(Oid relid, Oid atttype, AttrNumber attnum, Datum minmax[2])
 	if (res == MINMAX_NO_INDEX)
 	{
 		ereport(WARNING,
-				(errmsg("no index on \"%s\" found for adaptive chunking on chunk \"%s\"",
+				(errmsg("no index on \"%s\" found for %s on chunk \"%s\"",
 						NameStr(attname),
+						call_context,
 						get_rel_name(relid)),
-				 errdetail("Adaptive chunking works best with an index on the dimension being "
-						   "adapted.")));
+				 errdetail("%s works best with an index on the dimension.", call_context)));
 
 		res = minmax_heapscan(rel, atttype, attnum, minmax);
 	}
@@ -469,7 +480,11 @@ ts_calculate_chunk_interval(PG_FUNCTION_ARGS)
 
 		slice_interval = slice->fd.range_end - slice->fd.range_start;
 
-		if (chunk_get_minmax(chunk->table_id, dim->fd.column_type, attno, minmax))
+		if (ts_chunk_get_minmax(chunk->table_id,
+								dim->fd.column_type,
+								attno,
+								"adaptive chunking",
+								minmax))
 		{
 			int64 min = ts_time_value_to_internal(minmax[0], dim->fd.column_type);
 			int64 max = ts_time_value_to_internal(minmax[1], dim->fd.column_type);

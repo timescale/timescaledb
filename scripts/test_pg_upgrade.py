@@ -86,8 +86,10 @@ node_old.safe_psql(query=f"CREATE DATABASE {pg_database_test};")
 node_old.safe_psql(dbname=pg_database_test, query="CREATE EXTENSION timescaledb;")
 node_old.safe_psql(dbname=pg_database_test, filename="test/sql/updates/pre.testing.sql")
 node_old.safe_psql(
-    dbname=pg_database_test,
-    filename=f"test/sql/updates/setup.{test_version}.sql",
+    dbname=pg_database_test, filename=f"test/sql/updates/setup.{test_version}.sql"
+)
+node_old.safe_psql(
+    dbname=pg_database_test, filename="test/sql/updates/setup.pg_upgrade.sql"
 )
 node_old.safe_psql(dbname=pg_database_test, query="CHECKPOINT")
 node_old.safe_psql(dbname=pg_database_test, filename="test/sql/updates/setup.check.sql")

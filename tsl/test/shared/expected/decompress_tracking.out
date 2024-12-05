@@ -63,6 +63,7 @@ QUERY PLAN
                            Filter: (device = 'd2'::text)
 (12 rows)
 
+SET timescaledb.enable_compressed_direct_batch_delete TO false;
 BEGIN; :EXPLAIN_ANALYZE DELETE FROM decompress_tracking; ROLLBACK;
 QUERY PLAN
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
@@ -91,16 +92,42 @@ QUERY PLAN
                      Filter: (device = 'd3'::text)
 (11 rows)
 
+RESET timescaledb.enable_compressed_direct_batch_delete;
+BEGIN; :EXPLAIN_ANALYZE DELETE FROM decompress_tracking; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches deleted: 5
+   ->  Delete on decompress_tracking (actual rows=0 loops=1)
+         Delete on _hyper_X_X_chunk decompress_tracking_1
+         Delete on _hyper_X_X_chunk decompress_tracking_2
+         ->  Append (actual rows=0 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_1 (actual rows=0 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_2 (actual rows=0 loops=1)
+(8 rows)
+
+BEGIN; :EXPLAIN_ANALYZE DELETE FROM decompress_tracking WHERE device = 'd3'; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches deleted: 2
+   ->  Delete on decompress_tracking (actual rows=0 loops=1)
+         Delete on _hyper_X_X_chunk decompress_tracking_1
+         Delete on _hyper_X_X_chunk decompress_tracking_2
+         ->  Append (actual rows=0 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_1 (actual rows=0 loops=1)
+                     Filter: (device = 'd3'::text)
+               ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_2 (actual rows=0 loops=1)
+                     Filter: (device = 'd3'::text)
+(10 rows)
+
 BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking SELECT '2020-01-01 1:30','d1',random(); ROLLBACK;
 QUERY PLAN
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
-   Batches decompressed: 1
-   Tuples decompressed: 10
+   Batches filtered: 1
    ->  Insert on decompress_tracking (actual rows=0 loops=1)
          ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
                ->  Subquery Scan on "*SELECT*" (actual rows=1 loops=1)
                      ->  Result (actual rows=1 loops=1)
-(7 rows)
+(6 rows)
 
 BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking SELECT '2020-01-01','d2',random(); ROLLBACK;
 QUERY PLAN
@@ -123,12 +150,11 @@ QUERY PLAN
 BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking (VALUES ('2020-01-01 1:30','d1',random()),('2020-01-01 1:30','d2',random())); ROLLBACK;
 QUERY PLAN
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
-   Batches decompressed: 2
-   Tuples decompressed: 25
+   Batches filtered: 2
    ->  Insert on decompress_tracking (actual rows=0 loops=1)
          ->  Custom Scan (ChunkDispatch) (actual rows=2 loops=1)
                ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
-(6 rows)
+(5 rows)
 
 -- test prepared statements EXPLAIN still works after execution
 SET plan_cache_mode TO force_generic_plan;

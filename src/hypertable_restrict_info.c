@@ -26,28 +26,8 @@
 #include "hypercube.h"
 #include "partitioning.h"
 #include "scan_iterator.h"
+#include "ts_catalog/chunk_column_stats.h"
 #include "utils.h"
-
-typedef struct DimensionRestrictInfo
-{
-	const Dimension *dimension;
-} DimensionRestrictInfo;
-
-typedef struct DimensionRestrictInfoOpen
-{
-	DimensionRestrictInfo base;
-	int64 lower_bound; /* internal time representation */
-	StrategyNumber lower_strategy;
-	int64 upper_bound; /* internal time representation */
-	StrategyNumber upper_strategy;
-} DimensionRestrictInfoOpen;
-
-typedef struct DimensionRestrictInfoClosed
-{
-	DimensionRestrictInfo base;
-	List *partitions;		 /* hash values */
-	StrategyNumber strategy; /* either Invalid or equal */
-} DimensionRestrictInfoClosed;
 
 typedef struct DimensionValues
 {
@@ -94,6 +74,28 @@ dimension_restrict_info_create(const Dimension *d)
 }
 
 /*
+ * Given a column from a hypertable, create a DimensionRestrictInfo entry
+ * representing it. This gets used by the usual hypertable restrict info
+ * machinery to identify if the query clauses are using expressions involving
+ * this column. Note that this column is NOT a partitioning column but we are
+ * tracking ranges for this column in the _timescaledb_catalog.chunk_column_stats
+ * catalog table.
+ *
+ * The idea is to do chunk exclusion when queries have WHERE clauses using this
+ * column. The logic at the "Dimension" entry level are the same, so we reuse the
+ * same representation to benefit from it.
+ */
+static DimensionRestrictInfo *
+chunk_column_stats_restrict_info_create(const Hypertable *ht, const Form_chunk_column_stats d)
+{
+	/* create a dummy dimension structure for this range entry */
+	Dimension *dim = ts_chunk_column_stats_fill_dummy_dimension(d, ht->main_table_relid);
+
+	/* similar to open dimensions */
+	return &dimension_restrict_info_open_create(dim)->base;
+}
+
+/*
  * Check if the restriction on this dimension is trivial, that is, the entire
  * range of the dimension matches.
  */
@@ -103,6 +105,7 @@ dimension_restrict_info_is_trivial(const DimensionRestrictInfo *dri)
 	switch (dri->dimension->type)
 	{
 		case DIMENSION_TYPE_OPEN:
+		case DIMENSION_TYPE_STATS:
 		{
 			DimensionRestrictInfoOpen *open = (DimensionRestrictInfoOpen *) dri;
 			return open->lower_strategy == InvalidStrategy &&
@@ -250,6 +253,12 @@ dimension_restrict_info_add(DimensionRestrictInfo *dri, int strategy, Oid collat
 													strategy,
 													collation,
 													values);
+		case DIMENSION_TYPE_STATS:
+			/* we reuse the DimensionRestrictInfoOpen structure for these */
+			return dimension_restrict_info_open_add((DimensionRestrictInfoOpen *) dri,
+													strategy,
+													collation,
+													values);
 		case DIMENSION_TYPE_CLOSED:
 			return dimension_restrict_info_closed_add((DimensionRestrictInfoClosed *) dri,
 													  strategy,
@@ -274,18 +283,40 @@ typedef struct HypertableRestrictInfo
 HypertableRestrictInfo *
 ts_hypertable_restrict_info_create(RelOptInfo *rel, Hypertable *ht)
 {
-	int num_dimensions = ht->space->num_dimensions;
-	HypertableRestrictInfo *res =
-		palloc0(sizeof(HypertableRestrictInfo) + sizeof(DimensionRestrictInfo *) * num_dimensions);
+	/* If chunk skipping is disabled, we have to empty range_space
+	 * in case it was cached earlier.
+	 */
+	ChunkRangeSpace *range_space = ht->range_space;
+	if (!ts_guc_enable_chunk_skipping)
+		range_space = NULL;
+
+	int num_dimensions =
+		ht->space->num_dimensions + (range_space ? range_space->num_range_cols : 0);
+	HypertableRestrictInfo *res = palloc0(sizeof(HypertableRestrictInfo) +
+										  (sizeof(DimensionRestrictInfo *) * num_dimensions));
 	int i;
+	int range_index = 0;
 
 	res->num_dimensions = num_dimensions;
 
-	for (i = 0; i < num_dimensions; i++)
+	for (i = 0; i < ht->space->num_dimensions; i++)
 	{
 		DimensionRestrictInfo *dri = dimension_restrict_info_create(&ht->space->dimensions[i]);
 
 		res->dimension_restriction[i] = dri;
+		range_index++;
+	}
+
+	/*
+	 * We convert the range_space entries into dummy "DimensionRestrictInfo" entries. This allows
+	 * the hypertable restrict info machinery to consider these as well.
+	 */
+	for (i = 0; range_space != NULL && i < range_space->num_range_cols; i++)
+	{
+		DimensionRestrictInfo *dri =
+			chunk_column_stats_restrict_info_create(ht, &ht->range_space->range_cols[i]);
+
+		res->dimension_restriction[range_index++] = dri;
 	}
 
 	return res;
@@ -501,10 +532,14 @@ gather_restriction_dimension_vectors(const HypertableRestrictInfo *hri)
 
 	for (i = 0; i < hri->num_dimensions; i++)
 	{
-		const DimensionRestrictInfo *dri = hri->dimension_restriction[i];
-		DimensionVec *dv = ts_dimension_vec_create(DIMENSION_VEC_DEFAULT_SIZE);
+		DimensionRestrictInfo *dri = hri->dimension_restriction[i];
+		DimensionVec *dv;
 
 		Assert(NULL != dri);
+		/* dimension ranges don't need dimension slices */
+		dv = ts_dimension_vec_create(
+			dri->dimension->type == DIMENSION_TYPE_STATS ? 1 : DIMENSION_VEC_DEFAULT_SIZE);
+		dv->dri = dri;
 
 		switch (dri->dimension->type)
 		{
@@ -570,6 +605,11 @@ gather_restriction_dimension_vectors(const HypertableRestrictInfo *hri)
 				}
 				break;
 			}
+			case DIMENSION_TYPE_STATS:
+			{
+				/* an empty dv will be appended for this as a placeholder */
+				break;
+			}
 			default:
 				elog(ERROR, "unknown dimension type");
 				return NULL;
@@ -579,11 +619,16 @@ gather_restriction_dimension_vectors(const HypertableRestrictInfo *hri)
 
 		/*
 		 * If there is a dimension where no slices match, the result will be
-		 * empty.
+		 * empty. But only do so if it's not a DIMENSION_TYPE_STATS entry.
+		 *
+		 * For DIMENSION_TYPE_STATS entries, we get the list of chunks
+		 * directly later on from "chunk_column_stats" catalog. They do not
+		 * have dimension slices.
 		 */
-		if (dv->num_slices == 0)
+		if (dv->num_slices == 0 && dri->dimension->type != DIMENSION_TYPE_STATS)
 		{
 			ts_scan_iterator_close(&it);
+
 			return NIL;
 		}
 
@@ -601,7 +646,7 @@ gather_restriction_dimension_vectors(const HypertableRestrictInfo *hri)
 
 Chunk **
 ts_hypertable_restrict_info_get_chunks(HypertableRestrictInfo *hri, Hypertable *ht,
-									   unsigned int *num_chunks)
+									   bool include_osm, unsigned int *num_chunks)
 {
 	/*
 	 * Remove the dimensions for which we don't have a restriction, that is,
@@ -634,7 +679,7 @@ ts_hypertable_restrict_info_get_chunks(HypertableRestrictInfo *hri, Hypertable *
 		 * as well. We need to remove it when OSM reads are disabled via GUC
 		 * variable.
 		 */
-		if (!ts_guc_enable_osm_reads)
+		if (!include_osm || !ts_guc_enable_osm_reads)
 		{
 			int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
 
@@ -657,7 +702,7 @@ ts_hypertable_restrict_info_get_chunks(HypertableRestrictInfo *hri, Hypertable *
 		}
 		else
 		{
-			/* Find the chunks matching these dimension slices. */
+			/* Find the chunks matching these dimension ranges/slices. */
 			chunk_ids = ts_chunk_id_find_in_subspace(ht, dimension_vectors);
 		}
 
@@ -749,8 +794,8 @@ chunk_cmp_reverse(const void *c1, const void *c2)
  */
 Chunk **
 ts_hypertable_restrict_info_get_chunks_ordered(HypertableRestrictInfo *hri, Hypertable *ht,
-											   Chunk **chunks, bool reverse, List **nested_oids,
-											   unsigned int *num_chunks)
+											   bool include_osm, Chunk **chunks, bool reverse,
+											   List **nested_oids, unsigned int *num_chunks)
 {
 	List *slot_chunk_oids = NIL;
 	DimensionSlice *slice = NULL;
@@ -758,7 +803,7 @@ ts_hypertable_restrict_info_get_chunks_ordered(HypertableRestrictInfo *hri, Hype
 
 	if (chunks == NULL)
 	{
-		chunks = ts_hypertable_restrict_info_get_chunks(hri, ht, num_chunks);
+		chunks = ts_hypertable_restrict_info_get_chunks(hri, ht, include_osm, num_chunks);
 	}
 
 	if (*num_chunks == 0)
@@ -768,9 +813,9 @@ ts_hypertable_restrict_info_get_chunks_ordered(HypertableRestrictInfo *hri, Hype
 	Assert(IS_OPEN_DIMENSION(&ht->space->dimensions[0]));
 
 	if (reverse)
-		qsort(chunks, *num_chunks, sizeof(Chunk *), chunk_cmp_reverse);
+		qsort((void *) chunks, *num_chunks, sizeof(Chunk *), chunk_cmp_reverse);
 	else
-		qsort(chunks, *num_chunks, sizeof(Chunk *), chunk_cmp);
+		qsort((void *) chunks, *num_chunks, sizeof(Chunk *), chunk_cmp);
 
 	for (i = 0; i < *num_chunks; i++)
 	{

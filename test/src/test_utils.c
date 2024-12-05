@@ -21,6 +21,7 @@
 
 #include "debug_point.h"
 #include "extension_constants.h"
+#include "utils.h"
 
 TS_FUNCTION_INFO_V1(ts_test_error_injection);
 TS_FUNCTION_INFO_V1(ts_debug_shippable_error_after_n_rows);
@@ -92,13 +93,20 @@ transaction_row_counter(void)
 {
 	static LocalTransactionId last_lxid = 0;
 	static int rows_seen = 0;
-
-	if (last_lxid != MyProc->lxid)
+#if PG17_GE
+	if (last_lxid != MyProc->vxid.lxid)
 	{
 		/* Reset it for each new transaction for predictable results. */
 		rows_seen = 0;
+		last_lxid = MyProc->vxid.lxid;
+	}
+#else
+	if (last_lxid != MyProc->lxid)
+	{
+		rows_seen = 0;
 		last_lxid = MyProc->lxid;
 	}
+#endif
 
 	return rows_seen++;
 }
@@ -205,12 +213,20 @@ ts_debug_sleepy_function()
 	static LocalTransactionId last_lxid = 0;
 	static int rows_seen = 0;
 
-	if (last_lxid != MyProc->lxid)
+#if PG17_GE
+	if (last_lxid != MyProc->vxid.lxid)
 	{
 		/* Reset it for each new transaction for predictable results. */
 		rows_seen = 0;
+		last_lxid = MyProc->vxid.lxid;
+	}
+#else
+	if (last_lxid != MyProc->lxid)
+	{
+		rows_seen = 0;
 		last_lxid = MyProc->lxid;
 	}
+#endif
 
 	rows_seen++;
 
@@ -319,4 +335,45 @@ ts_debug_allocated_bytes(PG_FUNCTION_ARGS)
 	}
 
 	PG_RETURN_UINT64(MemoryContextMemAllocated(context, /* recurse = */ true));
+}
+
+TS_TEST_FN(ts_test_errdata_to_jsonb)
+{
+	ErrorData *edata = (ErrorData *) palloc(sizeof(ErrorData));
+	edata->elevel = ERROR;
+	edata->output_to_server = true;
+	edata->output_to_client = true;
+	edata->hide_stmt = false;
+	edata->hide_ctx = false;
+	edata->filename = "test error filename";
+	edata->lineno = 123;
+	edata->funcname = "test error function";
+	edata->domain = "test error domain";
+	edata->context_domain = "test error context domain";
+	edata->sqlerrcode = ERRCODE_INVALID_PARAMETER_VALUE;
+	edata->message = "test error message";
+	edata->detail = "test error detail";
+	edata->detail_log = "test error detail log";
+	edata->hint = "test error hint";
+	edata->context = "test error context";
+	edata->backtrace = "test error backtrace";
+	edata->message_id = "test error message id";
+	edata->schema_name = "test error schema";
+	edata->table_name = "test error table";
+	edata->column_name = "test error column";
+	edata->datatype_name = "test error datatype";
+	edata->constraint_name = "test error constraint";
+	edata->cursorpos = 42;
+	edata->internalpos = 42;
+	edata->internalquery = "test error internal query";
+	edata->saved_errno = 42;
+
+	NameData proc_schema = { .data = { 0 } };
+	NameData proc_name = { .data = { 0 } };
+	namestrcpy(&proc_schema, "proc_schema");
+	namestrcpy(&proc_name, "proc_name");
+
+	Jsonb *out = ts_errdata_to_jsonb(edata, &proc_schema, &proc_name);
+
+	PG_RETURN_JSONB_P(out);
 }

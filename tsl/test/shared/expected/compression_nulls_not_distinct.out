@@ -1,0 +1,33 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- test NULL NOT DISTINCT unique constraint
+-- this test is run only on PG15 since support for NULL NOT DISTINCT
+-- only exists since then. once we drop support for PG14, this test
+-- can be moved to non-shared compression_conflicts test
+set timescaledb.debug_compression_path_info to on;
+CREATE TABLE nulls_not_distinct(time timestamptz not null, device text, value float);
+CREATE UNIQUE INDEX ON nulls_not_distinct (time, device) NULLS NOT DISTINCT;
+SELECT table_name FROM create_hypertable('nulls_not_distinct', 'time');
+     table_name     
+ nulls_not_distinct
+(1 row)
+
+ALTER TABLE nulls_not_distinct SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+NOTICE:  default order by for hypertable "nulls_not_distinct" is set to ""time" DESC"
+INSERT INTO nulls_not_distinct SELECT '2024-01-01'::timestamptz + format('%s',i)::interval, 'd1', i FROM generate_series(1,6000) g(i);
+INSERT INTO nulls_not_distinct VALUES ('2024-01-01 0:00:00.5', NULL, 1);
+SELECT count(compress_chunk(c)) FROM show_chunks('nulls_not_distinct') c;
+INFO:  using tuplesort to scan rows from "_hyper_X_X_chunk" for compression
+ count 
+     1
+(1 row)
+
+-- shouldn't succeed because nulls are not distinct
+\set ON_ERROR_STOP 0
+INSERT INTO nulls_not_distinct VALUES ('2024-01-01 0:00:00.5', NULL, 1);
+INFO:  Using index scan with scan keys: index 1, heap 2, memory 1. 
+ERROR:  duplicate key value violates unique constraint "_hyper_X_X_chunk_nulls_not_distinct_time_device_idx"
+\set ON_ERROR_STOP 1
+RESET timescaledb.debug_compression_path_info;
+DROP TABLE nulls_not_distinct;

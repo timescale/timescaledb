@@ -112,9 +112,10 @@ test_factory(ConnectionType type, int status, char *host, int port)
 	ts_connection_destroy(conn);
 
 	if (!ts_http_response_state_valid_status(rsp))
-		elog(ERROR,
-			 "endpoint sent back unexpected HTTP status: %d",
-			 ts_http_response_state_status_code(rsp));
+		ereport(ERROR,
+				(errcode(ERRCODE_IO_ERROR),
+				 errmsg("endpoint sent back unexpected HTTP status: %d",
+						ts_http_response_state_status_code(rsp))));
 
 	json = DirectFunctionCall1(jsonb_in, CStringGetDatum(ts_http_response_state_body_start(rsp)));
 
@@ -135,7 +136,9 @@ ts_test_status_ssl(PG_FUNCTION_ARGS)
 	char buf[128] = { '\0' };
 
 	if (status / 100 != 2)
-		elog(ERROR, "endpoint sent back unexpected HTTP status: %d", status);
+		ereport(ERROR,
+				(errcode(ERRCODE_IO_ERROR),
+				 errmsg("endpoint sent back unexpected HTTP status: %d", status)));
 
 	snprintf(buf, sizeof(buf) - 1, "{\"status\":%d}", status);
 
@@ -150,7 +153,7 @@ ts_test_status(PG_FUNCTION_ARGS)
 	int port = 80;
 	int status = PG_GETARG_INT32(0);
 
-	PG_RETURN_JSONB_P((void *) test_factory(CONNECTION_PLAIN, status, TEST_ENDPOINT, port));
+	PG_RETURN_DATUM(test_factory(CONNECTION_PLAIN, status, TEST_ENDPOINT, port));
 }
 
 #ifdef TS_DEBUG
@@ -163,7 +166,7 @@ ts_test_status_mock(PG_FUNCTION_ARGS)
 
 	test_string = text_to_cstring(arg1);
 
-	PG_RETURN_JSONB_P((void *) test_factory(CONNECTION_MOCK, 123, TEST_ENDPOINT, port));
+	PG_RETURN_DATUM(test_factory(CONNECTION_MOCK, 123, TEST_ENDPOINT, port));
 }
 #endif
 
@@ -291,5 +294,5 @@ ts_test_telemetry(PG_FUNCTION_ARGS)
 
 	ts_http_response_state_destroy(rsp);
 
-	PG_RETURN_JSONB_P((void *) json_body);
+	PG_RETURN_DATUM(json_body);
 }

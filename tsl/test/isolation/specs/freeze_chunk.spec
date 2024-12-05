@@ -18,6 +18,7 @@ setup {
 
 teardown {
   DROP TABLE measurements;
+  DROP FUNCTION lock_chunktable;
 }
 
 # Test concurrent DML and freeze chunk. The wait point happens

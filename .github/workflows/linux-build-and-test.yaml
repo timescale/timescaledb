@@ -45,16 +45,16 @@ jobs:
     name: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
     needs: matrixbuilder
     runs-on: ${{ matrix.os }}
-    strategy:
-      matrix: ${{ fromJson(needs.matrixbuilder.outputs.matrix) }}
-      fail-fast: false
+
     env:
       PG_SRC_DIR: pgbuild
       PG_INSTALL_DIR: postgresql
-      MAKE_JOBS: 6
       CLANG: ${{ matrix.clang }}
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
+    strategy:
+      matrix: ${{ fromJson(needs.matrixbuilder.outputs.matrix) }}
+      fail-fast: false
 
     steps:
     - name: Install Linux Dependencies
@@ -124,9 +124,9 @@ jobs:
         cd ~/$PG_SRC_DIR
         ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
           --without-readline --without-zlib --without-libxml ${{ matrix.pg_extra_args }}
-        make -j $MAKE_JOBS
+        make -j $(nproc)
         for ext in ${{ matrix.pg_extensions }}; do
-          make -j $MAKE_JOBS -C contrib/${ext}
+          make -j $(nproc) -C contrib/${ext}
         done
 
     - name: Install PostgreSQL ${{ matrix.pg }}
@@ -152,17 +152,17 @@ jobs:
           -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
           ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} -DUSE_OPENSSL=OFF \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
-        make -j $MAKE_JOBS -C nossl
+        make -j $(nproc) -C nossl
         make -C nossl install
         make -C nossl regresscheck TESTS=telemetry
 
     - name: Build TimescaleDB
       run: |
-        ./bootstrap -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+        ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" \
           -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
           ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
-        make -j $MAKE_JOBS -C build
+        make -j $(nproc) -C build
         make -C build install
 
     - name: Check exported symbols
@@ -171,7 +171,6 @@ jobs:
     - name: make installcheck
       id: installcheck
       run: |
-        ulimit -c unlimited
         set -o pipefail
         make -k -C build installcheck IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \
             SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }} \
@@ -183,7 +182,7 @@ jobs:
 
     - name: coverage
       if: matrix.coverage
-      run: make -j $MAKE_JOBS -k -C build coverage
+      run: make -j $(nproc) -k -C build coverage
 
     - name: Send coverage report to Codecov.io app
       if: matrix.coverage
@@ -254,7 +253,7 @@ jobs:
           list
           info args
           info locals
-        " 2>&1 | tee stacktrace.log
+        " 2>&1 | tee -a stacktrace.log
         ./scripts/bundle_coredumps.sh
 
     - name: Stack trace macOS
@@ -268,6 +267,13 @@ jobs:
       with:
         name: Coredumps ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: coredumps
+
+    - name: Save stacktraces
+      if: always() && steps.collectlogs.outputs.coredumps == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: Stacktraces ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        path: stacktrace.log
 
     - name: Save TAP test logs
       if: always()

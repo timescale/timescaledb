@@ -989,6 +989,7 @@ ts_hyperspace_calculate_point(const Hyperspace *hs, TupleTableSlot *slot)
 			case DIMENSION_TYPE_CLOSED:
 				p->coordinates[p->num_coords++] = (int64) DatumGetInt32(datum);
 				break;
+			case DIMENSION_TYPE_STATS:
 			case DIMENSION_TYPE_ANY:
 				elog(ERROR, "invalid dimension type when inserting tuple");
 				break;
@@ -1471,6 +1472,7 @@ ts_dimension_info_validate(DimensionInfo *info)
 		case DIMENSION_TYPE_OPEN:
 			dimension_info_validate_open(info);
 			break;
+		case DIMENSION_TYPE_STATS:
 		case DIMENSION_TYPE_ANY:
 			elog(ERROR, "invalid dimension type in configuration");
 			break;
@@ -1738,6 +1740,10 @@ ts_dimension_info_out(PG_FUNCTION_ARGS)
 			break;
 		}
 
+		case DIMENSION_TYPE_STATS:
+			appendStringInfo(&str, "range");
+			break;
+
 		case DIMENSION_TYPE_ANY:
 			appendStringInfo(&str, "any");
 			break;
@@ -1880,7 +1886,7 @@ ts_dimensions_rename_schema_name(const char *old_name, const char *new_name)
 		.nkeys = 1,
 		.scankey = scankey,
 		.tuple_found = dimension_rename_schema_name,
-		.data = names,
+		.data = (void *) names,
 		.lockmode = RowExclusiveLock,
 		.scandirection = ForwardScanDirection,
 	};

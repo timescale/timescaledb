@@ -25,6 +25,10 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       build_type: ${{ steps.build_type.outputs.build_type }}
+      pg14_latest: ${{ steps.config.outputs.pg14_latest }}
+      pg15_latest: ${{ steps.config.outputs.pg15_latest }}
+      pg16_latest: ${{ steps.config.outputs.pg16_latest }}
+      pg17_latest: ${{ steps.config.outputs.pg17_latest }}
 
     steps:
     - name: Checkout source code
@@ -49,7 +53,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ 14, 15, 16 ]
+        pg: [ 14, 15, 16, 17 ]
         os: [ windows-2022 ]
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
         ignores: ["chunk_adaptive metadata telemetry"]
@@ -58,11 +62,13 @@ jobs:
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
         include:
           - pg: 14
-            tsl_skips_version: telemetry_stats-14
+            pg_version: ${{ needs.config.outputs.pg14_latest }}
           - pg: 15
-            tsl_skips_version: telemetry_stats-15
+            pg_version: ${{ needs.config.outputs.pg15_latest }}
           - pg: 16
-            tsl_skips_version: telemetry_stats-16
+            pg_version: ${{ needs.config.outputs.pg16_latest }}
+          - pg: 17
+            pg_version: ${{ needs.config.outputs.pg17_latest }}
     env:
       # PostgreSQL configuration
       PGPORT: 55432
@@ -71,7 +77,7 @@ jobs:
       TABLESPACE2: D:\tablespace2\
     steps:
     - name: Setup WSL
-      uses: Vampire/setup-wsl@v3
+      uses: Vampire/setup-wsl@v3.1.1
       with:
         additional-packages:
           cmake
@@ -120,8 +126,19 @@ jobs:
         key: "${{ runner.os }}-build-pg${{ matrix.pkg_version }}\
           -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
 
+    # Force install PostgreSQL 17 since the package still on moderation
+    # https://community.chocolatey.org/packages/postgresql17
+    - name: Install PostgreSQL ${{ matrix.pg }} (using ${{ matrix.pg_version }})
+      if: github.event_name != 'schedule' && steps.cache-postgresql.outputs.cache-hit != 'true'
+      run: |
+        choco feature disable --name=usePackageExitCodes
+        choco feature disable --name=showDownloadProgress
+        choco install postgresql${{ matrix.pg }} --version ${{ matrix.pg_version }} `
+          --force -y --install-args="'--prefix $HOME\PostgreSQL\${{ matrix.pg }} --extract-only yes'"
+
+    # This is for nightly builds. Here we pick the latest version of the package.
     - name: Install PostgreSQL ${{ matrix.pg }}
-      if: steps.cache-postgresql.outputs.cache-hit != 'true'
+      if: github.event_name == 'schedule' && steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
         choco feature disable --name=usePackageExitCodes
         choco feature disable --name=showDownloadProgress

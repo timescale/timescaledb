@@ -9,9 +9,9 @@ SET client_min_messages TO error;
 SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') AS "TEST_LOAD_NAME",
     format('include/%s_load_ht.sql', :'TEST_BASE_NAME') AS "TEST_LOAD_HT_NAME",
     format('include/%s_query.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME",
-    format('%s/results/%s_results.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_WITH_HYPERTABLE",
-    format('%s/results/%s_ht_results.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_WITH_NO_HYPERTABLE" \gset
-SELECT format('\! diff -u --label "Base pg table results" --label "Hyperatable results" %s %s', :'TEST_RESULTS_WITH_HYPERTABLE', :'TEST_RESULTS_WITH_NO_HYPERTABLE') AS "DIFF_CMD" \gset
+    format('%s/results/%s_ht_results.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_WITH_HYPERTABLE",
+    format('%s/results/%s_results.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_WITH_NO_HYPERTABLE" \gset
+SELECT format('\! diff -u --label "Base pg table results" --label "Hypertable results" %s %s', :'TEST_RESULTS_WITH_HYPERTABLE', :'TEST_RESULTS_WITH_NO_HYPERTABLE') AS "DIFF_CMD" \gset
 \ir :TEST_LOAD_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
@@ -849,6 +849,73 @@ psql:include/ts_merge_query.sql:778: ERROR:  syntax error at or near "RETURNING"
 LINE 10: RETURNING *;
          ^
 ROLLBACK;
+-- PG17-specific tests for views, returning and merge_action. These throw syntax errors for previous versions of Postgres.
+-- However, since the error is the same for both hypertables and regular tables, this test should still pass for previous versions.
+-- RETURNING
+INSERT INTO source(sid, delta) VALUES(1, 40), (5, 50);
+BEGIN;
+MERGE INTO target t
+USING source s
+ON t.tid = s.sid
+WHEN MATCHED AND tid > 2 THEN
+	UPDATE set balance = balance + s.delta
+WHEN MATCHED THEN
+	DELETE
+WHEN NOT MATCHED THEN
+	INSERT (tid, balance) VALUES (sid, delta);
+SELECT * from target;
+ROLLBACK;
+BEGIN;
+MERGE INTO target t
+USING source s
+ON t.tid = s.sid
+WHEN MATCHED AND tid > 1 THEN
+	UPDATE set balance = balance + s.delta
+WHEN MATCHED THEN
+	DELETE
+WHEN NOT MATCHED THEN
+	INSERT (tid, balance) VALUES (sid, delta)
+RETURNING merge_action(), t.*;
+psql:include/ts_merge_query.sql:811: ERROR:  syntax error at or near "RETURNING"
+LINE 10: RETURNING merge_action(), t.*;
+         ^
+ROLLBACK;
+-- Views
+CREATE VIEW tv AS SELECT * FROM target;
+BEGIN;
+MERGE INTO tv t
+USING source s
+ON t.tid = s.sid
+WHEN MATCHED AND tid > 2 THEN
+	UPDATE set balance = balance + s.delta
+WHEN MATCHED THEN
+	DELETE
+WHEN NOT MATCHED THEN
+	INSERT (tid, balance) VALUES (sid, delta);
+psql:include/ts_merge_query.sql:826: ERROR:  cannot execute MERGE on relation "tv"
+DETAIL:  This operation is not supported for views.
+SELECT * from tv;
+psql:include/ts_merge_query.sql:827: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+SELECT * from target; -- should also update the underlying table
+psql:include/ts_merge_query.sql:828: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ROLLBACK;
+BEGIN;
+MERGE INTO tv t
+USING source s
+ON t.tid = s.sid
+WHEN MATCHED AND tid > 2 THEN
+	UPDATE set balance = balance + s.delta
+WHEN MATCHED THEN
+	DELETE
+WHEN NOT MATCHED THEN
+	INSERT (tid, balance) VALUES (sid, delta)
+RETURNING merge_action(), t.*;
+psql:include/ts_merge_query.sql:841: ERROR:  syntax error at or near "RETURNING"
+LINE 10: RETURNING merge_action(), t.*;
+         ^
+ROLLBACK;
+DROP VIEW tv;
+DELETE FROM source where sid in (1, 5);
 -- EXPLAIN
 CREATE TABLE ex_mtarget (a int, b int)
   WITH (autovacuum_enabled=off);
@@ -932,6 +999,20 @@ ON tid = sid AND (SELECT count(*) > 0 FROM sq_target)
 WHEN MATCHED THEN
     UPDATE SET balance = 42;
 SELECT * FROM sq_target WHERE tid = 1;
+ROLLBACK;
+--  Test RETURNING with subqueries
+BEGIN;
+MERGE INTO sq_target t
+USING v
+ON tid = sid AND (SELECT count(*) > 0 FROM sq_target)
+WHEN MATCHED THEN
+    UPDATE SET balance = 42
+RETURNING *;
+psql:include/ts_merge_query.sql:952: ERROR:  syntax error at or near "RETURNING"
+LINE 6: RETURNING *;
+        ^
+SELECT * FROM sq_target WHERE tid = 1;
+psql:include/ts_merge_query.sql:953: ERROR:  current transaction is aborted, commands ignored until end of transaction block
 ROLLBACK;
 DROP TABLE sq_target CASCADE;
 DROP TABLE sq_source CASCADE;
@@ -2138,6 +2219,73 @@ psql:include/ts_merge_query.sql:778: ERROR:  syntax error at or near "RETURNING"
 LINE 10: RETURNING *;
          ^
 ROLLBACK;
+-- PG17-specific tests for views, returning and merge_action. These throw syntax errors for previous versions of Postgres.
+-- However, since the error is the same for both hypertables and regular tables, this test should still pass for previous versions.
+-- RETURNING
+INSERT INTO source(sid, delta) VALUES(1, 40), (5, 50);
+BEGIN;
+MERGE INTO target t
+USING source s
+ON t.tid = s.sid
+WHEN MATCHED AND tid > 2 THEN
+	UPDATE set balance = balance + s.delta
+WHEN MATCHED THEN
+	DELETE
+WHEN NOT MATCHED THEN
+	INSERT (tid, balance) VALUES (sid, delta);
+SELECT * from target;
+ROLLBACK;
+BEGIN;
+MERGE INTO target t
+USING source s
+ON t.tid = s.sid
+WHEN MATCHED AND tid > 1 THEN
+	UPDATE set balance = balance + s.delta
+WHEN MATCHED THEN
+	DELETE
+WHEN NOT MATCHED THEN
+	INSERT (tid, balance) VALUES (sid, delta)
+RETURNING merge_action(), t.*;
+psql:include/ts_merge_query.sql:811: ERROR:  syntax error at or near "RETURNING"
+LINE 10: RETURNING merge_action(), t.*;
+         ^
+ROLLBACK;
+-- Views
+CREATE VIEW tv AS SELECT * FROM target;
+BEGIN;
+MERGE INTO tv t
+USING source s
+ON t.tid = s.sid
+WHEN MATCHED AND tid > 2 THEN
+	UPDATE set balance = balance + s.delta
+WHEN MATCHED THEN
+	DELETE
+WHEN NOT MATCHED THEN
+	INSERT (tid, balance) VALUES (sid, delta);
+psql:include/ts_merge_query.sql:826: ERROR:  cannot execute MERGE on relation "tv"
+DETAIL:  This operation is not supported for views.
+SELECT * from tv;
+psql:include/ts_merge_query.sql:827: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+SELECT * from target; -- should also update the underlying table
+psql:include/ts_merge_query.sql:828: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ROLLBACK;
+BEGIN;
+MERGE INTO tv t
+USING source s
+ON t.tid = s.sid
+WHEN MATCHED AND tid > 2 THEN
+	UPDATE set balance = balance + s.delta
+WHEN MATCHED THEN
+	DELETE
+WHEN NOT MATCHED THEN
+	INSERT (tid, balance) VALUES (sid, delta)
+RETURNING merge_action(), t.*;
+psql:include/ts_merge_query.sql:841: ERROR:  syntax error at or near "RETURNING"
+LINE 10: RETURNING merge_action(), t.*;
+         ^
+ROLLBACK;
+DROP VIEW tv;
+DELETE FROM source where sid in (1, 5);
 -- EXPLAIN
 CREATE TABLE ex_mtarget (a int, b int)
   WITH (autovacuum_enabled=off);
@@ -2221,6 +2369,20 @@ ON tid = sid AND (SELECT count(*) > 0 FROM sq_target)
 WHEN MATCHED THEN
     UPDATE SET balance = 42;
 SELECT * FROM sq_target WHERE tid = 1;
+ROLLBACK;
+--  Test RETURNING with subqueries
+BEGIN;
+MERGE INTO sq_target t
+USING v
+ON tid = sid AND (SELECT count(*) > 0 FROM sq_target)
+WHEN MATCHED THEN
+    UPDATE SET balance = 42
+RETURNING *;
+psql:include/ts_merge_query.sql:952: ERROR:  syntax error at or near "RETURNING"
+LINE 6: RETURNING *;
+        ^
+SELECT * FROM sq_target WHERE tid = 1;
+psql:include/ts_merge_query.sql:953: ERROR:  current transaction is aborted, commands ignored until end of transaction block
 ROLLBACK;
 DROP TABLE sq_target CASCADE;
 DROP TABLE sq_source CASCADE;

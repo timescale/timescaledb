@@ -20,7 +20,7 @@ jobs:
 
       - name: Check latest-dev contents
         run: |
-          python scripts/check_updates_ast.py "sql/updates/latest-dev.sql"
+          python scripts/check_updates_ast.py --latest "sql/updates/latest-dev.sql"
 
       # To allow fixing previous mistakes we run the check against reverse-dev but don't
       # fail it on errors.

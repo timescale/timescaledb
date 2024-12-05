@@ -26,6 +26,7 @@
 typedef struct SubspaceStore SubspaceStore;
 typedef struct Chunk Chunk;
 typedef struct Hypercube Hypercube;
+typedef struct ChunkRangeSpace ChunkRangeSpace;
 
 /* For the distributed node case, we would have compression enabled
  * but don't have a corresponding internal table on the access
@@ -52,10 +53,7 @@ typedef struct Hypertable
 	Oid chunk_sizing_func;
 	Hyperspace *space;
 	SubspaceStore *chunk_cache;
-	/*
-	 * Allows restricting the data nodes to use for the hypertable. Default is to
-	 * use all available data nodes.
-	 */
+	ChunkRangeSpace *range_space;
 } Hypertable;
 
 /* create_hypertable record attribute numbers */

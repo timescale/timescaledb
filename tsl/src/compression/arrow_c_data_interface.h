@@ -136,10 +136,38 @@ struct ArrowSchema
 static pg_attribute_always_inline bool
 arrow_row_is_valid(const uint64 *bitmap, size_t row_number)
 {
+	if (likely(bitmap == NULL))
+	{
+		return true;
+	}
+
 	const size_t qword_index = row_number / 64;
 	const size_t bit_index = row_number % 64;
 	const uint64 mask = 1ull << bit_index;
 	return bitmap[qword_index] & mask;
+}
+
+/*
+ * Same as above but for two bitmaps, this is a typical situation when we have
+ * validity bitmap + filter result.
+ */
+static pg_attribute_always_inline bool
+arrow_row_both_valid(const uint64 *bitmap1, const uint64 *bitmap2, size_t row_number)
+{
+	if (likely(bitmap1 == NULL))
+	{
+		return arrow_row_is_valid(bitmap2, row_number);
+	}
+
+	if (likely(bitmap2 == NULL))
+	{
+		return arrow_row_is_valid(bitmap1, row_number);
+	}
+
+	const size_t qword_index = row_number / 64;
+	const size_t bit_index = row_number % 64;
+	const uint64 mask = 1ull << bit_index;
+	return (bitmap1[qword_index] & bitmap2[qword_index]) & mask;
 }
 
 static pg_attribute_always_inline void
@@ -148,13 +176,41 @@ arrow_set_row_validity(uint64 *bitmap, size_t row_number, bool value)
 	const size_t qword_index = row_number / 64;
 	const size_t bit_index = row_number % 64;
 	const uint64 mask = 1ull << bit_index;
+	const uint64 new_bit = (value ? 1ull : 0ull) << bit_index;
 
-	bitmap[qword_index] = (bitmap[qword_index] & ~mask) | ((-(uint64) value) & mask);
+	bitmap[qword_index] = (bitmap[qword_index] & ~mask) | new_bit;
 
 	Assert(arrow_row_is_valid(bitmap, row_number) == value);
 }
 
-/* Increase the `source_value` to be an even multiple of `pad_to`. */
+/*
+ * AND two optional arrow validity bitmaps into the given storage.
+ */
+static inline const uint64 *
+arrow_combine_validity(size_t num_words, uint64 *restrict storage, const uint64 *filter1,
+					   const uint64 *filter2)
+{
+	if (filter1 == NULL)
+	{
+		return filter2;
+	}
+
+	if (filter2 == NULL)
+	{
+		return filter1;
+	}
+
+	for (size_t i = 0; i < num_words; i++)
+	{
+		storage[i] = filter1[i] & filter2[i];
+	}
+
+	return storage;
+}
+
+/*
+ * Increase the `source_value` to be an even multiple of `pad_to`.
+ */
 static inline uint64
 pad_to_multiple(uint64 pad_to, uint64 source_value)
 {
@@ -162,8 +218,13 @@ pad_to_multiple(uint64 pad_to, uint64 source_value)
 }
 
 static inline size_t
-arrow_num_valid(uint64 *bitmap, size_t total_rows)
+arrow_num_valid(const uint64 *bitmap, size_t total_rows)
 {
+	if (bitmap == NULL)
+	{
+		return total_rows;
+	}
+
 	uint64 num_valid = 0;
 #ifdef HAVE__BUILTIN_POPCOUNT
 	const uint64 words = pad_to_multiple(64, total_rows) / 64;

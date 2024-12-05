@@ -86,6 +86,9 @@
 #define REQ_IS_WAL_RECEIVER "is_wal_receiver"
 
 #define PG_PROMETHEUS "pg_prometheus"
+#define PG_VECTOR "vector"
+#define TS_AI "ai"
+#define TS_VECTORSCALE "vectorscale"
 #define PROMSCALE "promscale"
 #define POSTGIS "postgis"
 #define TIMESCALE_ANALYTICS "timescale_analytics"
@@ -95,7 +98,8 @@
 #define REQ_NUM_ERR_BY_SQLERRCODE "errors_by_sqlerrcode"
 
 static const char *related_extensions[] = {
-	PG_PROMETHEUS, PROMSCALE, POSTGIS, TIMESCALE_ANALYTICS, TIMESCALEDB_TOOLKIT,
+	PG_PROMETHEUS,		 PROMSCALE, POSTGIS, TIMESCALE_ANALYTICS,
+	TIMESCALEDB_TOOLKIT, PG_VECTOR, TS_AI,	 TS_VECTORSCALE,
 };
 
 /* This function counts background worker jobs by type. */
@@ -360,9 +364,8 @@ add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 		elog(ERROR, "could not connect to SPI");
 
 	/* Lock down search_path */
-	res = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
-	if (res < 0)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
 
 	command = makeStringInfo();
 
@@ -397,6 +400,9 @@ add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 										  sqlerrs_jsonb);
 		MemoryContextSwitchTo(spi_context);
 	}
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
 
 	res = SPI_finish();
 
@@ -462,9 +468,8 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 		elog(ERROR, "could not connect to SPI");
 
 	/* Lock down search_path */
-	res = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
-	if (res < 0)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
 
 	command = makeStringInfo();
 
@@ -524,6 +529,10 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 		add_job_stats_internal(parse_state, TextDatumGetCString(jobtype_datum), &stats);
 		MemoryContextSwitchTo(spi_context);
 	}
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
+
 	res = SPI_finish();
 	Assert(res == SPI_OK_FINISH);
 }
@@ -795,8 +804,8 @@ add_query_result_dict(JsonbParseState *state, const char *query)
 		elog(ERROR, "could not connect to SPI");
 
 	/* Lock down search_path */
-	res = SPI_execute("SET LOCAL search_path TO pg_catalog, pg_temp", false, 0);
-	Ensure(res >= 0, "could not set search path");
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
 
 	res = SPI_execute(query, true, 0);
 	Ensure(res >= 0, "could not execute query");
@@ -833,6 +842,10 @@ add_query_result_dict(JsonbParseState *state, const char *query)
 		}
 		pushJsonbValue(&state, WJB_END_OBJECT, NULL);
 	}
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
+
 	MemoryContextSwitchTo(spi_context);
 	res = SPI_finish();
 	Assert(res == SPI_OK_FINISH);
@@ -1172,7 +1185,8 @@ ts_telemetry_main(const char *host, const char *path, const char *service)
 		 * throw an error, so we capture the error here and print debugging
 		 * information. */
 		ereport(NOTICE,
-				(errmsg("malformed telemetry response body"),
+				(errcode(ERRCODE_DATA_EXCEPTION),
+				 errmsg("malformed telemetry response body"),
 				 errdetail("host=%s, service=%s, path=%s: %s",
 						   host,
 						   service,

@@ -5,6 +5,8 @@
  */
 #pragma once
 
+#include "export.h"
+
 #define GAPFILL_PATH_NAME "GapFill"
 
-extern bool ts_is_gapfill_path(Path *path);
+extern TSDLLEXPORT bool ts_is_gapfill_path(Path *path);

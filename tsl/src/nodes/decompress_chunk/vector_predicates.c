@@ -48,6 +48,12 @@ get_vector_const_predicate(Oid pg_predicate)
 
 		case F_TEXTNE:
 			return vector_const_textne;
+
+		default:
+			/*
+			 * More checks below, this branch is to placate the static analyzers.
+			 */
+			break;
 	}
 
 	if (GetDatabaseEncoding() == PG_UTF8)
@@ -59,6 +65,11 @@ get_vector_const_predicate(Oid pg_predicate)
 				return vector_const_textlike_utf8;
 			case F_TEXTNLIKE:
 				return vector_const_textnlike_utf8;
+			default:
+				/*
+				 * This branch is to placate the static analyzers.
+				 */
+				break;
 		}
 	}
 
@@ -74,13 +85,14 @@ vector_nulltest(const ArrowArray *arrow, int test_type, uint64 *restrict result)
 	const uint64 *validity = (const uint64 *) arrow->buffers[0];
 	for (uint16 i = 0; i < bitmap_words; i++)
 	{
+		const uint64 validity_word = validity != NULL ? validity[i] : ~0ULL;
 		if (should_be_null)
 		{
-			result[i] &= ~validity[i];
+			result[i] &= ~validity_word;
 		}
 		else
 		{
-			result[i] &= validity[i];
+			result[i] &= validity_word;
 		}
 	}
 }

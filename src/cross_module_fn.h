@@ -75,6 +75,7 @@ typedef struct CrossModuleFunctions
 	void (*set_rel_pathlist_query)(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *,
 								   Hypertable *);
 	void (*set_rel_pathlist)(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
+	bool (*process_explain_def)(DefElem *def);
 
 	/* gapfill */
 	PGFunction gapfill_marker;
@@ -88,6 +89,9 @@ typedef struct CrossModuleFunctions
 
 	PGFunction reorder_chunk;
 	PGFunction move_chunk;
+
+	DDLResult (*ddl_command_start)(ProcessUtilityArgs *args);
+	void (*ddl_command_end)(EventTriggerData *trigdata);
 
 	/* Vectorized queries */
 	void (*tsl_postprocess_plan)(PlannedStmt *stmt);
@@ -110,6 +114,7 @@ typedef struct CrossModuleFunctions
 										  WithClauseResult *with_clause_options);
 	PGFunction continuous_agg_validate_query;
 	PGFunction continuous_agg_get_bucket_function;
+	PGFunction continuous_agg_get_bucket_function_info;
 	PGFunction continuous_agg_migrate_to_time_bucket;
 	PGFunction cagg_try_repair;
 
@@ -117,6 +122,7 @@ typedef struct CrossModuleFunctions
 	PGFunction compressed_data_recv;
 	PGFunction compressed_data_in;
 	PGFunction compressed_data_out;
+	PGFunction compressed_data_info;
 	bool (*process_compress_table)(AlterTableCmd *cmd, Hypertable *ht,
 								   WithClauseResult *with_clause_options);
 	void (*process_altertable_cmd)(Hypertable *ht, const AlterTableCmd *cmd);
@@ -141,6 +147,9 @@ typedef struct CrossModuleFunctions
 	PGFunction dictionary_compressor_finish;
 	PGFunction array_compressor_append;
 	PGFunction array_compressor_finish;
+	PGFunction hypercore_handler;
+	PGFunction hypercore_proxy_handler;
+	PGFunction is_compressed_tid;
 
 	PGFunction create_chunk;
 	PGFunction show_chunk;
@@ -150,7 +159,7 @@ typedef struct CrossModuleFunctions
 	PGFunction chunk_unfreeze_chunk;
 	PGFunction recompress_chunk_segmentwise;
 	PGFunction get_compressed_chunk_index_for_recompression;
-	void (*preprocess_query_tsl)(Query *parse);
+	void (*preprocess_query_tsl)(Query *parse, int *cursor_opts);
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

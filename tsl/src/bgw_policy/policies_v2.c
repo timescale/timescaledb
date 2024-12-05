@@ -6,6 +6,7 @@
 
 #include <postgres.h>
 #include <access/xact.h>
+#include <fmgr.h>
 #include <miscadmin.h>
 #include <parser/parse_coerce.h>
 #include <utils/builtins.h>
@@ -90,7 +91,7 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 {
 	int refresh_job_id = 0, compression_job_id = 0, retention_job_id = 0;
 	int64 refresh_interval = 0, compress_after = 0, drop_after = 0, drop_after_HT = 0;
-	int64 start_offset = 0, end_offset = 0, refresh_window_size = 0, refresh_total_interval = 0;
+	int64 start_offset = 0, end_offset = 0, refresh_total_interval = 0;
 	List *jobs = NIL;
 	BgwJob *orig_ht_reten_job = NULL;
 
@@ -157,14 +158,21 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 	/* Per policy checks */
 	if (all_policies.refresh && !IS_INTEGER_TYPE(all_policies.partition_type))
 	{
-		/* Check if there are any gaps in the refresh policy */
-		refresh_window_size = (start_offset == ts_time_get_max(all_policies.partition_type) ||
-							   end_offset == ts_time_get_min(all_policies.partition_type)) ?
-								  start_offset :
-								  start_offset - end_offset;
+		/*
+		 * Check if there are any gaps in the refresh policy. The below code is
+		 * a little suspect. But since we are planning to do away with the
+		 * add_policies/remove_policies APIs there's no need to spend a lot
+		 * of time on fixing it below.
+		 */
+		int64 refresh_window_size;
+		if (start_offset == ts_time_get_max(all_policies.partition_type) ||
+			end_offset == ts_time_get_min(all_policies.partition_type) ||
+			end_offset > start_offset ||
+			pg_sub_s64_overflow(start_offset, end_offset, &refresh_window_size))
+			refresh_window_size = start_offset;
 
 		/* if refresh_interval is greater than half of refresh_window_size, then there are gaps */
-		if (refresh_interval > refresh_window_size / 2)
+		if (refresh_interval > (refresh_window_size / 2))
 			emit_error(err_gap_refresh);
 
 		/* Disallow refreshed data to be deleted */
@@ -225,8 +233,10 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 											if_exists,
 											false,
 											DT_NOBEGIN,
-											NULL);
+											NULL,
+											all_policies.compress->use_access_method);
 	}
+
 	if (all_policies.retention && all_policies.retention->create_policy)
 	{
 		if (all_policies.is_alter_policy)
@@ -297,9 +307,12 @@ policies_add(PG_FUNCTION_ARGS)
 	}
 	if (!PG_ARGISNULL(4))
 	{
-		compression_policy tmp = { .create_policy = true,
-								   .compress_after = PG_GETARG_DATUM(4),
-								   .compress_after_type = get_fn_expr_argtype(fcinfo->flinfo, 4) };
+		compression_policy tmp = {
+			.create_policy = true,
+			.compress_after = PG_GETARG_DATUM(4),
+			.compress_after_type = get_fn_expr_argtype(fcinfo->flinfo, 4),
+			.use_access_method = PG_ARGISNULL(6) ? USE_AM_NULL : PG_GETARG_BOOL(6),
+		};
 		comp = tmp;
 		all_policies.compress = &comp;
 	}

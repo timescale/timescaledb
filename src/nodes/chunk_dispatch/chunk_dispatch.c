@@ -4,6 +4,7 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/attnum.h>
 #include <access/xact.h>
 #include <catalog/pg_type.h>
 #include <nodes/extensible.h>
@@ -102,7 +103,10 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 		 * Frozen chunks require at least PG14.
 		 */
 		if (chunk && ts_chunk_is_frozen(chunk))
-			elog(ERROR, "cannot INSERT into frozen chunk \"%s\"", get_rel_name(chunk->table_id));
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot INSERT into frozen chunk \"%s\"",
+							get_rel_name(chunk->table_id))));
 		if (chunk && IS_OSM_CHUNK(chunk))
 		{
 			const Dimension *time_dim =
@@ -164,16 +168,24 @@ ts_chunk_dispatch_decompress_batches_for_insert(ChunkDispatch *dispatch, ChunkIn
 {
 	if (cis->chunk_compressed)
 	{
+		OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
+
+		if (cis->use_tam && onconflict_action != ONCONFLICT_UPDATE)
+		{
+			/* With our own TAM, a unique index covers both the compressed and
+			 * non-compressed data, so there is no need to decompress anything
+			 * when doing inserts. */
+		}
 		/*
 		 * If this is an INSERT into a compressed chunk with UNIQUE or
 		 * PRIMARY KEY constraints we need to make sure any batches that could
 		 * potentially lead to a conflict are in the decompressed chunk so
 		 * postgres can do proper constraint checking.
 		 */
-		if (ts_cm_functions->decompress_batches_for_insert)
+		else if (ts_cm_functions->decompress_batches_for_insert)
 		{
 			ts_cm_functions->decompress_batches_for_insert(cis, slot);
-			OnConflictAction onconflict_action = chunk_dispatch_get_on_conflict_action(dispatch);
+
 			/* mark rows visible */
 			if (onconflict_action == ONCONFLICT_UPDATE)
 				dispatch->estate->es_output_cid = GetCurrentCommandId(true);
@@ -252,8 +264,8 @@ chunk_dispatch_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *be
 	cscan->custom_scan_tlist = tlist;
 	cscan->scan.plan.targetlist = tlist;
 
-#if PG15_GE
-	if (root->parse->mergeUseOuterJoin)
+#if (PG15_GE)
+	if (root->parse->commandType == CMD_MERGE)
 	{
 		/* replace expressions of ROWID_VAR */
 		tlist = ts_replace_rowid_vars(root, tlist, relopt->relid);
@@ -320,6 +332,32 @@ on_chunk_insert_state_changed(ChunkInsertState *cis, void *data)
 	state->rri = cis->result_relation_info;
 }
 
+#if PG15_GE
+static AttrNumber
+rel_get_natts(Oid relid)
+{
+	HeapTuple tp = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+
+	if (!HeapTupleIsValid(tp))
+		elog(ERROR, "cache lookup failed for relation %u", relid);
+	AttrNumber natts = ((Form_pg_class) GETSTRUCT(tp))->relnatts;
+	ReleaseSysCache(tp);
+	return natts;
+}
+
+static bool
+attr_is_dropped_or_missing(Oid relid, AttrNumber attno)
+{
+	HeapTuple tp = SearchSysCache2(ATTNUM, ObjectIdGetDatum(relid), Int16GetDatum(attno));
+	if (!HeapTupleIsValid(tp))
+		return false;
+	Form_pg_attribute att_tup = (Form_pg_attribute) GETSTRUCT(tp);
+	bool result = att_tup->attisdropped || att_tup->atthasmissing;
+	ReleaseSysCache(tp);
+	return result;
+}
+#endif
+
 static TupleTableSlot *
 chunk_dispatch_exec(CustomScanState *node)
 {
@@ -349,34 +387,28 @@ chunk_dispatch_exec(CustomScanState *node)
 	TupleTableSlot *newslot = NULL;
 	if (dispatch->dispatch_state->mtstate->operation == CMD_MERGE)
 	{
-		HeapTuple tp;
-		AttrNumber natts;
-		AttrNumber attno;
-
-		tp = SearchSysCache1(RELOID, ObjectIdGetDatum(ht->main_table_relid));
-		if (!HeapTupleIsValid(tp))
-			elog(ERROR, "cache lookup failed for relation %u", ht->main_table_relid);
-		natts = ((Form_pg_class) GETSTRUCT(tp))->relnatts;
-		ReleaseSysCache(tp);
-		for (attno = 1; attno <= natts; attno++)
+		const AttrNumber natts = rel_get_natts(ht->main_table_relid);
+		for (AttrNumber attno = 1; attno <= natts; attno++)
 		{
-			tp = SearchSysCache2(ATTNUM,
-								 ObjectIdGetDatum(ht->main_table_relid),
-								 Int16GetDatum(attno));
-			if (!HeapTupleIsValid(tp))
-				continue;
-			Form_pg_attribute att_tup = (Form_pg_attribute) GETSTRUCT(tp);
-			ReleaseSysCache(tp);
-			if (att_tup->attisdropped || att_tup->atthasmissing)
+			if (attr_is_dropped_or_missing(ht->main_table_relid, attno))
 			{
 				state->is_dropped_attr_exists = true;
-				continue;
+				break;
 			}
 		}
 		for (int i = 0; i < ht->space->num_dimensions; i++)
 		{
+			/*
+			 * XXX do we need an additional support of NOT MATCHED BY SOURCE
+			 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
+			 */
+#if PG17_GE
+			List *actionStates = dispatch->dispatch_state->mtstate->resultRelInfo
+									 ->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
+#else
 			List *actionStates =
 				dispatch->dispatch_state->mtstate->resultRelInfo->ri_notMatchedMergeAction;
+#endif
 			ListCell *l;
 			foreach (l, actionStates)
 			{
@@ -416,6 +448,32 @@ chunk_dispatch_exec(CustomScanState *node)
 	ts_chunk_dispatch_decompress_batches_for_insert(dispatch, cis, slot);
 
 	MemoryContextSwitchTo(old);
+
+	/*
+	 * Save away the insert state for using it in ExecInsert().
+	 *
+	 * We need to return the original slot from the subplan since otherwise
+	 * the slot might not match what is expected. The expected slot should
+	 * contain a tuple with the same definition as the parent hypertable while
+	 * the slot in the chunk insert state is a slot matching the chunk
+	 * definition.
+	 *
+	 * If columns have been dropped from the parent hypertable, new chunks
+	 * will not have these dropped attributes, which will cause problems later
+	 * in the insert execution (see ExecGetInsertNewTuple()).
+	 *
+	 * We can probably improve this code by removing ChunkDispatch. See
+	 * hypertable_modify.c for more information.
+	 */
+	state->cis = cis;
+
+	return slot;
+}
+
+TupleTableSlot *
+ts_chunk_dispatch_prepare_tuple_routing(ChunkDispatchState *state, TupleTableSlot *slot)
+{
+	ChunkInsertState *cis = state->cis;
 
 	/* Convert the tuple to the chunk's rowtype, if necessary */
 	if (cis->hyper_to_chunk_map != NULL && state->is_dropped_attr_exists == false)

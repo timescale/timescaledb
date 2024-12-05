@@ -85,7 +85,7 @@ select * from vectorqual where ts between '2022-02-02' and '2023-02-02' order by
  Sun Jan 01 00:00:00 2023 |      42 |      4 |      43 |      44
 (1 row)
 
-set timescaledb.debug_require_vector_qual to 'only' /* all following quals must be vectorized */;
+set timescaledb.debug_require_vector_qual to 'require' /* all following quals must be vectorized */;
 select count(*) from vectorqual where ts > '1999-01-01 00:00:00';
  count 
 -------
@@ -157,7 +157,7 @@ select count(compress_chunk(x, true)) from show_chunks('arithmetic') x;
      1
 (1 row)
 
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 select * from arithmetic where
         a > 1::int2 and a > 1::int4 and a > 1::int8
     and b > 1::int2 and b > 1::int4 and b > 1::int8
@@ -183,7 +183,7 @@ NOTICE:  chunk "_hyper_1_7_chunk" is already compressed
      5
 (1 row)
 
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 select tag from vectorqual where metric2 > 0;
  tag  
 ------
@@ -220,7 +220,7 @@ select count(*) from vectorqual where metric2
 (1 row)
 
 -- Can vectorize clauses with query parameters.
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 set plan_cache_mode to 'force_generic_plan';
 prepare p as select count(*) from vectorqual where metric3 = $1;
 execute p(33);
@@ -241,7 +241,7 @@ execute p(33);
 deallocate p;
 reset plan_cache_mode;
 -- Queries without aggregation.
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 select * from vectorqual where ts > '2021-01-01 00:00:00' order by vectorqual;
             ts            | metric2 | device | metric3 | metric4 | tag  
 --------------------------+---------+--------+---------+---------+------
@@ -275,7 +275,7 @@ select * from vectorqual where ts > '2021-01-01 00:00:00' and metric3 > 40 order
 (2 rows)
 
 -- ORed constrainst on multiple columns.
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 -- set timescaledb.debug_require_vector_qual to 'forbid';
 -- set timescaledb.enable_bulk_decompression to off;
 select * from vectorqual where ts > '2021-01-01 00:00:00' or metric3 > 40 order by vectorqual;
@@ -387,7 +387,7 @@ select count(*) from vectorqual where metric3 = 777 or metric3 === 777;
 
 -- Custom operator that can be vectorized but doesn't have a negator.
 create operator !!! (function = 'int4ne', rightarg = int4, leftarg = int4);
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 select count(*) from vectorqual where metric3 !!! 777;
  count 
 -------
@@ -471,7 +471,7 @@ select count(*) from vectorqual where 777 !!! metric3;
 (1 row)
 
 -- NullTest is vectorized.
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 select count(*) from vectorqual where metric4 is null;
  count 
 -------
@@ -519,7 +519,7 @@ select count(*) from :chunk1 t where tableoid is null;
 (1 row)
 
 -- Scalar array operators are vectorized if the operator is vectorizable.
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 select count(*) from vectorqual where metric3 = any(array[777, 888]); /* default value */
  count 
 -------
@@ -546,7 +546,7 @@ select count(*) from vectorqual where metric2 > all(array[-1, -2, -3]) /* all */
 
 -- Also have to support null array elements, because they are impossible to
 -- prevent in stable expressions.
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 select count(*) from vectorqual where metric2 = any(array[null::int]) /* any with null element */;
  count 
 -------
@@ -616,7 +616,7 @@ select count(compress_chunk(x, true)) from show_chunks('singlebatch') x;
      1
 (1 row)
 
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 -- Uncomment to generate the test reference w/o the vector optimizations.
 -- set timescaledb.enable_bulk_decompression to off;
 -- set timescaledb.debug_require_vector_qual to 'forbid';
@@ -1039,7 +1039,7 @@ select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 888 and me
 -- On versions >= 14, the Postgres planner chooses to build a hash table for
 -- large arrays. We currently don't vectorize in this case.
 select 1 from set_config('timescaledb.debug_require_vector_qual',
-    case when current_setting('server_version_num')::int >= 140000 then 'forbid' else 'only' end,
+    case when current_setting('server_version_num')::int >= 140000 then 'forbid' else 'require' end,
     false);
  ?column? 
 ----------
@@ -1081,7 +1081,7 @@ select count(*) from vectorqual where metric3 = any(array[metric4]);
 
 -- Vectorized filters also work if we have only stable functions on the right
 -- side that can be evaluated to a constant at run time.
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 select count(*) from vectorqual where ts > '2021-01-01 00:00:00'::timestamptz::timestamp;
  count 
 -------
@@ -1110,7 +1110,7 @@ select count(*) from vectorqual where ts < LOCALTIMESTAMP + '3 years'::interval;
 -- These filters are not vectorizable as written, because the 'timestamp > timestamptz'
 -- operator is stable, not immutable. We will try to cast the constant to the
 -- same type in this case.
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 select count(*) from vectorqual where ts > '2021-01-01 00:00:00'::timestamptz;
  count 
 -------
@@ -1152,7 +1152,7 @@ set timescaledb.enable_bulk_decompression to on;
 set timescaledb.debug_require_vector_qual to 'forbid';
 select count(*) from vectorqual where metric4 > 4;
 ERROR:  debug: encountered vector quals when they are disabled
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 select count(*) from vectorqual where metric3 === 4;
 ERROR:  debug: encountered non-vector quals when they are disabled
 \set ON_ERROR_STOP 1
@@ -1177,7 +1177,7 @@ select count(compress_chunk(x, true)) from show_chunks('date_table') x;
      1
 (1 row)
 
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 select * from date_table where ts >  '2021-01-02';
      ts     
 ------------
@@ -1294,7 +1294,7 @@ select count(distinct a) from text_table;
 (1 row)
 
 -- Test vectorized predicates.
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 -- -- Uncomment to generate the test reference w/o the vector optimizations.
 -- set timescaledb.enable_bulk_decompression to off;
 -- set timescaledb.debug_require_vector_qual to 'forbid';

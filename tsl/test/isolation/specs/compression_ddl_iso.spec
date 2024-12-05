@@ -8,7 +8,7 @@ setup
     SELECT create_hypertable('ts_device_table', 'time', chunk_time_interval => 10);
     INSERT INTO ts_device_table SELECT generate_series(0,29,1), 1, 100, 20;
     ALTER TABLE ts_device_table set(timescaledb.compress, timescaledb.compress_segmentby='location', timescaledb.compress_orderby='time');
-    CREATE FUNCTION lock_chunktable( name text) RETURNS void AS $$
+    CREATE OR REPLACE FUNCTION lock_chunktable( name text) RETURNS void AS $$
     BEGIN EXECUTE format( 'lock table %s IN SHARE MODE', name);
     END; $$ LANGUAGE plpgsql;
     CREATE FUNCTION count_chunktable(tbl regclass) RETURNS TABLE("count(*)" int, "count(*) only" int) AS $$

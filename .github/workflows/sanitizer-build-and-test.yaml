@@ -49,13 +49,12 @@ env:
 
   IGNORES: "bgw_db_scheduler bgw_db_scheduler_fixed"
 
-  EXTENSIONS: "postgres_fdw test_decoding"
+  EXTENSIONS: "postgres_fdw test_decoding pageinspect pgstattuple"
 jobs:
   config:
     runs-on: ubuntu-latest
     outputs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
-      pg16_latest: ${{ steps.setter.outputs.PG16_LATEST }}
     steps:
     - name: Checkout source code
       uses: actions/checkout@v4

@@ -36,6 +36,7 @@ SELECT a, count(b)
 FROM int_tab
 GROUP BY time_bucket(1, a), a WITH NO DATA;
 \c :TEST_DBNAME :ROLE_SUPERUSER
+SET timezone TO PST8PDT;
 DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT count(*) FROM _timescaledb_config.bgw_job;
@@ -260,6 +261,7 @@ SELECT hypertable_id as mat_id FROM _timescaledb_config.bgw_job where id = :job_
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_SUPERUSER
+SET timezone TO PST8PDT;
 UPDATE _timescaledb_config.bgw_job
 SET config = jsonb_build_object('mat_hypertable_id', :mat_id)
 WHERE id = :job_id;
@@ -397,7 +399,8 @@ SELECT timescaledb_experimental.remove_policies('continuous_agg_max_mat_date', f
 ERROR:  "continuous_agg_max_mat_date" is not a continuous aggregate
 -- No policy is added if one errors out
 SELECT timescaledb_experimental.add_policies('max_mat_view_date', refresh_start_offset => '1 day'::interval, refresh_end_offset => '2 day'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
-ERROR:  there are gaps in refresh policy
+ERROR:  policy refresh window too small
+DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "date".
 SELECT timescaledb_experimental.show_policies('max_mat_view_date');
  show_policies 
 ---------------
@@ -821,6 +824,7 @@ WHERE id = :job_id;
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+SET timezone TO PST8PDT;
 UPDATE _timescaledb_config.bgw_job
 SET config = jsonb_build_object('mat_hypertable_id', :mat_id)
 WHERE id = :job_id;

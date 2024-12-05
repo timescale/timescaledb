@@ -27,6 +27,7 @@ set(PRE_INSTALL_FUNCTION_FILES
 set(SOURCE_FILES
     hypertable.sql
     chunk.sql
+    hypercore.sql
     ddl_internal.sql
     util_time.sql
     util_internal_table_ddl.sql
@@ -78,6 +79,12 @@ list(APPEND SOURCE_FILES
 # These files need to be last in the scripts.
 list(APPEND SOURCE_FILES
   bgw_startup.sql)
+
+if(APACHE_ONLY)
+  list(APPEND SOURCE_FILES comment_apache.sql)
+else()
+  list(APPEND SOURCE_FILES comment_tsl.sql)
+endif()
 
 # These files should be prepended to update scripts so that they are executed
 # before anything else during updates

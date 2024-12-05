@@ -6,6 +6,7 @@
 #pragma once
 
 #include <postgres.h>
+#include <catalog/indexing.h>
 #include <executor/tuptable.h>
 #include <fmgr.h>
 #include <lib/stringinfo.h>
@@ -33,8 +34,6 @@ typedef struct BulkInsertStateData *BulkInsertState;
 	uint8 compression_algorithm
 
 #define TARGET_COMPRESSED_BATCH_SIZE 1000
-/* gap in sequence id between rows, potential for adding rows in gap later */
-#define SEQUENCE_NUM_GAP 10
 
 typedef struct CompressedDataHeader
 {
@@ -132,11 +131,13 @@ typedef struct RowDecompressor
 
 	TupleDesc out_desc;
 	Relation out_rel;
-	ResultRelInfo *indexstate;
+	CatalogIndexState indexstate;
 	EState *estate;
 
 	CommandId mycid;
 	BulkInsertState bistate;
+
+	bool delete_only;
 
 	Datum *compressed_datums;
 	bool *compressed_is_nulls;
@@ -147,8 +148,10 @@ typedef struct RowDecompressor
 	MemoryContext per_compressed_row_ctx;
 	int64 batches_decompressed;
 	int64 tuples_decompressed;
+	int64 batches_deleted;
 
 	TupleTableSlot **decompressed_slots;
+	int unprocessed_tuples;
 
 	Detoaster detoaster;
 } RowDecompressor;
@@ -165,13 +168,14 @@ typedef enum
 	TOAST_STORAGE_EXTENDED
 } CompressionStorage;
 
+typedef DecompressionIterator *(*DecompressionInitializer)(Datum, Oid);
 typedef ArrowArray *(*DecompressAllFunction)(Datum compressed, Oid element_type,
 											 MemoryContext dest_mctx);
 
 typedef struct CompressionAlgorithmDefinition
 {
-	DecompressionIterator *(*iterator_init_forward)(Datum, Oid element_type);
-	DecompressionIterator *(*iterator_init_reverse)(Datum, Oid element_type);
+	DecompressionInitializer iterator_init_forward;
+	DecompressionInitializer iterator_init_reverse;
 	DecompressAllFunction decompress_all;
 	void (*compressed_data_send)(CompressedDataHeader *, StringInfo);
 	Datum (*compressed_data_recv)(StringInfo);
@@ -258,12 +262,14 @@ typedef struct RowCompressor
 	bool *compressed_is_null;
 	int64 rowcnt_pre_compression;
 	int64 num_compressed_rows;
-	/* if recompressing segmentwise, we use this info to reset the sequence number */
-	bool reset_sequence;
 	/* flag for checking if we are working on the first tuple */
 	bool first_iteration;
 	/* the heap insert options */
 	int insert_options;
+
+	/* Callback called on every flush. The ntuples argument is the number of
+	 * tuples flushed. Typically used for progress reporting. */
+	void (*on_flush)(struct RowCompressor *rowcompress, uint64 ntuples);
 } RowCompressor;
 
 /*
@@ -295,6 +301,7 @@ extern Datum tsl_compressed_data_send(PG_FUNCTION_ARGS);
 extern Datum tsl_compressed_data_recv(PG_FUNCTION_ARGS);
 extern Datum tsl_compressed_data_in(PG_FUNCTION_ARGS);
 extern Datum tsl_compressed_data_out(PG_FUNCTION_ARGS);
+extern Datum tsl_compressed_data_info(PG_FUNCTION_ARGS);
 
 static void
 pg_attribute_unused() assert_num_compression_algorithms_sane(void)
@@ -319,6 +326,7 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 					 "number of algorithms have changed, the asserts should be updated");
 }
 
+extern Name compression_get_algorithm_name(CompressionAlgorithm alg);
 extern CompressionStorage compression_get_toast_storage(CompressionAlgorithm algo);
 extern CompressionAlgorithm compression_get_default_algorithm(Oid typeoid);
 
@@ -346,17 +354,19 @@ extern bool segment_info_datum_is_in_group(SegmentInfo *segment_info, Datum datu
 extern TupleTableSlot *compress_row_exec(CompressSingleRowState *cr, TupleTableSlot *slot);
 extern void compress_row_end(CompressSingleRowState *cr);
 extern void compress_row_destroy(CompressSingleRowState *cr);
-extern void row_decompressor_decompress_row_to_table(RowDecompressor *row_decompressor);
+extern int row_decompressor_decompress_row_to_table(RowDecompressor *row_decompressor);
 extern void row_decompressor_decompress_row_to_tuplesort(RowDecompressor *row_decompressor,
 														 Tuplesortstate *tuplesortstate);
 extern void compress_chunk_populate_sort_info_for_column(CompressionSettings *settings, Oid table,
 														 const char *attname, AttrNumber *att_nums,
 														 Oid *sort_operator, Oid *collation,
 														 bool *nulls_first);
+extern Tuplesortstate *compression_create_tuplesort_state(CompressionSettings *settings,
+														  Relation rel);
 extern void row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor,
 								Relation uncompressed_table, Relation compressed_table,
 								int16 num_columns_in_compressed_table, bool need_bistate,
-								bool reset_sequence, int insert_options);
+								int insert_options);
 extern void row_compressor_reset(RowCompressor *row_compressor);
 extern void row_compressor_close(RowCompressor *row_compressor);
 extern void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
@@ -368,8 +378,10 @@ extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_nu
 
 extern RowDecompressor build_decompressor(Relation in_rel, Relation out_rel);
 
+extern void row_decompressor_reset(RowDecompressor *decompressor);
 extern void row_decompressor_close(RowDecompressor *decompressor);
 extern enum CompressionAlgorithms compress_get_default_algorithm(Oid typeoid);
+extern int decompress_batch(RowDecompressor *decompressor);
 /*
  * A convenience macro to throw an error about the corrupted compressed data, if
  * the argument is false. When fuzzing is enabled, we don't show the message not
@@ -404,3 +416,11 @@ consumeCompressedData(StringInfo si, int bytes)
 #define GLOBAL_MAX_ROWS_PER_COMPRESSION INT16_MAX
 
 const CompressionAlgorithmDefinition *algorithm_definition(CompressionAlgorithm algo);
+
+struct decompress_batches_stats
+{
+	int64 batches_deleted;
+	int64 batches_filtered;
+	int64 batches_decompressed;
+	int64 tuples_decompressed;
+};

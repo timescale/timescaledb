@@ -4,67 +4,38 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-#include <access/htup_details.h>
-#include <access/multixact.h>
-#include <access/tableam.h>
-#include <access/valid.h>
-#include <access/xact.h>
+#include <access/skey.h>
 #include <catalog/heap.h>
-#include <catalog/index.h>
-#include <catalog/namespace.h>
+#include <catalog/indexing.h>
 #include <catalog/pg_am.h>
-#include <catalog/pg_attribute.h>
-#include <catalog/pg_type.h>
 #include <common/base64.h>
-#include <executor/nodeIndexscan.h>
-#include <executor/tuptable.h>
 #include <libpq/pqformat.h>
-#include <miscadmin.h>
-#include <nodes/execnodes.h>
-#include <nodes/nodeFuncs.h>
-#include <nodes/pg_list.h>
-#include <nodes/print.h>
-#include <optimizer/optimizer.h>
-#include <parser/parse_coerce.h>
-#include <parser/parsetree.h>
-#include <storage/lmgr.h>
 #include <storage/predicate.h>
-#include <utils/builtins.h>
 #include <utils/datum.h>
-#include <utils/fmgroids.h>
-#include <utils/lsyscache.h>
-#include <utils/memutils.h>
-#include <utils/portal.h>
-#include <utils/rel.h>
-#include <utils/relcache.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
-#include <utils/tuplesort.h>
 #include <utils/typcache.h>
 
 #include "compat/compat.h"
 
-#include "array.h"
+#include "algorithms/array.h"
+#include "algorithms/deltadelta.h"
+#include "algorithms/dictionary.h"
+#include "algorithms/gorilla.h"
 #include "chunk.h"
 #include "compression.h"
 #include "create.h"
 #include "custom_type_cache.h"
 #include "debug_assert.h"
 #include "debug_point.h"
-#include "deltadelta.h"
-#include "dictionary.h"
-#include "expression_utils.h"
-#include "gorilla.h"
 #include "guc.h"
-#include "indexing.h"
+#include "hypercore/hypercore_handler.h"
 #include "nodes/chunk_dispatch/chunk_insert_state.h"
-#include "nodes/hypertable_modify.h"
 #include "segment_meta.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/compression_settings.h"
-#include "wal_utils.h"
 
 StaticAssertDecl(GLOBAL_MAX_ROWS_PER_COMPRESSION >= TARGET_COMPRESSED_BATCH_SIZE,
 				 "max row numbers must be harmonized");
@@ -78,6 +49,20 @@ static const CompressionAlgorithmDefinition definitions[_END_COMPRESSION_ALGORIT
 	[COMPRESSION_ALGORITHM_DELTADELTA] = DELTA_DELTA_ALGORITHM_DEFINITION,
 };
 
+static NameData compression_algorithm_name[] = {
+	[_INVALID_COMPRESSION_ALGORITHM] = { "INVALID" },
+	[COMPRESSION_ALGORITHM_ARRAY] = { "ARRAY" },
+	[COMPRESSION_ALGORITHM_DICTIONARY] = { "DICTIONARY" },
+	[COMPRESSION_ALGORITHM_GORILLA] = { "GORILLA" },
+	[COMPRESSION_ALGORITHM_DELTADELTA] = { "DELTADELTA" },
+};
+
+Name
+compression_get_algorithm_name(CompressionAlgorithm alg)
+{
+	return &compression_algorithm_name[alg];
+}
+
 static Compressor *
 compressor_for_type(Oid type)
 {
@@ -88,8 +73,8 @@ compressor_for_type(Oid type)
 	return definitions[algorithm].compressor_for_type(type);
 }
 
-DecompressionIterator *(*tsl_get_decompression_iterator_init(CompressionAlgorithm algorithm,
-															 bool reverse))(Datum, Oid)
+DecompressionInitializer
+tsl_get_decompression_iterator_init(CompressionAlgorithm algorithm, bool reverse)
 {
 	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
@@ -126,11 +111,6 @@ static void row_compressor_append_row(RowCompressor *row_compressor, TupleTableS
 static void row_compressor_flush(RowCompressor *row_compressor, CommandId mycid,
 								 bool changed_groups);
 
-static int create_segment_filter_scankey(RowDecompressor *decompressor,
-										 char *segment_filter_col_name, StrategyNumber strategy,
-										 ScanKeyData *scankeys, int num_scankeys,
-										 Bitmapset **null_columns, Datum value, bool is_null_check,
-										 bool is_array_op);
 static void create_per_compressed_column(RowDecompressor *decompressor);
 
 /********************
@@ -192,9 +172,50 @@ truncate_relation(Oid table_oid)
 
 	ReindexParams params = { 0 };
 	ReindexParams *options = &params;
-	reindex_relation(table_oid, REINDEX_REL_PROCESS_TOAST, options);
+	reindex_relation_compat(NULL, table_oid, REINDEX_REL_PROCESS_TOAST, options);
 	rel = table_open(table_oid, AccessExclusiveLock);
 	CommandCounterIncrement();
+	table_close(rel, NoLock);
+}
+
+/* Handle the all rows deletion of a given relation */
+static void
+RelationDeleteAllRows(Relation rel, Snapshot snap)
+{
+	TupleTableSlot *slot = table_slot_create(rel, NULL);
+	TableScanDesc scan = table_beginscan(rel, snap, 0, NULL);
+	hypercore_scan_set_skip_compressed(scan, true);
+
+	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
+	{
+		simple_table_tuple_delete(rel, &(slot->tts_tid), snap);
+	}
+	table_endscan(scan);
+	ExecDropSingleTupleTableSlot(slot);
+}
+
+/*
+ * Delete the relation WITHOUT applying triggers. This will be used when
+ * `enable_delete_after_compression = true` instead of truncating the relation.
+ * Also don't restart sequences.
+ */
+static void
+delete_relation_rows(Oid table_oid)
+{
+	Relation rel = table_open(table_oid, RowExclusiveLock);
+	Snapshot snap = GetLatestSnapshot();
+
+	/* Delete the rows in the table */
+	RelationDeleteAllRows(rel, snap);
+
+	/* Delete the rows in the toast table */
+	if (OidIsValid(rel->rd_rel->reltoastrelid))
+	{
+		Relation toast_rel = table_open(rel->rd_rel->reltoastrelid, RowExclusiveLock);
+		RelationDeleteAllRows(toast_rel, snap);
+		table_close(toast_rel, NoLock);
+	}
+
 	table_close(rel, NoLock);
 }
 
@@ -228,7 +249,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 {
 	int n_keys;
 	ListCell *lc;
-	int indexscan_direction = NoMovementScanDirection;
+	ScanDirection indexscan_direction = NoMovementScanDirection;
 	Relation matched_index_rel = NULL;
 	TupleTableSlot *slot;
 	IndexScanDesc index_scan;
@@ -249,8 +270,16 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	 * a RowExclusive lock, and let other operations read and write this table
 	 * as we work. However, we currently compress each table as a oneshot, so
 	 * we're taking the stricter lock to prevent accidents.
+	 *
+	 * Putting RowExclusiveMode behind a GUC so we can try this out with
+	 * rollups during compression.
 	 */
-	Relation out_rel = relation_open(out_table, ExclusiveLock);
+	int out_rel_lockmode = ExclusiveLock;
+	if (ts_guc_enable_rowlevel_compression_locking)
+	{
+		out_rel_lockmode = RowExclusiveLock;
+	}
+	Relation out_rel = relation_open(out_table, out_rel_lockmode);
 
 	/* Sanity check we are dealing with relations */
 	Ensure(in_rel->rd_rel->relkind == RELKIND_RELATION, "compress_chunk called on non-relation");
@@ -266,8 +295,14 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	 * The following code is trying to find an existing index that
 	 * matches the configuration so that we can skip sequential scan and
 	 * tuplesort.
+	 *
+	 * Note that Hypercore TAM doesn't support (re-)compression via index at
+	 * this point because the index covers also existing compressed tuples. It
+	 * could be supported for initial compression when there is no compressed
+	 * data, but for now just avoid it altogether since compression indexscan
+	 * isn't enabled by default anyway.
 	 */
-	if (ts_guc_enable_compression_indexscan)
+	if (ts_guc_enable_compression_indexscan && !REL_IS_HYPERCORE(in_rel))
 	{
 		List *in_rel_index_oids = RelationGetIndexList(in_rel);
 		foreach (lc, in_rel_index_oids)
@@ -405,44 +440,20 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	}
 
 	RowCompressor row_compressor;
-	/* Reset sequence is used for resetting the sequence without
-	 * having to fetch the existing sequence for an individual
-	 * sequence group. If we are rolling up an uncompressed chunk
-	 * into an existing compressed chunk, we have to fetch
-	 * sequence numbers for each batch of the segment using
-	 * the respective index. In normal compression, this is
-	 * not necessary because we start segment numbers from zero.
-	 * We distinguish these cases by insert_options being zero for rollups.
-	 *
-	 * Sequence numbers are planned to be removed in the near future,
-	 * which will render this flag obsolete.
-	 */
-	bool reset_sequence = insert_options > 0;
 	row_compressor_init(settings,
 						&row_compressor,
 						in_rel,
 						out_rel,
 						out_desc->natts,
 						true /*need_bistate*/,
-						reset_sequence,
 						insert_options);
 
 	if (matched_index_rel != NULL)
 	{
 		int64 nrows_processed = 0;
 
-		/*
-		 * even though we log the information below, this debug info
-		 * is still used for INFO messages to clients and our tests.
-		 */
-		if (ts_guc_debug_compression_path_info)
-		{
-			elog(INFO,
-				 "compress_chunk_indexscan_start matched index \"%s\"",
-				 get_rel_name(matched_index_rel->rd_id));
-		}
-
-		elog(LOG,
+		Assert(!REL_IS_HYPERCORE(in_rel));
+		elog(ts_guc_debug_compression_path_info ? INFO : DEBUG1,
 			 "using index \"%s\" to scan rows for compression",
 			 get_rel_name(matched_index_rel->rd_id));
 
@@ -454,7 +465,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 		{
 			row_compressor_process_ordered_slot(&row_compressor, slot, mycid);
 			if ((++nrows_processed % report_reltuples) == 0)
-				elog(LOG,
+				elog(DEBUG2,
 					 "compressed " INT64_FORMAT " rows from \"%s\"",
 					 nrows_processed,
 					 RelationGetRelationName(in_rel));
@@ -463,7 +474,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 		if (row_compressor.rows_compressed_into_current_value > 0)
 			row_compressor_flush(&row_compressor, mycid, true);
 
-		elog(LOG,
+		elog(DEBUG1,
 			 "finished compressing " INT64_FORMAT " rows from \"%s\"",
 			 nrows_processed,
 			 RelationGetRelationName(in_rel));
@@ -474,16 +485,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	}
 	else
 	{
-		/*
-		 * even though we log the information below, this debug info
-		 * is still used for INFO messages to clients and our tests.
-		 */
-		if (ts_guc_debug_compression_path_info)
-		{
-			elog(INFO, "compress_chunk_tuplesort_start");
-		}
-
-		elog(LOG,
+		elog(ts_guc_debug_compression_path_info ? INFO : DEBUG1,
 			 "using tuplesort to scan rows from \"%s\" for compression",
 			 RelationGetRelationName(in_rel));
 
@@ -493,8 +495,17 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	}
 
 	row_compressor_close(&row_compressor);
-	DEBUG_WAITPOINT("compression_done_before_truncate_uncompressed");
-	truncate_relation(in_table);
+	if (!ts_guc_enable_delete_after_compression)
+	{
+		DEBUG_WAITPOINT("compression_done_before_truncate_uncompressed");
+		truncate_relation(in_table);
+		DEBUG_WAITPOINT("compression_done_after_truncate_uncompressed");
+	}
+	else
+	{
+		delete_relation_rows(in_table);
+		DEBUG_WAITPOINT("compression_done_after_delete_uncompressed");
+	}
 
 	table_close(out_rel, NoLock);
 	table_close(in_rel, NoLock);
@@ -509,18 +520,13 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	return cstat;
 }
 
-static Tuplesortstate *
-compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
+Tuplesortstate *
+compression_create_tuplesort_state(CompressionSettings *settings, Relation rel)
 {
-	TupleDesc tupDesc = RelationGetDescr(in_rel);
-	Tuplesortstate *tuplesortstate;
-	TableScanDesc scan;
-	TupleTableSlot *slot;
-
+	TupleDesc tupdesc = RelationGetDescr(rel);
 	int num_segmentby = ts_array_length(settings->fd.segmentby);
 	int num_orderby = ts_array_length(settings->fd.orderby);
 	int n_keys = num_segmentby + num_orderby;
-
 	AttrNumber *sort_keys = palloc(sizeof(*sort_keys) * n_keys);
 	Oid *sort_operators = palloc(sizeof(*sort_operators) * n_keys);
 	Oid *sort_collations = palloc(sizeof(*sort_collations) * n_keys);
@@ -542,7 +548,7 @@ compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
 			attname = ts_array_get_element_text(settings->fd.orderby, position);
 		}
 		compress_chunk_populate_sort_info_for_column(settings,
-													 RelationGetRelid(in_rel),
+													 RelationGetRelid(rel),
 													 attname,
 													 &sort_keys[n],
 													 &sort_operators[n],
@@ -550,17 +556,29 @@ compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
 													 &nulls_first[n]);
 	}
 
-	tuplesortstate = tuplesort_begin_heap(tupDesc,
-										  n_keys,
-										  sort_keys,
-										  sort_operators,
-										  sort_collations,
-										  nulls_first,
-										  maintenance_work_mem,
-										  NULL,
-										  false /*=randomAccess*/);
+	/* Make a copy of the tuple descriptor so that it is allocated on the same
+	 * memory context as the tuple sort instead of pointing into the relcache
+	 * entry that could be blown away. */
+	return tuplesort_begin_heap(CreateTupleDescCopy(tupdesc),
+								n_keys,
+								sort_keys,
+								sort_operators,
+								sort_collations,
+								nulls_first,
+								maintenance_work_mem,
+								NULL,
+								false /*=randomAccess*/);
+}
 
-	scan = table_beginscan(in_rel, GetLatestSnapshot(), 0, (ScanKey) NULL);
+static Tuplesortstate *
+compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
+{
+	Tuplesortstate *tuplesortstate;
+	TableScanDesc scan;
+	TupleTableSlot *slot;
+	tuplesortstate = compression_create_tuplesort_state(settings, in_rel);
+	scan = table_beginscan(in_rel, GetLatestSnapshot(), 0, NULL);
+	hypercore_scan_set_skip_compressed(scan, true);
 	slot = table_slot_create(in_rel, NULL);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
@@ -633,13 +651,14 @@ compress_chunk_populate_sort_info_for_column(CompressionSettings *settings, Oid 
 }
 
 /*
- * Find segment by index for setting the correct sequence number if
- * we are trying to roll up chunks while compressing
+ * Find segment by index on compressed chunk needed when doing index scans
+ * over compressed data
  */
 Oid
 get_compressed_chunk_index(ResultRelInfo *resultRelInfo, CompressionSettings *settings)
 {
 	int num_segmentby_columns = ts_array_length(settings->fd.segmentby);
+	int num_orderby_columns = ts_array_length(settings->fd.orderby);
 
 	for (int i = 0; i < resultRelInfo->ri_NumIndices; i++)
 	{
@@ -647,14 +666,16 @@ get_compressed_chunk_index(ResultRelInfo *resultRelInfo, CompressionSettings *se
 		Relation index_relation = resultRelInfo->ri_IndexRelationDescs[i];
 		IndexInfo *index_info = resultRelInfo->ri_IndexRelationInfo[i];
 
-		/* the index must include all segment by columns and sequence number */
-		if (index_info->ii_NumIndexKeyAttrs != num_segmentby_columns + 1)
+		/* The index must include all segment by columns and at least two metadata columns.
+		 * Default index we build includes all segmentby columns and metadata columns (min and max,
+		 * in that order) for all orderby columns.*/
+		if (index_info->ii_NumIndexKeyAttrs != num_segmentby_columns + (num_orderby_columns * 2))
 			continue;
 
-		for (int j = 0; j < index_info->ii_NumIndexKeyAttrs - 1; j++)
+		for (int j = 0; j < num_segmentby_columns - 1; j++)
 		{
-			const char *attname =
-				get_attname(index_relation->rd_id, AttrOffsetGetAttrNumber(j), false);
+			AttrNumber attno = index_relation->rd_index->indkey.values[j];
+			const char *attname = get_attname(index_relation->rd_index->indrelid, attno, false);
 
 			if (!ts_array_is_member(settings->fd.segmentby, attname))
 			{
@@ -666,167 +687,10 @@ get_compressed_chunk_index(ResultRelInfo *resultRelInfo, CompressionSettings *se
 		if (!matches)
 			continue;
 
-		/* Check last index column is sequence number */
-		const char *attname =
-			get_attname(index_relation->rd_id, index_info->ii_NumIndexKeyAttrs, false);
-
-		if (strncmp(attname, COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME, NAMEDATALEN) == 0)
-			return index_relation->rd_id;
+		return RelationGetRelid(index_relation);
 	}
 
 	return InvalidOid;
-}
-
-static int32
-index_scan_sequence_number(Relation table_rel, Oid index_oid, ScanKeyData *scankey,
-						   int num_scankeys)
-{
-	int32 result = 0;
-	bool is_null;
-	Relation index_rel = index_open(index_oid, AccessShareLock);
-
-	IndexScanDesc index_scan =
-		index_beginscan(table_rel, index_rel, GetTransactionSnapshot(), num_scankeys, 0);
-	index_scan->xs_want_itup = true;
-	index_rescan(index_scan, scankey, num_scankeys, NULL, 0);
-
-	if (index_getnext_tid(index_scan, BackwardScanDirection))
-	{
-		result = index_getattr(index_scan->xs_itup,
-							   index_scan->xs_itupdesc
-								   ->natts, /* Last attribute of the index is sequence number. */
-							   index_scan->xs_itupdesc,
-							   &is_null);
-		if (is_null)
-			result = 0;
-	}
-
-	index_endscan(index_scan);
-	index_close(index_rel, AccessShareLock);
-
-	return result;
-}
-
-static int32
-table_scan_sequence_number(Relation table_rel, int16 seq_num_column_num, ScanKeyData *scankey,
-						   int num_scankeys)
-{
-	int32 max_seq_num = 0;
-	TupleTableSlot *slot;
-	TableScanDesc scan;
-
-	slot = table_slot_create(table_rel, NULL);
-	scan = table_beginscan(table_rel, GetLatestSnapshot(), num_scankeys, scankey);
-
-	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
-	{
-		bool is_null;
-		Datum seq_num = slot_getattr(slot, seq_num_column_num, &is_null);
-
-		if (!is_null)
-		{
-			int32 curr_seq_num = DatumGetInt32(seq_num);
-
-			if (max_seq_num < curr_seq_num)
-				max_seq_num = curr_seq_num;
-		}
-	}
-
-	table_endscan(scan);
-	ExecDropSingleTupleTableSlot(slot);
-
-	return max_seq_num;
-}
-
-/* Scan compressed chunk to get the sequence number for current group.
- * This is necessary to do when merging chunks. If the chunk is empty,
- * scan will always return 0 and the sequence number will start from
- * SEQUENCE_NUM_GAP.
- */
-static int32
-get_sequence_number_for_current_group(Relation table_rel, Oid index_oid,
-									  int16 *uncompressed_col_to_compressed_col,
-									  PerColumn *per_column, int n_input_columns,
-									  int16 seq_num_column_num)
-{
-	/* If there is a suitable index, use index scan otherwise fallback to heap scan. */
-	bool is_index_scan = OidIsValid(index_oid);
-
-	int i, num_scankeys = 0;
-	int32 result = 0;
-
-	for (i = 0; i < n_input_columns; i++)
-	{
-		if (per_column[i].segmentby_column_index < 1)
-			continue;
-
-		num_scankeys++;
-	}
-
-	MemoryContext scan_ctx = AllocSetContextCreate(CurrentMemoryContext,
-												   "get max sequence number scan",
-												   ALLOCSET_DEFAULT_SIZES);
-	MemoryContext old_ctx;
-	old_ctx = MemoryContextSwitchTo(scan_ctx);
-
-	ScanKeyData *scankey = NULL;
-
-	if (num_scankeys > 0)
-	{
-		scankey = palloc0(sizeof(ScanKeyData) * num_scankeys);
-
-		for (i = 0; i < n_input_columns; i++)
-		{
-			if (per_column[i].segmentby_column_index < 1)
-				continue;
-
-			PerColumn col = per_column[i];
-			int16 attno = is_index_scan ?
-							  col.segmentby_column_index :
-							  AttrOffsetGetAttrNumber(uncompressed_col_to_compressed_col[i]);
-
-			if (col.segment_info->is_null)
-			{
-				ScanKeyEntryInitialize(&scankey[col.segmentby_column_index - 1],
-									   SK_ISNULL | SK_SEARCHNULL,
-									   attno,
-									   InvalidStrategy, /* no strategy */
-									   InvalidOid,		/* no strategy subtype */
-									   InvalidOid,		/* no collation */
-									   InvalidOid,		/* no reg proc for this */
-									   (Datum) 0);		/* constant */
-			}
-			else
-			{
-				ScanKeyEntryInitializeWithInfo(&scankey[col.segmentby_column_index - 1],
-											   0, /* flags */
-											   attno,
-											   BTEqualStrategyNumber,
-											   InvalidOid, /* No strategy subtype. */
-											   col.segment_info->collation,
-											   &col.segment_info->eq_fn,
-											   col.segment_info->val);
-			}
-		}
-	}
-
-	if (is_index_scan)
-	{
-		/* Index scan should always use at least one scan key to get the sequence number. */
-		Assert(num_scankeys > 0);
-
-		result = index_scan_sequence_number(table_rel, index_oid, scankey, num_scankeys);
-	}
-	else
-	{
-		/* Table scan can work without scan keys. */
-		result = table_scan_sequence_number(table_rel, seq_num_column_num, scankey, num_scankeys);
-	}
-
-	MemoryContextSwitchTo(old_ctx);
-	MemoryContextDelete(scan_ctx);
-
-	return result + SEQUENCE_NUM_GAP;
 }
 
 static void
@@ -926,28 +790,16 @@ build_column_map(CompressionSettings *settings, Relation uncompressed_table,
 void
 row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor,
 					Relation uncompressed_table, Relation compressed_table,
-					int16 num_columns_in_compressed_table, bool need_bistate, bool reset_sequence,
-					int insert_options)
+					int16 num_columns_in_compressed_table, bool need_bistate, int insert_options)
 {
 	Name count_metadata_name = DatumGetName(
 		DirectFunctionCall1(namein, CStringGetDatum(COMPRESSION_COLUMN_METADATA_COUNT_NAME)));
-	Name sequence_num_metadata_name = DatumGetName(
-		DirectFunctionCall1(namein,
-							CStringGetDatum(COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME)));
 	AttrNumber count_metadata_column_num =
 		get_attnum(compressed_table->rd_id, NameStr(*count_metadata_name));
-	AttrNumber sequence_num_column_num =
-		get_attnum(compressed_table->rd_id, NameStr(*sequence_num_metadata_name));
-
 	if (count_metadata_column_num == InvalidAttrNumber)
 		elog(ERROR,
 			 "missing metadata column '%s' in compressed table",
 			 COMPRESSION_COLUMN_METADATA_COUNT_NAME);
-
-	if (sequence_num_column_num == InvalidAttrNumber)
-		elog(ERROR,
-			 "missing metadata column '%s' in compressed table",
-			 COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
 
 	*row_compressor = (RowCompressor){
 		.per_row_ctx = AllocSetContextCreate(CurrentMemoryContext,
@@ -955,17 +807,14 @@ row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor
 											 ALLOCSET_DEFAULT_SIZES),
 		.compressed_table = compressed_table,
 		.bistate = need_bistate ? GetBulkInsertState() : NULL,
-		.resultRelInfo = ts_catalog_open_indexes(compressed_table),
+		.resultRelInfo = CatalogOpenIndexes(compressed_table),
 		.n_input_columns = RelationGetDescr(uncompressed_table)->natts,
 		.count_metadata_column_offset = AttrNumberGetAttrOffset(count_metadata_column_num),
-		.sequence_num_metadata_column_offset = AttrNumberGetAttrOffset(sequence_num_column_num),
 		.compressed_values = palloc(sizeof(Datum) * num_columns_in_compressed_table),
 		.compressed_is_null = palloc(sizeof(bool) * num_columns_in_compressed_table),
 		.rows_compressed_into_current_value = 0,
 		.rowcnt_pre_compression = 0,
 		.num_compressed_rows = 0,
-		.sequence_num = SEQUENCE_NUM_GAP,
-		.reset_sequence = reset_sequence,
 		.first_iteration = true,
 		.insert_options = insert_options,
 	};
@@ -1007,7 +856,7 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 	{
 		row_compressor_process_ordered_slot(row_compressor, slot, mycid);
 		if ((++nrows_processed % report_reltuples) == 0)
-			elog(LOG,
+			elog(DEBUG2,
 				 "compressed " INT64_FORMAT " rows from \"%s\"",
 				 nrows_processed,
 				 RelationGetRelationName(in_rel));
@@ -1015,7 +864,7 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 
 	if (row_compressor->rows_compressed_into_current_value > 0)
 		row_compressor_flush(row_compressor, mycid, true);
-	elog(LOG,
+	elog(DEBUG1,
 		 "finished compressing " INT64_FORMAT " rows from \"%s\"",
 		 nrows_processed,
 		 RelationGetRelationName(in_rel));
@@ -1080,26 +929,6 @@ row_compressor_update_group(RowCompressor *row_compressor, TupleTableSlot *row)
 	}
 	/* switch to original memory context */
 	MemoryContextSwitchTo(oldcontext);
-
-	/*
-	 * The sequence number of the compressed tuple is per segment by grouping
-	 * and should be reset when the grouping changes to prevent overflows with
-	 * many segmentby columns.
-	 *
-	 */
-	if (row_compressor->reset_sequence)
-		row_compressor->sequence_num = SEQUENCE_NUM_GAP; /* Start sequence from beginning */
-	else
-		row_compressor->sequence_num =
-			get_sequence_number_for_current_group(row_compressor->compressed_table,
-												  row_compressor->index_oid,
-												  row_compressor
-													  ->uncompressed_col_to_compressed_col,
-												  row_compressor->per_column,
-												  row_compressor->n_input_columns,
-												  AttrOffsetGetAttrNumber(
-													  row_compressor
-														  ->sequence_num_metadata_column_offset));
 }
 
 static bool
@@ -1230,16 +1059,6 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 		Int32GetDatum(row_compressor->rows_compressed_into_current_value);
 	row_compressor->compressed_is_null[row_compressor->count_metadata_column_offset] = false;
 
-	row_compressor->compressed_values[row_compressor->sequence_num_metadata_column_offset] =
-		Int32GetDatum(row_compressor->sequence_num);
-	row_compressor->compressed_is_null[row_compressor->sequence_num_metadata_column_offset] = false;
-
-	/* overflow could happen only if chunk has more than 200B rows */
-	if (row_compressor->sequence_num > PG_INT32_MAX - SEQUENCE_NUM_GAP)
-		elog(ERROR, "sequence id overflow");
-
-	row_compressor->sequence_num += SEQUENCE_NUM_GAP;
-
 	compressed_tuple = heap_form_tuple(RelationGetDescr(row_compressor->compressed_table),
 									   row_compressor->compressed_values,
 									   row_compressor->compressed_is_null);
@@ -1296,6 +1115,11 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 		row_compressor->compressed_values[compressed_col] = 0;
 		row_compressor->compressed_is_null[compressed_col] = true;
 	}
+
+	if (NULL != row_compressor->on_flush)
+		row_compressor->on_flush(row_compressor,
+								 row_compressor->rows_compressed_into_current_value);
+
 	row_compressor->rowcnt_pre_compression += row_compressor->rows_compressed_into_current_value;
 	row_compressor->num_compressed_rows++;
 	row_compressor->rows_compressed_into_current_value = 0;
@@ -1314,7 +1138,7 @@ row_compressor_close(RowCompressor *row_compressor)
 {
 	if (row_compressor->bistate)
 		FreeBulkInsertState(row_compressor->bistate);
-	ts_catalog_close_indexes(row_compressor->resultRelInfo);
+	CatalogCloseIndexes(row_compressor->resultRelInfo);
 }
 
 /******************
@@ -1406,7 +1230,7 @@ build_decompressor(Relation in_rel, Relation out_rel)
 
 		.out_desc = out_desc,
 		.out_rel = out_rel,
-		.indexstate = ts_catalog_open_indexes(out_rel),
+		.indexstate = CatalogOpenIndexes(out_rel),
 
 		.mycid = GetCurrentCommandId(true),
 		.bistate = GetBulkInsertState(),
@@ -1423,7 +1247,8 @@ build_decompressor(Relation in_rel, Relation out_rel)
 														ALLOCSET_DEFAULT_SIZES),
 		.estate = CreateExecutorState(),
 
-		.decompressed_slots = palloc0(sizeof(void *) * TARGET_COMPRESSED_BATCH_SIZE),
+		.decompressed_slots =
+			(TupleTableSlot **) palloc0(sizeof(void *) * TARGET_COMPRESSED_BATCH_SIZE),
 	};
 
 	create_per_compressed_column(&decompressor);
@@ -1442,11 +1267,20 @@ build_decompressor(Relation in_rel, Relation out_rel)
 }
 
 void
+row_decompressor_reset(RowDecompressor *decompressor)
+{
+	MemoryContextReset(decompressor->per_compressed_row_ctx);
+	decompressor->unprocessed_tuples = 0;
+	decompressor->batches_decompressed = 0;
+	decompressor->tuples_decompressed = 0;
+}
+
+void
 row_decompressor_close(RowDecompressor *decompressor)
 {
 	FreeBulkInsertState(decompressor->bistate);
 	MemoryContextDelete(decompressor->per_compressed_row_ctx);
-	ts_catalog_close_indexes(decompressor->indexstate);
+	CatalogCloseIndexes(decompressor->indexstate);
 	FreeExecutorState(decompressor->estate);
 	detoaster_close(&decompressor->detoaster);
 }
@@ -1491,13 +1325,13 @@ decompress_chunk(Oid in_table, Oid out_table)
 		row_decompressor_decompress_row_to_table(&decompressor);
 
 		if ((++nrows_processed % report_reltuples) == 0)
-			elog(LOG,
+			elog(DEBUG2,
 				 "decompressed " INT64_FORMAT " rows from \"%s\"",
 				 nrows_processed,
 				 RelationGetRelationName(in_rel));
 	}
 
-	elog(LOG,
+	elog(DEBUG1,
 		 "finished decompressing " INT64_FORMAT " rows from \"%s\"",
 		 nrows_processed,
 		 RelationGetRelationName(in_rel));
@@ -1575,9 +1409,12 @@ create_per_compressed_column(RowDecompressor *decompressor)
  * Decompresses the current compressed batch into decompressed_slots, and returns
  * the number of rows in batch.
  */
-static int
+int
 decompress_batch(RowDecompressor *decompressor)
 {
+	if (decompressor->unprocessed_tuples)
+		return decompressor->unprocessed_tuples;
+
 	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
 
 	/*
@@ -1703,10 +1540,12 @@ decompress_batch(RowDecompressor *decompressor)
 	decompressor->batches_decompressed++;
 	decompressor->tuples_decompressed += n_batch_rows;
 
+	decompressor->unprocessed_tuples = n_batch_rows;
+
 	return n_batch_rows;
 }
 
-void
+int
 row_decompressor_decompress_row_to_table(RowDecompressor *decompressor)
 {
 	const int n_batch_rows = decompress_batch(decompressor);
@@ -1765,7 +1604,9 @@ row_decompressor_decompress_row_to_table(RowDecompressor *decompressor)
 	}
 
 	MemoryContextSwitchTo(old_ctx);
-	MemoryContextReset(decompressor->per_compressed_row_ctx);
+	row_decompressor_reset(decompressor);
+
+	return n_batch_rows;
 }
 
 void
@@ -1782,7 +1623,7 @@ row_decompressor_decompress_row_to_tuplesort(RowDecompressor *decompressor,
 	}
 
 	MemoryContextSwitchTo(old_ctx);
-	MemoryContextReset(decompressor->per_compressed_row_ctx);
+	row_decompressor_reset(decompressor);
 }
 
 /********************/
@@ -1951,6 +1792,62 @@ tsl_compressed_data_out(PG_FUNCTION_ARGS)
 	PG_RETURN_CSTRING(encoded);
 }
 
+/* create_hypertable record attribute numbers */
+enum Anum_compressed_info
+{
+	Anum_compressed_info_algorithm = 1,
+	Anum_compressed_info_has_nulls,
+	_Anum_compressed_info_max,
+};
+
+#define Natts_compressed_info (_Anum_compressed_info_max - 1)
+
+extern Datum
+tsl_compressed_data_info(PG_FUNCTION_ARGS)
+{
+	const CompressedDataHeader *header = get_compressed_data_header(PG_GETARG_DATUM(0));
+	TupleDesc tupdesc;
+	HeapTuple tuple;
+	bool has_nulls = false;
+
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("function returning record called in "
+						"context that cannot accept type record")));
+
+	switch (header->compression_algorithm)
+	{
+		case COMPRESSION_ALGORITHM_GORILLA:
+			has_nulls = gorilla_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_DICTIONARY:
+			has_nulls = dictionary_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_DELTADELTA:
+			has_nulls = deltadelta_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_ARRAY:
+			has_nulls = array_compressed_has_nulls(header);
+			break;
+		default:
+			elog(ERROR, "unknown compression algorithm %d", header->compression_algorithm);
+			break;
+	}
+
+	tupdesc = BlessTupleDesc(tupdesc);
+
+	Datum values[Natts_compressed_info];
+	bool nulls[Natts_compressed_info] = { false };
+
+	values[AttrNumberGetAttrOffset(Anum_compressed_info_algorithm)] =
+		NameGetDatum(compression_get_algorithm_name(header->compression_algorithm));
+	values[AttrNumberGetAttrOffset(Anum_compressed_info_has_nulls)] = BoolGetDatum(has_nulls);
+	tuple = heap_form_tuple(tupdesc, values, nulls);
+
+	return HeapTupleGetDatum(tuple);
+}
+
 extern CompressionStorage
 compression_get_toast_storage(CompressionAlgorithm algorithm)
 {
@@ -1989,7 +1886,7 @@ compression_get_default_algorithm(Oid typeoid)
 
 		default:
 		{
-			/* use dictitionary if possible, otherwise use array */
+			/* use dictionary if possible, otherwise use array */
 			TypeCacheEntry *tentry =
 				lookup_type_cache(typeoid, TYPECACHE_EQ_OPR_FINFO | TYPECACHE_HASH_PROC_FINFO);
 			if (tentry->hash_proc_finfo.fn_addr == NULL || tentry->eq_opr_finfo.fn_addr == NULL)
@@ -1999,1393 +1896,9 @@ compression_get_default_algorithm(Oid typeoid)
 	}
 }
 
-/*
- * Build scankeys for decompression of specific batches. key_columns references the
- * columns of the uncompressed chunk.
- */
-static ScanKeyData *
-build_scankeys(Oid hypertable_relid, Oid out_rel, RowDecompressor *decompressor,
-			   Bitmapset *key_columns, Bitmapset **null_columns, TupleTableSlot *slot,
-			   int *num_scankeys)
-{
-	int key_index = 0;
-	ScanKeyData *scankeys = NULL;
-
-	CompressionSettings *settings = ts_compression_settings_get(out_rel);
-	Assert(settings);
-
-	if (!bms_is_empty(key_columns))
-	{
-		scankeys = palloc0(bms_num_members(key_columns) * 2 * sizeof(ScanKeyData));
-		int i = -1;
-		while ((i = bms_next_member(key_columns, i)) > 0)
-		{
-			AttrNumber attno = i + FirstLowInvalidHeapAttributeNumber;
-			char *attname = get_attname(decompressor->out_rel->rd_id, attno, false);
-			bool isnull;
-			AttrNumber ht_attno = get_attnum(hypertable_relid, attname);
-
-			/*
-			 * This is a not very precise but easy assertion to detect attno
-			 * mismatch at least in some cases. The mismatch might happen if the
-			 * hypertable and chunk layout are different because of dropped
-			 * columns, and we're using a wrong slot type here.
-			 */
-			PG_USED_FOR_ASSERTS_ONLY Oid ht_atttype = get_atttype(hypertable_relid, ht_attno);
-			PG_USED_FOR_ASSERTS_ONLY Oid slot_atttype =
-				slot->tts_tupleDescriptor->attrs[AttrNumberGetAttrOffset(ht_attno)].atttypid;
-			Assert(ht_atttype == slot_atttype);
-
-			Datum value = slot_getattr(slot, ht_attno, &isnull);
-
-			/*
-			 * There are 3 possible scenarios we have to consider
-			 * when dealing with columns which are part of unique
-			 * constraints.
-			 *
-			 * 1. Column is segmentby-Column
-			 * In this case we can add a single ScanKey with an
-			 * equality check for the value.
-			 * 2. Column is orderby-Column
-			 * In this we can add 2 ScanKeys with range constraints
-			 * utilizing batch metadata.
-			 * 3. Column is neither segmentby nor orderby
-			 * In this case we cannot utilize this column for
-			 * batch filtering as the values are compressed and
-			 * we have no metadata.
-			 */
-			if (ts_array_is_member(settings->fd.segmentby, attname))
-			{
-				key_index = create_segment_filter_scankey(decompressor,
-														  attname,
-														  BTEqualStrategyNumber,
-														  scankeys,
-														  key_index,
-														  null_columns,
-														  value,
-														  isnull,
-														  false);
-			}
-			if (ts_array_is_member(settings->fd.orderby, attname))
-			{
-				/* Cannot optimize orderby columns with NULL values since those
-				 * are not visible in metadata
-				 */
-				if (isnull)
-					continue;
-
-				int16 index = ts_array_position(settings->fd.orderby, attname);
-
-				key_index = create_segment_filter_scankey(decompressor,
-														  column_segment_min_name(index),
-														  BTLessEqualStrategyNumber,
-														  scankeys,
-														  key_index,
-														  null_columns,
-														  value,
-														  false,
-														  false); /* is_null_check */
-				key_index = create_segment_filter_scankey(decompressor,
-														  column_segment_max_name(index),
-														  BTGreaterEqualStrategyNumber,
-														  scankeys,
-														  key_index,
-														  null_columns,
-														  value,
-														  false,
-														  false); /* is_null_check */
-			}
-		}
-	}
-
-	*num_scankeys = key_index;
-	return scankeys;
-}
-
-static int
-create_segment_filter_scankey(RowDecompressor *decompressor, char *segment_filter_col_name,
-							  StrategyNumber strategy, ScanKeyData *scankeys, int num_scankeys,
-							  Bitmapset **null_columns, Datum value, bool is_null_check,
-							  bool is_array_op)
-{
-	AttrNumber cmp_attno = get_attnum(decompressor->in_rel->rd_id, segment_filter_col_name);
-	Assert(cmp_attno != InvalidAttrNumber);
-	/* This should never happen but if it does happen, we can't generate a scan key for
-	 * the filter column so just skip it */
-	if (cmp_attno == InvalidAttrNumber)
-		return num_scankeys;
-
-	int flags = is_array_op ? SK_SEARCHARRAY : 0;
-
-	/*
-	 * In PG versions <= 14 NULL values are always considered distinct
-	 * from other NULL values and therefore NULLABLE multi-columnn
-	 * unique constraints might expose unexpected behaviour in the
-	 * presence of NULL values.
-	 * Since SK_SEARCHNULL is not supported by heap scans we cannot
-	 * build a ScanKey for NOT NULL and instead have to do those
-	 * checks manually.
-	 */
-	if (is_null_check)
-	{
-		*null_columns = bms_add_member(*null_columns, cmp_attno);
-		return num_scankeys;
-	}
-
-	Oid atttypid = decompressor->in_desc->attrs[AttrNumberGetAttrOffset(cmp_attno)].atttypid;
-
-	TypeCacheEntry *tce = lookup_type_cache(atttypid, TYPECACHE_BTREE_OPFAMILY);
-	if (!OidIsValid(tce->btree_opf))
-		elog(ERROR, "no btree opfamily for type \"%s\"", format_type_be(atttypid));
-
-	Oid opr = get_opfamily_member(tce->btree_opf, atttypid, atttypid, strategy);
-
-	/*
-	 * Fall back to btree operator input type when it is binary compatible with
-	 * the column type and no operator for column type could be found.
-	 */
-	if (!OidIsValid(opr) && IsBinaryCoercible(atttypid, tce->btree_opintype))
-	{
-		opr =
-			get_opfamily_member(tce->btree_opf, tce->btree_opintype, tce->btree_opintype, strategy);
-	}
-
-	/* No operator could be found so we can't create the scankey. */
-	if (!OidIsValid(opr))
-		return num_scankeys;
-
-	opr = get_opcode(opr);
-	Assert(OidIsValid(opr));
-	/* We should never end up here but: no opcode, no optimization */
-	if (!OidIsValid(opr))
-		return num_scankeys;
-
-	ScanKeyEntryInitialize(&scankeys[num_scankeys++],
-						   flags,
-						   cmp_attno,
-						   strategy,
-						   InvalidOid, /* No strategy subtype. */
-						   decompressor->in_desc->attrs[AttrNumberGetAttrOffset(cmp_attno)]
-							   .attcollation,
-						   opr,
-						   value);
-
-	return num_scankeys;
-}
-
-/*
- * For insert into compressed chunks with unique index determine the
- * columns which are safe to use for batch filtering.
- *
- * This is based on RelationGetIndexAttrBitmap from postgres with changes
- * to also track unique expression indexes.
- */
-static Bitmapset *
-compressed_insert_key_columns(Relation relation)
-{
-	Bitmapset *indexattrs = NULL; /* indexed columns */
-	ListCell *l;
-
-	/* Fast path if definitely no indexes */
-	if (!RelationGetForm(relation)->relhasindex)
-		return NULL;
-
-	List *indexoidlist = RelationGetIndexList(relation);
-
-	/* Fall out if no indexes (but relhasindex was set) */
-	if (indexoidlist == NIL)
-		return NULL;
-
-	/*
-	 * For each index, add referenced attributes to indexattrs.
-	 *
-	 * Note: we consider all indexes returned by RelationGetIndexList, even if
-	 * they are not indisready or indisvalid.  This is important because an
-	 * index for which CREATE INDEX CONCURRENTLY has just started must be
-	 * included in HOT-safety decisions (see README.HOT).  If a DROP INDEX
-	 * CONCURRENTLY is far enough along that we should ignore the index, it
-	 * won't be returned at all by RelationGetIndexList.
-	 */
-	foreach (l, indexoidlist)
-	{
-		Oid indexOid = lfirst_oid(l);
-		Relation indexDesc = index_open(indexOid, AccessShareLock);
-
-		if (!indexDesc->rd_index->indisunique)
-		{
-			index_close(indexDesc, AccessShareLock);
-			continue;
-		}
-
-		/* Collect simple attribute references.
-		 * For covering indexes we only need to collect the key attributes.
-		 * Unlike RelationGetIndexAttrBitmap we allow expression indexes
-		 * but we do not extract attributes from the expressions as that
-		 * would not be a safe filter as the expression can alter attributes
-		 * which would not make them sufficient for batch filtering.
-		 */
-		for (int i = 0; i < indexDesc->rd_index->indnkeyatts; i++)
-		{
-			int attrnum = indexDesc->rd_index->indkey.values[i];
-			if (attrnum != 0)
-			{
-				indexattrs =
-					bms_add_member(indexattrs, attrnum - FirstLowInvalidHeapAttributeNumber);
-			}
-		}
-		index_close(indexDesc, AccessShareLock);
-	}
-
-	return indexattrs;
-}
-
-void
-decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
-{
-	/*
-	 * This is supposed to be called with the actual tuple that is being
-	 * inserted, so it cannot be empty.
-	 */
-	Assert(!TTS_EMPTY(slot));
-
-	Relation out_rel = cis->rel;
-
-	if (!ts_indexing_relation_has_primary_or_unique_index(out_rel))
-	{
-		/*
-		 * If there are no unique constraints there is nothing to do here.
-		 */
-		return;
-	}
-
-	if (!ts_guc_enable_dml_decompression)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("inserting into compressed chunk with unique constraints disabled"),
-				 errhint("Set timescaledb.enable_dml_decompression to TRUE.")));
-
-	Oid comp_relid = ts_chunk_get_relid(cis->compressed_chunk_id, false);
-	Relation in_rel = relation_open(comp_relid, RowExclusiveLock);
-
-	RowDecompressor decompressor = build_decompressor(in_rel, out_rel);
-	Bitmapset *key_columns = compressed_insert_key_columns(out_rel);
-	Bitmapset *null_columns = NULL;
-
-	int num_scankeys;
-	ScanKeyData *scankeys = build_scankeys(cis->hypertable_relid,
-										   in_rel->rd_id,
-										   &decompressor,
-										   key_columns,
-										   &null_columns,
-										   slot,
-										   &num_scankeys);
-
-	bms_free(key_columns);
-
-	/*
-	 * Using latest snapshot to scan the heap since we are doing this to build
-	 * the index on the uncompressed chunks in order to do speculative insertion
-	 * which is always built from all tuples (even in higher levels of isolation).
-	 */
-	TupleTableSlot *compressed_slot = table_slot_create(in_rel, NULL);
-	Snapshot snapshot = GetLatestSnapshot();
-	TableScanDesc scan = table_beginscan(in_rel, snapshot, num_scankeys, scankeys);
-
-	while (table_scan_getnextslot(scan, ForwardScanDirection, compressed_slot))
-	{
-		bool valid = true;
-
-		/*
-		 * Since the heap scan API does not support SK_SEARCHNULL we have to check
-		 * for NULL values manually when those are part of the constraints.
-		 */
-		for (int attno = bms_next_member(null_columns, -1); attno >= 0;
-			 attno = bms_next_member(null_columns, attno))
-		{
-			if (!slot_attisnull(compressed_slot, attno))
-			{
-				valid = false;
-				break;
-			}
-		}
-
-		/*
-		 * Skip if NULL check failed.
-		 */
-		if (!valid)
-			continue;
-
-		bool should_free;
-		HeapTuple tuple = ExecFetchSlotHeapTuple(compressed_slot, false, &should_free);
-		heap_deform_tuple(tuple,
-						  decompressor.in_desc,
-						  decompressor.compressed_datums,
-						  decompressor.compressed_is_nulls);
-
-		if (should_free)
-			heap_freetuple(tuple);
-
-		write_logical_replication_msg_decompression_start();
-		row_decompressor_decompress_row_to_table(&decompressor);
-
-		TM_FailureData tmfd;
-		TM_Result result pg_attribute_unused();
-		result = table_tuple_delete(in_rel,
-									&compressed_slot->tts_tid,
-									decompressor.mycid,
-									snapshot,
-									InvalidSnapshot,
-									true,
-									&tmfd,
-									false);
-
-		write_logical_replication_msg_decompression_end();
-
-		Assert(result == TM_Ok);
-
-		Assert(cis->cds != NULL);
-		cis->cds->batches_decompressed += decompressor.batches_decompressed;
-		cis->cds->tuples_decompressed += decompressor.tuples_decompressed;
-	}
-
-	table_endscan(scan);
-	ExecDropSingleTupleTableSlot(compressed_slot);
-	row_decompressor_close(&decompressor);
-
-	CommandCounterIncrement();
-	table_close(in_rel, NoLock);
-}
-
 const CompressionAlgorithmDefinition *
 algorithm_definition(CompressionAlgorithm algo)
 {
 	Assert(algo > 0 && algo < _END_COMPRESSION_ALGORITHMS);
 	return &definitions[algo];
-}
-
-static BatchFilter *
-make_batchfilter(char *column_name, StrategyNumber strategy, Oid collation, RegProcedure opcode,
-				 Const *value, bool is_null_check, bool is_null, bool is_array_op)
-{
-	BatchFilter *segment_filter = palloc0(sizeof(*segment_filter));
-
-	*segment_filter = (BatchFilter){
-		.strategy = strategy,
-		.collation = collation,
-		.opcode = opcode,
-		.value = value,
-		.is_null_check = is_null_check,
-		.is_null = is_null,
-		.is_array_op = is_array_op,
-	};
-	namestrcpy(&segment_filter->column_name, column_name);
-
-	return segment_filter;
-}
-
-/*
- * A compressed chunk can have multiple indexes. For a given list
- * of columns in index_filters, find the matching index which has
- * the most columns based on index_filters and adjust the filters
- * if necessary.
- * Return matching index if found else return NULL.
- *
- * Note: This method will find the best matching index based on
- * number of filters it matches. If an index matches all the filters,
- * it will be chosen. Otherwise, it will try to select the index
- * which has most matches. If there are multiple indexes have
- * the same number of matches, it will pick the first one it finds.
- * For example
- * for a given condition like "WHERE X = 10 AND Y = 8"
- * if there are multiple indexes like
- * 1. index (a,b,c,x)
- * 2. index (a,x,y)
- * 3. index (x)
- * In this case 2nd index is returned. If that one didn't exist,
- * it would return the 1st index.
- */
-static Relation
-find_matching_index(Relation comp_chunk_rel, List **index_filters, List **heap_filters)
-{
-	List *index_oids;
-	ListCell *lc;
-	int total_filters = list_length(*index_filters);
-	int max_match_count = 0;
-	Relation result_rel = NULL;
-
-	/* get list of indexes defined on compressed chunk */
-	index_oids = RelationGetIndexList(comp_chunk_rel);
-	foreach (lc, index_oids)
-	{
-		int match_count = 0;
-		Relation index_rel = index_open(lfirst_oid(lc), AccessShareLock);
-		IndexInfo *index_info = BuildIndexInfo(index_rel);
-
-		/* Can't use partial or expression indexes */
-		if (index_info->ii_Predicate != NIL || index_info->ii_Expressions != NIL)
-		{
-			index_close(index_rel, AccessShareLock);
-			continue;
-		}
-
-		/* Can only use Btree indexes */
-		if (index_info->ii_Am != BTREE_AM_OID)
-		{
-			index_close(index_rel, AccessShareLock);
-			continue;
-		}
-
-		ListCell *li;
-		foreach (li, *index_filters)
-		{
-			for (int i = 0; i < index_rel->rd_index->indnatts; i++)
-			{
-				AttrNumber attnum = index_rel->rd_index->indkey.values[i];
-				char *attname = get_attname(RelationGetRelid(comp_chunk_rel), attnum, false);
-				BatchFilter *sf = lfirst(li);
-				/* ensure column exists in index relation */
-				if (!strcmp(attname, NameStr(sf->column_name)))
-				{
-					match_count++;
-					break;
-				}
-			}
-		}
-		if (match_count == total_filters)
-		{
-			/* found index which has all columns specified in WHERE */
-			if (result_rel)
-				index_close(result_rel, AccessShareLock);
-			if (ts_guc_debug_compression_path_info)
-				elog(INFO, "Index \"%s\" is used for scan. ", RelationGetRelationName(index_rel));
-			return index_rel;
-		}
-
-		if (match_count > max_match_count)
-		{
-			max_match_count = match_count;
-			result_rel = index_rel;
-			continue;
-		}
-		index_close(index_rel, AccessShareLock);
-	}
-
-	/* No matching index whatsoever */
-	if (!result_rel)
-	{
-		*heap_filters = list_concat(*heap_filters, *index_filters);
-		*index_filters = list_truncate(*index_filters, 0);
-		return NULL;
-	}
-
-	/* We found an index which matches partially.
-	 * It can be used but we need to transfer the unmatched
-	 * filters from index_filters to heap filters.
-	 */
-	for (int i = 0; i < list_length(*index_filters); i++)
-	{
-		BatchFilter *sf = list_nth(*index_filters, i);
-		bool match = false;
-		for (int j = 0; j < result_rel->rd_index->indnatts; j++)
-		{
-			AttrNumber attnum = result_rel->rd_index->indkey.values[j];
-			char *attname = get_attname(RelationGetRelid(comp_chunk_rel), attnum, false);
-			/* ensure column exists in index relation */
-			if (!strcmp(attname, NameStr(sf->column_name)))
-			{
-				match = true;
-				break;
-			}
-		}
-
-		if (!match)
-		{
-			*heap_filters = lappend(*heap_filters, sf);
-			*index_filters = list_delete_nth_cell(*index_filters, i);
-		}
-	}
-	if (ts_guc_debug_compression_path_info)
-		elog(INFO, "Index \"%s\" is used for scan. ", RelationGetRelationName(result_rel));
-	return result_rel;
-}
-
-/*
- * This method will evaluate the predicates, extract
- * left and right operands, check if any of the operands
- * can be used for batch filtering and if so, it will
- * create a BatchFilter object and add it to the corresponding
- * list.
- * Any segmentby filter is put into index_filters list other
- * filters are put into heap_filters list.
- */
-static void
-process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates, List **heap_filters,
-				   List **index_filters, List **is_null)
-{
-	ListCell *lc;
-	/*
-	 * We dont want to forward boundParams from the execution state here
-	 * as we dont want to constify join params in the predicates.
-	 * Constifying JOIN params would not be safe as we don't redo
-	 * this part in rescan.
-	 */
-	PlannerGlobal glob = { .boundParams = NULL };
-	PlannerInfo root = { .glob = &glob };
-
-	foreach (lc, predicates)
-	{
-		Node *node = copyObject(lfirst(lc));
-		Var *var;
-		Expr *expr;
-		Oid collation, opno;
-		RegProcedure opcode;
-		char *column_name;
-
-		switch (nodeTag(node))
-		{
-			case T_OpExpr:
-			{
-				OpExpr *opexpr = castNode(OpExpr, node);
-				collation = opexpr->inputcollid;
-				Const *arg_value;
-
-				if (!ts_extract_expr_args(&opexpr->xpr, &var, &expr, &opno, &opcode))
-					continue;
-
-				if (!IsA(expr, Const))
-				{
-					expr = (Expr *) estimate_expression_value(&root, (Node *) expr);
-
-					if (!IsA(expr, Const))
-						continue;
-				}
-
-				arg_value = castNode(Const, expr);
-
-				column_name = get_attname(ch->table_id, var->varattno, false);
-				TypeCacheEntry *tce = lookup_type_cache(var->vartype, TYPECACHE_BTREE_OPFAMILY);
-				int op_strategy = get_op_opfamily_strategy(opno, tce->btree_opf);
-				if (ts_array_is_member(settings->fd.segmentby, column_name))
-				{
-					switch (op_strategy)
-					{
-						case BTEqualStrategyNumber:
-						case BTLessStrategyNumber:
-						case BTLessEqualStrategyNumber:
-						case BTGreaterStrategyNumber:
-						case BTGreaterEqualStrategyNumber:
-						{
-							/* save segment by column name and its corresponding value specified in
-							 * WHERE */
-							*index_filters = lappend(*index_filters,
-													 make_batchfilter(column_name,
-																	  op_strategy,
-																	  collation,
-																	  opcode,
-																	  arg_value,
-																	  false, /* is_null_check */
-																	  false, /* is_null */
-																	  false	 /* is_array_op */
-																	  ));
-						}
-					}
-					continue;
-				}
-
-				int min_attno = compressed_column_metadata_attno(settings,
-																 ch->table_id,
-																 var->varattno,
-																 settings->fd.relid,
-																 "min");
-				int max_attno = compressed_column_metadata_attno(settings,
-																 ch->table_id,
-																 var->varattno,
-																 settings->fd.relid,
-																 "max");
-
-				if (min_attno != InvalidAttrNumber && max_attno != InvalidAttrNumber)
-				{
-					switch (op_strategy)
-					{
-						case BTEqualStrategyNumber:
-						{
-							/* orderby col = value implies min <= value and max >= value */
-							*heap_filters = lappend(*heap_filters,
-													make_batchfilter(get_attname(settings->fd.relid,
-																				 min_attno,
-																				 false),
-																	 BTLessEqualStrategyNumber,
-																	 collation,
-																	 opcode,
-																	 arg_value,
-																	 false, /* is_null_check */
-																	 false, /* is_null */
-																	 false	/* is_array_op */
-																	 ));
-							*heap_filters = lappend(*heap_filters,
-													make_batchfilter(get_attname(settings->fd.relid,
-																				 max_attno,
-																				 false),
-																	 BTGreaterEqualStrategyNumber,
-																	 collation,
-																	 opcode,
-																	 arg_value,
-																	 false, /* is_null_check */
-																	 false, /* is_null */
-																	 false	/* is_array_op */
-																	 ));
-						}
-						break;
-						case BTLessStrategyNumber:
-						case BTLessEqualStrategyNumber:
-						{
-							/* orderby col <[=] value implies min <[=] value */
-							*heap_filters = lappend(*heap_filters,
-													make_batchfilter(get_attname(settings->fd.relid,
-																				 min_attno,
-																				 false),
-																	 op_strategy,
-																	 collation,
-																	 opcode,
-																	 arg_value,
-																	 false, /* is_null_check */
-																	 false, /* is_null */
-																	 false	/* is_array_op */
-																	 ));
-						}
-						break;
-						case BTGreaterStrategyNumber:
-						case BTGreaterEqualStrategyNumber:
-						{
-							/* orderby col >[=] value implies max >[=] value */
-							*heap_filters = lappend(*heap_filters,
-													make_batchfilter(get_attname(settings->fd.relid,
-																				 max_attno,
-																				 false),
-																	 op_strategy,
-																	 collation,
-																	 opcode,
-																	 arg_value,
-																	 false, /* is_null_check */
-																	 false, /* is_null */
-																	 false	/* is_array_op */
-																	 ));
-						}
-					}
-				}
-			}
-			break;
-			case T_ScalarArrayOpExpr:
-			{
-				ScalarArrayOpExpr *sa_expr = castNode(ScalarArrayOpExpr, node);
-				if (!ts_extract_expr_args(&sa_expr->xpr, &var, &expr, &opno, &opcode))
-					continue;
-
-				if (!IsA(expr, Const))
-				{
-					expr = (Expr *) estimate_expression_value(&root, (Node *) expr);
-					if (!IsA(expr, Const))
-						continue;
-				}
-
-				Const *arg_value = castNode(Const, expr);
-				collation = sa_expr->inputcollid;
-
-				column_name = get_attname(ch->table_id, var->varattno, false);
-				TypeCacheEntry *tce = lookup_type_cache(var->vartype, TYPECACHE_BTREE_OPFAMILY);
-				int op_strategy = get_op_opfamily_strategy(opno, tce->btree_opf);
-				if (ts_array_is_member(settings->fd.segmentby, column_name))
-				{
-					switch (op_strategy)
-					{
-						case BTEqualStrategyNumber:
-						case BTLessStrategyNumber:
-						case BTLessEqualStrategyNumber:
-						case BTGreaterStrategyNumber:
-						case BTGreaterEqualStrategyNumber:
-						{
-							/* save segment by column name and its corresponding value specified in
-							 * WHERE */
-							*index_filters = lappend(*index_filters,
-													 make_batchfilter(column_name,
-																	  op_strategy,
-																	  collation,
-																	  opcode,
-																	  arg_value,
-																	  false, /* is_null_check */
-																	  false, /* is_null */
-																	  true	 /* is_array_op */
-																	  ));
-						}
-					}
-					continue;
-				}
-
-				break;
-			}
-			case T_NullTest:
-			{
-				NullTest *ntest = (NullTest *) node;
-				if (IsA(ntest->arg, Var))
-				{
-					var = (Var *) ntest->arg;
-					/* ignore system-defined attributes */
-					if (var->varattno <= 0)
-						continue;
-					column_name = get_attname(ch->table_id, var->varattno, false);
-					if (ts_array_is_member(settings->fd.segmentby, column_name))
-					{
-						*index_filters =
-							lappend(*index_filters,
-									make_batchfilter(column_name,
-													 InvalidStrategy,
-													 InvalidOid,
-													 InvalidOid,
-													 NULL,
-													 true, /* is_null_check */
-													 ntest->nulltesttype == IS_NULL, /* is_null */
-													 false /* is_array_op */
-													 ));
-						if (ntest->nulltesttype == IS_NULL)
-							*is_null = lappend_int(*is_null, 1);
-						else
-							*is_null = lappend_int(*is_null, 0);
-					}
-					/* We cannot optimize filtering decompression using ORDERBY
-					 * metadata and null check qualifiers. We could possibly do that by checking the
-					 * compressed data in combination with the ORDERBY nulls first setting and
-					 * verifying that the first or last tuple of a segment contains a NULL value.
-					 * This is left for future optimization */
-				}
-			}
-			break;
-			default:
-				break;
-		}
-	}
-}
-
-/*
- * This method will build scan keys for predicates including
- * SEGMENT BY column with attribute number from compressed chunk
- * if condition is like <segmentbycol> = <const value>, else
- * OUT param null_columns is saved with column attribute number.
- */
-static ScanKeyData *
-build_update_delete_scankeys(RowDecompressor *decompressor, List *heap_filters, int *num_scankeys,
-							 Bitmapset **null_columns)
-{
-	ListCell *lc;
-	BatchFilter *filter;
-	int key_index = 0;
-
-	ScanKeyData *scankeys = palloc0(heap_filters->length * sizeof(ScanKeyData));
-
-	foreach (lc, heap_filters)
-	{
-		filter = lfirst(lc);
-		AttrNumber attno = get_attnum(decompressor->in_rel->rd_id, NameStr(filter->column_name));
-		if (attno == InvalidAttrNumber)
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_COLUMN),
-					 errmsg("column \"%s\" of relation \"%s\" does not exist",
-							NameStr(filter->column_name),
-							RelationGetRelationName(decompressor->in_rel))));
-
-		key_index = create_segment_filter_scankey(decompressor,
-												  NameStr(filter->column_name),
-												  filter->strategy,
-												  scankeys,
-												  key_index,
-												  null_columns,
-												  filter->value ? filter->value->constvalue : 0,
-												  filter->is_null_check,
-												  filter->is_array_op);
-	}
-	*num_scankeys = key_index;
-	return scankeys;
-}
-
-static void
-report_error(TM_Result result)
-{
-	switch (result)
-	{
-		case TM_Deleted:
-		{
-			if (IsolationUsesXactSnapshot())
-			{
-				/* For Repeatable Read isolation level report error */
-				ereport(ERROR,
-						(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
-						 errmsg("could not serialize access due to concurrent update")));
-			}
-		}
-		break;
-		/*
-		 * If another transaction is updating the compressed data,
-		 * we have to abort the transaction to keep consistency.
-		 */
-		case TM_Updated:
-		{
-			elog(ERROR, "tuple concurrently updated");
-		}
-		break;
-		case TM_Invisible:
-		{
-			elog(ERROR, "attempted to lock invisible tuple");
-		}
-		break;
-		case TM_Ok:
-			break;
-		default:
-		{
-			elog(ERROR, "unexpected tuple operation result: %d", result);
-		}
-		break;
-	}
-}
-
-/*
- * This method will:
- *  1.scan compressed chunk
- *  2.decompress the row
- *  3.delete this row from compressed chunk
- *  4.insert decompressed rows to uncompressed chunk
- *
- * Return value:
- * return true if any tuples are decompressed or decompression of the same data happened
- * in a concurrent operation. This is important for snapshot management in order to
- * see the uncompressed data in this transaction.
- * if all 4 steps defined above pass set chunk_status_changed to true
- * Step 3 will fail if there are conflicting concurrent operations on
- * same chunk.
- */
-static bool
-decompress_batches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
-				   Bitmapset *null_columns, List *is_nulls, bool *chunk_status_changed)
-{
-	Snapshot snapshot = GetTransactionSnapshot();
-
-	TupleTableSlot *slot = table_slot_create(decompressor->in_rel, NULL);
-	TableScanDesc scan = table_beginscan(decompressor->in_rel, snapshot, num_scankeys, scankeys);
-	bool data_decompressed = false;
-	int num_scanned_rows = 0;
-	int num_filtered_rows = 0;
-
-	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
-	{
-		num_scanned_rows++;
-		bool skip_tuple = false;
-		int attrno = bms_next_member(null_columns, -1);
-		int pos = 0;
-		bool is_null_condition = 0;
-		bool seg_col_is_null = false;
-		for (; attrno >= 0; attrno = bms_next_member(null_columns, attrno))
-		{
-			is_null_condition = list_nth_int(is_nulls, pos);
-			seg_col_is_null = slot_attisnull(slot, attrno);
-			if ((seg_col_is_null && !is_null_condition) || (!seg_col_is_null && is_null_condition))
-			{
-				/*
-				 * if segment by column in the scanned tuple has non null value
-				 * and IS NULL is specified, OR segment by column has null value
-				 * and IS NOT NULL is specified then skip this tuple
-				 */
-				skip_tuple = true;
-				break;
-			}
-			pos++;
-		}
-		if (skip_tuple)
-		{
-			num_filtered_rows++;
-			continue;
-		}
-
-		TM_FailureData tmfd;
-		TM_Result result;
-		bool should_free;
-		HeapTuple compressed_tuple = ExecFetchSlotHeapTuple(slot, false, &should_free);
-
-		heap_deform_tuple(compressed_tuple,
-						  decompressor->in_desc,
-						  decompressor->compressed_datums,
-						  decompressor->compressed_is_nulls);
-
-		if (should_free)
-			heap_freetuple(compressed_tuple);
-
-		result = table_tuple_delete(decompressor->in_rel,
-									&slot->tts_tid,
-									decompressor->mycid,
-									snapshot,
-									InvalidSnapshot,
-									true,
-									&tmfd,
-									false);
-
-		/* skip reporting error if isolation level is < Repeatable Read
-		 * since somebody decompressed the data concurrently, we need to take
-		 * that data into account as well when in Read Committed level
-		 */
-		if (result == TM_Deleted && !IsolationUsesXactSnapshot())
-		{
-			data_decompressed = true;
-			continue;
-		}
-
-		if (result != TM_Ok)
-		{
-			table_endscan(scan);
-			report_error(result);
-		}
-		row_decompressor_decompress_row_to_table(decompressor);
-		*chunk_status_changed = true;
-		data_decompressed = true;
-	}
-	if (scankeys)
-		pfree(scankeys);
-	table_endscan(scan);
-	ExecDropSingleTupleTableSlot(slot);
-
-	if (ts_guc_debug_compression_path_info)
-	{
-		elog(INFO,
-			 "Number of compressed rows fetched from table scan: %d. "
-			 "Number of compressed rows filtered: %d.",
-			 num_scanned_rows,
-			 num_filtered_rows);
-	}
-
-	return data_decompressed;
-}
-
-/*
- * This method will build scan keys required to do index
- * scans on compressed chunks.
- */
-static ScanKeyData *
-build_index_scankeys(Relation index_rel, List *index_filters, int *num_scankeys)
-{
-	ListCell *lc;
-	BatchFilter *filter = NULL;
-	*num_scankeys = list_length(index_filters);
-	ScanKeyData *scankey = palloc0(sizeof(ScanKeyData) * (*num_scankeys));
-	int idx = 0;
-	int flags;
-
-	/* Order scankeys based on index attribute order */
-	for (int attno = 1; attno <= index_rel->rd_index->indnatts && idx < *num_scankeys; attno++)
-	{
-		char *attname = get_attname(RelationGetRelid(index_rel), attno, false);
-		foreach (lc, index_filters)
-		{
-			filter = lfirst(lc);
-			if (!strcmp(attname, NameStr(filter->column_name)))
-			{
-				flags = 0;
-				if (filter->is_null_check)
-				{
-					flags = SK_ISNULL | (filter->is_null ? SK_SEARCHNULL : SK_SEARCHNOTNULL);
-				}
-				if (filter->is_array_op)
-				{
-					flags |= SK_SEARCHARRAY;
-				}
-
-				ScanKeyEntryInitialize(&scankey[idx++],
-									   flags,
-									   attno,
-									   filter->strategy,
-									   InvalidOid, /* no strategy subtype */
-									   filter->collation,
-									   filter->opcode,
-									   filter->value ? filter->value->constvalue : 0);
-				break;
-			}
-		}
-	}
-
-	Assert(idx == *num_scankeys);
-	return scankey;
-}
-
-/*
- * This method will:
- *  1.Scan the index created with SEGMENT BY columns.
- *  2.Fetch matching rows and decompress the row
- *  3.insert decompressed rows to uncompressed chunk
- *  4.delete this row from compressed chunk
- */
-static bool
-decompress_batches_using_index(RowDecompressor *decompressor, Relation index_rel,
-							   ScanKeyData *index_scankeys, int num_index_scankeys,
-							   ScanKeyData *scankeys, int num_scankeys, Bitmapset *null_columns,
-							   List *is_nulls, bool *chunk_status_changed)
-{
-	Snapshot snapshot = GetTransactionSnapshot();
-	int num_segmentby_filtered_rows = 0;
-	int num_heap_filtered_rows = 0;
-	bool data_decompressed = false;
-
-	IndexScanDesc scan =
-		index_beginscan(decompressor->in_rel, index_rel, snapshot, num_index_scankeys, 0);
-	TupleTableSlot *slot = table_slot_create(decompressor->in_rel, NULL);
-	index_rescan(scan, index_scankeys, num_index_scankeys, NULL, 0);
-
-	while (index_getnext_slot(scan, ForwardScanDirection, slot))
-	{
-		TM_Result result;
-		TM_FailureData tmfd;
-		bool should_free;
-		HeapTuple compressed_tuple;
-
-		compressed_tuple = ExecFetchSlotHeapTuple(slot, false, &should_free);
-
-		num_segmentby_filtered_rows++;
-		if (num_scankeys)
-		{
-			/* filter tuple based on compress_orderby columns */
-			bool valid = false;
-#if PG16_LT
-			HeapKeyTest(compressed_tuple,
-						RelationGetDescr(decompressor->in_rel),
-						num_scankeys,
-						scankeys,
-						valid);
-#else
-			valid = HeapKeyTest(compressed_tuple,
-								RelationGetDescr(decompressor->in_rel),
-								num_scankeys,
-								scankeys);
-#endif
-			if (!valid)
-			{
-				num_heap_filtered_rows++;
-
-				if (should_free)
-					heap_freetuple(compressed_tuple);
-				continue;
-			}
-		}
-
-		bool skip_tuple = false;
-		int attrno = bms_next_member(null_columns, -1);
-		int pos = 0;
-		bool is_null_condition = 0;
-		bool seg_col_is_null = false;
-		for (; attrno >= 0; attrno = bms_next_member(null_columns, attrno))
-		{
-			is_null_condition = list_nth_int(is_nulls, pos);
-			seg_col_is_null = slot_attisnull(slot, attrno);
-			if ((seg_col_is_null && !is_null_condition) || (!seg_col_is_null && is_null_condition))
-			{
-				/*
-				 * if segment by column in the scanned tuple has non null value
-				 * and IS NULL is specified, OR segment by column has null value
-				 * and IS NOT NULL is specified then skip this tuple
-				 */
-				skip_tuple = true;
-				break;
-			}
-			pos++;
-		}
-		if (skip_tuple)
-		{
-			num_heap_filtered_rows++;
-			continue;
-		}
-
-		heap_deform_tuple(compressed_tuple,
-						  decompressor->in_desc,
-						  decompressor->compressed_datums,
-						  decompressor->compressed_is_nulls);
-
-		if (should_free)
-			heap_freetuple(compressed_tuple);
-
-		result = table_tuple_delete(decompressor->in_rel,
-									&slot->tts_tid,
-									decompressor->mycid,
-									snapshot,
-									InvalidSnapshot,
-									true,
-									&tmfd,
-									false);
-
-		/* skip reporting error if isolation level is < Repeatable Read
-		 * since somebody decompressed the data concurrently, we need to take
-		 * that data into account as well when in Read Committed level
-		 */
-		if (result == TM_Deleted && !IsolationUsesXactSnapshot())
-		{
-			data_decompressed = true;
-			continue;
-		}
-
-		if (result != TM_Ok)
-		{
-			index_endscan(scan);
-			index_close(index_rel, AccessShareLock);
-			report_error(result);
-		}
-		row_decompressor_decompress_row_to_table(decompressor);
-		*chunk_status_changed = true;
-		data_decompressed = true;
-	}
-
-	if (ts_guc_debug_compression_path_info)
-	{
-		elog(INFO,
-			 "Number of compressed rows fetched from index: %d. "
-			 "Number of compressed rows filtered by heap filters: %d.",
-			 num_segmentby_filtered_rows,
-			 num_heap_filtered_rows);
-	}
-
-	ExecDropSingleTupleTableSlot(slot);
-	index_endscan(scan);
-
-	return data_decompressed;
-}
-
-/*
- * This method will:
- *  1. Evaluate WHERE clauses and check if SEGMENT BY columns
- *     are specified or not.
- *  2. Build scan keys for SEGMENT BY columns.
- *  3. Move scanned rows to staging area.
- *  4. Update catalog table to change status of moved chunk.
- *
- *  Returns true if it decompresses any data.
- */
-static bool
-decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chunk,
-									 List *predicates, EState *estate)
-{
-	/* process each chunk with its corresponding predicates */
-
-	List *heap_filters = NIL;
-	List *index_filters = NIL;
-	List *is_null = NIL;
-	ListCell *lc = NULL;
-	Relation chunk_rel;
-	Relation comp_chunk_rel;
-	Relation matching_index_rel = NULL;
-	Chunk *comp_chunk;
-	RowDecompressor decompressor;
-	BatchFilter *filter;
-
-	bool chunk_status_changed = false;
-	bool data_decompressed = false;
-	ScanKeyData *scankeys = NULL;
-	Bitmapset *null_columns = NULL;
-	int num_scankeys = 0;
-	ScanKeyData *index_scankeys = NULL;
-	int num_index_scankeys = 0;
-
-	comp_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
-	CompressionSettings *settings = ts_compression_settings_get(comp_chunk->table_id);
-
-	process_predicates(chunk, settings, predicates, &heap_filters, &index_filters, &is_null);
-
-	chunk_rel = table_open(chunk->table_id, RowExclusiveLock);
-	comp_chunk_rel = table_open(comp_chunk->table_id, RowExclusiveLock);
-	decompressor = build_decompressor(comp_chunk_rel, chunk_rel);
-
-	if (index_filters)
-	{
-		matching_index_rel = find_matching_index(comp_chunk_rel, &index_filters, &heap_filters);
-	}
-
-	write_logical_replication_msg_decompression_start();
-	if (heap_filters)
-	{
-		scankeys =
-			build_update_delete_scankeys(&decompressor, heap_filters, &num_scankeys, &null_columns);
-	}
-	if (matching_index_rel)
-	{
-		index_scankeys =
-			build_index_scankeys(matching_index_rel, index_filters, &num_index_scankeys);
-		data_decompressed = decompress_batches_using_index(&decompressor,
-														   matching_index_rel,
-														   index_scankeys,
-														   num_index_scankeys,
-														   scankeys,
-														   num_scankeys,
-														   null_columns,
-														   is_null,
-														   &chunk_status_changed);
-		/* close the selected index */
-		index_close(matching_index_rel, AccessShareLock);
-	}
-	else
-	{
-		data_decompressed = decompress_batches(&decompressor,
-											   scankeys,
-											   num_scankeys,
-											   null_columns,
-											   is_null,
-											   &chunk_status_changed);
-	}
-
-	/*
-	 * tuples from compressed chunk has been decompressed and moved
-	 * to staging area, thus mark this chunk as partially compressed
-	 */
-	if (chunk_status_changed == true)
-		ts_chunk_set_partial(chunk);
-
-	write_logical_replication_msg_decompression_end();
-
-	row_decompressor_close(&decompressor);
-
-	table_close(chunk_rel, NoLock);
-	table_close(comp_chunk_rel, NoLock);
-
-	foreach (lc, heap_filters)
-	{
-		filter = lfirst(lc);
-		pfree(filter);
-	}
-	foreach (lc, index_filters)
-	{
-		filter = lfirst(lc);
-		pfree(filter);
-	}
-	ht_state->batches_decompressed += decompressor.batches_decompressed;
-	ht_state->tuples_decompressed += decompressor.tuples_decompressed;
-
-	return data_decompressed;
-}
-
-/*
- * Traverse the plan tree to look for Scan nodes on uncompressed chunks.
- * Once Scan node is found check if chunk is compressed, if so then
- * decompress those segments which match the filter conditions if present.
- */
-
-struct decompress_chunk_context
-{
-	List *relids;
-	HypertableModifyState *ht_state;
-	/* indicates decompression actually occurred */
-	bool batches_decompressed;
-};
-
-static bool decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx);
-
-bool
-decompress_target_segments(HypertableModifyState *ht_state)
-{
-	ModifyTableState *ps =
-		linitial_node(ModifyTableState, castNode(CustomScanState, ht_state)->custom_ps);
-
-	struct decompress_chunk_context ctx = {
-		.ht_state = ht_state,
-		.relids = castNode(ModifyTable, ps->ps.plan)->resultRelations,
-	};
-	Assert(ctx.relids);
-
-	decompress_chunk_walker(&ps->ps, &ctx);
-	return ctx.batches_decompressed;
-}
-
-static bool
-decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx)
-{
-	RangeTblEntry *rte = NULL;
-	bool needs_decompression = false;
-	bool should_rescan = false;
-	bool batches_decompressed = false;
-	List *predicates = NIL;
-	Chunk *current_chunk;
-	if (ps == NULL)
-		return false;
-
-	switch (nodeTag(ps))
-	{
-		/* Note: IndexOnlyScans will never be selected for target
-		 * tables because system columns are necessary in order to modify the
-		 * data and those columns cannot be a part of the index
-		 */
-		case T_IndexScanState:
-		{
-			/* Get the index quals on the original table and also include
-			 * any filters that are used for filtering heap tuples
-			 */
-			predicates = list_union(((IndexScan *) ps->plan)->indexqualorig, ps->plan->qual);
-			needs_decompression = true;
-			break;
-		}
-		case T_BitmapHeapScanState:
-			predicates = list_union(((BitmapHeapScan *) ps->plan)->bitmapqualorig, ps->plan->qual);
-			needs_decompression = true;
-			should_rescan = true;
-			break;
-		case T_SeqScanState:
-		case T_SampleScanState:
-		case T_TidScanState:
-		case T_TidRangeScanState:
-		{
-			predicates = list_copy(ps->plan->qual);
-			needs_decompression = true;
-			break;
-		}
-		default:
-			break;
-	}
-	if (needs_decompression)
-	{
-		/*
-		 * We are only interested in chunk scans of chunks that are the
-		 * target of the DML statement not chunk scan on joined hypertables
-		 * even when it is a self join
-		 */
-		int scanrelid = ((Scan *) ps->plan)->scanrelid;
-		if (list_member_int(ctx->relids, scanrelid))
-		{
-			rte = rt_fetch(scanrelid, ps->state->es_range_table);
-			current_chunk = ts_chunk_get_by_relid(rte->relid, false);
-			if (current_chunk && ts_chunk_is_compressed(current_chunk))
-			{
-				if (!ts_guc_enable_dml_decompression)
-					ereport(ERROR,
-							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							 errmsg("UPDATE/DELETE is disabled on compressed chunks"),
-							 errhint("Set timescaledb.enable_dml_decompression to TRUE.")));
-
-				batches_decompressed = decompress_batches_for_update_delete(ctx->ht_state,
-																			current_chunk,
-																			predicates,
-																			ps->state);
-				ctx->batches_decompressed |= batches_decompressed;
-
-				/* This is a workaround specifically for bitmap heap scans:
-				 * during node initialization, initialize the scan state with the active snapshot
-				 * but since we are inserting data to be modified during the same query, they end up
-				 * missing that data by using a snapshot which doesn't account for this decompressed
-				 * data. To circumvent this issue, we change the internal scan state to use the
-				 * transaction snapshot and execute a rescan so the scan state is set correctly and
-				 * includes the new data.
-				 */
-				if (should_rescan)
-				{
-					ScanState *ss = ((ScanState *) ps);
-					if (ss && ss->ss_currentScanDesc)
-					{
-						ss->ss_currentScanDesc->rs_snapshot = GetTransactionSnapshot();
-						ExecReScan(ps);
-					}
-				}
-			}
-		}
-	}
-
-	if (predicates)
-		pfree(predicates);
-
-	return planstate_tree_walker(ps, decompress_chunk_walker, ctx);
 }

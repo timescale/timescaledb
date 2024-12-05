@@ -7,10 +7,9 @@
 #include <postgres.h>
 
 #include "compression/arrow_c_data_interface.h"
-
-#include "vector_predicates.h"
-
 #include "compression/compression.h"
+#include "src/utils.h"
+#include "vector_predicates.h"
 
 /*
  * Vectorized implementation of ScalarArrayOpExpr. Applies scalar_predicate for
@@ -73,11 +72,11 @@ vector_array_predicate(VectorPredicate *vector_const_predicate, bool is_or,
 
 			for (size_t word = 0; word < result_words; word++)
 			{
-				array_result[word] = 0;
+				final_result[word] = 0;
 			}
 			return;
 		}
-		Datum constvalue = fetch_att(array_data, typbyval, typlen);
+		Datum constvalue = ts_fetch_att(array_data, typbyval, typlen);
 		array_data = att_addlength_pointer(array_data, typlen, array_data);
 		array_data = (const char *) att_align_nominal(array_data, typalign);
 
@@ -95,7 +94,7 @@ vector_array_predicate(VectorPredicate *vector_const_predicate, bool is_or,
 			single_result = single_result_storage;
 			for (size_t outer = 0; outer < result_words; outer++)
 			{
-				single_result[outer] = -1;
+				single_result[outer] = ~0ULL;
 			}
 		}
 		else

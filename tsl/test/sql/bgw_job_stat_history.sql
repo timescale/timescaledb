@@ -157,4 +157,14 @@ ALTER SYSTEM RESET timescaledb.enable_job_execution_logging;
 SELECT pg_reload_conf();
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+
+-- The GUC is PGC_SIGHUP context so only ALTER SYSTEM is allowed
+\set ON_ERROR_STOP 0
+SHOW timescaledb.enable_job_execution_logging;
+SET timescaledb.enable_job_execution_logging TO OFF;
+SHOW timescaledb.enable_job_execution_logging;
+ALTER DATABASE :TEST_DBNAME SET timescaledb.enable_job_execution_logging TO ON;
+SHOW timescaledb.enable_job_execution_logging;
+\set ON_ERROR_STOP 1
+
 SELECT _timescaledb_functions.stop_background_workers();

@@ -8,6 +8,7 @@
 #include <postgres.h>
 
 #include "dimension_slice.h"
+#include "hypertable_restrict_info.h"
 
 /*
  *	DimensionVec is a collection of slices (ranges) along one dimension for a
@@ -15,14 +16,15 @@
  */
 typedef struct DimensionVec
 {
-	int32 capacity;	  /* The capacity of the slices array */
-	int32 num_slices; /* The current number of slices in slices
-					   * array */
+	int32 capacity;				/* The capacity of the slices array */
+	int32 num_slices;			/* The current number of slices in slices
+								 * array */
+	DimensionRestrictInfo *dri; /* corresponding restrictinfo */
 	DimensionSlice *slices[FLEXIBLE_ARRAY_MEMBER];
 } DimensionVec;
 
 #define DIMENSION_VEC_SIZE(num_slices)                                                             \
-	(sizeof(DimensionVec) + sizeof(DimensionSlice *) * num_slices)
+	(sizeof(DimensionVec) + (sizeof(DimensionSlice *) * num_slices))
 
 #define DIMENSION_VEC_DEFAULT_SIZE 10
 

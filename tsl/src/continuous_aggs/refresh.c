@@ -771,9 +771,8 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		elog(ERROR, "SPI_connect failed: %s", SPI_result_code_string(rc));
 
 	/* Lock down search_path */
-	rc = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
-	if (rc < 0)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
 
 	/* Like regular materialized views, require owner to refresh. */
 	if (!object_ownercheck(RelationRelationId, cagg->relid, GetUserId()))
@@ -862,6 +861,9 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	{
 		emit_up_to_date_notice(cagg, callctx);
 
+		/* Restore search_path */
+		AtEOXact_GUC(false, save_nestlevel);
+
 		rc = SPI_finish();
 		if (rc != SPI_OK_FINISH)
 			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
@@ -881,6 +883,9 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 
 	if (!process_cagg_invalidations_and_refresh(cagg, &refresh_window, callctx, INVALID_CHUNK_ID))
 		emit_up_to_date_notice(cagg, callctx);
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
 
 	rc = SPI_finish();
 	if (rc != SPI_OK_FINISH)

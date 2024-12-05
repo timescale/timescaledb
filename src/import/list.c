@@ -22,7 +22,8 @@
  */
 
 /* Overhead for the fixed part of a List header, measured in ListCells */
-#define LIST_HEADER_OVERHEAD ((int) ((offsetof(List, initial_elements) - 1) / sizeof(ListCell) + 1))
+#define LIST_HEADER_OVERHEAD                                                                       \
+	((int) (((offsetof(List, initial_elements) - 1) / sizeof(ListCell)) + 1))
 
 /*
  * Return a freshly allocated List with room for at least min_size cells.
@@ -78,7 +79,7 @@ ts_new_list(NodeTag type, int min_size)
 	max_size = min_size;
 #endif
 
-	newlist = (List *) palloc(offsetof(List, initial_elements) + max_size * sizeof(ListCell));
+	newlist = (List *) palloc(offsetof(List, initial_elements) + (max_size * sizeof(ListCell)));
 	newlist->type = type;
 	newlist->length = min_size;
 	newlist->max_length = max_size;

@@ -17,6 +17,7 @@
 #include <nodes/nodes.h>
 #include <optimizer/restrictinfo.h>
 #include <pgstat.h>
+#include <storage/lmgr.h>
 #include <utils/jsonb.h>
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
@@ -25,9 +26,19 @@
 
 #define PG_MAJOR_MIN 14
 
-#define is_supported_pg_version_14(version) ((version >= 140000) && (version < 150000))
-#define is_supported_pg_version_15(version) ((version >= 150000) && (version < 160000))
-#define is_supported_pg_version_16(version) ((version >= 160000) && (version < 170000))
+/*
+ * Prevent building against upstream versions that had ABI breaking change (14.14, 15.9, 16.5, 17.1)
+ * that was reverted in the following release.
+ */
+
+#define is_supported_pg_version_14(version)                                                        \
+	((version >= 140000) && (version < 150000) && (version != 140014))
+#define is_supported_pg_version_15(version)                                                        \
+	((version >= 150000) && (version < 160000) && (version != 150009))
+#define is_supported_pg_version_16(version)                                                        \
+	((version >= 160000) && (version < 170000) && (version != 160005))
+#define is_supported_pg_version_17(version)                                                        \
+	((version >= 170000) && (version < 180000) && (version != 170001))
 
 /*
  * PG16 support is a WIP and not complete yet.
@@ -35,11 +46,12 @@
  */
 #define is_supported_pg_version(version)                                                           \
 	(is_supported_pg_version_14(version) || is_supported_pg_version_15(version) ||                 \
-	 is_supported_pg_version_16(version))
+	 is_supported_pg_version_16(version) || is_supported_pg_version_17(version))
 
 #define PG14 is_supported_pg_version_14(PG_VERSION_NUM)
 #define PG15 is_supported_pg_version_15(PG_VERSION_NUM)
 #define PG16 is_supported_pg_version_16(PG_VERSION_NUM)
+#define PG17 is_supported_pg_version_17(PG_VERSION_NUM)
 
 #define PG14_LT (PG_VERSION_NUM < 140000)
 #define PG14_GE (PG_VERSION_NUM >= 140000)
@@ -47,9 +59,52 @@
 #define PG15_GE (PG_VERSION_NUM >= 150000)
 #define PG16_LT (PG_VERSION_NUM < 160000)
 #define PG16_GE (PG_VERSION_NUM >= 160000)
+#define PG17_LT (PG_VERSION_NUM < 170000)
+#define PG17_GE (PG_VERSION_NUM >= 170000)
 
 #if !(is_supported_pg_version(PG_VERSION_NUM))
 #error "Unsupported PostgreSQL version"
+#endif
+
+#if ((PG_VERSION_NUM >= 140014 && PG_VERSION_NUM < 150000) ||                                      \
+	 (PG_VERSION_NUM >= 150009 && PG_VERSION_NUM < 160000) ||                                      \
+	 (PG_VERSION_NUM >= 160005 && PG_VERSION_NUM < 170000) || (PG_VERSION_NUM >= 170001))
+/*
+ * The above versions introduced a fix for potentially losing updates to
+ * pg_class and pg_database due to inplace updates done to those catalog
+ * tables by PostgreSQL. The fix requires taking a lock on the tuple via
+ * SearchSysCacheLocked1(). For older PG versions, we just map the new
+ * function to the unlocked version and the unlocking of the tuple is a noop.
+ *
+ * https://github.com/postgres/postgres/commit/3b7a689e1a805c4dac2f35ff14fd5c9fdbddf150
+ *
+ * Here's an excerpt from README.tuplock that explains the need for additional
+ * tuple locks:
+ *
+ * If IsInplaceUpdateRelation() returns true for a table, the table is a
+ * system catalog that receives systable_inplace_update_begin() calls.
+ * Preparing a heap_update() of these tables follows additional locking rules,
+ * to ensure we don't lose the effects of an inplace update. In particular,
+ * consider a moment when a backend has fetched the old tuple to modify, not
+ * yet having called heap_update(). Another backend's inplace update starting
+ * then can't conclude until the heap_update() places its new tuple in a
+ * buffer. We enforce that using locktags as follows. While DDL code is the
+ * main audience, the executor follows these rules to make e.g. "MERGE INTO
+ * pg_class" safer. Locking rules are per-catalog:
+ *
+ * pg_class heap_update() callers: before copying the tuple to modify, take a
+ * lock on the tuple, a ShareUpdateExclusiveLock on the relation, or a
+ * ShareRowExclusiveLock or stricter on the relation.
+ */
+#define SYSCACHE_TUPLE_LOCK_NEEDED 1
+#define AssertSufficientPgClassUpdateLockHeld(relid)                                               \
+	Assert(CheckRelationOidLockedByMe(relid, ShareUpdateExclusiveLock, false) ||                   \
+		   CheckRelationOidLockedByMe(relid, ShareRowExclusiveLock, true));
+#define UnlockSysCacheTuple(rel, tid) UnlockTuple(rel, tid, InplaceUpdateTupleLock);
+#else
+#define SearchSysCacheLockedCopy1(rel, datum) SearchSysCacheCopy1(rel, datum)
+#define UnlockSysCacheTuple(rel, tid)
+#define AssertSufficientPgClassUpdateLockHeld(relid)
 #endif
 
 /*
@@ -764,4 +819,155 @@ error_severity(int elevel)
 
 	return prefix;
 }
+#endif
+
+#if PG17_LT
+/*
+ * Backport of RestrictSearchPath() from PG17
+ *
+ * We skip the check for IsBootstrapProcessingMode() since it creates problems
+ * on Windows builds and we don't need it for our use case.
+ */
+#include <utils/guc.h>
+static inline void
+RestrictSearchPath(void)
+{
+	set_config_option("search_path",
+					  "pg_catalog, pg_temp",
+					  PGC_USERSET,
+					  PGC_S_SESSION,
+					  GUC_ACTION_SAVE,
+					  true,
+					  0,
+					  false);
+}
+
+/* This macro was renamed in PG17, see 414f6c0fb79a */
+#define WAIT_EVENT_MESSAGE_QUEUE_INTERNAL WAIT_EVENT_MQ_INTERNAL
+
+/* 'flush' argument was added in 173b56f1ef59 */
+#define LogLogicalMessageCompat(prefix, message, size, transactional, flush)                       \
+	LogLogicalMessage(prefix, message, size, transactional)
+
+/* 'stmt' argument was added in f21848de2013 */
+#define reindex_relation_compat(stmt, relid, flags, params) reindex_relation(relid, flags, params)
+
+/* 'mergeActions' argument was added in 5f2e179bd31e */
+#define CheckValidResultRelCompat(resultRelInfo, operation, mergeActions)                          \
+	CheckValidResultRel(resultRelInfo, operation)
+
+/* 'vacuum_is_relation_owner' was renamed to 'vacuum_is_permitted_for_relation' in ecb0fd33720f */
+#define vacuum_is_permitted_for_relation_compat(relid, reltuple, options)                          \
+	vacuum_is_relation_owner(relid, reltuple, options)
+
+/*
+ * 'BackendIdGetProc' was renamed to 'ProcNumberGetProc' in 024c52111757.
+ * Also 'backendId' was renamed to 'procNumber'
+ */
+#define VirtualTransactionGetProcCompat(vxid) BackendIdGetProc((vxid)->backendId)
+
+/*
+ * 'opclassOptions' argument was added in 784162357130.
+ * Previously indexInfo->ii_OpclassOptions was used instead.
+ * On top of that 'stattargets' argument was added in 6a004f1be87d.
+ */
+#define index_create_compat(heapRelation,                                                          \
+							indexRelationName,                                                     \
+							indexRelationId,                                                       \
+							parentIndexRelid,                                                      \
+							parentConstraintId,                                                    \
+							relFileNumber,                                                         \
+							indexInfo,                                                             \
+							indexColNames,                                                         \
+							accessMethodId,                                                        \
+							tableSpaceId,                                                          \
+							collationIds,                                                          \
+							opclassIds,                                                            \
+							opclassOptions,                                                        \
+							coloptions,                                                            \
+							stattargets,                                                           \
+							reloptions,                                                            \
+							flags,                                                                 \
+							constr_flags,                                                          \
+							allow_system_table_mods,                                               \
+							is_internal,                                                           \
+							constraintId)                                                          \
+	index_create(heapRelation,                                                                     \
+				 indexRelationName,                                                                \
+				 indexRelationId,                                                                  \
+				 parentIndexRelid,                                                                 \
+				 parentConstraintId,                                                               \
+				 relFileNumber,                                                                    \
+				 indexInfo,                                                                        \
+				 indexColNames,                                                                    \
+				 accessMethodId,                                                                   \
+				 tableSpaceId,                                                                     \
+				 collationIds,                                                                     \
+				 opclassIds,                                                                       \
+				 coloptions,                                                                       \
+				 reloptions,                                                                       \
+				 flags,                                                                            \
+				 constr_flags,                                                                     \
+				 allow_system_table_mods,                                                          \
+				 is_internal,                                                                      \
+				 constraintId)
+
+#else /* PG17_GE */
+
+#define LogLogicalMessageCompat(prefix, message, size, transactional, flush)                       \
+	LogLogicalMessage(prefix, message, size, transactional, flush)
+
+#define reindex_relation_compat(stmt, relid, flags, params)                                        \
+	reindex_relation(stmt, relid, flags, params)
+
+#define CheckValidResultRelCompat(resultRelInfo, operation, mergeActions)                          \
+	CheckValidResultRel(resultRelInfo, operation, mergeActions)
+
+#define vacuum_is_permitted_for_relation_compat(relid, reltuple, options)                          \
+	vacuum_is_permitted_for_relation(relid, reltuple, options)
+
+#define VirtualTransactionGetProcCompat(vxid) ProcNumberGetProc(vxid->procNumber)
+
+#define index_create_compat(heapRelation,                                                          \
+							indexRelationName,                                                     \
+							indexRelationId,                                                       \
+							parentIndexRelid,                                                      \
+							parentConstraintId,                                                    \
+							relFileNumber,                                                         \
+							indexInfo,                                                             \
+							indexColNames,                                                         \
+							accessMethodId,                                                        \
+							tableSpaceId,                                                          \
+							collationIds,                                                          \
+							opclassIds,                                                            \
+							opclassOptions,                                                        \
+							coloptions,                                                            \
+							stattargets,                                                           \
+							reloptions,                                                            \
+							flags,                                                                 \
+							constr_flags,                                                          \
+							allow_system_table_mods,                                               \
+							is_internal,                                                           \
+							constraintId)                                                          \
+	index_create(heapRelation,                                                                     \
+				 indexRelationName,                                                                \
+				 indexRelationId,                                                                  \
+				 parentIndexRelid,                                                                 \
+				 parentConstraintId,                                                               \
+				 relFileNumber,                                                                    \
+				 indexInfo,                                                                        \
+				 indexColNames,                                                                    \
+				 accessMethodId,                                                                   \
+				 tableSpaceId,                                                                     \
+				 collationIds,                                                                     \
+				 opclassIds,                                                                       \
+				 opclassOptions,                                                                   \
+				 coloptions,                                                                       \
+				 stattargets,                                                                      \
+				 reloptions,                                                                       \
+				 flags,                                                                            \
+				 constr_flags,                                                                     \
+				 allow_system_table_mods,                                                          \
+				 is_internal,                                                                      \
+				 constraintId)
 #endif

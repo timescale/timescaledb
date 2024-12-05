@@ -11,7 +11,6 @@
 #include <utils/sortsupport.h>
 #include <utils/typcache.h>
 
-#include "datum_serialize.h"
 #include "segment_meta.h"
 
 SegmentMetaMinMaxBuilder *

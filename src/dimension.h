@@ -23,6 +23,7 @@ typedef enum DimensionType
 {
 	DIMENSION_TYPE_OPEN,
 	DIMENSION_TYPE_CLOSED,
+	DIMENSION_TYPE_STATS,
 	DIMENSION_TYPE_ANY,
 } DimensionType;
 

@@ -229,8 +229,16 @@ release_subtxn_pinned_caches(SubTransactionId subtxnid, bool abort)
 {
 	ListCell *lc;
 
-	/* Need a copy because cache_release will modify pinned_caches */
+	/*
+	 * Need a copy because cache_release will modify pinned_caches.
+	 *
+	 * This needs to be allocated in pinned cache memory context.
+	 * Otherwise leaks ensue if CurTransactionContext (which is the
+	 * CurrentMemoryContext) gets used!
+	 */
+	MemoryContext old = MemoryContextSwitchTo(pinned_caches_mctx);
 	List *pinned_caches_copy = list_copy(pinned_caches);
+	MemoryContextSwitchTo(old);
 
 	/* Only release caches created in subtxn */
 	foreach (lc, pinned_caches_copy)

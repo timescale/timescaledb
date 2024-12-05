@@ -66,6 +66,7 @@
 #include "time_utils.h"
 #include "trigger.h"
 #include "ts_catalog/catalog.h"
+#include "ts_catalog/chunk_column_stats.h"
 #include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
@@ -76,6 +77,7 @@ TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_single_chunk);
 TS_FUNCTION_INFO_V1(ts_chunk_attach_osm_table_chunk);
+TS_FUNCTION_INFO_V1(ts_chunk_drop_osm_chunk);
 TS_FUNCTION_INFO_V1(ts_chunk_id_from_relid);
 TS_FUNCTION_INFO_V1(ts_chunk_show);
 TS_FUNCTION_INFO_V1(ts_chunk_create);
@@ -661,7 +663,7 @@ set_attoptions(Relation ht_rel, Oid chunk_oid)
 
 	if (alter_cmds != NIL)
 	{
-		ts_alter_table_with_event_trigger(chunk_oid, NULL, alter_cmds, false);
+		AlterTableInternal(chunk_oid, alter_cmds, false);
 		list_free_deep(alter_cmds);
 	}
 }
@@ -677,28 +679,6 @@ create_toast_table(CreateStmt *stmt, Oid chunk_oid)
 	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options, true);
 
 	NewRelationCreateToastTable(chunk_oid, toast_options);
-}
-
-/*
- * Get the access method name for a relation.
- */
-static char *
-get_am_name_for_rel(Oid relid)
-{
-	HeapTuple tuple;
-	Form_pg_class cform;
-	Oid amoid;
-
-	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
-
-	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "cache lookup failed for relation %u", relid);
-
-	cform = (Form_pg_class) GETSTRUCT(tuple);
-	amoid = cform->relam;
-	ReleaseSysCache(tuple);
-
-	return get_am_name(amoid);
 }
 
 static void
@@ -753,7 +733,7 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 		.base.options =
 			(chunk->relkind == RELKIND_RELATION) ? ts_get_reloptions(ht->main_table_relid) : NIL,
 		.base.accessMethod = (chunk->relkind == RELKIND_RELATION) ?
-								 get_am_name_for_rel(chunk->hypertable_relid) :
+								 get_am_name(ts_get_rel_am(chunk->hypertable_relid)) :
 								 NULL,
 	};
 	Oid uid, saved_uid;
@@ -895,6 +875,16 @@ static void
 chunk_set_replica_identity(const Chunk *chunk)
 {
 	Relation ht_rel = relation_open(chunk->hypertable_relid, AccessShareLock);
+	Relation ch_rel = relation_open(chunk->table_id, AccessShareLock);
+
+	/* Do nothing if REPLICA IDENTITY of hypertable and chunk are equal */
+	if (ht_rel->rd_rel->relreplident == ch_rel->rd_rel->relreplident)
+	{
+		table_close(ch_rel, NoLock);
+		table_close(ht_rel, NoLock);
+		return;
+	}
+
 	ReplicaIdentityStmt stmt = {
 		.type = T_ReplicaIdentityStmt,
 		.identity_type = ht_rel->rd_rel->relreplident,
@@ -920,8 +910,9 @@ chunk_set_replica_identity(const Chunk *chunk)
 	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	AlterTableInternal(chunk->table_id, list_make1(&cmd), false);
+	ts_alter_table_with_event_trigger(chunk->table_id, NULL, list_make1(&cmd), false);
 	ts_catalog_restore_user(&sec_ctx);
+	table_close(ch_rel, NoLock);
 	table_close(ht_rel, NoLock);
 }
 
@@ -1088,6 +1079,9 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 													  table_name,
 													  prefix,
 													  get_next_chunk_id());
+
+	/* Insert any new chunk column stats entries into the catalog */
+	ts_chunk_column_stats_insert(ht, chunk);
 
 	chunk_add_constraints(chunk);
 	chunk_insert_into_metadata_after_lock(chunk);
@@ -1386,6 +1380,29 @@ ts_chunk_create_for_point(const Hypertable *ht, const Point *p, bool *found, con
 	return chunk;
 }
 
+static void
+scan_add_chunk_context(ChunkScanCtx *ctx, int32 chunk_id, List *dimension_vecs, List **l_chunk_ids)
+{
+	bool found = false;
+	ChunkScanEntry *entry = hash_search(ctx->htab, &chunk_id, HASH_ENTER, &found);
+	if (!found)
+	{
+		entry->stub = NULL;
+		entry->num_dimension_constraints = 0;
+	}
+
+	entry->num_dimension_constraints++;
+
+	/*
+	 * A chunk is complete when we've found slices for all required dimensions,
+	 * i.e., a complete subspace.
+	 */
+	if (entry->num_dimension_constraints == list_length(dimension_vecs))
+	{
+		*l_chunk_ids = lappend_int(*l_chunk_ids, entry->chunk_id);
+	}
+}
+
 /*
  * Find the chunks that belong to the subspace identified by the given dimension
  * vectors. We might be restricting only some dimensions, so this subspace is
@@ -1406,6 +1423,30 @@ ts_chunk_id_find_in_subspace(Hypertable *ht, List *dimension_vecs)
 	foreach (lc, dimension_vecs)
 	{
 		const DimensionVec *vec = lfirst(lc);
+
+		/*
+		 * If it's an entry of type DIMENSION_TYPE_STATS then we need to get
+		 * the chunks using the _timescaledb_catalog.chunk_column_stats catalog.
+		 */
+		Assert(vec->dri != NULL);
+		if (vec->dri->dimension->type == DIMENSION_TYPE_STATS)
+		{
+			ListCell *lc;
+			List *range_chunk_ids;
+
+			Assert(vec->num_slices == 0);
+			range_chunk_ids = ts_chunk_column_stats_get_chunk_ids_by_scan(vec->dri);
+
+			/* add these chunks to the context appropriately. */
+			foreach (lc, range_chunk_ids)
+			{
+				int32 chunk_id = lfirst_int(lc);
+
+				scan_add_chunk_context(&ctx, chunk_id, dimension_vecs, &chunk_ids);
+			}
+			continue;
+		}
+
 		/*
 		 * We shouldn't see a dimension with zero matching dimension slices.
 		 * That would mean that no chunks match at all, this should have been
@@ -1428,31 +1469,13 @@ ts_chunk_id_find_in_subspace(Hypertable *ht, List *dimension_vecs)
 				int32 current_chunk_id = DatumGetInt32(datum);
 				Assert(current_chunk_id != INVALID_CHUNK_ID);
 
-				bool found = false;
-				ChunkScanEntry *entry =
-					hash_search(ctx.htab, &current_chunk_id, HASH_ENTER, &found);
-				if (!found)
-				{
-					entry->stub = NULL;
-					entry->num_dimension_constraints = 0;
-				}
-
 				/*
 				 * We have only the dimension constraints here, because we're searching
 				 * by dimension slice id.
 				 */
 				Assert(!slot_attisnull(ts_scan_iterator_slot(&iterator),
 									   Anum_chunk_constraint_dimension_slice_id));
-				entry->num_dimension_constraints++;
-
-				/*
-				 * A chunk is complete when we've found slices for all required dimensions,
-				 * i.e., a complete subspace.
-				 */
-				if (entry->num_dimension_constraints == list_length(dimension_vecs))
-				{
-					chunk_ids = lappend_int(chunk_ids, entry->chunk_id);
-				}
+				scan_add_chunk_context(&ctx, current_chunk_id, dimension_vecs, &chunk_ids);
 			}
 		}
 	}
@@ -1580,12 +1603,14 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 	 * ts_chunk_build_from_tuple_and_stub() since chunk_resurrect() also uses
 	 * that function and, in that case, the chunk object is needed to create
 	 * the data table and related objects. */
-	chunk->table_id =
-		ts_get_relation_relid(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), false);
-
 	chunk->hypertable_relid = ts_hypertable_id_to_relid(chunk->fd.hypertable_id, false);
+	ts_get_rel_info_by_name(NameStr(chunk->fd.schema_name),
+							NameStr(chunk->fd.table_name),
+							&chunk->table_id,
+							&chunk->amoid,
+							&chunk->relkind);
 
-	chunk->relkind = get_rel_relkind(chunk->table_id);
+	Assert(OidIsValid(chunk->amoid) || chunk->fd.osm_chunk);
 
 	Ensure(chunk->relkind > 0,
 		   "relkind for chunk \"%s\".\"%s\" is invalid",
@@ -2613,8 +2638,8 @@ chunk_simple_scan_by_name(const char *schema, const char *table, FormData_chunk 
 	return chunk_simple_scan(&iterator, form, missing_ok, displaykey);
 }
 
-static bool
-chunk_simple_scan_by_reloid(Oid reloid, FormData_chunk *form, bool missing_ok)
+bool
+ts_chunk_simple_scan_by_reloid(Oid reloid, FormData_chunk *form, bool missing_ok)
 {
 	bool found = false;
 
@@ -2667,7 +2692,7 @@ ts_chunk_id_from_relid(PG_FUNCTION_ARGS)
 	if (last_relid == relid)
 		return last_id;
 
-	chunk_simple_scan_by_reloid(relid, &form, false);
+	ts_chunk_simple_scan_by_reloid(relid, &form, false);
 
 	last_relid = relid;
 	last_id = form.id;
@@ -2680,7 +2705,7 @@ ts_chunk_exists_relid(Oid relid)
 {
 	FormData_chunk form;
 
-	return chunk_simple_scan_by_reloid(relid, &form, true);
+	return ts_chunk_simple_scan_by_reloid(relid, &form, true);
 }
 
 /*
@@ -2691,7 +2716,7 @@ ts_chunk_get_hypertable_id_by_reloid(Oid reloid)
 {
 	FormData_chunk form;
 
-	if (chunk_simple_scan_by_reloid(reloid, &form, /* missing_ok = */ true))
+	if (ts_chunk_simple_scan_by_reloid(reloid, &form, /* missing_ok = */ true))
 	{
 		return form.hypertable_id;
 	}
@@ -2879,6 +2904,9 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 
 	/* Delete any row in bgw_policy_chunk-stats corresponding to this chunk */
 	ts_bgw_policy_chunk_stats_delete_by_chunk_id(form.id);
+
+	/* Delete any rows in _timescaledb_catalog.chunk_column_stats corresponding to this chunk */
+	ts_chunk_column_stats_delete_by_chunk_id(form.id);
 
 	if (form.compressed_chunk_id != INVALID_CHUNK_ID)
 	{
@@ -3344,8 +3372,19 @@ ts_chunk_set_unordered(Chunk *chunk)
 bool
 ts_chunk_set_partial(Chunk *chunk)
 {
+	bool set_status;
+
 	Assert(ts_chunk_is_compressed(chunk));
-	return ts_chunk_add_status(chunk, CHUNK_STATUS_COMPRESSED_PARTIAL);
+	set_status = ts_chunk_add_status(chunk, CHUNK_STATUS_COMPRESSED_PARTIAL);
+
+	/*
+	 * If the status was set then convert the corresponding
+	 * _timescaledb_catalog.chunk_column_stats entries "INVALID".
+	 */
+	if (set_status)
+		ts_chunk_column_stats_set_invalid(chunk->fd.hypertable_id, chunk->fd.id);
+
+	return set_status;
 }
 
 /* No inserts, updates, and deletes are permitted on a frozen chunk.
@@ -3411,6 +3450,7 @@ ts_chunk_clear_status(Chunk *chunk, int32 status)
 static bool
 ts_chunk_add_status(Chunk *chunk, int32 status)
 {
+	bool status_set = false;
 	if (ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FROZEN))
 	{
 		/* chunk in frozen state cannot be modified */
@@ -3449,9 +3489,12 @@ ts_chunk_add_status(Chunk *chunk, int32 status)
 
 	/* Row-level locks are released at transaction end or during savepoint rollback */
 	if (old_status != form.status)
+	{
 		chunk_update_catalog_tuple(&tid, &form);
+		status_set = true;
+	}
 
-	return true;
+	return status_set;
 }
 
 /*Assume permissions are already checked */
@@ -5091,4 +5134,27 @@ get_chunks_in_creation_time_range(Hypertable *ht, int64 older_than, int64 newer_
 	*num_chunks_returned = num_chunks;
 
 	return chunks;
+}
+
+Datum
+ts_chunk_drop_osm_chunk(PG_FUNCTION_ARGS)
+{
+	Oid hypertable_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	Cache *hcache = ts_hypertable_cache_pin();
+	Hypertable *ht = ts_resolve_hypertable_from_table_or_cagg(hcache, hypertable_relid, true);
+	int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
+	Chunk *osm_chunk = ts_chunk_get_by_id(osm_chunk_id, true);
+
+	ts_chunk_validate_chunk_status_for_operation(osm_chunk, CHUNK_DROP, true);
+
+	/* do not drop any chunk dependencies */
+	ts_chunk_drop(osm_chunk, DROP_RESTRICT, LOG);
+
+	/* reset hypertable OSM status */
+	ht->fd.status =
+		ts_clear_flags_32(ht->fd.status,
+						  HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
+	ts_hypertable_update_status_osm(ht);
+	ts_cache_release(hcache);
+	PG_RETURN_BOOL(true);
 }

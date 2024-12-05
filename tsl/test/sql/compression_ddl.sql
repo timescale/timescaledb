@@ -15,7 +15,9 @@ CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLE
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
-CREATE TABLE test1 ("Time" timestamptz, i integer, b bigint, t text);
+SET timezone TO 'America/Los_Angeles';
+
+CREATE TABLE test1 ("Time" timestamptz, i integer not null, b bigint, t text);
 SELECT table_name from create_hypertable('test1', 'Time', chunk_time_interval=> INTERVAL '1 day');
 
 INSERT INTO test1 SELECT t,  gen_rand_minstd(), gen_rand_minstd(), gen_rand_minstd()::text FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-28 1:00', '1 hour') t;
@@ -46,8 +48,8 @@ ALTER TABLE test1 REPLICA IDENTITY DEFAULT;
 
 -- make sure we cannot create constraints or unique indexes on compressed hypertables
 \set ON_ERROR_STOP 0
-ALTER TABLE test1 ADD CONSTRAINT c1 UNIQUE(time,i);
-CREATE UNIQUE INDEX unique_index ON test1(time,i);
+ALTER TABLE test1 ADD CONSTRAINT c1 UNIQUE("Time",i);
+CREATE UNIQUE INDEX unique_index ON test1("Time",i);
 \set ON_ERROR_STOP 1
 
 --test adding boolean columns with default and not null
@@ -126,7 +128,7 @@ SELECT tablename
 FROM pg_tables WHERE tablespace = 'tablespace1';
 
 \set ON_ERROR_STOP 0
-SELECT move_chunk(chunk=>:'COMPRESSED_CHUNK_NAME', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1',  reorder_index=>'_timescaledb_internal."compress_hyper_2_28_chunk_b__ts_meta_sequence_num_idx"');
+SELECT move_chunk(chunk=>:'COMPRESSED_CHUNK_NAME', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1',  reorder_index=>'_timescaledb_internal."compress_hyper_2_28_chunk_b__ts_meta_min_1__ts_meta_max_1_idx"');
 \set ON_ERROR_STOP 1
 
 -- ensure that both compressed and uncompressed chunks moved
@@ -355,6 +357,8 @@ CALL refresh_continuous_aggregate('test1_cont_view', NULL, NULL);
 SELECT count(*) FROM test1_cont_view;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+
+SET timezone TO 'America/Los_Angeles';
 
 SELECT chunk.schema_name|| '.' || chunk.table_name as "COMPRESSED_CHUNK_NAME"
 FROM _timescaledb_catalog.chunk chunk
@@ -836,6 +840,7 @@ VALUES -- chunk1
 -- enable compression, compress all chunks
 ALTER TABLE test_partials SET (timescaledb.compress);
 SELECT compress_chunk(show_chunks('test_partials'));
+VACUUM ANALYZE test_partials;
 -- fully compressed
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
 -- test P, F, F
@@ -996,6 +1001,80 @@ INSERT INTO hyper_unique_deferred(time, device_id,sensor_1) VALUES (125798770000
 alter table hyper_unique_deferred set (timescaledb.compress);
 select compress_chunk(show_chunks('hyper_unique_deferred')); -- also worked fine before 2.11.0
 select decompress_chunk(show_chunks('hyper_unique_deferred'));
+\set ON_ERROR_STOP 0
 begin; insert INTO hyper_unique_deferred values (1257987700000000000, 'dev1', 1); abort;
+\set ON_ERROR_STOP 1
 select compress_chunk(show_chunks('hyper_unique_deferred'));
+\set ON_ERROR_STOP 0
 begin; insert INTO hyper_unique_deferred values (1257987700000000000, 'dev1', 1); abort;
+\set ON_ERROR_STOP 1
+-- tests chunks being compressed using different segmentby settings
+-- github issue #7102
+CREATE TABLE compression_drop(time timestamptz NOT NULL, v0 int, v1 int);
+CREATE INDEX ON compression_drop(time);
+CREATE INDEX ON compression_drop(v0,time);
+SELECT create_hypertable('compression_drop','time',create_default_indexes:=false);
+ALTER TABLE compression_drop SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='v0');
+
+-- insert data and compress chunk
+INSERT INTO compression_drop(time, v0, v1)
+SELECT time, v0, v0+1
+FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-03 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gv0(v0);
+
+SELECT compress_chunk(ch, true) AS "CHUNK_NAME" FROM show_chunks('compression_drop') ch ORDER BY ch DESC \gset
+
+-- change segmentby column
+ALTER TABLE compression_drop SET (timescaledb.compress_segmentby='v1');
+
+-- insert more data and compress next chunk
+INSERT INTO compression_drop(time, v0, v1)
+SELECT time, v0, v0+1
+FROM generate_series('2000-01-07 0:00:00+0'::timestamptz,'2000-01-09 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gv0(v0);
+
+SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name)) AS "CHUNK_NAME"
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'compression_drop' AND NOT is_compressed;
+
+-- try dropping column v0, should fail
+\set ON_ERROR_STOP 0
+ALTER TABLE compression_drop DROP COLUMN v0;
+\set ON_ERROR_STOP 1
+
+DROP TABLE compression_drop;
+
+SET client_min_messages = ERROR;
+CREATE TABLE test2 (ts timestamptz, i integer not null, b bigint, t text);
+SELECT table_name from create_hypertable('test2', 'ts', chunk_time_interval=> INTERVAL '1 day');
+
+INSERT INTO test2
+SELECT t,
+       gen_rand_minstd(),
+       gen_rand_minstd(),
+       gen_rand_minstd()::text
+FROM   generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-28 1:00', '1 hour') t;
+
+ALTER TABLE test2 SET (
+      timescaledb.compress,
+      timescaledb.compress_segmentby = 'b',
+      timescaledb.compress_orderby = 'ts DESC'
+);
+
+\set ON_ERROR_STOP 0
+INSERT INTO test2(ts,b,t) VALUES ('2024-11-18 18:04:51',99,'magic');
+\set ON_ERROR_STOP 1
+ALTER TABLE test2 ALTER COLUMN i DROP NOT NULL;
+INSERT INTO test2(ts,b,t) VALUES ('2024-11-18 18:04:51',99,'magic');
+SELECT count(*) FROM test2 WHERE i IS NULL;
+SELECT count(compress_chunk(ch)) FROM show_chunks('test2') ch;
+SELECT count(*) FROM test2 WHERE i IS NULL;
+SELECT count(decompress_chunk(ch)) FROM show_chunks('test2') ch;
+SELECT count(*) FROM test2 WHERE i IS NULL;
+SELECT count(compress_chunk(ch)) FROM show_chunks('test2') ch;
+SELECT count(*) FROM test2 WHERE i IS NULL;
+
+\set ON_ERROR_STOP 0
+ALTER TABLE test2 ALTER COLUMN i SET NOT NULL;
+DELETE FROM test2 WHERE i IS NULL;
+SELECT count(*) FROM test2 WHERE i IS NULL;
+ALTER TABLE test2 ALTER COLUMN i SET NOT NULL;
+\set ON_ERROR_STOP 1

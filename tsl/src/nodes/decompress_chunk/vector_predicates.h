@@ -32,13 +32,13 @@ get_vector_qual_summary(uint64 *restrict qual_result, size_t n_rows)
 	bool all_rows_pass = true;
 	for (size_t i = 0; i < n_rows / 64; i++)
 	{
-		any_rows_pass |= (qual_result[i] != 0);
-		all_rows_pass &= (~qual_result[i] == 0);
+		any_rows_pass = any_rows_pass || (qual_result[i] != 0);
+		all_rows_pass = all_rows_pass && (~qual_result[i] == 0);
 	}
 
 	if (n_rows % 64 != 0)
 	{
-		const uint64 last_word_mask = -1ULL >> (64 - n_rows % 64);
+		const uint64 last_word_mask = ~0ULL >> (64 - n_rows % 64);
 		any_rows_pass |= (qual_result[n_rows / 64] & last_word_mask) != 0;
 		all_rows_pass &= ((~qual_result[n_rows / 64]) & last_word_mask) == 0;
 	}

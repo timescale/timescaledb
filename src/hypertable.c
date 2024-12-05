@@ -64,6 +64,7 @@
 #include "subspace_store.h"
 #include "trigger.h"
 #include "ts_catalog/catalog.h"
+#include "ts_catalog/chunk_column_stats.h"
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/metadata.h"
@@ -248,6 +249,12 @@ ts_hypertable_from_tupleinfo(const TupleInfo *ti)
 		ts_subspace_store_init(h->space, ti->mctx, ts_guc_max_cached_chunks_per_hypertable);
 	h->chunk_sizing_func = get_chunk_sizing_func_oid(&h->fd);
 
+	if (ts_guc_enable_chunk_skipping)
+	{
+		h->range_space =
+			ts_chunk_column_stats_range_space_scan(h->fd.id, h->main_table_relid, ti->mctx);
+	}
+
 	return h;
 }
 
@@ -376,7 +383,7 @@ ts_hypertable_relid_to_id(Oid relid)
 {
 	Cache *hcache;
 	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
-	int result = (ht == NULL) ? -1 : ht->fd.id;
+	int result = ht ? ht->fd.id : INVALID_HYPERTABLE_ID;
 
 	ts_cache_release(hcache);
 	return result;
@@ -644,6 +651,11 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 
 	/* Also remove any policy argument / job that uses this hypertable */
 	ts_bgw_policy_delete_by_hypertable_id(hypertable_id);
+
+	/* Also remove any rows in _timescaledb_catalog.chunk_column_stats corresponding to this
+	 * hypertable
+	 */
+	ts_chunk_column_stats_delete_by_hypertable_id(hypertable_id);
 
 	/* Remove any dependent continuous aggs */
 	ts_continuous_agg_drop_hypertable_callback(hypertable_id);
@@ -915,7 +927,7 @@ hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 static ScanTupleResult
 hypertable_tuple_found(TupleInfo *ti, void *data)
 {
-	Hypertable **entry = data;
+	Hypertable **entry = (Hypertable **) data;
 
 	*entry = ts_hypertable_from_tupleinfo(ti);
 	return SCAN_DONE;
@@ -926,7 +938,7 @@ ts_hypertable_get_by_name(const char *schema, const char *name)
 {
 	Hypertable *ht = NULL;
 
-	hypertable_scan(schema, name, hypertable_tuple_found, &ht, AccessShareLock);
+	hypertable_scan(schema, name, hypertable_tuple_found, (void *) &ht, AccessShareLock);
 
 	return ht;
 }
@@ -947,7 +959,7 @@ ts_hypertable_get_by_id(int32 hypertable_id)
 								   1,
 								   HYPERTABLE_ID_INDEX,
 								   hypertable_tuple_found,
-								   &ht,
+								   (void *) &ht,
 								   1,
 								   AccessShareLock,
 								   CurrentMemoryContext,
@@ -1276,6 +1288,15 @@ hypertable_validate_constraints(Oid relid)
 	{
 		Form_pg_constraint form = (Form_pg_constraint) GETSTRUCT(tuple);
 
+		if (form->contype == CONSTRAINT_FOREIGN)
+		{
+			if (ts_hypertable_relid_to_id(form->confrelid) != INVALID_HYPERTABLE_ID)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("hypertables cannot be used as foreign key references of "
+								"hypertables")));
+		}
+
 		if (form->contype == CONSTRAINT_CHECK && form->connoinherit)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
@@ -1301,7 +1322,11 @@ hypertable_validate_constraints(Oid relid)
 	{
 		Form_pg_constraint form = (Form_pg_constraint) GETSTRUCT(tuple);
 
-		if (form->contype == CONSTRAINT_FOREIGN)
+		/*
+		 * Hypertable <-> hypertable foreign keys are not supported.
+		 */
+		if (form->contype == CONSTRAINT_FOREIGN &&
+			ts_hypertable_relid_to_id(form->conrelid) != INVALID_HYPERTABLE_ID)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
 					 errmsg("cannot have FOREIGN KEY constraints to hypertable \"%s\"",
@@ -1982,6 +2007,9 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 		ts_tablespace_attach_internal(&tspc_name, table_relid, false);
 	}
 
+	if ((flags & HYPERTABLE_CREATE_DISABLE_DEFAULT_INDEXES) == 0)
+		ts_indexing_create_default_indexes(ht);
+
 	/*
 	 * Migrate data from the main table to chunks
 	 *
@@ -2000,9 +2028,6 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	}
 
 	insert_blocker_trigger_add(table_relid);
-
-	if ((flags & HYPERTABLE_CREATE_DISABLE_DEFAULT_INDEXES) == 0)
-		ts_indexing_create_default_indexes(ht);
 
 	ts_cache_release(hcache);
 
@@ -2461,14 +2486,25 @@ ts_chunk_get_osm_slice_and_lock(int32 osm_chunk_id, int32 time_dim_id, LockTuple
 				.lockmode = tuplockmode,
 				.waitpolicy = LockWaitBlock,
 			};
+			/*
+			 * We cannot acquire a tuple lock when running in recovery mode
+			 * since that prevents scans on tiered hypertables from running
+			 * on a read-only secondary. Acquiring a tuple lock requires
+			 * assigning a transaction id for the current transaction state
+			 * which is not possible in recovery mode. So we only acquire the
+			 * lock if we are not in recovery mode.
+			 */
+			ScanTupLock *const tuplock_ptr = RecoveryInProgress() ? NULL : &tuplock;
+
 			if (!IsolationUsesXactSnapshot())
 			{
 				/* in read committed mode, we follow all updates to this tuple */
 				tuplock.lockflags |= TUPLE_LOCK_FLAG_FIND_LAST_VERSION;
 			}
+
 			DimensionSlice *dimslice =
 				ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id,
-													   &tuplock,
+													   tuplock_ptr,
 													   CurrentMemoryContext,
 													   tablelockmode);
 			if (dimslice->fd.dimension_id == time_dim_id)
@@ -2498,6 +2534,18 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 
 	Oid time_type; /* required for resolving the argument types, should match the hypertable
 					  partitioning column type */
+
+	/*
+	 * This function is not meant to be run on a read-only secondary. It is
+	 * only used by OSM to update chunk's range in timescaledb catalog when
+	 * tiering configuration changes (a new chunk is created, a chunk drop
+	 * etc); OSM would already be holding a lock on a dimension slice tuple
+	 * by this moment (which is not possible on read-only instance).
+	 * Technically this function can be executed from SQL (e.g. from psql) when
+	 * in recovery mode; in that instance an ERROR would be thrown when trying
+	 * to update the dimension slice tuple, no harm will be done.
+	 */
+	Assert(!RecoveryInProgress());
 
 	hcache = ts_hypertable_cache_pin();
 	ht = ts_resolve_hypertable_from_table_or_cagg(hcache, relid, true);

@@ -131,102 +131,17 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 							   ObjectAddress *mattbladdress, char *relname)
 {
 	Query *final_selquery = NULL;
-	ListCell *lc;
-	FromExpr *fromexpr;
-	RangeTblEntry *rte;
-#if PG16_GE
-	RTEPermissionInfo *perminfo;
-#endif
 
 	CAGG_MAKEQUERY(final_selquery, inp->final_userquery);
 	final_selquery->hasAggs = !inp->finalized;
 
-	/*
-	 * For initial cagg creation rtable will have only 1 entry,
-	 * for alter table rtable will have multiple entries with our
-	 * RangeTblEntry as last member.
-	 * For cagg with joins, we need to create a new RTE and jointree
-	 * which contains the information of the materialised hypertable
-	 * that is created for this cagg.
-	 */
-	if (list_length(inp->final_userquery->jointree->fromlist) >=
-			CONTINUOUS_AGG_MAX_JOIN_RELATIONS ||
-		!IsA(linitial(inp->final_userquery->jointree->fromlist), RangeTblRef))
-	{
-		rte = makeNode(RangeTblEntry);
-		rte->alias = makeAlias(relname, NIL);
-		rte->inFromCl = true;
-		rte->inh = true;
-		rte->rellockmode = 1;
-		rte->eref = copyObject(rte->alias);
-		rte->relid = mattbladdress->objectId;
-#if PG16_GE
-		perminfo = addRTEPermissionInfo(&final_selquery->rteperminfos, rte);
-		perminfo->selectedCols = NULL;
-#endif
-		ListCell *l;
-		foreach (l, inp->final_userquery->jointree->fromlist)
-		{
-			/*
-			 * In case of joins, update the rte with all the join related struct.
-			 */
-			Node *jtnode = (Node *) lfirst(l);
-			JoinExpr *join = NULL;
-			if (IsA(jtnode, JoinExpr))
-			{
-				join = castNode(JoinExpr, jtnode);
-				RangeTblEntry *jrte = rt_fetch(join->rtindex, inp->final_userquery->rtable);
-				rte->joinaliasvars = jrte->joinaliasvars;
-				rte->jointype = jrte->jointype;
-				rte->joinleftcols = jrte->joinleftcols;
-				rte->joinrightcols = jrte->joinrightcols;
-				rte->joinmergedcols = jrte->joinmergedcols;
-				rte->join_using_alias = jrte->join_using_alias;
-#if PG16_LT
-				rte->selectedCols = jrte->selectedCols;
-#else
-				if (jrte->perminfoindex > 0)
-				{
-					RTEPermissionInfo *jperminfo =
-						getRTEPermissionInfo(inp->final_userquery->rteperminfos, jrte);
-					perminfo->selectedCols = jperminfo->selectedCols;
-				}
-#endif
-			}
-		}
-	}
-	else
-	{
-		rte = llast_node(RangeTblEntry, inp->final_userquery->rtable);
-		rte->eref->colnames = NIL;
-#if PG16_LT
-		rte->selectedCols = NULL;
-#else
-		perminfo = getRTEPermissionInfo(inp->final_userquery->rteperminfos, rte);
-		perminfo->selectedCols = NULL;
-#endif
-	}
-	if (rte->eref->colnames == NIL)
-	{
-		/*
-		 * We only need to do this for the case when there is no Join node in the query.
-		 * In the case of join, rte->eref is already populated by jrte->eref and hence the
-		 * relevant info, so need not to do this.
-		 */
+	/* New RangeTblEntry for the materialization hypertable */
+	RangeTblEntry *rte = makeNode(RangeTblEntry);
+	rte->inFromCl = true;
+	rte->inh = true;
+	rte->rellockmode = 1;
+	rte->eref = makeAlias(relname, NIL);
 
-		/* Aliases for column names for the materialization table. */
-		foreach (lc, matcollist)
-		{
-			ColumnDef *cdef = lfirst_node(ColumnDef, lc);
-			rte->eref->colnames = lappend(rte->eref->colnames, makeString(cdef->colname));
-			int attno = list_length(rte->eref->colnames) - FirstLowInvalidHeapAttributeNumber;
-#if PG16_LT
-			rte->selectedCols = bms_add_member(rte->selectedCols, attno);
-#else
-			perminfo->selectedCols = bms_add_member(perminfo->selectedCols, attno);
-#endif
-		}
-	}
 	rte->relid = mattbladdress->objectId;
 	rte->rtekind = RTE_RELATION;
 	rte->relkind = RELKIND_RELATION;
@@ -236,16 +151,33 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	rte->insertedCols = NULL;
 	rte->updatedCols = NULL;
 #else
+	RTEPermissionInfo *perminfo = addRTEPermissionInfo(&final_selquery->rteperminfos, rte);
+	perminfo->selectedCols = NULL;
 	perminfo->relid = mattbladdress->objectId;
 	perminfo->requiredPerms |= ACL_SELECT;
 	perminfo->insertedCols = NULL;
 	perminfo->updatedCols = NULL;
 #endif
 
-	/* 2. Fixup targetlist with the correct rel information. */
+	/* Aliases for column names for the materialization hypertable. */
+	ListCell *lc;
+	int attno = 0;
+	foreach (lc, matcollist)
+	{
+		ColumnDef *cdef = lfirst_node(ColumnDef, lc);
+		rte->eref->colnames = lappend(rte->eref->colnames, makeString(cdef->colname));
+		attno = list_length(rte->eref->colnames) - FirstLowInvalidHeapAttributeNumber;
+#if PG16_LT
+		rte->selectedCols = bms_add_member(rte->selectedCols, attno);
+#else
+		perminfo->selectedCols = bms_add_member(perminfo->selectedCols, attno);
+#endif
+	}
+
+	/* Fixup targetlist with the correct rel information. */
 	foreach (lc, inp->final_seltlist)
 	{
-		TargetEntry *tle = (TargetEntry *) lfirst(lc);
+		TargetEntry *tle = lfirst_node(TargetEntry, lc);
 		/*
 		 * In case when this is a cagg with joins, the Var from the normal table
 		 * already has resorigtbl populated and we need to use that to resolve
@@ -255,49 +187,17 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 		if (IsA(tle->expr, Var) && !OidIsValid(tle->resorigtbl))
 		{
 			tle->resorigtbl = rte->relid;
-			tle->resorigcol = ((Var *) tle->expr)->varattno;
+			tle->resorigcol = castNode(Var, tle->expr)->varattno;
 		}
 	}
 
-	if (list_length(inp->final_userquery->jointree->fromlist) >=
-			CONTINUOUS_AGG_MAX_JOIN_RELATIONS ||
-		!IsA(linitial(inp->final_userquery->jointree->fromlist), RangeTblRef))
-	{
-		RangeTblRef *rtr;
-		final_selquery->rtable = list_make1(rte);
-#if PG16_GE
-		/* perminfo has been set already in the previous if/else */
-		Assert(list_length(final_selquery->rteperminfos) == 1);
-#endif
-		rtr = makeNode(RangeTblRef);
-		rtr->rtindex = 1;
-		fromexpr = makeFromExpr(list_make1(rtr), NULL);
-	}
-	else
-	{
-		final_selquery->rtable = inp->final_userquery->rtable;
-#if PG16_GE
-		final_selquery->rteperminfos = inp->final_userquery->rteperminfos;
-#endif
-		fromexpr = inp->final_userquery->jointree;
-		fromexpr->quals = NULL;
-	}
+	RangeTblRef *rtr = makeNode(RangeTblRef);
+	rtr->rtindex = 1;
 
-	/*
-	 * Fixup from list. No quals on original table should be
-	 * present here - they should be on the query that populates
-	 * the mattable (partial_selquery). For the Cagg with join,
-	 * we can not copy the fromlist from inp->final_userquery as
-	 * it has two tables in this case.
-	 */
-	Assert(list_length(inp->final_userquery->jointree->fromlist) <=
-		   CONTINUOUS_AGG_MAX_JOIN_RELATIONS);
-
-	final_selquery->jointree = fromexpr;
+	final_selquery->rtable = list_make1(rte);
+	final_selquery->jointree = makeFromExpr(list_make1(rtr), NULL);
 	final_selquery->targetList = inp->final_seltlist;
 	final_selquery->sortClause = inp->final_userquery->sortClause;
-
-	/* Already finalized query no need to copy group by or having clause. */
 
 	return final_selquery;
 }

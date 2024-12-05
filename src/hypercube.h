@@ -24,7 +24,7 @@ typedef struct Hypercube
 } Hypercube;
 
 #define HYPERCUBE_SIZE(num_dimensions)                                                             \
-	(sizeof(Hypercube) + sizeof(DimensionSlice *) * (num_dimensions))
+	(sizeof(Hypercube) + (sizeof(DimensionSlice *) * (num_dimensions)))
 
 extern TSDLLEXPORT Hypercube *ts_hypercube_alloc(int16 num_dimensions);
 extern void ts_hypercube_free(Hypercube *hc);

@@ -13,7 +13,7 @@ See the Releases tab for the latest release.
 environment (header files) (e.g., `postgresql-server-dev-16` package
 for Linux, Postgres.app for MacOS)
 - C compiler (e.g., gcc or clang)
-- [CMake](https://cmake.org/) version 3.4 or greater
+- [CMake](https://cmake.org/) version 3.15 or greater
 
 ```bash
 git clone git@github.com:timescale/timescaledb.git
@@ -45,7 +45,7 @@ See the Releases tab for the latest release.
 - A standard [PostgreSQL 14, 15 or 16 64-bit installation](https://www.enterprisedb.com/downloads/postgres-postgresql-downloads#windows)
 - OpenSSL for Windows
 - Microsoft Visual Studio 2017 with CMake and Git components
-- OR Visual Studio 2015/2016 with [CMake](https://cmake.org/) version 3.4 or greater and Git
+- OR Visual Studio 2015/2016 with [CMake](https://cmake.org/) version 3.15 or greater and Git
 - Make sure all relevant binaries are in your PATH: `pg_config` and `cmake`
 
 If using Visual Studio 2017 with the CMake and Git components, you

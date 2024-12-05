@@ -57,7 +57,8 @@ get_timeout_millisec(TimestampTz by_time)
 	if (timeout_sec < 0 || timeout_usec < 0)
 		return 0;
 
-	return (int64) (timeout_sec * MILLISECS_PER_SEC + ((int64) timeout_usec) / USECS_PER_MILLISEC);
+	return (int64) ((timeout_sec * MILLISECS_PER_SEC) +
+					(((int64) timeout_usec) / USECS_PER_MILLISEC));
 }
 
 static bool
@@ -73,7 +74,7 @@ wait_using_wait_latch(TimestampTz until)
 		timeout = MAX_TIMEOUT;
 
 	/* Wait latch requires timeout to be <= INT_MAX */
-	if ((int64) timeout > (int64) INT_MAX)
+	if (timeout > (int64) INT_MAX)
 		timeout = INT_MAX;
 
 	wl_rc = WaitLatch(MyLatch,

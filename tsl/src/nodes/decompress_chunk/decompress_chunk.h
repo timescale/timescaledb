@@ -43,6 +43,7 @@ typedef struct CompressionInfo
 	Bitmapset *compressed_attnos_in_compressed_chunk;
 
 	bool single_chunk; /* query on explicit chunk */
+	bool has_seq_num;  /* legacy sequence number support */
 
 } CompressionInfo;
 
@@ -57,7 +58,9 @@ typedef struct DecompressChunkPath
 	bool batch_sorted_merge;
 } DecompressChunkPath;
 
-void ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
-										Chunk *chunk);
+void ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *rel, const Hypertable *ht,
+										const Chunk *chunk);
 
 extern bool ts_is_decompress_chunk_path(Path *path);
+
+DecompressChunkPath *copy_decompress_chunk_path(DecompressChunkPath *src);

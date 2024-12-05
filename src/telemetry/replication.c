@@ -4,10 +4,10 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <executor/spi.h>
+#include <utils/guc.h>
 
 #include "replication.h"
-
-#include <executor/spi.h>
 
 ReplicationInfo
 ts_telemetry_replication_info_gather(void)
@@ -24,9 +24,8 @@ ts_telemetry_replication_info_gather(void)
 		return info;
 
 	/* Lock down search_path */
-	res = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
-	if (res < 0)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
 
 	res = SPI_execute("SELECT cast(count(pid) as int) from pg_catalog.pg_stat_get_wal_senders() "
 					  "WHERE pid is not null",
@@ -58,6 +57,9 @@ ts_telemetry_replication_info_gather(void)
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
 
 	return info;
 }

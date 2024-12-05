@@ -251,8 +251,8 @@ generate_series(1,3) device;
 
 -- index scan, no sort on top
 :PREFIX SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time DESC LIMIT 1; -- index scan, no resorting required
-                                                                           QUERY PLAN                                                                            
------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                              QUERY PLAN                                                                               
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1 loops=1)
          Order: ht_metrics_compressed."time" DESC
@@ -260,7 +260,7 @@ generate_series(1,3) device;
                Sort Key: _hyper_1_3_chunk."time" DESC
                ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=1 loops=1)
                      Filter: (device = 3)
-                     ->  Index Scan Backward using compress_hyper_2_6_chunk_device__ts_meta_sequence_num_idx on compress_hyper_2_6_chunk (actual rows=1 loops=1)
+                     ->  Index Scan Backward using compress_hyper_2_6_chunk_device__ts_meta_min_1__ts_meta_max_idx on compress_hyper_2_6_chunk (actual rows=1 loops=1)
                            Index Cond: (device = 3)
                ->  Sort (actual rows=1 loops=1)
                      Sort Key: _hyper_1_3_chunk."time" DESC
@@ -272,7 +272,7 @@ generate_series(1,3) device;
                Sort Key: _hyper_1_2_chunk."time" DESC
                ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (never executed)
                      Filter: (device = 3)
-                     ->  Index Scan Backward using compress_hyper_2_5_chunk_device__ts_meta_sequence_num_idx on compress_hyper_2_5_chunk (never executed)
+                     ->  Index Scan Backward using compress_hyper_2_5_chunk_device__ts_meta_min_1__ts_meta_max_idx on compress_hyper_2_5_chunk (never executed)
                            Index Cond: (device = 3)
                ->  Sort (never executed)
                      Sort Key: _hyper_1_2_chunk."time" DESC
@@ -282,7 +282,7 @@ generate_series(1,3) device;
                Sort Key: _hyper_1_1_chunk."time" DESC
                ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (never executed)
                      Filter: (device = 3)
-                     ->  Index Scan Backward using compress_hyper_2_4_chunk_device__ts_meta_sequence_num_idx on compress_hyper_2_4_chunk (never executed)
+                     ->  Index Scan Backward using compress_hyper_2_4_chunk_device__ts_meta_min_1__ts_meta_max_idx on compress_hyper_2_4_chunk (never executed)
                            Index Cond: (device = 3)
                ->  Sort (never executed)
                      Sort Key: _hyper_1_1_chunk."time" DESC
@@ -297,14 +297,14 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time DESC LIMIT 1;
 (1 row)
 
 :PREFIX SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY device, time DESC LIMIT 1; -- this uses the index and does not do sort on top
-                                                                        QUERY PLAN                                                                         
------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                           QUERY PLAN                                                                            
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
    ->  Merge Append (actual rows=1 loops=1)
          Sort Key: _hyper_1_1_chunk."time" DESC
          ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1 loops=1)
                Filter: (device = 3)
-               ->  Index Scan Backward using compress_hyper_2_4_chunk_device__ts_meta_sequence_num_idx on compress_hyper_2_4_chunk (actual rows=1 loops=1)
+               ->  Index Scan Backward using compress_hyper_2_4_chunk_device__ts_meta_min_1__ts_meta_max_idx on compress_hyper_2_4_chunk (actual rows=1 loops=1)
                      Index Cond: (device = 3)
          ->  Sort (actual rows=1 loops=1)
                Sort Key: _hyper_1_1_chunk."time" DESC
@@ -314,7 +314,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time DESC LIMIT 1;
                      Rows Removed by Filter: 36
          ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=1 loops=1)
                Filter: (device = 3)
-               ->  Index Scan Backward using compress_hyper_2_5_chunk_device__ts_meta_sequence_num_idx on compress_hyper_2_5_chunk (actual rows=1 loops=1)
+               ->  Index Scan Backward using compress_hyper_2_5_chunk_device__ts_meta_min_1__ts_meta_max_idx on compress_hyper_2_5_chunk (actual rows=1 loops=1)
                      Index Cond: (device = 3)
          ->  Sort (actual rows=1 loops=1)
                Sort Key: _hyper_1_2_chunk."time" DESC
@@ -324,7 +324,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time DESC LIMIT 1;
                      Rows Removed by Filter: 38
          ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=1 loops=1)
                Filter: (device = 3)
-               ->  Index Scan Backward using compress_hyper_2_6_chunk_device__ts_meta_sequence_num_idx on compress_hyper_2_6_chunk (actual rows=1 loops=1)
+               ->  Index Scan Backward using compress_hyper_2_6_chunk_device__ts_meta_min_1__ts_meta_max_idx on compress_hyper_2_6_chunk (actual rows=1 loops=1)
                      Index Cond: (device = 3)
          ->  Sort (actual rows=1 loops=1)
                Sort Key: _hyper_1_3_chunk."time" DESC
@@ -341,8 +341,8 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY device, time DESC 
 (1 row)
 
 :PREFIX SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC LIMIT 1; -- this also uses the index and does not do sort on top
-                                                                       QUERY PLAN                                                                       
---------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                          QUERY PLAN                                                                          
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1 loops=1)
          Order: ht_metrics_compressed."time"
@@ -350,7 +350,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY device, time DESC 
                Sort Key: _hyper_1_1_chunk."time"
                ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1 loops=1)
                      Filter: (device = 3)
-                     ->  Index Scan using compress_hyper_2_4_chunk_device__ts_meta_sequence_num_idx on compress_hyper_2_4_chunk (actual rows=1 loops=1)
+                     ->  Index Scan using compress_hyper_2_4_chunk_device__ts_meta_min_1__ts_meta_max_idx on compress_hyper_2_4_chunk (actual rows=1 loops=1)
                            Index Cond: (device = 3)
                ->  Sort (actual rows=1 loops=1)
                      Sort Key: _hyper_1_1_chunk."time"
@@ -362,7 +362,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY device, time DESC 
                Sort Key: _hyper_1_2_chunk."time"
                ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (never executed)
                      Filter: (device = 3)
-                     ->  Index Scan using compress_hyper_2_5_chunk_device__ts_meta_sequence_num_idx on compress_hyper_2_5_chunk (never executed)
+                     ->  Index Scan using compress_hyper_2_5_chunk_device__ts_meta_min_1__ts_meta_max_idx on compress_hyper_2_5_chunk (never executed)
                            Index Cond: (device = 3)
                ->  Sort (never executed)
                      Sort Key: _hyper_1_2_chunk."time"
@@ -372,7 +372,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY device, time DESC 
                Sort Key: _hyper_1_3_chunk."time"
                ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (never executed)
                      Filter: (device = 3)
-                     ->  Index Scan using compress_hyper_2_6_chunk_device__ts_meta_sequence_num_idx on compress_hyper_2_6_chunk (never executed)
+                     ->  Index Scan using compress_hyper_2_6_chunk_device__ts_meta_min_1__ts_meta_max_idx on compress_hyper_2_6_chunk (never executed)
                            Index Cond: (device = 3)
                ->  Sort (never executed)
                      Sort Key: _hyper_1_3_chunk."time"
@@ -388,14 +388,14 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC 
 
 -- not eligible for chunkAppend, but eligible for sort pushdown
 :PREFIX SELECT * FROM ht_metrics_compressed ORDER BY device, time DESC LIMIT 1; -- with pushdown
-                                                     QUERY PLAN                                                     
---------------------------------------------------------------------------------------------------------------------
+                                                                        QUERY PLAN                                                                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
    ->  Merge Append (actual rows=1 loops=1)
          Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk."time" DESC
          ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1 loops=1)
                ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_2_4_chunk.device, compress_hyper_2_4_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_2_4_chunk.device, compress_hyper_2_4_chunk._ts_meta_min_1 DESC, compress_hyper_2_4_chunk._ts_meta_max_1 DESC
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3 loops=1)
          ->  Sort (actual rows=1 loops=1)
@@ -404,7 +404,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC 
                ->  Seq Scan on _hyper_1_1_chunk (actual rows=54 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=1 loops=1)
                ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_2_5_chunk.device, compress_hyper_2_5_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_2_5_chunk.device, compress_hyper_2_5_chunk._ts_meta_min_1 DESC, compress_hyper_2_5_chunk._ts_meta_max_1 DESC
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=3 loops=1)
          ->  Sort (actual rows=1 loops=1)
@@ -413,7 +413,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC 
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=57 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=1 loops=1)
                ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_2_6_chunk.device, compress_hyper_2_6_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_2_6_chunk.device, compress_hyper_2_6_chunk._ts_meta_min_1 DESC, compress_hyper_2_6_chunk._ts_meta_max_1 DESC
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3 loops=1)
          ->  Sort (actual rows=1 loops=1)
@@ -423,17 +423,17 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC 
 (30 rows)
 
 :PREFIX SELECT * FROM ht_metrics_compressed WHERE device IN (1,2,3) ORDER BY device, time DESC LIMIT 1; -- with pushdown
-                                                                       QUERY PLAN                                                                       
---------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                          QUERY PLAN                                                                          
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
    ->  Merge Append (actual rows=1 loops=1)
          Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk."time" DESC
          ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1 loops=1)
                Filter: (device = ANY ('{1,2,3}'::integer[]))
                ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_2_4_chunk.device, compress_hyper_2_4_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_2_4_chunk.device, compress_hyper_2_4_chunk._ts_meta_min_1 DESC, compress_hyper_2_4_chunk._ts_meta_max_1 DESC
                      Sort Method: quicksort 
-                     ->  Index Scan using compress_hyper_2_4_chunk_device__ts_meta_sequence_num_idx on compress_hyper_2_4_chunk (actual rows=3 loops=1)
+                     ->  Index Scan using compress_hyper_2_4_chunk_device__ts_meta_min_1__ts_meta_max_idx on compress_hyper_2_4_chunk (actual rows=3 loops=1)
                            Index Cond: (device = ANY ('{1,2,3}'::integer[]))
          ->  Sort (actual rows=1 loops=1)
                Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk."time" DESC
@@ -443,9 +443,9 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC 
          ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=1 loops=1)
                Filter: (device = ANY ('{1,2,3}'::integer[]))
                ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_2_5_chunk.device, compress_hyper_2_5_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_2_5_chunk.device, compress_hyper_2_5_chunk._ts_meta_min_1 DESC, compress_hyper_2_5_chunk._ts_meta_max_1 DESC
                      Sort Method: quicksort 
-                     ->  Index Scan using compress_hyper_2_5_chunk_device__ts_meta_sequence_num_idx on compress_hyper_2_5_chunk (actual rows=3 loops=1)
+                     ->  Index Scan using compress_hyper_2_5_chunk_device__ts_meta_min_1__ts_meta_max_idx on compress_hyper_2_5_chunk (actual rows=3 loops=1)
                            Index Cond: (device = ANY ('{1,2,3}'::integer[]))
          ->  Sort (actual rows=1 loops=1)
                Sort Key: _hyper_1_2_chunk.device, _hyper_1_2_chunk."time" DESC
@@ -455,9 +455,9 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC 
          ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=1 loops=1)
                Filter: (device = ANY ('{1,2,3}'::integer[]))
                ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_2_6_chunk.device, compress_hyper_2_6_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_2_6_chunk.device, compress_hyper_2_6_chunk._ts_meta_min_1 DESC, compress_hyper_2_6_chunk._ts_meta_max_1 DESC
                      Sort Method: quicksort 
-                     ->  Index Scan using compress_hyper_2_6_chunk_device__ts_meta_sequence_num_idx on compress_hyper_2_6_chunk (actual rows=3 loops=1)
+                     ->  Index Scan using compress_hyper_2_6_chunk_device__ts_meta_min_1__ts_meta_max_idx on compress_hyper_2_6_chunk (actual rows=3 loops=1)
                            Index Cond: (device = ANY ('{1,2,3}'::integer[]))
          ->  Sort (actual rows=1 loops=1)
                Sort Key: _hyper_1_3_chunk.device, _hyper_1_3_chunk."time" DESC
@@ -777,14 +777,14 @@ SELECT * FROM test1 ORDER BY x1, x2, x5, time, x4 DESC LIMIT 10; -- no pushdown 
 -- queries with pushdown
 :PREFIX
 SELECT * FROM test1 ORDER BY x1, x2, x5, time LIMIT 10;
-                                                                                QUERY PLAN                                                                                
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                              QUERY PLAN                                                                                               
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=5 loops=1)
    ->  Merge Append (actual rows=5 loops=1)
          Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=4 loops=1)
                ->  Sort (actual rows=3 loops=1)
-                     Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_min_1, compress_hyper_4_8_chunk._ts_meta_max_1
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=3 loops=1)
          ->  Sort (actual rows=1 loops=1)
@@ -795,14 +795,14 @@ SELECT * FROM test1 ORDER BY x1, x2, x5, time LIMIT 10;
 
 :PREFIX
 SELECT * FROM test1 ORDER BY x1, x2, x5, time DESC, x3 ASC, x4 ASC LIMIT 10; -- pushdown
-                                                                             QUERY PLAN                                                                              
----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                                     QUERY PLAN                                                                                                                                                                                      
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=5 loops=1)
    ->  Merge Append (actual rows=5 loops=1)
          Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time" DESC, _hyper_3_7_chunk.x3, _hyper_3_7_chunk.x4
          ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=4 loops=1)
                ->  Sort (actual rows=3 loops=1)
-                     Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_sequence_num
+                     Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_min_1 DESC, compress_hyper_4_8_chunk._ts_meta_max_1 DESC, compress_hyper_4_8_chunk._ts_meta_min_2, compress_hyper_4_8_chunk._ts_meta_max_2, compress_hyper_4_8_chunk._ts_meta_min_3, compress_hyper_4_8_chunk._ts_meta_max_3
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=3 loops=1)
          ->  Sort (actual rows=1 loops=1)
@@ -813,14 +813,14 @@ SELECT * FROM test1 ORDER BY x1, x2, x5, time DESC, x3 ASC, x4 ASC LIMIT 10; -- 
 
 :PREFIX
 SELECT * FROM test1 ORDER BY x1, x2, x5, time ASC, x3 DESC, x4 DESC LIMIT 10; -- pushdown
-                                                                                QUERY PLAN                                                                                
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                                          QUERY PLAN                                                                                                                                                                                           
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=5 loops=1)
    ->  Merge Append (actual rows=5 loops=1)
          Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time", _hyper_3_7_chunk.x3 DESC, _hyper_3_7_chunk.x4 DESC
          ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=4 loops=1)
                ->  Sort (actual rows=3 loops=1)
-                     Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_min_1, compress_hyper_4_8_chunk._ts_meta_max_1, compress_hyper_4_8_chunk._ts_meta_min_2 DESC, compress_hyper_4_8_chunk._ts_meta_max_2 DESC, compress_hyper_4_8_chunk._ts_meta_min_3 DESC, compress_hyper_4_8_chunk._ts_meta_max_3 DESC
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=3 loops=1)
          ->  Sort (actual rows=1 loops=1)
@@ -831,14 +831,14 @@ SELECT * FROM test1 ORDER BY x1, x2, x5, time ASC, x3 DESC, x4 DESC LIMIT 10; --
 
 :PREFIX
 SELECT * FROM test1 ORDER BY x1, x2, x5, time, x3 DESC LIMIT 10;
-                                                                                QUERY PLAN                                                                                
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                            QUERY PLAN                                                                                                                                             
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=5 loops=1)
    ->  Merge Append (actual rows=5 loops=1)
          Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time", _hyper_3_7_chunk.x3 DESC
          ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=4 loops=1)
                ->  Sort (actual rows=3 loops=1)
-                     Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_min_1, compress_hyper_4_8_chunk._ts_meta_max_1, compress_hyper_4_8_chunk._ts_meta_min_2 DESC, compress_hyper_4_8_chunk._ts_meta_max_2 DESC
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=3 loops=1)
          ->  Sort (actual rows=1 loops=1)
@@ -910,14 +910,14 @@ ANALYZE test2;
 set enable_indexscan = off;
 -- queries where sort is pushed down
 :PREFIX SELECT * FROM test2 ORDER BY x1, x2, x5, x3 LIMIT 10;
-                                                                               QUERY PLAN                                                                                
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                 QUERY PLAN                                                                                                 
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Merge Append (actual rows=10 loops=1)
          Sort Key: _hyper_5_9_chunk.x1, _hyper_5_9_chunk.x2, _hyper_5_9_chunk.x5, _hyper_5_9_chunk.x3
          ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=4 loops=1)
                ->  Sort (actual rows=3 loops=1)
-                     Sort Key: compress_hyper_6_11_chunk.x1, compress_hyper_6_11_chunk.x2, compress_hyper_6_11_chunk.x5, compress_hyper_6_11_chunk._ts_meta_sequence_num
+                     Sort Key: compress_hyper_6_11_chunk.x1, compress_hyper_6_11_chunk.x2, compress_hyper_6_11_chunk.x5, compress_hyper_6_11_chunk._ts_meta_min_1, compress_hyper_6_11_chunk._ts_meta_max_1
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_6_11_chunk (actual rows=3 loops=1)
          ->  Sort (actual rows=1 loops=1)
@@ -926,7 +926,7 @@ set enable_indexscan = off;
                ->  Seq Scan on _hyper_5_9_chunk (actual rows=1 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_5_10_chunk (actual rows=4 loops=1)
                ->  Sort (actual rows=3 loops=1)
-                     Sort Key: compress_hyper_6_12_chunk.x1, compress_hyper_6_12_chunk.x2, compress_hyper_6_12_chunk.x5, compress_hyper_6_12_chunk._ts_meta_sequence_num
+                     Sort Key: compress_hyper_6_12_chunk.x1, compress_hyper_6_12_chunk.x2, compress_hyper_6_12_chunk.x5, compress_hyper_6_12_chunk._ts_meta_min_1, compress_hyper_6_12_chunk._ts_meta_max_1
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_6_12_chunk (actual rows=3 loops=1)
          ->  Sort (actual rows=1 loops=1)
@@ -951,14 +951,14 @@ SELECT * FROM test2 ORDER BY x1, x2, x5, x3 LIMIT 10;
 (10 rows)
 
 :PREFIX SELECT * FROM test2 ORDER BY x1, x2, x5, x3, x4 LIMIT 10;
-                                                                               QUERY PLAN                                                                                
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                           QUERY PLAN                                                                                                                                           
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Merge Append (actual rows=10 loops=1)
          Sort Key: _hyper_5_9_chunk.x1, _hyper_5_9_chunk.x2, _hyper_5_9_chunk.x5, _hyper_5_9_chunk.x3, _hyper_5_9_chunk.x4
          ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=4 loops=1)
                ->  Sort (actual rows=3 loops=1)
-                     Sort Key: compress_hyper_6_11_chunk.x1, compress_hyper_6_11_chunk.x2, compress_hyper_6_11_chunk.x5, compress_hyper_6_11_chunk._ts_meta_sequence_num
+                     Sort Key: compress_hyper_6_11_chunk.x1, compress_hyper_6_11_chunk.x2, compress_hyper_6_11_chunk.x5, compress_hyper_6_11_chunk._ts_meta_min_1, compress_hyper_6_11_chunk._ts_meta_max_1, compress_hyper_6_11_chunk._ts_meta_min_2, compress_hyper_6_11_chunk._ts_meta_max_2
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_6_11_chunk (actual rows=3 loops=1)
          ->  Sort (actual rows=1 loops=1)
@@ -967,7 +967,7 @@ SELECT * FROM test2 ORDER BY x1, x2, x5, x3 LIMIT 10;
                ->  Seq Scan on _hyper_5_9_chunk (actual rows=1 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_5_10_chunk (actual rows=4 loops=1)
                ->  Sort (actual rows=3 loops=1)
-                     Sort Key: compress_hyper_6_12_chunk.x1, compress_hyper_6_12_chunk.x2, compress_hyper_6_12_chunk.x5, compress_hyper_6_12_chunk._ts_meta_sequence_num
+                     Sort Key: compress_hyper_6_12_chunk.x1, compress_hyper_6_12_chunk.x2, compress_hyper_6_12_chunk.x5, compress_hyper_6_12_chunk._ts_meta_min_1, compress_hyper_6_12_chunk._ts_meta_max_1, compress_hyper_6_12_chunk._ts_meta_min_2, compress_hyper_6_12_chunk._ts_meta_max_2
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_6_12_chunk (actual rows=3 loops=1)
          ->  Sort (actual rows=1 loops=1)
@@ -1161,14 +1161,14 @@ ANALYZE test3;
 set enable_indexscan = off;
 -- queries where sort is pushed down
 :PREFIX SELECT * FROM test3 ORDER BY x1, x2, x5, x3 LIMIT 10;
-                                                                               QUERY PLAN                                                                                
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                 QUERY PLAN                                                                                                 
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Merge Append (actual rows=10 loops=1)
          Sort Key: _hyper_7_13_chunk.x1, _hyper_7_13_chunk.x2, _hyper_7_13_chunk.x5, _hyper_7_13_chunk.x3
          ->  Custom Scan (DecompressChunk) on _hyper_7_13_chunk (actual rows=3 loops=1)
                ->  Sort (actual rows=2 loops=1)
-                     Sort Key: compress_hyper_8_17_chunk.x1, compress_hyper_8_17_chunk.x2, compress_hyper_8_17_chunk.x5, compress_hyper_8_17_chunk._ts_meta_sequence_num
+                     Sort Key: compress_hyper_8_17_chunk.x1, compress_hyper_8_17_chunk.x2, compress_hyper_8_17_chunk.x5, compress_hyper_8_17_chunk._ts_meta_min_1, compress_hyper_8_17_chunk._ts_meta_max_1
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_8_17_chunk (actual rows=2 loops=1)
          ->  Sort (actual rows=1 loops=1)
@@ -1177,12 +1177,12 @@ set enable_indexscan = off;
                ->  Seq Scan on _hyper_7_13_chunk (actual rows=1 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_7_14_chunk (actual rows=1 loops=1)
                ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_8_18_chunk.x1, compress_hyper_8_18_chunk.x2, compress_hyper_8_18_chunk.x5, compress_hyper_8_18_chunk._ts_meta_sequence_num
+                     Sort Key: compress_hyper_8_18_chunk.x1, compress_hyper_8_18_chunk.x2, compress_hyper_8_18_chunk.x5, compress_hyper_8_18_chunk._ts_meta_min_1, compress_hyper_8_18_chunk._ts_meta_max_1
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_8_18_chunk (actual rows=1 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_7_15_chunk (actual rows=3 loops=1)
                ->  Sort (actual rows=2 loops=1)
-                     Sort Key: compress_hyper_8_19_chunk.x1, compress_hyper_8_19_chunk.x2, compress_hyper_8_19_chunk.x5, compress_hyper_8_19_chunk._ts_meta_sequence_num
+                     Sort Key: compress_hyper_8_19_chunk.x1, compress_hyper_8_19_chunk.x2, compress_hyper_8_19_chunk.x5, compress_hyper_8_19_chunk._ts_meta_min_1, compress_hyper_8_19_chunk._ts_meta_max_1
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_8_19_chunk (actual rows=2 loops=1)
          ->  Sort (actual rows=1 loops=1)
@@ -1191,7 +1191,7 @@ set enable_indexscan = off;
                ->  Seq Scan on _hyper_7_15_chunk (actual rows=1 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_7_16_chunk (actual rows=1 loops=1)
                ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_8_20_chunk.x1, compress_hyper_8_20_chunk.x2, compress_hyper_8_20_chunk.x5, compress_hyper_8_20_chunk._ts_meta_sequence_num
+                     Sort Key: compress_hyper_8_20_chunk.x1, compress_hyper_8_20_chunk.x2, compress_hyper_8_20_chunk.x5, compress_hyper_8_20_chunk._ts_meta_min_1, compress_hyper_8_20_chunk._ts_meta_max_1
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_8_20_chunk (actual rows=1 loops=1)
 (31 rows)
@@ -1212,14 +1212,14 @@ SELECT * FROM test3 ORDER BY x1, x2, x5, x3 LIMIT 10;
 (10 rows)
 
 :PREFIX SELECT * FROM test3 ORDER BY x1, x2, x5, x3, x4 LIMIT 10;
-                                                                               QUERY PLAN                                                                                
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                           QUERY PLAN                                                                                                                                           
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Merge Append (actual rows=10 loops=1)
          Sort Key: _hyper_7_13_chunk.x1, _hyper_7_13_chunk.x2, _hyper_7_13_chunk.x5, _hyper_7_13_chunk.x3, _hyper_7_13_chunk.x4
          ->  Custom Scan (DecompressChunk) on _hyper_7_13_chunk (actual rows=3 loops=1)
                ->  Sort (actual rows=2 loops=1)
-                     Sort Key: compress_hyper_8_17_chunk.x1, compress_hyper_8_17_chunk.x2, compress_hyper_8_17_chunk.x5, compress_hyper_8_17_chunk._ts_meta_sequence_num
+                     Sort Key: compress_hyper_8_17_chunk.x1, compress_hyper_8_17_chunk.x2, compress_hyper_8_17_chunk.x5, compress_hyper_8_17_chunk._ts_meta_min_1, compress_hyper_8_17_chunk._ts_meta_max_1, compress_hyper_8_17_chunk._ts_meta_min_2, compress_hyper_8_17_chunk._ts_meta_max_2
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_8_17_chunk (actual rows=2 loops=1)
          ->  Sort (actual rows=1 loops=1)
@@ -1228,12 +1228,12 @@ SELECT * FROM test3 ORDER BY x1, x2, x5, x3 LIMIT 10;
                ->  Seq Scan on _hyper_7_13_chunk (actual rows=1 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_7_14_chunk (actual rows=1 loops=1)
                ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_8_18_chunk.x1, compress_hyper_8_18_chunk.x2, compress_hyper_8_18_chunk.x5, compress_hyper_8_18_chunk._ts_meta_sequence_num
+                     Sort Key: compress_hyper_8_18_chunk.x1, compress_hyper_8_18_chunk.x2, compress_hyper_8_18_chunk.x5, compress_hyper_8_18_chunk._ts_meta_min_1, compress_hyper_8_18_chunk._ts_meta_max_1, compress_hyper_8_18_chunk._ts_meta_min_2, compress_hyper_8_18_chunk._ts_meta_max_2
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_8_18_chunk (actual rows=1 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_7_15_chunk (actual rows=3 loops=1)
                ->  Sort (actual rows=2 loops=1)
-                     Sort Key: compress_hyper_8_19_chunk.x1, compress_hyper_8_19_chunk.x2, compress_hyper_8_19_chunk.x5, compress_hyper_8_19_chunk._ts_meta_sequence_num
+                     Sort Key: compress_hyper_8_19_chunk.x1, compress_hyper_8_19_chunk.x2, compress_hyper_8_19_chunk.x5, compress_hyper_8_19_chunk._ts_meta_min_1, compress_hyper_8_19_chunk._ts_meta_max_1, compress_hyper_8_19_chunk._ts_meta_min_2, compress_hyper_8_19_chunk._ts_meta_max_2
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_8_19_chunk (actual rows=2 loops=1)
          ->  Sort (actual rows=1 loops=1)
@@ -1242,7 +1242,7 @@ SELECT * FROM test3 ORDER BY x1, x2, x5, x3 LIMIT 10;
                ->  Seq Scan on _hyper_7_15_chunk (actual rows=1 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_7_16_chunk (actual rows=1 loops=1)
                ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_8_20_chunk.x1, compress_hyper_8_20_chunk.x2, compress_hyper_8_20_chunk.x5, compress_hyper_8_20_chunk._ts_meta_sequence_num
+                     Sort Key: compress_hyper_8_20_chunk.x1, compress_hyper_8_20_chunk.x2, compress_hyper_8_20_chunk.x5, compress_hyper_8_20_chunk._ts_meta_min_1, compress_hyper_8_20_chunk._ts_meta_max_1, compress_hyper_8_20_chunk._ts_meta_min_2, compress_hyper_8_20_chunk._ts_meta_max_2
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_8_20_chunk (actual rows=1 loops=1)
 (31 rows)

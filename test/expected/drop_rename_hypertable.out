@@ -195,6 +195,7 @@ SELECT * FROM _timescaledb_catalog.hypertable;
         Schema        |                       Name                       | Type  |   Owner    
 ----------------------+--------------------------------------------------+-------+------------
  _timescaledb_catalog | chunk                                            | table | super_user
+ _timescaledb_catalog | chunk_column_stats                               | table | super_user
  _timescaledb_catalog | chunk_constraint                                 | table | super_user
  _timescaledb_catalog | chunk_index                                      | table | super_user
  _timescaledb_catalog | compression_algorithm                            | table | super_user
@@ -214,7 +215,7 @@ SELECT * FROM _timescaledb_catalog.hypertable;
  _timescaledb_catalog | metadata                                         | table | super_user
  _timescaledb_catalog | tablespace                                       | table | super_user
  _timescaledb_catalog | telemetry_event                                  | table | super_user
-(20 rows)
+(21 rows)
 
 \dt "_timescaledb_internal".*
                           List of relations

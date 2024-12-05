@@ -47,7 +47,7 @@ cache_invalidate_callback(Datum arg, Oid relid)
 static void
 post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 {
-	if (ts_extension_is_loaded())
+	if (ts_extension_is_loaded_and_not_upgrading())
 		elog(WARNING, "mock post_analyze_hook " STR(TIMESCALEDB_VERSION_MOD));
 
 		/*

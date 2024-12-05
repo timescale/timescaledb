@@ -88,7 +88,11 @@ plan_add_parallel_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *
 											  partial_grouping_target,
 											  AGG_HASHED,
 											  AGGSPLIT_INITIAL_SERIAL,
+#if PG16_LT
 											  parse->groupClause,
+#else
+											  root->processed_groupClause,
+#endif
 											  NIL,
 											  &agg_partial_costs,
 											  d_num_partial_groups));
@@ -113,7 +117,11 @@ plan_add_parallel_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *
 									  target,
 									  AGG_HASHED,
 									  AGGSPLIT_FINAL_DESERIAL,
+#if PG16_LT
 									  parse->groupClause,
+#else
+									  root->processed_groupClause,
+#endif
 									  (List *) parse->havingQual,
 									  &agg_final_costs,
 									  d_num_groups));
@@ -133,6 +141,10 @@ ts_plan_add_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output
 	Size hashaggtablesize;
 	PathTarget *target = root->upper_targets[UPPERREL_GROUP_AGG];
 	bool try_parallel_aggregation;
+
+	/* Custom HashAgg is disabled by default */
+	if (!ts_guc_enable_custom_hashagg)
+		return;
 
 	if (parse->groupingSets || !parse->hasAggs || parse->groupClause == NIL)
 		return;
@@ -197,7 +209,11 @@ ts_plan_add_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output
 									  target,
 									  AGG_HASHED,
 									  AGGSPLIT_SIMPLE,
+#if PG16_LT
 									  parse->groupClause,
+#else
+									  root->processed_groupClause,
+#endif
 									  (List *) parse->havingQual,
 									  &agg_costs,
 									  d_num_groups));
