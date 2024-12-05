@@ -1007,7 +1007,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 									  compressed_path->pathkeys))
 			{
 				/*
-				 * The decompressed path already has the required ordering.
+				 * The compressed path already has the required ordering.
 				 */
 				DecompressChunkPath *path = (DecompressChunkPath *) chunk_path_no_sort;
 				path->reverse = sort_info.reverse;
