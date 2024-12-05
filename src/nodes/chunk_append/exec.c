@@ -389,7 +389,7 @@ perform_plan_init(ChunkAppendState *state, EState *estate, int eflags)
 		return;
 	}
 
-	state->subplanstates = palloc0(state->num_subplans * sizeof(PlanState *));
+	state->subplanstates = (PlanState **) palloc0(state->num_subplans * sizeof(PlanState *));
 
 	i = 0;
 	foreach (lc, state->filtered_subplans)
@@ -1116,11 +1116,14 @@ ca_get_relation_constraints(Oid relationObjectId, Index varno, bool include_notn
 			}
 		}
 
-		/* Add column range min/max ranges in 'CHECK CONSTRAINT' form */
-		result = list_concat(result,
-							 ts_chunk_column_stats_construct_check_constraints(relation,
-																			   relationObjectId,
-																			   varno));
+		if (ts_guc_enable_chunk_skipping)
+		{
+			/* Add column range min/max ranges in 'CHECK CONSTRAINT' form */
+			result = list_concat(result,
+								 ts_chunk_column_stats_construct_check_constraints(relation,
+																				   relationObjectId,
+																				   varno));
+		}
 	}
 
 	table_close(relation, NoLock);

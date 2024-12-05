@@ -22,6 +22,7 @@ SELECT table_name FROM create_hypertable('conditions', 'timec');
 
 -- schema tests
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+SET timezone TO 'UTC+8';
 -- drop if the tablespace1 and/or tablespace2 exists
 SET client_min_messages TO error;
 DROP TABLESPACE IF EXISTS tablespace1;
@@ -479,11 +480,11 @@ CALL refresh_continuous_aggregate('cagg_expr', NULL, NULL);
 SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
              time             | const | numeric |                    first                     | case | coalesce | avg1 | avg2 
 ------------------------------+-------+---------+----------------------------------------------+------+----------+------+------
- Fri Dec 31 16:00:00 1999 PST | Const |     4.3 | ("Sat Jan 01 00:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1
- Sat Jan 01 16:00:00 2000 PST | Const |     4.3 | ("Sat Jan 01 16:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1
- Sun Jan 02 16:00:00 2000 PST | Const |     4.3 | ("Sun Jan 02 16:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1
- Mon Jan 03 16:00:00 2000 PST | Const |     4.3 | ("Mon Jan 03 16:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1
- Tue Jan 04 16:00:00 2000 PST | Const |     4.3 | ("Tue Jan 04 16:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1
+ Fri Dec 31 16:00:00 1999 UTC | Const |     4.3 | ("Sat Jan 01 00:00:00 2000 UTC",1,0.25,0.75) | foo  | coalesce |    1 |    1
+ Sat Jan 01 16:00:00 2000 UTC | Const |     4.3 | ("Sat Jan 01 16:00:00 2000 UTC",1,0.25,0.75) | foo  | coalesce |    1 |    1
+ Sun Jan 02 16:00:00 2000 UTC | Const |     4.3 | ("Sun Jan 02 16:00:00 2000 UTC",1,0.25,0.75) | foo  | coalesce |    1 |    1
+ Mon Jan 03 16:00:00 2000 UTC | Const |     4.3 | ("Mon Jan 03 16:00:00 2000 UTC",1,0.25,0.75) | foo  | coalesce |    1 |    1
+ Tue Jan 04 16:00:00 2000 UTC | Const |     4.3 | ("Tue Jan 04 16:00:00 2000 UTC",1,0.25,0.75) | foo  | coalesce |    1 |    1
 (5 rows)
 
 --test materialization of invalidation before drop
@@ -1807,12 +1808,12 @@ View definition:
 SELECT * FROM cashflows ORDER BY cashflows;
             bucket            | amount | cashflow | cashflow2 
 ------------------------------+--------+----------+-----------
- Sun Dec 31 16:00:00 2017 PST |      1 |       10 |        11
- Mon Jan 01 16:00:00 2018 PST |     -1 |      -30 |        29
- Wed Oct 31 17:00:00 2018 PDT |     -1 |      -20 |        19
- Wed Oct 31 17:00:00 2018 PDT |      1 |       30 |        31
- Thu Nov 01 17:00:00 2018 PDT |     -1 |      -10 |         9
- Thu Nov 01 17:00:00 2018 PDT |      1 |       10 |        11
+ Sun Dec 31 16:00:00 2017 UTC |      1 |       10 |        11
+ Mon Jan 01 16:00:00 2018 UTC |     -1 |      -30 |        29
+ Wed Oct 31 16:00:00 2018 UTC |     -1 |      -20 |        19
+ Wed Oct 31 16:00:00 2018 UTC |      1 |       30 |        31
+ Thu Nov 01 16:00:00 2018 UTC |     -1 |      -10 |         9
+ Thu Nov 01 16:00:00 2018 UTC |      1 |       10 |        11
 (6 rows)
 
 -- test cagg creation with named arguments in time_bucket
@@ -1867,8 +1868,8 @@ CALL refresh_continuous_aggregate('transactions_montly', NULL, INTERVAL '1 month
 SELECT * FROM transactions_montly ORDER BY bucket;
             bucket            | sum | max | min 
 ------------------------------+-----+-----+-----
- Sun Dec 31 16:00:00 2017 PST |  40 |  10 |  10
- Wed Oct 31 17:00:00 2018 PDT |  70 |  10 |  10
+ Sun Dec 31 16:00:00 2017 UTC |  40 |  10 |  10
+ Wed Oct 31 16:00:00 2018 UTC |  70 |  10 |  10
 (2 rows)
 
 TRUNCATE transactions_montly;
@@ -1877,7 +1878,7 @@ CALL refresh_continuous_aggregate('transactions_montly', NULL, '2018-11-01 11:50
 SELECT * FROM transactions_montly ORDER BY bucket;
             bucket            | sum | max | min 
 ------------------------------+-----+-----+-----
- Sun Dec 31 16:00:00 2017 PST |  40 |  10 |  10
+ Sun Dec 31 16:00:00 2017 UTC |  40 |  10 |  10
 (1 row)
 
 -- Full refresh the CAGG
@@ -1885,8 +1886,8 @@ CALL refresh_continuous_aggregate('transactions_montly', NULL, NULL);
 SELECT * FROM transactions_montly ORDER BY bucket;
             bucket            | sum | max | min 
 ------------------------------+-----+-----+-----
- Sun Dec 31 16:00:00 2017 PST |  40 |  10 |  10
- Wed Oct 31 17:00:00 2018 PDT |  70 |  10 |  10
+ Sun Dec 31 16:00:00 2017 UTC |  40 |  10 |  10
+ Wed Oct 31 16:00:00 2018 UTC |  70 |  10 |  10
 (2 rows)
 
 -- Check set_chunk_time_interval on continuous aggregate
@@ -1994,12 +1995,12 @@ UNION ALL
 SELECT * FROM conditions_daily ORDER BY bucket, location;
  location |            bucket            | avg 
 ----------+------------------------------+-----
- SFO      | Sun Dec 31 16:00:00 2017 PST |  55
- NYC      | Mon Jan 01 16:00:00 2018 PST |  65
- POR      | Mon Jan 01 16:00:00 2018 PST | 100
- SFO      | Mon Jan 01 16:00:00 2018 PST |  65
- NYC      | Wed Oct 31 17:00:00 2018 PDT |  65
- NYC      | Thu Nov 01 17:00:00 2018 PDT |  15
+ SFO      | Sun Dec 31 16:00:00 2017 UTC |  55
+ NYC      | Mon Jan 01 16:00:00 2018 UTC |  65
+ POR      | Mon Jan 01 16:00:00 2018 UTC | 100
+ SFO      | Mon Jan 01 16:00:00 2018 UTC |  65
+ NYC      | Wed Oct 31 16:00:00 2018 UTC |  65
+ NYC      | Thu Nov 01 16:00:00 2018 UTC |  15
 (6 rows)
 
 -- Should return ROWS because we refreshed it
@@ -2021,12 +2022,12 @@ CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
 SELECT * FROM conditions_daily ORDER BY bucket, location;
  location |            bucket            | avg 
 ----------+------------------------------+-----
- SFO      | Sun Dec 31 16:00:00 2017 PST |  55
- NYC      | Mon Jan 01 16:00:00 2018 PST |  65
- POR      | Mon Jan 01 16:00:00 2018 PST | 100
- SFO      | Mon Jan 01 16:00:00 2018 PST |  65
- NYC      | Wed Oct 31 17:00:00 2018 PDT |  65
- NYC      | Thu Nov 01 17:00:00 2018 PDT |  15
+ SFO      | Sun Dec 31 16:00:00 2017 UTC |  55
+ NYC      | Mon Jan 01 16:00:00 2018 UTC |  65
+ POR      | Mon Jan 01 16:00:00 2018 UTC | 100
+ SFO      | Mon Jan 01 16:00:00 2018 UTC |  65
+ NYC      | Wed Oct 31 16:00:00 2018 UTC |  65
+ NYC      | Thu Nov 01 16:00:00 2018 UTC |  15
 (6 rows)
 
 -- Test TRUNCATE over a Realtime CAgg
@@ -2045,7 +2046,7 @@ SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg WHERE user_vie
 SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id)) AS watermak_empty_cagg;
        watermak_empty_cagg       
 ---------------------------------
- Sun Nov 23 16:00:00 4714 PST BC
+ Sun Nov 23 16:00:00 4714 UTC BC
 (1 row)
 
 -- Refresh the CAGG
@@ -2054,7 +2055,7 @@ CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
 SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id)) AS watermak_before;
        watermak_before        
 ------------------------------
- Fri Nov 02 17:00:00 2018 PDT
+ Fri Nov 02 16:00:00 2018 UTC
 (1 row)
 
 -- Exists chunks before truncate the cagg (> 0)
@@ -2077,19 +2078,19 @@ SELECT count(*) FROM show_chunks('conditions_daily');
 SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id)) AS watermak_after;
          watermak_after          
 ---------------------------------
- Sun Nov 23 16:00:00 4714 PST BC
+ Sun Nov 23 16:00:00 4714 UTC BC
 (1 row)
 
 -- Should return ROWS because the watermark was reseted by the TRUNCATE
 SELECT * FROM conditions_daily ORDER BY bucket, location;
  location |            bucket            | avg 
 ----------+------------------------------+-----
- SFO      | Sun Dec 31 16:00:00 2017 PST |  55
- NYC      | Mon Jan 01 16:00:00 2018 PST |  65
- POR      | Mon Jan 01 16:00:00 2018 PST | 100
- SFO      | Mon Jan 01 16:00:00 2018 PST |  65
- NYC      | Wed Oct 31 17:00:00 2018 PDT |  65
- NYC      | Thu Nov 01 17:00:00 2018 PDT |  15
+ SFO      | Sun Dec 31 16:00:00 2017 UTC |  55
+ NYC      | Mon Jan 01 16:00:00 2018 UTC |  65
+ POR      | Mon Jan 01 16:00:00 2018 UTC | 100
+ SFO      | Mon Jan 01 16:00:00 2018 UTC |  65
+ NYC      | Wed Oct 31 16:00:00 2018 UTC |  65
+ NYC      | Thu Nov 01 16:00:00 2018 UTC |  15
 (6 rows)
 
 -- check compression settings are cleaned up when deleting a cagg with compression

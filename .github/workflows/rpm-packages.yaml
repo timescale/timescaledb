@@ -4,6 +4,8 @@ name: RPM packages
   schedule:
     # run daily 0:00 on main branch
     - cron: '0 0 * * *'
+  pull_request:
+    paths: .github/workflows/rpm-packages.yaml
   push:
     tags:
     - '*'
@@ -21,7 +23,7 @@ jobs:
       fail-fast: false
       matrix:
         image: [ "rockylinux:8", "rockylinux:9" ]
-        pg: [ 14, 15, 16 ]
+        pg: [ 14, 15, 16, 17 ]
         license: [ "TSL", "Apache"]
         include:
           - license: Apache
@@ -90,6 +92,7 @@ jobs:
         fi
 
     - name: Test Downgrade
+      if: matrix.pg != '17'
       run: |
         # Since this runs nightly on main we have to get the previous version
         # from the last released version and not current branch.

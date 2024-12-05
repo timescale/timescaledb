@@ -663,7 +663,7 @@ set_attoptions(Relation ht_rel, Oid chunk_oid)
 
 	if (alter_cmds != NIL)
 	{
-		ts_alter_table_with_event_trigger(chunk_oid, NULL, alter_cmds, false);
+		AlterTableInternal(chunk_oid, alter_cmds, false);
 		list_free_deep(alter_cmds);
 	}
 }
@@ -679,28 +679,6 @@ create_toast_table(CreateStmt *stmt, Oid chunk_oid)
 	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options, true);
 
 	NewRelationCreateToastTable(chunk_oid, toast_options);
-}
-
-/*
- * Get the access method name for a relation.
- */
-static char *
-get_am_name_for_rel(Oid relid)
-{
-	HeapTuple tuple;
-	Form_pg_class cform;
-	Oid amoid;
-
-	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
-
-	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "cache lookup failed for relation %u", relid);
-
-	cform = (Form_pg_class) GETSTRUCT(tuple);
-	amoid = cform->relam;
-	ReleaseSysCache(tuple);
-
-	return get_am_name(amoid);
 }
 
 static void
@@ -755,7 +733,7 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 		.base.options =
 			(chunk->relkind == RELKIND_RELATION) ? ts_get_reloptions(ht->main_table_relid) : NIL,
 		.base.accessMethod = (chunk->relkind == RELKIND_RELATION) ?
-								 get_am_name_for_rel(chunk->hypertable_relid) :
+								 get_am_name(ts_get_rel_am(chunk->hypertable_relid)) :
 								 NULL,
 	};
 	Oid uid, saved_uid;
@@ -897,6 +875,16 @@ static void
 chunk_set_replica_identity(const Chunk *chunk)
 {
 	Relation ht_rel = relation_open(chunk->hypertable_relid, AccessShareLock);
+	Relation ch_rel = relation_open(chunk->table_id, AccessShareLock);
+
+	/* Do nothing if REPLICA IDENTITY of hypertable and chunk are equal */
+	if (ht_rel->rd_rel->relreplident == ch_rel->rd_rel->relreplident)
+	{
+		table_close(ch_rel, NoLock);
+		table_close(ht_rel, NoLock);
+		return;
+	}
+
 	ReplicaIdentityStmt stmt = {
 		.type = T_ReplicaIdentityStmt,
 		.identity_type = ht_rel->rd_rel->relreplident,
@@ -922,8 +910,9 @@ chunk_set_replica_identity(const Chunk *chunk)
 	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	AlterTableInternal(chunk->table_id, list_make1(&cmd), false);
+	ts_alter_table_with_event_trigger(chunk->table_id, NULL, list_make1(&cmd), false);
 	ts_catalog_restore_user(&sec_ctx);
+	table_close(ch_rel, NoLock);
 	table_close(ht_rel, NoLock);
 }
 
@@ -1614,12 +1603,14 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 	 * ts_chunk_build_from_tuple_and_stub() since chunk_resurrect() also uses
 	 * that function and, in that case, the chunk object is needed to create
 	 * the data table and related objects. */
-	chunk->table_id =
-		ts_get_relation_relid(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), false);
-
 	chunk->hypertable_relid = ts_hypertable_id_to_relid(chunk->fd.hypertable_id, false);
+	ts_get_rel_info_by_name(NameStr(chunk->fd.schema_name),
+							NameStr(chunk->fd.table_name),
+							&chunk->table_id,
+							&chunk->amoid,
+							&chunk->relkind);
 
-	chunk->relkind = get_rel_relkind(chunk->table_id);
+	Assert(OidIsValid(chunk->amoid) || chunk->fd.osm_chunk);
 
 	Ensure(chunk->relkind > 0,
 		   "relkind for chunk \"%s\".\"%s\" is invalid",

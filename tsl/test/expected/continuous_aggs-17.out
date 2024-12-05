@@ -1757,7 +1757,7 @@ group by bucket, symbol;
 NOTICE:  refreshing continuous aggregate "cagg_index_default"
 -- see corresponding materialization_hypertables
 select view_name, materialization_hypertable_name from timescaledb_information.continuous_aggregates ca
-where view_name like 'cagg_index_%';
+where view_name like 'cagg_index_%' ORDER BY view_name;
      view_name      | materialization_hypertable_name 
 --------------------+---------------------------------
  cagg_index_default | _materialized_hypertable_51

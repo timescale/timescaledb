@@ -6,7 +6,6 @@
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
-
 --TEST1 ---
 --basic test with count
 CREATE TABLE int_tab (a integer, b integer, c integer);
@@ -33,6 +32,9 @@ FROM int_tab
 GROUP BY time_bucket(1, a), a WITH NO DATA;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+
+SET timezone TO PST8PDT;
+
 DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
@@ -129,6 +131,9 @@ SELECT hypertable_id as mat_id FROM _timescaledb_config.bgw_job where id = :job_
 \set ON_ERROR_STOP 1
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+
+SET timezone TO PST8PDT;
+
 UPDATE _timescaledb_config.bgw_job
 SET config = jsonb_build_object('mat_hypertable_id', :mat_id)
 WHERE id = :job_id;
@@ -340,6 +345,9 @@ SELECT config FROM _timescaledb_config.bgw_job
 WHERE id = :job_id;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+
+SET timezone TO PST8PDT;
+
 UPDATE _timescaledb_config.bgw_job
 SET config = jsonb_build_object('mat_hypertable_id', :mat_id)
 WHERE id = :job_id;

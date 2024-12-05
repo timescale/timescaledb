@@ -67,7 +67,7 @@ SELECT pg_reload_conf();
 
 -- test the retention job
 SELECT next_start FROM alter_job(3, next_start => '2060-01-01 00:00:00+00'::timestamptz);
-TRUNCATE TABLE _timescaledb_internal.bgw_job_stat_history;
+DELETE FROM _timescaledb_internal.bgw_job_stat_history;
 INSERT INTO _timescaledb_internal.bgw_job_stat_history(job_id, pid, succeeded, execution_start, execution_finish, data)
 VALUES (123, 12345, false, '2000-01-01 00:00:00+00'::timestamptz, '2000-01-01 00:00:10+00'::timestamptz, '{}'),
 (456, 45678, false, '2000-01-01 00:00:20+00'::timestamptz, '2000-01-01 00:00:40+00'::timestamptz, '{}'),
@@ -85,6 +85,52 @@ SELECT test.wait_for_job_to_run(3, 1);
 SELECT job_id, pid, succeeded, execution_start, execution_finish, data
 FROM _timescaledb_internal.bgw_job_stat_history
 WHERE succeeded IS FALSE;
+
+-- test failure when starting jobs
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT _timescaledb_functions.stop_background_workers();
+
+DELETE FROM _timescaledb_internal.bgw_job_stat;
+DELETE FROM _timescaledb_internal.bgw_job_stat_history;
+DELETE FROM _timescaledb_config.bgw_job CASCADE;
+
+SELECT _timescaledb_functions.start_background_workers();
+
+\set VERBOSITY default
+-- Setup Jobs
+DO
+$TEST$
+DECLARE
+  stmt TEXT;
+  njobs INT := 26;
+BEGIN
+  RAISE INFO 'Creating % jobs', njobs;
+  FOR stmt IN
+    SELECT format('CREATE PROCEDURE custom_job%s(job_id int, config jsonb) LANGUAGE PLPGSQL AS $$ BEGIN PERFORM pg_sleep(0.1); END; $$', i) FROM generate_series(1, njobs) AS i
+  LOOP
+    EXECUTE stmt;
+  END LOOP;
+
+  RAISE INFO 'Scheduling % jobs', njobs;
+  PERFORM add_job(format('custom_job%s', i)::regproc, schedule_interval => interval '1 hour', initial_start := now())
+  FROM generate_series(1, njobs) AS i;
+END;
+$TEST$;
+
+-- Wait for jobs to run
+DO
+$TEST$
+DECLARE
+  njobs INT := 26;
+BEGIN
+  RAISE INFO 'Waiting for the % jobs to run', njobs;
+  SET LOCAL client_min_messages TO WARNING;
+  PERFORM test.wait_for_job_to_run_or_fail(id) FROM _timescaledb_config.bgw_job WHERE id >= 1000;
+END;
+$TEST$;
+
+SELECT count(*) > 0 FROM timescaledb_information.job_history WHERE succeeded IS FALSE AND err_message ~ 'failed to start job';
+\set VERBOSITY terse
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT _timescaledb_functions.stop_background_workers();

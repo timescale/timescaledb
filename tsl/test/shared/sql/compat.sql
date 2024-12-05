@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+SET timezone TO PST8PDT;
+
 \set ON_ERROR_STOP 0
 
 SELECT _timescaledb_internal.alter_job_set_hypertable_id(0,0);

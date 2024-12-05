@@ -3,6 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 SET timescaledb.enable_transparent_decompression to OFF;
+SET timezone TO 'America/Los_Angeles';
 
 \set PREFIX 'EXPLAIN (analyze, verbose, costs off, timing off, summary off)'
 
@@ -161,7 +162,7 @@ where uncompressed.compressed_chunk_id = compressed.id AND uncompressed.id = :'C
 SELECT count(*) from :CHUNK_NAME;
 SELECT count(*) from :COMPRESSED_CHUNK_NAME;
 SELECT sum(_ts_meta_count) from :COMPRESSED_CHUNK_NAME;
-SELECT location, _ts_meta_sequence_num from :COMPRESSED_CHUNK_NAME ORDER BY 1,2;
+SELECT location, _ts_meta_min_1, _ts_meta_max_1 from :COMPRESSED_CHUNK_NAME ORDER BY 1,2;
 
 \x
 SELECT chunk_id, numrows_pre_compression, numrows_post_compression
@@ -630,6 +631,8 @@ SET reltuples = 0, relpages = 0
         AND ch.compressed_chunk_id > 0 );
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
+SET timezone TO 'America/Los_Angeles';
+
 -- reltuples is initially -1 on PG14 before VACUUM/ANALYZE has been run
 SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, relpages, relallvisible FROM pg_class
  WHERE relname in ( SELECT ch.table_name FROM
@@ -712,6 +715,8 @@ ORDER BY 1;
 
 SELECT count(*) FROM metrics;
 
+-- TODO: remove this test in a separate PR since it introduces
+-- a lot of changes which hurt readability of test output
 -- test sequence number is local to segment by
 CREATE TABLE local_seq(time timestamptz, device int);
 SELECT table_name FROM create_hypertable('local_seq','time');
@@ -724,15 +729,6 @@ INSERT INTO local_seq SELECT '2000-01-01',4 FROM generate_series(1,3000);
 INSERT INTO local_seq SELECT '2000-01-01', generate_series(5,8);
 
 SELECT compress_chunk(c) FROM show_chunks('local_seq') c;
-
-SELECT
-	format('%s.%s',chunk.schema_name,chunk.table_name) AS "COMP_CHUNK"
-FROM _timescaledb_catalog.hypertable ht
-  INNER JOIN _timescaledb_catalog.hypertable ht_comp ON ht_comp.id = ht.compressed_hypertable_id
-  INNER JOIN _timescaledb_catalog.chunk ON chunk.hypertable_id = ht_comp.id
-WHERE ht.table_name = 'local_seq' \gset
-
-SELECT device, _ts_meta_sequence_num, _ts_meta_count FROM :COMP_CHUNK ORDER BY 1,2;
 
 -- github issue 4872
 -- If subplan of ConstraintAwareAppend is TidRangeScan, then SELECT on
@@ -797,6 +793,8 @@ ALTER TABLE f_sensor_data SET (timescaledb.compress, timescaledb.compress_segmen
 
 SELECT compress_chunk(i) FROM show_chunks('f_sensor_data') i;
 CALL reindex_compressed_hypertable('f_sensor_data');
+
+VACUUM ANALYZE f_sensor_data;
 
 -- Encourage use of parallel plans
 SET parallel_setup_cost = 0;

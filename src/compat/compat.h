@@ -17,6 +17,7 @@
 #include <nodes/nodes.h>
 #include <optimizer/restrictinfo.h>
 #include <pgstat.h>
+#include <storage/lmgr.h>
 #include <utils/jsonb.h>
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
@@ -25,10 +26,19 @@
 
 #define PG_MAJOR_MIN 14
 
-#define is_supported_pg_version_14(version) ((version >= 140000) && (version < 150000))
-#define is_supported_pg_version_15(version) ((version >= 150000) && (version < 160000))
-#define is_supported_pg_version_16(version) ((version >= 160000) && (version < 170000))
-#define is_supported_pg_version_17(version) ((version >= 170000) && (version < 180000))
+/*
+ * Prevent building against upstream versions that had ABI breaking change (14.14, 15.9, 16.5, 17.1)
+ * that was reverted in the following release.
+ */
+
+#define is_supported_pg_version_14(version)                                                        \
+	((version >= 140000) && (version < 150000) && (version != 140014))
+#define is_supported_pg_version_15(version)                                                        \
+	((version >= 150000) && (version < 160000) && (version != 150009))
+#define is_supported_pg_version_16(version)                                                        \
+	((version >= 160000) && (version < 170000) && (version != 160005))
+#define is_supported_pg_version_17(version)                                                        \
+	((version >= 170000) && (version < 180000) && (version != 170001))
 
 /*
  * PG16 support is a WIP and not complete yet.
@@ -54,6 +64,47 @@
 
 #if !(is_supported_pg_version(PG_VERSION_NUM))
 #error "Unsupported PostgreSQL version"
+#endif
+
+#if ((PG_VERSION_NUM >= 140014 && PG_VERSION_NUM < 150000) ||                                      \
+	 (PG_VERSION_NUM >= 150009 && PG_VERSION_NUM < 160000) ||                                      \
+	 (PG_VERSION_NUM >= 160005 && PG_VERSION_NUM < 170000) || (PG_VERSION_NUM >= 170001))
+/*
+ * The above versions introduced a fix for potentially losing updates to
+ * pg_class and pg_database due to inplace updates done to those catalog
+ * tables by PostgreSQL. The fix requires taking a lock on the tuple via
+ * SearchSysCacheLocked1(). For older PG versions, we just map the new
+ * function to the unlocked version and the unlocking of the tuple is a noop.
+ *
+ * https://github.com/postgres/postgres/commit/3b7a689e1a805c4dac2f35ff14fd5c9fdbddf150
+ *
+ * Here's an excerpt from README.tuplock that explains the need for additional
+ * tuple locks:
+ *
+ * If IsInplaceUpdateRelation() returns true for a table, the table is a
+ * system catalog that receives systable_inplace_update_begin() calls.
+ * Preparing a heap_update() of these tables follows additional locking rules,
+ * to ensure we don't lose the effects of an inplace update. In particular,
+ * consider a moment when a backend has fetched the old tuple to modify, not
+ * yet having called heap_update(). Another backend's inplace update starting
+ * then can't conclude until the heap_update() places its new tuple in a
+ * buffer. We enforce that using locktags as follows. While DDL code is the
+ * main audience, the executor follows these rules to make e.g. "MERGE INTO
+ * pg_class" safer. Locking rules are per-catalog:
+ *
+ * pg_class heap_update() callers: before copying the tuple to modify, take a
+ * lock on the tuple, a ShareUpdateExclusiveLock on the relation, or a
+ * ShareRowExclusiveLock or stricter on the relation.
+ */
+#define SYSCACHE_TUPLE_LOCK_NEEDED 1
+#define AssertSufficientPgClassUpdateLockHeld(relid)                                               \
+	Assert(CheckRelationOidLockedByMe(relid, ShareUpdateExclusiveLock, false) ||                   \
+		   CheckRelationOidLockedByMe(relid, ShareRowExclusiveLock, true));
+#define UnlockSysCacheTuple(rel, tid) UnlockTuple(rel, tid, InplaceUpdateTupleLock);
+#else
+#define SearchSysCacheLockedCopy1(rel, datum) SearchSysCacheCopy1(rel, datum)
+#define UnlockSysCacheTuple(rel, tid)
+#define AssertSufficientPgClassUpdateLockHeld(relid)
 #endif
 
 /*

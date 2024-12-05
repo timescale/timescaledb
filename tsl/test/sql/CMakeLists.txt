@@ -11,7 +11,6 @@ set(TEST_FILES
     cagg_errors.sql
     cagg_invalidation.sql
     cagg_policy.sql
-    cagg_query.sql
     cagg_refresh.sql
     cagg_utils.sql
     cagg_watermark.sql
@@ -30,6 +29,7 @@ set(TEST_FILES
     compression_policy.sql
     compression_qualpushdown.sql
     compression_settings.sql
+    compression_sequence_num_removal.sql
     compression_sorted_merge_distinct.sql
     compression_sorted_merge_columns.sql
     decompress_index.sql
@@ -41,8 +41,22 @@ set(TEST_FILES
     size_utils_tsl.sql
     skip_scan.sql
     transparent_decompression_join_index.sql
+    vector_agg_functions.sql
     vector_agg_param.sql
     vectorized_aggregation.sql)
+
+set(TEST_TEMPLATES
+    cagg_query.sql.in
+    cagg_union_view.sql.in
+    cagg_permissions.sql.in
+    chunk_column_stats.sql.in
+    compression_permissions.sql.in
+    compression_sorted_merge.sql.in
+    merge_append_partially_compressed.sql.in
+    modify_exclusion.sql.in
+    plan_skip_scan.sql.in
+    transparent_decompression.sql.in
+    transparent_decompression_ordered_index.sql.in)
 
 if(USE_TELEMETRY)
   list(APPEND TEST_FILES bgw_telemetry.sql)
@@ -100,14 +114,60 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     recompress_chunk_segmentwise.sql
     feature_flags.sql
     vector_agg_default.sql
+    vector_agg_memory.sql
     vector_agg_segmentby.sql)
+
+  list(
+    APPEND
+    TEST_TEMPLATES
+    cagg_bgw.sql.in
+    cagg_ddl.sql.in
+    cagg_migrate_function.sql.in
+    cagg_repair.sql.in
+    cagg_usage.sql.in
+    compression_errors.sql.in
+    compression_update_delete.sql.in
+    continuous_aggs.sql.in)
+
+  if(USE_TELEMETRY)
+    list(APPEND TEST_FILES telemetry_stats.sql)
+  endif()
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
   if(CMAKE_BUILD_TYPE MATCHES Debug)
-    list(APPEND TEST_FILES bgw_scheduler_control.sql)
+    list(APPEND TEST_FILES bgw_scheduler_control.sql hypercore.sql)
   endif()
-  list(APPEND TEST_FILES merge_compress.sql)
+  list(
+    APPEND
+    TEST_FILES
+    cagg_refresh_using_merge.sql
+    hypercore_columnar.sql
+    hypercore_copy.sql
+    hypercore_create.sql
+    hypercore_cursor.sql
+    hypercore_ddl.sql
+    hypercore_delete.sql
+    hypercore_dump_restore.sql
+    hypercore_index_btree.sql
+    hypercore_index_hash.sql
+    hypercore_insert.sql
+    hypercore_join.sql
+    hypercore_merge.sql
+    hypercore_policy.sql
+    hypercore_scans.sql
+    hypercore_stats.sql
+    hypercore_trigger.sql
+    hypercore_types.sql
+    hypercore_update.sql
+    hypercore_vacuum.sql
+    merge_compress.sql
+    hypercore_vacuum_full.sql)
+endif()
+
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
+  list(APPEND TEST_FILES cagg_planning.sql hypercore_parallel.sql)
+  list(APPEND TEST_TEMPLATES cagg_query_using_merge.sql.in)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
@@ -135,35 +195,6 @@ set(SOLO_TESTS
     move
     reorder
     telemetry_stats)
-
-set(TEST_TEMPLATES
-    cagg_union_view.sql.in
-    cagg_permissions.sql.in
-    chunk_column_stats.sql.in
-    compression_permissions.sql.in
-    compression_sorted_merge.sql.in
-    merge_append_partially_compressed.sql.in
-    modify_exclusion.sql.in
-    plan_skip_scan.sql.in
-    transparent_decompression.sql.in
-    transparent_decompression_ordered_index.sql.in)
-
-if(CMAKE_BUILD_TYPE MATCHES Debug)
-  list(
-    APPEND
-    TEST_TEMPLATES
-    cagg_bgw.sql.in
-    cagg_ddl.sql.in
-    cagg_migrate_function.sql.in
-    cagg_repair.sql.in
-    cagg_usage.sql.in
-    compression_errors.sql.in
-    compression_update_delete.sql.in
-    continuous_aggs.sql.in)
-  if(USE_TELEMETRY)
-    list(APPEND TEST_FILES telemetry_stats.sql)
-  endif()
-endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 # Check if PostgreSQL was compiled with JIT support
 set(PG_CONFIG_H "${PG_INCLUDEDIR}/pg_config.h")

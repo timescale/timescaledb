@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
-      pg16_latest: ${{ steps.setter.outputs.PG16_LATEST }}
+      pg17_latest: ${{ steps.setter.outputs.PG17_LATEST }}
     steps:
     - name: Checkout source code
       uses: actions/checkout@v4
@@ -47,15 +47,15 @@ jobs:
         CC: clang-14
         CXX: clang++-14
         DEBIAN_FRONTEND: noninteractive
-        IGNORES: "append-* transparent_decompression-* transparent_decompress_chunk-* pg_dump telemetry bgw_db_scheduler*"
+        IGNORES: "append-* transparent_decompression-* transparent_decompress_chunk-* pg_dump telemetry bgw_db_scheduler* hypercore_vacuum"
         SKIPS: chunk_adaptive histogram_test-*
-        EXTENSIONS: "postgres_fdw test_decoding"
+        EXTENSIONS: "postgres_fdw test_decoding pageinspect pgstattuple"
     strategy:
       matrix:
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
         build_type: [ Debug ]
         include:
-          - pg: ${{ fromJson(needs.config.outputs.pg16_latest) }}
+          - pg: ${{ fromJson(needs.config.outputs.pg17_latest) }}
             build_type: Debug
       fail-fast: false
 
@@ -153,6 +153,15 @@ jobs:
       run: |
         set -o pipefail
         export LANG=C.UTF-8
+        #
+        # Even disabling parallel plans the Sort Method on 32bits
+        # is always 'still in progress' for PG17. So for now added
+        # those tests to SKIPS.
+        #
+        PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
+        if [ ${PG_MAJOR} -eq 17 ]; then
+          SKIPS="${SKIPS} constraint_exclusion_prepared ordered_append*"
+        fi
         # PostgreSQL cannot be run as root. So, switch to postgres user.
         runuser -u postgres -- \
           make -k -C build installcheck IGNORES="${IGNORES}" \

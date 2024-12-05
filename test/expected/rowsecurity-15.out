@@ -541,9 +541,10 @@ SELECT * FROM document d FULL OUTER JOIN category c on d.cid = c.cid ORDER BY d.
      |     |        |                 |                    |  33 | technology
 (6 rows)
 
+\set VERBOSITY sqlstate
 DELETE FROM category WHERE cid = 33;    -- fails with FK violation
-ERROR:  update or delete on table "category" violates foreign key constraint "document_cid_fkey" on table "document"
-DETAIL:  Key is still referenced from table "document".
+ERROR:  23503
+\set VERBOSITY default
 -- can insert FK referencing invisible PK
 SET SESSION AUTHORIZATION regress_rls_carol;
 SELECT * FROM document d FULL OUTER JOIN category c on d.cid = c.cid ORDER BY d.did, c.cid;

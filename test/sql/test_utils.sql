@@ -68,3 +68,9 @@ CREATE TABLE hyper (time timestamptz, temp float);
 SELECT create_hypertable('hyper', 'time');
 INSERT INTO hyper VALUES ('2021-01-01', 1.0), ('2022-01-01', 2.0);
 SELECT test.scanner();
+
+-- Test errdata_to_jsonb
+RESET ROLE;
+CREATE OR REPLACE FUNCTION test.errdata_to_jsonb() RETURNS JSONB
+AS :MODULE_PATHNAME, 'ts_test_errdata_to_jsonb' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+SELECT test.errdata_to_jsonb();

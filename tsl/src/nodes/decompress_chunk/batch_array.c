@@ -52,7 +52,7 @@ batch_array_enlarge(BatchArray *array, int new_number)
 	array->batch_states = repalloc(array->batch_states, array->n_batch_state_bytes * new_number);
 
 	/* Zero out the tail. The batch states are initialized on first use. */
-	memset(((char *) array->batch_states) + array->n_batch_state_bytes * array->n_batch_states,
+	memset(((char *) array->batch_states) + (array->n_batch_state_bytes * array->n_batch_states),
 		   0x0,
 		   array->n_batch_state_bytes * (new_number - array->n_batch_states));
 

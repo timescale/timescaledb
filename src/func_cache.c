@@ -575,7 +575,7 @@ initialize_func_info()
 		{
 			/* The function cache could be accessed during an extension upgrade. Not all expected
 			 * functions have to exist at this point. */
-			elog(ts_extension_is_loaded() ? ERROR : NOTICE,
+			elog(ts_extension_is_loaded_and_not_upgrading() ? ERROR : NOTICE,
 				 "cache lookup failed for function \"%s\" with %d args",
 				 finfo->funcname,
 				 finfo->nargs);

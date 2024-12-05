@@ -567,7 +567,6 @@ job_execute(BgwJob *job)
 	bool portal_created = false;
 	char prokind;
 	Oid proc;
-	ObjectWithArgs *object;
 	FuncExpr *funcexpr;
 	MemoryContext parent_ctx = CurrentMemoryContext;
 	StringInfo query;
@@ -615,12 +614,7 @@ job_execute(BgwJob *job)
 	}
 #endif
 
-	object = makeNode(ObjectWithArgs);
-	object->objname = list_make2(makeString(NameStr(job->fd.proc_schema)),
-								 makeString(NameStr(job->fd.proc_name)));
-	object->objargs = list_make2(SystemTypeName("int4"), SystemTypeName("jsonb"));
-	proc = LookupFuncWithArgs(OBJECT_ROUTINE, object, false);
-
+	proc = ts_bgw_job_get_funcid(job);
 	prokind = get_func_prokind(proc);
 
 	/*

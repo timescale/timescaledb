@@ -103,7 +103,10 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 		 * Frozen chunks require at least PG14.
 		 */
 		if (chunk && ts_chunk_is_frozen(chunk))
-			elog(ERROR, "cannot INSERT into frozen chunk \"%s\"", get_rel_name(chunk->table_id));
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot INSERT into frozen chunk \"%s\"",
+							get_rel_name(chunk->table_id))));
 		if (chunk && IS_OSM_CHUNK(chunk))
 		{
 			const Dimension *time_dim =
@@ -165,16 +168,24 @@ ts_chunk_dispatch_decompress_batches_for_insert(ChunkDispatch *dispatch, ChunkIn
 {
 	if (cis->chunk_compressed)
 	{
+		OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
+
+		if (cis->use_tam && onconflict_action != ONCONFLICT_UPDATE)
+		{
+			/* With our own TAM, a unique index covers both the compressed and
+			 * non-compressed data, so there is no need to decompress anything
+			 * when doing inserts. */
+		}
 		/*
 		 * If this is an INSERT into a compressed chunk with UNIQUE or
 		 * PRIMARY KEY constraints we need to make sure any batches that could
 		 * potentially lead to a conflict are in the decompressed chunk so
 		 * postgres can do proper constraint checking.
 		 */
-		if (ts_cm_functions->decompress_batches_for_insert)
+		else if (ts_cm_functions->decompress_batches_for_insert)
 		{
 			ts_cm_functions->decompress_batches_for_insert(cis, slot);
-			OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
+
 			/* mark rows visible */
 			if (onconflict_action == ONCONFLICT_UPDATE)
 				dispatch->estate->es_output_cid = GetCurrentCommandId(true);
@@ -437,6 +448,32 @@ chunk_dispatch_exec(CustomScanState *node)
 	ts_chunk_dispatch_decompress_batches_for_insert(dispatch, cis, slot);
 
 	MemoryContextSwitchTo(old);
+
+	/*
+	 * Save away the insert state for using it in ExecInsert().
+	 *
+	 * We need to return the original slot from the subplan since otherwise
+	 * the slot might not match what is expected. The expected slot should
+	 * contain a tuple with the same definition as the parent hypertable while
+	 * the slot in the chunk insert state is a slot matching the chunk
+	 * definition.
+	 *
+	 * If columns have been dropped from the parent hypertable, new chunks
+	 * will not have these dropped attributes, which will cause problems later
+	 * in the insert execution (see ExecGetInsertNewTuple()).
+	 *
+	 * We can probably improve this code by removing ChunkDispatch. See
+	 * hypertable_modify.c for more information.
+	 */
+	state->cis = cis;
+
+	return slot;
+}
+
+TupleTableSlot *
+ts_chunk_dispatch_prepare_tuple_routing(ChunkDispatchState *state, TupleTableSlot *slot)
+{
+	ChunkInsertState *cis = state->cis;
 
 	/* Convert the tuple to the chunk's rowtype, if necessary */
 	if (cis->hyper_to_chunk_map != NULL && state->is_dropped_attr_exists == false)

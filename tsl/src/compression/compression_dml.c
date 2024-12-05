@@ -157,6 +157,16 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 	if (index_rel)
 		null_columns = NULL;
 
+	if (ts_guc_debug_compression_path_info)
+	{
+		elog(INFO,
+			 "Using %s scan with scan keys: index %d, heap %d, memory %d. ",
+			 index_rel ? "index" : "table",
+			 num_index_scankeys,
+			 num_heap_scankeys,
+			 num_mem_scankeys);
+	}
+
 	/*
 	 * Using latest snapshot to scan the heap since we are doing this to build
 	 * the index on the uncompressed chunks in order to do speculative insertion
@@ -759,6 +769,7 @@ get_batch_keys_for_unique_constraints(const ChunkInsertState *cis, Relation rela
 {
 	tuple_filtering_constraints *constraints = palloc0(sizeof(tuple_filtering_constraints));
 	constraints->on_conflict = ONCONFLICT_UPDATE;
+	constraints->nullsnotdistinct = false;
 	ListCell *lc;
 
 	/* Fast path if definitely no indexes */
@@ -794,12 +805,13 @@ get_batch_keys_for_unique_constraints(const ChunkInsertState *cis, Relation rela
 		 */
 		for (int i = 0; i < indexDesc->rd_index->indnkeyatts; i++)
 		{
-			int attno = indexDesc->rd_index->indkey.values[i];
+			AttrNumber attno = indexDesc->rd_index->indkey.values[i];
 			/* We are not interested in expression columns which will have attno = 0 */
 			if (!attno)
 				continue;
 
-			idx_attrs = bms_add_member(idx_attrs, attno - FirstLowInvalidHeapAttributeNumber);
+			Assert(AttrNumberIsForUserDefinedAttr(attno));
+			idx_attrs = bms_add_member(idx_attrs, attno);
 		}
 		index_close(indexDesc, AccessShareLock);
 
@@ -822,6 +834,12 @@ get_batch_keys_for_unique_constraints(const ChunkInsertState *cis, Relation rela
 			constraints->key_columns = bms_intersect(idx_attrs, constraints->key_columns);
 			constraints->covered = false;
 		}
+
+#if PG15_GE
+		/* If any of the unique indexes have NULLS NOT DISTINCT set, we proceed
+		 * with checking the constraints with decompression */
+		constraints->nullsnotdistinct |= indexDesc->rd_index->indnullsnotdistinct;
+#endif
 
 		/* When multiple unique indexes are present, in theory there could be no shared
 		 * columns even though that is very unlikely as they will probably at least share
@@ -926,7 +944,11 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 																	  false, /* is_null */
 																	  false	 /* is_array_op */
 																	  ));
+							break;
 						}
+						default:
+							/* Do nothing for unknown operator strategies. */
+							break;
 					}
 					continue;
 				}
@@ -1025,6 +1047,10 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 																	 false	/* is_array_op */
 																	 ));
 						}
+						break;
+						default:
+							/* Do nothing for unknown operator strategies. */
+							break;
 					}
 				}
 			}
@@ -1070,7 +1096,11 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 																	  false, /* is_null */
 																	  true	 /* is_array_op */
 																	  ));
+							break;
 						}
+						default:
+							/* Do nothing on unknown operator strategies. */
+							break;
 					}
 					continue;
 				}
@@ -1334,11 +1364,9 @@ key_column_is_null(tuple_filtering_constraints *constraints, Relation chunk_rel,
 	if (!constraints->covered || constraints->nullsnotdistinct)
 		return false;
 
-	int i = -1;
-	while ((i = bms_next_member(constraints->key_columns, i)) > 0)
+	AttrNumber chunk_attno = -1;
+	while ((chunk_attno = bms_next_member(constraints->key_columns, chunk_attno)) > 0)
 	{
-		AttrNumber chunk_attno = i + FirstLowInvalidHeapAttributeNumber;
-
 		/*
 		 * slot has the physical layout of the hypertable, so we need to
 		 * get the attribute number of the hypertable for the column.

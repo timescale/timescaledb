@@ -23,6 +23,7 @@ typedef struct TSSCallbacks
 	tss_enabled_hook_type tss_enabled_hook_type;
 } TSSCallbacks;
 
+extern bool ts_is_tss_enabled(void);
 extern void ts_begin_tss_store_callback(void);
 extern void ts_end_tss_store_callback(const char *query, int query_location, int query_len,
 									  uint64 query_id, uint64 rows);

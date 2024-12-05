@@ -1,1 +1,0 @@
-Fixes: #7230 Don't propagate fk constraints to osm chunk

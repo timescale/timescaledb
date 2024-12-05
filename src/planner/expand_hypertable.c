@@ -145,10 +145,10 @@ int_get_datum(int64 value, Oid type)
 			return TimestampGetDatum(value);
 		case TIMESTAMPTZOID:
 			return TimestampTzGetDatum(value);
+		default:
+			elog(ERROR, "unsupported datatype in int_get_datum: %s", format_type_be(type));
+			pg_unreachable();
 	}
-
-	elog(ERROR, "unsupported datatype in int_get_datum: %s", format_type_be(type));
-	pg_unreachable();
 }
 
 static int64
@@ -170,10 +170,12 @@ const_datum_get_int(Const *cnst)
 			return DatumGetTimestamp(cnst->constvalue);
 		case TIMESTAMPTZOID:
 			return DatumGetTimestampTz(cnst->constvalue);
+		default:
+			elog(ERROR,
+				 "unsupported datatype in const_datum_get_int: %s",
+				 format_type_be(cnst->consttype));
+			pg_unreachable();
 	}
-
-	elog(ERROR, "unsupported datatype in const_datum_get_int: %s", format_type_be(cnst->consttype));
-	pg_unreachable();
 }
 
 /*
@@ -884,7 +886,7 @@ find_children_chunks(HypertableRestrictInfo *hri, Hypertable *ht, bool include_o
 	 * by find_inheritance_children. This is mostly needed to avoid test
 	 * reference changes.
 	 */
-	qsort(chunks, *num_chunks, sizeof(Chunk *), chunk_cmp_chunk_reloid);
+	qsort((void *) chunks, *num_chunks, sizeof(Chunk *), chunk_cmp_chunk_reloid);
 
 	return chunks;
 }

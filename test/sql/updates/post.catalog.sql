@@ -12,14 +12,16 @@
 
 SELECT nspname AS Schema,
        relname AS Name,
-       unnest(relacl)::text as ACL
+       -- PG17 introduced MAINTAIN acl (m) so removed it to keep output backward compatible
+       replace(unnest(relacl)::text, 'm', '') as ACL
 FROM pg_class JOIN pg_namespace ns ON relnamespace = ns.oid
 WHERE nspname IN ('_timescaledb_catalog', '_timescaledb_config')
 ORDER BY Schema, Name, ACL;
 
 SELECT nspname AS schema,
        relname AS name,
-       unnest(initprivs)::text AS initpriv
+       -- PG17 introduced MAINTAIN acl (m) so removed it to keep output backward compatible
+       replace(unnest(initprivs)::text, 'm', '') AS initpriv
 FROM pg_class cl JOIN pg_namespace ns ON ns.oid = relnamespace
             LEFT JOIN pg_init_privs ON objoid = cl.oid AND objsubid = 0
 WHERE classoid = 'pg_class'::regclass
@@ -36,11 +38,35 @@ ORDER BY schema, name, initpriv;
 \dy
 \d public.*
 
-\dx+ timescaledb
-SELECT count(*)
-  FROM pg_depend
- WHERE refclassid = 'pg_extension'::regclass
-     AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
+-- Keep the output backward compatible
+\if :PG_UPGRADE_TEST
+  SELECT oid AS extoid FROM pg_catalog.pg_extension WHERE extname = 'timescaledb' \gset
+
+  WITH ext AS (
+    SELECT pg_catalog.pg_describe_object(classid, objid, 0) AS objdesc
+    FROM pg_catalog.pg_depend
+    WHERE refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND refobjid = :'extoid' AND deptype = 'e'
+    ORDER BY 1
+  )
+  SELECT objdesc AS "Object description" FROM ext
+  WHERE objdesc !~ '^type' OR objdesc ~ '^type _timescaledb_internal.(compressed_data|dimension_info)$'
+  ORDER BY 1;
+
+  WITH ext AS (
+    SELECT pg_catalog.pg_describe_object(classid, objid, 0) AS objdesc
+    FROM pg_catalog.pg_depend
+    WHERE refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND refobjid = :'extoid' AND deptype = 'e'
+    ORDER BY 1
+  )
+  SELECT count(*) FROM ext
+  WHERE objdesc !~ '^type' OR objdesc ~ '^type _timescaledb_internal.(compressed_data|dimension_info)$';
+\else
+  \dx+ timescaledb
+  SELECT count(*)
+    FROM pg_depend
+   WHERE refclassid = 'pg_extension'::regclass
+       AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
+\endif
 
 -- The list of tables configured to be dumped.
 SELECT unnest(extconfig)::regclass::text, unnest(extcondition) FROM pg_extension WHERE extname = 'timescaledb' ORDER BY 1;

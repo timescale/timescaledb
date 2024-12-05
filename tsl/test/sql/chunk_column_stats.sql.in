@@ -54,6 +54,10 @@ INSERT INTO sample_table VALUES (:'start_date'::timestamptz, 16, 14.6554, 47, 'n
 -- Non-int, date, timestamp cannot be specified as a min/max ranges for now
 -- We could expand to FLOATs, NUMERICs later
 \set ON_ERROR_STOP 0
+-- Error if you try enabling without enabling the GUC first
+SELECT * FROM enable_chunk_skipping('sample_table', 'name');
+-- Enable the chunk skipping GUC
+SET timescaledb.enable_chunk_skipping to ON;
 SELECT * FROM enable_chunk_skipping('sample_table', 'name');
 SELECT * FROM enable_chunk_skipping('sample_table', NULL);
 SELECT * FROM enable_chunk_skipping(NULL, 'name');
@@ -134,11 +138,49 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 
 -- A query using a WHERE clause on "sensor_id" column will scan the proper chunk
 -- due to chunk exclusion using min/max ranges calculated above
-:PREFIX SELECT * FROM sample_table WHERE sensor_id > 9;
+-- First chunk has [start,end) values of [1,9), here we confirm that its being
+-- filtered out when we are not hitting that range.
+
+-- Query ranges outside of chunk stats, should not include first chunk.
+:PREFIX SELECT * FROM sample_table WHERE sensor_id < 1;
+:PREFIX SELECT * FROM sample_table WHERE sensor_id <= 0;
+:PREFIX SELECT * FROM sample_table WHERE sensor_id > 8;
+:PREFIX SELECT * FROM sample_table WHERE sensor_id >= 9;
 :PREFIX SELECT * FROM sample_table WHERE sensor_id = 10;
+
+-- Query intersecting ranges, should include chunk.
+:PREFIX SELECT * FROM sample_table WHERE sensor_id = 7;
+:PREFIX SELECT * FROM sample_table WHERE sensor_id < 2;
+:PREFIX SELECT * FROM sample_table WHERE sensor_id > 3;
+:PREFIX SELECT * FROM sample_table WHERE sensor_id <= 1;
+:PREFIX SELECT * FROM sample_table WHERE sensor_id >= 8;
+:PREFIX SELECT * FROM sample_table WHERE sensor_id >= 8 AND sensor_id <= 10;
+:PREFIX SELECT * FROM sample_table WHERE sensor_id <= 4 AND sensor_id > -5;
+:PREFIX SELECT * FROM sample_table WHERE sensor_id > 6 AND sensor_id < 10;
+:PREFIX SELECT * FROM sample_table WHERE sensor_id <= 5 AND sensor_id > -1;
+
+-- Query chunk superset ranges, should include chunk.
+:PREFIX SELECT * FROM sample_table WHERE sensor_id > -2;
 :PREFIX SELECT * FROM sample_table WHERE sensor_id < 11;
-:PREFIX SELECT * FROM sample_table WHERE sensor_id > 9 and sensor_id < 20;
-:PREFIX SELECT * FROM sample_table WHERE sensor_id > 1 and sensor_id < 7;
+:PREFIX SELECT * FROM sample_table WHERE sensor_id >= 1 AND sensor_id <= 8;
+:PREFIX SELECT * FROM sample_table WHERE sensor_id > 0 AND sensor_id < 9;
+
+-- Query chunk subset ranges, should include chunk.
+:PREFIX SELECT * FROM sample_table WHERE sensor_id > 2 AND sensor_id < 7;
+:PREFIX SELECT * FROM sample_table WHERE sensor_id >= 3 AND sensor_id <= 6;
+:PREFIX SELECT * FROM sample_table WHERE sensor_id > 4 AND sensor_id <= 5;
+:PREFIX SELECT * FROM sample_table WHERE sensor_id >= 6 AND sensor_id < 8;
+
+-- Disabling the GUC will prevent plan time chunk skipping
+RESET timescaledb.enable_chunk_skipping;
+:PREFIX SELECT * FROM sample_table WHERE sensor_id < 1;
+SET timescaledb.enable_chunk_skipping to ON;
+
+-- Query ranges with OR clause will not work properly due to the way
+-- hypertable expansion works as of now. Once we fix that, it should
+-- fix the issue here too.
+-- Should not include but it does.
+:PREFIX SELECT * FROM sample_table WHERE sensor_id < 1 OR sensor_id > 8;
 
 -- Executor startup time exclusion will also use these ranges appropriately
 :PREFIX UPDATE sample_table set sensor_id = 10 WHERE sensor_id > length(substring(version(),1,9));
@@ -146,6 +188,11 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 :PREFIX SELECT * FROM sample_table  WHERE sensor_id > length(substring(version(),1,11));
 -- Scan both chunks
 :PREFIX SELECT * FROM sample_table  WHERE sensor_id > length(substring(version(),1,6));
+
+-- Disabling the GUC will prevent execution time chunk skipping
+RESET timescaledb.enable_chunk_skipping;
+:PREFIX UPDATE sample_table set sensor_id = 10 WHERE sensor_id > length(substring(version(),1,9));
+SET timescaledb.enable_chunk_skipping to ON;
 
 -- IN/ANY is not supported for now
 :PREFIX SELECT * FROM sample_table WHERE sensor_id IN (9, 10, 11);

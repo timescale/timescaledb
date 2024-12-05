@@ -449,7 +449,7 @@ tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 	bool have_incorrect_index = false;
 	for (uint32 i = 0; i < n_notnull; i++)
 	{
-		have_incorrect_index |= indices[i] >= (int16) header->num_distinct;
+		have_incorrect_index = have_incorrect_index || indices[i] >= (int16) header->num_distinct;
 	}
 	CheckCompressedData(!have_incorrect_index);
 
@@ -508,7 +508,8 @@ tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 		Assert(current_notnull_element == -1);
 	}
 
-	ArrowArray *result = MemoryContextAllocZero(dest_mctx, sizeof(ArrowArray) + sizeof(void *) * 2);
+	ArrowArray *result =
+		MemoryContextAllocZero(dest_mctx, sizeof(ArrowArray) + (sizeof(void *) * 2));
 	const void **buffers = (const void **) &result[1];
 	buffers[0] = validity_bitmap;
 	buffers[1] = indices;

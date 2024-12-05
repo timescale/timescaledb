@@ -32,6 +32,8 @@ from ci_settings import (
     PG15_LATEST,
     PG16_EARLIEST,
     PG16_LATEST,
+    PG17_EARLIEST,
+    PG17_LATEST,
     PG_LATEST,
 )
 
@@ -77,7 +79,7 @@ def build_debug_config(overrides):
             "name": "Debug",
             "os": "ubuntu-22.04",
             "pg_extra_args": "--enable-debug --enable-cassert --with-llvm LLVM_CONFIG=llvm-config-14",
-            "pg_extensions": "postgres_fdw test_decoding",
+            "pg_extensions": "postgres_fdw test_decoding pageinspect pgstattuple",
             "pginstallcheck": True,
             "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DREQUIRE_ALL_TESTS=ON",
         }
@@ -149,7 +151,7 @@ def macos_config(overrides):
             "ignored_tests": default_ignored_tests.union(macos_ignored_tests),
             "os": "macos-13",
             "pg_extra_args": "--with-libraries=/usr/local/opt/openssl@3/lib --with-includes=/usr/local/opt/openssl@3/include --without-icu",
-            "pg_extensions": "postgres_fdw test_decoding",
+            "pg_extensions": "postgres_fdw test_decoding pageinspect pgstattuple",
             "pginstallcheck": True,
             "tsdb_build_args": "-DASSERTIONS=ON -DREQUIRE_ALL_TESTS=ON -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl@3",
         }
@@ -165,28 +167,20 @@ m["include"].append(build_debug_config({"pg": PG15_LATEST}))
 
 m["include"].append(build_debug_config({"pg": PG16_LATEST}))
 
+m["include"].append(build_debug_config({"pg": PG17_LATEST}))
+
 # test timescaledb with release config on latest postgres release in MacOS
-m["include"].append(build_release_config(macos_config({"pg": PG16_LATEST})))
+m["include"].append(build_release_config(macos_config({"pg": PG17_LATEST})))
 
 # Test latest postgres release without telemetry. Also run clang-tidy on it
 # because it's the fastest one.
 m["include"].append(
     build_without_telemetry(
         {
-            "pg": PG16_LATEST,
+            "pg": PG17_LATEST,
             "cc": "clang-14",
             "cxx": "clang++-14",
             "tsdb_build_args": "-DLINTER=ON -DWARNINGS_AS_ERRORS=ON",
-        }
-    )
-)
-
-m["include"].append(
-    build_debug_config(
-        {
-            "pg": "17",
-            "snapshot": "snapshot",
-            "tsdb_build_args": "-DEXPERIMENTAL=ON",
         }
     )
 )
@@ -211,15 +205,22 @@ if not pull_request:
     # add debug test for first supported PG16 version
     m["include"].append(build_debug_config({"pg": PG16_EARLIEST}))
 
+    # add debug test for first supported PG17 version
+    if PG17_EARLIEST != PG17_LATEST:
+        m["include"].append(build_debug_config({"pg": PG17_EARLIEST}))
+
     # add debug tests for timescaledb on latest postgres release in MacOS
     m["include"].append(build_debug_config(macos_config({"pg": PG15_LATEST})))
 
     m["include"].append(build_debug_config(macos_config({"pg": PG16_LATEST})))
 
+    m["include"].append(build_debug_config(macos_config({"pg": PG17_LATEST})))
+
     # add release test for latest pg releases
     m["include"].append(build_release_config({"pg": PG14_LATEST}))
     m["include"].append(build_release_config({"pg": PG15_LATEST}))
     m["include"].append(build_release_config({"pg": PG16_LATEST}))
+    m["include"].append(build_release_config({"pg": PG17_LATEST}))
 
     # add apache only test for latest pg versions
     for PG_LATEST_VER in PG_LATEST:
@@ -247,6 +248,14 @@ if not pull_request:
         build_debug_config(
             {
                 "pg": 16,
+                "snapshot": "snapshot",
+            }
+        )
+    )
+    m["include"].append(
+        build_debug_config(
+            {
+                "pg": 17,
                 "snapshot": "snapshot",
             }
         )
@@ -306,7 +315,18 @@ elif len(sys.argv) > 2:
                     "coverage": False,
                     "installcheck_args": f'TESTS="{" ".join(list(tests) * 20)}"',
                     "name": "Flaky Check Debug",
-                    "pg": PG14_LATEST,
+                    "pg": PG16_LATEST,
+                    "pginstallcheck": False,
+                }
+            )
+        )
+        m["include"].append(
+            build_debug_config(
+                {
+                    "coverage": False,
+                    "installcheck_args": f'TESTS="{" ".join(list(tests) * 20)}"',
+                    "name": "Flaky Check Debug",
+                    "pg": PG17_LATEST,
                     "pginstallcheck": False,
                 }
             )
