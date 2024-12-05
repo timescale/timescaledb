@@ -77,7 +77,7 @@ static void emit_up_to_date_notice(const ContinuousAgg *cagg, const CaggRefreshC
 static bool process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 												   const InternalTimeRange *refresh_window,
 												   const CaggRefreshCallContext callctx,
-												   int32 chunk_id);
+												   int32 chunk_id, bool force);
 static void fill_bucket_offset_origin(const ContinuousAgg *cagg,
 									  const InternalTimeRange *const refresh_window,
 									  NullableDatum *offset, NullableDatum *origin);
@@ -628,6 +628,7 @@ Datum
 continuous_agg_refresh(PG_FUNCTION_ARGS)
 {
 	Oid cagg_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	bool force = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
 	ContinuousAgg *cagg;
 	InternalTimeRange refresh_window = {
 		.type = InvalidOid,
@@ -659,7 +660,8 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 									&refresh_window,
 									CAGG_REFRESH_WINDOW,
 									PG_ARGISNULL(1),
-									PG_ARGISNULL(2));
+									PG_ARGISNULL(2),
+									force);
 
 	PG_RETURN_VOID();
 }
@@ -703,7 +705,8 @@ continuous_agg_calculate_merged_refresh_window(const ContinuousAgg *cagg,
 static bool
 process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 									   const InternalTimeRange *refresh_window,
-									   const CaggRefreshCallContext callctx, int32 chunk_id)
+									   const CaggRefreshCallContext callctx, int32 chunk_id,
+									   bool force)
 {
 	InvalidationStore *invalidations;
 	Oid hyper_relid = ts_hypertable_id_to_relid(cagg->data.mat_hypertable_id, false);
@@ -727,7 +730,8 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 												  ts_guc_cagg_max_individual_materializations,
 												  &do_merged_refresh,
 												  &merged_refresh_window,
-												  callctx);
+												  callctx,
+												  force);
 
 	if (invalidations != NULL || do_merged_refresh)
 	{
@@ -759,7 +763,7 @@ void
 continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 								const InternalTimeRange *refresh_window_arg,
 								const CaggRefreshCallContext callctx, const bool start_isnull,
-								const bool end_isnull)
+								const bool end_isnull, bool force)
 {
 	int32 mat_id = cagg->data.mat_hypertable_id;
 	InternalTimeRange refresh_window = *refresh_window_arg;
@@ -881,7 +885,11 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 
 	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id, false);
 
-	if (!process_cagg_invalidations_and_refresh(cagg, &refresh_window, callctx, INVALID_CHUNK_ID))
+	if (!process_cagg_invalidations_and_refresh(cagg,
+												&refresh_window,
+												callctx,
+												INVALID_CHUNK_ID,
+												force))
 		emit_up_to_date_notice(cagg, callctx);
 
 	/* Restore search_path */

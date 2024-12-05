@@ -419,6 +419,27 @@ SET timescaledb.enable_tiered_reads=true;
 :EXPLAIN SELECT * from ht_try WHERE timec > '2022-01-01 01:00';
 :EXPLAIN SELECT * from ht_try WHERE timec < '2023-01-01 01:00';
 
+-- Test forceful refreshment. Here we simulate the situation that we've seen
+-- with tiered data when `timescaledb.enable_tiered_reads` were disabled on the
+-- server level. In that case we would not see materialized tiered data and
+-- we wouldn't be able to re-materialize the data using a normal refresh call
+-- because it would skip previously materialized ranges, but it should be
+-- possible with `force=>true` parameter.
+CREATE MATERIALIZED VIEW ht_try_weekly
+WITH (timescaledb.continuous) AS
+SELECT time_bucket(interval '1 week', timec) AS ts_bucket, avg(value)
+FROM ht_try
+GROUP BY 1
+WITH NO DATA;
+SELECT * FROM ht_try_weekly;
+SET timescaledb.enable_tiered_reads=false;
+CALL refresh_continuous_aggregate('ht_try_weekly', '2019-12-29', '2020-01-10', force=>false);
+SELECT * FROM ht_try_weekly;
+SET timescaledb.enable_tiered_reads=true;
+CALL refresh_continuous_aggregate('ht_try_weekly', '2019-12-29', '2020-01-10', force=>true);
+SELECT * FROM ht_try_weekly;
+DROP MATERIALIZED VIEW ht_try_weekly;
+
 -- This test verifies that a bugfix regarding the way `ROWID_VAR`s are adjusted
 -- in the chunks' targetlists on DELETE/UPDATE works (including partially
 -- compressed chunks)
