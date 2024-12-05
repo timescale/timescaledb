@@ -632,7 +632,7 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 		return;
 
 	/* Is sorting possible ? */
-	bool can_sort = grouping_is_sortable(parse->groupClause) && ts_guc_enable_chunkwise_aggregation;
+	bool can_sort = grouping_is_sortable(parse->groupClause);
 
 	/* Is hashing possible ? */
 	bool can_hash = grouping_is_hashable(parse->groupClause) &&
@@ -663,6 +663,7 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 	RelOptInfo *partially_grouped_rel =
 		fetch_upper_rel(root, UPPERREL_PARTIAL_GROUP_AGG, input_rel->relids);
 	partially_grouped_rel->consider_parallel = input_rel->consider_parallel;
+	partially_grouped_rel->consider_startup = input_rel->consider_startup;
 	partially_grouped_rel->reloptkind = input_rel->reloptkind;
 	partially_grouped_rel->serverid = input_rel->serverid;
 	partially_grouped_rel->userid = input_rel->userid;
@@ -690,18 +691,37 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 		extra_data->partial_costs_set = true;
 	}
 
-	/* Generate the aggregation pushdown path */
-	generate_agg_pushdown_path(root,
-							   &existing_agg_path->path,
-							   input_rel,
-							   output_rel,
-							   partially_grouped_rel,
-							   grouping_target,
-							   partial_grouping_target,
-							   can_sort,
-							   can_hash,
-							   d_num_groups,
-							   extra_data);
+	/*
+	 * For queries with LIMIT, the aggregated relation can have a path with low
+	 * total cost, and a path with low startup cost. We must partialize both, so
+	 * loop through the entire pathlist.
+	 */
+	ListCell *lc;
+	foreach (lc, output_rel->pathlist)
+	{
+		Node *path = lfirst(lc);
+		if (!IsA(path, AggPath))
+		{
+			/*
+			 * Shouldn't happen, but here we work with arbitrary paths we don't
+			 * control, so it's not an assertion.
+			 */
+			continue;
+		}
+
+		/* Generate the aggregation pushdown path */
+		generate_agg_pushdown_path(root,
+								   (Path *) path,
+								   input_rel,
+								   output_rel,
+								   partially_grouped_rel,
+								   grouping_target,
+								   partial_grouping_target,
+								   can_sort,
+								   can_hash,
+								   d_num_groups,
+								   extra_data);
+	}
 
 	/* Replan aggregation if we were able to generate partially grouped rel paths */
 	if (partially_grouped_rel->pathlist == NIL)
@@ -714,7 +734,6 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 	/* Finalize the created partially aggregated paths by adding a 'Finalize Aggregate' node on top
 	 * of them. */
 	AggClauseCosts *agg_final_costs = &extra_data->agg_final_costs;
-	ListCell *lc;
 	foreach (lc, partially_grouped_rel->pathlist)
 	{
 		Path *append_path = lfirst(lc);
