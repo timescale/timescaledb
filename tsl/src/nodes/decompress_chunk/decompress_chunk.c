@@ -746,8 +746,8 @@ can_batch_sorted_merge(PlannerInfo *root, CompressionInfo *info, const Chunk *ch
  * To save planning time, we therefore refrain from adding them.
  */
 static Path *
-make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, const Hypertable *ht, Index ht_relid,
-					   Path *path, Path *compressed_path)
+make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, const Hypertable *ht,
+					   Index ht_relid, Path *path, Path *compressed_path)
 {
 	if (root->query_pathkeys == NIL)
 	{
@@ -895,9 +895,11 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 	chunk_rel->rows = new_row_estimate;
 
 	create_compressed_scan_paths(root, compressed_rel, compression_info, &sort_info);
-	fprintf(stderr, "sortinfo: seqnum %d, pushdown %d, reverse %d, compressed pks:\n",
-		sort_info.needs_sequence_num, sort_info.can_pushdown_sort,
-		sort_info.reverse);
+	fprintf(stderr,
+			"sortinfo: seqnum %d, pushdown %d, reverse %d, compressed pks:\n",
+			sort_info.needs_sequence_num,
+			sort_info.can_pushdown_sort,
+			sort_info.reverse);
 	my_print(sort_info.required_compressed_pathkeys);
 
 	/* compute parent relids of the chunk and use it to filter paths*/
@@ -1154,21 +1156,23 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 				 */
 				if (path->pathkeys == NIL)
 				{
-				path = (Path *) create_append_path(root,
-												   chunk_rel,
-												   list_make2(path, uncompressed_path),
-												   NIL /* partial paths */,
-												   NIL, // path->pathkeys,
-												   req_outer,
-												   0,
-												   false,
-												   path->rows + uncompressed_path->rows);
+					path = (Path *) create_append_path(root,
+													   chunk_rel,
+													   list_make2(path, uncompressed_path),
+													   NIL /* partial paths */,
+													   NIL, // path->pathkeys,
+													   req_outer,
+													   0,
+													   false,
+													   path->rows + uncompressed_path->rows);
 				}
 				else
 				{
-					path = (Path *) create_merge_append_path(root, chunk_rel,
-						list_make2(path, uncompressed_path), path->pathkeys,
-						req_outer);
+					path = (Path *) create_merge_append_path(root,
+															 chunk_rel,
+															 list_make2(path, uncompressed_path),
+															 path->pathkeys,
+															 req_outer);
 				}
 				add_path(chunk_rel, path);
 			}
@@ -1262,8 +1266,8 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 
 			add_partial_path(chunk_rel, path);
 		}
-		/* the chunk_rel now owns the paths, remove them from the compressed_rel so they can't be
-		 * freed if it's planned */
+		/* the chunk_rel now owns the paths, remove them from the compressed_rel so they can't
+		 * be freed if it's planned */
 		compressed_rel->partial_pathlist = NIL;
 	}
 	/* Remove the compressed_rel from the simple_rel_array to prevent it from
