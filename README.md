@@ -141,7 +141,7 @@ For example, calculate the average daily temperature in a table named `weather_c
 ```sql
 SELECT time_bucket('1 day', time) AS bucket,
   avg(temperature) AS avg_temp
-FROM weather_conditions
+FROM conditions
 GROUP BY bucket
 ORDER BY bucket ASC;
 ```
