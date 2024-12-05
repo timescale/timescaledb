@@ -47,13 +47,10 @@ QUERY PLAN
          Chunks excluded during startup: 0
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                Index Cond: ((device_id = 1) AND ("time" < now()))
-               Heap Fetches: 100
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < now()))
-               Heap Fetches: 0
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < now()))
-               Heap Fetches: 0
 (13 rows)
 
 :PREFIX EXECUTE prep;
@@ -64,13 +61,10 @@ QUERY PLAN
          Chunks excluded during startup: 0
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                Index Cond: ((device_id = 1) AND ("time" < now()))
-               Heap Fetches: 100
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < now()))
-               Heap Fetches: 0
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < now()))
-               Heap Fetches: 0
 (13 rows)
 
 :PREFIX EXECUTE prep;
@@ -81,13 +75,10 @@ QUERY PLAN
          Chunks excluded during startup: 0
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                Index Cond: ((device_id = 1) AND ("time" < now()))
-               Heap Fetches: 100
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < now()))
-               Heap Fetches: 0
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < now()))
-               Heap Fetches: 0
 (13 rows)
 
 :PREFIX EXECUTE prep;
@@ -98,13 +89,10 @@ QUERY PLAN
          Chunks excluded during startup: 0
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                Index Cond: ((device_id = 1) AND ("time" < now()))
-               Heap Fetches: 100
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < now()))
-               Heap Fetches: 0
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < now()))
-               Heap Fetches: 0
 (13 rows)
 
 :PREFIX EXECUTE prep;
@@ -115,13 +103,10 @@ QUERY PLAN
          Chunks excluded during startup: 0
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                Index Cond: ((device_id = 1) AND ("time" < now()))
-               Heap Fetches: 100
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < now()))
-               Heap Fetches: 0
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < now()))
-               Heap Fetches: 0
 (13 rows)
 
 DEALLOCATE prep;
@@ -141,10 +126,8 @@ QUERY PLAN
          Chunks excluded during startup: 1
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-               Heap Fetches: 100
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-               Heap Fetches: 0
 (10 rows)
 
 :PREFIX EXECUTE prep;
@@ -155,10 +138,8 @@ QUERY PLAN
          Chunks excluded during startup: 1
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-               Heap Fetches: 100
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-               Heap Fetches: 0
 (10 rows)
 
 :PREFIX EXECUTE prep;
@@ -169,10 +150,8 @@ QUERY PLAN
          Chunks excluded during startup: 1
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-               Heap Fetches: 100
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-               Heap Fetches: 0
 (10 rows)
 
 :PREFIX EXECUTE prep;
@@ -183,10 +162,8 @@ QUERY PLAN
          Chunks excluded during startup: 1
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-               Heap Fetches: 100
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-               Heap Fetches: 0
 (10 rows)
 
 :PREFIX EXECUTE prep;
@@ -197,10 +174,8 @@ QUERY PLAN
          Chunks excluded during startup: 1
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-               Heap Fetches: 100
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-               Heap Fetches: 0
 (10 rows)
 
 DEALLOCATE prep;
@@ -226,25 +201,19 @@ QUERY PLAN
                Order: m1."time"
                ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_1 (actual rows=100 loops=1)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 100
                ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_2 (never executed)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 0
                ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_3 (never executed)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 0
          ->  Limit (actual rows=1 loops=100)
                ->  Custom Scan (ChunkAppend) on metrics m2 (actual rows=1 loops=100)
                      Chunks excluded during runtime: 2
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_1 (actual rows=1 loops=100)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 100
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_2 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_3 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
 (25 rows)
 
 :PREFIX EXECUTE prep;
@@ -255,25 +224,19 @@ QUERY PLAN
                Order: m1."time"
                ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_1 (actual rows=100 loops=1)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 100
                ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_2 (never executed)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 0
                ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_3 (never executed)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 0
          ->  Limit (actual rows=1 loops=100)
                ->  Custom Scan (ChunkAppend) on metrics m2 (actual rows=1 loops=100)
                      Chunks excluded during runtime: 2
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_1 (actual rows=1 loops=100)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 100
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_2 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_3 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
 (25 rows)
 
 :PREFIX EXECUTE prep;
@@ -284,25 +247,19 @@ QUERY PLAN
                Order: m1."time"
                ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_1 (actual rows=100 loops=1)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 100
                ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_2 (never executed)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 0
                ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_3 (never executed)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 0
          ->  Limit (actual rows=1 loops=100)
                ->  Custom Scan (ChunkAppend) on metrics m2 (actual rows=1 loops=100)
                      Chunks excluded during runtime: 2
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_1 (actual rows=1 loops=100)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 100
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_2 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_3 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
 (25 rows)
 
 :PREFIX EXECUTE prep;
@@ -313,25 +270,19 @@ QUERY PLAN
                Order: m1."time"
                ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_1 (actual rows=100 loops=1)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 100
                ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_2 (never executed)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 0
                ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_3 (never executed)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 0
          ->  Limit (actual rows=1 loops=100)
                ->  Custom Scan (ChunkAppend) on metrics m2 (actual rows=1 loops=100)
                      Chunks excluded during runtime: 2
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_1 (actual rows=1 loops=100)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 100
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_2 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_3 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
 (25 rows)
 
 :PREFIX EXECUTE prep;
@@ -342,25 +293,19 @@ QUERY PLAN
                Order: m1."time"
                ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_1 (actual rows=100 loops=1)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 100
                ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_2 (never executed)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 0
                ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_3 (never executed)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 0
          ->  Limit (actual rows=1 loops=100)
                ->  Custom Scan (ChunkAppend) on metrics m2 (actual rows=1 loops=100)
                      Chunks excluded during runtime: 2
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_1 (actual rows=1 loops=100)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 100
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_2 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_3 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
 (25 rows)
 
 DEALLOCATE prep;
@@ -382,10 +327,8 @@ QUERY PLAN
          Chunks excluded during startup: 1
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               Heap Fetches: 100
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               Heap Fetches: 0
 (10 rows)
 
 :PREFIX EXECUTE prep;
@@ -396,10 +339,8 @@ QUERY PLAN
          Chunks excluded during startup: 1
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               Heap Fetches: 100
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               Heap Fetches: 0
 (10 rows)
 
 :PREFIX EXECUTE prep;
@@ -410,10 +351,8 @@ QUERY PLAN
          Chunks excluded during startup: 1
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               Heap Fetches: 100
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               Heap Fetches: 0
 (10 rows)
 
 :PREFIX EXECUTE prep;
@@ -424,10 +363,8 @@ QUERY PLAN
          Chunks excluded during startup: 1
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               Heap Fetches: 100
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               Heap Fetches: 0
 (10 rows)
 
 :PREFIX EXECUTE prep;
@@ -438,10 +375,8 @@ QUERY PLAN
          Chunks excluded during startup: 1
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               Heap Fetches: 100
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               Heap Fetches: 0
 (10 rows)
 
 DEALLOCATE prep;
@@ -768,43 +703,31 @@ QUERY PLAN
                Order: m1."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_1 (actual rows=100 loops=1)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 100
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_2 (never executed)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_3 (never executed)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 0
          ->  Limit (actual rows=1 loops=100)
                ->  Custom Scan (ChunkAppend) on metrics_space m2 (actual rows=1 loops=100)
                      Chunks excluded during runtime: 6
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_1 (actual rows=1 loops=100)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 100
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_2 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_3 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_4 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_5 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_6 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_7 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_8 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_9 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
 (43 rows)
 
 :PREFIX EXECUTE prep;
@@ -815,43 +738,31 @@ QUERY PLAN
                Order: m1."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_1 (actual rows=100 loops=1)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 100
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_2 (never executed)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_3 (never executed)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 0
          ->  Limit (actual rows=1 loops=100)
                ->  Custom Scan (ChunkAppend) on metrics_space m2 (actual rows=1 loops=100)
                      Chunks excluded during runtime: 6
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_1 (actual rows=1 loops=100)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 100
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_2 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_3 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_4 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_5 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_6 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_7 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_8 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_9 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
 (43 rows)
 
 :PREFIX EXECUTE prep;
@@ -862,43 +773,31 @@ QUERY PLAN
                Order: m1."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_1 (actual rows=100 loops=1)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 100
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_2 (never executed)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_3 (never executed)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 0
          ->  Limit (actual rows=1 loops=100)
                ->  Custom Scan (ChunkAppend) on metrics_space m2 (actual rows=1 loops=100)
                      Chunks excluded during runtime: 6
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_1 (actual rows=1 loops=100)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 100
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_2 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_3 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_4 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_5 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_6 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_7 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_8 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_9 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
 (43 rows)
 
 :PREFIX EXECUTE prep;
@@ -909,43 +808,31 @@ QUERY PLAN
                Order: m1."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_1 (actual rows=100 loops=1)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 100
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_2 (never executed)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_3 (never executed)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 0
          ->  Limit (actual rows=1 loops=100)
                ->  Custom Scan (ChunkAppend) on metrics_space m2 (actual rows=1 loops=100)
                      Chunks excluded during runtime: 6
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_1 (actual rows=1 loops=100)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 100
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_2 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_3 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_4 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_5 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_6 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_7 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_8 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_9 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
 (43 rows)
 
 :PREFIX EXECUTE prep;
@@ -956,43 +843,31 @@ QUERY PLAN
                Order: m1."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_1 (actual rows=100 loops=1)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 100
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_2 (never executed)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_3 (never executed)
                      Index Cond: (device_id = 2)
-                     Heap Fetches: 0
          ->  Limit (actual rows=1 loops=100)
                ->  Custom Scan (ChunkAppend) on metrics_space m2 (actual rows=1 loops=100)
                      Chunks excluded during runtime: 6
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_1 (actual rows=1 loops=100)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 100
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_2 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_3 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_4 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_5 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_6 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_7 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_8 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_9 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
 (43 rows)
 
 DEALLOCATE prep;
@@ -1015,35 +890,26 @@ QUERY PLAN
                Sort Key: _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 21
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=60 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 60
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 21
          ->  Merge Append (never executed)
                Sort Key: _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
          ->  Merge Append (never executed)
                Sort Key: _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
 (36 rows)
 
 :PREFIX EXECUTE prep;
@@ -1055,35 +921,26 @@ QUERY PLAN
                Sort Key: _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 21
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=60 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 60
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 21
          ->  Merge Append (never executed)
                Sort Key: _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
          ->  Merge Append (never executed)
                Sort Key: _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
 (36 rows)
 
 :PREFIX EXECUTE prep;
@@ -1095,35 +952,26 @@ QUERY PLAN
                Sort Key: _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 21
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=60 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 60
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 21
          ->  Merge Append (never executed)
                Sort Key: _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
          ->  Merge Append (never executed)
                Sort Key: _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
 (36 rows)
 
 :PREFIX EXECUTE prep;
@@ -1135,35 +983,26 @@ QUERY PLAN
                Sort Key: _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 21
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=60 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 60
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 21
          ->  Merge Append (never executed)
                Sort Key: _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
          ->  Merge Append (never executed)
                Sort Key: _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
 (36 rows)
 
 :PREFIX EXECUTE prep;
@@ -1175,35 +1014,26 @@ QUERY PLAN
                Sort Key: _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 21
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=60 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 60
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 21
          ->  Merge Append (never executed)
                Sort Key: _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
          ->  Merge Append (never executed)
                Sort Key: _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 0
 (36 rows)
 
 DEALLOCATE prep;
@@ -1230,22 +1060,16 @@ QUERY PLAN
                Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 100
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
 (24 rows)
 
 :PREFIX EXECUTE prep;
@@ -1258,22 +1082,16 @@ QUERY PLAN
                Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 100
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
 (24 rows)
 
 :PREFIX EXECUTE prep;
@@ -1286,22 +1104,16 @@ QUERY PLAN
                Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 100
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
 (24 rows)
 
 :PREFIX EXECUTE prep;
@@ -1314,22 +1126,16 @@ QUERY PLAN
                Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 100
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
 (24 rows)
 
 :PREFIX EXECUTE prep;
@@ -1342,22 +1148,16 @@ QUERY PLAN
                Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 100
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     Heap Fetches: 1
 (24 rows)
 
 DEALLOCATE prep;
