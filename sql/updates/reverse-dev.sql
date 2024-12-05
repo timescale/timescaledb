@@ -58,3 +58,12 @@ DROP VIEW timescaledb_information.hypertable_columnstore_settings;
 DROP VIEW timescaledb_information.chunk_columnstore_settings;
 
 DROP PROCEDURE IF EXISTS _timescaledb_functions.cagg_migrate_update_watermark(INTEGER);
+
+-- Recreate `refresh_continuous_aggregate` procedure to remove the `force` argument
+DROP PROCEDURE IF EXISTS @extschema@.refresh_continuous_aggregate (continuous_aggregate REGCLASS, window_start "any", window_end "any", force BOOLEAN);
+
+CREATE PROCEDURE @extschema@.refresh_continuous_aggregate(
+    continuous_aggregate     REGCLASS,
+    window_start             "any",
+    window_end               "any"
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_continuous_agg_refresh';
