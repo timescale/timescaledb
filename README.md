@@ -115,16 +115,23 @@ You compress your time-series data to reduce its size by more than 90%. This cut
 
 When you enable compression, the data in your hypertable is compressed chunk by chunk. When the chunk is compressed, multiple records are grouped into a single row. The columns of this row hold an array-like structure that stores all the data. This means that instead of using lots of rows to store the data, it stores the same data in a single row. Because a single row takes up less disk space than many rows, it decreases the amount of disk space required, and can also speed up your queries. For example:
 
-- Compress a specific hypertable chunk manually:
+- Enable compression on hypertable
+    ```sql
+    ALTER TABLE conditions SET (
+      timescaledb.compress,
+      timescaledb.compress_segmentby = 'device_id'
+    );
+    ```
+- Compress hypertable chunks manually:
 
     ```sql
-    SELECT compress_chunk( '<chunk_name>');
+    SELECT compress_chunk(chunk, if_not_compressed => true) FROM show_chunks( 'conditions', now()::timestamp - INTERVAL '1 week', now()::timestamp - INTERVAL '3 weeks' ) AS chunk;
     ```
 
 - Create a policy to compress chunks that are older than seven days automatically:
 
     ```sql
-    SELECT add_compression_policy('<hypertable_name>', INTERVAL '7 days');
+    SELECT add_compression_policy('conditions', INTERVAL '7 days');
     ```
 
 See more:
