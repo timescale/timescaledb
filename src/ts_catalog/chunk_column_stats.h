@@ -23,6 +23,13 @@ typedef struct ChunkRangeSpace
 	FormData_chunk_column_stats range_cols[FLEXIBLE_ARRAY_MEMBER];
 } ChunkRangeSpace;
 
+typedef struct ChunkColumnStats
+{
+	/* Min and max, in that order */
+	Datum minmax[2];
+	bool isnull[2];
+} ChunkColumnStats;
+
 #define CHUNKRANGESPACE_SIZE(num_columns)                                                          \
 	(sizeof(ChunkRangeSpace) + (sizeof(NameData) * (num_columns)))
 
@@ -35,7 +42,8 @@ extern int ts_chunk_column_stats_update_by_id(int32 chunk_column_stats_id,
 extern Form_chunk_column_stats ts_chunk_column_stats_lookup(int32 hypertable_id, int32 chunk_id,
 															const char *col_name);
 
-extern TSDLLEXPORT int ts_chunk_column_stats_calculate(const Hypertable *ht, const Chunk *chunk);
+extern TSDLLEXPORT int ts_chunk_column_stats_calculate(const Hypertable *ht, const Chunk *chunk,
+													   ChunkColumnStats **statsarray);
 extern int ts_chunk_column_stats_insert(const Hypertable *ht, const Chunk *chunk);
 
 extern void ts_chunk_column_stats_drop(const Hypertable *ht, const char *col_name, bool *dropped);

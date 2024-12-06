@@ -11,6 +11,7 @@
 #include <utils/sortsupport.h>
 #include <utils/typcache.h>
 
+#include "debug_assert.h"
 #include "segment_meta.h"
 
 SegmentMetaMinMaxBuilder *
@@ -42,11 +43,27 @@ segment_meta_min_max_builder_create(Oid type_oid, Oid collation)
 	return builder;
 }
 
-void
-segment_meta_min_max_builder_update_val(SegmentMetaMinMaxBuilder *builder, Datum val)
+static Datum
+compare_values(SegmentMetaMinMaxBuilder *builder, Datum old_val, Datum val, bool is_min)
 {
 	int cmp;
 
+	cmp = ApplySortComparator(old_val, false, val, false, &builder->ssup);
+
+	if ((is_min && cmp > 0) || (!is_min && cmp < 0))
+	{
+		if (!builder->type_by_val)
+			pfree(DatumGetPointer(old_val));
+
+		return datumCopy(val, builder->type_by_val, builder->type_len);
+	}
+
+	return old_val;
+}
+
+void
+segment_meta_min_max_builder_update_val(SegmentMetaMinMaxBuilder *builder, Datum val)
+{
 	if (builder->empty)
 	{
 		builder->min = datumCopy(val, builder->type_by_val, builder->type_len);
@@ -55,21 +72,8 @@ segment_meta_min_max_builder_update_val(SegmentMetaMinMaxBuilder *builder, Datum
 		return;
 	}
 
-	cmp = ApplySortComparator(builder->min, false, val, false, &builder->ssup);
-	if (cmp > 0)
-	{
-		if (!builder->type_by_val)
-			pfree(DatumGetPointer(builder->min));
-		builder->min = datumCopy(val, builder->type_by_val, builder->type_len);
-	}
-
-	cmp = ApplySortComparator(builder->max, false, val, false, &builder->ssup);
-	if (cmp < 0)
-	{
-		if (!builder->type_by_val)
-			pfree(DatumGetPointer(builder->max));
-		builder->max = datumCopy(val, builder->type_by_val, builder->type_len);
-	}
+	builder->min = compare_values(builder, builder->min, val, true);
+	builder->max = compare_values(builder, builder->max, val, false);
 }
 
 void
@@ -83,6 +87,28 @@ segment_meta_min_max_builder_reset(SegmentMetaMinMaxBuilder *builder)
 {
 	if (!builder->empty)
 	{
+		/* Update the relation min and max. Those values need to live on a
+		 * memory context that has the same lifetime as the builder itself. */
+		MemoryContext oldcxt = MemoryContextSwitchTo(builder->ssup.ssup_cxt);
+
+		if (!builder->has_relation_stats)
+		{
+			builder->relation_min =
+				datumCopy(builder->min, builder->type_by_val, builder->type_len);
+			builder->relation_max =
+				datumCopy(builder->max, builder->type_by_val, builder->type_len);
+			builder->has_relation_stats = true;
+		}
+		else
+		{
+			builder->relation_min =
+				compare_values(builder, builder->relation_min, builder->min, true);
+			builder->relation_max =
+				compare_values(builder, builder->relation_max, builder->max, false);
+		}
+
+		MemoryContextSwitchTo(oldcxt);
+
 		if (!builder->type_by_val)
 		{
 			pfree(DatumGetPointer(builder->min));
@@ -90,43 +116,71 @@ segment_meta_min_max_builder_reset(SegmentMetaMinMaxBuilder *builder)
 		}
 		builder->min = 0;
 		builder->max = 0;
+		builder->empty = true;
 	}
-	builder->empty = true;
+
 	builder->has_null = false;
+}
+
+static Datum
+get_unpacked_value(SegmentMetaMinMaxBuilder *builder, Datum *value, bool valid_condition,
+				   const char *valuetype)
+{
+	Datum unpacked = *value;
+
+	Ensure(valid_condition, "no data for %s stats", valuetype);
+
+	if (builder->type_len == -1)
+	{
+		unpacked = PointerGetDatum(PG_DETOAST_DATUM_PACKED(*value));
+
+		if (*value != unpacked)
+			pfree(DatumGetPointer(*value));
+
+		*value = unpacked;
+	}
+
+	return unpacked;
 }
 
 Datum
 segment_meta_min_max_builder_min(SegmentMetaMinMaxBuilder *builder)
 {
-	if (builder->empty)
-		elog(ERROR, "trying to get min from an empty builder");
-	if (builder->type_len == -1)
-	{
-		Datum unpacked = PointerGetDatum(PG_DETOAST_DATUM_PACKED(builder->min));
-		if (builder->min != unpacked)
-			pfree(DatumGetPointer(builder->min));
-		builder->min = unpacked;
-	}
-	return builder->min;
+	return get_unpacked_value(builder, &builder->min, !builder->empty, "min");
 }
 
 Datum
 segment_meta_min_max_builder_max(SegmentMetaMinMaxBuilder *builder)
 {
-	if (builder->empty)
-		elog(ERROR, "trying to get max from an empty builder");
-	if (builder->type_len == -1)
-	{
-		Datum unpacked = PointerGetDatum(PG_DETOAST_DATUM_PACKED(builder->max));
-		if (builder->max != unpacked)
-			pfree(DatumGetPointer(builder->max));
-		builder->max = unpacked;
-	}
-	return builder->max;
+	return get_unpacked_value(builder, &builder->max, !builder->empty, "max");
+}
+
+Datum
+segment_meta_min_max_builder_relation_min(SegmentMetaMinMaxBuilder *builder)
+{
+	return get_unpacked_value(builder,
+							  &builder->relation_min,
+							  builder->has_relation_stats,
+							  "relation min");
+}
+
+Datum
+segment_meta_min_max_builder_relation_max(SegmentMetaMinMaxBuilder *builder)
+{
+	return get_unpacked_value(builder,
+							  &builder->relation_max,
+							  builder->has_relation_stats,
+							  "relation max");
 }
 
 bool
-segment_meta_min_max_builder_empty(SegmentMetaMinMaxBuilder *builder)
+segment_meta_min_max_builder_empty(const SegmentMetaMinMaxBuilder *builder)
 {
 	return builder->empty;
+}
+
+bool
+segment_meta_has_relation_stats(const SegmentMetaMinMaxBuilder *builder)
+{
+	return builder->has_relation_stats;
 }
