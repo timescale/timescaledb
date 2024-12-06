@@ -148,12 +148,6 @@ typedef struct
 
 } DecompressionMapContext;
 
-typedef struct VectorQualInfoDecompressChunk
-{
-	VectorQualInfo vqinfo;
-	const UncompressedColumnInfo *colinfo;
-} VectorQualInfoDecompressChunk;
-
 static bool *
 build_vector_attrs_array(const UncompressedColumnInfo *colinfo, const CompressionInfo *info)
 {
@@ -816,6 +810,8 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 	if (!vqinfo->vector_attrs[var->varattno])
 	{
 		/* This column doesn't support bulk decompression. */
+		//		fprintf(stderr, "doesn't support bulk decompression:\n");
+		//		my_print(var);
 		return NULL;
 	}
 

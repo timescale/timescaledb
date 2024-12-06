@@ -7,6 +7,7 @@
 
 #include "compression/compression.h"
 #include "nodes/decompress_chunk/decompress_context.h"
+#include "nodes/decompress_chunk/vector_quals.h"
 #include <executor/tuptable.h>
 
 typedef struct ArrowArray ArrowArray;
@@ -102,7 +103,7 @@ typedef struct DecompressBatchState
 	 * row. Indexed same as arrow arrays, w/o accounting for the reverse scan
 	 * direction. Initialized to all ones, i.e. all rows pass.
 	 */
-	uint64 *restrict vector_qual_result;
+	const uint64 *restrict vector_qual_result;
 
 	/*
 	 * This follows DecompressContext.compressed_chunk_columns, but does not
@@ -172,3 +173,18 @@ compressed_batch_current_tuple(DecompressBatchState *batch_state)
 	Assert(batch_state->per_batch_context != NULL);
 	return &batch_state->decompressed_scan_slot_data.base;
 }
+
+/*
+ * VectorQualState for a compressed batch used to pass
+ * DecompressChunk-specific data to vector qual functions that are shared
+ * across scan nodes.
+ */
+typedef struct CompressedBatchVectorQualState
+{
+	VectorQualState vqstate;
+	DecompressBatchState *batch_state;
+	DecompressContext *dcontext;
+} CompressedBatchVectorQualState;
+
+const ArrowArray *compressed_batch_get_arrow_array(VectorQualState *vqstate, Expr *expr,
+												   bool *is_default_value);
