@@ -1925,13 +1925,10 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 		hypertable_create_schema(NameStr(*associated_schema_name));
 
 	/*
-	 * Hypertables do not support transition tables in triggers, so if the
-	 * table already has such triggers we bail out
+	 * Hypertables do not support arbitrary triggers, so if the table already
+	 * has unsupported triggers we bail out
 	 */
-	if (ts_relation_has_transition_table_trigger(table_relid))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("hypertables do not support transition tables in triggers")));
+	ts_check_unsupported_triggers(table_relid);
 
 	if (NULL == chunk_sizing_info)
 		chunk_sizing_info = ts_chunk_sizing_info_get_default_disabled(table_relid);
