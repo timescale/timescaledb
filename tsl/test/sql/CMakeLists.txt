@@ -115,6 +115,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     recompress_chunk_segmentwise.sql
     feature_flags.sql
     vector_agg_default.sql
+    vector_agg_filter.sql
     vector_agg_memory.sql
     vector_agg_segmentby.sql)
 
