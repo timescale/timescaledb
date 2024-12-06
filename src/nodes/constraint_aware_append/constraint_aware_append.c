@@ -22,6 +22,7 @@
 #include <optimizer/plancat.h>
 #include <parser/parsetree.h>
 #include <rewrite/rewriteManip.h>
+#include <storage/lockdefs.h>
 #include <utils/lsyscache.h>
 #include <utils/memutils.h>
 #include <utils/syscache.h>
@@ -78,6 +79,8 @@ can_exclude_chunk(PlannerInfo *root, EState *estate, Index rt_index, List *restr
 {
 	RangeTblEntry *rte = rt_fetch(rt_index, estate->es_range_table);
 
+	/* Need AccessShareLock to call excluded_by_constraint() */
+	LockRelationOid(rte->relid, AccessShareLock);
 	return rte->rtekind == RTE_RELATION && rte->relkind == RELKIND_RELATION && !rte->inh &&
 		   excluded_by_constraint(root, rte, rt_index, restrictinfos);
 }
