@@ -235,6 +235,7 @@ RESET enable_seqscan;
 SELECT decompress_chunk(show_chunks('mytab'));
 alter table mytab set (timescaledb.compress = false);
 alter table mytab set (timescaledb.compress);
+SET timescaledb.enable_segmentwise_recompression TO OFF;
 select compress_chunk(show_chunks('mytab'));
 select compressed_chunk_name as compressed_chunk_name_before_recompression from compressed_chunk_info_view where hypertable_name = 'mytab' \gset
 INSERT INTO mytab VALUES ('2023-01-01'::timestamptz, 2, 3, 2);
@@ -242,6 +243,7 @@ INSERT INTO mytab VALUES ('2023-01-01'::timestamptz, 2, 3, 2);
 SELECT compress_chunk(:'chunk_to_compress_mytab');
 select compressed_chunk_name as compressed_chunk_name_after_recompression from compressed_chunk_info_view where hypertable_name = 'mytab' \gset
 select :'compressed_chunk_name_before_recompression' as before_recompression, :'compressed_chunk_name_after_recompression' as after_recompression;
+RESET timescaledb.enable_segmentwise_recompression;
 
 -- check behavior with NULL values in segmentby columns
 select '2022-01-01 09:00:00+00' as start_time \gset
