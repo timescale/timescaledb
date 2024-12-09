@@ -8,7 +8,7 @@
 
 <div align=center>
 
-<h3>TimescaleDB is an open-source extension for PostgreSQL that enables time-series, events, and analytics workloads, while increasing ingest, query, and storage performance</h3>
+<h3>TimescaleDB is an extension for PostgreSQL that enables time-series, events, and real-time analytics workloads, while increasing ingest, query, and storage performance</h3>
 
 [![Docs](https://img.shields.io/badge/Read_the_Timescale_docs-black?style=for-the-badge&logo=readthedocs&logoColor=white)](https://docs.timescale.com/)
 [![SLACK](https://img.shields.io/badge/Ask_the_Timescale_community-black?style=for-the-badge&logo=slack&logoColor=white)](https://timescaledb.slack.com/archives/C4GT3N90X)
@@ -16,7 +16,10 @@
 
 </div>
 
-TimescaleDB scales PostgreSQL for ingesting and querying vast amounts of live data. From the perspective of both use and management, TimescaleDB looks and feels just like PostgreSQL, and can be managed and queried as such. However, it provides a wide range of features and optimizations that supercharge your queries - all while keeping the costs down. For example, our hybrid row-columnar engine makes queries up to 350x faster, ingests 44% faster, and reduces storage by 95% over RDS. Visit [timescale.com](https://www.timescale.com) for details, use cases, customer success stories, and more.
+TimescaleDB scales PostgreSQL for time-series data with the help of [hypertables](https://docs.timescale.com/use-timescale/latest/hypertables/about-hypertables/). Hypertables are PostgreSQL tables that automatically partition your data by time and space. You interact with a hypertable in the same way as regular PostgreSQL table. Behind the scenes, the database performs the work of setting up and maintaining the hypertable's partitions.
+
+From the perspective of both use and management, TimescaleDB looks and feels like PostgreSQL, and can be managed and queried as
+such. However, it provides a range of features and optimizations that make managing your time-series data easier and more efficient. For example, our hybrid row-columnar engine makes queries up to 350x faster, ingests 44% faster, and reduces storage by 95% over RDS.
 
 <table style="width:100%;">
 <thead>
@@ -112,16 +115,24 @@ You compress your time-series data to reduce its size by more than 90%. This cut
 
 When you enable compression, the data in your hypertable is compressed chunk by chunk. When the chunk is compressed, multiple records are grouped into a single row. The columns of this row hold an array-like structure that stores all the data. This means that instead of using lots of rows to store the data, it stores the same data in a single row. Because a single row takes up less disk space than many rows, it decreases the amount of disk space required, and can also speed up your queries. For example:
 
-- Compress a specific hypertable chunk manually:
+- Enable compression on hypertable
 
     ```sql
-    SELECT compress_chunk( '<chunk_name>');
+    ALTER TABLE conditions SET (
+      timescaledb.compress,
+      timescaledb.compress_segmentby = 'device_id'
+    );
+    ```
+- Compress hypertable chunks manually:
+
+    ```sql
+    SELECT compress_chunk(chunk, if_not_compressed => true) FROM show_chunks( 'conditions', now()::timestamp - INTERVAL '1 week', now()::timestamp - INTERVAL '3 weeks' ) AS chunk;
     ```
 
 - Create a policy to compress chunks that are older than seven days automatically:
 
     ```sql
-    SELECT add_compression_policy('<hypertable_name>', INTERVAL '7 days');
+    SELECT add_compression_policy('conditions', INTERVAL '7 days');
     ```
 
 See more:
@@ -133,12 +144,12 @@ See more:
 
 Time buckets enable you to aggregate data in hypertables by time interval and calculate summary values.
 
-For example, calculate the average daily temperature in a table named `weather_conditions`. The table has a `time` and `temperature` columns:
+For example, calculate the average daily temperature in a table named `conditions`. The table has a `time` and `temperature` columns:
 
 ```sql
 SELECT time_bucket('1 day', time) AS bucket,
   avg(temperature) AS avg_temp
-FROM weather_conditions
+FROM conditions
 GROUP BY bucket
 ORDER BY bucket ASC;
 ```

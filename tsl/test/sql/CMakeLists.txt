@@ -144,6 +144,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     TEST_FILES
     cagg_refresh_using_merge.sql
     hypercore_columnar.sql
+    hypercore_constraints.sql
     hypercore_copy.sql
     hypercore_create.sql
     hypercore_cursor.sql
@@ -162,8 +163,8 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     hypercore_types.sql
     hypercore_update.sql
     hypercore_vacuum.sql
-    merge_compress.sql
-    hypercore_vacuum_full.sql)
+    hypercore_vacuum_full.sql
+    merge_compress.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))

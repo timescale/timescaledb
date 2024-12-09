@@ -1,0 +1,189 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+\ir include/setup_hypercore.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set hypertable readings
+\ir hypercore_helpers.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Function to run an explain analyze with and do replacements on the
+-- emitted plan. This is intended to be used when the structure of the
+-- plan is important, but not the specific chunks scanned nor the
+-- number of heap fetches, rows, loops, etc.
+create function explain_analyze_anonymize(text) returns setof text
+language plpgsql as
+$$
+declare
+    ln text;
+begin
+    for ln in
+        execute format('explain (analyze, costs off, summary off, timing off, decompress_cache_stats) %s', $1)
+    loop
+        if trim(both from ln) like 'Group Key:%' then
+	   continue;
+	end if;
+        ln := regexp_replace(ln, 'Array Cache Hits: \d+', 'Array Cache Hits: N');
+        ln := regexp_replace(ln, 'Array Cache Misses: \d+', 'Array Cache Misses: N');
+        ln := regexp_replace(ln, 'Array Cache Evictions: \d+', 'Array Cache Evictions: N');
+        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
+        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
+        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
+        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
+        return next ln;
+    end loop;
+end;
+$$;
+create function explain_anonymize(text) returns setof text
+language plpgsql as
+$$
+declare
+    ln text;
+begin
+    for ln in
+        execute format('explain (costs off, summary off, timing off) %s', $1)
+    loop
+        ln := regexp_replace(ln, 'Array Cache Hits: \d+', 'Array Cache Hits: N');
+        ln := regexp_replace(ln, 'Array Cache Misses: \d+', 'Array Cache Misses: N');
+        ln := regexp_replace(ln, 'Array Cache Evictions: \d+', 'Array Cache Evictions: N');
+        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
+        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
+        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
+        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
+        return next ln;
+    end loop;
+end;
+$$;
+create table :hypertable(
+       metric_id serial,
+       created_at timestamptz not null unique,
+       location_id smallint,	--segmentby attribute with index
+       owner_id bigint,		--segmentby attribute without index
+       device_id bigint,	--non-segmentby attribute
+       temp float8,
+       humidity float4
+);
+create index hypertable_location_id_idx on :hypertable (location_id);
+create index hypertable_device_id_idx on :hypertable (device_id);
+select create_hypertable(:'hypertable', by_range('created_at'));
+ create_hypertable 
+-------------------
+ (1,t)
+(1 row)
+
+-- Disable incremental sort to make tests stable
+set enable_incremental_sort = false;
+select setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+-- Insert rows into the tables.
+--
+-- The timestamps for the original rows will have timestamps every 10
+-- seconds. Any other timestamps are inserted as part of the test.
+insert into :hypertable (created_at, location_id, device_id, owner_id, temp, humidity)
+select t, ceil(random()*10), ceil(random()*30), ceil(random() * 5), random()*40, random()*100
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') t;
+alter table :hypertable set (
+	  timescaledb.compress,
+	  timescaledb.compress_orderby = 'created_at',
+	  timescaledb.compress_segmentby = 'location_id, owner_id'
+);
+-- Get some test chunks as global variables (first and last chunk here)
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk1
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
+ order by chunk1 asc
+ limit 1 \gset
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
+ order by chunk2 asc
+ limit 1 offset 1 \gset
+-- Drop the unique constraint and replace it with an exclusion
+-- constraint doing the same thing.
+alter table :hypertable drop constraint readings_created_at_key;
+alter table :hypertable add exclude (created_at with =);
+create table sample (like :chunk1 including generated including defaults including constraints);
+insert into sample(created_at, location_id, device_id, owner_id, temp, humidity)
+  values
+	('2022-06-01 00:01:23', 999, 666, 111, 3.14, 3.14),
+	('2022-06-01 00:02:23', 999, 666, 112, 3.14, 3.14),
+	('2022-06-01 00:03:23', 999, 666, 113, 3.14, 3.14),
+	('2022-06-01 00:04:23', 999, 666, 114, 3.14, 3.14);
+insert into :chunk1(created_at, location_id, device_id, owner_id, temp, humidity)
+select created_at, location_id, device_id, owner_id, temp, humidity from sample;
+select compress_chunk(show_chunks(:'hypertable'), hypercore_use_access_method => true);
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+(6 rows)
+
+-- These should fail the exclusion constraint
+\set ON_ERROR_STOP 0
+insert into :hypertable(created_at, location_id, device_id, owner_id, temp, humidity)
+select created_at, location_id, device_id, owner_id, temp, humidity from sample;
+ERROR:  conflicting key value violates exclusion constraint "1_7_readings_created_at_excl"
+insert into :chunk1(created_at, location_id, device_id, owner_id, temp, humidity)
+select created_at, location_id, device_id, owner_id, temp, humidity from sample;
+ERROR:  conflicting key value violates exclusion constraint "1_7_readings_created_at_excl"
+\set ON_ERROR_STOP 0
+create table test_exclude(
+       created_at timestamptz not null unique,
+       device_id bigint,
+       humidity numrange
+);
+select create_hypertable('test_exclude', by_range('created_at'));
+ create_hypertable 
+-------------------
+ (3,t)
+(1 row)
+
+create or replace function randrange() returns numrange as $$
+declare
+  start numeric := 100.0 * random()::numeric;
+begin
+  return numrange(start, start + random()::numeric);
+end;
+$$ language plpgsql;
+-- Insert a bunch or rows with a random humidity range.
+insert into test_exclude (created_at, device_id, humidity)
+select ts, ceil(random()*30), randrange()
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') ts;
+-- Pick a chunk to work with.
+select exclude_chunk from show_chunks('test_exclude') tbl(exclude_chunk) limit 1 \gset
+-- Find all rows that is a duplicate of a previous row.
+select * into dups from :exclude_chunk o where (
+       select count(*)
+       from :exclude_chunk i
+       where i.created_at < o.created_at and i.humidity && o.humidity
+) > 0;
+-- Make sure we have some duplicates. Otherwise, the test does not work.
+select count(*) > 0 from dups;
+ ?column? 
+----------
+ t
+(1 row)
+
+-- Delete the duplicates.
+delete from :exclude_chunk where created_at in (select created_at from dups);
+-- Add an exclusion constraint.
+alter table :exclude_chunk add constraint humidity_overlap exclude using gist (humidity with &&);
+-- Make sure that inserting some duplicate fails on this the exclusion constraint.
+\set ON_ERROR_STOP 0
+insert into :exclude_chunk select * from dups limit 10;
+ERROR:  conflicting key value violates exclusion constraint "humidity_overlap"
+insert into test_exclude select * from dups limit 10;
+ERROR:  conflicting key value violates exclusion constraint "humidity_overlap"
+\set ON_ERROR_STOP 1
