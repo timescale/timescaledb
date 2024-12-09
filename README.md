@@ -8,7 +8,7 @@
 
 <div align=center>
 
-<h3>TimescaleDB is an extension for PostgreSQL that enables time-series, events, and analytics workloads, while increasing ingest, query, and storage performance</h3>
+<h3>TimescaleDB is an open-source extension for PostgreSQL that enables time-series, events, and analytics workloads, while increasing ingest, query, and storage performance</h3>
 
 [![Docs](https://img.shields.io/badge/Read_the_Timescale_docs-black?style=for-the-badge&logo=readthedocs&logoColor=white)](https://docs.timescale.com/)
 [![SLACK](https://img.shields.io/badge/Ask_the_Timescale_community-black?style=for-the-badge&logo=slack&logoColor=white)](https://timescaledb.slack.com/archives/C4GT3N90X)
@@ -16,10 +16,7 @@
 
 </div>
 
-TimescaleDB scales PostgreSQL for time-series data with the help of [hypertables](https://docs.timescale.com/use-timescale/latest/hypertables/about-hypertables/). Hypertables are PostgreSQL tables that automatically partition your data by time and space. You interact with a hypertable in the same way as regular PostgreSQL table. Behind the scenes, the database performs the work of setting up and maintaining the hypertable's partitions.
-
-From the perspective of both use and management, TimescaleDB looks and feels like PostgreSQL, and can be managed and queried as
-such. However, it provides a range of features and optimizations that make managing your time-series data easier and more efficient. For example, our hybrid row-columnar engine makes queries up to 350x faster, ingests 44% faster, and reduces storage by 95% over RDS.
+TimescaleDB scales PostgreSQL for ingesting and querying vast amounts of live data. From the perspective of both use and management, TimescaleDB looks and feels just like PostgreSQL, and can be managed and queried as such. However, it provides a wide range of features and optimizations that supercharge your queries - all while keeping the costs down. For example, our hybrid row-columnar engine makes queries up to 350x faster, ingests 44% faster, and reduces storage by 95% over RDS. Visit [timescale.com](https://www.timescale.com) for details, use cases, customer success stories, and more.
 
 <table style="width:100%;">
 <thead>
@@ -46,7 +43,7 @@ Installation options are:
 - **Build from source**: See [Building from source](https://docs.timescale.com/self-hosted/latest/install/installation-source/).
 
    We recommend not using TimescaleDB with PostgreSQL 17.1, 16.5, 15.9, 14.14, 13.17, 12.21.
-   These minor versions [introduced a breaking binary interface change][postgres-breaking-change] that,
+   These minor versions [introduced a breaking binary interface change](https://www.postgresql.org/about/news/postgresql-172-166-1510-1415-1318-and-1222-released-2965/) that,
    once identified, was reverted in subsequent minor PostgreSQL versions 17.2, 16.6, 15.10, 14.15, 13.18, and 12.22.
    When you build from source, best practice is to build with PostgreSQL 17.2, 16.6, etc and higher.
    Users of [Timescale Cloud](https://console.cloud.timescale.com/) and Platform packages built and
@@ -218,7 +215,3 @@ We welcome contributions to TimescaleDB! See [Contributing](https://github.com/t
 
 Timescale is PostgreSQL made powerful. To learn more about the company and its products, visit [timescale.com](https://www.timescale.com).
 
-
-
-
-[postgres-breaking-change]: https://www.postgresql.org/about/news/postgresql-172-166-1510-1415-1318-and-1222-released-2965/
