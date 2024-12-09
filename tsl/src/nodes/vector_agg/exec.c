@@ -11,6 +11,7 @@
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <optimizer/optimizer.h>
 
 #include "nodes/vector_agg/exec.h"
 
@@ -18,6 +19,7 @@
 #include "guc.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/decompress_chunk/exec.h"
+#include "nodes/decompress_chunk/vector_quals.h"
 #include "nodes/vector_agg.h"
 
 static int
@@ -54,6 +56,25 @@ get_input_offset(DecompressChunkState *decompress_state, Var *var)
 	return index;
 }
 
+static int
+grouping_column_comparator(const void *a_ptr, const void *b_ptr)
+{
+	const GroupingColumn *a = (GroupingColumn *) a_ptr;
+	const GroupingColumn *b = (GroupingColumn *) b_ptr;
+
+	if (a->value_bytes == b->value_bytes)
+	{
+		return 0;
+	}
+
+	if (a->value_bytes > b->value_bytes)
+	{
+		return -1;
+	}
+
+	return 1;
+}
+
 static void
 vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 {
@@ -66,6 +87,17 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 
 	DecompressChunkState *decompress_state =
 		(DecompressChunkState *) linitial(vector_agg_state->custom.custom_ps);
+
+	/*
+	 * Set up the helper structures used to evaluate stable expressions in
+	 * vectorized FILTER clauses.
+	 */
+	PlannerGlobal glob = {
+		.boundParams = node->ss.ps.state->es_param_list_info,
+	};
+	PlannerInfo root = {
+		.glob = &glob,
+	};
 
 	/*
 	 * The aggregated targetlist with Aggrefs is in the custom scan targetlist
@@ -131,6 +163,9 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 
 			Aggref *aggref = castNode(Aggref, tlentry->expr);
 
+			//			fprintf(stderr, "the aggref at execution is:\n");
+			//			my_print(aggref);
+
 			VectorAggFunctions *func = get_vector_aggregate(aggref->aggfnoid);
 			Assert(func != NULL);
 			def->func = *func;
@@ -149,6 +184,12 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 			{
 				def->input_offset = -1;
 			}
+
+			if (aggref->aggfilter != NULL)
+			{
+				Node *constified = estimate_expression_value(&root, (Node *) aggref->aggfilter);
+				def->filter_clauses = list_make1(constified);
+			}
 		}
 		else
 		{
@@ -160,17 +201,95 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 
 			Var *var = castNode(Var, tlentry->expr);
 			col->input_offset = get_input_offset(decompress_state, var);
+
+			DecompressContext *dcontext = &decompress_state->decompress_context;
+			CompressionColumnDescription *desc =
+				&dcontext->compressed_chunk_columns[col->input_offset];
+
+			col->typid = desc->typid;
+			col->value_bytes = desc->value_bytes;
+			col->by_value = desc->by_value;
+			if (col->value_bytes == -1)
+			{
+				/*
+				 * long varlena requires 4 byte alignment, not sure why text has 'i'
+				 * typalign in pg catalog.
+				 */
+				col->alignment_bytes = 4;
+			}
+			else
+			{
+				switch (desc->typalign)
+				{
+					case TYPALIGN_CHAR:
+						col->alignment_bytes = 1;
+						break;
+					case TYPALIGN_SHORT:
+						col->alignment_bytes = ALIGNOF_SHORT;
+						break;
+					case TYPALIGN_INT:
+						col->alignment_bytes = ALIGNOF_INT;
+						break;
+					case TYPALIGN_DOUBLE:
+						col->alignment_bytes = ALIGNOF_DOUBLE;
+						break;
+					default:
+						Assert(false);
+						col->alignment_bytes = 1;
+				}
+			}
 		}
 	}
 
 	/*
-	 * Currently the only grouping policy we use is per-batch grouping.
+	 * Sort grouping columns by descending column size, variable size last. This
+	 * helps improve branch predictability and key packing when we use hashed
+	 * serialized multi-column keys.
 	 */
-	vector_agg_state->grouping =
-		create_grouping_policy_batch(vector_agg_state->num_agg_defs,
-									 vector_agg_state->agg_defs,
-									 vector_agg_state->num_grouping_columns,
-									 vector_agg_state->grouping_columns);
+	qsort(vector_agg_state->grouping_columns,
+		  vector_agg_state->num_grouping_columns,
+		  sizeof(GroupingColumn),
+		  grouping_column_comparator);
+
+	/*
+	 * Determine which grouping policy we are going to use.
+	 */
+	bool all_segmentby = true;
+	for (int i = 0; i < vector_agg_state->num_grouping_columns; i++)
+	{
+		GroupingColumn *col = &vector_agg_state->grouping_columns[i];
+		DecompressContext *dcontext = &decompress_state->decompress_context;
+		CompressionColumnDescription *desc = &dcontext->compressed_chunk_columns[col->input_offset];
+		//		if (desc->type == COMPRESSED_COLUMN && desc->by_value && desc->value_bytes > 0 &&
+		//			(size_t) desc->value_bytes <= sizeof(Datum))
+		if (desc->type != SEGMENTBY_COLUMN)
+		{
+			all_segmentby = false;
+			break;
+		}
+	}
+	if (all_segmentby)
+	{
+		/*
+		 * Per-batch grouping.
+		 */
+		vector_agg_state->grouping =
+			create_grouping_policy_batch(vector_agg_state->num_agg_defs,
+										 vector_agg_state->agg_defs,
+										 vector_agg_state->num_grouping_columns,
+										 vector_agg_state->grouping_columns);
+	}
+	else
+	{
+		/*
+		 * Hash grouping.
+		 */
+		vector_agg_state->grouping =
+			create_grouping_policy_hash(vector_agg_state->num_agg_defs,
+										vector_agg_state->agg_defs,
+										vector_agg_state->num_grouping_columns,
+										vector_agg_state->grouping_columns);
+	}
 }
 
 static void
@@ -293,6 +412,37 @@ vector_agg_exec(CustomScanState *node)
 			dcontext->ps->instrument->tuplecount += not_filtered_rows;
 		}
 
+		/*
+		 * Compute the vectorized filters for the aggregate function FILTER
+		 * clauses.
+		 */
+		const int naggs = vector_agg_state->num_agg_defs;
+		for (int i = 0; i < naggs; i++)
+		{
+			VectorAggDef *agg_def = &vector_agg_state->agg_defs[i];
+			if (agg_def->filter_clauses == NIL)
+			{
+				continue;
+			}
+			CompressedBatchVectorQualState cbvqstate = {
+				.vqstate = {
+					.vectorized_quals_constified = agg_def->filter_clauses,
+					.num_results = batch_state->total_batch_rows,
+					.per_vector_mcxt = batch_state->per_batch_context,
+					.slot = compressed_slot,
+					.get_arrow_array = compressed_batch_get_arrow_array,
+				},
+				.batch_state = batch_state,
+				.dcontext = dcontext,
+			};
+			VectorQualState *vqstate = &cbvqstate.vqstate;
+			vector_qual_compute(vqstate);
+			agg_def->filter_result = vqstate->vector_qual_result;
+		}
+
+		/*
+		 * Finally, pass the compressed batch to the grouping policy.
+		 */
 		grouping->gp_add_batch(grouping, batch_state);
 	}
 
