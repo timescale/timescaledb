@@ -148,12 +148,6 @@ typedef struct
 
 } DecompressionMapContext;
 
-typedef struct VectorQualInfoDecompressChunk
-{
-	VectorQualInfo vqinfo;
-	const UncompressedColumnInfo *colinfo;
-} VectorQualInfoDecompressChunk;
-
 static bool *
 build_vector_attrs_array(const UncompressedColumnInfo *colinfo, const CompressionInfo *info)
 {

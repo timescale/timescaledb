@@ -11,6 +11,7 @@
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <optimizer/optimizer.h>
 
 #include "nodes/vector_agg/exec.h"
 
@@ -18,6 +19,7 @@
 #include "guc.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/decompress_chunk/exec.h"
+#include "nodes/decompress_chunk/vector_quals.h"
 #include "nodes/vector_agg.h"
 
 static int
@@ -66,6 +68,17 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 
 	DecompressChunkState *decompress_state =
 		(DecompressChunkState *) linitial(vector_agg_state->custom.custom_ps);
+
+	/*
+	 * Set up the helper structures used to evaluate stable expressions in
+	 * vectorized FILTER clauses.
+	 */
+	PlannerGlobal glob = {
+		.boundParams = node->ss.ps.state->es_param_list_info,
+	};
+	PlannerInfo root = {
+		.glob = &glob,
+	};
 
 	/*
 	 * The aggregated targetlist with Aggrefs is in the custom scan targetlist
@@ -148,6 +161,12 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 			else
 			{
 				def->input_offset = -1;
+			}
+
+			if (aggref->aggfilter != NULL)
+			{
+				Node *constified = estimate_expression_value(&root, (Node *) aggref->aggfilter);
+				def->filter_clauses = list_make1(constified);
 			}
 		}
 		else
@@ -293,6 +312,37 @@ vector_agg_exec(CustomScanState *node)
 			dcontext->ps->instrument->tuplecount += not_filtered_rows;
 		}
 
+		/*
+		 * Compute the vectorized filters for the aggregate function FILTER
+		 * clauses.
+		 */
+		const int naggs = vector_agg_state->num_agg_defs;
+		for (int i = 0; i < naggs; i++)
+		{
+			VectorAggDef *agg_def = &vector_agg_state->agg_defs[i];
+			if (agg_def->filter_clauses == NIL)
+			{
+				continue;
+			}
+			CompressedBatchVectorQualState cbvqstate = {
+				.vqstate = {
+					.vectorized_quals_constified = agg_def->filter_clauses,
+					.num_results = batch_state->total_batch_rows,
+					.per_vector_mcxt = batch_state->per_batch_context,
+					.slot = compressed_slot,
+					.get_arrow_array = compressed_batch_get_arrow_array,
+				},
+				.batch_state = batch_state,
+				.dcontext = dcontext,
+			};
+			VectorQualState *vqstate = &cbvqstate.vqstate;
+			vector_qual_compute(vqstate);
+			agg_def->filter_result = vqstate->vector_qual_result;
+		}
+
+		/*
+		 * Finally, pass the compressed batch to the grouping policy.
+		 */
 		grouping->gp_add_batch(grouping, batch_state);
 	}
 
