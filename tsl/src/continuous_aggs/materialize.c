@@ -26,8 +26,11 @@
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
 
-#define CHUNKIDFROMRELID "chunk_id_from_relid"
 #define CONTINUOUS_AGG_CHUNK_ID_COL_NAME "chunk_id"
+
+/*********************
+ * utility functions *
+ *********************/
 
 static bool ranges_overlap(InternalTimeRange invalidation_range,
 						   InternalTimeRange new_materialization_range);
@@ -43,33 +46,108 @@ static char *build_merge_update_clause(List *column_names);
 /***************************
  * materialization support *
  ***************************/
-static void spi_update_watermark(Hypertable *mat_ht, SchemaAndName materialization_table,
-								 const NameData *time_column_name, TimeRange materialization_range,
-								 const char *const chunk_condition);
-static void spi_update_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
-										SchemaAndName partial_view,
-										SchemaAndName materialization_table,
-										const NameData *time_column_name,
-										TimeRange invalidation_range, const int32 chunk_id);
-static uint64 spi_delete_materializations(SchemaAndName materialization_table,
-										  const NameData *time_column_name,
-										  TimeRange materialization_range,
-										  const char *const chunk_condition);
-static uint64 spi_insert_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
-										  SchemaAndName partial_view,
-										  SchemaAndName materialization_table,
-										  const NameData *time_column_name,
-										  TimeRange materialization_range,
-										  const char *const chunk_condition);
-static bool spi_exists_materializations(SchemaAndName materialization_table,
-										const NameData *time_column_name,
-										TimeRange materialization_range);
-static uint64 spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
-										 SchemaAndName partial_view,
-										 SchemaAndName materialization_table,
-										 const NameData *time_column_name,
-										 TimeRange materialization_range);
+typedef enum MaterializationOperation
+{
+	OPERATION_INSERT_DELETE,
+	OPERATION_MERGE_DELETE
+} MaterializationOperation;
 
+typedef enum MaterializationPlanType
+{
+	PLAN_TYPE_INSERT,
+	PLAN_TYPE_DELETE,
+	PLAN_TYPE_EXISTS,
+	PLAN_TYPE_MERGE,
+	PLAN_TYPE_MERGE_DELETE,
+	_MAX_MATERIALIZATION_PLAN_TYPES
+} MaterializationPlanType;
+
+typedef struct MaterializationPlan
+{
+	const char *query;
+	const char *strings[3];
+	SPIPlanPtr plan;
+	bool read_only;
+} MaterializationPlan;
+
+static MaterializationPlan _materialization_plans[_MAX_MATERIALIZATION_PLAN_TYPES + 1] = {
+	[PLAN_TYPE_INSERT] = { .query = "INSERT INTO %s.%s SELECT * FROM %s.%s AS I "
+									"WHERE I.%s >= $1 AND I.%s < $2 %s;",
+						   .strings[0] = "insert",
+						   .strings[1] = "inserted",
+						   .strings[2] = "into",
+						   .plan = NULL,
+						   .read_only = false },
+	[PLAN_TYPE_DELETE] = { .query = "DELETE FROM %s.%s AS D "
+									"WHERE D.%s >= $1 AND D.%s < $2 %s;",
+						   .strings[0] = "delete",
+						   .strings[1] = "deleted",
+						   .strings[2] = "from",
+						   .plan = NULL,
+						   .read_only = false },
+	[PLAN_TYPE_EXISTS] = { .query = "SELECT 1 FROM %s.%s AS M "
+									"WHERE M.%s >= $1 AND M.%s < $2 "
+									"LIMIT 1;",
+						   .plan = NULL,
+						   .read_only = true },
+	[PLAN_TYPE_MERGE] = { .query = "WITH partial AS ( "
+								   "  SELECT * "
+								   "  FROM %s.%s "
+								   "  WHERE %s >= $1 AND %s < $2 "
+								   ") "
+								   "MERGE INTO %s.%s M "
+								   "USING partial P ON %s AND M.%s >= $1 AND M.%s < $2 "
+								   "  %s " /* UPDATE */
+								   "  WHEN NOT MATCHED THEN "
+								   "    INSERT (%s) VALUES (%s) ",
+						  .strings[0] = "merge",
+						  .strings[1] = "merged",
+						  .strings[2] = "into",
+						  .plan = NULL,
+						  .read_only = false },
+	[PLAN_TYPE_MERGE_DELETE] = { .query = "DELETE "
+										  "FROM %s.%s M "
+										  "WHERE M.%s >= $1 AND M.%s < $2 "
+										  "AND NOT EXISTS ("
+										  " SELECT FROM %s.%s P "
+										  " WHERE %s AND P.%s >= $1 AND P.%s < $2) ",
+								 .strings[0] = "delete",
+								 .strings[1] = "deleted",
+								 .strings[2] = "from",
+								 .plan = NULL,
+								 .read_only = false },
+};
+
+typedef struct MaterializationContext
+{
+	Hypertable *mat_ht;
+	const ContinuousAgg *cagg;
+	SchemaAndName partial_view;
+	SchemaAndName materialization_table;
+	NameData *time_column_name;
+	TimeRange materialization_range;
+	char *chunk_condition;
+} MaterializationContext;
+
+static MaterializationPlan *get_materialization_plan(MaterializationPlanType plan_type);
+static char *create_materialization_plan_query(MaterializationContext *context,
+											   MaterializationPlanType plan_type);
+static void create_materialization_plan(MaterializationContext *context,
+										MaterializationPlanType plan_type);
+static void create_materialization_plans(MaterializationContext *context,
+										 MaterializationOperation type);
+static int execute_materialization_plan(MaterializationContext *context,
+										MaterializationPlanType plan_type, uint64 *rows_processed);
+static void free_materialization_plan(MaterializationPlanType plan_type);
+static void free_materialization_plans();
+
+static void update_watermark(MaterializationContext *context);
+static bool exists_materializations(MaterializationContext *context);
+static uint64 execute_materialization(MaterializationContext *context,
+									  MaterializationPlanType plan_type);
+static void execute_materializations(MaterializationContext *context);
+
+/* API to update materializations from refresh code */
 void
 continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *cagg,
 									  SchemaAndName partial_view,
@@ -80,6 +158,25 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 {
 	InternalTimeRange combined_materialization_range = new_materialization_range;
 	bool materialize_invalidations_separately = range_length(invalidation_range) > 0;
+
+	MaterializationContext context = {
+		.mat_ht = mat_ht,
+		.cagg = cagg,
+		.partial_view = partial_view,
+		.materialization_table = materialization_table,
+		.time_column_name = (NameData *) time_column_name,
+		.materialization_range = internal_time_range_to_time_range(new_materialization_range),
+		/*
+		 * chunk_id is valid if the materializaion update should be done only on the given chunk.
+		 * This is used currently for refresh on chunk drop only. In other cases, manual
+		 * call to refresh_continuous_aggregate or call from a refresh policy, chunk_id is
+		 * not provided, i.e., invalid. Also the chunk_id is used only on the old format.
+		 */
+		.chunk_condition =
+			chunk_id != INVALID_CHUNK_ID && !ContinuousAggIsFinalized(cagg) ?
+				psprintf(" AND %s = %d", CONTINUOUS_AGG_CHUNK_ID_COL_NAME, chunk_id) :
+				"",
+	};
 
 	/* Lock down search_path */
 	int save_nestlevel = NewGUCNestLevel();
@@ -118,32 +215,18 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 	 */
 	if (range_length(invalidation_range) == 0 || !materialize_invalidations_separately)
 	{
-		spi_update_materializations(mat_ht,
-									cagg,
-									partial_view,
-									materialization_table,
-									time_column_name,
-									internal_time_range_to_time_range(
-										combined_materialization_range),
-									chunk_id);
+		context.materialization_range =
+			internal_time_range_to_time_range(combined_materialization_range);
+		execute_materializations(&context);
 	}
 	else
 	{
-		spi_update_materializations(mat_ht,
-									cagg,
-									partial_view,
-									materialization_table,
-									time_column_name,
-									internal_time_range_to_time_range(invalidation_range),
-									chunk_id);
+		context.materialization_range = internal_time_range_to_time_range(invalidation_range);
+		execute_materializations(&context);
 
-		spi_update_materializations(mat_ht,
-									cagg,
-									partial_view,
-									materialization_table,
-									time_column_name,
-									internal_time_range_to_time_range(new_materialization_range),
-									chunk_id);
+		context.materialization_range =
+			internal_time_range_to_time_range(new_materialization_range);
+		execute_materializations(&context);
 	}
 
 	/* Restore search_path */
@@ -330,26 +413,244 @@ build_merge_update_clause(List *column_names)
 	return ret->data;
 }
 
+static MaterializationPlan *
+get_materialization_plan(MaterializationPlanType plan_type)
+{
+	return &_materialization_plans[plan_type];
+}
+
+static char *
+create_materialization_plan_query(MaterializationContext *context,
+								  MaterializationPlanType plan_type)
+{
+	StringInfo query = makeStringInfo();
+
+	switch (plan_type)
+	{
+		/* Create INSERT query statement */
+		case PLAN_TYPE_INSERT:
+			appendStringInfo(query,
+							 get_materialization_plan(PLAN_TYPE_INSERT)->query,
+							 quote_identifier(NameStr(*context->materialization_table.schema)),
+							 quote_identifier(NameStr(*context->materialization_table.name)),
+							 quote_identifier(NameStr(*context->partial_view.schema)),
+							 quote_identifier(NameStr(*context->partial_view.name)),
+							 quote_identifier(NameStr(*context->time_column_name)),
+							 quote_identifier(NameStr(*context->time_column_name)),
+							 context->chunk_condition);
+			break;
+
+		/* Create DELETE query statement */
+		case PLAN_TYPE_DELETE:
+			appendStringInfo(query,
+							 get_materialization_plan(PLAN_TYPE_DELETE)->query,
+							 quote_identifier(NameStr(*context->materialization_table.schema)),
+							 quote_identifier(NameStr(*context->materialization_table.name)),
+							 quote_identifier(NameStr(*context->time_column_name)),
+							 quote_identifier(NameStr(*context->time_column_name)),
+							 context->chunk_condition);
+
+			break;
+
+		/* Create SELECT EXISTS query statement */
+		case PLAN_TYPE_EXISTS:
+			appendStringInfo(query,
+							 get_materialization_plan(PLAN_TYPE_EXISTS)->query,
+							 quote_identifier(NameStr(*context->materialization_table.schema)),
+							 quote_identifier(NameStr(*context->materialization_table.name)),
+							 quote_identifier(NameStr(*context->time_column_name)),
+							 quote_identifier(NameStr(*context->time_column_name)));
+			break;
+
+		/* Create MERGE query statement */
+		case PLAN_TYPE_MERGE:
+		{
+			List *grp_colnames =
+				cagg_find_groupingcols((ContinuousAgg *) context->cagg, context->mat_ht);
+			List *agg_colnames =
+				cagg_find_aggref_and_var_cols((ContinuousAgg *) context->cagg, context->mat_ht);
+			List *all_columns = NIL;
+
+			/* Concat both lists into a single one*/
+			all_columns = list_concat(all_columns, grp_colnames);
+			all_columns = list_concat(all_columns, agg_colnames);
+
+			StringInfo merge_update = makeStringInfo();
+			char *merge_update_clause = build_merge_update_clause(all_columns);
+
+			/* It make no sense but is possible to create a cagg only with time bucket (without
+			 * aggregate functions) */
+			if (merge_update_clause != NULL)
+			{
+				appendStringInfo(merge_update,
+								 "  WHEN MATCHED AND ROW(M.*) IS DISTINCT FROM ROW(P.*) THEN "
+								 "    UPDATE SET %s ",
+								 merge_update_clause);
+			}
+
+			/* MERGE statement to UPDATE affected buckets and INSERT new ones */
+			appendStringInfo(query,
+							 get_materialization_plan(PLAN_TYPE_MERGE)->query,
+
+							 /* partial VIEW */
+							 quote_identifier(NameStr(*context->partial_view.schema)),
+							 quote_identifier(NameStr(*context->partial_view.name)),
+
+							 /* partial WHERE */
+							 quote_identifier(NameStr(*context->time_column_name)),
+							 quote_identifier(NameStr(*context->time_column_name)),
+
+							 /* materialization hypertable */
+							 quote_identifier(NameStr(*context->materialization_table.schema)),
+							 quote_identifier(NameStr(*context->materialization_table.name)),
+
+							 /* MERGE JOIN condition */
+							 build_merge_join_clause(grp_colnames),
+
+							 /* extra MERGE JOIN condition with primary dimension */
+							 quote_identifier(NameStr(*context->time_column_name)),
+							 quote_identifier(NameStr(*context->time_column_name)),
+
+							 /* UPDATE */
+							 merge_update->data,
+
+							 /* INSERT */
+							 build_merge_insert_columns(all_columns, ", ", NULL),
+							 build_merge_insert_columns(all_columns, ", ", "P."));
+			break;
+		}
+
+		/* Create DELETE after MERGE query statement */
+		case PLAN_TYPE_MERGE_DELETE:
+		{
+			List *grp_colnames =
+				cagg_find_groupingcols((ContinuousAgg *) context->cagg, context->mat_ht);
+
+			appendStringInfo(query,
+							 get_materialization_plan(PLAN_TYPE_MERGE_DELETE)->query,
+
+							 /* materialization hypertable */
+							 quote_identifier(NameStr(*context->materialization_table.schema)),
+							 quote_identifier(NameStr(*context->materialization_table.name)),
+
+							 /* materialization hypertable WHERE */
+							 quote_identifier(NameStr(*context->time_column_name)),
+							 quote_identifier(NameStr(*context->time_column_name)),
+
+							 /* partial VIEW */
+							 quote_identifier(NameStr(*context->partial_view.schema)),
+							 quote_identifier(NameStr(*context->partial_view.name)),
+
+							 /* MERGE JOIN condition */
+							 build_merge_join_clause(grp_colnames),
+
+							 /* partial WHERE */
+							 quote_identifier(NameStr(*context->time_column_name)),
+							 quote_identifier(NameStr(*context->time_column_name)));
+			break;
+		}
+		default:
+			pg_unreachable();
+			break;
+	}
+
+	elog(DEBUG2, "Materialization Plan Type (%d): %s", plan_type, query->data);
+	return query->data;
+}
+
 static void
-spi_update_watermark(Hypertable *mat_ht, SchemaAndName materialization_table,
-					 const NameData *time_column_name, TimeRange materialization_range,
-					 const char *const chunk_condition)
+create_materialization_plan(MaterializationContext *context, MaterializationPlanType plan_type)
+{
+	MaterializationPlan *materialization = get_materialization_plan(plan_type);
+
+	if (materialization->plan == NULL)
+	{
+		char *query = create_materialization_plan_query(context, plan_type);
+		Oid types[] = { context->materialization_range.type, context->materialization_range.type };
+
+		materialization->plan = SPI_prepare(query, 2, types);
+		if (materialization->plan == NULL)
+			elog(ERROR, "%s: SPI_prepare failed: %s", __func__, query);
+
+		SPI_keepplan(materialization->plan);
+	}
+}
+
+static void
+create_materialization_plans(MaterializationContext *context, MaterializationOperation type)
+{
+	switch (type)
+	{
+		case OPERATION_INSERT_DELETE:
+			create_materialization_plan(context, PLAN_TYPE_INSERT);
+			create_materialization_plan(context, PLAN_TYPE_DELETE);
+			break;
+		case OPERATION_MERGE_DELETE:
+			create_materialization_plan(context, PLAN_TYPE_INSERT);
+			create_materialization_plan(context, PLAN_TYPE_EXISTS);
+			create_materialization_plan(context, PLAN_TYPE_MERGE);
+			create_materialization_plan(context, PLAN_TYPE_MERGE_DELETE);
+			break;
+		default:
+			pg_unreachable();
+			break;
+	}
+}
+
+static int
+execute_materialization_plan(MaterializationContext *context, MaterializationPlanType plan_type,
+							 uint64 *rows_processed)
+{
+	MaterializationPlan *materialization = get_materialization_plan(plan_type);
+	Datum values[] = { context->materialization_range.start, context->materialization_range.end };
+	char nulls[] = { false, false };
+
+	int res = SPI_execute_plan(materialization->plan, values, nulls, materialization->read_only, 0);
+
+	*rows_processed = SPI_processed;
+
+	return res;
+}
+
+static void
+free_materialization_plan(MaterializationPlanType plan_type)
+{
+	MaterializationPlan *materialization = get_materialization_plan(plan_type);
+
+	if (materialization->plan != NULL)
+	{
+		SPI_freeplan(materialization->plan);
+		materialization->plan = NULL;
+	}
+}
+
+static void
+free_materialization_plans()
+{
+	for (int plan_type = 0; plan_type < _MAX_MATERIALIZATION_PLAN_TYPES; plan_type++)
+	{
+		free_materialization_plan(plan_type);
+	}
+}
+
+static void
+update_watermark(MaterializationContext *context)
 {
 	int res;
 	StringInfo command = makeStringInfo();
-	Oid types[] = { materialization_range.type };
-	Datum values[] = { materialization_range.start };
+	Oid types[] = { context->materialization_range.type };
+	Datum values[] = { context->materialization_range.start };
 	char nulls[] = { false };
 
 	appendStringInfo(command,
 					 "SELECT %s FROM %s.%s AS I "
 					 "WHERE I.%s >= $1 %s "
 					 "ORDER BY 1 DESC LIMIT 1;",
-					 quote_identifier(NameStr(*time_column_name)),
-					 quote_identifier(NameStr(*materialization_table.schema)),
-					 quote_identifier(NameStr(*materialization_table.name)),
-					 quote_identifier(NameStr(*time_column_name)),
-					 chunk_condition);
+					 quote_identifier(NameStr(*context->time_column_name)),
+					 quote_identifier(NameStr(*context->materialization_table.schema)),
+					 quote_identifier(NameStr(*context->materialization_table.name)),
+					 quote_identifier(NameStr(*context->time_column_name)),
+					 context->chunk_condition);
 
 	elog(DEBUG2, "%s: %s", __func__, command->data);
 	res = SPI_execute_with_args(command->data,
@@ -361,12 +662,12 @@ spi_update_watermark(Hypertable *mat_ht, SchemaAndName materialization_table,
 								0 /* count */);
 
 	if (res < 0)
-		elog(ERROR, "could not get the last bucket of the materialized data");
+		elog(ERROR, "%s: could not get the last bucket of the materialized data", __func__);
 
-	Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == materialization_range.type,
+	Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == context->materialization_range.type,
 		   "partition types for result (%d) and dimension (%d) do not match",
 		   SPI_gettypeid(SPI_tuptable->tupdesc, 1),
-		   materialization_range.type);
+		   context->materialization_range.type);
 
 	if (SPI_processed > 0)
 	{
@@ -375,359 +676,105 @@ spi_update_watermark(Hypertable *mat_ht, SchemaAndName materialization_table,
 
 		if (!isnull)
 		{
-			int64 watermark = ts_time_value_to_internal(maxdat, materialization_range.type);
-			ts_cagg_watermark_update(mat_ht, watermark, isnull, false);
+			int64 watermark =
+				ts_time_value_to_internal(maxdat, context->materialization_range.type);
+			ts_cagg_watermark_update(context->mat_ht, watermark, isnull, false);
 		}
 	}
 }
 
-static void
-spi_update_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
-							SchemaAndName partial_view, SchemaAndName materialization_table,
-							const NameData *time_column_name, TimeRange invalidation_range,
-							const int32 chunk_id)
-{
-	StringInfo chunk_condition = makeStringInfo();
-	uint64 rows_processed = 0;
-
-	/* MERGE statement is available starting on PG15 and we'll support it only in the new format of
-	 * CAggs and for non-compressed hypertables */
-	if (ts_guc_enable_merge_on_cagg_refresh && PG_VERSION_NUM >= 150000 &&
-		ContinuousAggIsFinalized(cagg) && !TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(mat_ht))
-	{
-		rows_processed = spi_merge_materializations(mat_ht,
-													cagg,
-													partial_view,
-													materialization_table,
-													time_column_name,
-													invalidation_range);
-	}
-	else
-	{
-		/*
-		 * chunk_id is valid if the materializaion update should be done only on the given chunk.
-		 * This is used currently for refresh on chunk drop only. In other cases, manual
-		 * call to refresh_continuous_aggregate or call from a refresh policy, chunk_id is
-		 * not provided, i.e., invalid.
-		 */
-		if (chunk_id != INVALID_CHUNK_ID)
-			appendStringInfo(chunk_condition, "AND chunk_id = %d", chunk_id);
-
-		rows_processed += spi_delete_materializations(materialization_table,
-													  time_column_name,
-													  invalidation_range,
-													  chunk_condition->data);
-		rows_processed += spi_insert_materializations(mat_ht,
-													  cagg,
-													  partial_view,
-													  materialization_table,
-													  time_column_name,
-													  invalidation_range,
-													  chunk_condition->data);
-	}
-
-	/* Get the max(time_dimension) of the materialized data */
-	if (rows_processed > 0)
-	{
-		spi_update_watermark(mat_ht,
-							 materialization_table,
-							 time_column_name,
-							 invalidation_range,
-							 chunk_condition->data);
-	}
-}
-
 static bool
-spi_exists_materializations(SchemaAndName materialization_table, const NameData *time_column_name,
-							TimeRange materialization_range)
+exists_materializations(MaterializationContext *context)
 {
 	int res;
-	StringInfo command = makeStringInfo();
-	Oid types[] = { materialization_range.type, materialization_range.type };
-	Datum values[] = { materialization_range.start, materialization_range.end };
-	char nulls[] = { false, false };
+	uint64 rows_processed;
 
-	appendStringInfo(command,
-					 "SELECT 1 FROM %s.%s AS M "
-					 "WHERE M.%s >= $1 AND M.%s < $2 "
-					 "LIMIT 1;",
-					 quote_identifier(NameStr(*materialization_table.schema)),
-					 quote_identifier(NameStr(*materialization_table.name)),
-					 quote_identifier(NameStr(*time_column_name)),
-					 quote_identifier(NameStr(*time_column_name)));
-
-	elog(DEBUG2, "%s", command->data);
-	res = SPI_execute_with_args(command->data,
-								2,
-								types,
-								values,
-								nulls,
-								true /* read_only */,
-								0 /* count */);
+	res = execute_materialization_plan(context, PLAN_TYPE_EXISTS, &rows_processed);
 
 	if (res < 0)
 		elog(ERROR,
 			 "could not check the materialization table \"%s.%s\"",
-			 NameStr(*materialization_table.schema),
-			 NameStr(*materialization_table.name));
+			 NameStr(*context->materialization_table.schema),
+			 NameStr(*context->materialization_table.name));
 
-	return (SPI_processed > 0);
+	return (rows_processed > 0);
 }
 
 static uint64
-spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
-						   SchemaAndName partial_view, SchemaAndName materialization_table,
-						   const NameData *time_column_name, TimeRange materialization_range)
+execute_materialization(MaterializationContext *context, MaterializationPlanType plan_type)
 {
 	int res;
-	StringInfo command = makeStringInfo();
-	Oid types[] = { materialization_range.type, materialization_range.type };
-	Datum values[] = { materialization_range.start, materialization_range.end };
-	char nulls[] = { false, false };
+	uint64 rows_processed;
+	MaterializationPlan *materialization = get_materialization_plan(plan_type);
 
-	/* Fallback to INSERT materializations if there's no rows to change on it */
-	if (!spi_exists_materializations(materialization_table,
-									 time_column_name,
-									 materialization_range))
-	{
-		elog(DEBUG2,
-			 "no rows to update on materialization table \"%s.%s\", falling back to INSERT",
-			 NameStr(*materialization_table.schema),
-			 NameStr(*materialization_table.name));
-		return spi_insert_materializations(mat_ht,
-										   cagg,
-										   partial_view,
-										   materialization_table,
-										   time_column_name,
-										   materialization_range,
-										   "" /* empty chunk condition for Finalized CAggs */);
-	}
-
-	List *grp_colnames = cagg_find_groupingcols((ContinuousAgg *) cagg, mat_ht);
-	List *agg_colnames = cagg_find_aggref_and_var_cols((ContinuousAgg *) cagg, mat_ht);
-	List *all_columns = NIL;
-	uint64 rows_processed = 0;
-
-	/* Concat both lists into a single one*/
-	all_columns = list_concat(all_columns, grp_colnames);
-	all_columns = list_concat(all_columns, agg_colnames);
-
-	StringInfo merge_update = makeStringInfo();
-	char *merge_update_clause = build_merge_update_clause(all_columns);
-
-	/* It make no sense but is possible to create a cagg only with time bucket (without aggregate
-	 * functions) */
-	if (merge_update_clause != NULL)
-	{
-		appendStringInfo(merge_update,
-						 "  WHEN MATCHED AND ROW(M.*) IS DISTINCT FROM ROW(P.*) THEN "
-						 "    UPDATE SET %s ",
-						 merge_update_clause);
-	}
-
-	/* MERGE statement to UPDATE affected buckets and INSERT new ones */
-	appendStringInfo(command,
-					 "WITH partial AS ( "
-					 "  SELECT * "
-					 "  FROM %s.%s "
-					 "  WHERE %s >= $1 AND %s < $2 "
-					 ") "
-					 "MERGE INTO %s.%s M "
-					 "USING partial P ON %s AND M.%s >= $1 AND M.%s < $2 "
-					 "  %s " /* UPDATE */
-					 "  WHEN NOT MATCHED THEN "
-					 "    INSERT (%s) VALUES (%s) ",
-
-					 /* partial VIEW */
-					 quote_identifier(NameStr(*partial_view.schema)),
-					 quote_identifier(NameStr(*partial_view.name)),
-
-					 /* partial WHERE */
-					 quote_identifier(NameStr(*time_column_name)),
-					 quote_identifier(NameStr(*time_column_name)),
-
-					 /* materialization hypertable */
-					 quote_identifier(NameStr(*materialization_table.schema)),
-					 quote_identifier(NameStr(*materialization_table.name)),
-
-					 /* MERGE JOIN condition */
-					 build_merge_join_clause(grp_colnames),
-
-					 /* extra MERGE JOIN condition with primary dimension */
-					 quote_identifier(NameStr(*time_column_name)),
-					 quote_identifier(NameStr(*time_column_name)),
-
-					 /* UPDATE */
-					 merge_update->data,
-
-					 /* INSERT */
-					 build_merge_insert_columns(all_columns, ", ", NULL),
-					 build_merge_insert_columns(all_columns, ", ", "P."));
-
-	elog(DEBUG2, "%s: %s", __func__, command->data);
-	res = SPI_execute_with_args(command->data,
-								2,
-								types,
-								values,
-								nulls,
-								false /* read_only */,
-								0 /* count */);
+	res = execute_materialization_plan(context, plan_type, &rows_processed);
 
 	if (res < 0)
 		elog(ERROR,
-			 "could not materialize values into the materialization table \"%s.%s\"",
-			 NameStr(*materialization_table.schema),
-			 NameStr(*materialization_table.name));
+			 "could not %s old values %s materialization table \"%s.%s\"",
+			 materialization->strings[0],
+			 materialization->strings[2],
+			 NameStr(*context->materialization_table.schema),
+			 NameStr(*context->materialization_table.name));
 	else
 		elog(LOG,
-			 "merged " UINT64_FORMAT " row(s) into materialization table \"%s.%s\"",
-			 SPI_processed,
-			 NameStr(*materialization_table.schema),
-			 NameStr(*materialization_table.name));
-
-	rows_processed += SPI_processed;
-
-	/* DELETE rows from the materialization hypertable when necessary */
-	resetStringInfo(command);
-	appendStringInfo(command,
-					 "DELETE "
-					 "FROM %s.%s M "
-					 "WHERE M.%s >= $1 AND M.%s < $2 "
-					 "AND NOT EXISTS ("
-					 " SELECT FROM %s.%s P "
-					 " WHERE %s AND P.%s >= $1 AND P.%s < $2) ",
-
-					 /* materialization hypertable */
-					 quote_identifier(NameStr(*materialization_table.schema)),
-					 quote_identifier(NameStr(*materialization_table.name)),
-
-					 /* materialization hypertable WHERE */
-					 quote_identifier(NameStr(*time_column_name)),
-					 quote_identifier(NameStr(*time_column_name)),
-
-					 /* partial VIEW */
-					 quote_identifier(NameStr(*partial_view.schema)),
-					 quote_identifier(NameStr(*partial_view.name)),
-
-					 /* MERGE JOIN condition */
-					 build_merge_join_clause(grp_colnames),
-
-					 /* partial WHERE */
-					 quote_identifier(NameStr(*time_column_name)),
-					 quote_identifier(NameStr(*time_column_name)));
-
-	elog(DEBUG2, "%s: %s", __func__, command->data);
-	res = SPI_execute_with_args(command->data,
-								2,
-								types,
-								values,
-								nulls,
-								false /* read_only */,
-								0 /* count */);
-
-	if (res < 0)
-		elog(ERROR,
-			 "could not delete values from the materialization table \"%s.%s\"",
-			 NameStr(*materialization_table.schema),
-			 NameStr(*materialization_table.name));
-	else
-		elog(LOG,
-			 "deleted " UINT64_FORMAT " row(s) from materialization table \"%s.%s\"",
-			 SPI_processed,
-			 NameStr(*materialization_table.schema),
-			 NameStr(*materialization_table.name));
-
-	rows_processed += SPI_processed;
+			 "%s " UINT64_FORMAT " row(s) %s materialization table \"%s.%s\"",
+			 materialization->strings[1],
+			 rows_processed,
+			 materialization->strings[2],
+			 NameStr(*context->materialization_table.schema),
+			 NameStr(*context->materialization_table.name));
 
 	return rows_processed;
 }
 
-static uint64
-spi_delete_materializations(SchemaAndName materialization_table, const NameData *time_column_name,
-							TimeRange materialization_range, const char *const chunk_condition)
+static void
+execute_materializations(MaterializationContext *context)
 {
-	int res;
-	StringInfo command = makeStringInfo();
-	Oid types[] = { materialization_range.type, materialization_range.type };
-	Datum values[] = { materialization_range.start, materialization_range.end };
-	char nulls[] = { false, false };
+	uint64 rows_processed = 0;
 
-	appendStringInfo(command,
-					 "DELETE FROM %s.%s AS D WHERE "
-					 "D.%s >= $1 AND D.%s < $2 %s;",
-					 quote_identifier(NameStr(*materialization_table.schema)),
-					 quote_identifier(NameStr(*materialization_table.name)),
-					 quote_identifier(NameStr(*time_column_name)),
-					 quote_identifier(NameStr(*time_column_name)),
-					 chunk_condition);
+	PG_TRY();
+	{
+		/* MERGE statement is available starting on PG15 and we'll support it only in the new format
+		 * of CAggs and for non-compressed hypertables */
+		if (ts_guc_enable_merge_on_cagg_refresh && PG_VERSION_NUM >= 150000 &&
+			ContinuousAggIsFinalized(context->cagg) &&
+			!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(context->mat_ht))
+		{
+			create_materialization_plans(context, OPERATION_MERGE_DELETE);
 
-	elog(DEBUG2, "%s: %s", __func__, command->data);
-	res = SPI_execute_with_args(command->data,
-								2,
-								types,
-								values,
-								nulls,
-								false /* read_only */,
-								0 /* count */);
+			/* Fallback to INSERT materializations if there's no rows to change on it */
+			if (!exists_materializations(context))
+			{
+				elog(DEBUG2,
+					 "no rows to merge on materialization table \"%s.%s\", falling back to INSERT",
+					 NameStr(*context->materialization_table.schema),
+					 NameStr(*context->materialization_table.name));
+				rows_processed = execute_materialization(context, PLAN_TYPE_INSERT);
+			}
+			else
+			{
+				rows_processed += execute_materialization(context, PLAN_TYPE_MERGE);
+				rows_processed += execute_materialization(context, PLAN_TYPE_MERGE_DELETE);
+			}
+		}
+		else
+		{
+			create_materialization_plans(context, OPERATION_INSERT_DELETE);
+			rows_processed += execute_materialization(context, PLAN_TYPE_DELETE);
+			rows_processed += execute_materialization(context, PLAN_TYPE_INSERT);
+		}
+	}
+	PG_FINALLY();
+	{
+		/* Make sure all cached plans in the session be released before rethrowing the error */
+		free_materialization_plans();
+	}
+	PG_END_TRY();
 
-	if (res < 0)
-		elog(ERROR,
-			 "could not delete old values from materialization table \"%s.%s\"",
-			 NameStr(*materialization_table.schema),
-			 NameStr(*materialization_table.name));
-	else
-		elog(LOG,
-			 "deleted " UINT64_FORMAT " row(s) from materialization table \"%s.%s\"",
-			 SPI_processed,
-			 NameStr(*materialization_table.schema),
-			 NameStr(*materialization_table.name));
-
-	return SPI_processed;
-}
-
-static uint64
-spi_insert_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
-							SchemaAndName partial_view, SchemaAndName materialization_table,
-							const NameData *time_column_name, TimeRange materialization_range,
-							const char *const chunk_condition)
-{
-	int res;
-	StringInfo command = makeStringInfo();
-	Oid types[] = { materialization_range.type, materialization_range.type };
-	Datum values[] = { materialization_range.start, materialization_range.end };
-	char nulls[] = { false, false };
-
-	appendStringInfo(command,
-					 "INSERT INTO %s.%s SELECT * FROM %s.%s AS I "
-					 "WHERE I.%s >= $1 AND I.%s < $2 %s;",
-					 quote_identifier(NameStr(*materialization_table.schema)),
-					 quote_identifier(NameStr(*materialization_table.name)),
-					 quote_identifier(NameStr(*partial_view.schema)),
-					 quote_identifier(NameStr(*partial_view.name)),
-					 quote_identifier(NameStr(*time_column_name)),
-					 quote_identifier(NameStr(*time_column_name)),
-					 chunk_condition);
-
-	elog(DEBUG2, "%s: %s", __func__, command->data);
-	res = SPI_execute_with_args(command->data,
-								2,
-								types,
-								values,
-								nulls,
-								false /* read_only */,
-								0 /* count */);
-
-	if (res < 0)
-		elog(ERROR,
-			 "could not materialize values into the materialization table \"%s.%s\"",
-			 NameStr(*materialization_table.schema),
-			 NameStr(*materialization_table.name));
-	else
-		elog(LOG,
-			 "inserted " UINT64_FORMAT " row(s) into materialization table \"%s.%s\"",
-			 SPI_processed,
-			 NameStr(*materialization_table.schema),
-			 NameStr(*materialization_table.name));
-
-	return SPI_processed;
+	/* Get the max(time_dimension) of the materialized data */
+	if (rows_processed > 0)
+	{
+		update_watermark(context);
+	}
 }
