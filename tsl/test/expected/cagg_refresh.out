@@ -489,3 +489,41 @@ SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions
 GROUP BY 1,2 WITH NO DATA;
 COMMIT;
+-- Test forceful refreshment. Here we simulate the situation that we've seen
+-- with tiered data when `timescaledb.enable_tiered_reads` were disabled on the
+-- server level. In that case we would not see materialized tiered data and
+-- we wouldn't be able to re-materialize the data using a normal refresh call
+-- because it would skip previously materialized ranges, but it should be
+-- possible with `force=>true` parameter. To simulate this use-case we clear
+-- the materialization hypertable and forefully re-materialize it.
+SELECT ht.schema_name || '.' || ht.table_name AS mat_ht, mat_hypertable_id FROM _timescaledb_catalog.continuous_agg cagg
+JOIN _timescaledb_catalog.hypertable ht ON cagg.mat_hypertable_id = ht.id
+WHERE user_view_name = 'daily_temp' \gset
+-- Delete the data from the materialization hypertable
+DELETE FROM :mat_ht;
+SET timezone TO UTC;
+-- Run regular refresh, it should not touch previously materialized range
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-04 00:00 UTC', '2020-05-05 00:00 UTC');
+NOTICE:  continuous aggregate "daily_temp" is already up-to-date
+SELECT * FROM daily_temp
+ORDER BY day, device;
+ day | device | avg_temp 
+-----+--------+----------
+(0 rows)
+
+-- Run it again with force=>true, the data should be rematerialized
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-04 00:00 UTC', '2020-05-05 00:00 UTC', force=>true);
+SELECT * FROM daily_temp
+ORDER BY day, device;
+             day              | device |     avg_temp     
+------------------------------+--------+------------------
+ Mon May 04 00:00:00 2020 UTC |      0 | 15.7647058823529
+ Mon May 04 00:00:00 2020 UTC |      1 | 24.3142857142857
+ Mon May 04 00:00:00 2020 UTC |      2 | 14.8205128205128
+ Mon May 04 00:00:00 2020 UTC |      3 | 18.1111111111111
+ Tue May 05 00:00:00 2020 UTC |      0 | 19.3846153846154
+ Tue May 05 00:00:00 2020 UTC |      1 | 16.5555555555556
+ Tue May 05 00:00:00 2020 UTC |      2 | 18.5714285714286
+ Tue May 05 00:00:00 2020 UTC |      3 | 23.5714285714286
+(8 rows)
+
