@@ -9,8 +9,8 @@
 #include <catalog/pg_type.h>
 #include <nodes/parsenodes.h>
 
-#include "chunk.h"
 #include "ts_catalog/catalog.h"
+#include <chunk.h>
 
 #include "compat/compat.h"
 #include "with_clause_parser.h"
