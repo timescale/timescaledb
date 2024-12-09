@@ -2,6 +2,9 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+-- Avoid chunkwise aggregation to make the test stable
+set timescaledb.enable_chunkwise_aggregation to off;
+
 create table readings(time timestamptz,
        location text,
        device int,
