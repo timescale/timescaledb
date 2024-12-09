@@ -407,3 +407,7 @@ RESET max_parallel_workers_per_gather;
 
 -- Can't group by a system column
 SELECT sum(float_value) FROM testtable2 GROUP BY tableoid ORDER BY 1 LIMIT 1;
+
+-- Postgres versions starting with 16 remove the grouping columns that are
+-- equated to a constant. Check that our planning code handles this well.
+SELECT sum(float_value), int_value FROM testtable2 WHERE int_value = 1 GROUP BY int_value;
