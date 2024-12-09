@@ -1629,17 +1629,14 @@ UNION ALL
                            Group Key: time_bucket('5'::bigint, _hyper_14_61_chunk."time")
                            ->  Index Only Scan Backward using _hyper_14_61_chunk_small_integer_ht_time_idx on _hyper_14_61_chunk (actual rows=10 loops=1)
                                  Index Cond: ("time" < COALESCE((_timescaledb_functions.cagg_watermark(15))::integer, (_timescaledb_functions.cagg_watermark(15))::integer))
-                                 Heap Fetches: 10
                      ->  Partial GroupAggregate (actual rows=2 loops=1)
                            Group Key: time_bucket('5'::bigint, _hyper_14_62_chunk."time")
                            ->  Index Only Scan Backward using _hyper_14_62_chunk_small_integer_ht_time_idx on _hyper_14_62_chunk (actual rows=10 loops=1)
                                  Index Cond: ("time" < COALESCE((_timescaledb_functions.cagg_watermark(15))::integer, (_timescaledb_functions.cagg_watermark(15))::integer))
-                                 Heap Fetches: 10
                      ->  Partial GroupAggregate (actual rows=2 loops=1)
                            Group Key: time_bucket('5'::bigint, _hyper_14_63_chunk."time")
                            ->  Index Only Scan Backward using _hyper_14_63_chunk_small_integer_ht_time_idx on _hyper_14_63_chunk (actual rows=6 loops=1)
                                  Index Cond: ("time" < COALESCE((_timescaledb_functions.cagg_watermark(15))::integer, (_timescaledb_functions.cagg_watermark(15))::integer))
-                                 Heap Fetches: 6
 (30 rows)
 
 -- test with non constant value of the watermark function (should not be constified)

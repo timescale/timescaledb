@@ -142,7 +142,7 @@ cagg_alter_compression(ContinuousAgg *agg, Hypertable *mat_ht, List *compress_de
 				with_clause_options[i] = default_with_clause_options[i];
 				elog(NOTICE,
 					 "defaulting %s to %s",
-					 with_clause_options[i].definition->arg_name,
+					 with_clause_options[i].definition->arg_names[0],
 					 ts_with_clause_result_deparse_value(&with_clause_options[i]));
 			}
 		}
