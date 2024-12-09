@@ -16,7 +16,7 @@
 
 </div>
 
-TimescaleDB scales PostgreSQL for ingesting and querying vast amounts of live data. From the perspective of both use and management, TimescaleDB looks and feels just like PostgreSQL, and can be managed and queried as such. However, it provides a wide range of features and optimizations that supercharge your queries - all while keeping the costs down. For example, our hybrid row-columnar engine makes queries up to 350x faster, ingests 44% faster, and reduces storage by 95% over RDS. Visit [timescale.com](https://www.timescale.com) for details, use cases, customer success stories, and more.
+TimescaleDB scales PostgreSQL for ingesting and querying vast amounts of live data. From the perspective of both use and management, TimescaleDB looks and feels just like PostgreSQL, and can be managed and queried as such. However, it provides a wide range of features and optimizations that supercharge your queries - all while keeping the costs down. For example, our hybrid row-columnar engine makes queries up to 350x faster, ingests 44% faster, and reduces storage by 95%. Visit [timescale.com](https://www.timescale.com) for details, use cases, customer success stories, and more.
 
 <table style="width:100%;">
 <thead>
