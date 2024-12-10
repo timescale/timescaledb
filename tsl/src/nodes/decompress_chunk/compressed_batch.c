@@ -21,18 +21,6 @@
 #include "nodes/decompress_chunk/vector_quals.h"
 
 /*
- * VectorQualState for a compressed batch used to pass
- * DecompressChunk-specific data to vector qual functions that are shared
- * across scan nodes.
- */
-typedef struct CompressedBatchVectorQualState
-{
-	VectorQualState vqstate;
-	DecompressBatchState *batch_state;
-	DecompressContext *dcontext;
-} CompressedBatchVectorQualState;
-
-/*
  * Create a single-value ArrowArray of an arithmetic type. This is a specialized
  * function because arithmetic types have a particular layout of ArrowArrays.
  */
@@ -312,7 +300,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
  * VectorQualState->get_arrow_array() function used to interface with the
  * vector qual code across different scan nodes.
  */
-static const ArrowArray *
+const ArrowArray *
 compressed_batch_get_arrow_array(VectorQualState *vqstate, Expr *expr, bool *is_default_value)
 {
 	CompressedBatchVectorQualState *cbvqstate = (CompressedBatchVectorQualState *) vqstate;
@@ -360,8 +348,6 @@ compressed_batch_get_arrow_array(VectorQualState *vqstate, Expr *expr, bool *is_
 		   var->varattno);
 	Assert(column_description != NULL);
 	Assert(column_description->typid == var->vartype);
-	Ensure(column_description->type == COMPRESSED_COLUMN,
-		   "only compressed columns are supported in vectorized quals");
 
 	CompressedColumnValues *column_values = &batch_state->compressed_columns[column_index];
 
