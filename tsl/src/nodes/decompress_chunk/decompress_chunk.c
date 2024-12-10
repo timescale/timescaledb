@@ -895,12 +895,6 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 	chunk_rel->rows = new_row_estimate;
 
 	create_compressed_scan_paths(root, compressed_rel, compression_info, &sort_info);
-//	fprintf(stderr,
-//			"sortinfo: seqnum %d, pushdown %d, reverse %d, compressed pks:\n",
-//			sort_info.needs_sequence_num,
-//			sort_info.can_pushdown_sort,
-//			sort_info.reverse);
-//	my_print(sort_info.required_compressed_pathkeys);
 
 	/* compute parent relids of the chunk and use it to filter paths*/
 	Relids parent_relids = NULL;
@@ -993,7 +987,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 
 		Path *chunk_path_no_sort =
 			(Path *) decompress_chunk_path_create(root, compression_info, 0, compressed_path);
-		List *chunk_paths = list_make1(chunk_path_no_sort);
+		List *decompressed_paths = list_make1(chunk_path_no_sort);
 
 		/*
 		 * If we can push down the sort below the DecompressChunk node, we set the pathkeys of
@@ -1007,7 +1001,8 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 									  compressed_path->pathkeys))
 			{
 				/*
-				 * The compressed path already has the required ordering.
+				 * The compressed path already has the required ordering. Modify
+				 * in place the no-sorting path we just created above.
 				 */
 				DecompressChunkPath *path = (DecompressChunkPath *) chunk_path_no_sort;
 				path->reverse = sort_info.reverse;
@@ -1019,7 +1014,8 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 			{
 				/*
 				 * We must sort the underlying compressed path to get the
-				 * required ordering.
+				 * required ordering. Make a copy of no-sorting path and modify
+				 * it accordingly
 				 */
 				DecompressChunkPath *path_copy =
 					copy_decompress_chunk_path((DecompressChunkPath *) chunk_path_no_sort);
@@ -1048,7 +1044,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 
 				cost_decompress_chunk(root, &path_copy->custom_path.path, &sort_path);
 
-				chunk_paths = lappend(chunk_paths, path_copy);
+				decompressed_paths = lappend(decompressed_paths, path_copy);
 			}
 		}
 		else if (ts_guc_enable_decompression_sorted_merge)
@@ -1078,41 +1074,34 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 				path_copy->custom_path.path.pathkeys = root->query_pathkeys;
 				cost_batch_sorted_merge(root, compression_info, path_copy, compressed_path);
 
-				chunk_paths = lappend(chunk_paths, path_copy);
+				decompressed_paths = lappend(decompressed_paths, path_copy);
 			}
 		}
 
-		(void) make_chunk_sorted_path;
 		/*
-		 * Add useful sorted versions of the decompress path, if we couldn't
-		 * push down the sort.
+		 * Add sorted version of the decompress path, if we couldn't push down
+		 * the sort.
 		 */
-		Path *sort_above_chunk = make_chunk_sorted_path(root,
-														chunk_rel,
-														ht,
-														ht_relid,
-														chunk_path_no_sort,
-														compressed_path);
-		(void) sort_above_chunk;
-		if (sort_above_chunk != NULL)
+		if (!sort_info.can_pushdown_sort)
 		{
-			chunk_paths = lappend(chunk_paths, sort_above_chunk);
-		}
-
-		if (!add_uncompressed_part)
-		{
-			ListCell *chunk_paths_cell;
-			foreach (chunk_paths_cell, chunk_paths)
+			Path *sort_above_chunk = make_chunk_sorted_path(root,
+															chunk_rel,
+															ht,
+															ht_relid,
+															chunk_path_no_sort,
+															compressed_path);
+			if (sort_above_chunk != NULL)
 			{
-				add_path(chunk_rel, lfirst(chunk_paths_cell));
+				decompressed_paths = lappend(decompressed_paths, sort_above_chunk);
 			}
 		}
-		else
+
+		/*
+		 * If this is a partially compressed chunk we have to combine data
+		 * from compressed and uncompressed chunk.
+		 */
+		if (add_uncompressed_part)
 		{
-			/*
-			 * If this is a partially compressed chunk we have to combine data
-			 * from compressed and uncompressed chunk.
-			 */
 			Bitmapset *req_outer = PATH_REQ_OUTER(chunk_path_no_sort);
 			Path *uncompressed_path =
 				get_cheapest_path_for_pathkeys(initial_pathlist, NIL, req_outer, TOTAL_COST, false);
@@ -1130,40 +1119,25 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 					continue;
 			}
 
-			ListCell *chunk_paths_cell;
-			foreach (chunk_paths_cell, chunk_paths)
+			ListCell *lc;
+			foreach (lc, decompressed_paths)
 			{
 				/*
-				 * If we were able to generate a batch merge path, create a merge append path
-				 * that combines the result of the compressed and uncompressed part of the chunk.
-				 * The uncompressed part will be sorted, the batch_merge_path is already properly
-				 * sorted.
+				 * Combine decompressed path with uncompressed part of the chunk,
+				 * using either MergeAppend or plain Append, depending on
+				 * whether it has sorting.
 				 */
-				Path *path = lfirst(chunk_paths_cell);
-				//					path = (Path *) create_merge_append_path_compat(root,
-				//																	 chunk_rel,
-				//																	 list_make2(path,
-				//																				uncompressed_path),
-				//																	 path->pathkeys,
-				//																	 req_outer,
-				//																	 NIL);
-				/*
-				 * The per-chunk append paths are going to be accumulated
-				 * into a per-hypertable append path by
-				 * accumulate_append_subpath(), and it will try to create
-				 * MergeAppend paths if some child paths have pathkeys, so
-				 * here it is enough to create a plain Append path.
-				 */
+				Path *path = lfirst(lc);
 				if (path->pathkeys == NIL)
 				{
 					path = (Path *) create_append_path(root,
 													   chunk_rel,
 													   list_make2(path, uncompressed_path),
-													   NIL /* partial paths */,
-													   NIL, // path->pathkeys,
+													   /* partial_subpaths = */ NIL,
+													   /* pathkeys = */ NIL,
 													   req_outer,
-													   0,
-													   false,
+													   /* parallel_workers = */ 0,
+													   /* parallel_aware = */ false,
 													   path->rows + uncompressed_path->rows);
 				}
 				else
@@ -1174,14 +1148,24 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 															 path->pathkeys,
 															 req_outer);
 				}
-				add_path(chunk_rel, path);
+
+				lfirst(lc) = path;
 			}
+		}
+
+		/*
+		 * Add the paths to the chunk relation.
+		 */
+		foreach (lc, decompressed_paths)
+		{
+			add_path(chunk_rel, lfirst(lc));
 		}
 	}
 
 	/* the chunk_rel now owns the paths, remove them from the compressed_rel so they can't be freed
 	 * if it's planned */
 	compressed_rel->pathlist = NIL;
+
 	/* create parallel paths */
 	if (compressed_rel->consider_parallel)
 	{
