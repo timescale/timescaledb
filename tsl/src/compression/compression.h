@@ -11,6 +11,7 @@
 #include <fmgr.h>
 #include <lib/stringinfo.h>
 #include <nodes/execnodes.h>
+#include <utils/palloc.h>
 #include <utils/relcache.h>
 
 typedef struct BulkInsertStateData *BulkInsertState;
@@ -200,11 +201,14 @@ typedef enum CompressionAlgorithm
 	_MAX_NUM_COMPRESSION_ALGORITHMS = 128,
 } CompressionAlgorithm;
 
+typedef struct ChunkColumnStats ChunkColumnStats;
+
 typedef struct CompressionStats
 {
 	int64 rowcnt_pre_compression;
 	int64 rowcnt_post_compression;
 	int64 rowcnt_frozen;
+	ChunkColumnStats **colstats;
 } CompressionStats;
 
 typedef struct PerColumn
@@ -368,7 +372,7 @@ extern void row_compressor_init(CompressionSettings *settings, RowCompressor *ro
 								int16 num_columns_in_compressed_table, bool need_bistate,
 								int insert_options);
 extern void row_compressor_reset(RowCompressor *row_compressor);
-extern void row_compressor_close(RowCompressor *row_compressor);
+extern struct ChunkColumnStats **row_compressor_close(RowCompressor *row_compressor);
 extern void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
 											  Tuplesortstate *sorted_rel, TupleDesc sorted_desc,
 											  Relation in_rel);

@@ -12,6 +12,7 @@
 #include <libpq/pqformat.h>
 #include <storage/predicate.h>
 #include <utils/datum.h>
+#include <utils/palloc.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
@@ -34,6 +35,7 @@
 #include "segment_meta.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
+#include "ts_catalog/chunk_column_stats.h"
 #include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/compression_settings.h"
 
@@ -287,6 +289,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 
 	TupleDesc in_desc = RelationGetDescr(in_rel);
 	TupleDesc out_desc = RelationGetDescr(out_rel);
+
 	/* Before calling row compressor relation should be segmented and sorted as configured
 	 * by compress_segmentby and compress_orderby.
 	 * Cost of sorting can be mitigated if we find an existing BTREE index defined for
@@ -494,7 +497,8 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 		tuplesort_end(sorted_rel);
 	}
 
-	row_compressor_close(&row_compressor);
+	cstat.colstats = row_compressor_close(&row_compressor);
+
 	if (!ts_guc_enable_delete_after_compression)
 	{
 		DEBUG_WAITPOINT("compression_done_before_truncate_uncompressed");
@@ -720,6 +724,17 @@ build_column_map(CompressionSettings *settings, Relation uncompressed_table,
 		bool is_segmentby = ts_array_is_member(settings->fd.segmentby, NameStr(attr->attname));
 		bool is_orderby = ts_array_is_member(settings->fd.orderby, NameStr(attr->attname));
 
+		SegmentMetaMinMaxBuilder *segment_min_max_builder = NULL;
+		TypeCacheEntry *type = lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR);
+
+		if (OidIsValid(type->lt_opr))
+		{
+			/* Always run the min-max builder if the type allows. It is
+			 * useful to collect, e.g., column stats for chunk skipping. */
+			segment_min_max_builder =
+				segment_meta_min_max_builder_create(attr->atttypid, attr->attcollation);
+		}
+
 		if (!is_segmentby)
 		{
 			if (compressed_column_attr->atttypid != compressed_data_type_oid)
@@ -741,18 +756,6 @@ build_column_map(CompressionSettings *settings, Relation uncompressed_table,
 												 "max");
 			int16 segment_min_attr_offset = segment_min_attr_number - 1;
 			int16 segment_max_attr_offset = segment_max_attr_number - 1;
-
-			SegmentMetaMinMaxBuilder *segment_min_max_builder = NULL;
-			if (segment_min_attr_number != InvalidAttrNumber ||
-				segment_max_attr_number != InvalidAttrNumber)
-			{
-				Ensure(segment_min_attr_number != InvalidAttrNumber,
-					   "could not find the min metadata column");
-				Ensure(segment_max_attr_number != InvalidAttrNumber,
-					   "could not find the min metadata column");
-				segment_min_max_builder =
-					segment_meta_min_max_builder_create(attr->atttypid, attr->attcollation);
-			}
 
 			Ensure(!is_orderby || segment_min_max_builder != NULL,
 				   "orderby columns must have minmax metadata");
@@ -777,6 +780,7 @@ build_column_map(CompressionSettings *settings, Relation uncompressed_table,
 				.segmentby_column_index = index,
 				.min_metadata_attr_offset = -1,
 				.max_metadata_attr_offset = -1,
+				.min_max_metadata_builder = segment_min_max_builder,
 			};
 		}
 	}
@@ -965,7 +969,9 @@ row_compressor_append_row(RowCompressor *row_compressor, TupleTableSlot *row)
 		bool is_null;
 		Datum val;
 
-		/* if there is no compressor, this must be a segmenter, so just skip */
+		/* if there is no compressor, this must be a segmenter, so just
+		 * skip. Note that, for segmentby columns, min/max stats are updated
+		 * per segment (on flush) for instead of per row. */
 		if (compressor == NULL)
 			continue;
 
@@ -1024,11 +1030,9 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 				row_compressor->compressed_values[compressed_col] =
 					PointerGetDatum(compressed_data);
 
-			if (column->min_max_metadata_builder != NULL)
+			if (column->min_max_metadata_builder != NULL && column->min_metadata_attr_offset >= 0 &&
+				column->max_metadata_attr_offset >= 0)
 			{
-				Assert(column->min_metadata_attr_offset >= 0);
-				Assert(column->max_metadata_attr_offset >= 0);
-
 				if (!segment_meta_min_max_builder_empty(column->min_max_metadata_builder))
 				{
 					Assert(compressed_data != NULL);
@@ -1050,6 +1054,17 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 		}
 		else if (column->segment_info != NULL)
 		{
+			/* Update min/max for segmentby column. It is done here on flush
+			 * instead of per row since for the segment the value is always
+			 * the same. */
+			if (column->min_max_metadata_builder != NULL)
+			{
+				if (column->segment_info->is_null)
+					segment_meta_min_max_builder_update_null(column->min_max_metadata_builder);
+				else
+					segment_meta_min_max_builder_update_val(column->min_max_metadata_builder,
+															column->segment_info->val);
+			}
 			row_compressor->compressed_values[compressed_col] = column->segment_info->val;
 			row_compressor->compressed_is_null[compressed_col] = column->segment_info->is_null;
 		}
@@ -1091,23 +1106,31 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 
 		/* don't free the segment-bys if we've overflowed the row, we still need them */
 		if (column->segment_info != NULL && !changed_groups)
+		{
+			/* Still need to reset the min/max builder to save per-column
+			 * min/max based on per-segment min/max. */
+			segment_meta_min_max_builder_reset(column->min_max_metadata_builder);
 			continue;
+		}
 
 		if (column->compressor != NULL || !column->segment_info->typ_by_val)
 			pfree(DatumGetPointer(row_compressor->compressed_values[compressed_col]));
 
 		if (column->min_max_metadata_builder != NULL)
 		{
-			/* segment_meta_min_max_builder_reset will free the values, so  clear here */
-			if (!row_compressor->compressed_is_null[column->min_metadata_attr_offset])
+			/* segment_meta_min_max_builder_reset will free the values, so clear here */
+			if (column->min_metadata_attr_offset > 0 && column->max_metadata_attr_offset > 0)
 			{
-				row_compressor->compressed_values[column->min_metadata_attr_offset] = 0;
-				row_compressor->compressed_is_null[column->min_metadata_attr_offset] = true;
-			}
-			if (!row_compressor->compressed_is_null[column->max_metadata_attr_offset])
-			{
-				row_compressor->compressed_values[column->max_metadata_attr_offset] = 0;
-				row_compressor->compressed_is_null[column->max_metadata_attr_offset] = true;
+				if (!row_compressor->compressed_is_null[column->min_metadata_attr_offset])
+				{
+					row_compressor->compressed_values[column->min_metadata_attr_offset] = 0;
+					row_compressor->compressed_is_null[column->min_metadata_attr_offset] = true;
+				}
+				if (!row_compressor->compressed_is_null[column->max_metadata_attr_offset])
+				{
+					row_compressor->compressed_values[column->max_metadata_attr_offset] = 0;
+					row_compressor->compressed_is_null[column->max_metadata_attr_offset] = true;
+				}
 			}
 			segment_meta_min_max_builder_reset(column->min_max_metadata_builder);
 		}
@@ -1133,12 +1156,37 @@ row_compressor_reset(RowCompressor *row_compressor)
 	row_compressor->first_iteration = true;
 }
 
-void
+ChunkColumnStats **
 row_compressor_close(RowCompressor *row_compressor)
 {
 	if (row_compressor->bistate)
 		FreeBulkInsertState(row_compressor->bistate);
 	CatalogCloseIndexes(row_compressor->resultRelInfo);
+
+	ChunkColumnStats **colstats =
+		palloc(sizeof(ChunkColumnStats *) * row_compressor->n_input_columns);
+
+	/* Get any relation-level stats (min and max) collected during compression
+	 * and return it to caller */
+	for (int i = 0; i < row_compressor->n_input_columns; i++)
+	{
+		const PerColumn *column = &row_compressor->per_column[i];
+		SegmentMetaMinMaxBuilder *builder = column->min_max_metadata_builder;
+
+		if (builder && segment_meta_has_relation_stats(builder))
+		{
+			ChunkColumnStats *colstat = palloc(sizeof(ChunkColumnStats));
+			colstat->minmax[0] = segment_meta_min_max_builder_relation_min(builder);
+			colstat->minmax[1] = segment_meta_min_max_builder_relation_max(builder);
+			colstats[i] = colstat;
+		}
+		else
+		{
+			colstats[i] = NULL;
+		}
+	}
+
+	return colstats;
 }
 
 /******************

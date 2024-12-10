@@ -525,10 +525,15 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	 * In the future, we can look at computing min/max entries in the compressed chunk
 	 * using the batch metadata and then recompute the range to handle DELETE cases.
 	 */
-	if (cxt.srcht->range_space)
-		ts_chunk_column_stats_calculate(cxt.srcht, cxt.srcht_chunk);
 
 	cstat = compress_chunk(cxt.srcht_chunk->table_id, compress_ht_chunk->table_id, insert_options);
+
+	if (cxt.srcht->range_space && cstat.colstats)
+	{
+		ts_chunk_column_stats_calculate(cxt.srcht, cxt.srcht_chunk, cstat.colstats);
+		pfree(cstat.colstats);
+	}
+
 	after_size = ts_relation_size_impl(compress_ht_chunk->table_id);
 
 	if (new_compressed_chunk)
@@ -1370,7 +1375,7 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 	 */
 	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
 	if (ht->range_space)
-		ts_chunk_column_stats_calculate(ht, uncompressed_chunk);
+		ts_chunk_column_stats_calculate(ht, uncompressed_chunk, NULL);
 
 	/*************** tuplesort state *************************/
 	Tuplesortstate *segment_tuplesortstate;

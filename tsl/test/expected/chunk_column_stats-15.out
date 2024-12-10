@@ -633,7 +633,6 @@ SELECT * from _timescaledb_catalog.chunk_column_stats;
 
 -- Compressing a chunk again should calculate proper ranges
 SELECT compress_chunk(:'CH_NAME');
-WARNING:  no index on "sensor_id" found for column range on chunk "_hyper_1_1_chunk"
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -666,7 +665,6 @@ SELECT * from _timescaledb_catalog.chunk_column_stats;
 
 -- Check that truncate resets the entry in the catalog
 SELECT compress_chunk(:'CH_NAME');
-WARNING:  no index on "sensor_id" found for column range on chunk "_hyper_1_1_chunk"
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
