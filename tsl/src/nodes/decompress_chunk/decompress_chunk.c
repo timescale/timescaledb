@@ -813,9 +813,6 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, const Hypertabl
 	Path *sorted_path = (Path *)
 		create_sort_path(root, chunk_rel, (Path *) path_copy, useful_pathkeys, root->limit_tuples);
 
-	//	fprintf(stderr, "made useful sorted path:\n");
-	//	my_print(sorted_path);
-
 	return sorted_path;
 }
 

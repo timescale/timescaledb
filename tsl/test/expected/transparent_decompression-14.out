@@ -5628,15 +5628,12 @@ ORDER BY device_id;
          ->  Partial GroupAggregate (actual rows=1 loops=1)
                Group Key: _hyper_2_7_chunk.device_id
                ->  Index Only Scan Backward using _hyper_2_7_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_7_chunk (actual rows=672 loops=1)
-                     Heap Fetches: 0
          ->  Partial GroupAggregate (actual rows=3 loops=1)
                Group Key: _hyper_2_8_chunk.device_id
                ->  Index Only Scan Backward using _hyper_2_8_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_8_chunk (actual rows=2016 loops=1)
-                     Heap Fetches: 0
          ->  Partial GroupAggregate (actual rows=1 loops=1)
                Group Key: _hyper_2_9_chunk.device_id
                ->  Index Only Scan Backward using _hyper_2_9_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_9_chunk (actual rows=672 loops=1)
-                     Heap Fetches: 0
          ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk (actual rows=336 loops=1)
                      ->  Index Scan using compress_hyper_6_20_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_6_20_chunk (actual rows=1 loops=1)
@@ -5646,7 +5643,6 @@ ORDER BY device_id;
          ->  Partial GroupAggregate (actual rows=1 loops=1)
                Group Key: _hyper_2_12_chunk.device_id
                ->  Index Only Scan Backward using _hyper_2_12_chunk_metrics_space_device_id_device_id_peer_v0_v_2 on _hyper_2_12_chunk (actual rows=336 loops=1)
-                     Heap Fetches: 0
 (35 rows)
 
 -- test window functions with GROUP BY
@@ -5674,15 +5670,12 @@ ORDER BY device_id;
                ->  Partial GroupAggregate (actual rows=1 loops=1)
                      Group Key: _hyper_2_7_chunk.device_id
                      ->  Index Only Scan Backward using _hyper_2_7_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_7_chunk (actual rows=672 loops=1)
-                           Heap Fetches: 0
                ->  Partial GroupAggregate (actual rows=3 loops=1)
                      Group Key: _hyper_2_8_chunk.device_id
                      ->  Index Only Scan Backward using _hyper_2_8_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_8_chunk (actual rows=2016 loops=1)
-                           Heap Fetches: 0
                ->  Partial GroupAggregate (actual rows=1 loops=1)
                      Group Key: _hyper_2_9_chunk.device_id
                      ->  Index Only Scan Backward using _hyper_2_9_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_9_chunk (actual rows=672 loops=1)
-                           Heap Fetches: 0
                ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk (actual rows=336 loops=1)
                            ->  Index Scan using compress_hyper_6_20_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_6_20_chunk (actual rows=1 loops=1)
@@ -5692,7 +5685,6 @@ ORDER BY device_id;
                ->  Partial GroupAggregate (actual rows=1 loops=1)
                      Group Key: _hyper_2_12_chunk.device_id
                      ->  Index Only Scan Backward using _hyper_2_12_chunk_metrics_space_device_id_device_id_peer_v0_v_2 on _hyper_2_12_chunk (actual rows=336 loops=1)
-                           Heap Fetches: 0
 (36 rows)
 
 SET enable_hashagg = ON;
