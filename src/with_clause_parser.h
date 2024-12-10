@@ -14,7 +14,9 @@
 
 typedef struct WithClauseDefinition
 {
-	const char *arg_name;
+	/* Alternative names for the parameters. The first one is the "main" one
+	 * when it comes to printouts.*/
+	const char *arg_names[5];
 	Oid type_id;
 	Datum default_val;
 } WithClauseDefinition;

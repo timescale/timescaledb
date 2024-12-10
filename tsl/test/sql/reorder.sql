@@ -200,6 +200,7 @@ CLUSTER ct2 USING ct2_time_idx;
 
 -- deleted chunks are removed correctly
 DELETE FROM ct2 where time < 2 OR val < 2;
+VACUUM ct2;
 
 SELECT reorder_chunk('_timescaledb_internal._hyper_2_3_chunk', verbose => TRUE);
 SELECT ctid, time, val FROM _timescaledb_internal._hyper_2_3_chunk ORDER BY time;

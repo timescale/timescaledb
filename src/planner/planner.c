@@ -12,6 +12,7 @@
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <nodes/parsenodes.h>
 #include <nodes/plannodes.h>
 #include <optimizer/appendinfo.h>
 #include <optimizer/clauses.h>
@@ -1269,8 +1270,15 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	TsRelType reltype;
 	Hypertable *ht;
 
-	/* Quick exit if this is a relation we're not interested in */
-	if (!valid_hook_call() || !OidIsValid(rte->relid) || IS_DUMMY_REL(rel))
+	/*
+	 * Quick exit if this is a relation we're not interested in.
+	 *
+	 * If the rtekind is a named tuple store, it is a named tuple store *for*
+	 * the relation rte->relid (e.g., a transition table for a trigger), but
+	 * not the relation itself.
+	 */
+	if (!valid_hook_call() || rte->rtekind == RTE_NAMEDTUPLESTORE || !OidIsValid(rte->relid) ||
+		IS_DUMMY_REL(rel))
 	{
 		if (prev_set_rel_pathlist_hook != NULL)
 			(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);

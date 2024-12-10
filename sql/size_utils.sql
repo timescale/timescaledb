@@ -544,6 +544,25 @@ BEGIN
 END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
+CREATE OR REPLACE FUNCTION @extschema@.chunk_columnstore_stats (hypertable REGCLASS)
+    RETURNS TABLE (
+        chunk_schema name,
+        chunk_name name,
+        compression_status text,
+        before_compression_table_bytes bigint,
+        before_compression_index_bytes bigint,
+        before_compression_toast_bytes bigint,
+        before_compression_total_bytes bigint,
+        after_compression_table_bytes bigint,
+        after_compression_index_bytes bigint,
+        after_compression_toast_bytes bigint,
+        after_compression_total_bytes bigint,
+        node_name name)
+    LANGUAGE SQL
+    STABLE STRICT
+    AS 'SELECT * FROM @extschema@.chunk_compression_stats($1)'
+    SET search_path TO pg_catalog, pg_temp;
+
 -- Get compression statistics for a hypertable that has
 -- compression enabled
 CREATE OR REPLACE FUNCTION @extschema@.hypertable_compression_stats (hypertable REGCLASS)
@@ -580,6 +599,24 @@ $BODY$
     GROUP BY
         ch.node_name;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
+
+CREATE OR REPLACE FUNCTION @extschema@.hypertable_columnstore_stats (hypertable REGCLASS)
+    RETURNS TABLE (
+        total_chunks bigint,
+        number_compressed_chunks bigint,
+        before_compression_table_bytes bigint,
+        before_compression_index_bytes bigint,
+        before_compression_toast_bytes bigint,
+        before_compression_total_bytes bigint,
+        after_compression_table_bytes bigint,
+        after_compression_index_bytes bigint,
+        after_compression_toast_bytes bigint,
+        after_compression_total_bytes bigint,
+        node_name name)
+    LANGUAGE SQL
+    STABLE STRICT
+    AS 'SELECT * FROM @extschema@.hypertable_compression_stats($1)'
+    SET search_path TO pg_catalog, pg_temp;
 
 -------------Get index size for hypertables -------
 --schema_name      - schema_name for hypertable index
