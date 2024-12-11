@@ -1,0 +1,1 @@
+Implements: #7486 Prevent building against postgres versions with broken ABI

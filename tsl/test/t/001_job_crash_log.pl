@@ -12,7 +12,7 @@ use Test::More tests => 5;
 # We cannot do that with a regression test because the server will not recover after
 # a crash in that case
 
-my $node = TimescaleNode->create();
+my $node = TimescaleNode->create('job_crash_log');
 
 # by default PostgresNode doesn't doesn't restart after a crash
 # taken from 013_crash_restart.pl
@@ -65,7 +65,7 @@ is($node->poll_query_until('postgres', 'SELECT 1', '1'),
 	1, "reconnected after SIGQUIT");
 
 my $errlog = $node->safe_psql('postgres',
-	'select count(*) from _timescaledb_internal.job_errors where job_id = 1000 and pid is null'
+	'select count(*) from _timescaledb_internal.bgw_job_stat_history where job_id = 1000 and succeeded = false'
 );
 is($errlog, "1", "there is a row for the crash in the error log");
 

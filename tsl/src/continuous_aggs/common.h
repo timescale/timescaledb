@@ -36,7 +36,6 @@
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
 
-#define CONTINUOUS_AGG_MAX_JOIN_RELATIONS 2
 #define DEFAULT_MATPARTCOLUMN_NAME "time_partition_col"
 #define CAGG_INVALIDATION_THRESHOLD_NAME "invalidation threshold watermark"
 
@@ -66,23 +65,25 @@ typedef struct CAggTimebucketInfo
 	int32 htid;						/* hypertable id */
 	int32 parent_mat_hypertable_id; /* parent materialization hypertable id */
 	Oid htoid;						/* hypertable oid */
+	Oid htoidparent;				/* parent hypertable oid in case of hierarchical */
 	AttrNumber htpartcolno;			/* primary partitioning column of raw hypertable */
 									/* This should also be the column used by time_bucket */
-	Oid htpartcoltype;
-	int64 htpartcol_interval_len; /* interval length setting for primary partitioning column */
-	int64 bucket_width;			  /* bucket_width of time_bucket, stores BUCKET_WIDTH_VARIABLE for
-									 variable-sized buckets */
-	Oid bucket_width_type;		  /* type of bucket_width */
-	Interval *interval;			  /* stores the interval, NULL if not specified */
-	const char *timezone;		  /* the name of the timezone, NULL if not specified */
+	Oid htpartcoltype;				/* The collation type */
+	int64 htpartcol_interval_len;	/* interval length setting for primary partitioning column */
 
-	FuncExpr *bucket_func; /* function call expr of the bucketing function */
-	/*
-	 * Custom origin value stored as UTC timestamp.
-	 * If not specified, stores infinity.
-	 */
-	TimestampTz origin;
+	/* General bucket information */
+	ContinuousAggsBucketFunction *bf;
 } CAggTimebucketInfo;
+
+typedef enum CaggRefreshCallContext
+{
+	CAGG_REFRESH_CREATION,
+	CAGG_REFRESH_WINDOW,
+	CAGG_REFRESH_POLICY,
+} CaggRefreshCallContext;
+
+#define IS_TIME_BUCKET_INFO_TIME_BASED(bucket_function)                                            \
+	(bucket_function->bucket_width_type == INTERVALOID)
 
 #define CAGG_MAKEQUERY(selquery, srcquery)                                                         \
 	do                                                                                             \
@@ -103,7 +104,6 @@ extern CAggTimebucketInfo cagg_validate_query(const Query *query, const bool fin
 											  const char *cagg_schema, const char *cagg_name,
 											  const bool is_cagg_create);
 extern Query *destroy_union_query(Query *q);
-extern Oid relation_oid(Name schema, Name name);
 extern void RemoveRangeTableEntries(Query *query);
 extern Query *build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query *q2,
 								int materialize_htid);
@@ -112,10 +112,14 @@ extern bool function_allowed_in_cagg_definition(Oid funcid);
 extern Oid get_watermark_function_oid(void);
 extern Oid cagg_get_boundary_converter_funcoid(Oid typoid);
 
+extern ContinuousAgg *cagg_get_by_relid_or_fail(const Oid cagg_relid);
+extern List *cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht);
+
 static inline int64
 cagg_get_time_min(const ContinuousAgg *cagg)
 {
-	if (ts_continuous_agg_bucket_width_variable(cagg))
+	if (cagg->bucket_function->bucket_fixed_interval == false)
+	{
 		/*
 		 * To determine inscribed/circumscribed refresh window for variable-sized
 		 * buckets we should be able to calculate time_bucket(window.begin) and
@@ -130,7 +134,10 @@ cagg_get_time_min(const ContinuousAgg *cagg)
 		 * - ts_compute_circumscribed_bucketed_refresh_window_variable()
 		 */
 		return ts_time_get_nobegin_or_min(cagg->partition_type);
+	}
 
 	/* For fixed-sized buckets return min (start of time) */
 	return ts_time_get_min(cagg->partition_type);
 }
+
+ContinuousAggsBucketFunction *ts_cagg_get_bucket_function_info(Oid view_oid);

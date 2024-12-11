@@ -5,9 +5,9 @@
  */
 #include <postgres.h>
 
-#include "scanner.h"
-#include "scan_iterator.h"
 #include "chunk.h"
+#include "scan_iterator.h"
+#include "scanner.h"
 #include "test_utils.h"
 
 TS_TEST_FN(ts_test_scanner)

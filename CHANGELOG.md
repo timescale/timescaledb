@@ -4,6 +4,351 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.17.2 (2024-11-06)
+
+This release contains bug fixes since the 2.17.1 release. We recommend that you
+upgrade at the next available opportunity.
+
+**Bugfixes**
+* #7384 Fix "negative bitmapset member not allowed" and performance degradation
+on queries to compressed tables with ORDER BY clause matching the order of the
+compressed data
+* #7388 Use-after-free in vectorized grouping by segmentby columns
+
+**Thanks**
+* @dx034 for reporting an issue with negative bitmapset members due to large OIDs
+
+## 2.17.1 (2024-10-21)
+
+This release contains performance improvements and bug fixes since
+the 2.17.0 release. We recommend that you upgrade at the next
+available opportunity.
+
+**Features**
+* #7360 Add chunk skipping GUC
+
+**Bugfixes**
+* #7335 Change log level used in compression
+* #7342 Fix collation for in-memory tuple filtering
+
+**Thanks**
+* @gmilamjr for reporting an issue with the log level of compression messages
+* @hackbnw for reporting an issue with collation during tuple filtering
+
+## 2.17.0 (2024-10-08)
+
+This release adds support for PostgreSQL 17, significantly improves the performance of continuous aggregate refreshes,
+and contains performance improvements for analytical queries and delete operations over compressed hypertables.
+We recommend that you upgrade at the next available opportunity.
+
+**Highlighted features in TimescaleDB v2.17.0**
+
+* Full PostgreSQL 17 support for all existing features. TimescaleDB v2.17 is available for PostgreSQL 14, 15, 16, and 17.
+
+* Significant performance improvements for continuous aggregate policies: continuous aggregate refresh is now using
+`merge` instead of deleting old materialized data and re-inserting.
+
+  This update can decrease dramatically the amount of data that must be written on the continuous aggregate in the
+  presence of a small number of changes, reduce the `i/o` cost of refreshing a continuous aggregate, and generate fewer
+  Write-Ahead Logs (`WAL`).
+  Overall, continuous aggregate policies will be more lightweight, use less system resources, and complete faster.
+
+* Increased performance for real-time analytical queries over compressed hypertables:
+  we are excited to introduce additional Single Instruction, Multiple Data (`SIMD`) vectorization optimization to our
+  engine by supporting vectorized execution for queries that group by using the `segment_by` column(s) and
+  aggregate using the basic aggregate functions (`sum`, `count`, `avg`, `min`, `max`).
+
+  Stay tuned for more to come in follow-up releases! Support for grouping on additional columns, filtered aggregation,
+  vectorized expressions, and `time_bucket` is coming soon.
+
+* Improved performance of deletes on compressed hypertables when a large amount of data is affected.
+
+  This improvement speeds up operations that delete whole segments by skipping the decompression step.
+  It is enabled for all deletes that filter by the `segment_by` column(s).
+
+**PostgreSQL 14 deprecation announcement**
+
+  We will continue supporting PostgreSQL 14 until April 2025. Closer to that time, we will announce the specific
+  version of TimescaleDB in which PostgreSQL 14 support will not be included going forward.
+
+**Features**
+* #6882: Allow delete of full segments on compressed chunks without decompression.
+* #7033: Use `merge` statement on continuous aggregates refresh.
+* #7126: Add functions to show the compression information.
+* #7147: Vectorize partial aggregation for `sum(int4)` with grouping on `segment by` columns.
+* #7204: Track additional extensions in telemetry.
+* #7207: Refactor the `decompress_batches_scan` functions for easier maintenance.
+* #7209: Add a function to drop the `osm` chunk.
+* #7275: Add support for the `returning` clause for `merge`.
+* #7200: Vectorize common aggregate functions like `min`, `max`, `sum`, `avg`, `stddev`, `variance` for compressed columns
+  of arithmetic types, when there is grouping on `segment by` columns or no grouping.
+
+**Bug fixes**
+* #7187: Fix the string literal length for the `compressed_data_info` function.
+* #7191: Fix creating default indexes on chunks when migrating the data.
+* #7195: Fix the `segment by` and `order by` checks when dropping a column from a compressed hypertable.
+* #7201: Use the generic extension description when building `apt` and `rpm` loader packages.
+* #7227: Add an index to the `compression_chunk_size` catalog table.
+* #7229: Fix the foreign key constraints where the index and the constraint column order are different.
+* #7230: Do not propagate the foreign key constraints to the `osm` chunk.
+* #7234: Release the cache after accessing the cache entry.
+* #7258: Force English in the `pg_config` command executed by `cmake` to avoid the unexpected building errors.
+* #7270: Fix the memory leak in compressed DML batch filtering.
+* #7286: Fix the index column check while searching for the index.
+* #7290: Add check for null offset for continuous aggregates built on top of continuous aggregates.
+* #7301: Make foreign key behavior for hypertables consistent.
+* #7318: Fix chunk skipping range filtering.
+* #7320: Set the license specific extension comment in the install script.
+
+**Thanks**
+* @MiguelTubio for reporting and fixing the Windows build error.
+* @posuch for reporting the misleading extension description in the generic loader packages.
+* @snyrkill for discovering and reporting the issue with continuous aggregates built on top of continuous aggregates.
+
+## 2.16.1 (2024-08-06)
+
+This release contains bug fixes since the 2.16.0 release. We recommend
+that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* #7182 Fix untier_chunk for hypertables with foreign keys
+
+## 2.16.0 (2024-07-31)
+
+This release contains significant performance improvements when working with compressed data, extended join
+support in continuous aggregates, and the ability to define foreign keys from regular tables towards hypertables.
+We recommend that you upgrade at the next available opportunity.
+
+In TimescaleDB v2.16.0 we:
+
+* Introduce multiple performance focused optimizations for data manipulation operations (DML) over compressed chunks.
+
+  Improved upsert performance by more than 100x in some cases and more than 1000x in some update/delete scenarios.
+
+* Add the ability to define chunk skipping indexes on non-partitioning columns of compressed hypertables
+
+  TimescaleDB v2.16.0 extends chunk exclusion to use those skipping (sparse) indexes when queries filter on the relevant columns,
+  and prune chunks that do not include any relevant data for calculating the query response.
+
+* Offer new options for use cases that require foreign keys defined.
+
+  You can now add foreign keys from regular tables towards hypertables. We have also removed
+  some really annoying locks in the reverse direction that blocked access to referenced tables
+  while compression was running.
+
+* Extend Continuous Aggregates to support more types of analytical queries.
+
+  More types of joins are supported, additional equality operators on join clauses, and
+  support for joins between multiple regular tables.
+
+**Highlighted features in this release**
+
+* Improved query performance through chunk exclusion on compressed hypertables.
+
+  You can now define chunk skipping indexes on compressed chunks for any column with one of the following
+  integer data types: `smallint`, `int`, `bigint`, `serial`, `bigserial`, `date`, `timestamp`, `timestamptz`.
+
+  After you call `enable_chunk_skipping` on a column, TimescaleDB tracks the min and max values for
+  that column. TimescaleDB uses that information to exclude chunks for queries that filter on that
+  column, and would not find any data in those chunks.
+
+* Improved upsert performance on compressed hypertables.
+
+  By using index scans to verify constraints during inserts on compressed chunks, TimescaleDB speeds
+  up some ON CONFLICT clauses by more than 100x.
+
+* Improved performance of updates, deletes, and inserts on compressed hypertables.
+
+  By filtering data while accessing the compressed data and before decompressing, TimescaleDB has
+  improved performance for updates and deletes on all types of compressed chunks, as well as inserts
+  into compressed chunks with unique constraints.
+
+  By signaling constraint violations without decompressing, or decompressing only when matching
+  records are found in the case of updates, deletes and upserts, TimescaleDB v2.16.0 speeds
+  up those operations more than 1000x in some update/delete scenarios, and 10x for upserts.
+
+* You can add foreign keys from regular tables to hypertables, with support for all types of cascading options.
+  This is useful for hypertables that partition using sequential IDs, and need to reference those IDs from other tables.
+
+* Lower locking requirements during compression for hypertables with foreign keys
+
+  Advanced foreign key handling removes the need for locking referenced tables when new chunks are compressed.
+  DML is no longer blocked on referenced tables while compression runs on a hypertable.
+
+* Improved support for queries on Continuous Aggregates
+
+  `INNER/LEFT` and `LATERAL` joins are now supported. Plus, you can now join with multiple regular tables,
+  and you can have more than one equality operator on join clauses.
+
+**PostgreSQL 13 support removal announcement**
+
+Following the deprecation announcement for PostgreSQL 13 in TimescaleDB v2.13,
+PostgreSQL 13 is no longer supported in TimescaleDB v2.16.
+
+The Currently supported PostgreSQL major versions are 14, 15 and 16.
+
+**Features**
+* #6880: Add support for the array operators used for compressed DML batch filtering.
+* #6895: Improve the compressed DML expression pushdown.
+* #6897: Add support for replica identity on compressed hypertables.
+* #6918: Remove support for PG13.
+* #6920: Rework compression activity wal markers.
+* #6989: Add support for foreign keys when converting plain tables to hypertables.
+* #7020: Add support for the chunk column statistics tracking.
+* #7048: Add an index scan for INSERT DML decompression.
+* #7075: Reduce decompression on the compressed INSERT.
+* #7101: Reduce decompressions for the compressed UPDATE/DELETE.
+* #7108 Reduce decompressions for INSERTs with UNIQUE constraints
+* #7116 Use DELETE instead of TRUNCATE after compression
+* #7134 Refactor foreign key handling for compressed hypertables
+* #7161 Fix `mergejoin input data is out of order`
+
+**Bugfixes**
+* #6987 Fix REASSIGN OWNED BY for background jobs
+* #7018: Fix `search_path` quoting in the compression defaults function.
+* #7046: Prevent locking for compressed tuples.
+* #7055: Fix the `scankey` for `segment by` columns, where the type `constant` is different to `variable`.
+* #7064: Fix the bug in the default `order by` calculation in compression.
+* #7069: Fix the index column name usage.
+* #7074: Fix the bug in the default `segment by` calculation in compression.
+
+**Thanks**
+* @jledentu For reporting a problem with mergejoin input order
+
+
+## 2.15.3 (2024-07-02)
+
+This release contains bug fixes since the 2.15.2 release.
+Best practice is to upgrade at the next available opportunity.
+
+**Migrating from self-hosted TimescaleDB v2.14.x and earlier**
+
+After you run `ALTER EXTENSION`, you must run [this SQL script](https://github.com/timescale/timescaledb-extras/blob/master/utils/2.15.X-fix_hypertable_foreign_keys.sql). For more details, see the following pull request [#6797](https://github.com/timescale/timescaledb/pull/6797).
+
+If you are migrating from TimescaleDB v2.15.0, v2.15.1 or v2.15.2, no changes are required.
+
+**Bugfixes**
+* #7035: Fix the error when acquiring a tuple lock on the OSM chunks on the replica.
+* #7061: Fix the handling of multiple unique indexes in a compressed INSERT.
+* #7080: Fix the `corresponding equivalence member not found` error.
+* #7088: Fix the leaks in the DML functions.
+* #7091: Fix ORDER BY/GROUP BY expression not found in targetlist on PG16
+
+**Thanks**
+* @Kazmirchuk for reporting the issue about leaks with the functions in DML.
+
+## 2.15.2 (2024-06-07)
+
+This release contains bug fixes since the 2.15.1 release. Best
+practice is to upgrade at the next available opportunity.
+
+**Migrating from self-hosted TimescaleDB v2.14.x and earlier**
+
+After you run `ALTER EXTENSION`, you must run [this SQL script](https://github.com/timescale/timescaledb-extras/blob/master/utils/2.15.X-fix_hypertable_foreign_keys.sql). For more details, see the following pull request [#6797](https://github.com/timescale/timescaledb/pull/6797).
+
+If you are migrating from TimescaleDB v2.15.0 or v2.15.1, no changes are required.
+
+**Bugfixes**
+* #6975: Fix sort pushdown for partially compressed chunks.
+* #6976: Fix removal of metadata function and update script.
+* #6978: Fix segfault in `compress_chunk` with a primary space partition.
+* #6993: Disallow hash partitioning on primary column.
+
+**Thanks**
+* @gugu for reporting the issue with catalog corruption due to update.
+* @srieding for reporting an issue with partially compressed chunks and ordering on joined columns.
+
+## 2.15.1 (2024-05-28)
+
+This release contains bug fixes since the 2.15.0 release.
+Best practice is to upgrade at the next available opportunity.
+
+**Migrating from self-hosted TimescaleDB v2.14.x and earlier**
+
+After you run `ALTER EXTENSION`, you must run [this SQL script](https://github.com/timescale/timescaledb-extras/blob/master/utils/2.15.X-fix_hypertable_foreign_keys.sql). For more details, see the following pull request [#6797](https://github.com/timescale/timescaledb/pull/6797).
+
+If you are migrating from TimescaleDB v2.15.0, no changes are required.
+
+**Bugfixes**
+* #6540: Segmentation fault when you backfill data using COPY into a compressed chunk.
+* #6858: `BEFORE UPDATE` trigger not working correctly.
+* #6908: Fix `time_bucket_gapfill()` with timezone behaviour around daylight savings time (DST) switches.
+* #6911: Fix dropped chunk metadata removal in the update script.
+* #6940: Fix `pg_upgrade` failure by removing `regprocedure` from the catalog table.
+* #6957: Fix then `segfault` in UNION queries that contain ordering on compressed chunks.
+
+**Thanks**
+* @DiAifU, @kiddhombre and @intermittentnrg for reporting the issues with gapfill and daylight saving time.
+* @edgarzamora for reporting the issue with update triggers.
+* @hongquan for reporting the issue with the update script.
+* @iliastsa and @SystemParadox for reporting the issue with COPY into a compressed chunk.
+
+## 2.15.0 (2024-05-08)
+
+This release contains performance improvements and bug fixes since
+the 2.14.2 release. Best practice is to upgrade at the next
+available opportunity.
+
+In addition, it includes these noteworthy features:
+* Support `time_bucket` with `origin` and/or `offset` on Continuous Aggregate
+* Compression improvements:
+  - Improve expression pushdown
+  - Add minmax sparse indexes when compressing columns with btree indexes
+  - Improve compression setting defaults
+  - Vectorize filters in WHERE clause that contain text equality operators and LIKE expressions
+
+**Deprecation warning**
+* Starting on this release will not be possible to create Continuous Aggregate using `time_bucket_ng` anymore and it will be completely removed on the upcoming releases.
+* Recommend users to [migrate their old Continuous Aggregate format to the new one](https://docs.timescale.com/use-timescale/latest/continuous-aggregates/migrate/) because it support will be completely removed in next releases prevent them to migrate.
+* This is the last release supporting PostgreSQL 13.
+
+**Migrating from self-hosted TimescaleDB v2.14.x and earlier**
+
+After you run `ALTER EXTENSION`, you must run [this SQL script](https://github.com/timescale/timescaledb-extras/blob/master/utils/2.15.X-fix_hypertable_foreign_keys.sql). For more details, see the following pull request [#6797](https://github.com/timescale/timescaledb/pull/6797).
+
+**Features**
+* #6382: Support for `time_bucket` with `origin` and `offset` in CAggs.
+* #6696: Improve defaults for compression `segment_by` and `order_by`.
+* #6705: Add sparse minmax indexes for compressed columns that have uncompressed btree indexes.
+* #6754: Allow `DROP CONSTRAINT` on compressed hypertables.
+* #6767: Add metadata table `_timestaledb_internal.bgw_job_stat_history` for tracking job execution history.
+* #6798: Prevent usage of deprecated `time_bucket_ng` in CAgg definition.
+* #6810: Add telemetry for access methods.
+* #6811: Remove no longer relevant `timescaledb.allow_install_without_preload` GUC.
+* #6837: Add migration path for CAggs using `time_bucket_ng`.
+* #6865: Update the watermark when truncating a CAgg.
+
+**Bugfixes**
+* #6617: Fix error in show_chunks.
+* #6621: Remove metadata when dropping chunks.
+* #6677: Fix snapshot usage in CAgg invalidation scanner.
+* #6698: Define meaning of 0 retries for jobs as no retries.
+* #6717: Fix handling of compressed tables with primary or unique index in COPY path.
+* #6726: Fix constify cagg_watermark using window function when querying a CAgg.
+* #6729: Fix NULL start value handling in CAgg refresh.
+* #6732: Fix CAgg migration with custom timezone / date format settings.
+* #6752: Remove custom autovacuum setting from compressed chunks.
+* #6770: Fix plantime chunk exclusion for OSM chunk.
+* #6789: Fix deletes with subqueries and compression.
+* #6796: Fix a crash involving a view on a hypertable.
+* #6797: Fix foreign key constraint handling on compressed hypertables.
+* #6816: Fix handling of chunks with no contraints.
+* #6820: Fix a crash when the ts_hypertable_insert_blocker was called directly.
+* #6849: Use non-orderby compressed metadata in compressed DML.
+* #6867: Clean up compression settings when deleting compressed cagg.
+* #6869: Fix compressed DML with constraints of form value OP column.
+* #6870: Fix bool expression pushdown for queries on compressed chunks.
+
+**Thanks**
+* @brasic for reporting a crash when the ts_hypertable_insert_blocker was called directly.
+* @bvanelli for reporting an issue with the jobs retry count.
+* @djzurawsk for reporting error when dropping chunks.
+* @Dzuzepppe for reporting an issue with DELETEs using subquery on compressed chunk working incorrectly.
+* @hongquan for reporting a `timestamp out of range` error during CAgg migrations.
+* @kevcenteno for reporting an issue with the show_chunks API showing incorrect output when `created_before/created_after` was used with time-partitioned columns.
+* @mahipv for starting working on the job history PR.
+* @rovo89 for reporting constify cagg_watermark not working using window function when querying a CAgg.
+
 ## 2.14.2 (2024-02-20)
 
 This release contains bug fixes since the 2.14.1 release.

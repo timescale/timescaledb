@@ -47,8 +47,8 @@
 #include "compat/compat.h"
 #include "chunk.h"
 #include "cross_module_fn.h"
-#include "extension_constants.h"
 #include "extension.h"
+#include "extension_constants.h"
 #include "guc.h"
 #include "hypertable.h"
 #include "hypertable_restrict_info.h"
@@ -145,10 +145,10 @@ int_get_datum(int64 value, Oid type)
 			return TimestampGetDatum(value);
 		case TIMESTAMPTZOID:
 			return TimestampTzGetDatum(value);
+		default:
+			elog(ERROR, "unsupported datatype in int_get_datum: %s", format_type_be(type));
+			pg_unreachable();
 	}
-
-	elog(ERROR, "unsupported datatype in int_get_datum: %s", format_type_be(type));
-	pg_unreachable();
 }
 
 static int64
@@ -170,10 +170,12 @@ const_datum_get_int(Const *cnst)
 			return DatumGetTimestamp(cnst->constvalue);
 		case TIMESTAMPTZOID:
 			return DatumGetTimestampTz(cnst->constvalue);
+		default:
+			elog(ERROR,
+				 "unsupported datatype in const_datum_get_int: %s",
+				 format_type_be(cnst->consttype));
+			pg_unreachable();
 	}
-
-	elog(ERROR, "unsupported datatype in const_datum_get_int: %s", format_type_be(cnst->consttype));
-	pg_unreachable();
 }
 
 /*
@@ -664,7 +666,7 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 	for (lc = list_head((List *) quals); lc != NULL; prev = lc, lc = lnext((List *) quals, lc))
 	{
 		Expr *qual = lfirst(lc);
-		Relids relids = pull_varnos_compat(ctx->root, (Node *) qual);
+		Relids relids = pull_varnos(ctx->root, (Node *) qual);
 		int num_rels = bms_num_members(relids);
 
 		/* stop processing if not for current rel */
@@ -713,7 +715,7 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 		 * relation when it should show all rows */
 		if (!is_outer_join)
 			ctx->restrictions =
-				lappend(ctx->restrictions, make_simple_restrictinfo_compat(ctx->root, qual));
+				lappend(ctx->restrictions, make_simple_restrictinfo(ctx->root, qual));
 	}
 	return (Node *) list_concat((List *) quals, additional_quals);
 }
@@ -727,7 +729,7 @@ timebucket_annotate(Node *quals, CollectQualCtx *ctx)
 	foreach (lc, castNode(List, quals))
 	{
 		Expr *qual = lfirst(lc);
-		Relids relids = pull_varnos_compat(ctx->root, (Node *) qual);
+		Relids relids = pull_varnos(ctx->root, (Node *) qual);
 		int num_rels = bms_num_members(relids);
 
 		/* stop processing if not for current rel */
@@ -753,8 +755,7 @@ timebucket_annotate(Node *quals, CollectQualCtx *ctx)
 			qual = transformed;
 		}
 
-		ctx->restrictions =
-			lappend(ctx->restrictions, make_simple_restrictinfo_compat(ctx->root, qual));
+		ctx->restrictions = lappend(ctx->restrictions, make_simple_restrictinfo(ctx->root, qual));
 	}
 	return (Node *) list_concat((List *) quals, additional_quals);
 }
@@ -784,7 +785,7 @@ collect_join_quals(Node *quals, CollectQualCtx *ctx, bool can_propagate)
 	foreach (lc, (List *) quals)
 	{
 		Expr *qual = lfirst(lc);
-		Relids relids = pull_varnos_compat(ctx->root, (Node *) qual);
+		Relids relids = pull_varnos(ctx->root, (Node *) qual);
 		int num_rels = bms_num_members(relids);
 
 		/*
@@ -869,7 +870,8 @@ chunk_cmp_chunk_reloid(const void *c1, const void *c2)
 }
 
 static Chunk **
-find_children_chunks(HypertableRestrictInfo *hri, Hypertable *ht, unsigned int *num_chunks)
+find_children_chunks(HypertableRestrictInfo *hri, Hypertable *ht, bool include_osm,
+					 unsigned int *num_chunks)
 {
 	/*
 	 * Unlike find_all_inheritors we do not include parent because if there
@@ -877,14 +879,14 @@ find_children_chunks(HypertableRestrictInfo *hri, Hypertable *ht, unsigned int *
 	 * have a trigger blocking inserts on the parent table it cannot contain
 	 * any rows.
 	 */
-	Chunk **chunks = ts_hypertable_restrict_info_get_chunks(hri, ht, num_chunks);
+	Chunk **chunks = ts_hypertable_restrict_info_get_chunks(hri, ht, include_osm, num_chunks);
 
 	/*
 	 * Sort the chunks by oid ascending to roughly match the order provided
 	 * by find_inheritance_children. This is mostly needed to avoid test
 	 * reference changes.
 	 */
-	qsort(chunks, *num_chunks, sizeof(Chunk *), chunk_cmp_chunk_reloid);
+	qsort((void *) chunks, *num_chunks, sizeof(Chunk *), chunk_cmp_chunk_reloid);
 
 	return chunks;
 }
@@ -912,14 +914,14 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, List *jo
  * Get chunks from restrict info.
  *
  * If appends are returned in order appends_ordered on rel->fdw_private is set to true.
- * To make verifying pathkeys easier in set_rel_pathlist the attno of the column ordered by
- * is
+ * To make verifying pathkeys easier in set_rel_pathlist the hypertable attno of the column
+ * ordered by is stored in rel->fdw_private.
  * If the hypertable uses space partitioning the nested oids are stored in nested_oids
  * on rel->fdw_private when appends are ordered.
  */
 static Chunk **
 get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
-		   unsigned int *num_chunks)
+		   bool include_osm, unsigned int *num_chunks)
 {
 	bool reverse;
 	int order_attno;
@@ -957,13 +959,14 @@ get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *
 
 		return ts_hypertable_restrict_info_get_chunks_ordered(hri,
 															  ht,
+															  include_osm,
 															  NULL,
 															  reverse,
 															  nested_oids,
 															  num_chunks);
 	}
 
-	return find_children_chunks(hri, ht, num_chunks);
+	return find_children_chunks(hri, ht, include_osm, num_chunks);
 }
 
 static bool
@@ -1008,17 +1011,15 @@ ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel)
 /* Inspired by expand_inherited_rtentry but expands
  * a hypertable chunks into an append relation. */
 void
-ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel)
+ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel,
+								 bool include_osm)
 {
 	RangeTblEntry *rte = rt_fetch(rel->relid, root->parse->rtable);
 	Oid parent_oid = rte->relid;
-	List *inh_oids = NIL;
-	ListCell *l;
 	Relation oldrelation;
 	Query *parse = root->parse;
 	Index rti = rel->relid;
 	List *appinfos = NIL;
-	PlanRowMark *oldrc;
 	CollectQualCtx ctx = {
 		.root = root,
 		.rel = rel,
@@ -1033,11 +1034,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	/* double check our permissions are valid */
 	Assert(rti != (Index) parse->resultRelation);
 
-	oldrc = get_plan_rowmark(root->rowMarks, rti);
-
-	if (oldrc && RowMarkRequiresRowShareLock(oldrc->markType))
-		elog(ERROR, "unexpected permissions requested");
-
 	/* Walk the tree and find restrictions */
 	collect_quals_walker((Node *) root->parse->jointree, &ctx);
 	/* check join_level bookkeeping is balanced */
@@ -1048,24 +1044,33 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 
 	Chunk **chunks = NULL;
 	unsigned int num_chunks = 0;
-	chunks = get_chunks(&ctx, root, rel, ht, &num_chunks);
+	chunks = get_chunks(&ctx, root, rel, ht, include_osm, &num_chunks);
 	/* Can have zero chunks. */
 	Assert(num_chunks == 0 || chunks != NULL);
 
+	/* nothing to do here if we have no chunks */
+	if (!num_chunks)
+		return;
+
+	/*
+	 * We need to mark the RowMark for the hypertable as parent
+	 * to trigger inclusion of tableoid to allow for correctly
+	 * identifying tuples from individual chunks.
+	 */
+	PlanRowMark *oldrc = get_plan_rowmark(root->rowMarks, rti);
+	if (oldrc)
+	{
+		oldrc->isParent = true;
+	}
+
 	for (unsigned int i = 0; i < num_chunks; i++)
 	{
-		inh_oids = lappend_oid(inh_oids, chunks[i]->table_id);
-
 		/*
 		 * Add the information about chunks to the baserel info cache for
 		 * classify_relation().
 		 */
 		ts_add_baserel_cache_entry_for_chunk(chunks[i]->table_id, ht);
 	}
-
-	/* nothing to do here if we have no chunks and no data nodes */
-	if (list_length(inh_oids) == 0)
-		return;
 
 	oldrelation = table_open(parent_oid, NoLock);
 
@@ -1074,11 +1079,12 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	 * children to them. We include potential data node rels we might need to
 	 * create in case of a distributed hypertable.
 	 */
-	expand_planner_arrays(root, list_length(inh_oids));
+	expand_planner_arrays(root, num_chunks);
 
-	foreach (l, inh_oids)
+	for (unsigned int i = 0; i < num_chunks; i++)
 	{
-		Oid child_oid = lfirst_oid(l);
+		Chunk *chunk = chunks[i];
+		Oid child_oid = chunk->table_id;
 		Relation newrelation;
 		RangeTblEntry *childrte;
 		Index child_rtindex;
@@ -1087,10 +1093,8 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 
 		/* Open rel if needed */
 
-		if (child_oid != parent_oid)
-			newrelation = table_open(child_oid, chunk_lock);
-		else
-			newrelation = oldrelation;
+		Assert(child_oid != parent_oid);
+		newrelation = table_open(child_oid, chunk_lock);
 
 		/* chunks cannot be temp tables */
 		Assert(!RELATION_IS_OTHER_TEMP(newrelation));
@@ -1155,31 +1159,22 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	 * build_simple_rel will look things up in the append_rel_array, so we can
 	 * only use it after that array has been set up.
 	 */
-	for (int i = 0; i < list_length(inh_oids); i++)
+	for (unsigned int i = 0; i < num_chunks; i++)
 	{
 		Index child_rtindex = first_chunk_index + i;
 		/* build_simple_rel will add the child to the relarray */
 		RelOptInfo *child_rel = build_simple_rel(root, child_rtindex, rel);
 
-		/* if we're performing partitionwise aggregation, we must populate part_rels */
-		if (rel->part_rels != NULL)
-		{
-			rel->part_rels[i] = child_rel;
-#if PG15_GE
-			rel->live_parts = bms_add_member(rel->live_parts, i);
-#endif
-		}
-
 		/*
 		 * Can't touch fdw_private for OSM chunks, it might be managed by the
 		 * OSM extension, or, in the tests, by postgres_fdw.
 		 */
-		if (!IS_OSM_CHUNK(chunks[i]))
+		Chunk *chunk = chunks[i];
+		if (!IS_OSM_CHUNK(chunk))
 		{
-			ts_get_private_reloptinfo(child_rel)->cached_chunk_struct = chunks[i];
+			Assert(chunk->table_id == root->simple_rte_array[child_rtindex]->relid);
+			ts_get_private_reloptinfo(child_rel)->cached_chunk_struct = chunk;
 		}
-
-		Assert(chunks[i]->table_id == root->simple_rte_array[child_rtindex]->relid);
 	}
 }
 
@@ -1267,7 +1262,7 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 
 			if (new_qual)
 			{
-				Relids relids = pull_varnos_compat(ctx->root, (Node *) propagated);
+				Relids relids = pull_varnos(ctx->root, (Node *) propagated);
 				RestrictInfo *restrictinfo;
 
 				restrictinfo = make_restrictinfo_compat(root,

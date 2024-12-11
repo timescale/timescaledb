@@ -4,7 +4,7 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
-create function stable_identity(x anyelement) returns anyelement as $$ select x $$ language sql stable;
+create function stable_abs(x int4) returns int4 as 'int4abs' language internal stable;
 
 create table vectorqual(metric1 int8, ts timestamp, metric2 int8, device int8);
 select create_hypertable('vectorqual', 'ts');
@@ -27,7 +27,13 @@ select count(compress_chunk(x, true)) from show_chunks('vectorqual') x;
 
 select * from vectorqual order by vectorqual;
 
-set timescaledb.debug_require_vector_qual to 'only' /* all following quals must be vectorized */;
+-- single chunk
+select * from vectorqual where ts between '2019-02-02' and '2020-02-02' order by vectorqual;
+select * from vectorqual where ts between '2020-02-02' and '2021-02-02' order by vectorqual;
+select * from vectorqual where ts between '2021-02-02' and '2022-02-02' order by vectorqual;
+select * from vectorqual where ts between '2022-02-02' and '2023-02-02' order by vectorqual;
+
+set timescaledb.debug_require_vector_qual to 'require' /* all following quals must be vectorized */;
 select count(*) from vectorqual where ts > '1999-01-01 00:00:00';
 select count(*) from vectorqual where metric2 = 22;
 select count(*) from vectorqual where 22 = metric2 /* commutators */;
@@ -48,7 +54,7 @@ alter table arithmetic set (timescaledb.compress);
 insert into arithmetic values (100, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
     (101, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
 select count(compress_chunk(x, true)) from show_chunks('arithmetic') x;
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 select * from arithmetic where
         a > 1::int2 and a > 1::int4 and a > 1::int8
     and b > 1::int2 and b > 1::int4 and b > 1::int8
@@ -63,7 +69,7 @@ alter table vectorqual add column tag name;
 insert into vectorqual(ts, device, metric2, metric3, metric4, tag) values ('2025-01-01 00:00:00', 5, 52, 53, 54, 'tag5');
 select count(compress_chunk(x, true)) from show_chunks('vectorqual') x;
 
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 select tag from vectorqual where metric2 > 0;
 
 
@@ -81,7 +87,7 @@ select count(*) from vectorqual where metric2
     = (select metric2 from vectorqual order by 1 limit 1);
 
 -- Can vectorize clauses with query parameters.
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 set plan_cache_mode to 'force_generic_plan';
 
 prepare p as select count(*) from vectorqual where metric3 = $1;
@@ -89,7 +95,7 @@ execute p(33);
 deallocate p;
 
 -- Also try query parameter in combination with a stable function.
-prepare p(int4) as select count(*) from vectorqual where metric3 = stable_identity($1);
+prepare p(int4) as select count(*) from vectorqual where metric3 = stable_abs($1);
 execute p(33);
 deallocate p;
 
@@ -97,7 +103,7 @@ reset plan_cache_mode;
 
 
 -- Queries without aggregation.
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 select * from vectorqual where ts > '2021-01-01 00:00:00' order by vectorqual;
 select * from vectorqual where metric4 >= 0 order by vectorqual;
 
@@ -111,7 +117,7 @@ select * from vectorqual where ts > '2021-01-01 00:00:00' and metric3 > 40 order
 
 
 -- ORed constrainst on multiple columns.
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 -- set timescaledb.debug_require_vector_qual to 'forbid';
 -- set timescaledb.enable_bulk_decompression to off;
 
@@ -159,12 +165,12 @@ select count(*) from vectorqual where metric3 = 777 or metric3 === 777;
 
 -- Custom operator that can be vectorized but doesn't have a negator.
 create operator !!! (function = 'int4ne', rightarg = int4, leftarg = int4);
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 select count(*) from vectorqual where metric3 !!! 777;
 select count(*) from vectorqual where metric3 !!! any(array[777, 888]);
 select count(*) from vectorqual where metric3 !!! 777 or metric3 !!! 888;
 select count(*) from vectorqual where metric3 !!! 666 and (metric3 !!! 777 or metric3 !!! 888);
-select count(*) from vectorqual where metric3 !!! 666 and (metric3 !!! 777 or metric3 !!! stable_identity(888));
+select count(*) from vectorqual where metric3 !!! 666 and (metric3 !!! 777 or metric3 !!! stable_abs(888));
 
 set timescaledb.debug_require_vector_qual to 'forbid';
 select count(*) from vectorqual where not metric3 !!! 777;
@@ -183,11 +189,11 @@ select count(*) from vectorqual where 777 !!! metric3;
 
 
 -- NullTest is vectorized.
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 select count(*) from vectorqual where metric4 is null;
 select count(*) from vectorqual where metric4 is not null;
 select count(*) from vectorqual where metric3 = 777 or metric4 is not null;
-select count(*) from vectorqual where metric3 = stable_identity(777) or metric4 is null;
+select count(*) from vectorqual where metric3 = stable_abs(777) or metric4 is null;
 
 
 -- Can't vectorize conditions on system columns. Have to check this on a single
@@ -200,7 +206,7 @@ select count(*) from :chunk1 t where tableoid is null;
 
 
 -- Scalar array operators are vectorized if the operator is vectorizable.
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 select count(*) from vectorqual where metric3 = any(array[777, 888]); /* default value */
 select count(*) from vectorqual where metric4 = any(array[44, 55]) /* default null */;
 select count(*) from vectorqual where metric2 > any(array[-1, -2, -3]) /* any */;
@@ -208,7 +214,7 @@ select count(*) from vectorqual where metric2 > all(array[-1, -2, -3]) /* all */
 
 -- Also have to support null array elements, because they are impossible to
 -- prevent in stable expressions.
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 select count(*) from vectorqual where metric2 = any(array[null::int]) /* any with null element */;
 select count(*) from vectorqual where metric2 = any(array[22, null]) /* any with null element */;
 select count(*) from vectorqual where metric2 = any(array[null, 32]) /* any with null element */;
@@ -226,7 +232,7 @@ alter table singlebatch set (timescaledb.compress);
 insert into singlebatch select '2022-02-02 02:02:02', metric2, device, metric3, metric4, tag from vectorqual;
 select count(compress_chunk(x, true)) from show_chunks('singlebatch') x;
 
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 -- Uncomment to generate the test reference w/o the vector optimizations.
 -- set timescaledb.enable_bulk_decompression to off;
 -- set timescaledb.debug_require_vector_qual to 'forbid';
@@ -316,6 +322,26 @@ select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 777 and me
 select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 888 and metric2 = 12);
 select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 888 and metric2 = 666);
 
+
+-- On versions >= 14, the Postgres planner chooses to build a hash table for
+-- large arrays. We currently don't vectorize in this case.
+select 1 from set_config('timescaledb.debug_require_vector_qual',
+    case when current_setting('server_version_num')::int >= 140000 then 'forbid' else 'require' end,
+    false);
+
+select count(*) from singlebatch where metric2 = any(array[
+ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+50, 51, 52, 53, 54, 55, 56, 57, 58, 59,
+60, 61, 62, 63, 64, 65, 66, 67, 68, 69,
+70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
+80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
+90, 91, 92, 93, 94, 95, 96, 97, 98, 99
+]::int8[]);
+
 reset timescaledb.enable_bulk_decompression;
 reset timescaledb.debug_require_vector_qual;
 
@@ -328,7 +354,7 @@ select count(*) from vectorqual where metric3 = any(array[metric4]);
 
 -- Vectorized filters also work if we have only stable functions on the right
 -- side that can be evaluated to a constant at run time.
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 select count(*) from vectorqual where ts > '2021-01-01 00:00:00'::timestamptz::timestamp;
 select count(*) from vectorqual where ts > '2021-01-01 00:00:00'::timestamp - interval '1 day';
 -- Expression that evaluates to Null.
@@ -338,7 +364,7 @@ select count(*) from vectorqual where ts < LOCALTIMESTAMP + '3 years'::interval;
 -- These filters are not vectorizable as written, because the 'timestamp > timestamptz'
 -- operator is stable, not immutable. We will try to cast the constant to the
 -- same type in this case.
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 select count(*) from vectorqual where ts > '2021-01-01 00:00:00'::timestamptz;
 select count(*) from vectorqual where ts < LOCALTIMESTAMP at time zone 'UTC' + '3 years'::interval;
 
@@ -360,7 +386,7 @@ set timescaledb.enable_bulk_decompression to on;
 \set ON_ERROR_STOP 0
 set timescaledb.debug_require_vector_qual to 'forbid';
 select count(*) from vectorqual where metric4 > 4;
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 select count(*) from vectorqual where metric3 === 4;
 \set ON_ERROR_STOP 1
 
@@ -373,7 +399,7 @@ insert into date_table values ('2021-01-01'), ('2021-01-02'),
     ('2021-01-03');
 select count(compress_chunk(x, true)) from show_chunks('date_table') x;
 
-set timescaledb.debug_require_vector_qual to 'only';
+set timescaledb.debug_require_vector_qual to 'require';
 select * from date_table where ts >  '2021-01-02';
 select * from date_table where ts >= '2021-01-02';
 select * from date_table where ts =  '2021-01-02';
@@ -381,7 +407,7 @@ select * from date_table where ts <= '2021-01-02';
 select * from date_table where ts <  '2021-01-02';
 select * from date_table where ts <  CURRENT_DATE;
 
--- Text columns. Only tests bulk decompression for now.
+-- Text columns.
 create table text_table(ts int, d int);
 select create_hypertable('text_table', 'ts');
 alter table text_table set (timescaledb.compress, timescaledb.compress_segmentby = 'd');
@@ -406,6 +432,7 @@ insert into text_table select x + 100, 8, repeat((101 - x)::text || 'b', (101 - 
 insert into text_table select x + 200, 8, repeat((101 - x)::text || 'c', (101 - x)) from generate_series(1, 100) x;
 insert into text_table select x + 300, 8, repeat(        x::text || 'd',         x) from generate_series(1, 100) x;
 
+-- Use uncompressed table as reference.
 set timescaledb.debug_require_vector_qual to 'forbid';
 select sum(length(a)) from text_table;
 select count(distinct a) from text_table;
@@ -413,8 +440,81 @@ select count(distinct a) from text_table;
 select count(compress_chunk(x, true)) from show_chunks('text_table') x;
 select compress_chunk(x) from show_chunks('text_table') x;
 
+-- Check result with decompression.
 set timescaledb.enable_bulk_decompression to on;
 set timescaledb.debug_require_vector_qual to 'forbid';
 
 select sum(length(a)) from text_table;
 select count(distinct a) from text_table;
+
+
+-- Test vectorized predicates.
+set timescaledb.debug_require_vector_qual to 'require';
+-- -- Uncomment to generate the test reference w/o the vector optimizations.
+-- set timescaledb.enable_bulk_decompression to off;
+-- set timescaledb.debug_require_vector_qual to 'forbid';
+
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'default';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = '';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'same';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a != 'same';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'одинаковый';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'same-with-nulls';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'different1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = '異なる1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'different-with-nulls1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'different1000';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'different-with-nulls999';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a in ('same', 'different500');
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a in ('same-with-nulls', 'different-with-nulls499');
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a in ('different500', 'default');
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'different500' or a = 'default';
+
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a is null;
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a is not null;
+
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%same%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%одинаковый%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%одилаковый%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%одимаковый%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%異なる%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%異オる%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%異にる%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '異_る_';
+
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%different1%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%different1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%%1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%\1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%_';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%__';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%___';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%_1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%nulls_';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different1%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different\%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different\1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different_%1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different_';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different_1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'same_';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a not like '%different1%';
+
+\set ON_ERROR_STOP 0
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different\';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%\';
+\set ON_ERROR_STOP 1
+
+
+-- We don't vectorize comparison operators with text because they are probably
+-- not very useful.
+set timescaledb.debug_require_vector_qual to 'forbid';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a < 'same';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a > 'same';
+
+
+reset timescaledb.debug_require_vector_qual;
+reset timescaledb.enable_bulk_decompression;
+

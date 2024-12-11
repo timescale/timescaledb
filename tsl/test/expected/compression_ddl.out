@@ -30,7 +30,8 @@ SET client_min_messages = NOTICE;
 CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE1_PATH;
 CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE2_PATH;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-CREATE TABLE test1 ("Time" timestamptz, i integer, b bigint, t text);
+SET timezone TO 'America/Los_Angeles';
+CREATE TABLE test1 ("Time" timestamptz, i integer not null, b bigint, t text);
 SELECT table_name from create_hypertable('test1', 'Time', chunk_time_interval=> INTERVAL '1 day');
 NOTICE:  adding not-null constraint to column "Time"
  table_name 
@@ -54,11 +55,45 @@ DROP INDEX new_index;
 ALTER TABLE test1 SET (fillfactor=100);
 ALTER TABLE test1 RESET (fillfactor);
 ALTER TABLE test1 ALTER COLUMN b SET STATISTICS 10;
+-- ensure that REPLICA IDENTITY works
+SELECT relreplident, count(*) FROM show_chunks('test1') ch INNER JOIN pg_class c ON (ch = c.oid) GROUP BY 1 ORDER BY 1;
+ relreplident | count 
+--------------+-------
+ d            |    27
+(1 row)
+
+SELECT relreplident FROM pg_class c WHERE c.relname = 'test1';
+ relreplident 
+--------------
+ d
+(1 row)
+
+ALTER TABLE test1 REPLICA IDENTITY FULL;
+SELECT relname, relreplident FROM pg_class WHERE relname = 'test1' ORDER BY relname;
+ relname | relreplident 
+---------+--------------
+ test1   | f
+(1 row)
+
+-- the chunk's setting should also change to FULL
+SELECT relreplident, count(*) FROM show_chunks('test1') ch INNER JOIN pg_class c ON (ch = c.oid) GROUP BY 1 ORDER BY 1;
+ relreplident | count 
+--------------+-------
+ f            |    27
+(1 row)
+
+SELECT relreplident FROM pg_class c WHERE c.relname = 'test1';
+ relreplident 
+--------------
+ f
+(1 row)
+
+ALTER TABLE test1 REPLICA IDENTITY DEFAULT;
 -- make sure we cannot create constraints or unique indexes on compressed hypertables
 \set ON_ERROR_STOP 0
-ALTER TABLE test1 ADD CONSTRAINT c1 UNIQUE(time,i);
-ERROR:  operation not supported on hypertables that have compression enabled
-CREATE UNIQUE INDEX unique_index ON test1(time,i);
+ALTER TABLE test1 ADD CONSTRAINT c1 UNIQUE("Time",i);
+ERROR:  operation not supported on hypertables that have compressed data
+CREATE UNIQUE INDEX unique_index ON test1("Time",i);
 ERROR:  operation not supported on hypertables that have compression enabled
 \set ON_ERROR_STOP 1
 --test adding boolean columns with default and not null
@@ -71,6 +106,9 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
 (1 row)
 
 ALTER TABLE records SET (timescaledb.compress = true);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "records" is set to ""
+NOTICE:  default order by for hypertable "records" is set to ""time" DESC"
 ALTER TABLE records ADD COLUMN col1 boolean DEFAULT false NOT NULL;
 -- NULL constraints are useless and it is safe allow adding this
 -- column with NULL constraint to a compressed hypertable (Issue #5151)
@@ -158,7 +196,7 @@ FROM pg_tables WHERE tablespace = 'tablespace1';
 (0 rows)
 
 \set ON_ERROR_STOP 0
-SELECT move_chunk(chunk=>:'COMPRESSED_CHUNK_NAME', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1',  reorder_index=>'_timescaledb_internal."compress_hyper_2_28_chunk_b__ts_meta_sequence_num_idx"');
+SELECT move_chunk(chunk=>:'COMPRESSED_CHUNK_NAME', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1',  reorder_index=>'_timescaledb_internal."compress_hyper_2_28_chunk_b__ts_meta_min_1__ts_meta_max_1_idx"');
 ERROR:  cannot directly move internal compression data
 \set ON_ERROR_STOP 1
 -- ensure that both compressed and uncompressed chunks moved
@@ -525,6 +563,7 @@ SELECT count(*) FROM test1_cont_view;
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+SET timezone TO 'America/Los_Angeles';
 SELECT chunk.schema_name|| '.' || chunk.table_name as "COMPRESSED_CHUNK_NAME"
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
@@ -649,6 +688,8 @@ INSERT INTO test1 SELECT '2018-03-02 1:05'::TIMESTAMPTZ, 2;
 NOTICE:   raise notice test1_print_trigger called 
 NOTICE:   raise notice test1_print_trigger called 
 ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_orderby = '"Time" DESC');
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test1" is set to ""
 SELECT count(compress_chunk(ch)) FROM show_chunks('test1') ch;
  count 
 -------
@@ -675,6 +716,9 @@ INSERT INTO i2844 SELECT generate_series('2000-01-01'::timestamptz, '2000-01-02'
 CREATE MATERIALIZED VIEW test_agg WITH (timescaledb.continuous) AS SELECT time_bucket('1 hour', created_at) AS bucket, AVG(c1) AS avg_c1 FROM i2844 GROUP BY bucket;
 NOTICE:  refreshing continuous aggregate "test_agg"
 ALTER TABLE i2844 SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "i2844" is set to ""
+NOTICE:  default order by for hypertable "i2844" is set to "created_at DESC"
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='i2844'::regclass;
  relid | segmentby |   orderby    | orderby_desc | orderby_nullsfirst 
 -------+-----------+--------------+--------------+--------------------
@@ -982,6 +1026,7 @@ SELECT create_hypertable('test_defaults','time');
 (1 row)
 
 ALTER TABLE test_defaults SET (timescaledb.compress,timescaledb.compress_segmentby='device_id');
+psql:include/compression_alter.sql:119: NOTICE:  default order by for hypertable "test_defaults" is set to ""time" DESC"
 -- create 2 chunks
 INSERT INTO test_defaults SELECT '2000-01-01', 1;
 INSERT INTO test_defaults SELECT '2001-01-01', 1;
@@ -1238,6 +1283,9 @@ SELECT create_hypertable('issue4140', 'time');
 (1 row)
 
 ALTER TABLE issue4140 SET(timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "issue4140" is set to ""
+NOTICE:  default order by for hypertable "issue4140" is set to ""time" DESC"
 SELECT format('%I.%I', schema_name, table_name)::regclass AS ctable
 FROM _timescaledb_catalog.hypertable
 WHERE id = (SELECT compressed_hypertable_id FROM _timescaledb_catalog.hypertable WHERE table_name = 'issue4140') \gset
@@ -1304,6 +1352,7 @@ SELECT create_hypertable(
 (1 row)
 
 alter table "tEst2" set (timescaledb.compress=true, timescaledb.compress_segmentby='"Id"');
+NOTICE:  default order by for hypertable "tEst2" is set to ""Time" DESC"
 CREATE MATERIALIZED VIEW "tEst2_mv"
 WITH (timescaledb.continuous) AS
 SELECT "Id" as "Idd",
@@ -1395,21 +1444,19 @@ EXPLAIN (costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
-                                                                  QUERY PLAN                                                                   
------------------------------------------------------------------------------------------------------------------------------------------------
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
  Finalize GroupAggregate
    Group Key: _hyper_31_110_chunk.device_id
-   ->  Sort
+   ->  Merge Append
          Sort Key: _hyper_31_110_chunk.device_id
-         ->  Append
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_110_chunk.device_id
-                     ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
-                           ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_111_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_110_chunk.device_id
-                     ->  Index Only Scan using _hyper_31_110_chunk_compression_insert_device_id_time_idx on _hyper_31_110_chunk
-(12 rows)
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
+                     ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
+         ->  Partial GroupAggregate
+               Group Key: _hyper_31_110_chunk.device_id
+               ->  Index Only Scan using _hyper_31_110_chunk_compression_insert_device_id_time_idx on _hyper_31_110_chunk
+(10 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
@@ -1480,25 +1527,22 @@ EXPLAIN (costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
-                                                                  QUERY PLAN                                                                   
------------------------------------------------------------------------------------------------------------------------------------------------
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
  Finalize GroupAggregate
    Group Key: _hyper_31_110_chunk.device_id
-   ->  Sort
+   ->  Merge Append
          Sort Key: _hyper_31_110_chunk.device_id
-         ->  Append
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_110_chunk.device_id
-                     ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
-                           ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_111_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_112_chunk.device_id
-                     ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
-                           ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_113_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_112_chunk.device_id
-                     ->  Index Only Scan using _hyper_31_112_chunk_compression_insert_device_id_time_idx on _hyper_31_112_chunk
-(16 rows)
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
+                     ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
+                     ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
+         ->  Partial GroupAggregate
+               Group Key: _hyper_31_112_chunk.device_id
+               ->  Index Only Scan using _hyper_31_112_chunk_compression_insert_device_id_time_idx on _hyper_31_112_chunk
+(13 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
@@ -1569,29 +1613,25 @@ EXPLAIN (costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
-                                                                  QUERY PLAN                                                                   
------------------------------------------------------------------------------------------------------------------------------------------------
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
  Finalize GroupAggregate
    Group Key: _hyper_31_110_chunk.device_id
-   ->  Sort
+   ->  Merge Append
          Sort Key: _hyper_31_110_chunk.device_id
-         ->  Append
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_110_chunk.device_id
-                     ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
-                           ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_111_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_112_chunk.device_id
-                     ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
-                           ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_113_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_114_chunk.device_id
-                     ->  Custom Scan (DecompressChunk) on _hyper_31_114_chunk
-                           ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_115_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_114_chunk.device_id
-                     ->  Index Only Scan using _hyper_31_114_chunk_compression_insert_device_id_time_idx on _hyper_31_114_chunk
-(20 rows)
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
+                     ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
+                     ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_31_114_chunk
+                     ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_115_chunk
+         ->  Partial GroupAggregate
+               Group Key: _hyper_31_114_chunk.device_id
+               ->  Index Only Scan using _hyper_31_114_chunk_compression_insert_device_id_time_idx on _hyper_31_114_chunk
+(16 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
@@ -1662,33 +1702,28 @@ EXPLAIN (costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
-                                                                  QUERY PLAN                                                                   
------------------------------------------------------------------------------------------------------------------------------------------------
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
  Finalize GroupAggregate
    Group Key: _hyper_31_110_chunk.device_id
-   ->  Sort
+   ->  Merge Append
          Sort Key: _hyper_31_110_chunk.device_id
-         ->  Append
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_110_chunk.device_id
-                     ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
-                           ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_111_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_112_chunk.device_id
-                     ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
-                           ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_113_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_114_chunk.device_id
-                     ->  Custom Scan (DecompressChunk) on _hyper_31_114_chunk
-                           ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_115_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_116_chunk.device_id
-                     ->  Custom Scan (DecompressChunk) on _hyper_31_116_chunk
-                           ->  Index Scan using compress_hyper_32_117_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_117_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_116_chunk.device_id
-                     ->  Index Only Scan using _hyper_31_116_chunk_compression_insert_device_id_time_idx on _hyper_31_116_chunk
-(24 rows)
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
+                     ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
+                     ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_31_114_chunk
+                     ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_115_chunk
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_31_116_chunk
+                     ->  Index Scan using compress_hyper_32_117_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_117_chunk
+         ->  Partial GroupAggregate
+               Group Key: _hyper_31_116_chunk.device_id
+               ->  Index Only Scan using _hyper_31_116_chunk_compression_insert_device_id_time_idx on _hyper_31_116_chunk
+(19 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
@@ -1759,37 +1794,31 @@ EXPLAIN (costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
-                                                                  QUERY PLAN                                                                   
------------------------------------------------------------------------------------------------------------------------------------------------
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
  Finalize GroupAggregate
    Group Key: _hyper_31_110_chunk.device_id
-   ->  Sort
+   ->  Merge Append
          Sort Key: _hyper_31_110_chunk.device_id
-         ->  Append
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_110_chunk.device_id
-                     ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
-                           ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_111_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_112_chunk.device_id
-                     ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
-                           ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_113_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_114_chunk.device_id
-                     ->  Custom Scan (DecompressChunk) on _hyper_31_114_chunk
-                           ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_115_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_116_chunk.device_id
-                     ->  Custom Scan (DecompressChunk) on _hyper_31_116_chunk
-                           ->  Index Scan using compress_hyper_32_117_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_117_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_118_chunk.device_id
-                     ->  Custom Scan (DecompressChunk) on _hyper_31_118_chunk
-                           ->  Index Scan using compress_hyper_32_119_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_119_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_118_chunk.device_id
-                     ->  Index Only Scan using _hyper_31_118_chunk_compression_insert_device_id_time_idx on _hyper_31_118_chunk
-(28 rows)
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
+                     ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
+                     ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_31_114_chunk
+                     ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_115_chunk
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_31_116_chunk
+                     ->  Index Scan using compress_hyper_32_117_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_117_chunk
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_31_118_chunk
+                     ->  Index Scan using compress_hyper_32_119_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_119_chunk
+         ->  Partial GroupAggregate
+               Group Key: _hyper_31_118_chunk.device_id
+               ->  Index Only Scan using _hyper_31_118_chunk_compression_insert_device_id_time_idx on _hyper_31_118_chunk
+(22 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
@@ -1856,6 +1885,9 @@ VALUES -- chunk1
   ('2022-01-01 00:04'::timestamptz, 1, 2);
 -- enable compression, compress all chunks
 ALTER TABLE test_partials SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test_partials" is set to ""
+NOTICE:  default order by for hypertable "test_partials" is set to ""time" DESC"
 SELECT compress_chunk(show_chunks('test_partials'));
               compress_chunk               
 -------------------------------------------
@@ -1864,49 +1896,50 @@ SELECT compress_chunk(show_chunks('test_partials'));
  _timescaledb_internal._hyper_33_122_chunk
 (3 rows)
 
+VACUUM ANALYZE test_partials;
 -- fully compressed
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
-                                   QUERY PLAN                                   
---------------------------------------------------------------------------------
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
    ->  Custom Scan (DecompressChunk) on _hyper_33_120_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_123_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_123_chunk._ts_meta_min_1, compress_hyper_34_123_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_123_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_33_121_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_124_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_124_chunk._ts_meta_min_1, compress_hyper_34_124_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_124_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_33_122_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_125_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_125_chunk._ts_meta_min_1, compress_hyper_34_125_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_125_chunk
 (14 rows)
 
 -- test P, F, F
 INSERT INTO test_partials VALUES ('2020-01-01 00:03', 1, 2);
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
    ->  Merge Append
          Sort Key: _hyper_33_120_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_33_120_chunk
                ->  Sort
-                     Sort Key: compress_hyper_34_123_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_34_123_chunk._ts_meta_min_1, compress_hyper_34_123_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_34_123_chunk
          ->  Sort
                Sort Key: _hyper_33_120_chunk."time"
                ->  Seq Scan on _hyper_33_120_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_33_121_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_124_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_124_chunk._ts_meta_min_1, compress_hyper_34_124_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_124_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_33_122_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_125_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_125_chunk._ts_meta_min_1, compress_hyper_34_125_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_125_chunk
 (19 rows)
 
@@ -1928,15 +1961,15 @@ SELECT * FROM test_partials ORDER BY time;
 -- P, P, F
 INSERT INTO test_partials VALUES ('2021-01-01 00:03', 1, 2);
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
    ->  Merge Append
          Sort Key: _hyper_33_120_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_33_120_chunk
                ->  Sort
-                     Sort Key: compress_hyper_34_123_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_34_123_chunk._ts_meta_min_1, compress_hyper_34_123_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_34_123_chunk
          ->  Sort
                Sort Key: _hyper_33_120_chunk."time"
@@ -1945,14 +1978,14 @@ EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
          Sort Key: _hyper_33_121_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_33_121_chunk
                ->  Sort
-                     Sort Key: compress_hyper_34_124_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_34_124_chunk._ts_meta_min_1, compress_hyper_34_124_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_34_124_chunk
          ->  Sort
                Sort Key: _hyper_33_121_chunk."time"
                ->  Seq Scan on _hyper_33_121_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_33_122_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_125_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_125_chunk._ts_meta_min_1, compress_hyper_34_125_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_125_chunk
 (24 rows)
 
@@ -1976,15 +2009,15 @@ SELECT * FROM test_partials ORDER BY time;
 INSERT INTO test_partials VALUES ('2022-01-01 00:03', 1, 2);
 INSERT INTO test_partials VALUES ('2023-01-01 00:03', 1, 2);
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
-                                            QUERY PLAN                                             
----------------------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
    ->  Merge Append
          Sort Key: _hyper_33_120_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_33_120_chunk
                ->  Sort
-                     Sort Key: compress_hyper_34_123_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_34_123_chunk._ts_meta_min_1, compress_hyper_34_123_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_34_123_chunk
          ->  Sort
                Sort Key: _hyper_33_120_chunk."time"
@@ -1993,7 +2026,7 @@ EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
          Sort Key: _hyper_33_121_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_33_121_chunk
                ->  Sort
-                     Sort Key: compress_hyper_34_124_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_34_124_chunk._ts_meta_min_1, compress_hyper_34_124_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_34_124_chunk
          ->  Sort
                Sort Key: _hyper_33_121_chunk."time"
@@ -2002,7 +2035,7 @@ EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
          Sort Key: _hyper_33_122_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_33_122_chunk
                ->  Sort
-                     Sort Key: compress_hyper_34_125_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_34_125_chunk._ts_meta_min_1, compress_hyper_34_125_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_34_125_chunk
          ->  Sort
                Sort Key: _hyper_33_122_chunk."time"
@@ -2027,23 +2060,23 @@ END
 $$;
 INSERT INTO test_partials VALUES ('2022-01-01 00:02', 1, 2);
 EXPLAIN (COSTS OFF) SELECT * FROM test_partials ORDER BY time;
-                                            QUERY PLAN                                             
----------------------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
    ->  Custom Scan (DecompressChunk) on _hyper_33_120_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_127_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_127_chunk._ts_meta_min_1, compress_hyper_34_127_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_127_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_33_121_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_128_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_128_chunk._ts_meta_min_1, compress_hyper_34_128_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_128_chunk
    ->  Merge Append
          Sort Key: _hyper_33_122_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_33_122_chunk
                ->  Sort
-                     Sort Key: compress_hyper_34_129_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_34_129_chunk._ts_meta_min_1, compress_hyper_34_129_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_34_129_chunk
          ->  Sort
                Sort Key: _hyper_33_122_chunk."time"
@@ -2061,34 +2094,34 @@ SELECT compress_chunk(c) FROM show_chunks('test_partials', newer_than => '2022-0
 (2 rows)
 
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
    ->  Custom Scan (DecompressChunk) on _hyper_33_120_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_127_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_127_chunk._ts_meta_min_1, compress_hyper_34_127_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_127_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_33_121_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_128_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_128_chunk._ts_meta_min_1, compress_hyper_34_128_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_128_chunk
    ->  Merge Append
          Sort Key: _hyper_33_122_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_33_122_chunk
                ->  Sort
-                     Sort Key: compress_hyper_34_129_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_34_129_chunk._ts_meta_min_1, compress_hyper_34_129_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_34_129_chunk
          ->  Sort
                Sort Key: _hyper_33_122_chunk."time"
                ->  Seq Scan on _hyper_33_122_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_33_126_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_131_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_131_chunk._ts_meta_min_1, compress_hyper_34_131_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_131_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_33_130_chunk
          ->  Sort
-               Sort Key: compress_hyper_34_132_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_34_132_chunk._ts_meta_min_1, compress_hyper_34_132_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_34_132_chunk
 (27 rows)
 
@@ -2134,6 +2167,9 @@ INSERT INTO space_part values
 ('2021-01-01 00:03', 2, 1, 1);
 -- compress them
 ALTER TABLE space_part SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "space_part" is set to ""
+NOTICE:  default order by for hypertable "space_part" is set to ""time" DESC"
 SELECT compress_chunk(show_chunks('space_part'));
               compress_chunk               
 -------------------------------------------
@@ -2155,22 +2191,22 @@ SELECT add_dimension('space_part', 'a', number_partitions => 5);
 
 -- plan is still the same
 EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on space_part
    Order: space_part."time"
    ->  Merge Append
          Sort Key: _hyper_35_133_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_135_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_36_135_chunk._ts_meta_min_1, compress_hyper_36_135_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_135_chunk
          ->  Sort
                Sort Key: _hyper_35_133_chunk."time"
                ->  Seq Scan on _hyper_35_133_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_35_134_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_136_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_36_136_chunk._ts_meta_min_1, compress_hyper_36_136_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_136_chunk
 (15 rows)
 
@@ -2183,22 +2219,22 @@ INSERT INTO space_part VALUES
 ('2022-01-01 00:03', 2, 1, 1);
 -- plan still ok
 EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
-                                              QUERY PLAN                                              
-------------------------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on space_part
    Order: space_part."time"
    ->  Merge Append
          Sort Key: _hyper_35_133_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_135_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_36_135_chunk._ts_meta_min_1, compress_hyper_36_135_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_135_chunk
          ->  Sort
                Sort Key: _hyper_35_133_chunk."time"
                ->  Seq Scan on _hyper_35_133_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_35_134_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_136_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_36_136_chunk._ts_meta_min_1, compress_hyper_36_136_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_136_chunk
    ->  Merge Append
          Sort Key: _hyper_35_137_chunk."time"
@@ -2219,27 +2255,27 @@ NOTICE:  chunk "_hyper_35_134_chunk" is already compressed
 
 -- plan still ok
 EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on space_part
    Order: space_part."time"
    ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_139_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_36_139_chunk._ts_meta_min_1, compress_hyper_36_139_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_139_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_35_134_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_136_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_36_136_chunk._ts_meta_min_1, compress_hyper_36_136_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_136_chunk
    ->  Merge Append
          Sort Key: _hyper_35_137_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_35_137_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_140_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_36_140_chunk._ts_meta_min_1, compress_hyper_36_140_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_140_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_35_138_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_141_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_36_141_chunk._ts_meta_min_1, compress_hyper_36_141_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_141_chunk
 (20 rows)
 
@@ -2248,72 +2284,66 @@ insert into space_part values
 ('2022-01-01 00:02', 2, 1, 1),
 ('2022-01-01 00:02', 2, 1, 1);
 EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on space_part
    Order: space_part."time"
    ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_139_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_36_139_chunk._ts_meta_min_1, compress_hyper_36_139_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_139_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_35_134_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_136_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_36_136_chunk._ts_meta_min_1, compress_hyper_36_136_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_136_chunk
    ->  Merge Append
          Sort Key: _hyper_35_137_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_35_137_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_140_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_36_140_chunk._ts_meta_min_1, compress_hyper_36_140_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_140_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_35_138_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_141_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_36_141_chunk._ts_meta_min_1, compress_hyper_36_141_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_141_chunk
          ->  Sort
                Sort Key: _hyper_35_138_chunk."time"
-               ->  Sort
-                     Sort Key: _hyper_35_138_chunk."time"
-                     ->  Seq Scan on _hyper_35_138_chunk
-(25 rows)
+               ->  Seq Scan on _hyper_35_138_chunk
+(23 rows)
 
 -- make other one partial too
 INSERT INTO space_part VALUES
 ('2022-01-01 00:02', 1, 1, 1);
 EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on space_part
    Order: space_part."time"
    ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_139_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_36_139_chunk._ts_meta_min_1, compress_hyper_36_139_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_139_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_35_134_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_136_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_36_136_chunk._ts_meta_min_1, compress_hyper_36_136_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_136_chunk
    ->  Merge Append
          Sort Key: _hyper_35_137_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_35_137_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_140_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_36_140_chunk._ts_meta_min_1, compress_hyper_36_140_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_140_chunk
          ->  Sort
                Sort Key: _hyper_35_137_chunk."time"
-               ->  Sort
-                     Sort Key: _hyper_35_137_chunk."time"
-                     ->  Seq Scan on _hyper_35_137_chunk
+               ->  Seq Scan on _hyper_35_137_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_35_138_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_141_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_36_141_chunk._ts_meta_min_1, compress_hyper_36_141_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_141_chunk
          ->  Sort
                Sort Key: _hyper_35_138_chunk."time"
-               ->  Sort
-                     Sort Key: _hyper_35_138_chunk."time"
-                     ->  Seq Scan on _hyper_35_138_chunk
-(30 rows)
+               ->  Seq Scan on _hyper_35_138_chunk
+(26 rows)
 
 -- test creation of unique expression index does not interfere with enabling compression
 -- github issue 6205
@@ -2330,8 +2360,9 @@ WARNING:  column type "character varying" used for "col1" does not follow best p
 create unique index myidx_unique ON
 mytab (lower(col1::text), col2, departure_ts, arrival_ts);
 alter table mytab set (timescaledb.compress);
-WARNING:  column "col2" should be used for segmenting or ordering
-WARNING:  column "arrival_ts" should be used for segmenting or ordering
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: Please make sure col2 is not a unique column and appropriate for a segment by
+NOTICE:  default segment by for hypertable "mytab" is set to "col2"
+NOTICE:  default order by for hypertable "mytab" is set to "departure_ts DESC, arrival_ts"
 -- github issue 6186
 -- verify inserting into index works as expected during decompression
 insert into mytab (col1, col2, value, arrival_ts, departure_ts)
@@ -2416,6 +2447,7 @@ INSERT INTO hyper_ex(time, device_id,sensor_1) VALUES
 ('2022-01-01 01:00', 'dev2', 12);
 \set ON_ERROR_STOP 0
 ALTER TABLE hyper_ex SET (timescaledb.compress, timescaledb.compress_segmentby='device_id');
+NOTICE:  default order by for hypertable "hyper_ex" is set to ""time" DESC"
 ERROR:  constraint hyper_ex_time_device_id_excl is not supported for compression
 \set ON_ERROR_STOP 1
 -- check deferred uniqueness
@@ -2433,6 +2465,9 @@ NOTICE:  adding not-null constraint to column "time"
 
 INSERT INTO hyper_unique_deferred(time, device_id,sensor_1) VALUES (1257987700000000000, 'dev2', 11);
 alter table hyper_unique_deferred set (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "hyper_unique_deferred" is set to ""
+NOTICE:  default order by for hypertable "hyper_unique_deferred" is set to ""time" DESC"
 select compress_chunk(show_chunks('hyper_unique_deferred')); -- also worked fine before 2.11.0
               compress_chunk               
 -------------------------------------------
@@ -2445,5 +2480,134 @@ select decompress_chunk(show_chunks('hyper_unique_deferred'));
  _timescaledb_internal._hyper_40_146_chunk
 (1 row)
 
+\set ON_ERROR_STOP 0
 begin; insert INTO hyper_unique_deferred values (1257987700000000000, 'dev1', 1); abort;
 ERROR:  new row for relation "_hyper_40_146_chunk" violates check constraint "hyper_unique_deferred_sensor_1_check"
+\set ON_ERROR_STOP 1
+select compress_chunk(show_chunks('hyper_unique_deferred'));
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_40_146_chunk
+(1 row)
+
+\set ON_ERROR_STOP 0
+begin; insert INTO hyper_unique_deferred values (1257987700000000000, 'dev1', 1); abort;
+ERROR:  duplicate key value violates unique constraint "146_2_hyper_unique_deferred_time_key"
+\set ON_ERROR_STOP 1
+-- tests chunks being compressed using different segmentby settings
+-- github issue #7102
+CREATE TABLE compression_drop(time timestamptz NOT NULL, v0 int, v1 int);
+CREATE INDEX ON compression_drop(time);
+CREATE INDEX ON compression_drop(v0,time);
+SELECT create_hypertable('compression_drop','time',create_default_indexes:=false);
+       create_hypertable        
+--------------------------------
+ (42,public,compression_drop,t)
+(1 row)
+
+ALTER TABLE compression_drop SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='v0');
+-- insert data and compress chunk
+INSERT INTO compression_drop(time, v0, v1)
+SELECT time, v0, v0+1
+FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-03 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gv0(v0);
+SELECT compress_chunk(ch, true) AS "CHUNK_NAME" FROM show_chunks('compression_drop') ch ORDER BY ch DESC \gset
+-- change segmentby column
+ALTER TABLE compression_drop SET (timescaledb.compress_segmentby='v1');
+-- insert more data and compress next chunk
+INSERT INTO compression_drop(time, v0, v1)
+SELECT time, v0, v0+1
+FROM generate_series('2000-01-07 0:00:00+0'::timestamptz,'2000-01-09 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gv0(v0);
+SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name)) AS "CHUNK_NAME"
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'compression_drop' AND NOT is_compressed;
+                CHUNK_NAME                 
+-------------------------------------------
+ _timescaledb_internal._hyper_42_151_chunk
+(1 row)
+
+-- try dropping column v0, should fail
+\set ON_ERROR_STOP 0
+ALTER TABLE compression_drop DROP COLUMN v0;
+ERROR:  cannot drop orderby or segmentby column from a chunk with compression enabled
+\set ON_ERROR_STOP 1
+DROP TABLE compression_drop;
+SET client_min_messages = ERROR;
+CREATE TABLE test2 (ts timestamptz, i integer not null, b bigint, t text);
+SELECT table_name from create_hypertable('test2', 'ts', chunk_time_interval=> INTERVAL '1 day');
+ table_name 
+------------
+ test2
+(1 row)
+
+INSERT INTO test2
+SELECT t,
+       gen_rand_minstd(),
+       gen_rand_minstd(),
+       gen_rand_minstd()::text
+FROM   generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-28 1:00', '1 hour') t;
+ALTER TABLE test2 SET (
+      timescaledb.compress,
+      timescaledb.compress_segmentby = 'b',
+      timescaledb.compress_orderby = 'ts DESC'
+);
+\set ON_ERROR_STOP 0
+INSERT INTO test2(ts,b,t) VALUES ('2024-11-18 18:04:51',99,'magic');
+ERROR:  null value in column "i" of relation "_hyper_44_180_chunk" violates not-null constraint
+\set ON_ERROR_STOP 1
+ALTER TABLE test2 ALTER COLUMN i DROP NOT NULL;
+INSERT INTO test2(ts,b,t) VALUES ('2024-11-18 18:04:51',99,'magic');
+SELECT count(*) FROM test2 WHERE i IS NULL;
+ count 
+-------
+     1
+(1 row)
+
+SELECT count(compress_chunk(ch)) FROM show_chunks('test2') ch;
+ count 
+-------
+    28
+(1 row)
+
+SELECT count(*) FROM test2 WHERE i IS NULL;
+ count 
+-------
+     1
+(1 row)
+
+SELECT count(decompress_chunk(ch)) FROM show_chunks('test2') ch;
+ count 
+-------
+    28
+(1 row)
+
+SELECT count(*) FROM test2 WHERE i IS NULL;
+ count 
+-------
+     1
+(1 row)
+
+SELECT count(compress_chunk(ch)) FROM show_chunks('test2') ch;
+ count 
+-------
+    28
+(1 row)
+
+SELECT count(*) FROM test2 WHERE i IS NULL;
+ count 
+-------
+     1
+(1 row)
+
+\set ON_ERROR_STOP 0
+ALTER TABLE test2 ALTER COLUMN i SET NOT NULL;
+ERROR:  operation not supported on compressed chunks not using the "hypercore" table access method
+DELETE FROM test2 WHERE i IS NULL;
+SELECT count(*) FROM test2 WHERE i IS NULL;
+ count 
+-------
+     0
+(1 row)
+
+ALTER TABLE test2 ALTER COLUMN i SET NOT NULL;
+ERROR:  operation not supported on compressed chunks not using the "hypercore" table access method
+\set ON_ERROR_STOP 1

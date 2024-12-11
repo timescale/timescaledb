@@ -142,7 +142,7 @@ BEGIN
     END IF;
 
     -- get all scheduled policies except the refresh
-    SELECT jsonb_build_object('policies', array_agg(id))
+    SELECT jsonb_build_object('policies', array_agg(id ORDER BY id))
     INTO _policies
     FROM _timescaledb_config.bgw_job
     WHERE hypertable_id = _cagg_data.mat_hypertable_id
@@ -192,7 +192,7 @@ BEGIN
     EXECUTE _sql;
 
     -- get all scheduled policies
-    SELECT jsonb_build_object('policies', array_agg(id))
+    SELECT jsonb_build_object('policies', array_agg(id ORDER BY id))
     INTO _policies
     FROM _timescaledb_config.bgw_job
     WHERE hypertable_id = _cagg_data.mat_hypertable_id
@@ -596,3 +596,8 @@ BEGIN
     WHERE mat_hypertable_id OPERATOR(pg_catalog.=) _cagg_data.mat_hypertable_id;
 END;
 $BODY$;
+
+-- Migrate a CAgg which is using the experimental time_bucket_ng function
+-- into a CAgg using the regular time_bucket function
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.cagg_migrate_to_time_bucket(cagg REGCLASS)
+   AS '@MODULE_PATHNAME@', 'ts_continuous_agg_migrate_to_time_bucket' LANGUAGE C;

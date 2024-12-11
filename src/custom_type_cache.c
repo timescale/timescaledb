@@ -4,13 +4,13 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <catalog/namespace.h>
 #include <catalog/pg_type.h>
 #include <utils/syscache.h>
-#include <catalog/namespace.h>
 
 #include "custom_type_cache.h"
-#include "ts_catalog/catalog.h"
 #include "extension_constants.h"
+#include "ts_catalog/catalog.h"
 
 /* Information about functions that we put in the cache */
 static CustomTypeInfo typeinfo[_CUSTOM_TYPE_MAX_INDEX] = {

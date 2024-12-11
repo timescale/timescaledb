@@ -305,23 +305,40 @@ DROP TABLE location;
 -- test triggers with transition tables
 -- test creating hypertable from table with triggers with transition tables
 CREATE TABLE transition_test(time timestamptz NOT NULL);
-CREATE TRIGGER t1 AFTER INSERT ON transition_test REFERENCING NEW TABLE AS new_trans FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER t1_stmt AFTER INSERT ON transition_test REFERENCING NEW TABLE AS new_trans FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER t1_row AFTER INSERT ON transition_test REFERENCING NEW TABLE AS new_trans FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
+-- We do not support ROW triggers with transition tables, so we need
+-- to remove it to be able to create the hypertable.
 \set ON_ERROR_STOP 0
 SELECT create_hypertable('transition_test','time');
 \set ON_ERROR_STOP 1
-DROP TRIGGER t1 ON transition_test;
+DROP TRIGGER t1_row ON transition_test;
 SELECT create_hypertable('transition_test','time');
 
+-- Insert some rows to create a chunk
+INSERT INTO transition_test values ('2020-01-10');
+SELECT chunk FROM show_chunks('transition_test') tbl(chunk) limit 1 \gset
+
 -- test creating trigger with transition tables on existing hypertable
-\set ON_ERROR_STOP 0
-CREATE TRIGGER t2 AFTER INSERT ON transition_test REFERENCING NEW TABLE AS new_trans FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
 CREATE TRIGGER t3 AFTER UPDATE ON transition_test REFERENCING NEW TABLE AS new_trans OLD TABLE AS old_trans FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
 CREATE TRIGGER t4 AFTER DELETE ON transition_test REFERENCING OLD TABLE AS old_trans FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
 
-CREATE TRIGGER t2 AFTER INSERT ON transition_test REFERENCING NEW TABLE AS new_trans FOR EACH ROW EXECUTE FUNCTION test_trigger();
-CREATE TRIGGER t3 AFTER UPDATE ON transition_test REFERENCING NEW TABLE AS new_trans OLD TABLE AS old_trans FOR EACH ROW EXECUTE FUNCTION test_trigger();
-CREATE TRIGGER t4 AFTER DELETE ON transition_test REFERENCING OLD TABLE AS old_trans FOR EACH ROW EXECUTE FUNCTION test_trigger();
+INSERT INTO transition_test values ('2020-01-11');
+COPY transition_test FROM STDIN;
+2020-01-09
+\.
+UPDATE transition_test SET time = '2020-01-12' WHERE time = '2020-01-11';
+DELETE FROM transition_test WHERE time = '2020-01-12';
+
+\set ON_ERROR_STOP 0
+CREATE TRIGGER t3 AFTER UPDATE ON :chunk REFERENCING NEW TABLE AS new_trans OLD TABLE AS old_trans FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER t4 AFTER DELETE ON :chunk REFERENCING OLD TABLE AS old_trans FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER t5 AFTER INSERT ON transition_test REFERENCING NEW TABLE AS new_trans FOR EACH ROW EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER t6 AFTER UPDATE ON transition_test REFERENCING NEW TABLE AS new_trans OLD TABLE AS old_trans FOR EACH ROW EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER t7 AFTER DELETE ON transition_test REFERENCING OLD TABLE AS old_trans FOR EACH ROW EXECUTE FUNCTION test_trigger();
+
+-- Test insert blocker trigger does not crash when called directly
+SELECT _timescaledb_functions.insert_blocker();
+
 \set ON_ERROR_STOP 1
-
-

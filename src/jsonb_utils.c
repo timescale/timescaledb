@@ -4,18 +4,15 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <fmgr.h>
 
+#include <common/jsonapi.h>
+#include <fmgr.h>
 #include <utils/builtins.h>
 #include <utils/json.h>
 #include <utils/jsonb.h>
 
 #include "compat/compat.h"
-
-#include <common/jsonapi.h>
-
 #include "export.h"
-
 #include "jsonb_utils.h"
 
 static void ts_jsonb_add_pair(JsonbParseState *state, JsonbValue *key, JsonbValue *value);
@@ -57,41 +54,75 @@ ts_jsonb_add_str(JsonbParseState *state, const char *key, const char *value)
 	ts_jsonb_add_value(state, key, &json_value);
 }
 
+static PGFunction
+get_convert_func(Oid typeid)
+{
+	switch (typeid)
+	{
+		case INT2OID:
+			return int2_numeric;
+		case INT4OID:
+			return int4_numeric;
+		case INT8OID:
+			return int8_numeric;
+		default:
+			return NULL;
+	}
+}
+
+void
+ts_jsonb_set_value_by_type(JsonbValue *value, Oid typeid, Datum datum)
+{
+	switch (typeid)
+	{
+		Oid typeOut;
+		bool isvarlena;
+		char *str;
+		PGFunction func;
+
+		case INT2OID:
+		case INT4OID:
+		case INT8OID:
+		case NUMERICOID:
+			func = get_convert_func(typeid);
+			value->type = jbvNumeric;
+			value->val.numeric = DatumGetNumeric(func ? DirectFunctionCall1(func, datum) : datum);
+			break;
+
+		default:
+			getTypeOutputInfo(typeid, &typeOut, &isvarlena);
+			str = OidOutputFunctionCall(typeOut, datum);
+			value->type = jbvString;
+			value->val.string.val = str;
+			value->val.string.len = strlen(str);
+			break;
+	}
+}
+
 void
 ts_jsonb_add_int32(JsonbParseState *state, const char *key, const int32 int_value)
 {
-	Numeric value;
+	JsonbValue json_value;
 
-	value = DatumGetNumeric(DirectFunctionCall1(int4_numeric, Int32GetDatum(int_value)));
-
-	ts_jsonb_add_numeric(state, key, value);
+	ts_jsonb_set_value_by_type(&json_value, INT4OID, Int32GetDatum(int_value));
+	ts_jsonb_add_value(state, key, &json_value);
 }
 
 void
 ts_jsonb_add_int64(JsonbParseState *state, const char *key, const int64 int_value)
 {
-	Numeric value;
+	JsonbValue json_value;
 
-	value = DatumGetNumeric(DirectFunctionCall1(int8_numeric, Int64GetDatum(int_value)));
-
-	ts_jsonb_add_numeric(state, key, value);
+	ts_jsonb_set_value_by_type(&json_value, INT8OID, Int64GetDatum(int_value));
+	ts_jsonb_add_value(state, key, &json_value);
 }
 
 void
 ts_jsonb_add_interval(JsonbParseState *state, const char *key, Interval *interval)
 {
-	char *value;
+	JsonbValue json_value;
 
-	value = DatumGetCString(DirectFunctionCall1(interval_out, IntervalPGetDatum(interval)));
-
-	ts_jsonb_add_str(state, key, value);
-}
-
-void
-ts_jsonb_add_numeric(JsonbParseState *state, const char *key, const Numeric value)
-{
-	JsonbValue json_value = { .type = jbvNumeric, .val.numeric = value };
-
+	ts_jsonb_set_value_by_type(&json_value, INTERVALOID, IntervalPGetDatum(interval));
 	ts_jsonb_add_value(state, key, &json_value);
 }
 
@@ -144,27 +175,6 @@ ts_jsonb_get_str_field(const Jsonb *jsonb, const char *key)
 		return NULL;
 
 	return text_to_cstring(DatumGetTextP(result));
-}
-
-TimestampTz
-ts_jsonb_get_time_field(const Jsonb *jsonb, const char *key, bool *field_found)
-{
-	Datum time_datum;
-	char *time_str = ts_jsonb_get_str_field(jsonb, key);
-
-	if (time_str == NULL)
-	{
-		*field_found = false;
-		return DT_NOBEGIN;
-	}
-
-	time_datum = DirectFunctionCall3(timestamptz_in,
-									 /* str= */ CStringGetDatum(time_str),
-									 /* unused */ Int32GetDatum(-1),
-									 /* typmod= */ Int32GetDatum(-1));
-
-	*field_found = true;
-	return DatumGetTimestampTz(time_datum);
 }
 
 bool

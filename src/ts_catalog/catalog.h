@@ -6,10 +6,10 @@
 #pragma once
 
 #include <postgres.h>
+#include <access/heapam.h>
+#include <nodes/nodes.h>
 #include <utils/jsonb.h>
 #include <utils/rel.h>
-#include <nodes/nodes.h>
-#include <access/heapam.h>
 
 #include "export.h"
 #include "extension_constants.h"
@@ -41,6 +41,7 @@ typedef enum CatalogTable
 	TABLESPACE,
 	BGW_JOB,
 	BGW_JOB_STAT,
+	BGW_JOB_STAT_HISTORY,
 	METADATA,
 	BGW_POLICY_CHUNK_STATS,
 	CONTINUOUS_AGG,
@@ -50,9 +51,9 @@ typedef enum CatalogTable
 	COMPRESSION_SETTINGS,
 	COMPRESSION_CHUNK_SIZE,
 	CONTINUOUS_AGGS_BUCKET_FUNCTION,
-	JOB_ERRORS,
 	CONTINUOUS_AGGS_WATERMARK,
 	TELEMETRY_EVENT,
+	CHUNK_COLUMN_STATS,
 	/* Don't forget updating catalog.c when adding new tables! */
 	_MAX_CATALOG_TABLES,
 } CatalogTable;
@@ -288,6 +289,69 @@ enum
 	DIMENSION_SLICE_ID_IDX = 0,
 	DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
 	_MAX_DIMENSION_SLICE_INDEX,
+};
+
+/******************************
+ *
+ * Dimension range table definitions
+ *
+ ******************************/
+
+#define CHUNK_COLUMN_STATS_TABLE_NAME "chunk_column_stats"
+
+enum Anum_chunk_column_stats
+{
+	Anum_chunk_column_stats_id = 1,
+	Anum_chunk_column_stats_hypertable_id,
+	Anum_chunk_column_stats_chunk_id,
+	Anum_chunk_column_stats_column_name,
+	Anum_chunk_column_stats_range_start,
+	Anum_chunk_column_stats_range_end,
+	Anum_chunk_column_stats_valid,
+	_Anum_chunk_column_stats_max,
+};
+
+#define Natts_chunk_column_stats (_Anum_chunk_column_stats_max - 1)
+
+typedef struct FormData_chunk_column_stats
+{
+	int32 id;
+	int32 hypertable_id;
+	int32 chunk_id;
+	NameData column_name;
+	int64 range_start;
+	int64 range_end;
+	bool valid;
+} FormData_chunk_column_stats;
+
+typedef FormData_chunk_column_stats *Form_chunk_column_stats;
+
+enum Anum_chunk_column_stats_id_idx
+{
+	Anum_chunk_column_stats_id_idx_id = 1,
+	_Anum_chunk_column_stats_id_idx_max,
+};
+
+#define Natts_chunk_column_stats_id_idx (_Anum_chunk_column_stats_id_idx_max - 1)
+
+enum Anum_chunk_column_stats_ht_id_chunk_id_column_name_range_start_range_end_idx
+{
+	Anum_chunk_column_stats_ht_id_chunk_id_column_name_range_start_range_end_idx_hypertable_id = 1,
+	Anum_chunk_column_stats_ht_id_chunk_id_column_name_range_start_range_end_idx_chunk_id,
+	Anum_chunk_column_stats_ht_id_chunk_id_column_name_range_start_range_end_idx_column_name,
+	Anum_chunk_column_stats_ht_id_chunk_id_column_name_range_start_range_end_idx_range_start,
+	Anum_chunk_column_stats_ht_id_chunk_id_column_name_range_start_range_end_idx_range_end,
+	_Anum_chunk_column_stats_ht_id_chunk_id_column_name_range_start_range_end_idx_max,
+};
+
+#define Natts_chunk_column_stats_ht_id_chunk_id_column_name_range_start_range_end_idx              \
+	(_Anum_chunk_column_stats_ht_id_chunk_id_column_name_range_start_range_end_idx_max - 1)
+
+enum
+{
+	CHUNK_COLUMN_STATS_ID_IDX = 0,
+	CHUNK_COLUMN_STATS_HT_ID_CHUNK_ID_COLUMN_NAME_IDX,
+	_MAX_CHUNK_COLUMN_STATS_INDEX,
 };
 
 /*************************
@@ -678,6 +742,49 @@ enum Anum_bgw_job_stat_pkey_idx
 
 #define Natts_bjw_job_stat_pkey_idx (_Anum_bgw_job_stat_pkey_idx_max - 1)
 
+#define BGW_JOB_STAT_HISTORY_TABLE_NAME "bgw_job_stat_history"
+
+enum Anum_bgw_job_stat_history
+{
+	Anum_bgw_job_stat_history_id = 1,
+	Anum_bgw_job_stat_history_job_id,
+	Anum_bgw_job_stat_history_pid,
+	Anum_bgw_job_stat_history_execution_start,
+	Anum_bgw_job_stat_history_execution_finish,
+	Anum_bgw_job_stat_history_succeeded,
+	Anum_bgw_job_stat_history_data,
+	_Anum_bgw_job_stat_history_max,
+};
+
+#define Natts_bgw_job_stat_history (_Anum_bgw_job_stat_history_max - 1)
+
+typedef struct FormData_bgw_job_stat_history
+{
+	int64 id;
+	int32 job_id;
+	int32 pid;
+	TimestampTz execution_start;
+	TimestampTz execution_finish;
+	bool succeeded;
+	Jsonb *data;
+} FormData_bgw_job_stat_history;
+
+typedef FormData_bgw_job_stat_history *Form_bgw_job_stat_history;
+
+enum
+{
+	BGW_JOB_STAT_HISTORY_PKEY_IDX = 0,
+	_MAX_BGW_JOB_STAT_HISTORY_INDEX,
+};
+
+enum Anum_bgw_job_stat_history_pkey_idx
+{
+	Anum_bgw_job_stat_history_pkey_idx_id = 1,
+	_Anum_bgw_job_stat_history_pkey_idx_max,
+};
+
+#define Natts_bjw_job_stat_history_pkey_idx (_Anum_bgw_job_stat_history_pkey_idx_max - 1)
+
 /******************************
  *
  * metadata table definitions
@@ -793,7 +900,6 @@ typedef enum Anum_continuous_agg
 	Anum_continuous_agg_user_view_name,
 	Anum_continuous_agg_partial_view_schema,
 	Anum_continuous_agg_partial_view_name,
-	Anum_continuous_agg_bucket_width,
 	Anum_continuous_agg_direct_view_schema,
 	Anum_continuous_agg_direct_view_name,
 	Anum_continuous_agg_materialize_only,
@@ -812,18 +918,6 @@ typedef struct FormData_continuous_agg
 	NameData user_view_name;
 	NameData partial_view_schema;
 	NameData partial_view_name;
-	/*
-	 * bucket_width is BUCKET_WIDTH_VARIABLE (see continuous_agg.h) for buckets
-	 * with variable size - monthly buckets, buckets with timezone, etc. For such
-	 * buckets the information about the bucketing function is stored in
-	 * _timescaledb_catalog.continuous_aggs_bucket_function.
-	 *
-	 * When possible, don't access bucket_width directly. Use corresponding
-	 * procedures instead, such as:
-	 * - ts_continuous_agg_bucket_width_variable
-	 * - ts_continuous_agg_bucket_width
-	 */
-	int64 bucket_width;
 	NameData direct_view_schema;
 	NameData direct_view_name;
 	bool materialized_only;
@@ -1199,31 +1293,6 @@ typedef struct CatalogSecurityContext
 	int saved_security_context;
 } CatalogSecurityContext;
 
-#define JOB_ERRORS_TABLE_NAME "job_errors"
-
-enum Anum_job_error
-{
-	Anum_job_error_job_id = 1,
-	Anum_job_error_pid,
-	Anum_job_error_start_time,
-	Anum_job_error_finish_time,
-	Anum_job_error_error_data,
-	_Anum_job_error_max,
-};
-
-#define Natts_job_error (_Anum_job_error_max - 1)
-
-typedef struct FormData_job_error
-{
-	int32 job_id;
-	int32 pid;
-	TimestampTz start_time;
-	TimestampTz finish_time;
-	Jsonb *error_data;
-} FormData_job_error;
-
-typedef FormData_job_error *Form_job_error;
-
 #define HYPERTABLE_STATUS_DEFAULT 0
 /* flag set when hypertable has an attached OSM chunk */
 #define HYPERTABLE_STATUS_OSM 1
@@ -1279,14 +1348,14 @@ extern TSDLLEXPORT void ts_catalog_insert_only(Relation rel, HeapTuple tuple);
 extern TSDLLEXPORT void ts_catalog_insert(Relation rel, HeapTuple tuple);
 extern TSDLLEXPORT void ts_catalog_insert_values(Relation rel, TupleDesc tupdesc, Datum *values,
 												 bool *nulls);
+extern TSDLLEXPORT void ts_catalog_insert_datums(Relation rel, TupleDesc tupdesc,
+												 NullableDatum *datums);
 extern TSDLLEXPORT void ts_catalog_update_tid_only(Relation rel, ItemPointer tid, HeapTuple tuple);
 extern TSDLLEXPORT void ts_catalog_update_tid(Relation rel, ItemPointer tid, HeapTuple tuple);
 extern TSDLLEXPORT void ts_catalog_update(Relation rel, HeapTuple tuple);
 extern TSDLLEXPORT void ts_catalog_delete_tid_only(Relation rel, ItemPointer tid);
 extern TSDLLEXPORT void ts_catalog_delete_tid(Relation rel, ItemPointer tid);
 extern TSDLLEXPORT void ts_catalog_invalidate_cache(Oid catalog_relid, CmdType operation);
-extern TSDLLEXPORT ResultRelInfo *ts_catalog_open_indexes(Relation heapRel);
-extern TSDLLEXPORT void ts_catalog_close_indexes(ResultRelInfo *indstate);
 extern TSDLLEXPORT void ts_catalog_index_insert(ResultRelInfo *indstate, HeapTuple heapTuple);
 
 bool TSDLLEXPORT ts_catalog_scan_one(CatalogTable table, int indexid, ScanKeyData *scankey,

@@ -35,13 +35,27 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.create_compressed_chunk(
 CREATE OR REPLACE FUNCTION @extschema@.compress_chunk(
     uncompressed_chunk REGCLASS,
     if_not_compressed BOOLEAN = true,
-    recompress BOOLEAN = false
-) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_compress_chunk' LANGUAGE C STRICT VOLATILE;
+    recompress BOOLEAN = false,
+    hypercore_use_access_method BOOL = NULL
+) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_compress_chunk' LANGUAGE C VOLATILE;
+
+-- Alias for compress_chunk above.
+CREATE OR REPLACE PROCEDURE @extschema@.convert_to_columnstore(
+    chunk REGCLASS,
+    if_not_columnstore BOOLEAN = true,
+    recompress BOOLEAN = false,
+    hypercore_use_access_method BOOL = NULL
+) AS '@MODULE_PATHNAME@', 'ts_compress_chunk' LANGUAGE C;
 
 CREATE OR REPLACE FUNCTION @extschema@.decompress_chunk(
     uncompressed_chunk REGCLASS,
     if_compressed BOOLEAN = true
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_decompress_chunk' LANGUAGE C STRICT VOLATILE;
+
+CREATE OR REPLACE PROCEDURE @extschema@.convert_to_rowstore(
+    chunk REGCLASS,
+    if_columnstore BOOLEAN = true
+) AS '@MODULE_PATHNAME@', 'ts_decompress_chunk' LANGUAGE C;
 
 CREATE OR REPLACE FUNCTION _timescaledb_functions.recompress_chunk_segmentwise(
     uncompressed_chunk REGCLASS,
@@ -138,16 +152,25 @@ BEGIN
   LOOP
     _removed := _removed + 1;
     RAISE INFO 'Removing metadata of chunk % from hypertable %', _chunk_id, _hypertable_id;
+
     WITH _dimension_slice_remove AS (
         DELETE FROM _timescaledb_catalog.dimension_slice
         USING _timescaledb_catalog.chunk_constraint
         WHERE dimension_slice.id = chunk_constraint.dimension_slice_id
         AND chunk_constraint.chunk_id = _chunk_id
+        AND NOT EXISTS (
+            SELECT FROM _timescaledb_catalog.chunk_constraint cc
+            WHERE cc.chunk_id <> _chunk_id
+            AND cc.dimension_slice_id = dimension_slice.id
+        )
         RETURNING _timescaledb_catalog.dimension_slice.id
     )
     DELETE FROM _timescaledb_catalog.chunk_constraint
     USING _dimension_slice_remove
     WHERE chunk_constraint.dimension_slice_id = _dimension_slice_remove.id;
+
+    DELETE FROM _timescaledb_catalog.chunk_constraint
+    WHERE chunk_constraint.chunk_id = _chunk_id;
 
     DELETE FROM _timescaledb_internal.bgw_policy_chunk_stats
     WHERE bgw_policy_chunk_stats.chunk_id = _chunk_id;

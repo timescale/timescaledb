@@ -9,7 +9,7 @@ SELECT table_name FROM create_hypertable('compress_unique','offset_timestamp');
 (1 row)
 
 CREATE UNIQUE INDEX uniq_expr ON compress_unique USING btree (lower((meter_id)::text), meter_channel_id, offset_timestamp, "timestamp");
-ALTER TABLE compress_unique SET (timescaledb.compress,timescaledb.compress_segmentby='meter_id,meter_channel_id');
+ALTER TABLE compress_unique SET (timescaledb.compress,timescaledb.compress_segmentby='meter_id,meter_channel_id', timescaledb.compress_orderby='offset_timestamp desc');
 WARNING:  column "timestamp" should be used for segmenting or ordering
 INSERT INTO compress_unique VALUES ('2000-01-01','m1','c1','2000-01-01');
 INSERT INTO compress_unique VALUES ('2000-01-01','m1','c2','2000-01-01');
@@ -27,12 +27,11 @@ ERROR:  duplicate key value violates unique constraint "_hyper_X_X_chunk_uniq_ex
 EXPLAIN (analyze,costs off,summary off,timing off) INSERT INTO compress_unique VALUES ('2000-01-01','m1','c2','2000-01-02');
 QUERY PLAN
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
-   Batches decompressed: 1
-   Tuples decompressed: 1
+   Batches filtered: 1
    ->  Insert on compress_unique (actual rows=0 loops=1)
          ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
                ->  Result (actual rows=1 loops=1)
-(6 rows)
+(5 rows)
 
 -- should decompress no batches
 EXPLAIN (analyze,costs off,summary off,timing off) INSERT INTO compress_unique VALUES ('2000-01-01','m1','c3','2000-01-02');

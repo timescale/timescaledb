@@ -4,9 +4,9 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
-#include <math.h>
 #include <postgres.h>
 #include <catalog/pg_operator.h>
+#include <math.h>
 #include <miscadmin.h>
 #include <nodes/bitmapset.h>
 #include <nodes/makefuncs.h>
@@ -25,19 +25,18 @@
 #include <planner.h>
 
 #include "compat/compat.h"
+#include "compression/compression.h"
+#include "compression/create.h"
+#include "cross_module_fn.h"
 #include "custom_type_cache.h"
 #include "debug_assert.h"
-#include "ts_catalog/array_utils.h"
-#include "import/planner.h"
 #include "import/allpaths.h"
-#include "compression/create.h"
-#include "compression/compression.h"
+#include "import/planner.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/decompress_chunk/qual_pushdown.h"
+#include "ts_catalog/array_utils.h"
 #include "utils.h"
-
-#define DECOMPRESS_CHUNK_BATCH_SIZE 1000
 
 static CustomPathMethods decompress_chunk_path_methods = {
 	.CustomName = "DecompressChunk",
@@ -47,6 +46,7 @@ static CustomPathMethods decompress_chunk_path_methods = {
 typedef struct SortInfo
 {
 	List *required_compressed_pathkeys;
+	List *required_eq_classes;
 	bool needs_sequence_num;
 	bool can_pushdown_sort; /* sort can be pushed below DecompressChunk */
 	bool reverse;
@@ -68,10 +68,11 @@ static DecompressChunkPath *decompress_chunk_path_create(PlannerInfo *root, Comp
 														 int parallel_workers,
 														 Path *compressed_path);
 
-static void decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk *chunk,
-											 RelOptInfo *chunk_rel, bool needs_sequence_num);
+static void decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info,
+											 const Chunk *chunk, RelOptInfo *chunk_rel,
+											 bool needs_sequence_num);
 
-static SortInfo build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info,
+static SortInfo build_sortinfo(const Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info,
 							   List *pathkeys);
 
 static bool
@@ -140,11 +141,49 @@ append_ec_for_seqnum(PlannerInfo *root, CompressionInfo *info, SortInfo *sort_in
 	newec->ec_max_security = 0;
 	newec->ec_merged = NULL;
 
+	info->compressed_rel->eclass_indexes =
+		bms_add_member(info->compressed_rel->eclass_indexes, list_length(root->eq_classes));
 	root->eq_classes = lappend(root->eq_classes, newec);
 
 	MemoryContextSwitchTo(oldcontext);
 
 	return newec;
+}
+
+static EquivalenceClass *
+append_ec_for_metadata_col(PlannerInfo *root, CompressionInfo *info, Var *var, PathKey *pk)
+{
+	MemoryContext oldcontext = MemoryContextSwitchTo(root->planner_cxt);
+	EquivalenceMember *em = makeNode(EquivalenceMember);
+
+	em->em_expr = (Expr *) var;
+	em->em_relids = bms_make_singleton(info->compressed_rel->relid);
+	em->em_is_const = false;
+	em->em_is_child = false;
+	em->em_datatype = var->vartype;
+	EquivalenceClass *ec = makeNode(EquivalenceClass);
+	ec->ec_opfamilies = pk->pk_eclass->ec_opfamilies;
+	ec->ec_collation = pk->pk_eclass->ec_collation;
+	ec->ec_members = list_make1(em);
+	ec->ec_sources = list_copy(pk->pk_eclass->ec_sources);
+	ec->ec_derives = list_copy(pk->pk_eclass->ec_derives);
+	ec->ec_relids = bms_make_singleton(info->compressed_rel->relid);
+	ec->ec_has_const = pk->pk_eclass->ec_has_const;
+	ec->ec_has_volatile = pk->pk_eclass->ec_has_volatile;
+#if PG16_LT
+	ec->ec_below_outer_join = pk->pk_eclass->ec_below_outer_join;
+#endif
+	ec->ec_broken = pk->pk_eclass->ec_broken;
+	ec->ec_sortref = pk->pk_eclass->ec_sortref;
+	ec->ec_min_security = pk->pk_eclass->ec_min_security;
+	ec->ec_max_security = pk->pk_eclass->ec_max_security;
+	ec->ec_merged = pk->pk_eclass->ec_merged;
+	root->eq_classes = lappend(root->eq_classes, ec);
+	MemoryContextSwitchTo(oldcontext);
+	info->compressed_rel->eclass_indexes =
+		bms_add_member(info->compressed_rel->eclass_indexes, root->eq_classes->length - 1);
+
+	return ec;
 }
 
 static void
@@ -154,6 +193,7 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 	Var *var;
 	int varattno;
 	List *required_compressed_pathkeys = NIL;
+	ListCell *lc = NULL;
 	PathKey *pk;
 
 	/*
@@ -171,11 +211,7 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 		 * seen from the start, so that we arrive at the proper counts of seen
 		 * segmentby columns in the end.
 		 */
-		Bitmapset *segmentby_columns = bms_copy(info->chunk_const_segmentby);
-		ListCell *lc;
-		for (lc = list_head(chunk_pathkeys);
-			 lc != NULL && bms_num_members(segmentby_columns) < info->num_segmentby_columns;
-			 lc = lnext(chunk_pathkeys, lc))
+		for (lc = list_head(chunk_pathkeys); lc; lc = lnext(chunk_pathkeys, lc))
 		{
 			PathKey *pk = lfirst(lc);
 			EquivalenceMember *compressed_em = NULL;
@@ -196,21 +232,11 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 			 * already refers a compressed column, it is a bug. See
 			 * build_sortinfo().
 			 */
-			Assert(compressed_em != NULL);
+			if (!compressed_em)
+				break;
 
 			required_compressed_pathkeys = lappend(required_compressed_pathkeys, pk);
-
-			segmentby_columns =
-				bms_add_member(segmentby_columns, castNode(Var, compressed_em->em_expr)->varattno);
 		}
-
-		/*
-		 * Either we sort by all segmentby columns, or by subset of them and
-		 * nothing else. We verified this condition in build_sortinfo(), so only
-		 * asserting here.
-		 */
-		Assert(bms_num_members(segmentby_columns) == info->num_segmentby_columns ||
-			   list_length(required_compressed_pathkeys) == list_length(chunk_pathkeys));
 	}
 
 	/*
@@ -219,44 +245,118 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 	 */
 	if (sort_info->needs_sequence_num)
 	{
-		bool nulls_first;
-		Oid sortop;
-		varattno =
-			get_attnum(info->compressed_rte->relid, COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
-		var = makeVar(info->compressed_rel->relid, varattno, INT4OID, -1, InvalidOid, 0);
-
-		if (sort_info->reverse)
+		/* TODO: split up legacy sequence number path and non-sequence number path into dedicated
+		 * functions. */
+		if (info->has_seq_num)
 		{
-			sortop = get_commutator(Int4LessOperator);
-			nulls_first = true;
+			bool nulls_first;
+			Oid sortop;
+			varattno = get_attnum(info->compressed_rte->relid,
+								  COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
+			var = makeVar(info->compressed_rel->relid, varattno, INT4OID, -1, InvalidOid, 0);
+
+			if (sort_info->reverse)
+			{
+				sortop = get_commutator(Int4LessOperator);
+				nulls_first = true;
+			}
+			else
+			{
+				sortop = Int4LessOperator;
+				nulls_first = false;
+			}
+
+			/*
+			 * Create the EquivalenceClass for the sequence number column of this
+			 * compressed chunk, so that we can build the PathKey that refers to it.
+			 */
+			EquivalenceClass *ec =
+				append_ec_for_seqnum(root, info, sort_info, var, sortop, nulls_first);
+
+			/* Find the operator in pg_amop --- failure shouldn't happen. */
+			Oid opfamily, opcintype;
+			int16 strategy;
+			if (!get_ordering_op_properties(sortop, &opfamily, &opcintype, &strategy))
+				elog(ERROR, "operator %u is not a valid ordering operator", sortop);
+
+			pk = make_canonical_pathkey(root, ec, opfamily, strategy, nulls_first);
+
+			required_compressed_pathkeys = lappend(required_compressed_pathkeys, pk);
 		}
 		else
 		{
-			sortop = Int4LessOperator;
-			nulls_first = false;
+			/* If there are no segmentby pathkeys, start from the beginning of the list */
+			if (info->num_segmentby_columns == 0)
+			{
+				lc = list_head(chunk_pathkeys);
+			}
+			Assert(lc != NULL);
+			Expr *expr;
+			char *column_name;
+			for (; lc != NULL; lc = lnext(chunk_pathkeys, lc))
+			{
+				pk = lfirst(lc);
+				expr = find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
+
+				Assert(expr != NULL && IsA(expr, Var));
+				var = castNode(Var, expr);
+				Assert(var->varattno > 0);
+
+				column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
+				int16 orderby_index = ts_array_position(info->settings->fd.orderby, column_name);
+				varattno =
+					get_attnum(info->compressed_rte->relid, column_segment_min_name(orderby_index));
+				Assert(orderby_index != 0);
+				bool orderby_desc =
+					ts_array_get_element_bool(info->settings->fd.orderby_desc, orderby_index);
+				bool orderby_nullsfirst =
+					ts_array_get_element_bool(info->settings->fd.orderby_nullsfirst, orderby_index);
+
+				bool nulls_first;
+				int16 strategy;
+
+				if (sort_info->reverse)
+				{
+					strategy = orderby_desc ? BTLessStrategyNumber : BTGreaterStrategyNumber;
+					nulls_first = !orderby_nullsfirst;
+				}
+				else
+				{
+					strategy = orderby_desc ? BTGreaterStrategyNumber : BTLessStrategyNumber;
+					nulls_first = orderby_nullsfirst;
+				}
+
+				var = makeVar(info->compressed_rel->relid,
+							  varattno,
+							  var->vartype,
+							  var->vartypmod,
+							  var->varcollid,
+							  var->varlevelsup);
+				EquivalenceClass *min_ec = append_ec_for_metadata_col(root, info, var, pk);
+				PathKey *min =
+					make_canonical_pathkey(root, min_ec, pk->pk_opfamily, strategy, nulls_first);
+				required_compressed_pathkeys = lappend(required_compressed_pathkeys, min);
+
+				varattno =
+					get_attnum(info->compressed_rte->relid, column_segment_max_name(orderby_index));
+				var = makeVar(info->compressed_rel->relid,
+							  varattno,
+							  var->vartype,
+							  var->vartypmod,
+							  var->varcollid,
+							  var->varlevelsup);
+				EquivalenceClass *max_ec = append_ec_for_metadata_col(root, info, var, pk);
+				PathKey *max =
+					make_canonical_pathkey(root, max_ec, pk->pk_opfamily, strategy, nulls_first);
+
+				required_compressed_pathkeys = lappend(required_compressed_pathkeys, max);
+			}
 		}
-
-		/*
-		 * Create the EquivalenceClass for the sequence number column of this
-		 * compressed chunk, so that we can build the PathKey that refers to it.
-		 */
-		EquivalenceClass *ec =
-			append_ec_for_seqnum(root, info, sort_info, var, sortop, nulls_first);
-
-		/* Find the operator in pg_amop --- failure shouldn't happen. */
-		Oid opfamily, opcintype;
-		int16 strategy;
-		if (!get_ordering_op_properties(sortop, &opfamily, &opcintype, &strategy))
-			elog(ERROR, "operator %u is not a valid ordering operator", sortop);
-
-		pk = make_canonical_pathkey(root, ec, opfamily, strategy, nulls_first);
-
-		required_compressed_pathkeys = lappend(required_compressed_pathkeys, pk);
 	}
 	sort_info->required_compressed_pathkeys = required_compressed_pathkeys;
 }
 
-static DecompressChunkPath *
+DecompressChunkPath *
 copy_decompress_chunk_path(DecompressChunkPath *src)
 {
 	DecompressChunkPath *dst = palloc(sizeof(DecompressChunkPath));
@@ -266,7 +366,8 @@ copy_decompress_chunk_path(DecompressChunkPath *src)
 }
 
 static CompressionInfo *
-build_compressioninfo(PlannerInfo *root, Hypertable *ht, Chunk *chunk, RelOptInfo *chunk_rel)
+build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chunk,
+					  RelOptInfo *chunk_rel)
 {
 	AppendRelInfo *appinfo;
 	CompressionInfo *info = palloc0(sizeof(CompressionInfo));
@@ -312,6 +413,10 @@ build_compressioninfo(PlannerInfo *root, Hypertable *ht, Chunk *chunk, RelOptInf
 		}
 	}
 
+	info->has_seq_num =
+		get_attnum(info->settings->fd.relid, COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME) !=
+		InvalidAttrNumber;
+
 	return info;
 }
 
@@ -347,7 +452,16 @@ static double
 smoothstep(double x, double start, double end)
 {
 	x = (x - start) / (end - start);
-	x = x < 0 ? 0 : x > 1 ? 1 : x;
+
+	if (x < 0)
+	{
+		x = 0;
+	}
+	else if (x > 1)
+	{
+		x = 1;
+	}
+
 	return x * x * (3.0F - 2.0F * x);
 }
 
@@ -404,11 +518,8 @@ cost_batch_sorted_merge(PlannerInfo *root, CompressionInfo *compression_info,
 					  .varattno = compressed_attno };
 		segmentby_groupexprs = lappend(segmentby_groupexprs, var);
 	}
-	const double open_batches_estimated = estimate_num_groups_compat(root,
-																	 segmentby_groupexprs,
-																	 dcpath->custom_path.path.rows,
-																	 NULL,
-																	 NULL);
+	const double open_batches_estimated =
+		estimate_num_groups(root, segmentby_groupexprs, dcpath->custom_path.path.rows, NULL, NULL);
 	Assert(open_batches_estimated > 0);
 
 	/*
@@ -429,8 +540,8 @@ cost_batch_sorted_merge(PlannerInfo *root, CompressionInfo *compression_info,
 	 * we often read a small subset of columns in analytical queries. The
 	 * compressed chunk is never projected so we can't use it for that.
 	 */
-	const double work_mem_bytes = work_mem * (double) 1024.0;
-	const double needed_memory_bytes = open_batches_clamped * DECOMPRESS_CHUNK_BATCH_SIZE *
+	const double work_mem_bytes = work_mem * 1024.0;
+	const double needed_memory_bytes = open_batches_clamped * TARGET_COMPRESSED_BATCH_SIZE *
 									   dcpath->custom_path.path.pathtarget->width;
 
 	/*
@@ -452,7 +563,7 @@ cost_batch_sorted_merge(PlannerInfo *root, CompressionInfo *compression_info,
 	 */
 	const double sort_path_cost_for_startup =
 		sort_path.startup_cost +
-		(sort_path.total_cost - sort_path.startup_cost) * (open_batches_clamped / sort_path.rows);
+		((sort_path.total_cost - sort_path.startup_cost) * (open_batches_clamped / sort_path.rows));
 	Assert(sort_path_cost_for_startup >= 0);
 	dcpath->custom_path.path.startup_cost = sort_path_cost_for_startup + work_mem_penalty;
 
@@ -534,7 +645,7 @@ cost_batch_sorted_merge(PlannerInfo *root, CompressionInfo *compression_info,
  * compatible and the optimization can be used.
  */
 static MergeBatchResult
-can_batch_sorted_merge(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
+can_batch_sorted_merge(PlannerInfo *root, CompressionInfo *info, const Chunk *chunk)
 {
 	PathKey *pk;
 	Var *var;
@@ -644,8 +755,8 @@ can_batch_sorted_merge(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
  * To save planning time, we therefore refrain from adding them.
  */
 static void
-add_chunk_sorted_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hypertable *ht, Index ht_relid,
-					   Path *path, Path *compressed_path)
+add_chunk_sorted_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const Hypertable *ht,
+					   Index ht_relid, Path *path, Path *compressed_path)
 {
 	if (root->query_pathkeys == NIL)
 		return;
@@ -702,13 +813,40 @@ add_chunk_sorted_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hypertable *ht,
 	}
 }
 
+#define IS_UPDL_CMD(parse)                                                                         \
+	((parse)->commandType == CMD_UPDATE || (parse)->commandType == CMD_DELETE)
 void
-ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hypertable *ht,
-								   Chunk *chunk)
+ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const Hypertable *ht,
+								   const Chunk *chunk)
 {
 	RelOptInfo *compressed_rel;
 	ListCell *lc;
 	Index ht_relid = 0;
+	PlannerInfo *proot;
+	bool consider_partial = ts_chunk_is_partial(chunk);
+
+	/*
+	 * For UPDATE/DELETE commands, the executor decompresses and brings the rows into
+	 * the uncompressed chunk. Therefore, it's necessary to add the scan on the
+	 * uncompressed portion.
+	 */
+	if (ts_chunk_is_compressed(chunk) && ts_cm_functions->decompress_target_segments &&
+		!consider_partial)
+	{
+		for (proot = root->parent_root; proot != NULL && !consider_partial;
+			 proot = proot->parent_root)
+		{
+			/*
+			 * We could additionally check and compare that the relation involved in the subquery
+			 * and the DML target relation are one and the same. But these kinds of queries
+			 * should be rare.
+			 */
+			if (IS_UPDL_CMD(proot->parse))
+			{
+				consider_partial = true;
+			}
+		}
+	}
 
 	CompressionInfo *compression_info = build_compressioninfo(root, ht, chunk, chunk_rel);
 
@@ -736,11 +874,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 
 	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
 	/* translate chunk_rel->baserestrictinfo */
-	pushdown_quals(root,
-				   compression_info->settings,
-				   chunk_rel,
-				   compressed_rel,
-				   ts_chunk_is_partial(chunk));
+	pushdown_quals(root, compression_info->settings, chunk_rel, compressed_rel, consider_partial);
 
 	set_baserel_size_estimates(root, compressed_rel);
 	const double new_tuples_estimate = compressed_rel->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
@@ -892,7 +1026,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				 * to a merge append path when we are able to generate the ordered result for the
 				 * compressed and uncompressed part of the chunk.
 				 */
-				if (!ts_chunk_is_partial(chunk))
+				if (!consider_partial)
 					add_path(chunk_rel, &batch_merge_path->custom_path.path);
 			}
 		}
@@ -941,7 +1075,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 		 * If this is a partially compressed chunk we have to combine data
 		 * from compressed and uncompressed chunk.
 		 */
-		if (ts_chunk_is_partial(chunk))
+		if (consider_partial)
 		{
 			Bitmapset *req_outer = PATH_REQ_OUTER(chunk_path);
 			Path *uncompressed_path =
@@ -966,15 +1100,31 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 			 */
 			if (batch_merge_path != NULL)
 			{
-				chunk_path = (Path *) create_merge_append_path_compat(root,
-																	  chunk_rel,
-																	  list_make2(batch_merge_path,
-																				 uncompressed_path),
-																	  root->query_pathkeys,
-																	  req_outer,
-																	  NIL);
+				chunk_path = (Path *) create_merge_append_path(root,
+															   chunk_rel,
+															   list_make2(batch_merge_path,
+																		  uncompressed_path),
+															   root->query_pathkeys,
+															   req_outer);
 			}
 			else
+			{
+				/* Check all pathkey components can be satisfied by current chunk */
+				List *pathkeys = NIL;
+				ListCell *lc;
+				foreach (lc, root->query_pathkeys)
+				{
+					PathKey *pathkey = (PathKey *) lfirst(lc);
+					EquivalenceClass *pathkey_ec = pathkey->pk_eclass;
+
+					Expr *em_expr = find_em_expr_for_rel(pathkey_ec, chunk_rel);
+
+					/* No em expression found for our rel */
+					if (!em_expr)
+						break;
+
+					pathkeys = lappend(pathkeys, pathkey);
+				}
 				/*
 				 * Ideally, we would like for this to be a MergeAppend path.
 				 * However, accumulate_append_subpath will cut out MergeAppend
@@ -982,28 +1132,28 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				 * into a MergeAppend node later, at the chunk append level.
 				 */
 				chunk_path =
-					(Path *) create_append_path_compat(root,
-													   chunk_rel,
-													   list_make2(chunk_path, uncompressed_path),
-													   NIL /* partial paths */,
-													   root->query_pathkeys /* pathkeys */,
-													   req_outer,
-													   0,
-													   false,
-													   false,
-													   chunk_path->rows + uncompressed_path->rows);
+					(Path *) create_append_path(root,
+												chunk_rel,
+												list_make2(chunk_path, uncompressed_path),
+												NIL /* partial paths */,
+												pathkeys,
+												req_outer,
+												0,
+												false,
+												chunk_path->rows + uncompressed_path->rows);
+			}
 		}
 
 		/* Add useful sorted versions of the decompress path */
 		add_chunk_sorted_paths(root, chunk_rel, ht, ht_relid, chunk_path, compressed_path);
 
-		/* this has to go after the path is copied for the ordered path since path can get freed in
-		 * add_path */
+		/* this has to go after the path is copied for the ordered path since path can get freed
+		 * in add_path */
 		add_path(chunk_rel, chunk_path);
 	}
 
-	/* the chunk_rel now owns the paths, remove them from the compressed_rel so they can't be freed
-	 * if it's planned */
+	/* the chunk_rel now owns the paths, remove them from the compressed_rel so they can't be
+	 * freed if it's planned */
 	compressed_rel->pathlist = NIL;
 	/* create parallel paths */
 	if (compressed_rel->consider_parallel)
@@ -1027,7 +1177,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 														 compressed_path->parallel_workers,
 														 compressed_path);
 
-			if (ts_chunk_is_partial(chunk))
+			if (consider_partial)
 			{
 				Bitmapset *req_outer = PATH_REQ_OUTER(path);
 				Path *uncompressed_path = NULL;
@@ -1052,9 +1202,9 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 
 				/*
 				 * All children of an append path are required to have the same parameterization
-				 * so we reparameterize here when we couldn't get a path with the parameterization
-				 * we need. Reparameterization should always succeed here since uncompressed_path
-				 * should always be a scan.
+				 * so we reparameterize here when we couldn't get a path with the
+				 * parameterization we need. Reparameterization should always succeed here since
+				 * uncompressed_path should always be a scan.
 				 */
 				if (!bms_equal(req_outer, PATH_REQ_OUTER(uncompressed_path)))
 				{
@@ -1075,23 +1225,22 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 					path_list = list_make1(uncompressed_path);
 
 				/* Use a parallel aware append to handle non-partial paths properly */
-				path = (Path *) create_append_path_compat(root,
-														  chunk_rel,
-														  path_list,
-														  partial_path_list,
-														  NIL /* pathkeys */,
-														  req_outer,
-														  Max(path->parallel_workers,
-															  uncompressed_path->parallel_workers),
-														  true, /* parallel aware */
-														  NIL,
-														  path->rows + uncompressed_path->rows);
+				path = (Path *) create_append_path(root,
+												   chunk_rel,
+												   path_list,
+												   partial_path_list,
+												   NIL /* pathkeys */,
+												   req_outer,
+												   Max(path->parallel_workers,
+													   uncompressed_path->parallel_workers),
+												   true, /* parallel aware */
+												   path->rows + uncompressed_path->rows);
 			}
 
 			add_partial_path(chunk_rel, path);
 		}
-		/* the chunk_rel now owns the paths, remove them from the compressed_rel so they can't be
-		 * freed if it's planned */
+		/* the chunk_rel now owns the paths, remove them from the compressed_rel so they can't
+		 * be freed if it's planned */
 		compressed_rel->partial_pathlist = NIL;
 	}
 	/* Remove the compressed_rel from the simple_rel_array to prevent it from
@@ -1217,13 +1366,30 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 											COMPRESSION_COLUMN_METADATA_COUNT_NAME,
 											&attrs_used);
 
-	/* add the segment order column if we may try to order by it */
+	/* add the sequence number or orderby metadata columns if we try to order by them*/
 	if (needs_sequence_num)
 	{
-		compressed_reltarget_add_var_for_column(compressed_rel,
-												compressed_relid,
-												COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME,
-												&attrs_used);
+		if (info->has_seq_num)
+		{
+			compressed_reltarget_add_var_for_column(compressed_rel,
+													compressed_relid,
+													COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME,
+													&attrs_used);
+		}
+		else
+		{
+			for (int i = 1; i <= ts_array_length(info->settings->fd.orderby); i++)
+			{
+				compressed_reltarget_add_var_for_column(compressed_rel,
+														compressed_relid,
+														column_segment_min_name(i),
+														&attrs_used);
+				compressed_reltarget_add_var_for_column(compressed_rel,
+														compressed_relid,
+														column_segment_max_name(i),
+														&attrs_used);
+			}
+		}
 	}
 
 	/*
@@ -1371,7 +1537,7 @@ has_compressed_vars_walker(Node *node, CompressionInfo *info)
 	if (IsA(node, Var))
 	{
 		Var *var = castNode(Var, node);
-		if ((Index) var->varno != (Index) info->compressed_rel->relid)
+		if ((Index) var->varno != info->compressed_rel->relid)
 		{
 			return false;
 		}
@@ -1488,17 +1654,6 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		Var *var;
 		Assert(!bms_overlap(cur_em->em_relids, info->compressed_rel->relids));
 
-		/*
-		 * We want to base our equivalence member on the hypertable equivalence
-		 * member, not on the uncompressed chunk one, because the latter is
-		 * marked as child itself. This is mostly relevant for PG16 where we
-		 * have to specify a parent for the newly created equivalence member.
-		 */
-		if (cur_em->em_is_child)
-		{
-			continue;
-		}
-
 		/* only consider EquivalenceMembers that are Vars, possibly with RelabelType, of the
 		 * uncompressed chunk */
 		var = (Var *) cur_em->em_expr;
@@ -1507,6 +1662,13 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		if (!(var && IsA(var, Var)))
 			continue;
 
+		/*
+		 * We want to base our equivalence member on the hypertable equivalence
+		 * member, not on the uncompressed chunk one. We can't just check for
+		 * em_is_child though because the hypertable might be a child itself and not
+		 * a top-level EquivalenceMember. This is mostly relevant for PG16+ where
+		 * we have to specify a parent for the newly created equivalence member.
+		 */
 		if ((Index) var->varno != info->ht_rel->relid)
 			continue;
 
@@ -1653,7 +1815,7 @@ compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *inf
  * and add it to PlannerInfo
  */
 static void
-decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk *chunk,
+decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Chunk *chunk,
 								 RelOptInfo *chunk_rel, bool needs_sequence_num)
 {
 	Index compressed_index = root->simple_rel_array_size;
@@ -1674,7 +1836,7 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk
 
 	expand_planner_arrays(root, 1);
 	info->compressed_rte =
-		decompress_chunk_make_rte(compressed_reloid, AccessShareLock, root->parse);
+		decompress_chunk_make_rte(compressed_reloid, info->chunk_rte->rellockmode, root->parse);
 	root->simple_rte_array[compressed_index] = info->compressed_rte;
 
 	root->parse->rtable = lappend(root->parse->rtable, info->compressed_rte);
@@ -1806,10 +1968,10 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, Comp
 	{
 		/* Almost the same functionality as ts_create_plain_partial_paths.
 		 *
-		 * However, we also create a partial path for small chunks to allow PostgreSQL to choose a
-		 * parallel plan for decompression. If no partial path is present for a single chunk,
-		 * PostgreSQL will not use a parallel plan and all chunks are decompressed by a non-parallel
-		 * plan (even if there are a few bigger chunks).
+		 * However, we also create a partial path for small chunks to allow PostgreSQL to choose
+		 * a parallel plan for decompression. If no partial path is present for a single chunk,
+		 * PostgreSQL will not use a parallel plan and all chunks are decompressed by a
+		 * non-parallel plan (even if there are a few bigger chunks).
 		 */
 		int parallel_workers = compute_parallel_worker(compressed_rel,
 													   compressed_rel->pages,
@@ -1844,11 +2006,36 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, Comp
 		 * decompression
 		 */
 		List *orig_pathkeys = root->query_pathkeys;
+		List *orig_eq_classes = root->eq_classes;
+		Bitmapset *orig_eclass_indexes = info->compressed_rel->eclass_indexes;
 		build_compressed_scan_pathkeys(sort_info, root, root->query_pathkeys, info);
 		root->query_pathkeys = sort_info->required_compressed_pathkeys;
+
+		/* We can optimize iterating over EquivalenceClasses by reducing them to
+		 * the subset which are from the compressed chunk. This only works if we don't
+		 * have joins based on equivalence classes involved since those
+		 * use eclass_indexes which is not valid with this optimization.
+		 *
+		 * Clauseless joins work fine since they don't rely on eclass_indexes.
+		 */
+		if (!info->chunk_rel->has_eclass_joins)
+		{
+			int i = -1;
+			List *required_eq_classes = NIL;
+			while ((i = bms_next_member(info->compressed_rel->eclass_indexes, i)) >= 0)
+			{
+				EquivalenceClass *cur_ec = (EquivalenceClass *) list_nth(root->eq_classes, i);
+				required_eq_classes = lappend(required_eq_classes, cur_ec);
+			}
+			root->eq_classes = required_eq_classes;
+			info->compressed_rel->eclass_indexes = NULL;
+		}
+
 		check_index_predicates(root, compressed_rel);
 		create_index_paths(root, compressed_rel);
 		root->query_pathkeys = orig_pathkeys;
+		root->eq_classes = orig_eq_classes;
+		info->compressed_rel->eclass_indexes = orig_eclass_indexes;
 	}
 	else
 	{
@@ -1990,7 +2177,7 @@ find_const_segmentby(RelOptInfo *chunk_rel, CompressionInfo *info)
  * If query pathkeys is shorter than segmentby + compress_orderby pushdown can still be done
  */
 static SortInfo
-build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List *pathkeys)
+build_sortinfo(const Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List *pathkeys)
 {
 	int pk_index;
 	PathKey *pk;

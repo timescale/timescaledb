@@ -6,9 +6,9 @@
 #pragma once
 
 #include <postgres.h>
-#include <utils/jsonb.h>
 #include "dimension.h"
 #include <continuous_aggs/materialize.h>
+#include <utils/jsonb.h>
 
 extern Datum policy_refresh_cagg_add(PG_FUNCTION_ARGS);
 extern Datum policy_refresh_cagg_proc(PG_FUNCTION_ARGS);

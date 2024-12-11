@@ -1,1 +1,0 @@
-DROP VIEW IF EXISTS timescaledb_experimental.chunk_replication_status;

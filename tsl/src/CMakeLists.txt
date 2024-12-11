@@ -1,8 +1,8 @@
 set(SOURCES
     chunk_api.c
     chunk.c
+    chunkwise_agg.c
     init.c
-    partialize_agg.c
     partialize_finalize.c
     planner.c
     process_utility.c
@@ -30,9 +30,6 @@ set_target_properties(
   PROPERTIES OUTPUT_NAME ${TSL_LIBRARY_NAME}-${PROJECT_VERSION_MOD} PREFIX "")
 
 target_include_directories(${TSL_LIBRARY_NAME} PRIVATE ${PG_INCLUDEDIR})
-if(USE_OPENSSL)
-  target_include_directories(${TSL_LIBRARY_NAME} PRIVATE ${OPENSSL_INCLUDE_DIR})
-endif(USE_OPENSSL)
 
 target_compile_definitions(${TSL_LIBRARY_NAME} PUBLIC TS_TSL)
 target_compile_definitions(${TSL_LIBRARY_NAME} PUBLIC TS_SUBMODULE)
@@ -51,4 +48,6 @@ install(TARGETS ${TSL_LIBRARY_NAME} DESTINATION ${PG_PKGLIBDIR})
 add_subdirectory(bgw_policy)
 add_subdirectory(compression)
 add_subdirectory(continuous_aggs)
+add_subdirectory(import)
+add_subdirectory(hypercore)
 add_subdirectory(nodes)

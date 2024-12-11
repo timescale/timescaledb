@@ -37,7 +37,7 @@ sudo make -C "${BUILD_DIR}" install > /dev/null
 
 set +e
 
-FROM_VERSION=${CURRENT_VERSION} TO_VERSION=${PREV_VERSION} TEST_VERSION=v8 TEST_REPAIR=false "${SCRIPT_DIR}/test_update_from_version.sh"
+FROM_VERSION=${CURRENT_VERSION} TO_VERSION=${PREV_VERSION} TEST_REPAIR=false "${SCRIPT_DIR}/test_update_from_version.sh"
 return_code=$?
 if [ $return_code -ne 0 ]; then
   echo -e "\nFailed downgrade from ${CURRENT_VERSION} to ${PREV_VERSION}\n"

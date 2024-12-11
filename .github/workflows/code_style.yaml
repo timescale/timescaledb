@@ -65,8 +65,8 @@ jobs:
         uses: actions/checkout@v4
       - name: Run codespell
         run: |
-          find . -type f \( -name "*.c" -or -name "*.h" -or -name "*.yaml" -or -name "*.sh" \) \
-            -exec codespell -L "inh,larg,inout" {} \+
+          find . -type f \( -name "*.c" -or -name "*.h" -or -name "*.yaml" -or -name "*.yml" -or -name "*.sh" -or -name "*.cmake" -or -name "*.py" -or -name "*.pl" -or -name "CMakeLists.txt" \) \
+            -exec codespell -I .github/codespell-ignore-words {} \+
 
   cc_checks:
     name: Check code formatting
@@ -98,17 +98,15 @@ jobs:
       - name: Install prerequisites
         run: |
           pip install --upgrade pip
-          # Inexplicably, at some point pip started to insist on installing
-          # prospector==1.7.7, which is incompatible with the new pylint.
-          # Also pin the version of the other tools so that they don't fail
-          # sporadically when a new version becomes available.
-          pip install black prospector==1.8.4 pylint==2.16.0 dodgy==0.2.1 \
-            mccabe==0.7.0 pycodestyle==2.9.1 pyflakes==2.5.0 \
-            psutil pygithub pglast
+          pip install black prospector pylint dodgy \
+            mccabe pycodestyle pyflakes \
+            psutil pygithub pglast testgres
           pip list
           pip list --user
+
       - name: Checkout source
         uses: actions/checkout@v4
+
       - name: Run prospector
         run: |
           find . -type f -name "*.py" -print -exec prospector {} + -exec black {} +

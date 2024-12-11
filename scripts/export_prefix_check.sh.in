@@ -25,7 +25,7 @@ fi
 # we also whitelist a couple of special symbols
 #    _.*_init                     module startup functions
 #    _.*_fini                     module shutdown functions
-#    Pg_magic_func                used by postgres to check extension compatability
+#    Pg_magic_func                used by postgres to check extension compatibility
 #    timescaledb_hello            used to test that our name collision resistance works
 #    loader_hello                 used to test that our name collision resistance works
 #    test_symbol_conflict         used to test that our name collision resistance works

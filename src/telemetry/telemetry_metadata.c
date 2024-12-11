@@ -5,28 +5,17 @@
  */
 #include <postgres.h>
 #include <catalog/pg_type.h>
+#include <commands/tablecmds.h>
 #include <utils/builtins.h>
 #include <utils/jsonb.h>
 #include <utils/timestamp.h>
-#include <commands/tablecmds.h>
 
+#include "jsonb_utils.h"
+#include "scan_iterator.h"
+#include "telemetry/telemetry_metadata.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/metadata.h"
 #include "uuid.h"
-#include "telemetry/telemetry_metadata.h"
-#include "scan_iterator.h"
-#include "jsonb_utils.h"
-
-#if PG14_LT
-/* Copied from jsonb_util.c */
-static void
-JsonbToJsonbValue(Jsonb *jsonb, JsonbValue *val)
-{
-	val->type = jbvBinary;
-	val->val.binary.data = &jsonb->root;
-	val->val.binary.len = VARSIZE(jsonb) - VARHDRSZ;
-}
-#endif
 
 void
 ts_telemetry_event_truncate(void)

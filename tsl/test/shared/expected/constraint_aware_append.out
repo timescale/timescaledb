@@ -11,6 +11,9 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 ALTER TABLE ca_append_result SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "ca_append_result" is set to ""
+NOTICE:  default order by for hypertable "ca_append_result" is set to ""time" DESC"
 INSERT INTO ca_append_result SELECT '2000-01-03','d1',0.3;
 SELECT count(compress_chunk(ch)) AS compressed FROM show_chunks('ca_append_result') ch;
  compressed 

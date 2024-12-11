@@ -1,0 +1,436 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\ir include/setup_hypercore.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set hypertable readings
+\ir hypercore_helpers.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Function to run an explain analyze with and do replacements on the
+-- emitted plan. This is intended to be used when the structure of the
+-- plan is important, but not the specific chunks scanned nor the
+-- number of heap fetches, rows, loops, etc.
+create function explain_analyze_anonymize(text) returns setof text
+language plpgsql as
+$$
+declare
+    ln text;
+begin
+    for ln in
+        execute format('explain (analyze, costs off, summary off, timing off, decompress_cache_stats) %s', $1)
+    loop
+        if trim(both from ln) like 'Group Key:%' then
+	   continue;
+	end if;
+        ln := regexp_replace(ln, 'Array Cache Hits: \d+', 'Array Cache Hits: N');
+        ln := regexp_replace(ln, 'Array Cache Misses: \d+', 'Array Cache Misses: N');
+        ln := regexp_replace(ln, 'Array Cache Evictions: \d+', 'Array Cache Evictions: N');
+        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
+        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
+        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
+        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
+        return next ln;
+    end loop;
+end;
+$$;
+create function explain_anonymize(text) returns setof text
+language plpgsql as
+$$
+declare
+    ln text;
+begin
+    for ln in
+        execute format('explain (costs off, summary off, timing off) %s', $1)
+    loop
+        ln := regexp_replace(ln, 'Array Cache Hits: \d+', 'Array Cache Hits: N');
+        ln := regexp_replace(ln, 'Array Cache Misses: \d+', 'Array Cache Misses: N');
+        ln := regexp_replace(ln, 'Array Cache Evictions: \d+', 'Array Cache Evictions: N');
+        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
+        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
+        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
+        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
+        return next ln;
+    end loop;
+end;
+$$;
+create table :hypertable(
+       metric_id serial,
+       created_at timestamptz not null unique,
+       location_id smallint,	--segmentby attribute with index
+       owner_id bigint,		--segmentby attribute without index
+       device_id bigint,	--non-segmentby attribute
+       temp float8,
+       humidity float4
+);
+create index hypertable_location_id_idx on :hypertable (location_id);
+create index hypertable_device_id_idx on :hypertable (device_id);
+select create_hypertable(:'hypertable', by_range('created_at'));
+ create_hypertable 
+-------------------
+ (1,t)
+(1 row)
+
+-- Disable incremental sort to make tests stable
+set enable_incremental_sort = false;
+select setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+-- Insert rows into the tables.
+--
+-- The timestamps for the original rows will have timestamps every 10
+-- seconds. Any other timestamps are inserted as part of the test.
+insert into :hypertable (created_at, location_id, device_id, owner_id, temp, humidity)
+select t, ceil(random()*10), ceil(random()*30), ceil(random() * 5), random()*40, random()*100
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') t;
+alter table :hypertable set (
+	  timescaledb.compress,
+	  timescaledb.compress_orderby = 'created_at',
+	  timescaledb.compress_segmentby = 'location_id, owner_id'
+);
+-- Get some test chunks as global variables (first and last chunk here)
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk1
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
+ order by chunk1 asc
+ limit 1 \gset
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
+ order by chunk2 asc
+ limit 1 offset 1 \gset
+create table saved_rows (like :chunk1, new_row bool not null, kind text);
+create table count_stmt (inserts int, updates int, deletes int);
+create function save_row() returns trigger as $$
+begin
+   if new is not null then
+       insert into saved_rows select new.*, true, tg_op;
+   end if;
+   if old is not null then
+       insert into saved_rows select old.*, false, tg_op;
+   end if;
+   return new;
+end;
+$$ language plpgsql;
+create function save_transition_table() returns trigger as $$
+begin
+   case tg_op
+   	when 'INSERT' then
+	     insert into saved_rows select n.*, true, tg_op from new_table n;
+	when 'DELETE' then
+	     insert into saved_rows select o.*, false, tg_op from old_table o;
+	when 'UPDATE' then
+	     insert into saved_rows select n.*, true, tg_op from new_table n;
+	     insert into saved_rows select o.*, false, tg_op from old_table o;
+   end case;
+   return null;
+end;
+$$ language plpgsql;
+create function count_ops() returns trigger as $$
+begin
+   insert into count_stmt values (
+   	  (tg_op = 'INSERT')::int,
+	  (tg_op = 'UPDATE')::int,
+	  (tg_op = 'DELETE')::int
+   );
+   return null;
+end;
+$$ language plpgsql;
+create function notify_action() returns trigger as $$
+begin
+   raise notice 'table % was truncated', tg_table_name;
+   return null;
+end;
+$$ language plpgsql;
+-- Compress all the chunks and make sure that they are compressed
+select compress_chunk(show_chunks(:'hypertable'), hypercore_use_access_method => true);
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+(6 rows)
+
+select chunk_name, compression_status from chunk_compression_stats(:'hypertable');
+    chunk_name    | compression_status 
+------------------+--------------------
+ _hyper_1_1_chunk | Compressed
+ _hyper_1_2_chunk | Compressed
+ _hyper_1_3_chunk | Compressed
+ _hyper_1_4_chunk | Compressed
+ _hyper_1_5_chunk | Compressed
+ _hyper_1_6_chunk | Compressed
+(6 rows)
+
+with the_info as (
+     select min(created_at) min_created_at,
+     	    max(created_at) max_created_at
+       from :hypertable
+)
+select min_created_at,
+       max_created_at,
+       '1m'::interval + min_created_at + (max_created_at - min_created_at) as mid_created_at,
+       '1m'::interval + max_created_at + (max_created_at - min_created_at) as post_created_at
+  from the_info \gset
+-- Insert a bunch of rows to make sure that we have a mix of
+-- uncompressed, partially compressed, and fully compressed
+-- chunks. Note that there is is an overlap between the compressed and
+-- uncompressed start and end timestamps.
+insert into :hypertable (created_at, location_id, device_id, owner_id, temp, humidity)
+select t, ceil(random()*10), ceil(random()*30), ceil(random() * 5), random()*40, random()*100
+from generate_series(:'mid_created_at'::timestamptz, :'post_created_at', '15m') t;
+-- Create a table with some samples that we can re-use to generate conflicts.
+create table sample (like :chunk1 including generated including defaults including constraints);
+insert into sample(created_at, location_id, device_id, owner_id, temp, humidity)
+  values
+	('2022-06-01 00:01:23', 999, 666, 111, 3.14, 3.14),
+	('2022-06-01 00:02:23', 999, 666, 112, 3.14, 3.14),
+	('2022-06-01 00:03:23', 999, 666, 113, 3.14, 3.14),
+	('2022-06-01 00:04:23', 999, 666, 114, 3.14, 3.14);
+-- Start by testing insert triggers for both statements and rows. In
+-- this case, the trigger will just save away the rows into a separate
+-- table and check that we get the same number of rows with the same
+-- values.
+create trigger save_insert_row_trg
+       before insert on :chunk1
+       for each row execute function save_row();
+create trigger count_inserts_trg
+       before insert on :chunk1
+       for each statement execute function count_ops();
+insert into :chunk1(created_at, location_id, device_id, owner_id, temp, humidity)
+select created_at, location_id, device_id, owner_id, temp, humidity from sample limit 2;
+select * from saved_rows where kind = 'INSERT';
+ metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity | new_row |  kind  
+-----------+------------------------------+-------------+----------+-----------+------+----------+---------+--------
+     11527 | Wed Jun 01 00:01:23 2022 PDT |         999 |      111 |       666 | 3.14 |     3.14 | t       | INSERT
+     11528 | Wed Jun 01 00:02:23 2022 PDT |         999 |      112 |       666 | 3.14 |     3.14 | t       | INSERT
+(2 rows)
+
+select sum(inserts), sum(updates), sum(deletes) from count_stmt;
+ sum | sum | sum 
+-----+-----+-----
+   1 |   0 |   0
+(1 row)
+
+truncate saved_rows, count_stmt;
+merge into :chunk1 c using sample s on c.created_at = s.created_at
+when not matched then insert values (s.*);
+select * from saved_rows;
+ metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity | new_row |  kind  
+-----------+------------------------------+-------------+----------+-----------+------+----------+---------+--------
+     11525 | Wed Jun 01 00:03:23 2022 PDT |         999 |      113 |       666 | 3.14 |     3.14 | t       | INSERT
+     11526 | Wed Jun 01 00:04:23 2022 PDT |         999 |      114 |       666 | 3.14 |     3.14 | t       | INSERT
+(2 rows)
+
+select sum(inserts), sum(updates), sum(deletes) from count_stmt;
+ sum | sum | sum 
+-----+-----+-----
+   1 |   0 |   0
+(1 row)
+
+truncate saved_rows, count_stmt;
+drop trigger save_insert_row_trg on :chunk1;
+drop trigger count_inserts_trg on :chunk1;
+-- Run update and upsert tests
+create trigger save_update_row_trg
+       before update on :chunk1
+       for each row execute function save_row();
+create trigger count_update_trg
+       before update on :chunk1
+       for each statement execute function count_ops();
+update :chunk1 set temp = 9.99 where device_id = 666;
+select * from saved_rows where kind = 'UPDATE';
+ metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity | new_row |  kind  
+-----------+------------------------------+-------------+----------+-----------+------+----------+---------+--------
+     11527 | Wed Jun 01 00:01:23 2022 PDT |         999 |      111 |       666 | 9.99 |     3.14 | t       | UPDATE
+     11527 | Wed Jun 01 00:01:23 2022 PDT |         999 |      111 |       666 | 3.14 |     3.14 | f       | UPDATE
+     11528 | Wed Jun 01 00:02:23 2022 PDT |         999 |      112 |       666 | 9.99 |     3.14 | t       | UPDATE
+     11528 | Wed Jun 01 00:02:23 2022 PDT |         999 |      112 |       666 | 3.14 |     3.14 | f       | UPDATE
+     11525 | Wed Jun 01 00:03:23 2022 PDT |         999 |      113 |       666 | 9.99 |     3.14 | t       | UPDATE
+     11525 | Wed Jun 01 00:03:23 2022 PDT |         999 |      113 |       666 | 3.14 |     3.14 | f       | UPDATE
+     11526 | Wed Jun 01 00:04:23 2022 PDT |         999 |      114 |       666 | 9.99 |     3.14 | t       | UPDATE
+     11526 | Wed Jun 01 00:04:23 2022 PDT |         999 |      114 |       666 | 3.14 |     3.14 | f       | UPDATE
+(8 rows)
+
+select sum(inserts), sum(updates), sum(deletes) from count_stmt;
+ sum | sum | sum 
+-----+-----+-----
+   0 |   1 |   0
+(1 row)
+
+truncate saved_rows, count_stmt;
+-- Upsert with conflicts on previously inserted rows
+insert into :chunk1(created_at, location_id, device_id, owner_id, temp, humidity)
+select created_at, location_id, device_id, owner_id, temp, humidity from sample
+on conflict (created_at) do update set temp = 6.66, device_id = 666;
+select * from saved_rows where kind = 'UPDATE';
+ metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity | new_row |  kind  
+-----------+------------------------------+-------------+----------+-----------+------+----------+---------+--------
+     11527 | Wed Jun 01 00:01:23 2022 PDT |         999 |      111 |       666 | 6.66 |     3.14 | t       | UPDATE
+     11527 | Wed Jun 01 00:01:23 2022 PDT |         999 |      111 |       666 | 9.99 |     3.14 | f       | UPDATE
+     11528 | Wed Jun 01 00:02:23 2022 PDT |         999 |      112 |       666 | 6.66 |     3.14 | t       | UPDATE
+     11528 | Wed Jun 01 00:02:23 2022 PDT |         999 |      112 |       666 | 9.99 |     3.14 | f       | UPDATE
+     11525 | Wed Jun 01 00:03:23 2022 PDT |         999 |      113 |       666 | 6.66 |     3.14 | t       | UPDATE
+     11525 | Wed Jun 01 00:03:23 2022 PDT |         999 |      113 |       666 | 9.99 |     3.14 | f       | UPDATE
+     11526 | Wed Jun 01 00:04:23 2022 PDT |         999 |      114 |       666 | 6.66 |     3.14 | t       | UPDATE
+     11526 | Wed Jun 01 00:04:23 2022 PDT |         999 |      114 |       666 | 9.99 |     3.14 | f       | UPDATE
+(8 rows)
+
+select sum(inserts), sum(updates), sum(deletes) from count_stmt;
+ sum | sum | sum 
+-----+-----+-----
+   0 |   1 |   0
+(1 row)
+
+truncate saved_rows, count_stmt;
+drop trigger save_update_row_trg on :chunk1;
+drop trigger count_update_trg on :chunk1;
+-- Run delete tests
+create trigger save_delete_row_trg
+       before delete on :chunk1
+       for each row execute function save_row();
+create trigger count_delete_trg
+       before delete on :chunk1
+       for each statement execute function count_ops();
+delete from :chunk1 where device_id = 666;
+select * from saved_rows where kind = 'DELETE';
+ metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity | new_row |  kind  
+-----------+------------------------------+-------------+----------+-----------+------+----------+---------+--------
+     11527 | Wed Jun 01 00:01:23 2022 PDT |         999 |      111 |       666 | 6.66 |     3.14 | f       | DELETE
+     11528 | Wed Jun 01 00:02:23 2022 PDT |         999 |      112 |       666 | 6.66 |     3.14 | f       | DELETE
+     11525 | Wed Jun 01 00:03:23 2022 PDT |         999 |      113 |       666 | 6.66 |     3.14 | f       | DELETE
+     11526 | Wed Jun 01 00:04:23 2022 PDT |         999 |      114 |       666 | 6.66 |     3.14 | f       | DELETE
+(4 rows)
+
+select sum(inserts), sum(updates), sum(deletes) from count_stmt;
+ sum | sum | sum 
+-----+-----+-----
+   0 |   0 |   1
+(1 row)
+
+truncate saved_rows, count_stmt;
+drop trigger save_delete_row_trg on :chunk1;
+drop trigger count_delete_trg on :chunk1;
+-- Checking that transition tables on triggers is not supported on
+-- individual chunks.
+\set ON_ERROR_STOP 0
+create trigger row_insert_transition_table_trg
+       after insert on :chunk1
+       referencing new table as new_table
+       for each statement execute function save_transition_table();
+ERROR:  triggers with transition tables are not supported on hypertable chunks
+create trigger row_update_transition_table_trg
+       after update on :chunk1
+       referencing new table as new_table
+       for each statement execute function save_transition_table();
+ERROR:  triggers with transition tables are not supported on hypertable chunks
+create trigger row_delete_transition_table_trg
+       after delete on :chunk1
+       referencing new table as new_table
+       for each statement execute function save_transition_table();
+ERROR:  triggers with transition tables are not supported on hypertable chunks
+create trigger row_insert_transition_table_trg
+       after insert on :chunk1
+       referencing new table as new_table
+       for each row execute function save_transition_table();
+ERROR:  triggers with transition tables are not supported on hypertable chunks
+create trigger row_update_transition_table_trg
+       after update on :chunk1
+       referencing new table as new_table
+       for each row execute function save_transition_table();
+ERROR:  triggers with transition tables are not supported on hypertable chunks
+create trigger row_delete_transition_table_trg
+       after delete on :chunk1
+       referencing new table as new_table
+       for each row execute function save_transition_table();
+ERROR:  triggers with transition tables are not supported on hypertable chunks
+\set ON_ERROR_STOP 1
+-- Remove duplicates from readings table so that we can run the tests
+-- below.
+delete from readings where created_at in (select created_at from sample);
+-- Test transition tables on hypertables using hypercore access method
+create trigger save_insert_transition_table_trg
+       after insert on readings
+       referencing new table as new_table
+       for each statement execute function save_transition_table();
+insert into readings(created_at, location_id, device_id, owner_id, temp, humidity)
+select created_at, location_id, device_id, owner_id, temp, humidity from sample
+order by created_at limit 2;
+select * from saved_rows;
+ metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity | new_row |  kind  
+-----------+------------------------------+-------------+----------+-----------+------+----------+---------+--------
+     11533 | Wed Jun 01 00:01:23 2022 PDT |         999 |      111 |       666 | 3.14 |     3.14 | t       | INSERT
+     11534 | Wed Jun 01 00:02:23 2022 PDT |         999 |      112 |       666 | 3.14 |     3.14 | t       | INSERT
+(2 rows)
+
+truncate saved_rows;
+copy readings(created_at, location_id, device_id, owner_id, temp, humidity) from stdin with (format csv);
+select * from saved_rows;
+ metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity | new_row |  kind  
+-----------+------------------------------+-------------+----------+-----------+------+----------+---------+--------
+     11535 | Wed Jun 01 00:01:35 2022 PDT |         999 |      111 |       666 | 3.14 |     3.14 | t       | INSERT
+(1 row)
+
+truncate saved_rows;
+create trigger save_update_transition_table_trg
+       after update on readings
+       referencing new table as new_table old table as old_table
+       for each statement execute function save_transition_table();
+select * from readings where location_id = 999;
+ metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity 
+-----------+------------------------------+-------------+----------+-----------+------+----------
+     11533 | Wed Jun 01 00:01:23 2022 PDT |         999 |      111 |       666 | 3.14 |     3.14
+     11534 | Wed Jun 01 00:02:23 2022 PDT |         999 |      112 |       666 | 3.14 |     3.14
+     11535 | Wed Jun 01 00:01:35 2022 PDT |         999 |      111 |       666 | 3.14 |     3.14
+(3 rows)
+
+update readings set humidity = 99.99 where location_id = 999;
+select * from saved_rows;
+ metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity | new_row |  kind  
+-----------+------------------------------+-------------+----------+-----------+------+----------+---------+--------
+     11533 | Wed Jun 01 00:01:23 2022 PDT |         999 |      111 |       666 | 3.14 |    99.99 | t       | UPDATE
+     11534 | Wed Jun 01 00:02:23 2022 PDT |         999 |      112 |       666 | 3.14 |    99.99 | t       | UPDATE
+     11535 | Wed Jun 01 00:01:35 2022 PDT |         999 |      111 |       666 | 3.14 |    99.99 | t       | UPDATE
+     11533 | Wed Jun 01 00:01:23 2022 PDT |         999 |      111 |       666 | 3.14 |     3.14 | f       | UPDATE
+     11534 | Wed Jun 01 00:02:23 2022 PDT |         999 |      112 |       666 | 3.14 |     3.14 | f       | UPDATE
+     11535 | Wed Jun 01 00:01:35 2022 PDT |         999 |      111 |       666 | 3.14 |     3.14 | f       | UPDATE
+(6 rows)
+
+truncate saved_rows;
+create trigger save_delete_transition_table_trg
+       after delete on readings
+       referencing old table as old_table
+       for each statement execute function save_transition_table();
+select * from readings where location_id = 999;
+ metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity 
+-----------+------------------------------+-------------+----------+-----------+------+----------
+     11533 | Wed Jun 01 00:01:23 2022 PDT |         999 |      111 |       666 | 3.14 |    99.99
+     11534 | Wed Jun 01 00:02:23 2022 PDT |         999 |      112 |       666 | 3.14 |    99.99
+     11535 | Wed Jun 01 00:01:35 2022 PDT |         999 |      111 |       666 | 3.14 |    99.99
+(3 rows)
+
+delete from readings where location_id = 999;
+select * from saved_rows;
+ metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity | new_row |  kind  
+-----------+------------------------------+-------------+----------+-----------+------+----------+---------+--------
+     11533 | Wed Jun 01 00:01:23 2022 PDT |         999 |      111 |       666 | 3.14 |    99.99 | f       | DELETE
+     11534 | Wed Jun 01 00:02:23 2022 PDT |         999 |      112 |       666 | 3.14 |    99.99 | f       | DELETE
+     11535 | Wed Jun 01 00:01:35 2022 PDT |         999 |      111 |       666 | 3.14 |    99.99 | f       | DELETE
+(3 rows)
+
+truncate saved_rows;
+-- Check truncate trigger
+create trigger notify_truncate
+       after truncate on readings
+       for each statement execute function notify_action();
+truncate readings;
+NOTICE:  table readings was truncated

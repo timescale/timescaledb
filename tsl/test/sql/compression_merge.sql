@@ -46,6 +46,22 @@ CROSS JOIN generate_series(1, 5, 1) i;
 -- Compression is set to merge those 24 chunks into 3 chunks, two 10 hour chunks and a single 4 hour chunk.
 ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby='i', timescaledb.compress_orderby='loc,"Time"', timescaledb.compress_chunk_time_interval='10 hours');
 
+-- Verify we are fully recompressing unordered chunks
+BEGIN;
+  SELECT count(compress_chunk(chunk,  true)) FROM show_chunks('test2') chunk;
+  SELECT format('%I.%I',ch.schema_name,ch.table_name) AS "CHUNK"
+    FROM _timescaledb_catalog.chunk ch
+    JOIN _timescaledb_catalog.hypertable ht ON ht.id=ch.hypertable_id
+    JOIN _timescaledb_catalog.hypertable ht2 ON ht.id=ht2.compressed_hypertable_id AND ht2.table_name='test2' LIMIT 1 \gset
+
+  -- Not using time as first column in orderby makes the merged chunks unordered
+  -- We want to sure we are fully recompressing them which will make only
+  -- a single batch per segment group
+  SELECT count(*)
+  FROM :CHUNK
+  WHERE i = 1;
+ROLLBACK;
+
 SELECT
   $$
   SELECT * FROM test2 ORDER BY i, "Time"
@@ -117,9 +133,6 @@ SELECT format('%I.%I',ch.schema_name,ch.table_name) AS "CHUNK"
   JOIN _timescaledb_catalog.hypertable ht ON ht.id=ch.hypertable_id
   JOIN _timescaledb_catalog.hypertable ht2 ON ht.id=ht2.compressed_hypertable_id AND ht2.table_name='test5' \gset
 
--- Make sure sequence numbers are correctly fetched from index.
-SELECT _ts_meta_sequence_num FROM :CHUNK  where i = 1;
-
 SELECT schemaname || '.' || indexname AS "INDEXNAME"
 FROM pg_indexes i
 INNER JOIN _timescaledb_catalog.chunk cc ON i.schemaname = cc.schema_name and i.tablename = cc.table_name
@@ -129,12 +142,8 @@ LIMIT 1 \gset
 
 DROP INDEX :INDEXNAME;
 
--- We dropped the index from compressed chunk thats needed to determine sequence numbers
--- during merge, merging will fallback to doing heap scans and work just fine.
+-- Merging works without indexes on compressed chunks
 SELECT compress_chunk(i, true) FROM show_chunks('test5') i LIMIT 5;
-
--- Make sure sequence numbers are correctly fetched from heap.
-SELECT _ts_meta_sequence_num FROM :CHUNK where i = 1;
 
 SELECT 'test5' AS "HYPERTABLE_NAME" \gset
 \ir include/compression_test_merge.sql
@@ -292,3 +301,20 @@ BEGIN;
   SELECT hypertable_name, range_start, range_end FROM timescaledb_information.chunks WHERE hypertable_name = 'test9' ORDER BY 2;
 ROLLBACK;
 
+-- Test RowExclusiveLock on compressed chunk during chunk rollup using a GUC
+CREATE TABLE test10 ("Time" timestamptz, i integer, value integer);
+SELECT table_name from create_hypertable('test10', 'Time', chunk_time_interval=> INTERVAL '1 hour');
+
+INSERT INTO test10
+SELECT t, i, gen_rand_minstd()
+FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-02 3:59', '10 minutes') t
+CROSS JOIN generate_series(1, 3, 1) i;
+
+ALTER TABLE test10 set (timescaledb.compress, timescaledb.compress_segmentby='i', timescaledb.compress_orderby='"Time"', timescaledb.compress_chunk_time_interval='2 hours');
+SHOW timescaledb.enable_rowlevel_compression_locking;
+SET timescaledb.enable_rowlevel_compression_locking to on;
+
+SELECT compress_chunk(show_chunks('test10'));
+
+RESET timescaledb.enable_rowlevel_compression_locking;
+DROP TABLE test10;

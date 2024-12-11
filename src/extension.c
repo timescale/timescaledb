@@ -4,20 +4,25 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <access/xact.h>
 #include <access/transam.h>
-#include <commands/event_trigger.h>
+#include <access/xact.h>
 #include <catalog/namespace.h>
 #include <catalog/objectaccess.h>
-#include <utils/lsyscache.h>
-#include <utils/inval.h>
+#include <commands/event_trigger.h>
 #include <fmgr.h>
+#include <utils/inval.h>
+#include <utils/lsyscache.h>
 
-#include "compat/compat-msvc-enter.h" /* To label externs in extension.h and
-								 * miscadmin.h correctly */
+#if PG_VERSION_NUM < 150000
+/*
+ * Some externs are mislabeled when building on Windows so we try to fix them
+ * with this hack. This is only needed for versions < 15.
+ */
+#include "compat/compat-msvc-enter.h"
 #include <commands/extension.h>
 #include <miscadmin.h>
 #include "compat/compat-msvc-exit.h"
+#endif
 
 #include <access/relscan.h>
 #include <catalog/indexing.h>
@@ -25,11 +30,11 @@
 #include <utils/builtins.h>
 #include <utils/fmgroids.h>
 
-#include "ts_catalog/catalog.h"
-#include "extension.h"
-#include "guc.h"
-#include "extension_utils.c"
 #include "compat/compat.h"
+#include "extension.h"
+#include "extension_utils.c"
+#include "guc.h"
+#include "ts_catalog/catalog.h"
 
 #define TS_UPDATE_SCRIPT_CONFIG_VAR MAKE_EXTOPTION("update_script_stage")
 #define POST_UPDATE "post"
@@ -283,17 +288,6 @@ ts_extension_invalidate(void)
 bool
 ts_extension_is_loaded(void)
 {
-	/* When restoring deactivate extension.
-	 *
-	 * We are using IsBinaryUpgrade (and ts_guc_restoring).  If a user set
-	 * `ts_guc_restoring` for a database, it will be stored in
-	 * `pg_db_role_settings` and be included in a dump, which will cause
-	 * `pg_upgrade` to fail.
-	 *
-	 * See dumpDatabaseConfig in pg_dump.c. */
-	if (ts_guc_restoring || IsBinaryUpgrade)
-		return false;
-
 	if (EXTENSION_STATE_UNKNOWN == extstate || EXTENSION_STATE_TRANSITIONING == extstate)
 	{
 		/* status may have updated without a relcache invalidate event */
@@ -335,6 +329,23 @@ ts_extension_is_loaded(void)
 			elog(ERROR, "unknown state: %d", extstate);
 			return false;
 	}
+}
+
+bool
+ts_extension_is_loaded_and_not_upgrading(void)
+{
+	/* When restoring deactivate extension.
+	 *
+	 * We are using IsBinaryUpgrade (and ts_guc_restoring).  If a user set
+	 * `ts_guc_restoring` for a database, it will be stored in
+	 * `pg_db_role_settings` and be included in a dump, which will cause
+	 * `pg_upgrade` to fail.
+	 *
+	 * See dumpDatabaseConfig in pg_dump.c. */
+	if (ts_guc_restoring || IsBinaryUpgrade)
+		return false;
+
+	return ts_extension_is_loaded();
 }
 
 const char *

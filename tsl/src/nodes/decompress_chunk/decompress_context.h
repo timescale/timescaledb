@@ -27,15 +27,22 @@ typedef struct CompressionColumnDescription
 {
 	CompressionColumnType type;
 	Oid typid;
-	int value_bytes;
+	int16 value_bytes;
+	bool by_value;
 
 	/*
-	 * Attno of the decompressed column in the output of DecompressChunk node.
+	 * Attno of the decompressed column in the scan tuple of DecompressChunk node.
 	 * Negative values are special columns that do not have a representation in
-	 * the decompressed chunk, but are still used for decompression. They should
-	 * have the respective `type` field.
+	 * the decompressed chunk, but are still used for decompression. The `type`
+	 * field is set accordingly for these columns.
 	 */
-	AttrNumber output_attno;
+	AttrNumber custom_scan_attno;
+
+	/*
+	 * Attno of this column in the uncompressed chunks. We use it to fetch the
+	 * default value from the uncompressed chunk tuple descriptor.
+	 */
+	AttrNumber uncompressed_chunk_attno;
 
 	/*
 	 * Attno of the compressed column in the input compressed chunk scan.
@@ -47,11 +54,24 @@ typedef struct CompressionColumnDescription
 
 typedef struct DecompressContext
 {
-	CompressionColumnDescription *template_columns;
-	int num_total_columns;
-	int num_compressed_columns;
+	/*
+	 * Note that this array contains only those columns that are decompressed
+	 * (output_attno != 0), and the order is different from the compressed chunk
+	 * tuple order: first go the actual data columns, and after that the metadata
+	 * columns.
+	 */
+	CompressionColumnDescription *compressed_chunk_columns;
+
+	/*
+	 * This includes all decompressed columns (output_attno != 0), including the
+	 * metadata columns.
+	 */
+	int num_columns_with_metadata;
+
+	/* This excludes the metadata columns. */
+	int num_data_columns;
+
 	List *vectorized_quals_constified;
-	Size batch_memory_context_bytes;
 	bool reverse;
 	bool batch_sorted_merge; /* Merge append optimization enabled */
 	bool enable_bulk_decompression;
@@ -62,22 +82,15 @@ typedef struct DecompressContext
 	 */
 	MemoryContext bulk_decompression_context;
 
-	TupleTableSlot *decompressed_slot;
+	TupleTableSlot *custom_scan_slot;
 
 	/*
-	 * Make non-refcounted copies of the tupdesc for reuse across all batch states
-	 * and avoid spending CPU in ResourceOwner when creating a big number of table
-	 * slots. This happens because each new slot pins its tuple descriptor using
-	 * PinTupleDesc, and for reference-counting tuples this involves adding a new
-	 * reference to ResourceOwner, which is not very efficient for a large number of
-	 * references.
-	 *
-	 * We don't have to do this for the decompressed slot tuple descriptor,
-	 * because there we use custom tuple slot (de)initialization functions, which
-	 * don't use reference counting and just use a raw pointer to the tuple
-	 * descriptor.
+	 * The scan tuple descriptor might be different from the uncompressed chunk
+	 * one, and it doesn't have the default column values in that case, so we
+	 * have to fetch the default values from the uncompressed chunk tuple
+	 * descriptor which we store here.
 	 */
-	TupleDesc compressed_slot_tdesc;
+	TupleDesc uncompressed_chunk_tdesc;
 
 	PlanState *ps; /* Set for filtering and instrumentation */
 

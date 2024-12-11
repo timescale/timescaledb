@@ -22,8 +22,15 @@ ANALYZE decompress_tracking;
 
 BEGIN; :EXPLAIN_ANALYZE UPDATE decompress_tracking SET value = value + 3; ROLLBACK;
 BEGIN; :EXPLAIN_ANALYZE UPDATE decompress_tracking SET value = value + 3 WHERE device = 'd2'; ROLLBACK;
+
+SET timescaledb.enable_compressed_direct_batch_delete TO false;
 BEGIN; :EXPLAIN_ANALYZE DELETE FROM decompress_tracking; ROLLBACK;
 BEGIN; :EXPLAIN_ANALYZE DELETE FROM decompress_tracking WHERE device = 'd3'; ROLLBACK;
+RESET timescaledb.enable_compressed_direct_batch_delete;
+
+BEGIN; :EXPLAIN_ANALYZE DELETE FROM decompress_tracking; ROLLBACK;
+BEGIN; :EXPLAIN_ANALYZE DELETE FROM decompress_tracking WHERE device = 'd3'; ROLLBACK;
+
 BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking SELECT '2020-01-01 1:30','d1',random(); ROLLBACK;
 BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking SELECT '2020-01-01','d2',random(); ROLLBACK;
 BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking SELECT '2020-01-01','d4',random(); ROLLBACK;

@@ -5,6 +5,8 @@
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
 
+SET timezone TO PST8PDT;
+
 --negative tests for query validation
 create table mat_t1( a integer, b integer,c TEXT);
 
@@ -80,13 +82,6 @@ AS
 Select max(temperature)
 from conditions
  group by time_bucket('1week', timec) , time_bucket('1month', timec), location WITH NO DATA;
-
---time_bucket using additional args
-CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
-AS
-Select max(temperature)
-from conditions
- group by time_bucket( INTERVAL '5 minutes', timec, INTERVAL '-2.5 minutes') , location WITH NO DATA;
 
 --time_bucket using non-const for first argument
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)

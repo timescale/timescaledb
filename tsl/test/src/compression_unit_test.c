@@ -10,8 +10,8 @@
 #include <access/htup_details.h>
 #include <catalog/pg_type.h>
 #include <fmgr.h>
-#include <libpq/pqformat.h>
 #include <lib/stringinfo.h>
+#include <libpq/pqformat.h>
 #include <utils/array.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
@@ -19,16 +19,16 @@
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
+#include "test_utils.h"
 #include "ts_catalog/catalog.h"
 #include <export.h>
-#include "test_utils.h"
 
-#include "compression/array.h"
+#include "compression/algorithms/array.h"
+#include "compression/algorithms/deltadelta.h"
+#include "compression/algorithms/dictionary.h"
+#include "compression/algorithms/float_utils.h"
+#include "compression/algorithms/gorilla.h"
 #include "compression/arrow_c_data_interface.h"
-#include "compression/dictionary.h"
-#include "compression/gorilla.h"
-#include "compression/deltadelta.h"
-#include "compression/float_utils.h"
 #include "compression/segment_meta.h"
 
 #define TEST_ELEMENTS 1015
@@ -539,11 +539,8 @@ test_delta3(bool have_nulls, bool have_random)
 
 	/* Forward decompression. */
 	DecompressionIterator *iter =
-		delta_delta_decompression_iterator_from_datum_forward(PointerGetDatum((void *) compressed),
-															  INT8OID);
-	ArrowArray *bulk_result = delta_delta_decompress_all(PointerGetDatum((void *) compressed),
-														 INT8OID,
-														 CurrentMemoryContext);
+		delta_delta_decompression_iterator_from_datum_forward(compressed, INT8OID);
+	ArrowArray *bulk_result = delta_delta_decompress_all(compressed, INT8OID, CurrentMemoryContext);
 	for (int i = 0; i < TEST_ELEMENTS; i++)
 	{
 		DecompressResult r = delta_delta_decompression_iterator_try_next_forward(iter);
@@ -565,9 +562,7 @@ test_delta3(bool have_nulls, bool have_random)
 	TestAssertTrue(r.is_done);
 
 	/* Reverse decompression. */
-	iter =
-		delta_delta_decompression_iterator_from_datum_reverse(PointerGetDatum((void *) compressed),
-															  INT8OID);
+	iter = delta_delta_decompression_iterator_from_datum_reverse(compressed, INT8OID);
 	for (int i = TEST_ELEMENTS - 1; i >= 0; i--)
 	{
 		DecompressResult r = delta_delta_decompression_iterator_try_next_reverse(iter);

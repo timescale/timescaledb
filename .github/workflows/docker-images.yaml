@@ -7,6 +7,8 @@ name: Test Docker images
   schedule:
     # run daily 0:00 on main branch
     - cron: '0 0 * * *'
+  pull_request:
+    paths: .github/workflows/docker-images.yaml
   push:
     tags:
     - '*'
@@ -41,19 +43,17 @@ jobs:
       fail-fast: false
       matrix:
         image: [
-            "timescaledb:latest-pg13",
             "timescaledb:latest-pg14",
             "timescaledb:latest-pg15",
             "timescaledb:latest-pg16",
-            "timescaledb:latest-pg13-bitnami",
+            "timescaledb:latest-pg17",
             "timescaledb:latest-pg14-bitnami",
             "timescaledb:latest-pg15-bitnami",
             "timescaledb:latest-pg16-bitnami",
-            "timescaledb:latest-pg13-repmgr-bitnami",
+            "timescaledb:latest-pg17-bitnami",
             "timescaledb:latest-pg14-repmgr-bitnami",
             "timescaledb:latest-pg15-repmgr-bitnami",
             "timescaledb:latest-pg16-repmgr-bitnami",
-            "timescaledb-ha:pg13",
             "timescaledb-ha:pg14",
             "timescaledb-ha:pg15",
             "timescaledb-ha:pg16",

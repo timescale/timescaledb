@@ -7,8 +7,8 @@
 
 #include <postgres.h>
 
-#include <libpq/pqformat.h>
 #include <funcapi.h>
+#include <libpq/pqformat.h>
 #include <utils/builtins.h>
 
 #include "compression_sql_test.h"

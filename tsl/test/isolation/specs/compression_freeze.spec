@@ -44,6 +44,11 @@ step "s1_compress" {
    SELECT count(*) FROM (SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('sensor_data') i) i;
 }
 
+step "s1_compress_delete" {
+   SET timescaledb.enable_delete_after_compression TO on;
+   SELECT count(*) FROM (SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('sensor_data') i) i;
+}
+
 step "s1_select_count" {
    SELECT count(*) FROM sensor_data;
 }
@@ -51,11 +56,19 @@ step "s1_select_count" {
 session "s2"
 step "s2_select_count_and_stats" {
    SELECT count(*) FROM sensor_data;
-   SELECT chunk_schema, chunk_name, compression_status FROM chunk_compression_stats('sensor_data') ORDER BY 1, 2, 3;
+   SELECT compression_status, count(*) FROM chunk_compression_stats('sensor_data') GROUP BY 1 ORDER BY 1, 2;
 }
 
 step "s2_lock_compression" {
     SELECT debug_waitpoint_enable('compression_done_before_truncate_uncompressed');
+}
+
+step "s2_lock_compression_after_truncate" {
+    SELECT debug_waitpoint_enable('compression_done_after_truncate_uncompressed');
+}
+
+step "s2_lock_compression_after_delete" {
+    SELECT debug_waitpoint_enable('compression_done_after_delete_uncompressed');
 }
 
 step "s2_unlock_compression" {
@@ -63,6 +76,22 @@ step "s2_unlock_compression" {
     SELECT debug_waitpoint_release('compression_done_before_truncate_uncompressed');
 }
 
+step "s2_unlock_compression_after_truncate" {
+    SELECT locktype, mode, granted, objid FROM pg_locks WHERE granted AND relation::regclass::text LIKE '%hyper%chunk' ORDER BY relation, locktype, mode, granted;
+    SELECT debug_waitpoint_release('compression_done_after_truncate_uncompressed');
+}
+
+step "s2_unlock_compression_after_delete" {
+    SELECT locktype, mode, granted, objid FROM pg_locks WHERE granted AND relation::regclass::text LIKE '%hyper%chunk' ORDER BY relation, locktype, mode, granted;
+    SELECT debug_waitpoint_release('compression_done_after_delete_uncompressed');
+}
+
 permutation "s1_select_count" "s2_select_count_and_stats"
 permutation "s1_select_count" "s1_compress" "s1_select_count" "s2_select_count_and_stats"
 permutation "s2_lock_compression" "s2_select_count_and_stats" "s1_compress" "s2_select_count_and_stats" "s2_unlock_compression" "s2_select_count_and_stats"
+
+# Check after TRUNCATE
+permutation "s2_lock_compression_after_truncate" "s2_select_count_and_stats" "s1_compress" "s2_unlock_compression_after_truncate" "s2_select_count_and_stats"
+
+# Check after DELETE
+permutation "s2_lock_compression_after_delete" "s2_select_count_and_stats" "s1_compress_delete" "s2_select_count_and_stats" "s2_unlock_compression_after_delete" "s2_select_count_and_stats"

@@ -6,6 +6,11 @@ set(TEST_TEMPLATES_MODULE_DEBUG
     reorder_vs_insert.spec.in reorder_vs_select.spec.in
     decompression_chunk_and_parallel_query.in)
 
+# This one must go first because it is very dependent on chunk IDs in EXPLAIN.
+if(CMAKE_BUILD_TYPE MATCHES Debug)
+  set(TEST_FILES cagg_watermark_concurrent_update.spec)
+endif()
+
 list(
   APPEND
   TEST_FILES
@@ -22,13 +27,17 @@ if(PG_VERSION VERSION_GREATER_EQUAL "14.0")
   list(APPEND TEST_FILES concurrent_decompress_update.spec)
 endif()
 
+if(PG_VERSION VERSION_GREATER_EQUAL "15.0")
+  list(APPEND TEST_FILES hypercore_tuple_lock.spec
+       hypercore_concurrent_vacuum.spec)
+endif()
+
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_TEMPLATES_MODULE ${TEST_TEMPLATES_MODULE_DEBUG})
   list(
     APPEND
     TEST_FILES
     cagg_concurrent_invalidation.spec
-    cagg_watermark_concurrent_update.spec
     compression_chunk_race.spec
     compression_freeze.spec
     compression_merge_race.spec
@@ -63,8 +72,6 @@ foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
 endforeach(TEMPLATE_FILE)
 
 file(REMOVE ${ISOLATION_TEST_SCHEDULE})
-
-list(SORT TEST_FILES)
 
 foreach(TEST_FILE ${TEST_FILES})
   string(REGEX REPLACE "(.+)\.spec" "\\1" TESTS_TO_RUN ${TEST_FILE})

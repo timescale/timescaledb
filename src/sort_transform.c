@@ -99,6 +99,10 @@ transform_time_op_const_interval(OpExpr *op)
 			(left == TIMESTAMPTZOID && right == INTERVALOID) ||
 			(left == DATEOID && right == INTERVALOID))
 		{
+			Interval *interval = DatumGetIntervalP((lsecond_node(Const, op->args))->constvalue);
+			if (interval->month != 0 || interval->day != 0)
+				return (Expr *) op;
+
 			char *name = get_opname(op->opno);
 
 			if (strncmp(name, "-", NAMEDATALEN) == 0 || strncmp(name, "+", NAMEDATALEN) == 0)
@@ -168,6 +172,12 @@ transform_int_op_const(OpExpr *op)
 								return copyObject(nonconst);
 						}
 						break;
+					default:
+						/*
+						 * Do nothing for unknown operators. The explicit empty
+						 * branch is to placate the static analyzers.
+						 */
+						break;
 				}
 			}
 		}
@@ -208,20 +218,12 @@ ts_sort_transform_expr(Expr *orig_expr)
 		}
 
 		/* Functions of one argument that convert something to timestamp(tz). */
-#if PG14_LT
-		if (func->funcid == F_DATE_TIMESTAMP || func->funcid == F_TIMESTAMPTZ_TIMESTAMP)
-#else
 		if (func->funcid == F_TIMESTAMP_DATE || func->funcid == F_TIMESTAMP_TIMESTAMPTZ)
-#endif
 		{
 			return transform_timestamp_cast(func);
 		}
 
-#if PG14_LT
-		if (func->funcid == F_DATE_TIMESTAMPTZ || func->funcid == F_TIMESTAMP_TIMESTAMPTZ)
-#else
 		if (func->funcid == F_TIMESTAMPTZ_DATE || func->funcid == F_TIMESTAMPTZ_TIMESTAMP)
-#endif
 		{
 			return transform_timestamptz_cast(func);
 		}

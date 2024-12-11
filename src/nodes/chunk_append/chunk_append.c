@@ -12,10 +12,10 @@
 #include <utils/builtins.h>
 #include <utils/typcache.h>
 
-#include "planner/planner.h"
-#include "nodes/chunk_append/chunk_append.h"
 #include "func_cache.h"
 #include "guc.h"
+#include "nodes/chunk_append/chunk_append.h"
+#include "planner/planner.h"
 
 static Var *find_equality_join_var(Var *sort_var, Index ht_relid, Oid eq_opr,
 								   List *join_conditions);
@@ -53,12 +53,8 @@ create_group_subpath(PlannerInfo *root, RelOptInfo *rel, List *group, List *path
 {
 	if (list_length(group) > 1)
 	{
-		MergeAppendPath *append = create_merge_append_path_compat(root,
-																  rel,
-																  group,
-																  pathkeys,
-																  required_outer,
-																  partitioned_rels);
+		MergeAppendPath *append =
+			create_merge_append_path(root, rel, group, pathkeys, required_outer);
 		*nested_children = lappend(*nested_children, append);
 	}
 	else
@@ -348,9 +344,6 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 			List *merge_childs = NIL;
 			MergeAppendPath *append;
 
-			if (flat == NULL)
-				break;
-
 			/*
 			 * For each lc_oid, there will be 0, 1, or 2 matches in flat_list: 0 matches
 			 * if child was pruned, 1 match if the chunk is uncompressed or fully compressed,
@@ -363,6 +356,10 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 #ifdef USE_ASSERT_CHECKING
 				int nmatches = 0;
 #endif
+				/* Before entering the "DO" loop, check for a valid path entry */
+				if (flat == NULL)
+					break;
+
 				do
 				{
 					Path *child = (Path *) lfirst(flat);
@@ -389,12 +386,11 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 
 			if (list_length(merge_childs) > 1)
 			{
-				append = create_merge_append_path_compat(root,
-														 rel,
-														 merge_childs,
-														 path->cpath.path.pathkeys,
-														 PATH_REQ_OUTER(subpath),
-														 NIL);
+				append = create_merge_append_path(root,
+												  rel,
+												  merge_childs,
+												  path->cpath.path.pathkeys,
+												  PATH_REQ_OUTER(subpath));
 				nested_children = lappend(nested_children, append);
 			}
 			else if (list_length(merge_childs) == 1)

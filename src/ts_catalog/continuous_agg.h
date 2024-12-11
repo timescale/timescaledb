@@ -9,11 +9,11 @@
 #include <catalog/pg_type.h>
 #include <nodes/parsenodes.h>
 
-#include "ts_catalog/catalog.h"
 #include "chunk.h"
+#include "ts_catalog/catalog.h"
 
-#include "with_clause_parser.h"
 #include "compat/compat.h"
+#include "with_clause_parser.h"
 
 #define CAGGINVAL_TRIGGER_NAME "ts_cagg_invalidation_trigger"
 
@@ -39,6 +39,12 @@
 		if (OidIsValid((newuid)))                                                                  \
 			SetUserIdAndSecContext(saved_uid, saved_secctx);                                       \
 	} while (0);
+
+/* Does the function belong to a time_bucket_ng function that is no longer allowed
+ * in CAgg definitions? */
+#define IS_DEPRECATED_TIME_BUCKET_NG_FUNC(funcinfo)                                                \
+	((funcinfo->origin == ORIGIN_TIMESCALE_EXPERIMENTAL) &&                                        \
+	 (strcmp("time_bucket_ng", funcinfo->funcname) == 0))
 
 typedef enum ContinuousAggViewOption
 {
@@ -66,8 +72,6 @@ extern TSDLLEXPORT WithClauseResult *ts_continuous_agg_with_clause_parse(const L
 extern TSDLLEXPORT List *
 ts_continuous_agg_get_compression_defelems(const WithClauseResult *with_clauses);
 
-#define BUCKET_WIDTH_VARIABLE (-1)
-
 /*
  * Information about the bucketing function.
  */
@@ -82,39 +86,44 @@ typedef struct ContinuousAggsBucketFunction
 	 * situations since PostgreSQL protects the bucket_function from deletion until the CAgg is
 	 * defined. */
 	Oid bucket_function;
+	Oid bucket_width_type; /* type of bucket_width */
 
-	/* `bucket_width` argument of the function. */
-	Interval *bucket_width;
+	/* Is the interval of the bucket fixed? */
+	bool bucket_fixed_interval;
 
+	/* Is the bucket defined on a time datatype ?*/
+	bool bucket_time_based;
+
+	/*
+	 * Fields that are used for time based buckets
+	 */
+	Interval *bucket_time_width;
 	/*
 	 * Custom origin value stored as UTC timestamp.
 	 * If not specified, stores infinity.
 	 */
-	TimestampTz bucket_origin;
+	TimestampTz bucket_time_origin;
+	Interval *bucket_time_offset;
+	char *bucket_time_timezone;
 
-	/* `bucket_offset` argument of the function. */
-	Interval *bucket_offset;
+	/*
+	 * Fields that are used on integer based buckets
+	 */
+	int64 bucket_integer_width;
+	int64 bucket_integer_offset;
 
-	/* `timezone` argument of the function provided by the user. */
-	char *timezone;
-
-	/* Is the interval of the bucket fixed? */
-	bool bucket_fixed_interval;
 } ContinuousAggsBucketFunction;
 
 typedef struct ContinuousAgg
 {
 	FormData_continuous_agg data;
 
-	/*
-	 * bucket_function is NULL unless the bucket is variable in size,
-	 * e.g. monthly bucket or a bucket with a timezone.
-	 * In this case data.bucket_with stores BUCKET_WIDTH_VARIABLE.
-	 */
+	/* Info about the time bucketing function */
 	ContinuousAggsBucketFunction *bucket_function;
 
 	/* Relid of the user-facing view */
 	Oid relid;
+
 	/* Type of the primary partitioning dimension */
 	Oid partition_type;
 } ContinuousAgg;
@@ -139,21 +148,10 @@ typedef enum ContinuousAggHypertableStatus
 	HypertableIsMaterializationAndRaw = HypertableIsMaterialization | HypertableIsRawTable,
 } ContinuousAggHypertableStatus;
 
-typedef struct ContinuousAggMatOptions
-{
-	bool verbose;
-	bool within_single_transaction;
-	bool process_only_invalidation;
-	int64 invalidate_prior_to_time; /* exclusive, if not bucketed, the last invalidation bucket will
-									   cover this point */
-} ContinuousAggMatOptions;
-
 typedef struct CaggsInfoData
 {
 	/* (int32) elements */
 	List *mat_hypertable_ids;
-	/* (int64) Datum elements; stores BUCKET_WIDTH_VARIABLE for variable buckets */
-	List *bucket_widths;
 	/* (const ContinuousAggsBucketFunction *) elements; stores NULL for fixed buckets */
 	List *bucket_functions;
 } CaggsInfo;
@@ -202,8 +200,7 @@ extern ContinuousAgg *ts_continuous_agg_find_userview_name(const char *schema, c
 
 extern TSDLLEXPORT void ts_continuous_agg_invalidate_chunk(Hypertable *ht, Chunk *chunk);
 
-extern TSDLLEXPORT bool ts_continuous_agg_bucket_width_variable(const ContinuousAgg *agg);
-extern TSDLLEXPORT int64 ts_continuous_agg_bucket_width(const ContinuousAgg *agg);
+extern TSDLLEXPORT bool ts_continuous_agg_bucket_on_interval(Oid bucket_function);
 
 extern TSDLLEXPORT void
 ts_compute_inscribed_bucketed_refresh_window_variable(int64 *start, int64 *end,
@@ -215,3 +212,6 @@ extern TSDLLEXPORT int64 ts_compute_beginning_of_the_next_bucket_variable(
 	int64 timeval, const ContinuousAggsBucketFunction *bf);
 
 extern TSDLLEXPORT Query *ts_continuous_agg_get_query(ContinuousAgg *cagg);
+
+extern TSDLLEXPORT int64
+ts_continuous_agg_fixed_bucket_width(const ContinuousAggsBucketFunction *bucket_function);

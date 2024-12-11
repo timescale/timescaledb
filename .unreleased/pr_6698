@@ -1,2 +1,0 @@
-Fixes: #6698 Define meaning of 0 retries for jobs as no retries
-Thanks: @bvanelli for reporting an issue with the jobs retry count

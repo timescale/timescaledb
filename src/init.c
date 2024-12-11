@@ -8,19 +8,19 @@
 #include <access/xact.h>
 #include <commands/extension.h>
 #include <miscadmin.h>
-#include <utils/guc.h>
 #include <parser/analyze.h>
 #include <storage/ipc.h>
+#include <utils/guc.h>
 
-#include "extension.h"
-#include "bgw/launcher_interface.h"
-#include "guc.h"
-#include "ts_catalog/catalog.h"
-#include "version.h"
 #include "compat/compat.h"
+#include "bgw/launcher_interface.h"
 #include "config.h"
+#include "extension.h"
+#include "guc.h"
 #include "license_guc.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
+#include "ts_catalog/catalog.h"
+#include "version.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;

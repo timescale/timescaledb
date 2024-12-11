@@ -6,11 +6,11 @@
 #pragma once
 
 #include <postgres.h>
-#include <nodes/parsenodes.h>
-#include <access/xact.h>
 #include <access/relscan.h>
-#include <executor/executor.h>
+#include <access/xact.h>
 #include <commands/copy.h>
+#include <executor/executor.h>
+#include <nodes/parsenodes.h>
 #include <storage/lockdefs.h>
 
 typedef struct ChunkDispatch ChunkDispatch;

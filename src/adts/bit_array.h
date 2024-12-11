@@ -10,8 +10,8 @@
 #include <lib/stringinfo.h>
 #include <libpq/pqformat.h>
 
-#include <adts/uint64_vec.h>
 #include "bit_array_impl.h"
+#include <adts/uint64_vec.h>
 
 /*******************
  ***  Public API ***

@@ -7,10 +7,9 @@
 
 #include <postgres.h>
 
-#include "export.h"
 #include "cache.h"
-#include "hypertable.h"
 #include "export.h"
+#include "hypertable.h"
 
 /* When a hypertable entry ht is fetched using the cache
  * i.e. ts_hypertable_cache_get_entry and variants, all related information such as

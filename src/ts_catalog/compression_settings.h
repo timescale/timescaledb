@@ -8,8 +8,8 @@
 #include <postgres.h>
 #include <catalog/pg_type.h>
 
-#include "ts_catalog/catalog.h"
 #include "hypertable.h"
+#include "ts_catalog/catalog.h"
 
 typedef struct CompressionSettings
 {

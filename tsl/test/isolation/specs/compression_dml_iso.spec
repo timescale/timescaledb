@@ -8,7 +8,7 @@ setup
     SELECT create_hypertable('ts_device_table', 'time', chunk_time_interval => 10);
     INSERT INTO ts_device_table SELECT generate_series(0,29,1), 1, 100, 20;
     ALTER TABLE ts_device_table set(timescaledb.compress, timescaledb.compress_segmentby='location', timescaledb.compress_orderby='time');
-    CREATE FUNCTION lock_chunktable( name text) RETURNS void AS $$
+    CREATE OR REPLACE FUNCTION lock_chunktable( name text) RETURNS void AS $$
     BEGIN EXECUTE format( 'lock table %s IN SHARE MODE', name);
     END; $$ LANGUAGE plpgsql;
     CREATE FUNCTION count_chunktable(tbl regclass) RETURNS TABLE("count(*)" int, "count(*) only" int) AS $$
@@ -65,12 +65,21 @@ step "CA1" {
   FROM show_chunks('ts_device_table') AS ch
   ORDER BY ch::text;
 }
+step "NOS"
+{
+    ALTER TABLE ts_device_table set(timescaledb.compress, timescaledb.compress_orderby='time');
+}
 step "CAc" { COMMIT; }
 
 # Test concurrent update/delete operations
 permutation "CA1" "CAc" "SH" "I1" "Ic" "SH" "UPD1" "UPDc" "SH" "DEL1" "DELc" "SH" "UPD1" "UPDc" "SH"
 permutation "IN1" "INc" "CA1" "CAc" "SH" "SS" "DEL1" "UPD1" "DELc" "UPDc" "SH" "SS"
 permutation "IN1" "INc" "CA1" "CAc" "SH" "SS" "UPD1" "DEL1" "UPDc" "DELc" "SH" "SS"
+
+# Test same operations with no segmentby columns (no index scanning)
+permutation "NOS" "CA1" "CAc" "SH" "I1" "Ic" "SH" "UPD1" "UPDc" "SH" "DEL1" "DELc" "SH" "UPD1" "UPDc" "SH"
+permutation "NOS" "IN1" "INc" "CA1" "CAc" "SH" "SS" "DEL1" "UPD1" "DELc" "UPDc" "SH" "SS"
+permutation "NOS" "IN1" "INc" "CA1" "CAc" "SH" "SS" "UPD1" "DEL1" "UPDc" "DELc" "SH" "SS"
 
 #Test interaction with upper isolation levels
 permutation "IN1" "INc" "CA1" "CAc" "SH" "SS" "DEL1" "UPDrr"  "DELc" "UPDc" "SH" "SS"

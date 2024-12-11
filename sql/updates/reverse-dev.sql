@@ -1,73 +1,59 @@
-DROP FUNCTION IF EXISTS _timescaledb_functions.remove_dropped_chunk_metadata(INTEGER);
+-- Hypercore AM
+DROP ACCESS METHOD IF EXISTS hypercore_proxy;
+DROP FUNCTION IF EXISTS ts_hypercore_proxy_handler;
+DROP ACCESS METHOD IF EXISTS hypercore;
+DROP FUNCTION IF EXISTS ts_hypercore_handler;
+DROP FUNCTION IF EXISTS _timescaledb_debug.is_compressed_tid;
 
---
--- Rebuild the catalog table `_timescaledb_catalog.continuous_aggs_bucket_function`
---
-UPDATE _timescaledb_catalog.continuous_aggs_bucket_function SET bucket_origin = '' WHERE bucket_origin IS NULL;
-UPDATE _timescaledb_catalog.continuous_aggs_bucket_function SET bucket_timezone = '' WHERE bucket_timezone IS NULL;
+DROP FUNCTION IF EXISTS @extschema@.compress_chunk(uncompressed_chunk REGCLASS,	if_not_compressed BOOLEAN, recompress BOOLEAN, hypercore_use_access_method BOOL);
 
-CREATE TABLE _timescaledb_catalog._tmp_continuous_aggs_bucket_function AS
-    SELECT
-      mat_hypertable_id,
-      CASE WHEN bucket_func::text like 'timescaledb_experimental%' THEN true ELSE false END,
-      split_part(bucket_func::regproc::text, '.', 2),
-      bucket_width,
-      bucket_origin,
-      bucket_timezone
-    FROM
-      _timescaledb_catalog.continuous_aggs_bucket_function
-    ORDER BY
-         mat_hypertable_id;
+CREATE FUNCTION @extschema@.compress_chunk(
+    uncompressed_chunk REGCLASS,
+    if_not_compressed BOOLEAN = true,
+    recompress BOOLEAN = false
+) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_compress_chunk' LANGUAGE C STRICT VOLATILE;
 
-ALTER EXTENSION timescaledb
-    DROP TABLE _timescaledb_catalog.continuous_aggs_bucket_function;
+DROP FUNCTION IF EXISTS @extschema@.add_compression_policy(hypertable REGCLASS, compress_after "any", if_not_exists BOOL, schedule_interval INTERVAL, initial_start TIMESTAMPTZ, timezone TEXT, compress_created_before INTERVAL, hypercore_use_access_method BOOL);
 
-DROP TABLE _timescaledb_catalog.continuous_aggs_bucket_function;
+CREATE FUNCTION @extschema@.add_compression_policy(
+    hypertable REGCLASS,
+    compress_after "any" = NULL,
+    if_not_exists BOOL = false,
+    schedule_interval INTERVAL = NULL,
+    initial_start TIMESTAMPTZ = NULL,
+    timezone TEXT = NULL,
+    compress_created_before INTERVAL = NULL
+)
+RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_policy_compression_add'
+LANGUAGE C VOLATILE;
 
-CREATE TABLE _timescaledb_catalog.continuous_aggs_bucket_function (
-  mat_hypertable_id integer NOT NULL,
-  -- The schema of the function. Equals TRUE for "timescaledb_experimental", FALSE otherwise.
-  experimental bool NOT NULL,
-  -- Name of the bucketing function, e.g. "time_bucket" or "time_bucket_ng"
-  name text NOT NULL,
-  -- `bucket_width` argument of the function, e.g. "1 month"
-  bucket_width text NOT NULL,
-  -- `origin` argument of the function provided by the user
-  origin text NOT NULL,
-  -- `timezone` argument of the function provided by the user
-  timezone text NOT NULL,
-  -- table constraints
-  CONSTRAINT continuous_aggs_bucket_function_pkey PRIMARY KEY (mat_hypertable_id),
-  CONSTRAINT continuous_aggs_bucket_function_mat_hypertable_id_fkey FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
-);
+DROP FUNCTION IF EXISTS timescaledb_experimental.add_policies(relation REGCLASS, if_not_exists BOOL, refresh_start_offset "any", refresh_end_offset "any", compress_after "any", drop_after "any", hypercore_use_access_method BOOL);
 
-INSERT INTO _timescaledb_catalog.continuous_aggs_bucket_function
-  SELECT * FROM _timescaledb_catalog._tmp_continuous_aggs_bucket_function;
+CREATE FUNCTION timescaledb_experimental.add_policies(
+    relation REGCLASS,
+    if_not_exists BOOL = false,
+    refresh_start_offset "any" = NULL,
+    refresh_end_offset "any" = NULL,
+    compress_after "any" = NULL,
+    drop_after "any" = NULL)
+RETURNS BOOL
+AS '@MODULE_PATHNAME@', 'ts_policies_add'
+LANGUAGE C VOLATILE;
 
-DROP TABLE _timescaledb_catalog._tmp_continuous_aggs_bucket_function;
+DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression_execute(job_id INTEGER, htid INTEGER, lag ANYELEMENT, maxchunks INTEGER, verbose_log BOOLEAN, recompress_enabled  BOOLEAN, use_creation_time BOOLEAN, useam BOOLEAN);
 
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_bucket_function', '');
+DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression(job_id INTEGER, config JSONB);
+DROP PROCEDURE IF EXISTS @extschema@.convert_to_columnstore(REGCLASS, BOOLEAN, BOOLEAN, BOOLEAN);
+DROP PROCEDURE IF EXISTS @extschema@.convert_to_rowstore(REGCLASS, BOOLEAN);
+DROP PROCEDURE IF EXISTS @extschema@.add_columnstore_policy(REGCLASS, "any", BOOL, INTERVAL, TIMESTAMPTZ, TEXT, INTERVAL, BOOL);
+DROP PROCEDURE IF EXISTS @extschema@.remove_columnstore_policy(REGCLASS, BOOL);
+DROP FUNCTION IF EXISTS @extschema@.hypertable_columnstore_stats(REGCLASS);
+DROP FUNCTION IF EXISTS @extschema@.chunk_columnstore_stats(REGCLASS);
 
-GRANT SELECT ON TABLE _timescaledb_catalog.continuous_aggs_bucket_function TO PUBLIC;
+ALTER EXTENSION timescaledb DROP VIEW timescaledb_information.hypertable_columnstore_settings;
+ALTER EXTENSION timescaledb DROP VIEW timescaledb_information.chunk_columnstore_settings;
 
-ANALYZE _timescaledb_catalog.continuous_aggs_bucket_function;
-
---
--- End rebuild the catalog table `_timescaledb_catalog.continuous_aggs_bucket_function`
---
-
--- Convert _timescaledb_catalog.continuous_aggs_bucket_function.origin back to Timestamp
-UPDATE _timescaledb_catalog.continuous_aggs_bucket_function
-   SET origin = origin::timestamptz::timestamp::text
-   WHERE length(origin) > 1;
-
--- only create stub
-CREATE FUNCTION _timescaledb_functions.get_chunk_relstats(relid REGCLASS)
-RETURNS TABLE(chunk_id INTEGER, hypertable_id INTEGER, num_pages INTEGER, num_tuples REAL, num_allvisible INTEGER)
-AS $$BEGIN END$$ LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp;
-
-CREATE FUNCTION _timescaledb_functions.get_chunk_colstats(relid REGCLASS)
-RETURNS TABLE(chunk_id INTEGER, hypertable_id INTEGER, att_num INTEGER, nullfrac REAL, width INTEGER, distinctval REAL, slotkind INTEGER[], slotopstrings CSTRING[], slotcollations OID[], slot1numbers FLOAT4[], slot2numbers FLOAT4[], slot3numbers FLOAT4[], slot4numbers FLOAT4[], slot5numbers FLOAT4[], slotvaluetypetrings CSTRING[], slot1values CSTRING[], slot2values CSTRING[], slot3values CSTRING[], slot4values CSTRING[], slot5values CSTRING[])
-AS $$BEGIN END$$ LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp;
-
+DROP VIEW timescaledb_information.hypertable_columnstore_settings;
+DROP VIEW timescaledb_information.chunk_columnstore_settings;
 

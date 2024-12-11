@@ -71,3 +71,38 @@ SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 2,1;
    ->  Index Scan using _hyper_1_1_chunk_order_test_device_id_time_idx on _hyper_1_1_chunk
 (2 rows)
 
+-- test sort optimization with interval calculation with non-fixed interval
+-- #7097
+CREATE TABLE i7097_1(time timestamptz NOT NULL, quantity float, "isText" boolean);
+CREATE TABLE i7097_2(time timestamptz NOT NULL, quantity float, "isText" boolean);
+CREATE INDEX ON i7097_1(time) WHERE "isText" IS NULL;
+CREATE INDEX ON i7097_2(time) WHERE "isText" IS NULL;
+SELECT table_name FROM create_hypertable('i7097_1', 'time', create_default_indexes => false);
+ table_name 
+------------
+ i7097_1
+(1 row)
+
+SELECT table_name FROM create_hypertable('i7097_2', 'time', create_default_indexes => false);
+ table_name 
+------------
+ i7097_2
+(1 row)
+
+INSERT INTO i7097_1(time, quantity)
+SELECT time, round((random() * (100-3) + 3)::NUMERIC) AS quantity
+FROM generate_series('2023-01-01T00:00:00+01:00', '2023-05-01T00:00:00+01:00', interval 'PT10M') AS t(time);
+INSERT INTO i7097_2(time, quantity)
+SELECT time, round((random() * (100-3) + 3)::NUMERIC) AS quantity
+FROM generate_series('2023-01-01T00:00:00+01:00', '2023-05-01T00:00:00+01:00', interval 'PT10M') AS t(time);
+VACUUM ANALYZE i7097_1, i7097_2;
+SET TIME ZONE 'Europe/Paris';
+WITH
+"cte1" AS (SELECT time + interval 'P1Y' AS time, avg(quantity) AS quantity FROM i7097_1 WHERE time >= '2024-03-31T00:00:00+01:00'::timestamptz - interval 'P1Y' AND time < '2024-03-31T23:59:59+02:00'::timestamptz + (- interval 'P1Y') AND "isText" IS NULL GROUP BY 1 ORDER BY 1 ASC),
+"cte2" AS (SELECT time + interval 'P1Y' AS time, avg(quantity) AS quantity FROM i7097_2 WHERE time >= '2024-03-31T00:00:00+01:00'::timestamptz - interval 'P1Y' AND time < '2024-03-31T23:59:59+02:00'::timestamptz + (- interval 'P1Y') AND "isText" IS NULL GROUP BY 1 ORDER BY 1 ASC)
+SELECT count(*) FROM (SELECT time, cte1.quantity + cte2.quantity FROM cte1 FULL OUTER JOIN cte2 USING (time)) j;
+ count 
+-------
+   138
+(1 row)
+

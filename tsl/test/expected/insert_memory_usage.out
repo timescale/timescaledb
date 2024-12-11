@@ -71,6 +71,8 @@ select * from portal_memory_log where (
 truncate uk_price_paid;
 insert into uk_price_paid select * from uk_price_paid_one;
 alter table uk_price_paid set (timescaledb.compress, timescaledb.compress_orderby = 'date');
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "uk_price_paid" is set to ""
 select count(compress_chunk(chunk)) from show_chunks('uk_price_paid') chunk;
  count 
 -------

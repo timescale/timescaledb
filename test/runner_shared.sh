@@ -11,6 +11,7 @@ TEST_PGUSER=${TEST_PGUSER:-postgres}
 TEST_INPUT_DIR=${TEST_INPUT_DIR:-${EXE_DIR}}
 TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR:-${EXE_DIR}}
 TEST_SUPPORT_FILE=${CURRENT_DIR}/sql/utils/testsupport.sql
+TEST_SUPPORT_FILE_INIT=${CURRENT_DIR}/sql/utils/testsupport_init.sql
 
 # Read the extension version from version.config
 read -r VERSION < ${CURRENT_DIR}/../version.config
@@ -50,6 +51,7 @@ if mkdir ${TEST_OUTPUT_DIR}/.pg_init 2>/dev/null; then
      -v TEST_INPUT_DIR=${TEST_INPUT_DIR} \
      -v TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR} \
      -v TEST_SUPPORT_FILE=${TEST_SUPPORT_FILE} \
+     -v TEST_SUPPORT_FILE_INIT=${TEST_SUPPORT_FILE_INIT} \
      -v TSL_MODULE_PATHNAME="'timescaledb-tsl-${EXT_VERSION}'" \
      "$@" -d ${TEST_DBNAME} < ${TEST_INPUT_DIR}/shared/sql/include/shared_setup.sql >/dev/null
   touch ${TEST_OUTPUT_DIR}/.pg_init/done
@@ -77,17 +79,4 @@ ${PSQL} -U ${TEST_PGUSER} \
      -v ROLE_DEFAULT_PERM_USER_2=${TEST_ROLE_DEFAULT_PERM_USER_2} \
      -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" \
      -v TSL_MODULE_PATHNAME="'timescaledb-tsl-${EXT_VERSION}'" \
-     "$@" -d ${TEST_DBNAME} 2>&1 | \
-          sed  -e '/<exclude_from_test>/,/<\/exclude_from_test>/d' \
-               -e 's!_[0-9]\{1,\}_[0-9]\{1,\}_chunk!_X_X_chunk!g' \
-               -e 's!^ \{1,\}QUERY PLAN \{1,\}$!QUERY PLAN!' \
-               -e 's!:  actual rows!: actual rows!' \
-               -e '/^-\{1,\}$/d' \
-               -e 's! Memory: [0-9]\{1,\}kB!!' \
-               -e 's! Memory Usage: [0-9]\{1,\}kB!!' \
-               -e 's! Average  Peak Memory: [0-9]\{1,\}kB!!' | \
-          grep -v 'DEBUG:  rehashing catalog cache id' | \
-          grep -v 'DEBUG:  compacted fsync request queue from' | \
-          grep -v 'DEBUG:  creating and filling new WAL file' | \
-          grep -v 'DEBUG:  done creating and filling new WAL file' | \
-          grep -v 'NOTICE:  cancelling the background worker for job'
+     "$@" -d ${TEST_DBNAME} 2>&1 | ${CURRENT_DIR}/runner_cleanup_output.sh "shared"

@@ -20,6 +20,8 @@ set(SOURCES
     event_trigger.c
     extension.c
     extension_constants.c
+    expression_utils.c
+    foreign_key.c
     gapfill.c
     guc.c
     histogram.c
@@ -45,7 +47,8 @@ set(SOURCES
     trigger.c
     utils.c
     version.c
-    with_clause_parser.c)
+    with_clause_parser.c
+    tss_callbacks.c)
 
 # Add test source code in Debug builds
 if(CMAKE_BUILD_TYPE MATCHES Debug)
@@ -101,7 +104,9 @@ if(USE_OPENSSL)
   set(TS_USE_OPENSSL ${USE_OPENSSL})
   target_include_directories(${PROJECT_NAME} SYSTEM
                              PUBLIC ${OPENSSL_INCLUDE_DIR})
-  target_link_libraries(${PROJECT_NAME} ${OPENSSL_LIBRARIES})
+  if(MSVC)
+    target_link_libraries(${PROJECT_NAME} ${OPENSSL_LIBRARIES})
+  endif(MSVC)
 endif(USE_OPENSSL)
 
 configure_file(config.h.in config.h)

@@ -158,7 +158,8 @@ UNION ALL
   GROUP BY (public.time_bucket(168, conditions."time"));
 COPY _timescaledb_catalog.hypertable (id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size, compression_state, compressed_hypertable_id, status) FROM stdin;
 COPY _timescaledb_catalog.dimension (id, hypertable_id, column_name, column_type, aligned, num_slices, partitioning_func_schema, partitioning_func, interval_length, compress_interval_length, integer_now_func_schema, integer_now_func) FROM stdin;
-COPY _timescaledb_catalog.continuous_agg (mat_hypertable_id, raw_hypertable_id, parent_mat_hypertable_id, user_view_schema, user_view_name, partial_view_schema, partial_view_name, bucket_width, direct_view_schema, direct_view_name, materialized_only, finalized) FROM stdin;
+COPY _timescaledb_catalog.continuous_agg (mat_hypertable_id, raw_hypertable_id, parent_mat_hypertable_id, user_view_schema, user_view_name, partial_view_schema, partial_view_name, direct_view_schema, direct_view_name, materialized_only, finalized) FROM stdin;
+COPY _timescaledb_catalog.continuous_aggs_bucket_function (mat_hypertable_id, bucket_func, bucket_width, bucket_fixed_width) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_invalidation_threshold (hypertable_id, watermark) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (materialization_id, lowest_modified_value, greatest_modified_value) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_watermark (mat_hypertable_id, watermark) FROM stdin;
@@ -341,6 +342,8 @@ psql:include/cagg_migrate_common.sql:104: ERROR:  plan already exists for contin
 -- policies for test
 ALTER MATERIALIZED VIEW conditions_summary_daily SET (timescaledb.compress=true);
 psql:include/cagg_migrate_common.sql:108: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:108: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:108: NOTICE:  default segment by for hypertable "_materialized_hypertable_3" is set to ""
 \if :IS_TIME_DIMENSION
 SELECT add_retention_policy('conditions_summary_daily', '30 days'::interval);
 SELECT add_continuous_aggregate_policy('conditions_summary_daily', '30 days'::interval, '1 day'::interval, '1 hour'::interval);
@@ -369,12 +372,12 @@ SELECT *
 FROM timescaledb_information.jobs
 WHERE hypertable_schema = :'MAT_SCHEMA_NAME'
 AND hypertable_name = :'MAT_TABLE_NAME'
-AND job_id >= 1000;
+AND job_id >= 1000 ORDER BY job_id;
  job_id |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule |                            config                             | next_start | initial_start |   hypertable_schema   |      hypertable_name       |      check_schema      |                check_name                 
 --------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+--------------------+-----------+----------------+---------------------------------------------------------------+------------+---------------+-----------------------+----------------------------+------------------------+-------------------------------------------
-   1002 | Compression Policy [1002]                  | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 3, "compress_after": 100}                   |            |               | _timescaledb_internal | _materialized_hypertable_3 | _timescaledb_functions | policy_compression_check
-   1001 | Refresh Continuous Aggregate Policy [1001] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": 1, "start_offset": 50, "mat_hypertable_id": 3} |            |               | _timescaledb_internal | _materialized_hypertable_3 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
    1000 | Retention Policy [1000]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              | {"drop_after": 400, "hypertable_id": 3}                       |            |               | _timescaledb_internal | _materialized_hypertable_3 | _timescaledb_functions | policy_retention_check
+   1001 | Refresh Continuous Aggregate Policy [1001] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": 1, "start_offset": 50, "mat_hypertable_id": 3} |            |               | _timescaledb_internal | _materialized_hypertable_3 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
+   1002 | Compression Policy [1002]                  | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 3, "compress_after": 100}                   |            |               | _timescaledb_internal | _materialized_hypertable_3 | _timescaledb_functions | policy_compression_check
 (3 rows)
 
 -- execute the migration
@@ -384,6 +387,8 @@ TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCA
 psql:include/cagg_migrate_common.sql:128: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 CALL cagg_migrate('conditions_summary_daily');
 psql:include/cagg_migrate_common.sql:129: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:129: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:129: NOTICE:  default segment by for hypertable "_materialized_hypertable_7" is set to ""
 psql:include/cagg_migrate_common.sql:129: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('1008' AS integer), NULL);"
 SELECT
     ca.raw_hypertable_id AS "NEW_RAW_HYPERTABLE_ID",
@@ -430,12 +435,12 @@ SELECT *
 FROM timescaledb_information.jobs
 WHERE hypertable_schema = :'NEW_MAT_SCHEMA_NAME'
 AND hypertable_name = :'NEW_MAT_TABLE_NAME'
-AND job_id >= 1000;
+AND job_id >= 1000 ORDER BY job_id;
  job_id |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule |                            config                             | next_start | initial_start |   hypertable_schema   |      hypertable_name       |      check_schema      |                check_name                 
 --------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+--------------------+-----------+----------------+---------------------------------------------------------------+------------+---------------+-----------------------+----------------------------+------------------------+-------------------------------------------
-   1005 | Compression Policy [1005]                  | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 7, "compress_after": 100}                   |            |               | _timescaledb_internal | _materialized_hypertable_7 | _timescaledb_functions | policy_compression_check
-   1004 | Refresh Continuous Aggregate Policy [1004] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": 1, "start_offset": 50, "mat_hypertable_id": 7} |            |               | _timescaledb_internal | _materialized_hypertable_7 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
    1003 | Retention Policy [1003]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              | {"drop_after": 400, "hypertable_id": 7}                       |            |               | _timescaledb_internal | _materialized_hypertable_7 | _timescaledb_functions | policy_retention_check
+   1004 | Refresh Continuous Aggregate Policy [1004] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": 1, "start_offset": 50, "mat_hypertable_id": 7} |            |               | _timescaledb_internal | _materialized_hypertable_7 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
+   1005 | Compression Policy [1005]                  | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 7, "compress_after": 100}                   |            |               | _timescaledb_internal | _materialized_hypertable_7 | _timescaledb_functions | policy_compression_check
 (3 rows)
 
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
@@ -443,7 +448,7 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
 -------------------+---------+----------+------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------
                  3 |       1 | FINISHED | SAVE WATERMARK   | {"watermark": "1008"}
                  3 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
-                 3 |       3 | FINISHED | DISABLE POLICIES | {"policies": [1002, 1000]}
+                 3 |       3 | FINISHED | DISABLE POLICIES | {"policies": [1000, 1002]}
                  3 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "1008", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "integer"}
                  3 |       5 | FINISHED | COPY DATA        | {"end_ts": "100", "start_ts": "0", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
                  3 |       6 | FINISHED | COPY DATA        | {"end_ts": "200", "start_ts": "100", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
@@ -455,10 +460,10 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
                  3 |      12 | FINISHED | COPY DATA        | {"end_ts": "800", "start_ts": "700", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
                  3 |      13 | FINISHED | COPY DATA        | {"end_ts": "900", "start_ts": "800", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
                  3 |      14 | FINISHED | COPY DATA        | {"end_ts": "1000", "start_ts": "900", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |      15 | FINISHED | COPY POLICIES    | {"policies": [1002, 1001, 1000], "cagg_name_new": "conditions_summary_daily_new"}
+                 3 |      15 | FINISHED | COPY POLICIES    | {"policies": [1000, 1001, 1002], "cagg_name_new": "conditions_summary_daily_new"}
                  3 |      16 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
                  3 |      17 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                 3 |      18 | FINISHED | ENABLE POLICIES  | {"policies": [1003, 1004, 1005, 1002, 1001, 1000]}
+                 3 |      18 | FINISHED | ENABLE POLICIES  | {"policies": [1003, 1004, 1005, 1000, 1001, 1002]}
 (18 rows)
 
 -- check migrated data. should return 0 (zero) rows
@@ -529,6 +534,8 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE);
 psql:include/cagg_migrate_common.sql:181: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:181: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:181: NOTICE:  default segment by for hypertable "_materialized_hypertable_9" is set to ""
 psql:include/cagg_migrate_common.sql:181: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('1008' AS integer), NULL);"
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
@@ -633,11 +640,13 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE, drop_old => TRUE);
 psql:include/cagg_migrate_common.sql:203: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:203: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:203: NOTICE:  default segment by for hypertable "_materialized_hypertable_11" is set to ""
 psql:include/cagg_migrate_common.sql:203: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('1008' AS integer), NULL);"
 psql:include/cagg_migrate_common.sql:203: NOTICE:  drop cascades to 10 other objects
-psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1002 not found, skipping
-psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1001 not found, skipping
 psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1000 not found, skipping
+psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1001 not found, skipping
+psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1002 not found, skipping
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
                   View "public.conditions_summary_daily"
@@ -1018,7 +1027,8 @@ UNION ALL
   GROUP BY (public.time_bucket('7 days'::interval, conditions."time"));
 COPY _timescaledb_catalog.hypertable (id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size, compression_state, compressed_hypertable_id, status) FROM stdin;
 COPY _timescaledb_catalog.dimension (id, hypertable_id, column_name, column_type, aligned, num_slices, partitioning_func_schema, partitioning_func, interval_length, compress_interval_length, integer_now_func_schema, integer_now_func) FROM stdin;
-COPY _timescaledb_catalog.continuous_agg (mat_hypertable_id, raw_hypertable_id, parent_mat_hypertable_id, user_view_schema, user_view_name, partial_view_schema, partial_view_name, bucket_width, direct_view_schema, direct_view_name, materialized_only, finalized) FROM stdin;
+COPY _timescaledb_catalog.continuous_agg (mat_hypertable_id, raw_hypertable_id, parent_mat_hypertable_id, user_view_schema, user_view_name, partial_view_schema, partial_view_name, direct_view_schema, direct_view_name, materialized_only, finalized) FROM stdin;
+COPY _timescaledb_catalog.continuous_aggs_bucket_function (mat_hypertable_id, bucket_func, bucket_width, bucket_fixed_width) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_invalidation_threshold (hypertable_id, watermark) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (materialization_id, lowest_modified_value, greatest_modified_value) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_watermark (mat_hypertable_id, watermark) FROM stdin;
@@ -1193,6 +1203,8 @@ psql:include/cagg_migrate_common.sql:104: ERROR:  plan already exists for contin
 -- policies for test
 ALTER MATERIALIZED VIEW conditions_summary_daily SET (timescaledb.compress=true);
 psql:include/cagg_migrate_common.sql:108: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:108: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:108: NOTICE:  default segment by for hypertable "_materialized_hypertable_7" is set to ""
 \if :IS_TIME_DIMENSION
 SELECT add_retention_policy('conditions_summary_daily', '30 days'::interval);
  add_retention_policy 
@@ -1221,12 +1233,12 @@ SELECT *
 FROM timescaledb_information.jobs
 WHERE hypertable_schema = :'MAT_SCHEMA_NAME'
 AND hypertable_name = :'MAT_TABLE_NAME'
-AND job_id >= 1000;
+AND job_id >= 1000 ORDER BY job_id;
  job_id |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule |                                     config                                     | next_start | initial_start |   hypertable_schema   |      hypertable_name       |      check_schema      |                check_name                 
 --------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+--------------------+-----------+----------------+--------------------------------------------------------------------------------+------------+---------------+-----------------------+----------------------------+------------------------+-------------------------------------------
-   1014 | Compression Policy [1014]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 7, "compress_after": "@ 45 days"}                            |            |               | _timescaledb_internal | _materialized_hypertable_7 | _timescaledb_functions | policy_compression_check
-   1013 | Refresh Continuous Aggregate Policy [1013] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 7} |            |               | _timescaledb_internal | _materialized_hypertable_7 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
    1012 | Retention Policy [1012]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              | {"drop_after": "@ 30 days", "hypertable_id": 7}                                |            |               | _timescaledb_internal | _materialized_hypertable_7 | _timescaledb_functions | policy_retention_check
+   1013 | Refresh Continuous Aggregate Policy [1013] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 7} |            |               | _timescaledb_internal | _materialized_hypertable_7 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
+   1014 | Compression Policy [1014]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 7, "compress_after": "@ 45 days"}                            |            |               | _timescaledb_internal | _materialized_hypertable_7 | _timescaledb_functions | policy_compression_check
 (3 rows)
 
 -- execute the migration
@@ -1236,6 +1248,8 @@ TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCA
 psql:include/cagg_migrate_common.sql:128: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 CALL cagg_migrate('conditions_summary_daily');
 psql:include/cagg_migrate_common.sql:129: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:129: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:129: NOTICE:  default segment by for hypertable "_materialized_hypertable_11" is set to ""
 psql:include/cagg_migrate_common.sql:129: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('2023-01-01 00:00:00' AS timestamp without time zone), NULL);"
 SELECT
     ca.raw_hypertable_id AS "NEW_RAW_HYPERTABLE_ID",
@@ -1282,12 +1296,12 @@ SELECT *
 FROM timescaledb_information.jobs
 WHERE hypertable_schema = :'NEW_MAT_SCHEMA_NAME'
 AND hypertable_name = :'NEW_MAT_TABLE_NAME'
-AND job_id >= 1000;
+AND job_id >= 1000 ORDER BY job_id;
  job_id |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule |                                     config                                      | next_start | initial_start |   hypertable_schema   |       hypertable_name       |      check_schema      |                check_name                 
 --------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+--------------------+-----------+----------------+---------------------------------------------------------------------------------+------------+---------------+-----------------------+-----------------------------+------------------------+-------------------------------------------
-   1017 | Compression Policy [1017]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 11, "compress_after": "@ 45 days"}                            |            |               | _timescaledb_internal | _materialized_hypertable_11 | _timescaledb_functions | policy_compression_check
-   1016 | Refresh Continuous Aggregate Policy [1016] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 11} |            |               | _timescaledb_internal | _materialized_hypertable_11 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
    1015 | Retention Policy [1015]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              | {"drop_after": "@ 30 days", "hypertable_id": 11}                                |            |               | _timescaledb_internal | _materialized_hypertable_11 | _timescaledb_functions | policy_retention_check
+   1016 | Refresh Continuous Aggregate Policy [1016] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 11} |            |               | _timescaledb_internal | _materialized_hypertable_11 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
+   1017 | Compression Policy [1017]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 11, "compress_after": "@ 45 days"}                            |            |               | _timescaledb_internal | _materialized_hypertable_11 | _timescaledb_functions | policy_compression_check
 (3 rows)
 
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
@@ -1295,7 +1309,7 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
 -------------------+---------+----------+------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
                  7 |       1 | FINISHED | SAVE WATERMARK   | {"watermark": "2023-01-01 00:00:00"}
                  7 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
-                 7 |       3 | FINISHED | DISABLE POLICIES | {"policies": [1014, 1012]}
+                 7 |       3 | FINISHED | DISABLE POLICIES | {"policies": [1012, 1014]}
                  7 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "2023-01-01 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "timestamp without time zone"}
                  7 |       5 | FINISHED | COPY DATA        | {"end_ts": "2022-03-11 00:00:00", "start_ts": "2021-12-31 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
                  7 |       6 | FINISHED | COPY DATA        | {"end_ts": "2022-05-20 00:00:00", "start_ts": "2022-03-11 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
@@ -1303,10 +1317,10 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
                  7 |       8 | FINISHED | COPY DATA        | {"end_ts": "2022-10-07 00:00:00", "start_ts": "2022-07-29 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
                  7 |       9 | FINISHED | COPY DATA        | {"end_ts": "2022-12-16 00:00:00", "start_ts": "2022-10-07 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
                  7 |      10 | FINISHED | COPY DATA        | {"end_ts": "2023-02-24 00:00:00", "start_ts": "2022-12-16 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 7 |      11 | FINISHED | COPY POLICIES    | {"policies": [1014, 1013, 1012], "cagg_name_new": "conditions_summary_daily_new"}
+                 7 |      11 | FINISHED | COPY POLICIES    | {"policies": [1012, 1013, 1014], "cagg_name_new": "conditions_summary_daily_new"}
                  7 |      12 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
                  7 |      13 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                 7 |      14 | FINISHED | ENABLE POLICIES  | {"policies": [1015, 1016, 1017, 1014, 1013, 1012]}
+                 7 |      14 | FINISHED | ENABLE POLICIES  | {"policies": [1015, 1016, 1017, 1012, 1013, 1014]}
 (14 rows)
 
 -- check migrated data. should return 0 (zero) rows
@@ -1369,6 +1383,8 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE);
 psql:include/cagg_migrate_common.sql:181: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:181: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:181: NOTICE:  default segment by for hypertable "_materialized_hypertable_13" is set to ""
 psql:include/cagg_migrate_common.sql:181: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('2023-01-01 00:00:00' AS timestamp without time zone), NULL);"
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
@@ -1473,11 +1489,13 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE, drop_old => TRUE);
 psql:include/cagg_migrate_common.sql:203: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:203: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:203: NOTICE:  default segment by for hypertable "_materialized_hypertable_15" is set to ""
 psql:include/cagg_migrate_common.sql:203: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('2023-01-01 00:00:00' AS timestamp without time zone), NULL);"
 psql:include/cagg_migrate_common.sql:203: NOTICE:  drop cascades to 6 other objects
-psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1014 not found, skipping
-psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1013 not found, skipping
 psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1012 not found, skipping
+psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1013 not found, skipping
+psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1014 not found, skipping
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
                             View "public.conditions_summary_daily"
@@ -1855,7 +1873,8 @@ UNION ALL
   GROUP BY (public.time_bucket('7 days'::interval, conditions."time"));
 COPY _timescaledb_catalog.hypertable (id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size, compression_state, compressed_hypertable_id, status) FROM stdin;
 COPY _timescaledb_catalog.dimension (id, hypertable_id, column_name, column_type, aligned, num_slices, partitioning_func_schema, partitioning_func, interval_length, compress_interval_length, integer_now_func_schema, integer_now_func) FROM stdin;
-COPY _timescaledb_catalog.continuous_agg (mat_hypertable_id, raw_hypertable_id, parent_mat_hypertable_id, user_view_schema, user_view_name, partial_view_schema, partial_view_name, bucket_width, direct_view_schema, direct_view_name, materialized_only, finalized) FROM stdin;
+COPY _timescaledb_catalog.continuous_agg (mat_hypertable_id, raw_hypertable_id, parent_mat_hypertable_id, user_view_schema, user_view_name, partial_view_schema, partial_view_name, direct_view_schema, direct_view_name, materialized_only, finalized) FROM stdin;
+COPY _timescaledb_catalog.continuous_aggs_bucket_function (mat_hypertable_id, bucket_func, bucket_width, bucket_fixed_width) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_invalidation_threshold (hypertable_id, watermark) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (materialization_id, lowest_modified_value, greatest_modified_value) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_watermark (mat_hypertable_id, watermark) FROM stdin;
@@ -2024,6 +2043,8 @@ psql:include/cagg_migrate_common.sql:104: ERROR:  plan already exists for contin
 -- policies for test
 ALTER MATERIALIZED VIEW conditions_summary_daily SET (timescaledb.compress=true);
 psql:include/cagg_migrate_common.sql:108: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:108: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:108: NOTICE:  default segment by for hypertable "_materialized_hypertable_11" is set to ""
 \if :IS_TIME_DIMENSION
 SELECT add_retention_policy('conditions_summary_daily', '30 days'::interval);
  add_retention_policy 
@@ -2052,12 +2073,12 @@ SELECT *
 FROM timescaledb_information.jobs
 WHERE hypertable_schema = :'MAT_SCHEMA_NAME'
 AND hypertable_name = :'MAT_TABLE_NAME'
-AND job_id >= 1000;
+AND job_id >= 1000 ORDER BY job_id;
  job_id |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule |                                     config                                      | next_start | initial_start |   hypertable_schema   |       hypertable_name       |      check_schema      |                check_name                 
 --------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+--------------------+-----------+----------------+---------------------------------------------------------------------------------+------------+---------------+-----------------------+-----------------------------+------------------------+-------------------------------------------
-   1026 | Compression Policy [1026]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 11, "compress_after": "@ 45 days"}                            |            |               | _timescaledb_internal | _materialized_hypertable_11 | _timescaledb_functions | policy_compression_check
-   1025 | Refresh Continuous Aggregate Policy [1025] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 11} |            |               | _timescaledb_internal | _materialized_hypertable_11 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
    1024 | Retention Policy [1024]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              | {"drop_after": "@ 30 days", "hypertable_id": 11}                                |            |               | _timescaledb_internal | _materialized_hypertable_11 | _timescaledb_functions | policy_retention_check
+   1025 | Refresh Continuous Aggregate Policy [1025] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 11} |            |               | _timescaledb_internal | _materialized_hypertable_11 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
+   1026 | Compression Policy [1026]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 11, "compress_after": "@ 45 days"}                            |            |               | _timescaledb_internal | _materialized_hypertable_11 | _timescaledb_functions | policy_compression_check
 (3 rows)
 
 -- execute the migration
@@ -2067,6 +2088,8 @@ TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCA
 psql:include/cagg_migrate_common.sql:128: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 CALL cagg_migrate('conditions_summary_daily');
 psql:include/cagg_migrate_common.sql:129: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:129: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:129: NOTICE:  default segment by for hypertable "_materialized_hypertable_21" is set to ""
 psql:include/cagg_migrate_common.sql:129: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('2022-12-31 16:00:00-08' AS timestamp with time zone), NULL);"
 SELECT
     ca.raw_hypertable_id AS "NEW_RAW_HYPERTABLE_ID",
@@ -2113,12 +2136,12 @@ SELECT *
 FROM timescaledb_information.jobs
 WHERE hypertable_schema = :'NEW_MAT_SCHEMA_NAME'
 AND hypertable_name = :'NEW_MAT_TABLE_NAME'
-AND job_id >= 1000;
+AND job_id >= 1000 ORDER BY job_id;
  job_id |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule |                                     config                                      | next_start | initial_start |   hypertable_schema   |       hypertable_name       |      check_schema      |                check_name                 
 --------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+--------------------+-----------+----------------+---------------------------------------------------------------------------------+------------+---------------+-----------------------+-----------------------------+------------------------+-------------------------------------------
-   1029 | Compression Policy [1029]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 21, "compress_after": "@ 45 days"}                            |            |               | _timescaledb_internal | _materialized_hypertable_21 | _timescaledb_functions | policy_compression_check
-   1028 | Refresh Continuous Aggregate Policy [1028] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 21} |            |               | _timescaledb_internal | _materialized_hypertable_21 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
    1027 | Retention Policy [1027]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              | {"drop_after": "@ 30 days", "hypertable_id": 21}                                |            |               | _timescaledb_internal | _materialized_hypertable_21 | _timescaledb_functions | policy_retention_check
+   1028 | Refresh Continuous Aggregate Policy [1028] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 21} |            |               | _timescaledb_internal | _materialized_hypertable_21 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
+   1029 | Compression Policy [1029]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 21, "compress_after": "@ 45 days"}                            |            |               | _timescaledb_internal | _materialized_hypertable_21 | _timescaledb_functions | policy_compression_check
 (3 rows)
 
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
@@ -2126,7 +2149,7 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
 -------------------+---------+----------+------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
                 11 |       1 | FINISHED | SAVE WATERMARK   | {"watermark": "2022-12-31 16:00:00-08"}
                 11 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
-                11 |       3 | FINISHED | DISABLE POLICIES | {"policies": [1026, 1024]}
+                11 |       3 | FINISHED | DISABLE POLICIES | {"policies": [1024, 1026]}
                 11 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "2022-12-31 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "timestamp with time zone"}
                 11 |       5 | FINISHED | COPY DATA        | {"end_ts": "2022-03-11 16:00:00-08", "start_ts": "2021-12-31 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
                 11 |       6 | FINISHED | COPY DATA        | {"end_ts": "2022-05-20 16:00:00-07", "start_ts": "2022-03-11 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
@@ -2134,10 +2157,10 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
                 11 |       8 | FINISHED | COPY DATA        | {"end_ts": "2022-10-07 16:00:00-07", "start_ts": "2022-07-29 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
                 11 |       9 | FINISHED | COPY DATA        | {"end_ts": "2022-12-16 16:00:00-08", "start_ts": "2022-10-07 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
                 11 |      10 | FINISHED | COPY DATA        | {"end_ts": "2023-02-24 16:00:00-08", "start_ts": "2022-12-16 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                11 |      11 | FINISHED | COPY POLICIES    | {"policies": [1026, 1025, 1024], "cagg_name_new": "conditions_summary_daily_new"}
+                11 |      11 | FINISHED | COPY POLICIES    | {"policies": [1024, 1025, 1026], "cagg_name_new": "conditions_summary_daily_new"}
                 11 |      12 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
                 11 |      13 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                11 |      14 | FINISHED | ENABLE POLICIES  | {"policies": [1027, 1028, 1029, 1026, 1025, 1024]}
+                11 |      14 | FINISHED | ENABLE POLICIES  | {"policies": [1027, 1028, 1029, 1024, 1025, 1026]}
 (14 rows)
 
 -- check migrated data. should return 0 (zero) rows
@@ -2200,6 +2223,8 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE);
 psql:include/cagg_migrate_common.sql:181: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:181: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:181: NOTICE:  default segment by for hypertable "_materialized_hypertable_23" is set to ""
 psql:include/cagg_migrate_common.sql:181: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('2022-12-31 16:00:00-08' AS timestamp with time zone), NULL);"
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
@@ -2304,11 +2329,13 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE, drop_old => TRUE);
 psql:include/cagg_migrate_common.sql:203: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:203: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:203: NOTICE:  default segment by for hypertable "_materialized_hypertable_25" is set to ""
 psql:include/cagg_migrate_common.sql:203: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('2022-12-31 16:00:00-08' AS timestamp with time zone), NULL);"
 psql:include/cagg_migrate_common.sql:203: NOTICE:  drop cascades to 6 other objects
-psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1026 not found, skipping
-psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1025 not found, skipping
 psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1024 not found, skipping
+psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1025 not found, skipping
+psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1026 not found, skipping
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
                            View "public.conditions_summary_daily"
@@ -2682,7 +2709,8 @@ UNION ALL
   GROUP BY (public.time_bucket('7 days'::interval, conditions."time"));
 COPY _timescaledb_catalog.hypertable (id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size, compression_state, compressed_hypertable_id, status) FROM stdin;
 COPY _timescaledb_catalog.dimension (id, hypertable_id, column_name, column_type, aligned, num_slices, partitioning_func_schema, partitioning_func, interval_length, compress_interval_length, integer_now_func_schema, integer_now_func) FROM stdin;
-COPY _timescaledb_catalog.continuous_agg (mat_hypertable_id, raw_hypertable_id, parent_mat_hypertable_id, user_view_schema, user_view_name, partial_view_schema, partial_view_name, bucket_width, direct_view_schema, direct_view_name, materialized_only, finalized) FROM stdin;
+COPY _timescaledb_catalog.continuous_agg (mat_hypertable_id, raw_hypertable_id, parent_mat_hypertable_id, user_view_schema, user_view_name, partial_view_schema, partial_view_name, direct_view_schema, direct_view_name, materialized_only, finalized) FROM stdin;
+COPY _timescaledb_catalog.continuous_aggs_bucket_function (mat_hypertable_id, bucket_func, bucket_width, bucket_fixed_width) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_invalidation_threshold (hypertable_id, watermark) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (materialization_id, lowest_modified_value, greatest_modified_value) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_watermark (mat_hypertable_id, watermark) FROM stdin;
@@ -2881,7 +2909,8 @@ UNION ALL
   GROUP BY (public.time_bucket('7 days'::interval, conditions."time"));
 COPY _timescaledb_catalog.hypertable (id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size, compression_state, compressed_hypertable_id, status) FROM stdin;
 COPY _timescaledb_catalog.dimension (id, hypertable_id, column_name, column_type, aligned, num_slices, partitioning_func_schema, partitioning_func, interval_length, compress_interval_length, integer_now_func_schema, integer_now_func) FROM stdin;
-COPY _timescaledb_catalog.continuous_agg (mat_hypertable_id, raw_hypertable_id, parent_mat_hypertable_id, user_view_schema, user_view_name, partial_view_schema, partial_view_name, bucket_width, direct_view_schema, direct_view_name, materialized_only, finalized) FROM stdin;
+COPY _timescaledb_catalog.continuous_agg (mat_hypertable_id, raw_hypertable_id, parent_mat_hypertable_id, user_view_schema, user_view_name, partial_view_schema, partial_view_name, direct_view_schema, direct_view_name, materialized_only, finalized) FROM stdin;
+COPY _timescaledb_catalog.continuous_aggs_bucket_function (mat_hypertable_id, bucket_func, bucket_width, bucket_fixed_width) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_invalidation_threshold (hypertable_id, watermark) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (materialization_id, lowest_modified_value, greatest_modified_value) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_watermark (mat_hypertable_id, watermark) FROM stdin;
@@ -2926,3 +2955,116 @@ DROP MATERIALIZED VIEW conditions_summary_daily;
 DROP MATERIALIZED VIEW conditions_summary_weekly;
 DROP TABLE conditions CASCADE;
 psql:include/cagg_migrate_custom_timezone.sql:23: NOTICE:  drop cascades to 3 other objects
+-- #########################################################
+-- Issue 6976 - space partitioning should not cause catalog corruption
+-- #########################################################
+CREATE TABLE space_partitioning (
+	time timestamptz,
+	device_id integer,
+	value float
+);
+-- Updating sequence numbers so creating a hypertable doesn't mess with
+-- data imports used by migration tests
+SELECT setval('_timescaledb_catalog.hypertable_id_seq', 999, true);
+ setval 
+--------
+    999
+(1 row)
+
+SELECT setval('_timescaledb_catalog.chunk_id_seq', 999, true);
+ setval 
+--------
+    999
+(1 row)
+
+SELECT setval('_timescaledb_catalog.dimension_id_seq', 999, true);
+ setval 
+--------
+    999
+(1 row)
+
+SELECT setval('_timescaledb_catalog.dimension_slice_id_seq', 999, true);
+ setval 
+--------
+    999
+(1 row)
+
+SELECT create_hypertable('space_partitioning', 'time', chunk_time_interval=>'1 hour'::interval);
+NOTICE:  adding not-null constraint to column "time"
+         create_hypertable          
+------------------------------------
+ (1000,public,space_partitioning,t)
+(1 row)
+
+SELECT add_dimension('space_partitioning', 'device_id', 3);
+                add_dimension                 
+----------------------------------------------
+ (1001,public,space_partitioning,device_id,t)
+(1 row)
+
+INSERT INTO space_partitioning SELECT t, 1, 1.0 FROM generate_series('2024-01-01'::timestamptz, '2024-02-01'::timestamptz, '10 minutes'::interval) t;
+INSERT INTO space_partitioning SELECT t, 1000, 1.0 FROM generate_series('2024-01-01'::timestamptz, '2024-02-01'::timestamptz, '10 minutes'::interval) t;
+CREATE MATERIALIZED VIEW space_partitioning_summary
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
+SELECT
+    time_bucket(INTERVAL '1 week', "time") AS bucket,
+    device_id,
+    MIN(value),
+    MAX(value),
+    SUM(value)
+FROM
+    space_partitioning
+GROUP BY
+    1, 2
+WITH NO DATA;
+-- setting up the state so that remove_dropped_chunk_metadata
+-- would run on the hypertable and trigger the catalog corruption
+UPDATE _timescaledb_catalog.chunk
+SET dropped = TRUE
+FROM _timescaledb_catalog.hypertable
+WHERE  chunk.hypertable_id = hypertable.id
+AND hypertable.table_name = 'space_partitioning'
+AND chunk.id = 1000;
+UPDATE _timescaledb_catalog.continuous_agg
+SET finalized = true
+FROM _timescaledb_catalog.hypertable
+WHERE continuous_agg.raw_hypertable_id = hypertable.id
+AND hypertable.table_name = 'space_partitioning';
+SET timescaledb.restoring TO ON;
+DROP TABLE _timescaledb_internal._hyper_1000_1000_chunk;
+SET timescaledb.restoring TO OFF;
+SELECT _timescaledb_functions.remove_dropped_chunk_metadata(id)
+FROM _timescaledb_catalog.hypertable
+WHERE table_name = 'space_partitioning';
+INFO:  Removing metadata of chunk 1000 from hypertable 1000
+ remove_dropped_chunk_metadata 
+-------------------------------
+                             1
+(1 row)
+
+-- check every chunk has as many chunk constraints as
+-- there are dimensions, should return empty result
+-- this ensures we have avoided catalog corruption
+WITH dimension_count as (
+SELECT ht.id, count(*)
+FROM _timescaledb_catalog.hypertable ht
+INNER JOIN _timescaledb_catalog.dimension d
+	ON d.hypertable_id = ht.id
+WHERE table_name = 'space_partitioning'
+GROUP BY 1),
+chunk_constraint_count AS (
+SELECT c.hypertable_id, cc.chunk_id, count(*)
+FROM _timescaledb_catalog.chunk_constraint cc
+INNER JOIN _timescaledb_catalog.chunk c
+	ON cc.chunk_id = c.id
+GROUP BY 1, 2
+)
+SELECT *
+FROM dimension_count dc
+INNER JOIN chunk_constraint_count ccc
+	ON ccc.hypertable_id = dc.id
+WHERE dc.count != ccc.count;
+ id | count | hypertable_id | chunk_id | count 
+----+-------+---------------+----------+-------
+(0 rows)
+

@@ -26,8 +26,8 @@
 #include <utils/syscache.h>
 #include <utils/timestamp.h>
 
-#include "partitioning.h"
 #include "compat/compat.h"
+#include "partitioning.h"
 #include "ts_catalog/catalog.h"
 #include "utils.h"
 

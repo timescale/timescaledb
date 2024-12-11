@@ -41,7 +41,7 @@ function(GET_PG_CONFIG var)
   # Only call pg_config if the variable didn't already have a value.
   if(NOT ${var})
     execute_process(
-      COMMAND ${PG_CONFIG} ${ARGN}
+      COMMAND ${CMAKE_COMMAND} -E env LC_MESSAGES=C ${PG_CONFIG} ${ARGN}
       OUTPUT_VARIABLE _temp
       OUTPUT_STRIP_TRAILING_WHITESPACE)
   endif()
@@ -301,13 +301,13 @@ if(WIN32)
   find_path(
     PG_PATH postgres.exe
     PATHS "C:/PostgreSQL" "C:/Program Files/PostgreSQL"
-    PATH_SUFFIXES bin 13/bin 14/bin 15/bin
+    PATH_SUFFIXES bin 14/bin 15/bin 16/bin
     DOC "The path to a PostgreSQL installation")
 elseif(UNIX)
   find_path(
     PG_PATH postgres
     PATHS $ENV{HOME} /opt/local/pgsql /usr/local/pgsql /usr/lib/postgresql
-    PATH_SUFFIXES bin 13/bin 14/bin 15/bin
+    PATH_SUFFIXES bin 14/bin 15/bin 16/bin
     DOC "The path to a PostgreSQL installation")
 endif()
 
@@ -349,10 +349,10 @@ message(
 
 # Ensure that PostgreSQL version is supported and consistent with src/compat.h
 # version check
-if((${PG_VERSION_MAJOR} LESS "13")
-   OR (${PG_VERSION_MAJOR} GREATER "16")
+if((${PG_VERSION_MAJOR} LESS "14")
+   OR (${PG_VERSION_MAJOR} GREATER "17")
    AND NOT (${EXPERIMENTAL}))
-  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 13, 14, 15 and 16")
+  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 14, 15, 16 and 17")
 endif()
 
 # Get PostgreSQL configuration from pg_config
@@ -397,15 +397,6 @@ if(PG_SOURCE_DIR)
 endif(PG_SOURCE_DIR)
 
 set(EXT_CONTROL_FILE ${PROJECT_NAME}.control)
-if(${PG_VERSION_MAJOR} GREATER "12")
-  set(TRUSTED trusted=true)
-endif()
-
-if(APACHE_ONLY)
-  set(LICENSE_EDITION "Apache 2 Edition")
-else()
-  set(LICENSE_EDITION "Community Edition")
-endif()
 configure_file(${EXT_CONTROL_FILE}.in ${EXT_CONTROL_FILE})
 
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${EXT_CONTROL_FILE}
@@ -599,7 +590,10 @@ if(USE_OPENSSL AND (NOT PG_USE_OPENSSL))
   )
 endif(USE_OPENSSL AND (NOT PG_USE_OPENSSL))
 
-if(USE_OPENSSL)
+# While we dont link directly against OpenSSL on non-Windows, doing this on
+# Windows causes linker errors. So on Windows we link directly against the
+# OpenSSL libraries.
+if(USE_OPENSSL AND MSVC)
   # Try to find a local OpenSSL installation
   find_package(OpenSSL)
 
@@ -638,7 +632,7 @@ if(USE_OPENSSL)
     message(STATUS "OpenSSL libraries: ${_path}")
   endforeach()
   message(STATUS "Using OpenSSL version ${OPENSSL_VERSION}")
-endif(USE_OPENSSL)
+endif(USE_OPENSSL AND MSVC)
 
 if(CODECOVERAGE)
   message(STATUS "Code coverage is enabled.")

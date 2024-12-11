@@ -28,13 +28,16 @@
 #include "compression/create.h"
 #include "custom_type_cache.h"
 #include "guc.h"
+#include "import/list.h"
 #include "import/planner.h"
+#include "nodes/chunk_append/transform.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
-#include "nodes/chunk_append/transform.h"
-#include "vector_predicates.h"
+#include "nodes/decompress_chunk/vector_quals.h"
+#include "nodes/vector_agg/exec.h"
 #include "ts_catalog/array_utils.h"
+#include "vector_predicates.h"
 
 static CustomScanMethods decompress_chunk_plan_methods = {
 	.CustomName = "DecompressChunk",
@@ -58,38 +61,219 @@ check_for_system_columns(Bitmapset *attrs_used)
 			bit = bms_next_member(attrs_used, bit);
 
 		if (bit > 0 && bit + FirstLowInvalidHeapAttributeNumber < 0)
-			elog(ERROR, "transparent decompression only supports tableoid system column");
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+					 errmsg("transparent decompression only supports tableoid system column")));
 	}
 }
 
+typedef struct
+{
+	bool bulk_decompression_possible;
+	int custom_scan_attno;
+} UncompressedColumnInfo;
+
+typedef struct
+{
+	/* Can be negative if it's a metadata column, zero if not decompressed. */
+	int uncompressed_chunk_attno;
+	bool bulk_decompression_possible;
+	bool is_segmentby;
+} CompressedColumnInfo;
+
 /*
- * Given the scan targetlist and the bitmapset of the needed columns, determine
- * which scan columns become which decompressed columns (fill decompression_map).
+ * Scratch space for mapping out the decompressed columns.
+ */
+typedef struct
+{
+	PlannerInfo *root;
+
+	DecompressChunkPath *decompress_path;
+
+	Bitmapset *uncompressed_attrs_needed;
+
+	/*
+	 * If we produce at least some columns that support bulk decompression.
+	 */
+	bool have_bulk_decompression_columns;
+
+	/*
+	 * Maps the uncompressed chunk attno to the respective column compression
+	 * info. This lives only during planning so that we can understand on which
+	 * columns we can apply vectorized quals, and which uncompressed attno goes
+	 * to which custom scan attno (it's not the same if we're using a custom
+	 * scan targetlist).
+	 */
+	UncompressedColumnInfo *uncompressed_attno_info;
+
+	/*
+	 * Maps the compressed chunk attno to the respective column compression info.
+	 */
+	CompressedColumnInfo *compressed_attno_info;
+
+	/*
+	 * We might use a custom scan targetlist for DecompressChunk node if it
+	 * allows us to avoid projection.
+	 */
+	List *custom_scan_targetlist;
+
+	/*
+	 * Next, we have basically the same data as the above, but expressed as
+	 * several Lists, to allow passing them through the custom plan settings.
+	 */
+
+	/*
+	 * decompression_map maps targetlist entries of the compressed scan to
+	 * custom scan attnos. Negative values are metadata columns in the compressed
+	 * scan that do not have a representation in the uncompressed chunk, but are
+	 * still used for decompression.
+	 */
+	List *decompression_map;
+
+	/*
+	 * This Int list is parallel to the compressed scan targetlist, just like
+	 * the above one. The value is true if a given targetlist entry is a
+	 * segmentby column, false otherwise. Has the same length as the above list.
+	 * We have to use the parallel lists and not a list of structs, because the
+	 * Plans have to be copyable by the Postgres _copy functions, and we can't
+	 * do that for a custom struct.
+	 */
+	List *is_segmentby_column;
+
+	/*
+	 * Same structure as above, says whether we support bulk decompression for this
+	 * column.
+	 */
+	List *bulk_decompression_column;
+
+} DecompressionMapContext;
+
+typedef struct VectorQualInfoDecompressChunk
+{
+	VectorQualInfo vqinfo;
+	const UncompressedColumnInfo *colinfo;
+} VectorQualInfoDecompressChunk;
+
+static bool *
+build_vector_attrs_array(const UncompressedColumnInfo *colinfo, const CompressionInfo *info)
+{
+	const AttrNumber arrlen = info->chunk_rel->max_attr + 1;
+	bool *vector_attrs = palloc(sizeof(bool) * arrlen);
+
+	for (AttrNumber attno = 0; attno < arrlen; attno++)
+	{
+		vector_attrs[attno] = colinfo[attno].bulk_decompression_possible;
+	}
+
+	return vector_attrs;
+}
+
+/*
+ * Try to make the custom scan targetlist that follows the order of the
+ * pathtarget. This would allow us to avoid a projection from scan tuple to
+ * output tuple.
+ * Returns NIL if it's not possible, e.g. if there are whole-row variables or
+ * variables that are used for quals but not for output.
+ */
+static List *
+follow_uncompressed_output_tlist(const DecompressionMapContext *context)
+{
+	List *result = NIL;
+	Bitmapset *uncompressed_attrs_found = NULL;
+	const CompressionInfo *info = context->decompress_path->info;
+	const PathTarget *pathtarget = context->decompress_path->custom_path.path.pathtarget;
+	int custom_scan_attno = 1;
+	for (int i = 0; i < list_length(pathtarget->exprs); i++)
+	{
+		Expr *expr = list_nth(pathtarget->exprs, i);
+		if (!IsA(expr, Var))
+		{
+			/*
+			 * The pathtarget has some non-var expressions, so we won't be able
+			 * to build a matching decompressed scan targetlist.
+			 */
+			return NIL;
+		}
+
+		Var *var = castNode(Var, expr);
+
+		/* This should produce uncompressed chunk columns. */
+		Assert((Index) var->varno == info->chunk_rel->relid);
+
+		const int uncompressed_chunk_attno = var->varattno;
+		if (uncompressed_chunk_attno <= 0)
+		{
+			/*
+			 * The pathtarget has some special vars so we won't be able to
+			 * build a matching decompressed scan targetlist.
+			 */
+			return NIL;
+		}
+
+		char *attname = get_attname(info->chunk_rte->relid,
+									uncompressed_chunk_attno,
+									/* missing_ok = */ false);
+
+		TargetEntry *target_entry = makeTargetEntry((Expr *) copyObject(var),
+													/* resno = */ custom_scan_attno,
+													/* resname = */ attname,
+													/* resjunk = */ false);
+		target_entry->ressortgroupref =
+			pathtarget->sortgrouprefs ? pathtarget->sortgrouprefs[i] : 0;
+		result = lappend(result, target_entry);
+
+		uncompressed_attrs_found =
+			bms_add_member(uncompressed_attrs_found,
+						   uncompressed_chunk_attno - FirstLowInvalidHeapAttributeNumber);
+
+		custom_scan_attno++;
+	}
+
+	if (!bms_equal(uncompressed_attrs_found, context->uncompressed_attrs_needed))
+	{
+		/*
+		 * There are some variables that are not in the pathtarget that are used
+		 * for quals. We still have to have them in the scan tuple in this case.
+		 * Note that while we could possibly relax this at execution time for
+		 * vectorized quals, the requirement that the qual var be found in the
+		 * scan targetlist is a Postgres one.
+		 */
+		return NIL;
+	}
+
+	return result;
+}
+
+/*
+ * Given the compressed output targetlist and the bitmapset of the needed
+ * columns, determine which compressed chunk column become which uncompressed
+ * chunk column.
  *
- * Note that the chunk_attrs_needed bitmap is offset by the
+ * Note that the uncompressed_attrs_needed bitmap is offset by the
  * FirstLowInvalidHeapAttributeNumber, similar to RelOptInfo.attr_needed. This
  * allows to encode the requirement for system columns, which have negative
  * attnos.
  */
 static void
-build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan_tlist,
-						Bitmapset *chunk_attrs_needed)
+build_decompression_map(DecompressionMapContext *context, List *compressed_scan_tlist)
 {
+	DecompressChunkPath *path = context->decompress_path;
+	CompressionInfo *info = path->info;
 	/*
 	 * Track which normal and metadata columns we were able to find in the
 	 * targetlist.
 	 */
 	bool missing_count = true;
-	bool missing_sequence = path->needs_sequence_num;
-	Bitmapset *chunk_attrs_found = NULL, *selectedCols = NULL;
+	Bitmapset *uncompressed_attrs_found = NULL;
+	Bitmapset *selectedCols = NULL;
 
 #if PG16_LT
-	selectedCols = path->info->ht_rte->selectedCols;
+	selectedCols = info->ht_rte->selectedCols;
 #else
-	if (path->info->ht_rte->perminfoindex > 0)
+	if (info->ht_rte->perminfoindex > 0)
 	{
 		RTEPermissionInfo *perminfo =
-			getRTEPermissionInfo(root->parse->rteperminfos, path->info->ht_rte);
+			getRTEPermissionInfo(context->root->parse->rteperminfos, info->ht_rte);
 		selectedCols = perminfo->selectedCols;
 	}
 #endif
@@ -106,26 +290,28 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan
 	 * be added at decompression time. Always mark it as found.
 	 */
 	if (bms_is_member(TableOidAttributeNumber - FirstLowInvalidHeapAttributeNumber,
-					  chunk_attrs_needed))
+					  context->uncompressed_attrs_needed))
 	{
-		chunk_attrs_found =
-			bms_add_member(chunk_attrs_found,
+		uncompressed_attrs_found =
+			bms_add_member(uncompressed_attrs_found,
 						   TableOidAttributeNumber - FirstLowInvalidHeapAttributeNumber);
 	}
 
 	ListCell *lc;
 
-	path->uncompressed_chunk_attno_to_compression_info =
-		palloc0(sizeof(*path->uncompressed_chunk_attno_to_compression_info) *
-				(path->info->chunk_rel->max_attr + 1));
+	context->uncompressed_attno_info =
+		palloc0(sizeof(*context->uncompressed_attno_info) * (info->chunk_rel->max_attr + 1));
+
+	context->compressed_attno_info =
+		palloc0(sizeof(*context->compressed_attno_info) * (info->compressed_rel->max_attr + 1));
 
 	/*
 	 * Go over the scan targetlist and determine to which output column each
 	 * scan column goes, saving other additional info as we do that.
 	 */
-	path->have_bulk_decompression_columns = false;
-	path->decompression_map = NIL;
-	foreach (lc, scan_tlist)
+	context->have_bulk_decompression_columns = false;
+	context->decompression_map = NIL;
+	foreach (lc, compressed_scan_tlist)
 	{
 		TargetEntry *target = (TargetEntry *) lfirst(lc);
 		if (!IsA(target->expr, Var))
@@ -134,10 +320,10 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan
 		}
 
 		Var *var = castNode(Var, target->expr);
-		Assert((Index) var->varno == path->info->compressed_rel->relid);
-		AttrNumber compressed_attno = var->varattno;
+		Assert((Index) var->varno == info->compressed_rel->relid);
+		AttrNumber compressed_chunk_attno = var->varattno;
 
-		if (compressed_attno == InvalidAttrNumber)
+		if (compressed_chunk_attno == InvalidAttrNumber)
 		{
 			/*
 			 * We shouldn't have whole-row vars in the compressed scan tlist,
@@ -148,36 +334,37 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan
 			elog(ERROR, "compressed scan targetlist must not have whole-row vars");
 		}
 
-		const char *column_name = get_attname(path->info->compressed_rte->relid,
-											  compressed_attno,
+		const char *column_name = get_attname(info->compressed_rte->relid,
+											  compressed_chunk_attno,
 											  /* missing_ok = */ false);
-		AttrNumber chunk_attno = get_attnum(path->info->chunk_rte->relid, column_name);
+		AttrNumber uncompressed_chunk_attno = get_attnum(info->chunk_rte->relid, column_name);
 
-		AttrNumber destination_attno_in_uncompressed_chunk = 0;
-		if (chunk_attno != InvalidAttrNumber)
+		AttrNumber destination_attno = 0;
+		if (uncompressed_chunk_attno != InvalidAttrNumber)
 		{
 			/*
 			 * Normal column, not a metadata column.
 			 */
-			Assert(chunk_attno != InvalidAttrNumber);
+			Assert(uncompressed_chunk_attno != InvalidAttrNumber);
 
-			if (bms_is_member(0 - FirstLowInvalidHeapAttributeNumber, chunk_attrs_needed))
+			if (bms_is_member(0 - FirstLowInvalidHeapAttributeNumber,
+							  context->uncompressed_attrs_needed))
 			{
 				/*
 				 * attno = 0 means whole-row var. Output all the columns.
 				 */
-				destination_attno_in_uncompressed_chunk = chunk_attno;
-				chunk_attrs_found =
-					bms_add_member(chunk_attrs_found,
-								   chunk_attno - FirstLowInvalidHeapAttributeNumber);
+				destination_attno = uncompressed_chunk_attno;
+				uncompressed_attrs_found =
+					bms_add_member(uncompressed_attrs_found,
+								   uncompressed_chunk_attno - FirstLowInvalidHeapAttributeNumber);
 			}
-			else if (bms_is_member(chunk_attno - FirstLowInvalidHeapAttributeNumber,
-								   chunk_attrs_needed))
+			else if (bms_is_member(uncompressed_chunk_attno - FirstLowInvalidHeapAttributeNumber,
+								   context->uncompressed_attrs_needed))
 			{
-				destination_attno_in_uncompressed_chunk = chunk_attno;
-				chunk_attrs_found =
-					bms_add_member(chunk_attrs_found,
-								   chunk_attno - FirstLowInvalidHeapAttributeNumber);
+				destination_attno = uncompressed_chunk_attno;
+				uncompressed_attrs_found =
+					bms_add_member(uncompressed_attrs_found,
+								   uncompressed_chunk_attno - FirstLowInvalidHeapAttributeNumber);
 			}
 		}
 		else
@@ -197,58 +384,40 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan
 
 			if (strcmp(column_name, COMPRESSION_COLUMN_METADATA_COUNT_NAME) == 0)
 			{
-				destination_attno_in_uncompressed_chunk = DECOMPRESS_CHUNK_COUNT_ID;
+				destination_attno = DECOMPRESS_CHUNK_COUNT_ID;
 				missing_count = false;
-			}
-			else if (path->needs_sequence_num &&
-					 strcmp(column_name, COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME) == 0)
-			{
-				destination_attno_in_uncompressed_chunk = DECOMPRESS_CHUNK_SEQUENCE_NUM_ID;
-				missing_sequence = false;
 			}
 		}
 
-		bool is_segment = ts_array_is_member(path->info->settings->fd.segmentby, column_name);
-
-		path->decompression_map =
-			lappend_int(path->decompression_map, destination_attno_in_uncompressed_chunk);
-		path->is_segmentby_column = lappend_int(path->is_segmentby_column, is_segment);
+		const bool is_segment = ts_array_is_member(info->settings->fd.segmentby, column_name);
 
 		/*
 		 * Determine if we can use bulk decompression for this column.
 		 */
-		Oid typoid = get_atttype(path->info->chunk_rte->relid, chunk_attno);
+		Oid typoid = get_atttype(info->chunk_rte->relid, uncompressed_chunk_attno);
 		const bool bulk_decompression_possible =
-			!is_segment && destination_attno_in_uncompressed_chunk > 0 &&
+			!is_segment && destination_attno > 0 &&
 			tsl_get_decompress_all_function(compression_get_default_algorithm(typoid), typoid) !=
 				NULL;
-		path->have_bulk_decompression_columns |= bulk_decompression_possible;
-		path->bulk_decompression_column =
-			lappend_int(path->bulk_decompression_column, bulk_decompression_possible);
+		context->have_bulk_decompression_columns |= bulk_decompression_possible;
 
 		/*
 		 * Save information about decompressed columns in uncompressed chunk
 		 * for planning of vectorized filters.
 		 */
-		if (destination_attno_in_uncompressed_chunk > 0)
+		if (uncompressed_chunk_attno != InvalidAttrNumber)
 		{
-			path->uncompressed_chunk_attno_to_compression_info
-				[destination_attno_in_uncompressed_chunk] =
-				(DecompressChunkColumnCompression){ .bulk_decompression_possible =
-														bulk_decompression_possible };
+			context->uncompressed_attno_info[uncompressed_chunk_attno] = (UncompressedColumnInfo){
+				.bulk_decompression_possible = bulk_decompression_possible,
+				.custom_scan_attno = InvalidAttrNumber,
+			};
 		}
 
-		if (path->perform_vectorized_aggregation)
-		{
-			Assert(list_length(path->custom_path.path.parent->reltarget->exprs) == 1);
-			Var *var = linitial(path->custom_path.path.parent->reltarget->exprs);
-			Assert((Index) var->varno == path->custom_path.path.parent->relid);
-			if (var->varattno == destination_attno_in_uncompressed_chunk)
-				path->aggregated_column_type =
-					lappend_int(path->aggregated_column_type, var->vartype);
-			else
-				path->aggregated_column_type = lappend_int(path->aggregated_column_type, -1);
-		}
+		context->compressed_attno_info[compressed_chunk_attno] = (CompressedColumnInfo){
+			.bulk_decompression_possible = bulk_decompression_possible,
+			.uncompressed_chunk_attno = destination_attno,
+			.is_segmentby = is_segment,
+		};
 	}
 
 	/*
@@ -256,17 +425,18 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan
 	 * We can't conveniently check that we have all columns for all-row vars, so
 	 * skip attno 0 in this check.
 	 */
-	Bitmapset *attrs_not_found = bms_difference(chunk_attrs_needed, chunk_attrs_found);
+	Bitmapset *attrs_not_found =
+		bms_difference(context->uncompressed_attrs_needed, uncompressed_attrs_found);
 	int bit = bms_next_member(attrs_not_found, 0 - FirstLowInvalidHeapAttributeNumber);
 	if (bit >= 0)
 	{
 		elog(ERROR,
 			 "column '%s' (%d) not found in the targetlist for compressed chunk '%s'",
-			 get_attname(path->info->chunk_rte->relid,
+			 get_attname(info->chunk_rte->relid,
 						 bit + FirstLowInvalidHeapAttributeNumber,
 						 /* missing_ok = */ true),
 			 bit + FirstLowInvalidHeapAttributeNumber,
-			 get_rel_name(path->info->compressed_rte->relid));
+			 get_rel_name(info->compressed_rte->relid));
 	}
 
 	if (missing_count)
@@ -274,9 +444,83 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan
 		elog(ERROR, "the count column was not found in the compressed targetlist");
 	}
 
-	if (missing_sequence)
+	/*
+	 * If possible, try to make the custom scan targetlist same as the required
+	 * output targetlist, so that we can avoid a projection there.
+	 */
+	context->custom_scan_targetlist = follow_uncompressed_output_tlist(context);
+	if (context->custom_scan_targetlist != NIL)
 	{
-		elog(ERROR, "the sequence column was not found in the compressed scan targetlist");
+		/*
+		 * The decompression will produce a custom scan tuple, set the custom
+		 * scan attnos accordingly.
+		 */
+		int custom_scan_attno = 1;
+		foreach (lc, context->custom_scan_targetlist)
+		{
+			const int uncompressed_chunk_attno =
+				castNode(Var, castNode(TargetEntry, lfirst(lc))->expr)->varattno;
+			context->uncompressed_attno_info[uncompressed_chunk_attno].custom_scan_attno =
+				custom_scan_attno;
+			custom_scan_attno++;
+		}
+	}
+	else
+	{
+		/*
+		 * The decompression will produce the uncompressed chunk tuple, set the
+		 * custom scan attnos accordingly.
+		 * Note that we might have dropped columns here, but we can set these
+		 * attnos for them just as well, they won't be decompressed anyway
+		 * because they are not in the compressed scan output.
+		 */
+		for (int i = 1; i <= info->chunk_rel->max_attr; i++)
+		{
+			UncompressedColumnInfo *uncompressed_info = &context->uncompressed_attno_info[i];
+			uncompressed_info->custom_scan_attno = i;
+		}
+	}
+
+	/*
+	 * Finally, we have to convert the decompression information we've build
+	 * into several lists so that it can be passed through the custom path
+	 * settings.
+	 */
+	foreach (lc, compressed_scan_tlist)
+	{
+		TargetEntry *target = (TargetEntry *) lfirst(lc);
+		Var *var = castNode(Var, target->expr);
+		Assert((Index) var->varno == info->compressed_rel->relid);
+		const AttrNumber compressed_chunk_attno = var->varattno;
+		Assert(compressed_chunk_attno != InvalidAttrNumber);
+		CompressedColumnInfo *compressed_info =
+			&context->compressed_attno_info[compressed_chunk_attno];
+
+		/*
+		 * Note that the decompressed custom scan targetlist might follow
+		 * neither its output targetlist (when we need more columns for filters)
+		 * nor the uncompressed chunk tuple. So here we have to do this
+		 * additional conversion.
+		 */
+		int compressed_column_destination;
+		if (compressed_info->uncompressed_chunk_attno <= 0)
+		{
+			compressed_column_destination = compressed_info->uncompressed_chunk_attno;
+		}
+		else
+		{
+			UncompressedColumnInfo *uncompressed_info =
+				&context->uncompressed_attno_info[compressed_info->uncompressed_chunk_attno];
+			compressed_column_destination = uncompressed_info->custom_scan_attno;
+		}
+
+		context->decompression_map =
+			lappend_int(context->decompression_map, compressed_column_destination);
+		context->is_segmentby_column =
+			lappend_int(context->is_segmentby_column, compressed_info->is_segmentby);
+		context->bulk_decompression_column =
+			lappend_int(context->bulk_decompression_column,
+						compressed_info->bulk_decompression_possible);
 	}
 }
 
@@ -427,8 +671,8 @@ is_not_runtime_constant(Node *node)
  * Try to check if the current qual is vectorizable, and if needed make a
  * commuted copy. If not, return NULL.
  */
-static Node *
-make_vectorized_qual(DecompressChunkPath *path, Node *qual)
+Node *
+vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 {
 	/*
 	 * We can vectorize BoolExpr (AND/OR/NOT).
@@ -452,7 +696,7 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 		foreach (lc, boolexpr->args)
 		{
 			Node *arg = lfirst(lc);
-			Node *vectorized_arg = make_vectorized_qual(path, arg);
+			Node *vectorized_arg = vector_qual_make(arg, vqinfo);
 			if (vectorized_arg == NULL)
 			{
 				return NULL;
@@ -548,7 +792,7 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 	}
 
 	Var *var = castNode(Var, arg1);
-	if ((Index) var->varno != path->info->chunk_rel->relid)
+	if ((Index) var->varno != vqinfo->rti)
 	{
 		/*
 		 * We have a Var from other relation (join clause), can't vectorize it
@@ -569,8 +813,7 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 	 * ExecQual is performed before ExecProject and operates on the decompressed
 	 * scan slot, so the qual attnos are the uncompressed chunk attnos.
 	 */
-	if (!path->uncompressed_chunk_attno_to_compression_info[var->varattno]
-			 .bulk_decompression_possible)
+	if (!vqinfo->vector_attrs[var->varattno])
 	{
 		/* This column doesn't support bulk decompression. */
 		return NULL;
@@ -601,6 +844,18 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 		return NULL;
 	}
 
+	if (OidIsValid(var->varcollid) && !get_collation_isdeterministic(var->varcollid))
+	{
+		/*
+		 * Can't vectorize string equality with a nondeterministic collation.
+		 * Not sure if we have to check the collation of Const as well, but it
+		 * will be known only at planning time. Currently we don't check it at
+		 * all. Also this is untested because we don't have nondeterministic
+		 * collations in all test configurations.
+		 */
+		return NULL;
+	}
+
 	if (opexpr)
 	{
 		/*
@@ -615,7 +870,6 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 	 */
 	Assert(saop != NULL);
 
-#if PG14_GE
 	if (saop->hashfuncid)
 	{
 		/*
@@ -623,7 +877,6 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 		 */
 		return NULL;
 	}
-#endif
 
 	return (Node *) saop;
 }
@@ -633,9 +886,14 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
  * list.
  */
 static void
-find_vectorized_quals(DecompressChunkPath *path, List *qual_list, List **vectorized,
-					  List **nonvectorized)
+find_vectorized_quals(DecompressionMapContext *context, DecompressChunkPath *path, List *qual_list,
+					  List **vectorized, List **nonvectorized)
 {
+	VectorQualInfo vqi = {
+		.vector_attrs = build_vector_attrs_array(context->uncompressed_attno_info, path->info),
+		.rti = path->info->chunk_rel->relid,
+	};
+
 	ListCell *lc;
 	foreach (lc, qual_list)
 	{
@@ -649,8 +907,7 @@ find_vectorized_quals(DecompressChunkPath *path, List *qual_list, List **vectori
 		 */
 		Node *transformed_comparison =
 			(Node *) ts_transform_cross_datatype_comparison((Expr *) source_qual);
-
-		Node *vectorized_qual = make_vectorized_qual(path, transformed_comparison);
+		Node *vectorized_qual = vector_qual_make(transformed_comparison, &vqi);
 		if (vectorized_qual)
 		{
 			*vectorized = lappend(*vectorized, vectorized_qual);
@@ -660,6 +917,8 @@ find_vectorized_quals(DecompressChunkPath *path, List *qual_list, List **vectori
 			*nonvectorized = lappend(*nonvectorized, source_qual);
 		}
 	}
+
+	pfree(vqi.vector_attrs);
 }
 
 /*
@@ -704,7 +963,7 @@ ts_label_sort_with_costsize(PlannerInfo *root, Sort *plan, double limit_tuples)
 
 Plan *
 decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
-							 List *decompressed_tlist, List *clauses, List *custom_plans)
+							 List *output_targetlist, List *clauses, List *custom_plans)
 {
 	DecompressChunkPath *dcpath = (DecompressChunkPath *) path;
 	CustomScan *decompress_plan = makeNode(CustomScan);
@@ -719,21 +978,6 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	decompress_plan->flags = path->flags;
 	decompress_plan->methods = &decompress_chunk_plan_methods;
 	decompress_plan->scan.scanrelid = dcpath->info->chunk_rel->relid;
-
-	/* output target list */
-	decompress_plan->scan.plan.targetlist = decompressed_tlist;
-	/* input target list */
-	decompress_plan->custom_scan_tlist = NIL;
-
-	/* Make PostgreSQL aware that we emit partials. In apply_vectorized_agg_optimization the
-	 * pathtarget of the node is changed; the decompress chunk node now emits prtials directly.
-	 *
-	 * We have to set a custom_scan_tlist to make sure tlist_matches_tupdesc is true to prevent the
-	 * call of ExecAssignProjectionInfo in ExecConditionalAssignProjectionInfo. Otherwise,
-	 * PostgreSQL will error out since scan nodes are not intended to emit partial aggregates.
-	 */
-	if (dcpath->perform_vectorized_aggregation)
-		decompress_plan->custom_scan_tlist = decompressed_tlist;
 
 	if (IsA(compressed_path, IndexPath))
 	{
@@ -815,27 +1059,30 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 	/*
 	 * Determine which columns we have to decompress.
-	 * decompressed_tlist is sometimes empty, e.g. for a direct select from
+	 * output_targetlist is sometimes empty, e.g. for a direct select from
 	 * chunk. We have a ProjectionPath above DecompressChunk in this case, and
 	 * the targetlist for this path is not built by the planner
 	 * (CP_IGNORE_TLIST). This is why we have to examine rel pathtarget.
 	 * Looking at the targetlist is not enough, we also have to decompress the
 	 * columns participating in quals and in pathkeys.
 	 */
-	Bitmapset *chunk_attrs_needed = NULL;
+	Bitmapset *uncompressed_attrs_needed = NULL;
 	pull_varattnos((Node *) decompress_plan->scan.plan.qual,
 				   dcpath->info->chunk_rel->relid,
-				   &chunk_attrs_needed);
+				   &uncompressed_attrs_needed);
 	pull_varattnos((Node *) dcpath->custom_path.path.pathtarget->exprs,
 				   dcpath->info->chunk_rel->relid,
-				   &chunk_attrs_needed);
+				   &uncompressed_attrs_needed);
 
 	/*
 	 * Determine which compressed column goes to which output column.
 	 */
-	build_decompression_map(root, dcpath, compressed_scan->plan.targetlist, chunk_attrs_needed);
+	DecompressionMapContext context = { .root = root,
+										.decompress_path = dcpath,
+										.uncompressed_attrs_needed = uncompressed_attrs_needed };
+	build_decompression_map(&context, compressed_scan->plan.targetlist);
 
-	/* Build heap sort info for sorted_merge_append */
+	/* Build heap sort info for batch sorted merge. */
 	List *sort_options = NIL;
 
 	if (dcpath->batch_sorted_merge)
@@ -894,12 +1141,16 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 				/*
 				 * We found a Var equivalence member that belongs to the
-				 * decompressed relation. We can use its varattno directly for
-				 * the comparison operator, because it operates on the
-				 * decompressed scan tuple.
+				 * decompressed relation. We have to convert its varattno which
+				 * is the varattno of the uncompressed chunk tuple, to the
+				 * decompressed scan tuple varattno.
 				 */
 				Var *var = castNode(Var, em->em_expr);
 				Assert((Index) var->varno == (Index) em_relid);
+
+				const int decompressed_scan_attno =
+					context.uncompressed_attno_info[var->varattno].custom_scan_attno;
+				Assert(decompressed_scan_attno > 0);
 
 				/*
 				 * Look up the correct sort operator from the PathKey's slightly
@@ -917,7 +1168,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 						 var->vartype,
 						 pk->pk_opfamily);
 
-				sort_col_idx = lappend_oid(sort_col_idx, var->varattno);
+				sort_col_idx = lappend_oid(sort_col_idx, decompressed_scan_attno);
 				sort_collations = lappend_oid(sort_collations, var->varcollid);
 				sort_nulls = lappend_oid(sort_nulls, pk->pk_nulls_first);
 				sort_ops = lappend_oid(sort_ops, sortop);
@@ -1026,7 +1277,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 	const bool enable_bulk_decompression = !dcpath->batch_sorted_merge &&
 										   ts_guc_enable_bulk_decompression &&
-										   dcpath->have_bulk_decompression_columns;
+										   context.have_bulk_decompression_columns;
 
 	/*
 	 * For some predicates, we have more efficient implementation that work on
@@ -1037,7 +1288,8 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	if (enable_bulk_decompression)
 	{
 		List *nonvectorized_quals = NIL;
-		find_vectorized_quals(dcpath,
+		find_vectorized_quals(&context,
+							  dcpath,
 							  decompress_plan->scan.plan.qual,
 							  &vectorized_quals,
 							  &nonvectorized_quals);
@@ -1046,11 +1298,11 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	}
 
 #ifdef TS_DEBUG
-	if (ts_guc_debug_require_vector_qual == RVQ_Forbid && list_length(vectorized_quals) > 0)
+	if (ts_guc_debug_require_vector_qual == DRO_Forbid && list_length(vectorized_quals) > 0)
 	{
 		elog(ERROR, "debug: encountered vector quals when they are disabled");
 	}
-	else if (ts_guc_debug_require_vector_qual == RVQ_Only)
+	else if (ts_guc_debug_require_vector_qual == DRO_Require)
 	{
 		if (list_length(decompress_plan->scan.plan.qual) > 0)
 		{
@@ -1063,12 +1315,13 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	}
 #endif
 
-	settings = list_make6_int(dcpath->info->hypertable_id,
-							  dcpath->info->chunk_rte->relid,
-							  dcpath->reverse,
-							  dcpath->batch_sorted_merge,
-							  enable_bulk_decompression,
-							  dcpath->perform_vectorized_aggregation);
+	settings = ts_new_list(T_IntList, DCS_Count);
+	lfirst_int(list_nth_cell(settings, DCS_HypertableId)) = dcpath->info->hypertable_id;
+	lfirst_int(list_nth_cell(settings, DCS_ChunkRelid)) = dcpath->info->chunk_rte->relid;
+	lfirst_int(list_nth_cell(settings, DCS_Reverse)) = dcpath->reverse;
+	lfirst_int(list_nth_cell(settings, DCS_BatchSortedMerge)) = dcpath->batch_sorted_merge;
+	lfirst_int(list_nth_cell(settings, DCS_EnableBulkDecompression)) = enable_bulk_decompression;
+	lfirst_int(list_nth_cell(settings, DCS_HasRowMarks)) = root->parse->rowMarks != NIL;
 
 	/*
 	 * Vectorized quals must go into custom_exprs, because Postgres has to see
@@ -1077,12 +1330,28 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	 */
 	decompress_plan->custom_exprs = list_make1(vectorized_quals);
 
-	decompress_plan->custom_private = list_make6(settings,
-												 dcpath->decompression_map,
-												 dcpath->is_segmentby_column,
-												 dcpath->bulk_decompression_column,
-												 dcpath->aggregated_column_type,
-												 sort_options);
+	decompress_plan->custom_private = ts_new_list(T_List, DCP_Count);
+	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_Settings)) = settings;
+	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_DecompressionMap)) =
+		context.decompression_map;
+	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_IsSegmentbyColumn)) =
+		context.is_segmentby_column;
+	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_BulkDecompressionColumn)) =
+		context.bulk_decompression_column;
+	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_SortInfo)) = sort_options;
+
+	/*
+	 * We might be using a custom scan tuple if it allows us to avoid the
+	 * projection. Otherwise, this tlist is NIL and we'll be using the
+	 * uncompressed tuple as the custom scan tuple.
+	 */
+	decompress_plan->custom_scan_tlist = context.custom_scan_targetlist;
+
+	/*
+	 * Note that we cannot decide here that we require a projection. It is
+	 * decided at Path stage, now we must produce the requested targetlist.
+	 */
+	decompress_plan->scan.plan.targetlist = output_targetlist;
 
 	return &decompress_plan->scan.plan;
 }

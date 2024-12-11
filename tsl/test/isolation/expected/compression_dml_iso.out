@@ -153,6 +153,164 @@ time|device|location|value
 (0 rows)
 
 
+starting permutation: NOS CA1 CAc SH I1 Ic SH UPD1 UPDc SH DEL1 DELc SH UPD1 UPDc SH
+step NOS: 
+    ALTER TABLE ts_device_table set(timescaledb.compress, timescaledb.compress_orderby='time');
+
+step CA1: 
+  BEGIN;
+  SELECT
+    CASE WHEN compress_chunk(ch) IS NOT NULL THEN true ELSE false END AS compress
+  FROM show_chunks('ts_device_table') AS ch
+  ORDER BY ch::text;
+
+compress
+--------
+t       
+t       
+t       
+(3 rows)
+
+step CAc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step I1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 100, 100);
+step Ic: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step UPD1: BEGIN; UPDATE ts_device_table SET value = 4 WHERE location = 200;
+step UPDc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step DEL1: BEGIN; DELETE from ts_device_table WHERE location = 200;
+step DELc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step UPD1: BEGIN; UPDATE ts_device_table SET value = 4 WHERE location = 200;
+step UPDc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+
+starting permutation: NOS IN1 INc CA1 CAc SH SS DEL1 UPD1 DELc UPDc SH SS
+step NOS: 
+    ALTER TABLE ts_device_table set(timescaledb.compress, timescaledb.compress_orderby='time');
+
+step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100);
+step INc: COMMIT;
+step CA1: 
+  BEGIN;
+  SELECT
+    CASE WHEN compress_chunk(ch) IS NOT NULL THEN true ELSE false END AS compress
+  FROM show_chunks('ts_device_table') AS ch
+  ORDER BY ch::text;
+
+compress
+--------
+t       
+t       
+t       
+(3 rows)
+
+step CAc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+   1|     1|     200|  100
+(1 row)
+
+step DEL1: BEGIN; DELETE from ts_device_table WHERE location = 200;
+step UPD1: BEGIN; UPDATE ts_device_table SET value = 4 WHERE location = 200; <waiting ...>
+step DELc: COMMIT;
+step UPD1: <... completed>
+step UPDc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+(0 rows)
+
+
+starting permutation: NOS IN1 INc CA1 CAc SH SS UPD1 DEL1 UPDc DELc SH SS
+step NOS: 
+    ALTER TABLE ts_device_table set(timescaledb.compress, timescaledb.compress_orderby='time');
+
+step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100);
+step INc: COMMIT;
+step CA1: 
+  BEGIN;
+  SELECT
+    CASE WHEN compress_chunk(ch) IS NOT NULL THEN true ELSE false END AS compress
+  FROM show_chunks('ts_device_table') AS ch
+  ORDER BY ch::text;
+
+compress
+--------
+t       
+t       
+t       
+(3 rows)
+
+step CAc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+   1|     1|     200|  100
+(1 row)
+
+step UPD1: BEGIN; UPDATE ts_device_table SET value = 4 WHERE location = 200;
+step DEL1: BEGIN; DELETE from ts_device_table WHERE location = 200; <waiting ...>
+step UPDc: COMMIT;
+step DEL1: <... completed>
+step DELc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks|number_compressed_chunks
+------------+------------------------
+           3|                       3
+(1 row)
+
+step SS: SELECT * FROM ts_device_table WHERE location = 200;
+time|device|location|value
+----+------+--------+-----
+(0 rows)
+
+
 starting permutation: IN1 INc CA1 CAc SH SS DEL1 UPDrr DELc UPDc SH SS
 step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100);
 step INc: COMMIT;

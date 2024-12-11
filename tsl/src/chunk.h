@@ -6,8 +6,8 @@
 #pragma once
 
 #include <postgres.h>
-#include <fmgr.h>
 #include <chunk.h>
+#include <fmgr.h>
 
 extern Datum chunk_freeze_chunk(PG_FUNCTION_ARGS);
 extern Datum chunk_unfreeze_chunk(PG_FUNCTION_ARGS);

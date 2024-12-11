@@ -11,6 +11,7 @@ TEST_PGUSER=${TEST_PGUSER:-postgres}
 TEST_INPUT_DIR=${TEST_INPUT_DIR:-${EXE_DIR}}
 TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR:-${EXE_DIR}}
 TEST_SUPPORT_FILE=${CURRENT_DIR}/sql/utils/testsupport.sql
+TEST_SUPPORT_FILE_INIT=${CURRENT_DIR}/sql/utils/testsupport_init.sql
 
 # PGAPPNAME will be 'pg_regress/test' so we cut off the prefix
 # to get the name of the test
@@ -86,6 +87,13 @@ if mkdir ${TEST_OUTPUT_DIR}/.pg_init 2>/dev/null; then
     ALTER USER ${TEST_ROLE_3} WITH CREATEDB PASSWORD '${TEST_ROLE_3_PASS}';
     ALTER USER ${TEST_ROLE_4} WITH CREATEDB PASSWORD '${TEST_ROLE_4_PASS}';
 EOF
+  ${PSQL} "$@" -U $TEST_ROLE_SUPERUSER -d template1 \
+      -v ECHO=none \
+      -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" \
+      -v TSL_MODULE_PATHNAME="'timescaledb-tsl-${EXT_VERSION}'" \
+      -v TEST_SPINWAIT_ITERS=${TEST_SPINWAIT_ITERS} \
+      -f ${TEST_SUPPORT_FILE} >/dev/null 2>&1
+
   ${PSQL} "$@" -U ${USER} -d postgres -v ECHO=none -c "ALTER USER ${TEST_ROLE_SUPERUSER} WITH SUPERUSER;" >/dev/null
   touch ${TEST_OUTPUT_DIR}/.pg_init/done
 fi
@@ -99,7 +107,12 @@ cd ${EXE_DIR}/sql
 # create database and install timescaledb
 ${PSQL} "$@" -U $TEST_ROLE_SUPERUSER -d postgres -v ECHO=none -c "CREATE DATABASE \"${TEST_DBNAME}\";"
 ${PSQL} "$@" -U $TEST_ROLE_SUPERUSER -d ${TEST_DBNAME} -v ECHO=none -c "SET client_min_messages=error; CREATE EXTENSION timescaledb;"
-${PSQL} "$@" -U $TEST_ROLE_SUPERUSER -d ${TEST_DBNAME} -v ECHO=none -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" -v TSL_MODULE_PATHNAME="'timescaledb-tsl-${EXT_VERSION}'" < ${TEST_SUPPORT_FILE} >/dev/null 2>&1
+${PSQL} "$@" -U $TEST_ROLE_SUPERUSER -d ${TEST_DBNAME} \
+    -v ECHO=none \
+    -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" \
+    -v TSL_MODULE_PATHNAME="'timescaledb-tsl-${EXT_VERSION}'" \
+    -v TEST_SPINWAIT_ITERS=${TEST_SPINWAIT_ITERS} \
+    -f ${TEST_SUPPORT_FILE_INIT} >/dev/null 2>&1
 export TEST_DBNAME
 
 # we strip out any output between <exclude_from_test></exclude_from_test>
@@ -134,13 +147,5 @@ ${PSQL} -U ${TEST_PGUSER} \
      -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" \
      -v TSL_MODULE_PATHNAME="'timescaledb-tsl-${EXT_VERSION}'" \
      -v TEST_SUPPORT_FILE=${TEST_SUPPORT_FILE} \
-     "$@" -d ${TEST_DBNAME} 2>&1 | \
-          sed  -e '/<exclude_from_test>/,/<\/exclude_from_test>/d' \
-               -e 's! Memory: [0-9]\{1,\}kB!!' \
-               -e 's! Memory Usage: [0-9]\{1,\}kB!!' \
-               -e 's! Average  Peak Memory: [0-9]\{1,\}kB!!' | \
-          grep -v 'DEBUG:  rehashing catalog cache id' | \
-          grep -v 'DEBUG:  compacted fsync request queue from' | \
-          grep -v 'DEBUG:  creating and filling new WAL file' | \
-          grep -v 'DEBUG:  done creating and filling new WAL file' | \
-          grep -v 'NOTICE:  cancelling the background worker for job'
+     -v TEST_SUPPORT_FILE_INIT=${TEST_SUPPORT_FILE_INIT} \
+     "$@" -d ${TEST_DBNAME} 2>&1 | ${CURRENT_DIR}/runner_cleanup_output.sh

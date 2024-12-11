@@ -4,8 +4,8 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-#include <nodes/bitmapset.h>
 #include <lib/binaryheap.h>
+#include <nodes/bitmapset.h>
 
 #include "compression/compression.h"
 #include "nodes/decompress_chunk/batch_array.h"
@@ -159,7 +159,7 @@ binaryheap_add_unordered_autoresize(binaryheap *heap, Datum d)
 	if (heap->bh_size >= heap->bh_space)
 	{
 		heap->bh_space = heap->bh_space * 2;
-		Size new_size = offsetof(binaryheap, bh_nodes) + sizeof(Datum) * heap->bh_space;
+		Size new_size = offsetof(binaryheap, bh_nodes) + (sizeof(Datum) * heap->bh_space);
 		heap = (binaryheap *) repalloc(heap, new_size);
 	}
 
@@ -207,9 +207,9 @@ batch_queue_heap_pop(BatchQueue *bq, DecompressContext *dcontext)
 			 * We're working with virtual tuple slots so no need for slot_getattr().
 			 */
 			Assert(TTS_IS_VIRTUAL(top_tuple));
-			queue->heap_entries[top_batch_index * queue->nkeys + key].value =
+			queue->heap_entries[(top_batch_index * queue->nkeys) + key].value =
 				top_tuple->tts_values[attr];
-			queue->heap_entries[top_batch_index * queue->nkeys + key].null =
+			queue->heap_entries[(top_batch_index * queue->nkeys) + key].null =
 				top_tuple->tts_isnull[attr];
 		}
 
@@ -308,9 +308,9 @@ batch_queue_heap_push_batch(BatchQueue *_queue, DecompressContext *dcontext,
 		 * We're working with virtual tuple slots so no need for slot_getattr().
 		 */
 		Assert(TTS_IS_VIRTUAL(current_tuple));
-		queue->heap_entries[new_batch_index * queue->nkeys + key].value =
+		queue->heap_entries[(new_batch_index * queue->nkeys) + key].value =
 			current_tuple->tts_values[attr];
-		queue->heap_entries[new_batch_index * queue->nkeys + key].null =
+		queue->heap_entries[(new_batch_index * queue->nkeys) + key].null =
 			current_tuple->tts_isnull[attr];
 	}
 
@@ -420,16 +420,12 @@ build_batch_sorted_merge_info(const List *sortinfo, int *nkeys)
 }
 
 BatchQueue *
-batch_queue_heap_create(int num_compressed_cols, Size batch_memory_context_bytes,
-						const List *sortinfo, const TupleDesc result_tupdesc,
-						const BatchQueueFunctions *funcs)
+batch_queue_heap_create(int num_compressed_cols, const List *sortinfo,
+						const TupleDesc result_tupdesc, const BatchQueueFunctions *funcs)
 {
 	BatchQueueHeap *queue = palloc0(sizeof(BatchQueueHeap));
 
-	batch_array_init(&queue->queue.batch_array,
-					 INITIAL_BATCH_CAPACITY,
-					 num_compressed_cols,
-					 batch_memory_context_bytes);
+	batch_array_init(&queue->queue.batch_array, INITIAL_BATCH_CAPACITY, num_compressed_cols);
 
 	queue->sortkeys = build_batch_sorted_merge_info(sortinfo, &queue->nkeys);
 

@@ -46,6 +46,11 @@ UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan
 UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan_nulls'::regclass;
 UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan_ht'::regclass;
 UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid IN (select inhrelid from pg_inherits where inhparent='skip_scan_ht'::regclass);
+-- Turn off autovacuum to not trigger new vacuums that restores the
+-- adjusted statistics
+alter table skip_scan set (autovacuum_enabled = off);
+alter table skip_scan_nulls set (autovacuum_enabled = off);
+alter table skip_scan_ht set (autovacuum_enabled = off);
 -- we want to run with analyze here so we can see counts in the nodes
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
 \set TABLE skip_scan
@@ -83,7 +88,6 @@ CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
          ->  Index Only Scan using skip_scan_idx_dev_nulls_last on skip_scan (actual rows=12 loops=1)
                Index Cond: (dev > NULL::integer)
-               Heap Fetches: 12
 (5 rows)
 
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC;
@@ -93,7 +97,6 @@ CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
          ->  Index Only Scan Backward using skip_scan_idx_dev_nulls_last on skip_scan (actual rows=12 loops=1)
                Index Cond: (dev < NULL::integer)
-               Heap Fetches: 12
 (5 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
@@ -103,7 +106,6 @@ CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
          ->  Index Only Scan using skip_scan_idx_dev_nulls_last on skip_scan (actual rows=12 loops=1)
                Index Cond: (dev > NULL::integer)
-               Heap Fetches: 12
 (5 rows)
 
 DROP INDEX skip_scan_idx_dev_nulls_last;
@@ -116,7 +118,6 @@ CREATE INDEX skip_scan_idx_dev_nulls_first ON :TABLE(dev NULLS FIRST);
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
          ->  Index Only Scan using skip_scan_idx_dev_nulls_first on skip_scan (actual rows=12 loops=1)
                Index Cond: (dev > NULL::integer)
-               Heap Fetches: 12
 (5 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev NULLS FIRST;
@@ -126,7 +127,6 @@ CREATE INDEX skip_scan_idx_dev_nulls_first ON :TABLE(dev NULLS FIRST);
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
          ->  Index Only Scan using skip_scan_idx_dev_nulls_first on skip_scan (actual rows=12 loops=1)
                Index Cond: (dev > NULL::integer)
-               Heap Fetches: 12
 (5 rows)
 
 DROP INDEX skip_scan_idx_dev_nulls_first;
@@ -139,7 +139,6 @@ CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
          ->  Index Only Scan using skip_scan_idx_dev_time_idx on skip_scan (actual rows=12 loops=1)
                Index Cond: (dev > NULL::integer)
-               Heap Fetches: 12
 (5 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
@@ -149,7 +148,6 @@ CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
          ->  Index Only Scan using skip_scan_idx_dev_time_idx on skip_scan (actual rows=12 loops=1)
                Index Cond: (dev > NULL::integer)
-               Heap Fetches: 12
 (5 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev DESC, time DESC;
@@ -159,7 +157,6 @@ CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
          ->  Index Only Scan Backward using skip_scan_idx_dev_time_idx on skip_scan (actual rows=12 loops=1)
                Index Cond: (dev < NULL::integer)
-               Heap Fetches: 12
 (5 rows)
 
 DROP INDEX skip_scan_idx_dev_time_idx;
@@ -172,7 +169,6 @@ CREATE INDEX skip_scan_idx_time_dev_idx ON :TABLE(time, dev);
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=11 loops=1)
          ->  Index Only Scan using skip_scan_idx_time_dev_idx on skip_scan (actual rows=11 loops=1)
                Index Cond: (("time" = 100) AND (dev > NULL::integer))
-               Heap Fetches: 11
 (5 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time = 100;
@@ -182,7 +178,6 @@ CREATE INDEX skip_scan_idx_time_dev_idx ON :TABLE(time, dev);
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=11 loops=1)
          ->  Index Only Scan using skip_scan_idx_time_dev_idx on skip_scan (actual rows=11 loops=1)
                Index Cond: (("time" = 100) AND (dev > NULL::integer))
-               Heap Fetches: 11
 (5 rows)
 
 DROP INDEX skip_scan_idx_time_dev_idx;
@@ -243,7 +238,6 @@ basic DISTINCT queries on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 12
 (6 rows)
 
 :PREFIX SELECT DISTINCT dev_name, 'q1_2' FROM :TABLE ORDER BY dev_name;
@@ -254,7 +248,6 @@ basic DISTINCT queries on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_name_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 12
 (6 rows)
 
 :PREFIX SELECT DISTINCT dev, 'q1_3', NULL FROM :TABLE ORDER BY dev;
@@ -265,7 +258,6 @@ basic DISTINCT queries on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 12
 (6 rows)
 
 \qecho stable expression in targetlist on :TABLE
@@ -278,7 +270,6 @@ stable expression in targetlist on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 12
 (6 rows)
 
 :PREFIX SELECT DISTINCT dev_name, 'q1_5', length(md5(now()::text)) FROM :TABLE ORDER BY dev_name;
@@ -289,7 +280,6 @@ stable expression in targetlist on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_name_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 12
 (6 rows)
 
 -- volatile expression in targetlist
@@ -358,7 +348,6 @@ stable expression in targetlist on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 12
 (6 rows)
 
 -- distinct on expressions not supported
@@ -406,7 +395,6 @@ stable expression in targetlist on skip_scan
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
          ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=12 loops=1)
                Index Cond: (dev > NULL::integer)
-               Heap Fetches: 12
 (5 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev, 'q2_2' FROM :TABLE;
@@ -417,7 +405,6 @@ stable expression in targetlist on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 12
 (6 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev, 'q2_3', NULL FROM :TABLE;
@@ -428,7 +415,6 @@ stable expression in targetlist on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 12
 (6 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev, 'q2_4', length(md5(now()::text)) FROM :TABLE;
@@ -439,7 +425,6 @@ stable expression in targetlist on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 12
 (6 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev, 'q2_5', length(md5(random()::text)) FROM :TABLE;
@@ -450,7 +435,6 @@ stable expression in targetlist on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 12
 (6 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE;
@@ -487,7 +471,6 @@ stable expression in targetlist on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 12
 (6 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) time, 'q2_10' FROM :TABLE ORDER by dev, time;
@@ -498,7 +481,6 @@ stable expression in targetlist on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_time_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 12
 (6 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev, tableoid::regclass, 'q2_11' FROM :TABLE;
@@ -518,7 +500,6 @@ stable expression in targetlist on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 12
 (6 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev, int_func_stable(), 'q2_13' FROM :TABLE;
@@ -529,7 +510,6 @@ stable expression in targetlist on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 12
 (6 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev, int_func_volatile(), 'q2_14' FROM :TABLE;
@@ -540,7 +520,6 @@ stable expression in targetlist on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 12
 (6 rows)
 
 -- DISTINCT ON queries on TEXT column
@@ -551,7 +530,6 @@ stable expression in targetlist on skip_scan
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
          ->  Index Only Scan using skip_scan_dev_name_idx on skip_scan (actual rows=12 loops=1)
                Index Cond: (dev_name > NULL::text)
-               Heap Fetches: 12
 (5 rows)
 
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_2' FROM :TABLE;
@@ -562,7 +540,6 @@ stable expression in targetlist on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_name_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 12
 (6 rows)
 
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_3', NULL FROM :TABLE;
@@ -573,7 +550,6 @@ stable expression in targetlist on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_name_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 12
 (6 rows)
 
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_4', length(md5(now()::text)) FROM :TABLE;
@@ -584,7 +560,6 @@ stable expression in targetlist on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_name_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 12
 (6 rows)
 
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_5', length(md5(random()::text)) FROM :TABLE;
@@ -595,7 +570,6 @@ stable expression in targetlist on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_name_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 12
 (6 rows)
 
 :PREFIX SELECT DISTINCT ON (dev_name) * FROM :TABLE;
@@ -632,7 +606,6 @@ stable expression in targetlist on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_name_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 12
 (6 rows)
 
 :PREFIX SELECT DISTINCT ON (dev_name) time, 'q3_10' FROM :TABLE ORDER by dev_name, time;
@@ -662,7 +635,6 @@ stable expression in targetlist on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_name_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 12
 (6 rows)
 
 :PREFIX SELECT DISTINCT ON (dev_name) dev, int_func_immutable(), 'q3_13' FROM :TABLE;
@@ -722,7 +694,6 @@ LIMIT queries on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=3 loops=1)
                ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=3 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 3
 (6 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev DESC, time DESC LIMIT 3;
@@ -733,7 +704,6 @@ LIMIT queries on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=3 loops=1)
                ->  Index Only Scan Backward using skip_scan_dev_time_idx on skip_scan (actual rows=3 loops=1)
                      Index Cond: (dev < NULL::integer)
-                     Heap Fetches: 3
 (6 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev, time LIMIT 3;
@@ -744,7 +714,6 @@ LIMIT queries on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=3 loops=1)
                ->  Index Only Scan using skip_scan_dev_time_idx on skip_scan (actual rows=3 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 3
 (6 rows)
 
 \qecho range queries on :TABLE
@@ -756,7 +725,6 @@ range queries on skip_scan
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=11 loops=1)
          ->  Index Only Scan using skip_scan_dev_time_idx on skip_scan (actual rows=11 loops=1)
                Index Cond: ((dev > NULL::integer) AND ("time" >= 100) AND ("time" <= 300))
-               Heap Fetches: 11
 (5 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time < 200;
@@ -766,7 +734,6 @@ range queries on skip_scan
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=11 loops=1)
          ->  Index Only Scan using skip_scan_dev_time_idx on skip_scan (actual rows=11 loops=1)
                Index Cond: ((dev > NULL::integer) AND ("time" < 200))
-               Heap Fetches: 11
 (5 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time > 800;
@@ -776,7 +743,6 @@ range queries on skip_scan
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=11 loops=1)
          ->  Index Only Scan using skip_scan_dev_time_idx on skip_scan (actual rows=11 loops=1)
                Index Cond: ((dev > NULL::integer) AND ("time" > 800))
-               Heap Fetches: 11
 (5 rows)
 
 \qecho ordered append on :TABLE
@@ -794,7 +760,6 @@ ordered append on skip_scan
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=1001 loops=1)
          ->  Index Only Scan using skip_scan_time_dev_idx on skip_scan (actual rows=1001 loops=1)
                Index Cond: (("time" > NULL::integer) AND ("time" >= 0) AND ("time" <= 5000))
-               Heap Fetches: 1001
 (5 rows)
 
 \qecho SUBSELECTS on :TABLE
@@ -817,7 +782,6 @@ SUBSELECTS on skip_scan
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 12
 (6 rows)
 
 :PREFIX SELECT time, dev, NULL, 'q4_4' FROM (SELECT DISTINCT ON (dev) dev, time FROM :TABLE) a;
@@ -999,7 +963,6 @@ WHERE CLAUSES
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=5 loops=1)
          ->  Index Only Scan using skip_scan_time_dev_val_idx on skip_scan (actual rows=5 loops=1)
                Index Cond: (("time" = 100) AND (dev > NULL::integer) AND (dev > 5))
-               Heap Fetches: 5
 (5 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev,time FROM :TABLE WHERE dev > 5 AND time > 200;
@@ -1039,7 +1002,6 @@ WHERE CLAUSES
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=1 loops=1)
          ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=1 loops=1)
                Index Cond: ((dev > NULL::integer) AND (dev IS NULL))
-               Heap Fetches: 1
 (5 rows)
 
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev_name IS NULL;
@@ -1049,7 +1011,6 @@ WHERE CLAUSES
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=1 loops=1)
          ->  Index Only Scan using skip_scan_dev_name_idx on skip_scan (actual rows=1 loops=1)
                Index Cond: ((dev_name > NULL::text) AND (dev_name IS NULL))
-               Heap Fetches: 1
 (5 rows)
 
 -- test constants in ORDER BY
@@ -1073,7 +1034,6 @@ SELECT * FROM devices;
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
          ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=12 loops=1)
                Index Cond: (dev > NULL::integer)
-               Heap Fetches: 12
 (5 rows)
 
 :PREFIX WITH devices AS (
@@ -1086,7 +1046,6 @@ SELECT * FROM devices ORDER BY dev;
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
          ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=12 loops=1)
                Index Cond: (dev > NULL::integer)
-               Heap Fetches: 12
 (5 rows)
 
 -- prepared statements
@@ -1098,7 +1057,6 @@ PREPARE prep AS SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
          ->  Index Only Scan using skip_scan_dev_name_idx on skip_scan (actual rows=12 loops=1)
                Index Cond: (dev_name > NULL::text)
-               Heap Fetches: 12
 (5 rows)
 
 :PREFIX EXECUTE prep;
@@ -1108,7 +1066,6 @@ PREPARE prep AS SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
          ->  Index Only Scan using skip_scan_dev_name_idx on skip_scan (actual rows=12 loops=1)
                Index Cond: (dev_name > NULL::text)
-               Heap Fetches: 12
 (5 rows)
 
 :PREFIX EXECUTE prep;
@@ -1118,7 +1075,6 @@ PREPARE prep AS SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
          ->  Index Only Scan using skip_scan_dev_name_idx on skip_scan (actual rows=12 loops=1)
                Index Cond: (dev_name > NULL::text)
-               Heap Fetches: 12
 (5 rows)
 
 DEALLOCATE prep;
@@ -1179,7 +1135,6 @@ DEALLOCATE prep;
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 12
    ->  Result (actual rows=833 loops=12)
          ->  Unique (actual rows=833 loops=12)
                ->  Custom Scan (SkipScan) on skip_scan skip_scan_1 (actual rows=833 loops=12)
@@ -1197,12 +1152,10 @@ DEALLOCATE prep;
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 12
    ->  Unique (actual rows=833 loops=12)
          ->  Custom Scan (SkipScan) on skip_scan skip_scan_1 (actual rows=833 loops=12)
                ->  Index Only Scan using skip_scan_dev_time_idx on skip_scan skip_scan_1 (actual rows=833 loops=12)
                      Index Cond: ((dev = skip_scan.dev) AND ("time" > NULL::integer))
-                     Heap Fetches: 10001
 (11 rows)
 
 -- Test that the multi-column DISTINCT emulation is equivalent to a real multi-column DISTINCT
@@ -1216,12 +1169,10 @@ DEALLOCATE prep;
          ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
                ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=12 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 12
    ->  Unique (actual rows=833 loops=12)
          ->  Custom Scan (SkipScan) on skip_scan skip_scan_1 (actual rows=833 loops=12)
                ->  Index Only Scan using skip_scan_dev_time_idx on skip_scan skip_scan_1 (actual rows=833 loops=12)
                      Index Cond: ((dev = skip_scan.dev) AND ("time" > NULL::integer))
-                     Heap Fetches: 10001
 (11 rows)
 
 :PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev IS NOT NULL;
@@ -1230,7 +1181,6 @@ DEALLOCATE prep;
  Unique (actual rows=10001 loops=1)
    ->  Index Only Scan using skip_scan_dev_time_idx on skip_scan (actual rows=10001 loops=1)
          Index Cond: (dev IS NOT NULL)
-         Heap Fetches: 10001
 (4 rows)
 
 :PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev IS NOT NULL
@@ -1247,18 +1197,15 @@ UNION SELECT b.* FROM
                ->  Unique (actual rows=10001 loops=1)
                      ->  Index Only Scan using skip_scan_dev_time_idx on skip_scan (actual rows=10001 loops=1)
                            Index Cond: (dev IS NOT NULL)
-                           Heap Fetches: 10001
                ->  Nested Loop (actual rows=10001 loops=1)
                      ->  Unique (actual rows=12 loops=1)
                            ->  Custom Scan (SkipScan) on skip_scan skip_scan_1 (actual rows=12 loops=1)
                                  ->  Index Only Scan using skip_scan_dev_idx on skip_scan skip_scan_1 (actual rows=12 loops=1)
                                        Index Cond: (dev > NULL::integer)
-                                       Heap Fetches: 12
                      ->  Unique (actual rows=833 loops=12)
                            ->  Custom Scan (SkipScan) on skip_scan skip_scan_2 (actual rows=833 loops=12)
                                  ->  Index Only Scan using skip_scan_dev_time_idx on skip_scan skip_scan_2 (actual rows=833 loops=12)
                                        Index Cond: ((dev = skip_scan_1.dev) AND ("time" > NULL::integer))
-                                       Heap Fetches: 10001
 (20 rows)
 
 -- SkipScan into INSERT
@@ -1287,7 +1234,6 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
    ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
          ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=12 loops=1)
                Index Cond: (dev > NULL::integer)
-               Heap Fetches: 12
 (5 rows)
 
 SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
@@ -1305,7 +1251,6 @@ TRUNCATE skip_scan_insert;
    ->  Custom Scan (SkipScan) on skip_scan_nulls (actual rows=1 loops=1)
          ->  Index Only Scan using skip_scan_nulls_time_idx on skip_scan_nulls (actual rows=1 loops=1)
                Index Cond: ("time" > NULL::integer)
-               Heap Fetches: 1
 (5 rows)
 
 -- no tuples in resultset
@@ -1316,7 +1261,6 @@ TRUNCATE skip_scan_insert;
    ->  Custom Scan (SkipScan) on skip_scan_nulls (actual rows=0 loops=1)
          ->  Index Only Scan using skip_scan_nulls_time_idx on skip_scan_nulls (actual rows=0 loops=1)
                Index Cond: (("time" > NULL::integer) AND ("time" IS NOT NULL))
-               Heap Fetches: 0
 (5 rows)
 
 \set TABLE skip_scan_ht
@@ -1360,19 +1304,15 @@ CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_idx_dev_nulls_last on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_idx_dev_nulls_last on _hyper_1_2_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_idx_dev_nulls_last on _hyper_1_3_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_idx_dev_nulls_last on _hyper_1_4_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
 (19 rows)
 
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC;
@@ -1384,19 +1324,15 @@ CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan Backward using _hyper_1_1_chunk_skip_scan_idx_dev_nulls_last on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev < NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                ->  Index Only Scan Backward using _hyper_1_2_chunk_skip_scan_idx_dev_nulls_last on _hyper_1_2_chunk (actual rows=11 loops=1)
                      Index Cond: (dev < NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                ->  Index Only Scan Backward using _hyper_1_3_chunk_skip_scan_idx_dev_nulls_last on _hyper_1_3_chunk (actual rows=11 loops=1)
                      Index Cond: (dev < NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                ->  Index Only Scan Backward using _hyper_1_4_chunk_skip_scan_idx_dev_nulls_last on _hyper_1_4_chunk (actual rows=11 loops=1)
                      Index Cond: (dev < NULL::integer)
-                     Heap Fetches: 11
 (19 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
@@ -1408,19 +1344,15 @@ CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_idx_dev_nulls_last on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_idx_dev_nulls_last on _hyper_1_2_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_idx_dev_nulls_last on _hyper_1_3_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_idx_dev_nulls_last on _hyper_1_4_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
 (19 rows)
 
 DROP INDEX skip_scan_idx_dev_nulls_last;
@@ -1435,19 +1367,15 @@ CREATE INDEX skip_scan_idx_dev_nulls_first ON :TABLE(dev NULLS FIRST);
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_idx_dev_nulls_first on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_idx_dev_nulls_first on _hyper_1_2_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_idx_dev_nulls_first on _hyper_1_3_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_idx_dev_nulls_first on _hyper_1_4_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
 (19 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev NULLS FIRST;
@@ -1459,19 +1387,15 @@ CREATE INDEX skip_scan_idx_dev_nulls_first ON :TABLE(dev NULLS FIRST);
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_idx_dev_nulls_first on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_idx_dev_nulls_first on _hyper_1_2_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_idx_dev_nulls_first on _hyper_1_3_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_idx_dev_nulls_first on _hyper_1_4_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
 (19 rows)
 
 DROP INDEX skip_scan_idx_dev_nulls_first;
@@ -1486,19 +1410,15 @@ CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_idx_dev_time_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_idx_dev_time_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_idx_dev_time_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_idx_dev_time_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
 (19 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
@@ -1510,19 +1430,15 @@ CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_idx_dev_time_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_idx_dev_time_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_idx_dev_time_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_idx_dev_time_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
 (19 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev DESC, time DESC;
@@ -1534,19 +1450,15 @@ CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan Backward using _hyper_1_1_chunk_skip_scan_idx_dev_time_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev < NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                ->  Index Only Scan Backward using _hyper_1_2_chunk_skip_scan_idx_dev_time_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                      Index Cond: (dev < NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                ->  Index Only Scan Backward using _hyper_1_3_chunk_skip_scan_idx_dev_time_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                      Index Cond: (dev < NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                ->  Index Only Scan Backward using _hyper_1_4_chunk_skip_scan_idx_dev_time_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                      Index Cond: (dev < NULL::integer)
-                     Heap Fetches: 11
 (19 rows)
 
 DROP INDEX skip_scan_idx_dev_time_idx;
@@ -1558,7 +1470,6 @@ CREATE INDEX skip_scan_idx_time_dev_idx ON :TABLE(time, dev);
  Unique (actual rows=11 loops=1)
    ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_idx_time_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
          Index Cond: ("time" = 100)
-         Heap Fetches: 11
 (4 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time = 100;
@@ -1567,7 +1478,6 @@ CREATE INDEX skip_scan_idx_time_dev_idx ON :TABLE(time, dev);
  Unique (actual rows=11 loops=1)
    ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_idx_time_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
          Index Cond: ("time" = 100)
-         Heap Fetches: 11
 (4 rows)
 
 DROP INDEX skip_scan_idx_time_dev_idx;
@@ -1656,19 +1566,15 @@ basic DISTINCT queries on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
 (20 rows)
 
 :PREFIX SELECT DISTINCT dev_name, 'q1_2' FROM :TABLE ORDER BY dev_name;
@@ -1681,19 +1587,15 @@ basic DISTINCT queries on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_name_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_name_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_name_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
 (20 rows)
 
 :PREFIX SELECT DISTINCT dev, 'q1_3', NULL FROM :TABLE ORDER BY dev;
@@ -1706,19 +1608,15 @@ basic DISTINCT queries on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
 (20 rows)
 
 \qecho stable expression in targetlist on :TABLE
@@ -1733,19 +1631,15 @@ stable expression in targetlist on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
 (20 rows)
 
 :PREFIX SELECT DISTINCT dev_name, 'q1_5', length(md5(now()::text)) FROM :TABLE ORDER BY dev_name;
@@ -1758,19 +1652,15 @@ stable expression in targetlist on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_name_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_name_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_name_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
 (20 rows)
 
 -- volatile expression in targetlist
@@ -1865,19 +1755,15 @@ stable expression in targetlist on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
 (20 rows)
 
 -- distinct on expressions not supported
@@ -1947,19 +1833,15 @@ stable expression in targetlist on skip_scan_ht
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
 (19 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev, 'q2_2' FROM :TABLE;
@@ -1972,19 +1854,15 @@ stable expression in targetlist on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
 (20 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev, 'q2_3', NULL FROM :TABLE;
@@ -1997,19 +1875,15 @@ stable expression in targetlist on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
 (20 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev, 'q2_4', length(md5(now()::text)) FROM :TABLE;
@@ -2022,19 +1896,15 @@ stable expression in targetlist on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
 (20 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev, 'q2_5', length(md5(random()::text)) FROM :TABLE;
@@ -2047,19 +1917,15 @@ stable expression in targetlist on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
 (20 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE;
@@ -2122,19 +1988,15 @@ stable expression in targetlist on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
 (20 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) time, 'q2_10' FROM :TABLE ORDER by dev, time;
@@ -2147,19 +2009,15 @@ stable expression in targetlist on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
 (20 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev, tableoid::regclass, 'q2_11' FROM :TABLE;
@@ -2189,19 +2047,15 @@ stable expression in targetlist on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
 (20 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev, int_func_stable(), 'q2_13' FROM :TABLE;
@@ -2214,19 +2068,15 @@ stable expression in targetlist on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
 (20 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev, int_func_volatile(), 'q2_14' FROM :TABLE;
@@ -2239,19 +2089,15 @@ stable expression in targetlist on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
 (20 rows)
 
 -- DISTINCT ON queries on TEXT column
@@ -2264,19 +2110,15 @@ stable expression in targetlist on skip_scan_ht
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_name_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_name_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_name_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 11
 (19 rows)
 
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_2' FROM :TABLE;
@@ -2289,19 +2131,15 @@ stable expression in targetlist on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_name_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_name_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_name_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
 (20 rows)
 
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_3', NULL FROM :TABLE;
@@ -2314,19 +2152,15 @@ stable expression in targetlist on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_name_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_name_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_name_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
 (20 rows)
 
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_4', length(md5(now()::text)) FROM :TABLE;
@@ -2339,19 +2173,15 @@ stable expression in targetlist on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_name_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_name_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_name_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
 (20 rows)
 
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_5', length(md5(random()::text)) FROM :TABLE;
@@ -2364,19 +2194,15 @@ stable expression in targetlist on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_name_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_name_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_name_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
 (20 rows)
 
 :PREFIX SELECT DISTINCT ON (dev_name) * FROM :TABLE;
@@ -2439,19 +2265,15 @@ stable expression in targetlist on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_name_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_name_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_name_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
 (20 rows)
 
 :PREFIX SELECT DISTINCT ON (dev_name) time, 'q3_10' FROM :TABLE ORDER by dev_name, time;
@@ -2496,19 +2318,15 @@ stable expression in targetlist on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_name_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_name_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_name_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
-                           Heap Fetches: 11
 (20 rows)
 
 :PREFIX SELECT DISTINCT ON (dev_name) dev, int_func_immutable(), 'q3_13' FROM :TABLE;
@@ -2606,19 +2424,15 @@ LIMIT queries on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=3 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=3 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 3
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=3 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=3 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 3
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=3 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=3 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 3
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=3 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=3 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 3
 (20 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev DESC, time DESC LIMIT 3;
@@ -2631,19 +2445,15 @@ LIMIT queries on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=3 loops=1)
                      ->  Index Only Scan Backward using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=3 loops=1)
                            Index Cond: (dev < NULL::integer)
-                           Heap Fetches: 3
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=3 loops=1)
                      ->  Index Only Scan Backward using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk (actual rows=3 loops=1)
                            Index Cond: (dev < NULL::integer)
-                           Heap Fetches: 3
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=3 loops=1)
                      ->  Index Only Scan Backward using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk (actual rows=3 loops=1)
                            Index Cond: (dev < NULL::integer)
-                           Heap Fetches: 3
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=3 loops=1)
                      ->  Index Only Scan Backward using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk (actual rows=3 loops=1)
                            Index Cond: (dev < NULL::integer)
-                           Heap Fetches: 3
 (20 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev, time LIMIT 3;
@@ -2656,19 +2466,15 @@ LIMIT queries on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=3 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=3 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 3
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=3 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk (actual rows=3 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 3
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=3 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk (actual rows=3 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 3
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=3 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk (actual rows=3 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 3
 (20 rows)
 
 \qecho range queries on :TABLE
@@ -2682,11 +2488,9 @@ range queries on skip_scan_ht
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: ((dev > NULL::integer) AND ("time" >= 100) AND ("time" <= 300))
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                      Index Cond: ((dev > NULL::integer) AND ("time" >= 100) AND ("time" <= 300))
-                     Heap Fetches: 11
 (11 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time < 200;
@@ -2696,7 +2500,6 @@ range queries on skip_scan_ht
    ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
          ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                Index Cond: ((dev > NULL::integer) AND ("time" < 200))
-               Heap Fetches: 11
 (5 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time > 800;
@@ -2706,7 +2509,6 @@ range queries on skip_scan_ht
    ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
          ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                Index Cond: ((dev > NULL::integer) AND ("time" > 800))
-               Heap Fetches: 11
 (5 rows)
 
 \qecho ordered append on :TABLE
@@ -2731,19 +2533,15 @@ ordered append on skip_scan_ht
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=250 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_time_dev_idx on _hyper_1_1_chunk (actual rows=250 loops=1)
                      Index Cond: (("time" > NULL::integer) AND ("time" >= 0) AND ("time" <= 5000))
-                     Heap Fetches: 250
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=250 loops=1)
                ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_time_dev_idx on _hyper_1_2_chunk (actual rows=250 loops=1)
                      Index Cond: (("time" > NULL::integer) AND ("time" >= 0) AND ("time" <= 5000))
-                     Heap Fetches: 250
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=250 loops=1)
                ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_time_dev_idx on _hyper_1_3_chunk (actual rows=250 loops=1)
                      Index Cond: (("time" > NULL::integer) AND ("time" >= 0) AND ("time" <= 5000))
-                     Heap Fetches: 250
          ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=250 loops=1)
                ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_time_dev_idx on _hyper_1_4_chunk (actual rows=250 loops=1)
                      Index Cond: (("time" > NULL::integer) AND ("time" >= 0) AND ("time" <= 5000))
-                     Heap Fetches: 250
 (19 rows)
 
 \qecho SUBSELECTS on :TABLE
@@ -2776,19 +2574,15 @@ SUBSELECTS on skip_scan_ht
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
 (20 rows)
 
 :PREFIX SELECT time, dev, NULL, 'q4_4' FROM (SELECT DISTINCT ON (dev) dev, time FROM :TABLE) a;
@@ -3140,7 +2934,6 @@ WHERE CLAUSES
  Unique (actual rows=5 loops=1)
    ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_time_dev_val_idx on _hyper_1_1_chunk (actual rows=5 loops=1)
          Index Cond: (("time" = 100) AND (dev > 5))
-         Heap Fetches: 5
 (4 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev,time FROM :TABLE WHERE dev > 5 AND time > 200;
@@ -3152,7 +2945,6 @@ WHERE CLAUSES
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=5 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=5 loops=1)
                      Index Cond: ((dev > NULL::integer) AND (dev > 5) AND ("time" > 200))
-                     Heap Fetches: 5
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=5 loops=1)
                ->  Index Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=5 loops=1)
                      Index Cond: (dev > 5)
@@ -3207,19 +2999,15 @@ WHERE CLAUSES
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=1 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
                      Index Cond: ((dev > NULL::integer) AND (dev IS NULL))
-                     Heap Fetches: 1
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=1 loops=1)
                ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
                      Index Cond: ((dev > NULL::integer) AND (dev IS NULL))
-                     Heap Fetches: 1
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=1 loops=1)
                ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
                      Index Cond: ((dev > NULL::integer) AND (dev IS NULL))
-                     Heap Fetches: 1
          ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=1 loops=1)
                ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=1 loops=1)
                      Index Cond: ((dev > NULL::integer) AND (dev IS NULL))
-                     Heap Fetches: 1
 (19 rows)
 
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev_name IS NULL;
@@ -3231,19 +3019,15 @@ WHERE CLAUSES
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=1 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
                      Index Cond: ((dev_name > NULL::text) AND (dev_name IS NULL))
-                     Heap Fetches: 1
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=1 loops=1)
                ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_name_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
                      Index Cond: ((dev_name > NULL::text) AND (dev_name IS NULL))
-                     Heap Fetches: 1
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=1 loops=1)
                ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_name_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
                      Index Cond: ((dev_name > NULL::text) AND (dev_name IS NULL))
-                     Heap Fetches: 1
          ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=1 loops=1)
                ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_name_idx on _hyper_1_4_chunk (actual rows=1 loops=1)
                      Index Cond: ((dev_name > NULL::text) AND (dev_name IS NULL))
-                     Heap Fetches: 1
 (19 rows)
 
 -- test constants in ORDER BY
@@ -3280,19 +3064,15 @@ SELECT * FROM devices;
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
 (19 rows)
 
 :PREFIX WITH devices AS (
@@ -3307,19 +3087,15 @@ SELECT * FROM devices ORDER BY dev;
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
 (19 rows)
 
 -- prepared statements
@@ -3333,19 +3109,15 @@ PREPARE prep AS SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_name_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_name_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_name_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 11
 (19 rows)
 
 :PREFIX EXECUTE prep;
@@ -3357,19 +3129,15 @@ PREPARE prep AS SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_name_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_name_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_name_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 11
 (19 rows)
 
 :PREFIX EXECUTE prep;
@@ -3381,19 +3149,15 @@ PREPARE prep AS SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_name_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_name_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_name_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                      Index Cond: (dev_name > NULL::text)
-                     Heap Fetches: 11
 (19 rows)
 
 DEALLOCATE prep;
@@ -3486,19 +3250,15 @@ DEALLOCATE prep;
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
    ->  Result (actual rows=909 loops=11)
          ->  Unique (actual rows=909 loops=11)
                ->  Merge Append (actual rows=909 loops=11)
@@ -3529,38 +3289,30 @@ DEALLOCATE prep;
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
    ->  Unique (actual rows=909 loops=11)
          ->  Merge Append (actual rows=909 loops=11)
                Sort Key: _hyper_1_1_chunk_1."time"
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=227 loops=11)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=227 loops=11)
                            Index Cond: ((dev = _hyper_1_1_chunk.dev) AND ("time" > NULL::integer))
-                           Heap Fetches: 2500
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=227 loops=11)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=227 loops=11)
                            Index Cond: ((dev = _hyper_1_1_chunk.dev) AND ("time" > NULL::integer))
-                           Heap Fetches: 2500
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=227 loops=11)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=227 loops=11)
                            Index Cond: ((dev = _hyper_1_1_chunk.dev) AND ("time" > NULL::integer))
-                           Heap Fetches: 2500
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=227 loops=11)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=227 loops=11)
                            Index Cond: ((dev = _hyper_1_1_chunk.dev) AND ("time" > NULL::integer))
-                           Heap Fetches: 2500
 (39 rows)
 
 -- Test that the multi-column DISTINCT emulation is equivalent to a real multi-column DISTINCT
@@ -3576,38 +3328,30 @@ DEALLOCATE prep;
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
-                           Heap Fetches: 11
    ->  Unique (actual rows=909 loops=11)
          ->  Merge Append (actual rows=909 loops=11)
                Sort Key: _hyper_1_1_chunk_1."time"
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=227 loops=11)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=227 loops=11)
                            Index Cond: ((dev = _hyper_1_1_chunk.dev) AND ("time" > NULL::integer))
-                           Heap Fetches: 2500
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=227 loops=11)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=227 loops=11)
                            Index Cond: ((dev = _hyper_1_1_chunk.dev) AND ("time" > NULL::integer))
-                           Heap Fetches: 2500
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=227 loops=11)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=227 loops=11)
                            Index Cond: ((dev = _hyper_1_1_chunk.dev) AND ("time" > NULL::integer))
-                           Heap Fetches: 2500
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=227 loops=11)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=227 loops=11)
                            Index Cond: ((dev = _hyper_1_1_chunk.dev) AND ("time" > NULL::integer))
-                           Heap Fetches: 2500
 (39 rows)
 
 :PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev IS NOT NULL;
@@ -3618,16 +3362,12 @@ DEALLOCATE prep;
          Sort Key: _hyper_1_1_chunk.dev, _hyper_1_1_chunk."time"
          ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=2500 loops=1)
                Index Cond: (dev IS NOT NULL)
-               Heap Fetches: 2500
          ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk (actual rows=2500 loops=1)
                Index Cond: (dev IS NOT NULL)
-               Heap Fetches: 2500
          ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk (actual rows=2500 loops=1)
                Index Cond: (dev IS NOT NULL)
-               Heap Fetches: 2500
          ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk (actual rows=2500 loops=1)
                Index Cond: (dev IS NOT NULL)
-               Heap Fetches: 2500
 (15 rows)
 
 :PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev IS NOT NULL
@@ -3646,16 +3386,12 @@ UNION SELECT b.* FROM
                            Sort Key: _hyper_1_1_chunk.dev, _hyper_1_1_chunk."time"
                            ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=2500 loops=1)
                                  Index Cond: (dev IS NOT NULL)
-                                 Heap Fetches: 2500
                            ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk (actual rows=2500 loops=1)
                                  Index Cond: (dev IS NOT NULL)
-                                 Heap Fetches: 2500
                            ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk (actual rows=2500 loops=1)
                                  Index Cond: (dev IS NOT NULL)
-                                 Heap Fetches: 2500
                            ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk (actual rows=2500 loops=1)
                                  Index Cond: (dev IS NOT NULL)
-                                 Heap Fetches: 2500
                ->  Nested Loop (actual rows=10000 loops=1)
                      ->  Unique (actual rows=11 loops=1)
                            ->  Merge Append (actual rows=44 loops=1)
@@ -3663,38 +3399,30 @@ UNION SELECT b.* FROM
                                  ->  Custom Scan (SkipScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=11 loops=1)
                                        ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=11 loops=1)
                                              Index Cond: (dev > NULL::integer)
-                                             Heap Fetches: 11
                                  ->  Custom Scan (SkipScan) on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=11 loops=1)
                                        ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=11 loops=1)
                                              Index Cond: (dev > NULL::integer)
-                                             Heap Fetches: 11
                                  ->  Custom Scan (SkipScan) on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=11 loops=1)
                                        ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=11 loops=1)
                                              Index Cond: (dev > NULL::integer)
-                                             Heap Fetches: 11
                                  ->  Custom Scan (SkipScan) on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=11 loops=1)
                                        ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=11 loops=1)
                                              Index Cond: (dev > NULL::integer)
-                                             Heap Fetches: 11
                      ->  Unique (actual rows=909 loops=11)
                            ->  Merge Append (actual rows=909 loops=11)
                                  Sort Key: _hyper_1_1_chunk_2."time"
                                  ->  Custom Scan (SkipScan) on _hyper_1_1_chunk _hyper_1_1_chunk_2 (actual rows=227 loops=11)
                                        ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_2 (actual rows=227 loops=11)
                                              Index Cond: ((dev = _hyper_1_1_chunk_1.dev) AND ("time" > NULL::integer))
-                                             Heap Fetches: 2500
                                  ->  Custom Scan (SkipScan) on _hyper_1_2_chunk _hyper_1_2_chunk_2 (actual rows=227 loops=11)
                                        ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_2 (actual rows=227 loops=11)
                                              Index Cond: ((dev = _hyper_1_1_chunk_1.dev) AND ("time" > NULL::integer))
-                                             Heap Fetches: 2500
                                  ->  Custom Scan (SkipScan) on _hyper_1_3_chunk _hyper_1_3_chunk_2 (actual rows=227 loops=11)
                                        ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_2 (actual rows=227 loops=11)
                                              Index Cond: ((dev = _hyper_1_1_chunk_1.dev) AND ("time" > NULL::integer))
-                                             Heap Fetches: 2500
                                  ->  Custom Scan (SkipScan) on _hyper_1_4_chunk _hyper_1_4_chunk_2 (actual rows=227 loops=11)
                                        ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_2 (actual rows=227 loops=11)
                                              Index Cond: ((dev = _hyper_1_1_chunk_1.dev) AND ("time" > NULL::integer))
-                                             Heap Fetches: 2500
 (59 rows)
 
 -- SkipScan into INSERT
@@ -3733,19 +3461,15 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
          ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
-                     Heap Fetches: 11
 (19 rows)
 
 SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
@@ -3763,7 +3487,6 @@ TRUNCATE skip_scan_insert;
    ->  Custom Scan (SkipScan) on skip_scan_nulls (actual rows=1 loops=1)
          ->  Index Only Scan using skip_scan_nulls_time_idx on skip_scan_nulls (actual rows=1 loops=1)
                Index Cond: ("time" > NULL::integer)
-               Heap Fetches: 1
 (5 rows)
 
 -- no tuples in resultset
@@ -3774,7 +3497,6 @@ TRUNCATE skip_scan_insert;
    ->  Custom Scan (SkipScan) on skip_scan_nulls (actual rows=0 loops=1)
          ->  Index Only Scan using skip_scan_nulls_time_idx on skip_scan_nulls (actual rows=0 loops=1)
                Index Cond: (("time" > NULL::integer) AND ("time" IS NOT NULL))
-               Heap Fetches: 0
 (5 rows)
 
 \ir include/skip_scan_query_ht.sql
@@ -3793,19 +3515,15 @@ CREATE INDEX ON :TABLE(time);
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=250 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_time_idx on _hyper_1_1_chunk (actual rows=250 loops=1)
                      Index Cond: ("time" > NULL::integer)
-                     Heap Fetches: 250
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=250 loops=1)
                ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_time_idx on _hyper_1_2_chunk (actual rows=250 loops=1)
                      Index Cond: ("time" > NULL::integer)
-                     Heap Fetches: 250
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=250 loops=1)
                ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_time_idx on _hyper_1_3_chunk (actual rows=250 loops=1)
                      Index Cond: ("time" > NULL::integer)
-                     Heap Fetches: 250
          ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=250 loops=1)
                ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_time_idx on _hyper_1_4_chunk (actual rows=250 loops=1)
                      Index Cond: ("time" > NULL::integer)
-                     Heap Fetches: 250
 (19 rows)
 
 --baseline query with skipscan
@@ -3833,13 +3551,13 @@ SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
 (1 row)
 
 :PREFIX SELECT DISTINCT ON (dev) dev, dev_name FROM :TABLE;
-                                                                   QUERY PLAN                                                                   
-------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                       QUERY PLAN                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=2538 loops=1)
          Sort Key: _hyper_1_1_chunk.dev
          ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=2505 loops=1)
-               ->  Index Scan using compress_hyper_2_5_chunk_dev__ts_meta_sequence_num_idx on compress_hyper_2_5_chunk (actual rows=11 loops=1)
+               ->  Index Scan using compress_hyper_2_5_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_2_5_chunk (actual rows=11 loops=1)
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                ->  Index Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx1 on _hyper_1_2_chunk (actual rows=11 loops=1)
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
@@ -3980,6 +3698,5 @@ ANALYZE i3720;
    ->  Custom Scan (SkipScan) on _hyper_4_10_chunk (actual rows=3 loops=1)
          ->  Index Only Scan using _hyper_4_10_chunk_i3720_data_time_idx on _hyper_4_10_chunk (actual rows=3 loops=1)
                Index Cond: (data > NULL::text)
-               Heap Fetches: 3
 (5 rows)
 

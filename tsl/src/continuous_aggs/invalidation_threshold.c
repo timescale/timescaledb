@@ -4,27 +4,27 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-#include <access/htup_details.h>
 #include <access/htup.h>
+#include <access/htup_details.h>
 #include <access/xact.h>
 #include <nodes/memnodes.h>
-#include <storage/lockdefs.h>
 #include <storage/lmgr.h>
+#include <storage/lockdefs.h>
 #include <utils/builtins.h>
 #include <utils/memutils.h>
 #include <utils/snapmgr.h>
 
-#include "ts_catalog/catalog.h"
-#include <scanner.h>
-#include <scan_iterator.h>
 #include <compat/compat.h>
-#include <time_utils.h>
+#include "ts_catalog/catalog.h"
+#include <scan_iterator.h>
+#include <scanner.h>
 #include <time_bucket.h>
+#include <time_utils.h>
 
-#include "debug_point.h"
-#include "ts_catalog/continuous_agg.h"
 #include "continuous_aggs/materialize.h"
+#include "debug_point.h"
 #include "invalidation_threshold.h"
+#include "ts_catalog/continuous_agg.h"
 
 /*
  * Invalidation threshold.
@@ -241,13 +241,14 @@ invalidation_threshold_compute(const ContinuousAgg *cagg, const InternalTimeRang
 		}
 		else
 		{
-			if (ts_continuous_agg_bucket_width_variable(cagg))
+			if (cagg->bucket_function->bucket_fixed_interval == false)
 			{
 				return ts_compute_beginning_of_the_next_bucket_variable(maxval,
 																		cagg->bucket_function);
 			}
 
-			int64 bucket_width = ts_continuous_agg_bucket_width(cagg);
+			int64 bucket_width = ts_continuous_agg_fixed_bucket_width(cagg->bucket_function);
+			Assert(bucket_width > 0);
 			int64 bucket_start = ts_time_bucket_by_type(bucket_width, maxval, refresh_window->type);
 			/* Add one bucket to get to the end of the last bucket */
 			return ts_time_saturating_add(bucket_start, bucket_width, refresh_window->type);

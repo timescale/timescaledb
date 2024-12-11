@@ -50,9 +50,9 @@
 #include <optimizer/planmain.h>
 #include <optimizer/subselect.h>
 #include <optimizer/tlist.h>
-#include <parser/parsetree.h>
 #include <parser/parse_clause.h>
 #include <parser/parse_func.h>
+#include <parser/parsetree.h>
 #include <rewrite/rewriteManip.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
@@ -188,7 +188,7 @@ is_first_last_node(Node *node, List **context)
 		if (func_strategy != NULL)
 			return true;
 	}
-	return expression_tree_walker(node, is_first_last_node, context);
+	return expression_tree_walker(node, is_first_last_node, (void *) context);
 }
 
 static bool

@@ -1,7 +1,9 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+SET timezone TO 'America/Los_Angeles';
 \set PREFIX 'EXPLAIN (costs off, summary off, timing off) '
+\set ANALYZE  'EXPLAIN (analyze, costs off, summary off, timing off) '
 CREATE TABLE test1 (timec timestamptz , i integer ,
       b bigint, t text);
 SELECT table_name from create_hypertable('test1', 'timec', chunk_time_interval=> INTERVAL '7 days');
@@ -406,6 +408,9 @@ SELECT create_hypertable('test_gen', 'id', chunk_time_interval=>10);
 (1 row)
 
 ALTER TABLE test_gen set (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test_gen" is set to ""
+NOTICE:  default order by for hypertable "test_gen" is set to "id DESC"
 INSERT into test_gen (payload) SELECT generate_series(1,15) ;
 SELECT max(id) from test_gen;
  max 
@@ -479,6 +484,7 @@ INSERT INTO trigger_test(time, device, value,dropcol1) SELECT '2000-01-01',1,1,1
 -- drop the column before we compress
 ALTER TABLE trigger_test DROP COLUMN dropcol1;
 ALTER TABLE trigger_test SET (timescaledb.compress,timescaledb.compress_segmentby='device');
+NOTICE:  default order by for hypertable "trigger_test" is set to ""time" DESC"
 SELECT compress_chunk(c) FROM show_chunks('trigger_test') c;
               compress_chunk              
 ------------------------------------------
@@ -766,6 +772,8 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 ALTER TABLE test_ordering SET (timescaledb.compress,timescaledb.compress_orderby='time desc');
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test_ordering" is set to ""
 INSERT INTO test_ordering VALUES (5),(4),(3);
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
@@ -782,11 +790,11 @@ SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timesc
 
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
-                               QUERY PLAN                                
--------------------------------------------------------------------------
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
    ->  Sort
-         Sort Key: compress_hyper_14_21_chunk._ts_meta_sequence_num DESC
+         Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
          ->  Seq Scan on compress_hyper_14_21_chunk
 (4 rows)
 
@@ -799,15 +807,15 @@ INSERT INTO test_ordering SELECT 1;
 -- It was hard to include a path without pushed down sort for consideration, as `add_path` would reject
 -- the path with sort pushdown, which is desirable in most cases
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
-                                     QUERY PLAN                                      
--------------------------------------------------------------------------------------
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
    ->  Merge Append
          Sort Key: _hyper_13_20_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
                ->  Sort
-                     Sort Key: compress_hyper_14_21_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_14_21_chunk
          ->  Sort
                Sort Key: _hyper_13_20_chunk."time"
@@ -817,15 +825,15 @@ INSERT INTO test_ordering SELECT 1;
 INSERT INTO test_ordering VALUES (105),(104),(103);
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
-                                              QUERY PLAN                                              
-------------------------------------------------------------------------------------------------------
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
    ->  Merge Append
          Sort Key: _hyper_13_20_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
                ->  Sort
-                     Sort Key: compress_hyper_14_21_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_14_21_chunk
          ->  Sort
                Sort Key: _hyper_13_20_chunk."time"
@@ -873,17 +881,17 @@ SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timesc
 
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
-                                  QUERY PLAN                                   
--------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
    ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
          ->  Sort
-               Sort Key: compress_hyper_14_23_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_14_23_chunk._ts_meta_min_1, compress_hyper_14_23_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_14_23_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_13_22_chunk
          ->  Sort
-               Sort Key: compress_hyper_14_24_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_14_24_chunk._ts_meta_min_1, compress_hyper_14_24_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_14_24_chunk
 (10 rows)
 
@@ -916,6 +924,9 @@ SELECT * FROM cagg_conditions ORDER BY 1;
 (1 row)
 
 ALTER TABLE conditions SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "conditions" is set to ""
+NOTICE:  default order by for hypertable "conditions" is set to "timec DESC"
 SELECT  compress_chunk(ch) FROM show_chunks('conditions') ch;
               compress_chunk              
 ------------------------------------------
@@ -960,6 +971,9 @@ SELECT table_name FROM create_hypertable('direct_insert','time');
 (1 row)
 
 ALTER TABLE direct_insert SET(timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "direct_insert" is set to ""
+NOTICE:  default order by for hypertable "direct_insert" is set to ""time" DESC"
 SELECT
   format('%I.%I', ht.schema_name, ht.table_name) AS "TABLENAME"
 FROM
@@ -1034,6 +1048,18 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('test_copy') ch;
 (1 row)
 
 \copy test_copy FROM data/copy_data.csv WITH CSV HEADER;
+-- Also test the code path where the chunk insert state goes out of cache.
+set timescaledb.max_open_chunks_per_insert = 1;
+truncate table test_copy;
+INSERT INTO test_copy SELECT generate_series(1,25,1), -1;
+SELECT count(compress_chunk(ch)) FROM show_chunks('test_copy') ch;
+ count 
+-------
+     3
+(1 row)
+
+\copy test_copy FROM data/copy_data.csv WITH CSV HEADER;
+reset timescaledb.max_open_chunks_per_insert;
 DROP TABLE test_copy;
 -- Text limitting decompressed tuple during an insert
 CREATE TABLE test_limit (
@@ -1050,6 +1076,7 @@ INSERT INTO test_limit SELECT t, i FROM generate_series(1,10000,1) t CROSS JOIN 
 CREATE UNIQUE INDEX timestamp_id_idx ON test_limit(timestamp, id);
 ALTER TABLE test_limit SET (
     timescaledb.compress,
+    timescaledb.compress_segmentby = '',
     timescaledb.compress_orderby = 'timestamp'
 );
 WARNING:  column "id" should be used for segmenting or ordering
@@ -1059,16 +1086,122 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('test_limit') ch;
     11
 (1 row)
 
-SET timescaledb.max_tuples_decompressed_per_dml_transaction = 5000;
+SET timescaledb.max_tuples_decompressed_per_dml_transaction = 1;
 \set VERBOSITY default
 \set ON_ERROR_STOP 0
 -- Inserting in the same period should decompress tuples
-INSERT INTO test_limit SELECT t, 11 FROM generate_series(1,6000,1000) t;
-ERROR:  tuple decompression limit exceeded by operation
-DETAIL:  current limit: 5000, tuples decompressed: 6000
-HINT:  Consider increasing timescaledb.max_tuples_decompressed_per_dml_transaction or set to 0 (unlimited).
+INSERT INTO test_limit SELECT t, 2 FROM generate_series(1,6000,1000) t;
+ERROR:  duplicate key value violates unique constraint "_hyper_24_54_chunk_timestamp_id_idx"
 -- Setting to 0 should remove the limit.
 SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0;
-INSERT INTO test_limit SELECT t, 11 FROM generate_series(1,6000,1000) t;
+INSERT INTO test_limit SELECT t, 2 FROM generate_series(1,6000,1000) t;
+ERROR:  duplicate key value violates unique constraint "_hyper_24_54_chunk_timestamp_id_idx"
 \set ON_ERROR_STOP 1
 DROP TABLE test_limit;
+RESET timescaledb.max_tuples_decompressed_per_dml_transaction;
+-- test multiple unique constraints
+CREATE TABLE multi_unique (time timestamptz NOT NULL, u1 int, u2 int, value float, unique(time, u1), unique(time, u2));
+SELECT table_name FROM create_hypertable('multi_unique', 'time');
+  table_name  
+--------------
+ multi_unique
+(1 row)
+
+ALTER TABLE multi_unique SET (timescaledb.compress, timescaledb.compress_segmentby = 'u1, u2');
+NOTICE:  default order by for hypertable "multi_unique" is set to ""time" DESC"
+INSERT INTO multi_unique VALUES('2024-01-01', 0, 0, 1.0);
+SELECT count(compress_chunk(c)) FROM show_chunks('multi_unique') c;
+ count 
+-------
+     1
+(1 row)
+
+\set ON_ERROR_STOP 0
+-- all INSERTS should fail with constraint violation
+BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 0, 0, 1.0); ROLLBACK;
+ERROR:  duplicate key value violates unique constraint "76_1_multi_unique_time_u1_key"
+DETAIL:  Key ("time", u1)=(Mon Jan 01 00:00:00 2024 PST, 0) already exists.
+BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 0, 1, 1.0); ROLLBACK;
+ERROR:  duplicate key value violates unique constraint "76_1_multi_unique_time_u1_key"
+DETAIL:  Key ("time", u1)=(Mon Jan 01 00:00:00 2024 PST, 0) already exists.
+BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 1, 0, 1.0); ROLLBACK;
+ERROR:  duplicate key value violates unique constraint "76_2_multi_unique_time_u2_key"
+DETAIL:  Key ("time", u2)=(Mon Jan 01 00:00:00 2024 PST, 0) already exists.
+\set ON_ERROR_STOP 1
+DROP TABLE multi_unique;
+-- test insert with unique constraints and NULLs
+CREATE TABLE unique_null(time timestamptz NOT NULL, u1 int, u2 int, value float, unique(time, u1, u2));
+SELECT table_name FROM create_hypertable('unique_null', 'time');
+ table_name  
+-------------
+ unique_null
+(1 row)
+
+ALTER TABLE unique_null SET (timescaledb.compress, timescaledb.compress_segmentby = 'u1, u2');
+NOTICE:  default order by for hypertable "unique_null" is set to ""time" DESC"
+INSERT INTO unique_null VALUES('2024-01-01', 0, 0, 1.0);
+SELECT count(compress_chunk(c)) FROM show_chunks('unique_null') c;
+ count 
+-------
+     1
+(1 row)
+
+\set ON_ERROR_STOP 0
+-- all INSERTS should fail with constraint violation
+BEGIN; INSERT INTO unique_null VALUES('2024-01-01', 0, 0, 1.0); ROLLBACK;
+ERROR:  duplicate key value violates unique constraint "78_3_unique_null_time_u1_u2_key"
+\set ON_ERROR_STOP 1
+-- neither of these should need to decompress
+:ANALYZE INSERT INTO unique_null VALUES('2024-01-01', NULL, 1, 1.0);
+                           QUERY PLAN                            
+-----------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   ->  Insert on unique_null (actual rows=0 loops=1)
+         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
+               ->  Result (actual rows=1 loops=1)
+(4 rows)
+
+SELECT count(*) FROM unique_null;
+ count 
+-------
+     2
+(1 row)
+
+:ANALYZE INSERT INTO unique_null VALUES('2024-01-01', 1, NULL, 1.0);
+                           QUERY PLAN                            
+-----------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   ->  Insert on unique_null (actual rows=0 loops=1)
+         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
+               ->  Result (actual rows=1 loops=1)
+(4 rows)
+
+SELECT count(*) FROM unique_null;
+ count 
+-------
+     3
+(1 row)
+
+:ANALYZE INSERT INTO unique_null VALUES('2024-01-01', NULL, NULL, 1.0);
+                           QUERY PLAN                            
+-----------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   ->  Insert on unique_null (actual rows=0 loops=1)
+         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
+               ->  Result (actual rows=1 loops=1)
+(4 rows)
+
+SELECT count(*) FROM unique_null;
+ count 
+-------
+     4
+(1 row)
+
+INSERT INTO unique_null VALUES('2024-01-01', NULL, NULL, 1.0);
+SELECT count(*) FROM unique_null;
+ count 
+-------
+     5
+(1 row)
+
+DROP TABLE unique_null;

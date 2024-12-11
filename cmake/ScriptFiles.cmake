@@ -27,6 +27,7 @@ set(PRE_INSTALL_FUNCTION_FILES
 set(SOURCE_FILES
     hypertable.sql
     chunk.sql
+    hypercore.sql
     ddl_internal.sql
     util_time.sql
     util_internal_table_ddl.sql
@@ -53,7 +54,7 @@ set(SOURCE_FILES
     policy_internal.sql
     cagg_utils.sql
     cagg_migrate.sql
-    job_error_log_retention.sql
+    job_stat_history_log_retention.sql
     osm_api.sql
     compression_defaults.sql)
 
@@ -79,7 +80,13 @@ list(APPEND SOURCE_FILES
 list(APPEND SOURCE_FILES
   bgw_startup.sql)
 
-# These files should be pre-pended to update scripts so that they are executed
+if(APACHE_ONLY)
+  list(APPEND SOURCE_FILES comment_apache.sql)
+else()
+  list(APPEND SOURCE_FILES comment_tsl.sql)
+endif()
+
+# These files should be prepended to update scripts so that they are executed
 # before anything else during updates
 set(PRE_UPDATE_FILES updates/pre-version-change.sql updates/pre-update.sql)
 set(PRE_DOWNGRADE_FILES updates/pre-version-change.sql)

@@ -12,8 +12,8 @@
 #include <utils/fmgrprotos.h>
 #include <utils/timestamp.h>
 
-#include "utils.h"
 #include "time_bucket.h"
+#include "utils.h"
 
 #define TIME_BUCKET(period, timestamp, offset, min, max, result)                                   \
 	do                                                                                             \
@@ -163,10 +163,10 @@ bucket_month(int32 period, DateADT date, DateADT origin)
 	int32 result;
 
 	j2date(date + POSTGRES_EPOCH_JDATE, &year, &month, &day);
-	int32 timestamp = year * 12 + month - 1;
+	int32 timestamp = (year * 12) + month - 1;
 
 	j2date(origin + POSTGRES_EPOCH_JDATE, &year, &month, &day);
-	int32 offset = year * 12 + month - 1;
+	int32 offset = (year * 12) + month - 1;
 
 	TIME_BUCKET(period, timestamp, offset, PG_INT32_MIN, PG_INT32_MAX, result);
 
@@ -459,13 +459,28 @@ ts_date_offset_bucket(PG_FUNCTION_ARGS)
 	PG_RETURN_DATUM(date);
 }
 
+TSDLLEXPORT int64
+ts_time_bucket_by_type(int64 interval, int64 timestamp, Oid timestamp_type)
+{
+	NullableDatum null_datum = INIT_NULL_DATUM;
+	return ts_time_bucket_by_type_extended(interval,
+										   timestamp,
+										   timestamp_type,
+										   null_datum,
+										   null_datum);
+}
+
 /* when working with time_buckets stored in our catalog, we may not know ahead of time which
  * bucketing function to use, this function dynamically dispatches to the correct time_bucket_<foo>
  * based on an inputted timestamp_type
  */
 TSDLLEXPORT int64
-ts_time_bucket_by_type(int64 interval, int64 timestamp, Oid timestamp_type)
+ts_time_bucket_by_type_extended(int64 interval, int64 timestamp, Oid timestamp_type,
+								NullableDatum offset, NullableDatum origin)
 {
+	/* Defined offset and origin in one function is not supported */
+	Assert(offset.isnull == true || origin.isnull == true);
+
 	Datum timestamp_in_time_type = ts_internal_to_time_value(timestamp, timestamp_type);
 	Datum interval_in_interval_type;
 	Datum time_bucketed;
@@ -487,22 +502,48 @@ ts_time_bucket_by_type(int64 interval, int64 timestamp, Oid timestamp_type)
 			break;
 		case TIMESTAMPOID:
 			interval_in_interval_type = ts_internal_to_interval_value(interval, INTERVALOID);
-			bucket_function = ts_timestamp_bucket;
+			if (offset.isnull)
+				bucket_function = ts_timestamp_bucket; /* handles also origin */
+			else
+				bucket_function = ts_timestamp_offset_bucket;
 			break;
 		case TIMESTAMPTZOID:
 			interval_in_interval_type = ts_internal_to_interval_value(interval, INTERVALOID);
-			bucket_function = ts_timestamptz_bucket;
+			if (offset.isnull)
+				bucket_function = ts_timestamptz_bucket; /* handles also origin */
+			else
+				bucket_function = ts_timestamptz_offset_bucket;
 			break;
 		case DATEOID:
 			interval_in_interval_type = ts_internal_to_interval_value(interval, INTERVALOID);
-			bucket_function = ts_date_bucket;
+			if (offset.isnull)
+				bucket_function = ts_date_bucket; /* handles also origin */
+			else
+				bucket_function = ts_date_offset_bucket;
 			break;
 		default:
 			elog(ERROR, "invalid time_bucket type \"%s\"", format_type_be(timestamp_type));
 	}
 
-	time_bucketed =
-		DirectFunctionCall2(bucket_function, interval_in_interval_type, timestamp_in_time_type);
+	if (!offset.isnull)
+	{
+		time_bucketed = DirectFunctionCall3(bucket_function,
+											interval_in_interval_type,
+											timestamp_in_time_type,
+											offset.value);
+	}
+	else if (!origin.isnull)
+	{
+		time_bucketed = DirectFunctionCall3(bucket_function,
+											interval_in_interval_type,
+											timestamp_in_time_type,
+											origin.value);
+	}
+	else
+	{
+		time_bucketed =
+			DirectFunctionCall2(bucket_function, interval_in_interval_type, timestamp_in_time_type);
+	}
 
 	return ts_time_value_to_internal(time_bucketed, timestamp_type);
 }
@@ -643,8 +684,8 @@ ts_time_bucket_ng_date(PG_FUNCTION_ARGS)
 
 		j2date(date + POSTGRES_EPOCH_JDATE, &year, &month, &day);
 		int32 result;
-		int32 offset = origin_year * 12 + origin_month - 1;
-		int32 timestamp = year * 12 + month - 1;
+		int32 offset = (origin_year * 12) + origin_month - 1;
+		int32 timestamp = (year * 12) + month - 1;
 		TIME_BUCKET(interval->month, timestamp, offset, PG_INT32_MIN, PG_INT32_MAX, result);
 
 		year = result / 12;

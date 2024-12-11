@@ -75,15 +75,6 @@ step "s1_decompress" {
 }
 
 session "s2"
-## locking up the catalog table will block the recompression from releasing the index lock
-## we should not be deadlocking since the index lock has been reduced to ExclusiveLock
-step "s2_block_on_compressed_chunk_size" {
-	BEGIN;
-	LOCK TABLE _timescaledb_catalog.compression_chunk_size;
-}
-step "s2_unblock" {
-	ROLLBACK;
-}
 step "s2_select_from_compressed_chunk" {
 	SELECT sum(temperature) > 1 FROM sensor_data WHERE sensor_id = 2;
 }
@@ -106,6 +97,6 @@ step "s3_release_chunk_insert" {
 }
 
 
-permutation "s2_block_on_compressed_chunk_size" "s1_begin" "s1_recompress_chunk" "s2_select_from_compressed_chunk" "s2_wait_for_select_to_finish" "s2_unblock" "s1_rollback"
+permutation "s1_begin" "s1_recompress_chunk" "s2_select_from_compressed_chunk" "s2_wait_for_select_to_finish" "s1_rollback"
 
 permutation "s1_compress" "s3_block_chunk_insert" "s2_insert" "s1_decompress" "s1_compress" "s3_release_chunk_insert"

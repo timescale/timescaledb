@@ -8,12 +8,12 @@
 #include <postgres.h>
 #include <access/attnum.h>
 #include <access/htup_details.h>
-#include <executor/tuptable.h>
 #include <catalog/pg_type.h>
+#include <executor/tuptable.h>
 
-#include "ts_catalog/catalog.h"
 #include "export.h"
 #include "time_utils.h"
+#include "ts_catalog/catalog.h"
 
 typedef struct PartitioningInfo PartitioningInfo;
 typedef struct DimensionSlice DimensionSlice;
@@ -23,6 +23,7 @@ typedef enum DimensionType
 {
 	DIMENSION_TYPE_OPEN,
 	DIMENSION_TYPE_CLOSED,
+	DIMENSION_TYPE_STATS,
 	DIMENSION_TYPE_ANY,
 } DimensionType;
 

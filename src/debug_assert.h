@@ -23,16 +23,15 @@
  * of our control (e.g., unexpected changes to the metadata) so if you have a
  * test that trigger the error, this macro should not be used.
  */
-#ifdef USE_ASSERT_CHECKING
-#define Ensure(COND, FMT, ...) AssertMacro(COND)
-#else
 #define Ensure(COND, FMT, ...)                                                                     \
 	do                                                                                             \
 	{                                                                                              \
 		if (unlikely(!(COND)))                                                                     \
+		{                                                                                          \
+			Assert(false);                                                                         \
 			ereport(ERROR,                                                                         \
 					(errcode(ERRCODE_INTERNAL_ERROR),                                              \
 					 errdetail("Assertion '" #COND "' failed."),                                   \
 					 errmsg(FMT, ##__VA_ARGS__)));                                                 \
+		}                                                                                          \
 	} while (0)
-#endif

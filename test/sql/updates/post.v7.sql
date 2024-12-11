@@ -2,7 +2,9 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
+\set PG_UPGRADE_TEST false
 \ir post.catalog.sql
+\unset PG_UPGRADE_TEST
 \ir post.insert.sql
 \ir post.integrity_test.sql
 \ir catalog_missing_columns.sql

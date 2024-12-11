@@ -5,10 +5,10 @@
  */
 #pragma once
 
+#include "config.h"
+#include "export.h"
 #include "scanner.h"
 #include "ts_catalog/catalog.h"
-#include "export.h"
-#include "config.h"
 
 extern ScanTupleResult ts_bgw_policy_delete_row_only_tuple_found(TupleInfo *ti, void *const data);
 

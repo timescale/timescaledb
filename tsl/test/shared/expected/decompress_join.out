@@ -42,6 +42,7 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 ALTER TABLE partial_join set(timescaledb.compress,timescaledb.compress_segmentby='device');
+NOTICE:  default order by for hypertable "partial_join" is set to ""time" DESC"
 INSERT INTO partial_join SELECT '2000-01-01','d1';
 SELECT count(*) FROM (SELECT compress_chunk(show_chunks('partial_join'),true)) compress;
  count 

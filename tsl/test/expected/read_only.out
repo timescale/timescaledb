@@ -199,6 +199,9 @@ select set_integer_now_func('test_table_int', 'dummy_now');
 (1 row)
 
 ALTER TABLE test_table_int SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test_table_int" is set to ""
+NOTICE:  default order by for hypertable "test_table_int" is set to ""time" DESC"
 INSERT INTO test_table_int VALUES (0, 1), (10,10);
 SELECT add_compression_policy('test_table_int', '1'::integer) as comp_job_id \gset
 SELECT config as comp_job_config

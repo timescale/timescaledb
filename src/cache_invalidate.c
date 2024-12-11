@@ -5,22 +5,22 @@
  */
 #include <postgres.h>
 #include <access/xact.h>
-#include <utils/lsyscache.h>
-#include <utils/inval.h>
 #include <catalog/namespace.h>
-#include <nodes/nodes.h>
 #include <miscadmin.h>
+#include <nodes/nodes.h>
+#include <utils/inval.h>
+#include <utils/lsyscache.h>
 #include <utils/syscache.h>
 
-#include "annotations.h"
-#include "ts_catalog/catalog.h"
 #include "compat/compat.h"
+#include "annotations.h"
 #include "extension.h"
 #include "hypertable_cache.h"
+#include "ts_catalog/catalog.h"
 
 #include "bgw/scheduler.h"
-#include "cross_module_fn.h"
 #include "cache_invalidate.h"
+#include "cross_module_fn.h"
 
 /*
  * Notes on the way cache invalidation works.

@@ -25,20 +25,20 @@
 
 static const WithClauseDefinition compress_hypertable_with_clause_def[] = {
 		[CompressEnabled] = {
-			.arg_name = "compress",
+			.arg_names = {"compress", "enable_columnstore", NULL},
 			.type_id = BOOLOID,
 			.default_val = (Datum)false,
 		},
 		[CompressSegmentBy] = {
-			 .arg_name = "compress_segmentby",
+			.arg_names = {"compress_segmentby", "segmentby", NULL},
 			 .type_id = TEXTOID,
 		},
 		[CompressOrderBy] = {
-			 .arg_name = "compress_orderby",
+			.arg_names = {"compress_orderby", "orderby", NULL},
 			 .type_id = TEXTOID,
 		},
 		[CompressChunkTimeInterval] = {
-			 .arg_name = "compress_chunk_time_interval",
+			.arg_names = {"compress_chunk_time_interval", NULL},
 			 .type_id = INTERVALOID,
 		},
 };
@@ -98,7 +98,7 @@ parse_segment_collist(char *inpstr, Hypertable *hypertable)
 
 	PG_TRY();
 	{
-		parsed = raw_parser_compat(buf.data);
+		parsed = raw_parser(buf.data, RAW_PARSE_DEFAULT);
 	}
 	PG_CATCH();
 	{
@@ -176,8 +176,8 @@ throw_order_by_error(char *order_by)
 }
 
 /* compress_orderby is parsed same as order by in select queries */
-static OrderBySettings
-parse_order_collist(char *inpstr, Hypertable *hypertable)
+OrderBySettings
+ts_compress_parse_order_collist(char *inpstr, Hypertable *hypertable)
 {
 	StringInfoData buf;
 	List *parsed;
@@ -200,7 +200,7 @@ parse_order_collist(char *inpstr, Hypertable *hypertable)
 
 	PG_TRY();
 	{
-		parsed = raw_parser_compat(buf.data);
+		parsed = raw_parser(buf.data, RAW_PARSE_DEFAULT);
 	}
 	PG_CATCH();
 	{
@@ -322,13 +322,9 @@ ts_compress_hypertable_parse_segment_by(WithClauseResult *parsed_options, Hypert
 OrderBySettings
 ts_compress_hypertable_parse_order_by(WithClauseResult *parsed_options, Hypertable *hypertable)
 {
-	if (parsed_options[CompressOrderBy].is_default == false)
-	{
-		Datum textarg = parsed_options[CompressOrderBy].parsed;
-		return parse_order_collist(TextDatumGetCString(textarg), hypertable);
-	}
-	else
-		return (OrderBySettings){ 0 };
+	Ensure(parsed_options[CompressOrderBy].is_default == false, "with clause is not default");
+	Datum textarg = parsed_options[CompressOrderBy].parsed;
+	return ts_compress_parse_order_collist(TextDatumGetCString(textarg), hypertable);
 }
 
 /* returns List of CompressedParsedCol
