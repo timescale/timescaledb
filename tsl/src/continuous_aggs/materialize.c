@@ -3,7 +3,6 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#include <compat/compat.h>
 #include <postgres.h>
 #include <executor/spi.h>
 #include <fmgr.h>
@@ -20,6 +19,7 @@
 #include <utils/snapmgr.h>
 #include <utils/timestamp.h>
 
+#include "compat/compat.h"
 #include "debug_assert.h"
 #include "guc.h"
 #include "materialize.h"
@@ -770,11 +770,15 @@ execute_materializations(MaterializationContext *context)
 			rows_processed += execute_materialization_plan(context, PLAN_TYPE_DELETE);
 			rows_processed += execute_materialization_plan(context, PLAN_TYPE_INSERT);
 		}
+
+		/* Free all cached plans */
+		free_materialization_plans(context);
 	}
-	PG_FINALLY();
+	PG_CATCH();
 	{
 		/* Make sure all cached plans in the session be released before rethrowing the error */
 		free_materialization_plans(context);
+		PG_RE_THROW();
 	}
 	PG_END_TRY();
 
