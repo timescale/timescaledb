@@ -332,8 +332,7 @@ extern DecompressAllFunction tsl_get_decompress_all_function(CompressionAlgorith
 
 typedef struct Chunk Chunk;
 typedef struct ChunkInsertState ChunkInsertState;
-extern void decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk,
-										  TupleTableSlot *slot);
+extern void decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot);
 #if PG14_GE
 typedef struct HypertableModifyState HypertableModifyState;
 extern bool decompress_target_segments(HypertableModifyState *ht_state);
@@ -356,13 +355,16 @@ extern void compress_chunk_populate_sort_info_for_column(CompressionSettings *se
 														 Oid *sort_operator, Oid *collation,
 														 bool *nulls_first);
 extern void row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor,
-								TupleDesc uncompressed_tuple_desc, Relation compressed_table,
+								Relation uncompressed_table, Relation compressed_table,
 								int16 num_columns_in_compressed_table, bool need_bistate,
 								bool reset_sequence, int insert_options);
 extern void row_compressor_reset(RowCompressor *row_compressor);
 extern void row_compressor_close(RowCompressor *row_compressor);
 extern void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
-											  Tuplesortstate *sorted_rel, TupleDesc sorted_desc);
+											  Tuplesortstate *sorted_rel, TupleDesc sorted_desc,
+											  Relation in_rel);
+extern Oid get_compressed_chunk_index(ResultRelInfo *resultRelInfo, CompressionSettings *settings);
+
 extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_null);
 
 extern RowDecompressor build_decompressor(Relation in_rel, Relation out_rel);
@@ -376,7 +378,7 @@ extern enum CompressionAlgorithms compress_get_default_algorithm(Oid typeoid);
  */
 #ifndef TS_COMPRESSION_FUZZING
 #define CORRUPT_DATA_MESSAGE(X)                                                                    \
-	(errmsg("the compressed data is corrupt"), errdetail(X), errcode(ERRCODE_DATA_CORRUPTED))
+	(errmsg("the compressed data is corrupt"), errdetail("%s", X), errcode(ERRCODE_DATA_CORRUPTED))
 #else
 #define CORRUPT_DATA_MESSAGE(X) (errcode(ERRCODE_DATA_CORRUPTED))
 #endif
@@ -402,3 +404,5 @@ consumeCompressedData(StringInfo si, int bytes)
  * We use this limit for sanity checks in case the compressed data is corrupt.
  */
 #define GLOBAL_MAX_ROWS_PER_COMPRESSION 1015
+
+const CompressionAlgorithmDefinition *algorithm_definition(CompressionAlgorithm algo);

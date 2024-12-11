@@ -266,7 +266,7 @@ copy_decompress_chunk_path(DecompressChunkPath *src)
 }
 
 static CompressionInfo *
-build_compressioninfo(PlannerInfo *root, Hypertable *ht, RelOptInfo *chunk_rel)
+build_compressioninfo(PlannerInfo *root, Hypertable *ht, Chunk *chunk, RelOptInfo *chunk_rel)
 {
 	AppendRelInfo *appinfo;
 	CompressionInfo *info = palloc0(sizeof(CompressionInfo));
@@ -276,7 +276,8 @@ build_compressioninfo(PlannerInfo *root, Hypertable *ht, RelOptInfo *chunk_rel)
 	info->chunk_rel = chunk_rel;
 	info->chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
 
-	info->settings = ts_compression_settings_get(ht->main_table_relid);
+	Oid relid = ts_chunk_get_relid(chunk->fd.compressed_chunk_id, true);
+	info->settings = ts_compression_settings_get(relid);
 
 	if (chunk_rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
 	{
@@ -389,10 +390,18 @@ cost_batch_sorted_merge(PlannerInfo *root, CompressionInfo *compression_info,
 		 segmentby_attno =
 			 bms_next_member(compression_info->chunk_segmentby_attnos, segmentby_attno))
 	{
+		char *colname = get_attname(compression_info->chunk_rte->relid,
+									segmentby_attno,
+									/* missing_ok = */ false);
+		AttrNumber compressed_attno = get_attnum(compression_info->compressed_rte->relid, colname);
+		Ensure(compressed_attno != InvalidAttrNumber,
+			   "segmentby column %s not found in compressed chunk %d",
+			   colname,
+			   compression_info->compressed_rte->relid);
 		Var *var = palloc(sizeof(Var));
 		*var = (Var){ .xpr.type = T_Var,
 					  .varno = compression_info->compressed_rel->relid,
-					  .varattno = segmentby_attno };
+					  .varattno = compressed_attno };
 		segmentby_groupexprs = lappend(segmentby_groupexprs, var);
 	}
 	const double open_batches_estimated = estimate_num_groups_compat(root,
@@ -701,7 +710,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	ListCell *lc;
 	Index ht_relid = 0;
 
-	CompressionInfo *compression_info = build_compressioninfo(root, ht, chunk_rel);
+	CompressionInfo *compression_info = build_compressioninfo(root, ht, chunk, chunk_rel);
 
 	/* double check we don't end up here on single chunk queries with ONLY */
 	Assert(compression_info->chunk_rel->reloptkind == RELOPT_OTHER_MEMBER_REL ||

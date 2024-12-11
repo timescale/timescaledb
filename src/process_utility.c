@@ -2819,10 +2819,14 @@ process_index_start(ProcessUtilityArgs *args)
 static int
 chunk_index_mappings_cmp(const void *p1, const void *p2)
 {
-	const ChunkIndexMapping *mapping[] = { *((ChunkIndexMapping *const *) p1),
-										   *((ChunkIndexMapping *const *) p2) };
+	const ChunkIndexMapping *lhs = *((ChunkIndexMapping *const *) p1);
+	const ChunkIndexMapping *rhs = *((ChunkIndexMapping *const *) p2);
 
-	return mapping[0]->chunkoid - mapping[1]->chunkoid;
+	if (lhs->chunkoid < rhs->chunkoid)
+		return -1;
+	if (lhs->chunkoid > rhs->chunkoid)
+		return 1;
+	return 0;
 }
 
 /*
@@ -3969,19 +3973,8 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 	Assert(IsA(cmd->def, List));
 	inpdef = (List *) cmd->def;
 	ts_with_clause_filter(inpdef, &compress_options, &pg_options);
-	if (compress_options)
-	{
-		parse_results = ts_compress_hypertable_set_clause_parse(compress_options);
-		/* We allow updating compress chunk time interval independently of other compression
-		 * options. */
-		if (parse_results[CompressEnabled].is_default &&
-			parse_results[CompressChunkTimeInterval].is_default)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("the option timescaledb.compress must be set to true to enable "
-							"compression")));
-	}
-	else
+
+	if (!compress_options)
 		return DDL_CONTINUE;
 
 	if (pg_options != NIL)
@@ -3989,6 +3982,9 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("only timescaledb.compress parameters allowed when specifying compression "
 						"parameters for hypertable")));
+
+	parse_results = ts_compress_hypertable_set_clause_parse(compress_options);
+
 	ts_cm_functions->process_compress_table(cmd, ht, parse_results);
 	return DDL_DONE;
 }

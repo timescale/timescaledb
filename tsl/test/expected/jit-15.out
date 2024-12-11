@@ -188,35 +188,25 @@ SELECT * FROM jit_device_summary WHERE metric_spread = 1800 ORDER BY bucket DESC
                                                                                                          QUERY PLAN                                                                                                          
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
-   Output: _materialized_hypertable_4.bucket, _materialized_hypertable_4.device_id, _materialized_hypertable_4.metric_avg, _materialized_hypertable_4.metric_spread
+   Output: _hyper_4_6_chunk.bucket, _hyper_4_6_chunk.device_id, _hyper_4_6_chunk.metric_avg, _hyper_4_6_chunk.metric_spread
    ->  Sort
-         Output: _materialized_hypertable_4.bucket, _materialized_hypertable_4.device_id, _materialized_hypertable_4.metric_avg, _materialized_hypertable_4.metric_spread
-         Sort Key: _materialized_hypertable_4.bucket DESC, _materialized_hypertable_4.device_id
+         Output: _hyper_4_6_chunk.bucket, _hyper_4_6_chunk.device_id, _hyper_4_6_chunk.metric_avg, _hyper_4_6_chunk.metric_spread
+         Sort Key: _hyper_4_6_chunk.bucket DESC, _hyper_4_6_chunk.device_id
          ->  Append
-               ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_4
-                     Output: _materialized_hypertable_4.bucket, _materialized_hypertable_4.device_id, _materialized_hypertable_4.metric_avg, _materialized_hypertable_4.metric_spread
-                     Startup Exclusion: true
-                     Runtime Exclusion: false
-                     Chunks excluded during startup: 0
-                     ->  Index Scan using _hyper_4_6_chunk__materialized_hypertable_4_bucket_idx on _timescaledb_internal._hyper_4_6_chunk
-                           Output: _hyper_4_6_chunk.bucket, _hyper_4_6_chunk.device_id, _hyper_4_6_chunk.metric_avg, _hyper_4_6_chunk.metric_spread
-                           Index Cond: (_hyper_4_6_chunk.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone))
-                           Filter: (_hyper_4_6_chunk.metric_spread = '1800'::double precision)
+               ->  Index Scan using _hyper_4_6_chunk__materialized_hypertable_4_bucket_idx on _timescaledb_internal._hyper_4_6_chunk
+                     Output: _hyper_4_6_chunk.bucket, _hyper_4_6_chunk.device_id, _hyper_4_6_chunk.metric_avg, _hyper_4_6_chunk.metric_spread
+                     Index Cond: (_hyper_4_6_chunk.bucket < 'Mon Dec 31 01:00:00 2018 PST'::timestamp with time zone)
+                     Filter: (_hyper_4_6_chunk.metric_spread = '1800'::double precision)
                ->  HashAggregate
-                     Output: (time_bucket('@ 1 hour'::interval, jit_test_contagg.observation_time)), jit_test_contagg.device_id, avg(jit_test_contagg.metric), (max(jit_test_contagg.metric) - min(jit_test_contagg.metric))
-                     Group Key: time_bucket('@ 1 hour'::interval, jit_test_contagg.observation_time), jit_test_contagg.device_id
-                     Filter: ((max(jit_test_contagg.metric) - min(jit_test_contagg.metric)) = '1800'::double precision)
+                     Output: (time_bucket('@ 1 hour'::interval, _hyper_3_5_chunk.observation_time)), _hyper_3_5_chunk.device_id, avg(_hyper_3_5_chunk.metric), (max(_hyper_3_5_chunk.metric) - min(_hyper_3_5_chunk.metric))
+                     Group Key: time_bucket('@ 1 hour'::interval, _hyper_3_5_chunk.observation_time), _hyper_3_5_chunk.device_id
+                     Filter: ((max(_hyper_3_5_chunk.metric) - min(_hyper_3_5_chunk.metric)) = '1800'::double precision)
                      ->  Result
-                           Output: time_bucket('@ 1 hour'::interval, jit_test_contagg.observation_time), jit_test_contagg.device_id, jit_test_contagg.metric
-                           ->  Custom Scan (ChunkAppend) on public.jit_test_contagg
-                                 Output: jit_test_contagg.observation_time, jit_test_contagg.device_id, jit_test_contagg.metric
-                                 Startup Exclusion: true
-                                 Runtime Exclusion: false
-                                 Chunks excluded during startup: 4
-                                 ->  Index Scan using _hyper_3_5_chunk_jit_test_contagg_observation_time_idx on _timescaledb_internal._hyper_3_5_chunk
-                                       Output: _hyper_3_5_chunk.observation_time, _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.metric
-                                       Index Cond: (_hyper_3_5_chunk.observation_time >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone))
-(29 rows)
+                           Output: time_bucket('@ 1 hour'::interval, _hyper_3_5_chunk.observation_time), _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.metric
+                           ->  Index Scan using _hyper_3_5_chunk_jit_test_contagg_observation_time_idx on _timescaledb_internal._hyper_3_5_chunk
+                                 Output: _hyper_3_5_chunk.observation_time, _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.metric
+                                 Index Cond: (_hyper_3_5_chunk.observation_time >= 'Mon Dec 31 01:00:00 2018 PST'::timestamp with time zone)
+(19 rows)
 
 -- generate the results into two different files
 \set ECHO errors

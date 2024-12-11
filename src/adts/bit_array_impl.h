@@ -45,12 +45,12 @@ static inline void bit_array_wrap_internal(BitArray *array, uint32 num_buckets,
  ************************/
 
 static inline void
-bit_array_init(BitArray *array)
+bit_array_init(BitArray *array, int expected_bits)
 {
 	*array = (BitArray){
 		.bits_used_in_last_bucket = 0,
 	};
-	uint64_vec_init(&array->buckets, CurrentMemoryContext, 0);
+	uint64_vec_init(&array->buckets, CurrentMemoryContext, expected_bits / 64);
 }
 
 /* This initializes the bit array by wrapping buckets. Note, that the bit array will

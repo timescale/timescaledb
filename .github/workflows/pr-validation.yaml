@@ -1,7 +1,7 @@
 name: Pull Request Validation
 "on":
   pull_request:
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened, edited, auto_merge_enabled, auto_merge_disabled]
     branches: [main]
 jobs:
   # Count the number of commits in a pull request. This can be
@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout source
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         ref: ${{ github.event.pull_request.head.sha }}
         fetch-depth: 0
@@ -36,7 +36,8 @@ jobs:
         BODY: ${{ github.event.pull_request.body }}
       run: |
         echo "$BODY" | egrep -qsi '^disable-check:.*\<commit-count\>'
-        if [[ $? -ne 0 ]]; then
+        if [[ $? -ne 0 ]] && [[ "${{ github.event.pull_request.auto_merge.merge_method }}" != "squash" ]]
+        then
           base=${{ github.event.pull_request.base.sha }}
           head=${{ github.event.pull_request.head.sha }}
           count=`git rev-list --count $base..$head`
@@ -62,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Check if the pull request changes the loader
         shell: bash --norc --noprofile {0}

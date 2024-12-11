@@ -50,6 +50,8 @@
 static void validate_hypertable_for_compression(Hypertable *ht);
 static List *build_columndefs(CompressionSettings *settings, Oid src_relid);
 static ColumnDef *build_columndef_singlecolumn(const char *colname, Oid typid);
+static void compression_settings_update(Hypertable *ht, CompressionSettings *settings,
+										WithClauseResult *with_clause_options);
 
 static char *
 compression_column_segment_metadata_name(int16 column_index, const char *type)
@@ -58,8 +60,7 @@ compression_column_segment_metadata_name(int16 column_index, const char *type)
 	int ret;
 
 	Assert(column_index > 0);
-	ret =
-		snprintf(buf, NAMEDATALEN, COMPRESSION_COLUMN_METADATA_PREFIX "%s_%d", type, column_index);
+	ret = snprintf(buf, NAMEDATALEN, COMPRESSION_COLUMN_METADATA_PATTERN_V1, type, column_index);
 	if (ret < 0 || ret > NAMEDATALEN)
 	{
 		ereport(ERROR,
@@ -82,86 +83,22 @@ column_segment_max_name(int16 column_index)
 													COMPRESSION_COLUMN_METADATA_MAX_COLUMN_NAME);
 }
 
-static void
-check_segmentby(Oid relid, List *segmentby_cols)
+int
+compressed_column_metadata_attno(CompressionSettings *settings, Oid chunk_reloid,
+								 AttrNumber chunk_attno, Oid compressed_reloid, char *metadata_type)
 {
-	ListCell *lc;
-	ArrayType *segmentby = NULL;
+	Assert(strcmp(metadata_type, "min") == 0 || strcmp(metadata_type, "max") == 0);
 
-	foreach (lc, segmentby_cols)
+	char *attname = get_attname(chunk_reloid, chunk_attno, /* missing_ok = */ false);
+	int16 orderby_pos = ts_array_position(settings->fd.orderby, attname);
+
+	if (orderby_pos != 0)
 	{
-		char *colname = lfirst(lc);
-		AttrNumber col_attno = get_attnum(relid, colname);
-		if (col_attno == InvalidAttrNumber)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_SYNTAX_ERROR),
-					 errmsg("column \"%s\" does not exist", colname),
-					 errhint("The timescaledb.compress_segmentby option must reference a valid "
-							 "column.")));
-		}
-
-		const char *col_attname = get_attname(relid, col_attno, false);
-
-		/* check if segmentby columns are distinct. */
-		if (ts_array_is_member(segmentby, col_attname))
-			ereport(ERROR,
-					(errcode(ERRCODE_SYNTAX_ERROR),
-					 errmsg("duplicate column name \"%s\"", colname),
-					 errhint("The timescaledb.compress_segmentby option must reference distinct "
-							 "column.")));
-		segmentby = ts_array_add_element_text(segmentby, col_attname);
+		char *metadata_name = compression_column_segment_metadata_name(orderby_pos, metadata_type);
+		return get_attnum(compressed_reloid, metadata_name);
 	}
-}
 
-static void
-check_orderby(Oid relid, List *orderby_cols, ArrayType *segmentby)
-{
-	ArrayType *orderby = NULL;
-	ListCell *lc;
-
-	foreach (lc, orderby_cols)
-	{
-		CompressedParsedCol *col = (CompressedParsedCol *) lfirst(lc);
-		AttrNumber col_attno = get_attnum(relid, NameStr(col->colname));
-
-		if (col_attno == InvalidAttrNumber)
-			ereport(ERROR,
-					(errcode(ERRCODE_SYNTAX_ERROR),
-					 errmsg("column \"%s\" does not exist", NameStr(col->colname)),
-					 errhint("The timescaledb.compress_orderby option must reference a valid "
-							 "column.")));
-
-		Oid col_type = get_atttype(relid, col_attno);
-		TypeCacheEntry *type = lookup_type_cache(col_type, TYPECACHE_LT_OPR);
-
-		if (!OidIsValid(type->lt_opr))
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_FUNCTION),
-					 errmsg("invalid ordering column type %s", format_type_be(col_type)),
-					 errdetail("Could not identify a less-than operator for the type.")));
-
-		const char *col_attname = get_attname(relid, col_attno, false);
-
-		/* check if orderby columns are distinct. */
-		if (ts_array_is_member(orderby, col_attname))
-			ereport(ERROR,
-					(errcode(ERRCODE_SYNTAX_ERROR),
-					 errmsg("duplicate column name \"%s\"", NameStr(col->colname)),
-					 errhint("The timescaledb.compress_orderby option must reference distinct "
-							 "column.")));
-
-		/* check if orderby_cols and segmentby_cols are distinct */
-		if (ts_array_is_member(segmentby, col_attname))
-			ereport(ERROR,
-					(errcode(ERRCODE_SYNTAX_ERROR),
-					 errmsg("cannot use column \"%s\" for both ordering and segmenting",
-							col_attname),
-					 errhint("Use separate columns for the timescaledb.compress_orderby and"
-							 " timescaledb.compress_segmentby options.")));
-
-		orderby = ts_array_add_element_text(orderby, col_attname);
-	}
+	return InvalidAttrNumber;
 }
 
 /*
@@ -177,7 +114,8 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 {
 	Oid compresseddata_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
 	ArrayType *segmentby = settings->fd.segmentby;
-	List *column_defs = NIL;
+	List *compressed_column_defs = NIL;
+	List *segmentby_column_defs = NIL;
 
 	Relation rel = table_open(src_relid, AccessShareLock);
 	TupleDesc tupdesc = rel->rd_att;
@@ -200,6 +138,7 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 				 COMPRESSION_COLUMN_METADATA_PREFIX);
 
 		bool is_segmentby = ts_array_is_member(segmentby, NameStr(attr->attname));
+		bool is_orderby = ts_array_is_member(settings->fd.orderby, NameStr(attr->attname));
 
 		if (is_segmentby)
 		{
@@ -207,64 +146,80 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 			typmod = attr->atttypmod;
 			collid = attr->attcollation;
 		}
+
 		if (!OidIsValid(attroid))
 		{
 			attroid = compresseddata_oid; /* default type for column */
 		}
+
 		coldef = makeColumnDef(NameStr(attr->attname), attroid, typmod, collid);
-		column_defs = lappend(column_defs, coldef);
-	}
 
-	table_close(rel, AccessShareLock);
-
-	/* additional metadata columns. */
-
-	/* count of the number of uncompressed rows */
-	column_defs = lappend(column_defs,
-						  makeColumnDef(COMPRESSION_COLUMN_METADATA_COUNT_NAME,
-										INT4OID,
-										-1 /* typemod */,
-										0 /*collation*/));
-	/* sequence_num column */
-	column_defs = lappend(column_defs,
-						  makeColumnDef(COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME,
-										INT4OID,
-										-1 /* typemod */,
-										0 /*collation*/));
-
-	if (settings->fd.orderby)
-	{
-		Datum datum;
-		bool isnull;
-		int16 index = 1;
-		ArrayIterator it = array_create_iterator(settings->fd.orderby, 0, NULL);
-		while (array_iterate(it, &datum, &isnull))
+		/*
+		 * Put the metadata columns before the compressed columns, because they
+		 * are accessed before decompression.
+		 */
+		if (is_orderby)
 		{
-			AttrNumber col_attno = get_attnum(settings->fd.relid, TextDatumGetCString(datum));
-			Oid col_type = get_atttype(settings->fd.relid, col_attno);
-			TypeCacheEntry *type = lookup_type_cache(col_type, TYPECACHE_LT_OPR);
+			int index = ts_array_position(settings->fd.orderby, NameStr(attr->attname));
+			TypeCacheEntry *type = lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR);
 
 			if (!OidIsValid(type->lt_opr))
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_FUNCTION),
-						 errmsg("invalid ordering column type %s", format_type_be(col_type)),
+						 errmsg("invalid ordering column type %s", format_type_be(attr->atttypid)),
 						 errdetail("Could not identify a less-than operator for the type.")));
 
 			/* segment_meta min and max columns */
-			column_defs = lappend(column_defs,
-								  makeColumnDef(column_segment_min_name(index),
-												col_type,
-												-1 /* typemod */,
-												0 /*collation*/));
-			column_defs = lappend(column_defs,
-								  makeColumnDef(column_segment_max_name(index),
-												col_type,
-												-1 /* typemod */,
-												0 /*collation*/));
-			index++;
+			compressed_column_defs = lappend(compressed_column_defs,
+											 makeColumnDef(column_segment_min_name(index),
+														   attr->atttypid,
+														   attr->atttypmod,
+														   attr->attcollation));
+			compressed_column_defs = lappend(compressed_column_defs,
+											 makeColumnDef(column_segment_max_name(index),
+														   attr->atttypid,
+														   attr->atttypmod,
+														   attr->attcollation));
+		}
+
+		if (is_segmentby)
+		{
+			segmentby_column_defs = lappend(segmentby_column_defs, coldef);
+		}
+		else
+		{
+			compressed_column_defs = lappend(compressed_column_defs, coldef);
 		}
 	}
-	return column_defs;
+
+	/*
+	 * Add the metadata columns. Count is always accessed, so put it first.
+	 * Sequence number should probably go after all orderby columns, but we
+	 * put it here for simplicity.
+	 */
+	List *all_column_defs = list_make2(makeColumnDef(COMPRESSION_COLUMN_METADATA_COUNT_NAME,
+													 INT4OID,
+													 -1 /* typemod */,
+													 0 /*collation*/),
+									   makeColumnDef(COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME,
+													 INT4OID,
+													 -1 /* typemod */,
+													 0 /*collation*/));
+
+	/*
+	 * Then, put all segmentby columns. They are likely to be used in filters
+	 * before decompression.
+	 */
+	all_column_defs = list_concat(all_column_defs, segmentby_column_defs);
+
+	/*
+	 * Then, put all the compressed columns.
+	 */
+	all_column_defs = list_concat(all_column_defs, compressed_column_defs);
+
+	table_close(rel, AccessShareLock);
+
+	return all_column_defs;
 }
 
 /* use this api for the case when you add a single column to a table that already has
@@ -393,10 +348,9 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 
 /* Add  the hypertable time column to the end of the orderby list if
  * it's not already in the orderby or segmentby. */
-static List *
-add_time_to_order_by_if_not_included(List *orderby_cols, List *segmentby_cols, Hypertable *ht)
+static OrderBySettings
+add_time_to_order_by_if_not_included(OrderBySettings obs, ArrayType *segmentby, Hypertable *ht)
 {
-	ListCell *lc;
 	const Dimension *time_dim;
 	const char *time_col_name;
 	bool found = false;
@@ -404,30 +358,20 @@ add_time_to_order_by_if_not_included(List *orderby_cols, List *segmentby_cols, H
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
 	time_col_name = get_attname(ht->main_table_relid, time_dim->column_attno, false);
 
-	foreach (lc, orderby_cols)
-	{
-		CompressedParsedCol *col = (CompressedParsedCol *) lfirst(lc);
-		if (namestrcmp(&col->colname, time_col_name) == 0)
-			found = true;
-	}
-	foreach (lc, segmentby_cols)
-	{
-		if (strncmp(lfirst(lc), time_col_name, NAMEDATALEN) == 0)
-			found = true;
-	}
+	if (ts_array_is_member(obs.orderby, time_col_name))
+		found = true;
+
+	if (ts_array_is_member(segmentby, time_col_name))
+		found = true;
 
 	if (!found)
 	{
-		/* Add time DESC NULLS FIRST to order by list */
-		CompressedParsedCol *col = palloc(sizeof(*col));
-		*col = (CompressedParsedCol){
-			.desc = true,
-			.nullsfirst = true,
-		};
-		namestrcpy(&col->colname, time_col_name);
-		orderby_cols = lappend(orderby_cols, col);
+		/* Add time DESC NULLS FIRST to order by settings */
+		obs.orderby = ts_array_add_element_text(obs.orderby, pstrdup(time_col_name));
+		obs.orderby_desc = ts_array_add_element_bool(obs.orderby_desc, true);
+		obs.orderby_nullsfirst = ts_array_add_element_bool(obs.orderby_nullsfirst, true);
 	}
-	return orderby_cols;
+	return obs;
 }
 
 /* returns list of constraints that need to be cloned on the compressed hypertable
@@ -591,70 +535,13 @@ validate_existing_indexes(Hypertable *ht, CompressionSettings *settings)
 }
 
 static void
-check_modify_compression_options(Hypertable *ht, CompressionSettings *settings,
-								 WithClauseResult *with_clause_options, List *parsed_orderby_cols)
-{
-	bool compress_enable = DatumGetBool(with_clause_options[CompressEnabled].parsed);
-	bool compressed_chunks_exist;
-	bool compression_already_enabled = TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht);
-	compressed_chunks_exist =
-		compression_already_enabled && ts_chunk_exists_with_compression(ht->fd.id);
-
-	if (compressed_chunks_exist)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot change configuration on already compressed chunks"),
-				 errdetail("There are compressed chunks that prevent changing"
-						   " the existing compression configuration.")));
-
-	/* Require both order by and segment by when altering if they were previously set because
-	 * otherwise it's not clear what the default value means: does it mean leave as-is or is it an
-	 * empty list.
-	 * In the case where orderby is already set to the default value (time DESC),
-	 * both interpretations should lead to orderby being set to the default value,
-	 * so we allow skipping orderby if the default is the already set value. */
-	if (compress_enable && compression_already_enabled)
-	{
-		if (with_clause_options[CompressOrderBy].is_default && settings->fd.orderby)
-		{
-			bool orderby_time_default_matches = false;
-			const char *colname = NULL;
-			CompressedParsedCol *parsed = NULL;
-			/* If the orderby that's already set is only the time column DESC (which is the
-			 default), and we pass the default again, then no need to give an error */
-			if (list_length(parsed_orderby_cols) == 1)
-			{
-				colname = ts_array_get_element_text(settings->fd.orderby, 1);
-				bool orderby_desc = ts_array_get_element_bool(settings->fd.orderby_desc, 1);
-				parsed = lfirst(list_nth_cell(parsed_orderby_cols, 0));
-				orderby_time_default_matches = (orderby_desc == parsed->desc);
-			}
-
-			// this is okay only if the orderby that's already set is only the time column
-			// check for the same attribute name and same order (desc)
-			if (!(ts_array_length(settings->fd.orderby) == 1 &&
-				  list_length(parsed_orderby_cols) == 1 && parsed &&
-				  (namestrcmp(&parsed->colname, colname) == 0) && orderby_time_default_matches))
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("must specify a column to order by"),
-						 errdetail("The timescaledb.compress_orderby option was"
-								   " previously set and must also be specified"
-								   " in the updated configuration.")));
-		}
-		if (with_clause_options[CompressSegmentBy].is_default && settings->fd.segmentby)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("must specify a column to segment by"),
-					 errdetail("The timescaledb.compress_segmentby option was"
-							   " previously set and must also be specified"
-							   " in the updated configuration.")));
-	}
-}
-
-static void
 drop_existing_compression_table(Hypertable *ht)
 {
+	if (ts_chunk_exists_with_compression(ht->fd.id))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot drop compression hypertable with compressed chunks")));
+
 	Hypertable *compressed = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 	if (compressed == NULL)
 		ereport(ERROR,
@@ -673,23 +560,14 @@ drop_existing_compression_table(Hypertable *ht)
 static bool
 disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 {
-	bool compression_already_enabled = TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht);
-	if (!with_clause_options[CompressOrderBy].is_default ||
-		!with_clause_options[CompressSegmentBy].is_default)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("invalid compression configuration"),
-				 errdetail("Cannot set additional compression options when"
-						   " disabling compression.")));
-
-	if (!compression_already_enabled)
+	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 		/* compression is not enabled, so just return */
 		return false;
 
-	CompressionSettings *settings = ts_compression_settings_get(ht->main_table_relid);
-
-	/* compression is enabled. can we turn it off? */
-	check_modify_compression_options(ht, settings, with_clause_options, NIL);
+	if (ts_chunk_exists_with_compression(ht->fd.id))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot disable compression on hypertable with compressed chunks")));
 
 	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 		drop_existing_compression_table(ht);
@@ -756,10 +634,6 @@ update_compress_chunk_time_interval(Hypertable *ht, WithClauseResult *with_claus
 	return ts_hypertable_set_compress_interval(ht, compress_interval_usec);
 }
 
-static void compression_settings_update(CompressionSettings *settings,
-										WithClauseResult *with_clause_options, List *segmentby_cols,
-										List *orderby_cols);
-
 /*
  * enables compression for the passed in table by
  * creating a compression hypertable with special properties
@@ -778,10 +652,8 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 						   WithClauseResult *with_clause_options)
 {
 	int32 compress_htid;
-	bool compress_enable = DatumGetBool(with_clause_options[CompressEnabled].parsed);
-	Oid ownerid;
-	List *segmentby_cols;
-	List *orderby_cols;
+	bool compress_disable = !with_clause_options[CompressEnabled].is_default &&
+							!DatumGetBool(with_clause_options[CompressEnabled].parsed);
 	CompressionSettings *settings;
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
@@ -794,55 +666,33 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	/* reload info after lock */
 	ht = ts_hypertable_get_by_id(ht->fd.id);
 
+	if (compress_disable)
+	{
+		return disable_compression(ht, with_clause_options);
+	}
+
 	settings = ts_compression_settings_get(ht->main_table_relid);
 	if (!settings)
 	{
 		settings = ts_compression_settings_create(ht->main_table_relid, NULL, NULL, NULL, NULL);
 	}
 
-	/* If we are not enabling compression, we must be just altering compressed chunk interval. */
-	if (with_clause_options[CompressEnabled].is_default)
+	compression_settings_update(ht, settings, with_clause_options);
+
+	if (!TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
-		return update_compress_chunk_time_interval(ht, with_clause_options);
-	}
-	if (!compress_enable)
-	{
-		return disable_compression(ht, with_clause_options);
-	}
-	ownerid = ts_rel_get_owner(ht->main_table_relid);
-	segmentby_cols = ts_compress_hypertable_parse_segment_by(with_clause_options, ht);
-	orderby_cols = ts_compress_hypertable_parse_order_by(with_clause_options, ht);
-	orderby_cols = add_time_to_order_by_if_not_included(orderby_cols, segmentby_cols, ht);
+		/* take explicit locks on catalog tables and keep them till end of txn */
+		LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE), RowExclusiveLock);
 
-	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
-		check_modify_compression_options(ht, settings, with_clause_options, orderby_cols);
+		/* Check if we can create a compressed hypertable with existing
+		 * constraints and indexes. */
+		validate_existing_constraints(ht, settings);
+		validate_existing_indexes(ht, settings);
 
-	compression_settings_update(settings, with_clause_options, segmentby_cols, orderby_cols);
-
-	check_segmentby(ht->main_table_relid, segmentby_cols);
-	check_orderby(ht->main_table_relid, orderby_cols, settings->fd.segmentby);
-
-	/* take explicit locks on catalog tables and keep them till end of txn */
-	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE), RowExclusiveLock);
-
-	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
-	{
-		/* compression is enabled */
-		drop_existing_compression_table(ht);
-	}
-
-	/* Check if we can create a compressed hypertable with existing
-	 * constraints and indexes. */
-	validate_existing_constraints(ht, settings);
-	validate_existing_indexes(ht, settings);
-
-	Oid tablespace_oid = get_rel_tablespace(ht->main_table_relid);
-	compress_htid = compression_hypertable_create(ht, ownerid, tablespace_oid);
-	ts_hypertable_set_compressed(ht, compress_htid);
-
-	if (!with_clause_options[CompressChunkTimeInterval].is_default)
-	{
-		update_compress_chunk_time_interval(ht, with_clause_options);
+		Oid ownerid = ts_rel_get_owner(ht->main_table_relid);
+		Oid tablespace_oid = get_rel_tablespace(ht->main_table_relid);
+		compress_htid = compression_hypertable_create(ht, ownerid, tablespace_oid);
+		ts_hypertable_set_compressed(ht, compress_htid);
 	}
 
 	/* do not release any locks, will get released by xact end */
@@ -910,37 +760,31 @@ validate_hypertable_for_compression(Hypertable *ht)
 }
 
 static void
-compression_settings_update(CompressionSettings *settings, WithClauseResult *with_clause_options,
-							List *segmentby_cols, List *orderby_cols)
+compression_settings_update(Hypertable *ht, CompressionSettings *settings,
+							WithClauseResult *with_clause_options)
 {
 	/* orderby arrays should always be in sync either all NULL or none */
 	Assert(
 		(settings->fd.orderby && settings->fd.orderby_desc && settings->fd.orderby_nullsfirst) ||
 		(!settings->fd.orderby && !settings->fd.orderby_desc && !settings->fd.orderby_nullsfirst));
 
+	if (!with_clause_options[CompressChunkTimeInterval].is_default)
+	{
+		update_compress_chunk_time_interval(ht, with_clause_options);
+	}
+
 	if (!with_clause_options[CompressSegmentBy].is_default)
 	{
-		settings->fd.segmentby = ts_array_create_from_list_text(segmentby_cols);
+		settings->fd.segmentby = ts_compress_hypertable_parse_segment_by(with_clause_options, ht);
 	}
 
 	if (!with_clause_options[CompressOrderBy].is_default || !settings->fd.orderby)
 	{
-		List *cols = NIL;
-		List *desc = NIL;
-		List *nullsfirst = NIL;
-		ListCell *lc;
-
-		foreach (lc, orderby_cols)
-		{
-			CompressedParsedCol *col = lfirst(lc);
-			cols = lappend(cols, (void *) NameStr(col->colname));
-			desc = lappend_int(desc, col->desc);
-			nullsfirst = lappend_int(nullsfirst, col->nullsfirst);
-		}
-
-		settings->fd.orderby = ts_array_create_from_list_text(cols);
-		settings->fd.orderby_desc = ts_array_create_from_list_bool(desc);
-		settings->fd.orderby_nullsfirst = ts_array_create_from_list_bool(nullsfirst);
+		OrderBySettings obs = ts_compress_hypertable_parse_order_by(with_clause_options, ht);
+		obs = add_time_to_order_by_if_not_included(obs, settings->fd.segmentby, ht);
+		settings->fd.orderby = obs.orderby;
+		settings->fd.orderby_desc = obs.orderby_desc;
+		settings->fd.orderby_nullsfirst = obs.orderby_nullsfirst;
 	}
 
 	ts_compression_settings_update(settings);

@@ -18,7 +18,7 @@ set(TSL_LIBRARY_NAME ${PROJECT_NAME}-tsl)
 
 include(build-defs.cmake)
 
-if(CMAKE_BUILD_TYPE MATCHES Debug)
+if(CMAKE_BUILD_TYPE MATCHES Debug OR COMPRESSION_FUZZING)
   add_library(${TSL_LIBRARY_NAME} MODULE
               ${SOURCES} $<TARGET_OBJECTS:${TSL_TESTS_LIB_NAME}>)
 else()

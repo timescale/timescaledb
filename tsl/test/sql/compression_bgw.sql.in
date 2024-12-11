@@ -193,12 +193,6 @@ ALTER TABLE conditions SET (timescaledb.compress);
 SELECT COUNT(*) AS dropped_chunks_count
   FROM drop_chunks('conditions', TIMESTAMPTZ '2018-12-15 00:00');
 
--- We need to have some chunks that are marked as dropped, otherwise
--- we will not have a problem below.
-SELECT COUNT(*) AS dropped_chunks_count
-  FROM _timescaledb_catalog.chunk
- WHERE dropped = TRUE;
-
 SELECT count(*) FROM timescaledb_information.chunks
 WHERE hypertable_name = 'conditions' and is_compressed = true;
 

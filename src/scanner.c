@@ -475,11 +475,12 @@ ts_scanner_scan(ScannerCtx *ctx)
 					ts_scanner_close(ctx);
 				break;
 			}
-			else if (scan_result == SCAN_RESCAN)
+			else if (scan_result == SCAN_RESTART_WITH_NEW_SNAPSHOT)
 			{
+				ts_scanner_end_scan(ctx);
 				ctx->internal.tinfo.count = 0;
-				ts_scanner_rescan(ctx, NULL);
-				continue;
+				ctx->snapshot = GetLatestSnapshot();
+				ts_scanner_start_scan(ctx);
 			}
 		}
 	}
@@ -490,9 +491,15 @@ ts_scanner_scan(ScannerCtx *ctx)
 TSDLLEXPORT bool
 ts_scanner_scan_one(ScannerCtx *ctx, bool fail_if_not_found, const char *item_type)
 {
-	int num_found = ts_scanner_scan(ctx);
+	/* Since this function ignores the custom limit, we assume that no custom limit is set by the
+	 * caller. */
+	Assert(ctx->limit == 0);
 
+	/* We are interested in a maximum of two tuples to determine whether the addressed tuple is
+	 * unique. */
 	ctx->limit = 2;
+
+	int num_found = ts_scanner_scan(ctx);
 
 	switch (num_found)
 	{

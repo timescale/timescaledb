@@ -1,0 +1,2 @@
+Fixes: #6732 Fix CAgg migration with custom timezone / date format settings 
+Thanks: @hongquan For reporting a 'timestamp out of range' error during CAgg migrations

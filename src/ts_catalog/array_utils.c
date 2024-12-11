@@ -4,10 +4,14 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <catalog/pg_collation.h>
 #include <catalog/pg_type.h>
+#include <fmgr.h>
 #include <utils/array.h>
 #include <utils/builtins.h>
+#include <utils/fmgroids.h>
 
+#include <compat/compat.h>
 #include <debug_assert.h>
 #include "array_utils.h"
 
@@ -27,6 +31,26 @@ ts_array_length(ArrayType *arr)
 	Assert(ARR_NDIM(arr) == 1);
 
 	return ARR_DIMS(arr)[0];
+}
+
+extern TSDLLEXPORT bool
+ts_array_equal(ArrayType *left, ArrayType *right)
+{
+	/* Quick exit if both are NULL or point to same thing. */
+	if (left == right)
+		return true;
+
+	if (left == NULL || right == NULL)
+		return false;
+
+	Assert(left != NULL && right != NULL && ARR_NDIM(left) == 1 && ARR_NDIM(right) == 1);
+
+	Datum result = OidFunctionCall2Coll(F_ARRAY_EQ,
+										DEFAULT_COLLATION_OID,
+										PointerGetDatum(left),
+										PointerGetDatum(right));
+
+	return DatumGetBool(result);
 }
 
 extern TSDLLEXPORT bool

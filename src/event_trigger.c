@@ -11,6 +11,7 @@
 #include <catalog/pg_trigger.h>
 #include <commands/event_trigger.h>
 #include <executor/executor.h>
+#include <utils/array.h>
 #include <utils/builtins.h>
 
 #include "compat/compat.h"

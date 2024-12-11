@@ -362,9 +362,14 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 			CompressionColumnDescription *column = &dcontext->template_columns[i];
 			if (column->bulk_decompression_supported)
 			{
-				/* Values array, with 64 element padding (actually we have less). */
-				batch_memory_context_bytes +=
-					(GLOBAL_MAX_ROWS_PER_COMPRESSION + 64) * column->value_bytes;
+				/*
+				 * Values array, with 64 element padding (actually we have less).
+				 *
+				 * For variable-length types (we only have text) we can't
+				 * estimate the width currently.
+				 */
+				batch_memory_context_bytes += (GLOBAL_MAX_ROWS_PER_COMPRESSION + 64) *
+											  (column->value_bytes > 0 ? column->value_bytes : 16);
 				/* Nulls bitmap, one uint64 per 64 rows. */
 				batch_memory_context_bytes +=
 					((GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64) * sizeof(uint64);
@@ -416,7 +421,6 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 
 	/* Constify stable expressions in vectorized predicates. */
-	chunk_state->have_constant_false_vectorized_qual = false;
 	PlannerGlobal glob = {
 		.boundParams = node->ss.ps.state->es_param_list_info,
 	};
@@ -427,31 +431,6 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	foreach (lc, chunk_state->vectorized_quals_original)
 	{
 		Node *constified = estimate_expression_value(&root, (Node *) lfirst(lc));
-
-		/*
-		 * Note that some expressions are evaluated to a null Const, like a
-		 * strict comparison with stable expression that evaluates to null. If
-		 * we have such filter, no rows can pass, so we set a special flag to
-		 * return early.
-		 */
-		if (IsA(constified, Const))
-		{
-			Const *c = castNode(Const, constified);
-			if (c->constisnull || !DatumGetBool(c->constvalue))
-			{
-				chunk_state->have_constant_false_vectorized_qual = true;
-				break;
-			}
-			else
-			{
-				/*
-				 * This is a constant true qual, every row passes and we can
-				 * just ignore it. No idea how it can happen though.
-				 */
-				Assert(false);
-				continue;
-			}
-		}
 
 		dcontext->vectorized_quals_constified =
 			lappend(dcontext->vectorized_quals_constified, constified);
@@ -478,8 +457,21 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 	/* Two columns are decompressed, the column that needs to be aggregated and the count column */
 	Assert(dcontext->num_total_columns == 2);
 
-	CompressionColumnDescription *column_description = &dcontext->template_columns[0];
-	Assert(dcontext->template_columns[1].type == COUNT_COLUMN);
+	CompressionColumnDescription *value_column_description = &dcontext->template_columns[0];
+	CompressionColumnDescription *count_column_description = &dcontext->template_columns[1];
+	if (count_column_description->type != COUNT_COLUMN)
+	{
+		/*
+		 * The count and value columns can go in different order based on their
+		 * order in compressed chunk, so check which one we are seeing.
+		 */
+		CompressionColumnDescription *tmp = value_column_description;
+		value_column_description = count_column_description;
+		count_column_description = tmp;
+	}
+	Assert(value_column_description->type == COMPRESSED_COLUMN ||
+		   value_column_description->type == SEGMENTBY_COLUMN);
+	Assert(count_column_description->type == COUNT_COLUMN);
 
 	/* Get a free batch slot */
 	const int new_batch_index = batch_array_get_unused_slot(&batch_queue->batch_array);
@@ -513,14 +505,12 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 
 	int64 result_sum = 0;
 
-	if (column_description->type == SEGMENTBY_COLUMN)
+	if (value_column_description->type == SEGMENTBY_COLUMN)
 	{
 		/*
 		 * To calculate the sum for a segment by value, we need to multiply the value of the segment
 		 * by column with the number of compressed tuples in this batch.
 		 */
-		CompressionColumnDescription *column_description_count = &dcontext->template_columns[1];
-
 		while (true)
 		{
 			TupleTableSlot *compressed_slot =
@@ -537,13 +527,13 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 
 			bool isnull_value, isnull_elements;
 			Datum value = slot_getattr(compressed_slot,
-									   column_description->compressed_scan_attno,
+									   value_column_description->compressed_scan_attno,
 									   &isnull_value);
 
 			/* We have multiple compressed tuples for this segment by value. Get number of
 			 * compressed tuples */
 			Datum elements = slot_getattr(compressed_slot,
-										  column_description_count->compressed_scan_attno,
+										  count_column_description->compressed_scan_attno,
 										  &isnull_elements);
 
 			if (!isnull_value && !isnull_elements)
@@ -574,10 +564,10 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 			MemoryContextSwitchTo(old_mctx);
 		}
 	}
-	else if (column_description->type == COMPRESSED_COLUMN)
+	else if (value_column_description->type == COMPRESSED_COLUMN)
 	{
 		Assert(dcontext->enable_bulk_decompression);
-		Assert(column_description->bulk_decompression_supported);
+		Assert(value_column_description->bulk_decompression_supported);
 		Assert(list_length(aggref->args) == 1);
 
 		while (true)
@@ -595,8 +585,9 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 
 			/* Decompress data */
 			bool isnull;
-			Datum value =
-				slot_getattr(compressed_slot, column_description->compressed_scan_attno, &isnull);
+			Datum value = slot_getattr(compressed_slot,
+									   value_column_description->compressed_scan_attno,
+									   &isnull);
 
 			Ensure(isnull == false, "got unexpected NULL attribute value from compressed batch");
 
@@ -612,13 +603,13 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 
 			DecompressAllFunction decompress_all =
 				tsl_get_decompress_all_function(header->compression_algorithm,
-												column_description->typid);
+												value_column_description->typid);
 			Assert(decompress_all != NULL);
 
 			MemoryContextSwitchTo(dcontext->bulk_decompression_context);
 
 			arrow = decompress_all(PointerGetDatum(header),
-								   column_description->typid,
+								   value_column_description->typid,
 								   batch_state->per_batch_context);
 
 			Assert(arrow != NULL);
@@ -731,11 +722,6 @@ decompress_chunk_exec_impl(DecompressChunkState *chunk_state, const BatchQueueFu
 	if (chunk_state->perform_vectorized_aggregation)
 	{
 		return perform_vectorized_aggregation(chunk_state);
-	}
-
-	if (chunk_state->have_constant_false_vectorized_qual)
-	{
-		return NULL;
 	}
 
 	bqfuncs->pop(bq, dcontext);

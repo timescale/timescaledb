@@ -28,6 +28,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     APPEND
     TEST_FILES
     cagg_concurrent_invalidation.spec
+    cagg_watermark_concurrent_update.spec
     compression_chunk_race.spec
     compression_freeze.spec
     compression_merge_race.spec

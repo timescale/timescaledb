@@ -1,0 +1,1 @@
+Fixes: #6677 Fix snapshot usage in CAgg invalidation scanner 

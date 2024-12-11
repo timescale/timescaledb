@@ -153,3 +153,10 @@ arrow_set_row_validity(uint64 *bitmap, size_t row_number, bool value)
 
 	Assert(arrow_row_is_valid(bitmap, row_number) == value);
 }
+
+/* Increase the `source_value` to be an even multiple of `pad_to`. */
+static inline uint64
+pad_to_multiple(uint64 pad_to, uint64 source_value)
+{
+	return ((source_value + pad_to - 1) / pad_to) * pad_to;
+}

@@ -84,7 +84,7 @@ step "recompress_chunks_start" {
       chunk regclass;
     BEGIN
       SELECT show_chunks('hyper') INTO chunk;
-      CALL recompress_chunk(chunk);
+      PERFORM compress_chunk(chunk);
     END;
     $$;
 }

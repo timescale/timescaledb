@@ -23,6 +23,8 @@ TSDLLEXPORT CompressionSettings *ts_compression_settings_create(Oid relid, Array
 TSDLLEXPORT CompressionSettings *ts_compression_settings_get(Oid relid);
 TSDLLEXPORT CompressionSettings *ts_compression_settings_materialize(Oid ht_relid, Oid dst_relid);
 TSDLLEXPORT bool ts_compression_settings_delete(Oid relid);
+TSDLLEXPORT bool ts_compression_settings_equal(const CompressionSettings *left,
+											   const CompressionSettings *right);
 
 TSDLLEXPORT int ts_compression_settings_update(CompressionSettings *settings);
 

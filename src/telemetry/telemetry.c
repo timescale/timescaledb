@@ -715,7 +715,7 @@ add_function_call_telemetry(JsonbParseState *state)
 		return;
 	}
 
-	visible_extensions[0] = "timescaledb";
+	visible_extensions[0] = EXTENSION_NAME;
 	for (size_t i = 1; i < sizeof(visible_extensions) / sizeof(char *); i++)
 		visible_extensions[i] = related_extensions[i - 1];
 

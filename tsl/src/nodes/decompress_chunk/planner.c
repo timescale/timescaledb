@@ -32,6 +32,7 @@
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
+#include "nodes/chunk_append/transform.h"
 #include "vector_predicates.h"
 #include "ts_catalog/array_utils.h"
 
@@ -430,8 +431,54 @@ static Node *
 make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 {
 	/*
-	 * Currently we vectorize some "Var op Const" binary predicates,
-	 * scalar array operations with these predicates, and null test.
+	 * We can vectorize BoolExpr (AND/OR/NOT).
+	 */
+	if (IsA(qual, BoolExpr))
+	{
+		BoolExpr *boolexpr = castNode(BoolExpr, qual);
+
+		if (boolexpr->boolop == NOT_EXPR)
+		{
+			/*
+			 * NOT should be removed by Postgres for all operators we can
+			 * vectorize (see prepqual.c), so we don't support it.
+			 */
+			return NULL;
+		}
+
+		bool need_copy = false;
+		List *vectorized_args = NIL;
+		ListCell *lc;
+		foreach (lc, boolexpr->args)
+		{
+			Node *arg = lfirst(lc);
+			Node *vectorized_arg = make_vectorized_qual(path, arg);
+			if (vectorized_arg == NULL)
+			{
+				return NULL;
+			}
+
+			if (vectorized_arg != arg)
+			{
+				need_copy = true;
+			}
+
+			vectorized_args = lappend(vectorized_args, vectorized_arg);
+		}
+
+		if (!need_copy)
+		{
+			return (Node *) boolexpr;
+		}
+
+		BoolExpr *boolexpr_copy = (BoolExpr *) copyObject(boolexpr);
+		boolexpr_copy->args = vectorized_args;
+		return (Node *) boolexpr_copy;
+	}
+
+	/*
+	 * Among the simple predicates, we vectorize some "Var op Const" binary
+	 * predicates, scalar array operations with these predicates, and null test.
 	 */
 	NullTest *nulltest = NULL;
 	OpExpr *opexpr = NULL;
@@ -593,7 +640,17 @@ find_vectorized_quals(DecompressChunkPath *path, List *qual_list, List **vectori
 	foreach (lc, qual_list)
 	{
 		Node *source_qual = lfirst(lc);
-		Node *vectorized_qual = make_vectorized_qual(path, source_qual);
+
+		/*
+		 * We can't vectorize the stable cross-type operators (for example
+		 * timestamp > timestamptz), so try to cast the constant to the same
+		 * type to convert it to the same-type operator. We do the same thing
+		 * for chunk exclusion.
+		 */
+		Node *transformed_comparison =
+			(Node *) ts_transform_cross_datatype_comparison((Expr *) source_qual);
+
+		Node *vectorized_qual = make_vectorized_qual(path, transformed_comparison);
 		if (vectorized_qual)
 		{
 			*vectorized = lappend(*vectorized, vectorized_qual);

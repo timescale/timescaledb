@@ -38,16 +38,16 @@ jobs:
     steps:
 
     - name: Setup python 3.10
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
     - name: Checkout timescaledb
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Install pgspot
       run: |
-        python -m pip install pgspot==0.6.0
+        python -m pip install pgspot==0.7.0
 
     - name: Build timescaledb sqlfiles
       run: |

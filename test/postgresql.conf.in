@@ -1,20 +1,27 @@
 # NOTE: any changes here require changes to tsl/test/postgresql.conf. Its prefix
 # must be the same as this file.
 
-shared_preload_libraries=timescaledb
-max_worker_processes=24
 autovacuum=false
-random_page_cost=1.0
-timezone='US/Pacific'
 datestyle='Postgres, MDY'
-timescaledb.license='apache'
-@TELEMETRY_DEFAULT_SETTING@
+hba_file='@TEST_PG_HBA_FILE@'
+log_destination='@TEST_PG_LOG_DESTINATION@'
+log_directory='@TEST_PG_LOG_DIRECTORY@'
+log_filename='postmaster.log'
+log_line_prefix='%m: %u [%p] %d '
+logging_collector=true
+max_worker_processes=24
+random_page_cost=1.0
+shared_preload_libraries=timescaledb
 timescaledb.last_tuned='1971-02-03 04:05:06.789012 -0300'
 timescaledb.last_tuned_version='0.0.1'
+timescaledb.passfile='@TEST_PASSFILE@'
 timescaledb_telemetry.cloud='ci'
-log_line_prefix='%m: %u [%p] %d '
+timezone='US/Pacific'
+
 # Set extra_float_digits=0 to retain the pre PG12 rounding behaviour
 # of floating point numbers, which are needed to make our tests work.
 extra_float_digits=0
-timescaledb.passfile='@TEST_PASSFILE@'
-hba_file='@TEST_PG_HBA_FILE@'
+
+@TELEMETRY_DEFAULT_SETTING@
+
+timescaledb.license='apache'

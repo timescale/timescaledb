@@ -378,8 +378,8 @@ SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9));
 SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
 --earliest datapoint now in table
 SELECT * FROM drop_chunks_table ORDER BY time ASC limit 1;
---we see the chunks row with the dropped flags set;
-SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk where dropped;
+--chunks are removed
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE dropped;
 --still see data in the view
 SELECT * FROM drop_chunks_view WHERE time_bucket < (integer_now_test2()-9) ORDER BY time_bucket DESC;
 --no data but covers dropped chunks

@@ -192,12 +192,10 @@ ts_chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti)
 
 	fd->id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_id)]);
 	fd->hypertable_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_hypertable_id)]);
-	memcpy(&fd->schema_name,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_chunk_schema_name)]),
-		   NAMEDATALEN);
-	memcpy(&fd->table_name,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_chunk_table_name)]),
-		   NAMEDATALEN);
+	namestrcpy(&fd->schema_name,
+			   DatumGetCString(values[AttrNumberGetAttrOffset(Anum_chunk_schema_name)]));
+	namestrcpy(&fd->table_name,
+			   DatumGetCString(values[AttrNumberGetAttrOffset(Anum_chunk_table_name)]));
 
 	if (nulls[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)])
 		fd->compressed_chunk_id = INVALID_CHUNK_ID;
@@ -3145,7 +3143,7 @@ List *
 ts_chunk_get_chunk_ids_by_hypertable_id(int32 hypertable_id)
 {
 	List *chunkids = NIL;
-	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowExclusiveLock, CurrentMemoryContext);
+	ScanIterator iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
 
 	init_scan_by_hypertable_id(&iterator, hypertable_id);
 	ts_scanner_foreach(&iterator)
@@ -3946,6 +3944,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		}
 	}
 
+	bool all_caggs_finalized = ts_continuous_agg_hypertable_all_finalized(hypertable_id);
 	List *dropped_chunk_names = NIL;
 	for (uint64 i = 0; i < num_chunks; i++)
 	{
@@ -3968,7 +3967,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		chunk_name = psprintf("%s.%s", schema_name, table_name);
 		dropped_chunk_names = lappend(dropped_chunk_names, chunk_name);
 
-		if (has_continuous_aggs)
+		if (has_continuous_aggs && !all_caggs_finalized)
 			ts_chunk_drop_preserve_catalog_row(chunks + i, DROP_RESTRICT, log_level);
 		else
 			ts_chunk_drop(chunks + i, DROP_RESTRICT, log_level);
@@ -4339,6 +4338,13 @@ ts_chunk_is_compressed(const Chunk *chunk)
 	return ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_COMPRESSED);
 }
 
+bool
+ts_chunk_needs_recompression(const Chunk *chunk)
+{
+	Assert(ts_chunk_is_compressed(chunk));
+	return ts_chunk_is_partial(chunk) || ts_chunk_is_unordered(chunk);
+}
+
 /* Note that only a compressed chunk can have partial flag set */
 bool
 ts_chunk_is_partial(const Chunk *chunk)
@@ -4374,6 +4380,28 @@ ts_chunk_validate_chunk_status_for_operation(const Chunk *chunk, ChunkOperation 
 {
 	Oid chunk_relid = chunk->table_id;
 	int32 chunk_status = chunk->fd.status;
+
+	/*
+	 * Block everything but DELETE on OSM chunks.
+	 */
+	if (chunk->fd.osm_chunk)
+	{
+		switch (cmd)
+		{
+			case CHUNK_DROP:
+				return true;
+				break;
+
+			default:
+				if (throw_error)
+					elog(ERROR,
+						 "%s not permitted on tiered chunk \"%s\" ",
+						 get_chunk_operation_str(cmd),
+						 get_rel_name(chunk_relid));
+				return false;
+				break;
+		}
+	}
 
 	/* Handle frozen chunks */
 	if (ts_flags_are_set_32(chunk_status, CHUNK_STATUS_FROZEN))

@@ -23,6 +23,14 @@ symbol NAMEDATALEN;
 + /* You are using strlcpy with NAMEDATALEN, please consider using NameData and namestrcpy instead. */
 + namestrcpy(E1, E2);
 
+@rule_namedata_memcpy@
+expression E1, E2;
+symbol NAMEDATALEN;
+@@
+- memcpy(E1, E2, NAMEDATALEN);
++ /* You are using memcpy with NAMEDATALEN, please consider using NameData and namestrcpy instead. */
++ namestrcpy(E1, E2);
+
 @@
 typedef NameData;
 NameData E;

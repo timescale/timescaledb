@@ -112,8 +112,13 @@ SELECT
 
 SELECT compress_chunk(i) FROM show_chunks('test5') i LIMIT 4;
 
+SELECT format('%I.%I',ch.schema_name,ch.table_name) AS "CHUNK"
+  FROM _timescaledb_catalog.chunk ch
+  JOIN _timescaledb_catalog.hypertable ht ON ht.id=ch.hypertable_id
+  JOIN _timescaledb_catalog.hypertable ht2 ON ht.id=ht2.compressed_hypertable_id AND ht2.table_name='test5' \gset
+
 -- Make sure sequence numbers are correctly fetched from index.
-SELECT _ts_meta_sequence_num FROM _timescaledb_internal.compress_hyper_10_187_chunk where i = 1;
+SELECT _ts_meta_sequence_num FROM :CHUNK  where i = 1;
 
 SELECT schemaname || '.' || indexname AS "INDEXNAME"
 FROM pg_indexes i
@@ -129,7 +134,7 @@ DROP INDEX :INDEXNAME;
 SELECT compress_chunk(i, true) FROM show_chunks('test5') i LIMIT 5;
 
 -- Make sure sequence numbers are correctly fetched from heap.
-SELECT _ts_meta_sequence_num FROM _timescaledb_internal.compress_hyper_10_187_chunk where i = 1;
+SELECT _ts_meta_sequence_num FROM :CHUNK where i = 1;
 
 SELECT 'test5' AS "HYPERTABLE_NAME" \gset
 \ir include/compression_test_merge.sql
@@ -233,3 +238,57 @@ SET enable_seqscan TO OFF;
 SET enable_bitmapscan TO ON;
 
 SELECT count(*) FROM test8 WHERE series_id = 1;
+
+-- Verify rollup is prevented when compression settings differ
+CREATE TABLE test9(time TIMESTAMPTZ NOT NULL, value DOUBLE PRECISION NOT NULL, series_id BIGINT NOT NULL);
+SELECT create_hypertable('test9', 'time', chunk_time_interval => INTERVAL '1 h');
+
+ALTER TABLE test9 set (timescaledb.compress,
+    timescaledb.compress_segmentby = 'series_id',
+    timescaledb.compress_orderby = 'time',
+    timescaledb.compress_chunk_time_interval = '1 day');
+
+-- create chunk and compress
+INSERT INTO test9 (time, series_id, value) SELECT '2020-01-01 00:00:00'::TIMESTAMPTZ, 1, 1;
+SELECT compress_chunk(show_chunks('test9'), true);
+INSERT INTO test9 (time, series_id, value) SELECT '2020-01-01 01:00:00'::TIMESTAMPTZ, 1, 1;
+
+-- should be 2 chunk before rollup
+SELECT hypertable_name, range_start, range_end FROM timescaledb_information.chunks WHERE hypertable_name = 'test9' ORDER BY 2;
+SELECT compress_chunk(show_chunks('test9'), true);
+-- should be 1 chunk because of rollup
+SELECT hypertable_name, range_start, range_end FROM timescaledb_information.chunks WHERE hypertable_name = 'test9' ORDER BY 2;
+
+INSERT INTO test9 (time, series_id, value) SELECT '2020-01-01 02:00:00'::TIMESTAMPTZ, 1, 1;
+-- should be 2 chunks again
+SELECT hypertable_name, range_start, range_end FROM timescaledb_information.chunks WHERE hypertable_name = 'test9' ORDER BY 2;
+
+ALTER TABLE test9 SET (timescaledb.compress_segmentby = '');
+BEGIN;
+  SELECT compress_chunk(show_chunks('test9'), true);
+  -- should not be rolled up
+  SELECT hypertable_name, range_start, range_end FROM timescaledb_information.chunks WHERE hypertable_name = 'test9' ORDER BY 2;
+ROLLBACK;
+
+ALTER TABLE test9 SET (timescaledb.compress_segmentby = 'series_id', timescaledb.compress_orderby = 'time DESC');
+BEGIN;
+  SELECT compress_chunk(show_chunks('test9'), true);
+  -- should not be rolled up
+  SELECT hypertable_name, range_start, range_end FROM timescaledb_information.chunks WHERE hypertable_name = 'test9' ORDER BY 2;
+ROLLBACK;
+
+ALTER TABLE test9 SET (timescaledb.compress_segmentby = 'series_id', timescaledb.compress_orderby = 'time NULLS FIRST');
+BEGIN;
+  SELECT compress_chunk(show_chunks('test9'), true);
+  -- should not be rolled up
+  SELECT hypertable_name, range_start, range_end FROM timescaledb_information.chunks WHERE hypertable_name = 'test9' ORDER BY 2;
+ROLLBACK;
+
+-- reset back to original settings
+ALTER TABLE test9 SET (timescaledb.compress_segmentby = 'series_id', timescaledb.compress_orderby = 'time');
+BEGIN;
+  SELECT compress_chunk(show_chunks('test9'), true);
+  -- should be rolled up
+  SELECT hypertable_name, range_start, range_end FROM timescaledb_information.chunks WHERE hypertable_name = 'test9' ORDER BY 2;
+ROLLBACK;
+

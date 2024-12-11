@@ -79,9 +79,10 @@ invalidation_threshold_scan_update(TupleInfo *ti, void *const data)
 
 	InvalidationThresholdData *invthresh = (InvalidationThresholdData *) data;
 
-	/* If the tuple was modified concurrently, retry the operation */
+	/* If the tuple was modified concurrently, retry the operation and use a new snapshot
+	 * to see the updated tuple. */
 	if (ti->lockresult == TM_Updated)
-		return SCAN_RESCAN;
+		return SCAN_RESTART_WITH_NEW_SNAPSHOT;
 
 	if (ti->lockresult != TM_Ok)
 	{
@@ -181,13 +182,18 @@ invalidation_threshold_set_or_get(const ContinuousAgg *cagg,
 		.nkeys = 1,
 		.scankey = scankey,
 		.data = &updatectx,
-		.limit = 1,
 		.tuple_found = invalidation_threshold_scan_update,
 		.lockmode = RowExclusiveLock,
 		.scandirection = ForwardScanDirection,
 		.result_mctx = CurrentMemoryContext,
 		.tuplock = &scantuplock,
 		.flags = SCANNER_F_KEEPLOCK,
+		/* We update the threshold value using this scanner. Since the scanner uses SnapshotSelf
+		 * per default, the updated tuple would become immediately visible to the scanner (the
+		 * snapshot includes "changes made by the current command") and ts_scanner_scan_one() would
+		 * fail due to the second found tuple. A normal MVCC snapshot is used to prevent the update
+		 * is immediately seen by the scanner. */
+		.snapshot = GetLatestSnapshot(),
 	};
 
 	ScanKeyInit(&scankey[0],
@@ -196,7 +202,7 @@ invalidation_threshold_set_or_get(const ContinuousAgg *cagg,
 				F_INT4EQ,
 				Int32GetDatum(cagg->data.raw_hypertable_id));
 
-	found = ts_scanner_scan_one(&scanctx, false, "invalidation threshold");
+	found = ts_scanner_scan_one(&scanctx, false, CAGG_INVALIDATION_THRESHOLD_NAME);
 	Ensure(found,
 		   "invalidation threshold for hypertable %d not found",
 		   cagg->data.raw_hypertable_id);
@@ -231,28 +237,7 @@ invalidation_threshold_compute(const ContinuousAgg *cagg, const InternalTimeRang
 		if (isnull)
 		{
 			/* No data in hypertable */
-			if (ts_continuous_agg_bucket_width_variable(cagg))
-			{
-				/*
-				 * To determine inscribed/circumscribed refresh window for variable-sized
-				 * buckets we should be able to calculate time_bucket(window.begin) and
-				 * time_bucket(window.end). This, however, is not possible in general case.
-				 * As an example, the minimum date is 4714-11-24 BC, which is before any
-				 * reasonable default `origin` value. Thus for variable-sized buckets
-				 * instead of minimum date we use -infinity since time_bucket(-infinity)
-				 * is well-defined as -infinity.
-				 *
-				 * For more details see:
-				 * - ts_compute_inscribed_bucketed_refresh_window_variable()
-				 * - ts_compute_circumscribed_bucketed_refresh_window_variable()
-				 */
-				return ts_time_get_nobegin(refresh_window->type);
-			}
-			else
-			{
-				/* For fixed-sized buckets return min (start of time) */
-				return ts_time_get_min(refresh_window->type);
-			}
+			return cagg_get_time_min(cagg);
 		}
 		else
 		{
@@ -290,7 +275,6 @@ invalidation_threshold_initialize(const ContinuousAgg *cagg)
 			catalog_get_index(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD, BGW_JOB_PKEY_IDX),
 		.nkeys = 1,
 		.scankey = scankey,
-		.limit = 1,
 		.lockmode = ShareUpdateExclusiveLock,
 		.scandirection = ForwardScanDirection,
 		.result_mctx = CurrentMemoryContext,
@@ -303,7 +287,7 @@ invalidation_threshold_initialize(const ContinuousAgg *cagg)
 				F_INT4EQ,
 				Int32GetDatum(cagg->data.raw_hypertable_id));
 
-	found = ts_scanner_scan_one(&scanctx, false, "invalidation threshold");
+	found = ts_scanner_scan_one(&scanctx, false, CAGG_INVALIDATION_THRESHOLD_NAME);
 
 	if (!found)
 	{
@@ -315,9 +299,7 @@ invalidation_threshold_initialize(const ContinuousAgg *cagg)
 		bool nulls[Natts_continuous_aggs_invalidation_threshold] = { false };
 		CatalogSecurityContext sec_ctx;
 		/* get the MIN value for the partition type */
-		int64 min_value = ts_continuous_agg_bucket_width_variable(cagg) ?
-							  ts_time_get_nobegin(cagg->partition_type) :
-							  ts_time_get_min(cagg->partition_type);
+		int64 min_value = cagg_get_time_min(cagg);
 
 		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_invalidation_threshold_hypertable_id)] =
 			Int32GetDatum(cagg->data.raw_hypertable_id);

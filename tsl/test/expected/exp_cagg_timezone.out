@@ -117,12 +117,12 @@ WHERE mat_hypertable_id = :cagg_id_tz;
 (1 row)
 
 -- Make sure the timezone is saved in the catalog table
-SELECT experimental, name, bucket_width, origin, timezone
+SELECT bucket_func, bucket_width, bucket_origin, bucket_timezone, bucket_fixed_width
 FROM _timescaledb_catalog.continuous_aggs_bucket_function
 WHERE mat_hypertable_id = :cagg_id_tz;
- experimental |      name      | bucket_width | origin | timezone 
---------------+----------------+--------------+--------+----------
- t            | time_bucket_ng | @ 1 mon      |        | MSK
+                                   bucket_func                                   | bucket_width | bucket_origin | bucket_timezone | bucket_fixed_width 
+---------------------------------------------------------------------------------+--------------+---------------+-----------------+--------------------
+ timescaledb_experimental.time_bucket_ng(interval,timestamp with time zone,text) | @ 1 mon      |               | MSK             | f
 (1 row)
 
 -- Make sure that buckets with specified timezone are always treated as
@@ -149,12 +149,12 @@ WHERE mat_hypertable_id = :cagg_id_1w;
 (1 row)
 
 -- Make sure the timezone is saved in the catalog table
-SELECT experimental, name, bucket_width, origin, timezone
+SELECT bucket_func, bucket_width, bucket_origin, bucket_timezone, bucket_fixed_width
 FROM _timescaledb_catalog.continuous_aggs_bucket_function
 WHERE mat_hypertable_id = :cagg_id_1w;
- experimental |      name      | bucket_width | origin | timezone 
---------------+----------------+--------------+--------+----------
- t            | time_bucket_ng | @ 7 days     |        | MSK
+                                   bucket_func                                   | bucket_width | bucket_origin | bucket_timezone | bucket_fixed_width 
+---------------------------------------------------------------------------------+--------------+---------------+-----------------+--------------------
+ timescaledb_experimental.time_bucket_ng(interval,timestamp with time zone,text) | @ 7 days     |               | MSK             | f
 (1 row)
 
 -- Check the invalidation threshold is -infinity

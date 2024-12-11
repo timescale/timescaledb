@@ -1,0 +1,1 @@
+Fixes: #6717 Fix handling of compressed tables with primary or unique index in COPY path

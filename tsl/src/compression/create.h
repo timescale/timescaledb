@@ -17,6 +17,7 @@
 	COMPRESSION_COLUMN_METADATA_PREFIX "sequence_num"
 #define COMPRESSION_COLUMN_METADATA_MIN_COLUMN_NAME "min"
 #define COMPRESSION_COLUMN_METADATA_MAX_COLUMN_NAME "max"
+#define COMPRESSION_COLUMN_METADATA_PATTERN_V1 "_ts_meta_%s_%d"
 
 bool tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 								WithClauseResult *with_clause_options);
@@ -27,3 +28,8 @@ Chunk *create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid tabl
 
 char *column_segment_min_name(int16 column_index);
 char *column_segment_max_name(int16 column_index);
+
+typedef struct CompressionSettings CompressionSettings;
+int compressed_column_metadata_attno(CompressionSettings *settings, Oid chunk_reloid,
+									 AttrNumber chunk_attno, Oid compressed_reloid,
+									 char *metadata_type);

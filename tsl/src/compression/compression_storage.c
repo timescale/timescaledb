@@ -66,6 +66,8 @@ compression_hypertable_create(Hypertable *ht, Oid owner, Oid tablespace_oid)
 	RangeVar *compress_rel;
 	int32 compress_hypertable_id;
 
+	Assert(!TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht));
+
 	create = makeNode(CreateStmt);
 	create->tableElts = NIL;
 	create->inhRelations = NIL;

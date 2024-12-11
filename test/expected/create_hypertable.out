@@ -1053,3 +1053,18 @@ select * from tidrangescan_test where time > '2023-02-12 00:00:00+02:40'::timest
 (3 rows)
 
 drop table tidrangescan_test;
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+set client_min_messages = WARNING;
+-- test creating a hypertable from table referenced by a foreign key fails with
+-- error "cannot have FOREIGN KEY constraints to hypertable".
+create table test_schema.fk_parent(time timestamptz, id int, unique(time, id));
+create table test_schema.fk_child(
+  time timestamptz,
+  id int,
+  foreign key (time, id) references test_schema.fk_parent(time, id)
+);
+select create_hypertable ('test_schema.fk_parent', 'time');
+ERROR:  cannot have FOREIGN KEY constraints to hypertable "fk_parent"
+HINT:  Remove all FOREIGN KEY constraints to table "fk_parent" before making it a hypertable.
+\set ON_ERROR_STOP 1

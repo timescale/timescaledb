@@ -12,7 +12,7 @@ BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME:-$USER/pgbuild}
 IMAGE_NAME=${IMAGE_NAME:-$USER/timescaledb}
 GIT_ID=$(git -C ${BASE_DIR} describe --dirty --always | sed -e "s|/|_|g")
 TAG_NAME=${TAG_NAME:-$GIT_ID}
-BUILD_TYPE=${BUILD_TYPE:-Debug}
+BUILD_TYPE=${BUILD_TYPE:-Release}
 USE_OPENSSL=${USE_OPENSSL:-true}
 PUSH_PG_IMAGE=${PUSH_PG_IMAGE:-false}
 GENERATE_DOWNGRADE_SCRIPT=${GENERATE_DOWNGRADE_SCRIPT:-OFF}
@@ -79,7 +79,7 @@ build_timescaledb()
     if ! docker exec -u root ${BUILD_CONTAINER_NAME} /bin/bash -c " \
         cd /build/debug \
         && git config --global --add safe.directory /src \
-        && cmake -DGENERATE_DOWNGRADE_SCRIPT=${GENERATE_DOWNGRADE_SCRIPT} -DENABLE_DEBUG_UTILS=off -DUSE_OPENSSL=${USE_OPENSSL} -DCMAKE_BUILD_TYPE=${BUILD_TYPE} /src \
+        && cmake -DGENERATE_DOWNGRADE_SCRIPT=${GENERATE_DOWNGRADE_SCRIPT} -DUSE_OPENSSL=${USE_OPENSSL} -DCMAKE_BUILD_TYPE=${BUILD_TYPE} /src \
         && make -j $(nproc) && make install \
         && echo \"shared_preload_libraries = 'timescaledb'\" >> /usr/local/share/postgresql/postgresql.conf.sample \
         && echo \"timescaledb.telemetry_level=off\" >> /usr/local/share/postgresql/postgresql.conf.sample \

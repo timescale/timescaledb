@@ -144,6 +144,13 @@ DROP MATERIALIZED VIEW mat_refresh_test;
 CALL refresh_continuous_aggregate('mat_refresh_test', NULL, NULL);
 
 SELECT * FROM mat_refresh_test;
+
+-- Test permissions also when the watermark is not constified and the ACL checks
+-- in ts_continuous_agg_watermark are executed
+SET timescaledb.enable_cagg_watermark_constify = OFF;
+SELECT * FROM mat_refresh_test;
+RESET timescaledb.enable_cagg_watermark_constify;
+
 SELECT * FROM :materialization_hypertable;
 SELECT * FROM :"mat_chunk_schema".:"mat_chunk_table";
 

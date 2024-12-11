@@ -482,3 +482,118 @@ SELECT * FROM cagg3;
 CREATE MATERIALIZED VIEW cagg4 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS SELECT time_bucket('1 month', time, 'PST8PDT', "offset":= INTERVAL '15 day') FROM metrics GROUP BY 1;
 ERROR:  continuous aggregate view must include a valid time bucket function
 \set ON_ERROR_STOP 1
+--
+-- drop chunks tests
+--
+-- should return 4 chunks
+SELECT
+   c.table_name as chunk_name,
+   c.status as chunk_status, c.dropped, c.compressed_chunk_id as comp_id
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
+WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
+ORDER BY 1;
+     chunk_name     | chunk_status | dropped | comp_id 
+--------------------+--------------+---------+---------
+ _hyper_11_17_chunk |            0 | f       |        
+ _hyper_11_18_chunk |            0 | f       |        
+ _hyper_11_19_chunk |            0 | f       |        
+ _hyper_11_20_chunk |            0 | f       |        
+(4 rows)
+
+-- all caggs in the new format (finalized=true)
+SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE user_view_name in ('cagg1', 'cagg2', 'cagg3') ORDER BY 1;
+ user_view_name | finalized 
+----------------+-----------
+ cagg1          | t
+ cagg2          | t
+ cagg3          | t
+(3 rows)
+
+-- dropping chunk should also remove the catalog data
+SELECT drop_chunks('metrics', older_than => '2000-01-01 00:00:00-02'::timestamptz);
+               drop_chunks                
+------------------------------------------
+ _timescaledb_internal._hyper_11_17_chunk
+(1 row)
+
+-- should return 3 chunks
+SELECT
+   c.table_name as chunk_name,
+   c.status as chunk_status, c.dropped, c.compressed_chunk_id as comp_id
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
+WHERE h.id = c.hypertable_id AND h.table_name = 'metrics'
+ORDER BY 1;
+     chunk_name     | chunk_status | dropped | comp_id 
+--------------------+--------------+---------+---------
+ _hyper_11_18_chunk |            0 | f       |        
+ _hyper_11_19_chunk |            0 | f       |        
+ _hyper_11_20_chunk |            0 | f       |        
+(3 rows)
+
+-- let's update the catalog to fake an old format cagg (finalized=false)
+\c :TEST_DBNAME :ROLE_SUPERUSER
+UPDATE _timescaledb_catalog.continuous_agg SET finalized=FALSE WHERE user_view_name = 'cagg1';
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+-- cagg1 now is a fake old format (finalized=false)
+SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE user_view_name in ('cagg1', 'cagg2', 'cagg3') ORDER BY 1;
+ user_view_name | finalized 
+----------------+-----------
+ cagg1          | f
+ cagg2          | t
+ cagg3          | t
+(3 rows)
+
+-- cagg1 now is in the old format (finalized=false)
+-- dropping chunk should NOT remove the catalog data
+SELECT drop_chunks('metrics', older_than => '2000-01-13 00:00:00-02'::timestamptz);
+               drop_chunks                
+------------------------------------------
+ _timescaledb_internal._hyper_11_18_chunk
+(1 row)
+
+-- should return 3 chunks and one of them should be marked as dropped
+SELECT
+   c.table_name as chunk_name,
+   c.status as chunk_status, c.dropped, c.compressed_chunk_id as comp_id
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
+WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
+ORDER BY 1;
+     chunk_name     | chunk_status | dropped | comp_id 
+--------------------+--------------+---------+---------
+ _hyper_11_18_chunk |            0 | t       |        
+ _hyper_11_19_chunk |            0 | f       |        
+ _hyper_11_20_chunk |            0 | f       |        
+(3 rows)
+
+-- remove the fake old format cagg
+DROP MATERIALIZED VIEW cagg1;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_12_21_chunk
+-- no more old format caggs (finalized=false)
+SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE user_view_name in ('cagg1', 'cagg2', 'cagg3') ORDER BY 1;
+ user_view_name | finalized 
+----------------+-----------
+ cagg2          | t
+ cagg3          | t
+(2 rows)
+
+-- dropping chunk should remove the catalog data
+SELECT drop_chunks('metrics', older_than => '2000-01-25 00:00:00-02'::timestamptz);
+               drop_chunks                
+------------------------------------------
+ _timescaledb_internal._hyper_11_19_chunk
+(1 row)
+
+-- should return 2 chunks and one of them should be marked as dropped
+-- because we dropped chunk before when an old format cagg exists
+SELECT
+   c.table_name as chunk_name,
+   c.status as chunk_status, c.dropped, c.compressed_chunk_id as comp_id
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
+WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
+ORDER BY 1;
+     chunk_name     | chunk_status | dropped | comp_id 
+--------------------+--------------+---------+---------
+ _hyper_11_18_chunk |            0 | t       |        
+ _hyper_11_20_chunk |            0 | f       |        
+(2 rows)
+

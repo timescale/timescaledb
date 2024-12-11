@@ -159,30 +159,22 @@ FROM (
     dim.column_name AS primary_dimension,
     dim.column_type AS primary_dimension_type,
     row_number() OVER (PARTITION BY chcons.chunk_id ORDER BY dim.id) AS chunk_dimension_num,
-    CASE WHEN (dim.column_type = 'TIMESTAMP'::regtype
-      OR dim.column_type = 'TIMESTAMPTZ'::regtype
-      OR dim.column_type = 'DATE'::regtype) THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
       _timescaledb_functions.to_timestamp(dimsl.range_start)
     ELSE
       NULL
     END AS range_start,
-    CASE WHEN (dim.column_type = 'TIMESTAMP'::regtype
-      OR dim.column_type = 'TIMESTAMPTZ'::regtype
-      OR dim.column_type = 'DATE'::regtype) THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
       _timescaledb_functions.to_timestamp(dimsl.range_end)
     ELSE
       NULL
     END AS range_end,
-    CASE WHEN (dim.column_type = 'TIMESTAMP'::regtype
-      OR dim.column_type = 'TIMESTAMPTZ'::regtype
-      OR dim.column_type = 'DATE'::regtype) THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
       NULL
     ELSE
       dimsl.range_start
     END AS integer_range_start,
-    CASE WHEN (dim.column_type = 'TIMESTAMP'::regtype
-      OR dim.column_type = 'TIMESTAMPTZ'::regtype
-      OR dim.column_type = 'DATE'::regtype) THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
       NULL
     ELSE
       dimsl.range_end
@@ -228,18 +220,14 @@ SELECT ht.schema_name AS hypertable_schema,
     'Time'
   END AS dimension_type,
   CASE WHEN dim.interval_length IS NOT NULL THEN
-    CASE WHEN dim.column_type = 'TIMESTAMP'::regtype
-      OR dim.column_type = 'TIMESTAMPTZ'::regtype
-      OR dim.column_type = 'DATE'::regtype THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
       _timescaledb_functions.to_interval(dim.interval_length)
     ELSE
       NULL
     END
   END AS time_interval,
   CASE WHEN dim.interval_length IS NOT NULL THEN
-    CASE WHEN dim.column_type = 'TIMESTAMP'::regtype
-      OR dim.column_type = 'TIMESTAMPTZ'::regtype
-      OR dim.column_type = 'DATE'::regtype THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
       NULL
     ELSE
       dim.interval_length
@@ -325,4 +313,54 @@ WHERE
 			   'MEMBER') IS TRUE
     OR pg_catalog.pg_has_role(current_user, owner, 'MEMBER') IS TRUE;
 
+CREATE OR REPLACE VIEW timescaledb_information.hypertable_compression_settings AS
+	SELECT
+		format('%I.%I',ht.schema_name,ht.table_name)::regclass AS hypertable,
+		array_to_string(segmentby,',') AS segmentby,
+		un.orderby,
+    d.compress_interval_length
+  FROM _timescaledb_catalog.hypertable ht
+  JOIN LATERAL (
+    SELECT
+      CASE WHEN d.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
+        _timescaledb_functions.to_interval(d.compress_interval_length)::text
+      ELSE
+        d.compress_interval_length::text
+      END AS compress_interval_length
+    FROM _timescaledb_catalog.dimension d WHERE d.hypertable_id = ht.id ORDER BY id LIMIT 1
+  ) d ON true
+  LEFT JOIN _timescaledb_catalog.compression_settings s ON format('%I.%I',ht.schema_name,ht.table_name)::regclass = s.relid
+	LEFT JOIN LATERAL (
+		SELECT
+			string_agg(
+				format('%I%s%s',orderby,
+					CASE WHEN "desc" THEN ' DESC' ELSE '' END,
+					CASE WHEN nullsfirst AND NOT "desc" THEN ' NULLS FIRST' WHEN NOT nullsfirst AND "desc" THEN ' NULLS LAST' ELSE '' END
+				)
+			,',') AS orderby
+		FROM unnest(s.orderby, s.orderby_desc, s.orderby_nullsfirst) un(orderby, "desc", nullsfirst)
+	) un ON true;
+
+CREATE OR REPLACE VIEW timescaledb_information.chunk_compression_settings AS
+	SELECT
+		format('%I.%I',ht.schema_name,ht.table_name)::regclass AS hypertable,
+		format('%I.%I',ch.schema_name,ch.table_name)::regclass AS chunk,
+		array_to_string(segmentby,',') AS segmentby,
+		un.orderby
+	FROM _timescaledb_catalog.hypertable ht
+	INNER JOIN _timescaledb_catalog.chunk ch ON ch.hypertable_id = ht.id
+  INNER JOIN _timescaledb_catalog.chunk ch2 ON ch2.id = ch.compressed_chunk_id
+  LEFT JOIN _timescaledb_catalog.compression_settings s ON format('%I.%I',ch2.schema_name,ch2.table_name)::regclass = s.relid
+	LEFT JOIN LATERAL (
+		SELECT
+			string_agg(
+				format('%I%s%s',orderby,
+					CASE WHEN "desc" THEN ' DESC' ELSE '' END,
+					CASE WHEN nullsfirst AND NOT "desc" THEN ' NULLS FIRST' WHEN NOT nullsfirst AND "desc" THEN ' NULLS LAST' ELSE '' END
+				)
+			,',') AS orderby
+		FROM unnest(s.orderby, s.orderby_desc, s.orderby_nullsfirst) un(orderby, "desc", nullsfirst)
+	) un ON true;
+
 GRANT SELECT ON ALL TABLES IN SCHEMA timescaledb_information TO PUBLIC;
+

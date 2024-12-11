@@ -108,7 +108,7 @@ step "RC" {
       SELECT ch FROM show_chunks('ts_device_table') ch
        ORDER BY ch::text LIMIT 1
      LOOP
-         CALL recompress_chunk(chunk_name);
+         PERFORM compress_chunk(chunk_name);
      END LOOP;
   END;
   $$;

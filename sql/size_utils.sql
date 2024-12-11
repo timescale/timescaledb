@@ -9,6 +9,10 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.relation_size(relation REGCLAS
 RETURNS TABLE (total_size BIGINT, heap_size BIGINT, index_size BIGINT, toast_size BIGINT)
 AS '@MODULE_PATHNAME@', 'ts_relation_size' LANGUAGE C VOLATILE;
 
+CREATE OR REPLACE FUNCTION _timescaledb_functions.relation_approximate_size(relation REGCLASS)
+RETURNS TABLE (total_size BIGINT, heap_size BIGINT, index_size BIGINT, toast_size BIGINT)
+AS '@MODULE_PATHNAME@', 'ts_relation_approximate_size' LANGUAGE C STRICT VOLATILE;
+
 CREATE OR REPLACE VIEW _timescaledb_internal.hypertable_chunk_local_size AS
 SELECT
     h.schema_name AS hypertable_schema,
@@ -167,6 +171,29 @@ $BODY$
    -- hypertable), so sum them up:
    SELECT sum(total_bytes)::bigint
    FROM @extschema@.hypertable_detailed_size(hypertable);
+$BODY$ SET search_path TO pg_catalog, pg_temp;
+
+-- Get approximate relation size of hypertable
+--
+-- hypertable - hypertable to get approximate size of
+--
+-- Returns:
+-- table_bytes        - Approximate disk space used by hypertable
+-- index_bytes        - Approximate disk space used by indexes
+-- toast_bytes        - Approximate disk space of toast tables
+-- total_bytes        - Total approximate disk space used by the specified table, including all indexes and TOAST data
+CREATE OR REPLACE FUNCTION @extschema@.hypertable_approximate_detailed_size(relation REGCLASS)
+RETURNS TABLE (table_bytes BIGINT, index_bytes BIGINT, toast_bytes BIGINT, total_bytes BIGINT)
+AS '@MODULE_PATHNAME@', 'ts_hypertable_approximate_size' LANGUAGE C VOLATILE;
+
+--- returns approximate total-bytes for a hypertable (includes table + index)
+CREATE OR REPLACE FUNCTION @extschema@.hypertable_approximate_size(
+    hypertable              REGCLASS)
+RETURNS BIGINT
+LANGUAGE SQL VOLATILE STRICT AS
+$BODY$
+   SELECT sum(total_bytes)::bigint
+   FROM @extschema@.hypertable_approximate_detailed_size(hypertable);
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 CREATE OR REPLACE FUNCTION _timescaledb_functions.chunks_local_size(

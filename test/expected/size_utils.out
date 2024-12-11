@@ -583,6 +583,86 @@ SELECT * FROM _timescaledb_functions.relation_size(NULL);
             |           |            |           
 (1 row)
 
+-- Test approximate size functions with invalid input
+SELECT * FROM hypertable_approximate_size(0);
+ hypertable_approximate_size 
+-----------------------------
+                            
+(1 row)
+
+SELECT * FROM hypertable_approximate_detailed_size(0);
+ table_bytes | index_bytes | toast_bytes | total_bytes 
+-------------+-------------+-------------+-------------
+             |             |             |            
+(1 row)
+
+SELECT * FROM _timescaledb_functions.relation_approximate_size(0);
+ total_size | heap_size | index_size | toast_size 
+------------+-----------+------------+------------
+            |           |            |           
+(1 row)
+
+SELECT * FROM hypertable_approximate_size(NULL);
+ hypertable_approximate_size 
+-----------------------------
+                            
+(1 row)
+
+SELECT * FROM hypertable_approximate_detailed_size(NULL);
+ table_bytes | index_bytes | toast_bytes | total_bytes 
+-------------+-------------+-------------+-------------
+             |             |             |            
+(1 row)
+
+SELECT * FROM _timescaledb_functions.relation_approximate_size(NULL);
+ total_size | heap_size | index_size | toast_size 
+------------+-----------+------------+------------
+(0 rows)
+
+-- Test size on view, sequence and composite type
+CREATE VIEW view1 as SELECT 1;
+SELECT * FROM _timescaledb_functions.relation_approximate_size('view1');
+ total_size | heap_size | index_size | toast_size 
+------------+-----------+------------+------------
+          0 |         0 |          0 |          0
+(1 row)
+
+SELECT * FROM _timescaledb_functions.relation_size('view1');
+ total_size | heap_size | index_size | toast_size 
+------------+-----------+------------+------------
+          0 |         0 |          0 |          0
+(1 row)
+
+CREATE SEQUENCE test_id_seq
+    INCREMENT 1
+    START 1    MINVALUE 1
+    MAXVALUE 9223372036854775807
+    CACHE 1;
+SELECT * FROM _timescaledb_functions.relation_approximate_size('test_id_seq');
+ total_size | heap_size | index_size | toast_size 
+------------+-----------+------------+------------
+       8192 |      8192 |          0 |          0
+(1 row)
+
+SELECT * FROM _timescaledb_functions.relation_size('test_id_seq');
+ total_size | heap_size | index_size | toast_size 
+------------+-----------+------------+------------
+       8192 |      8192 |          0 |          0
+(1 row)
+
+CREATE TYPE test_type AS (time timestamp, temp float);
+SELECT * FROM _timescaledb_functions.relation_approximate_size('test_type');
+ total_size | heap_size | index_size | toast_size 
+------------+-----------+------------+------------
+          0 |         0 |          0 |          0
+(1 row)
+
+SELECT * FROM _timescaledb_functions.relation_size('test_type');
+ total_size | heap_size | index_size | toast_size 
+------------+-----------+------------+------------
+          0 |         0 |          0 |          0
+(1 row)
+
 -- Test size functions on regular table
 CREATE TABLE hypersize(time timestamptz, device int);
 CREATE INDEX hypersize_time_idx ON hypersize (time);
@@ -633,6 +713,18 @@ SELECT * FROM hypertable_index_size('hypersize_time_idx');
                       
 (1 row)
 
+SELECT * FROM _timescaledb_functions.relation_approximate_size('hypersize');
+ total_size | heap_size | index_size | toast_size 
+------------+-----------+------------+------------
+       8192 |         0 |       8192 |          0
+(1 row)
+
+SELECT * FROM hypertable_approximate_size('hypersize');
+ERROR:  "hypersize" is not a hypertable or a continuous aggregate
+HINT:  The operation is only possible on a hypertable or continuous aggregate.
+SELECT * FROM hypertable_approximate_detailed_size('hypersize');
+ERROR:  "hypersize" is not a hypertable or a continuous aggregate
+HINT:  The operation is only possible on a hypertable or continuous aggregate.
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1
 -- Test size functions on empty hypertable
@@ -686,6 +778,24 @@ SELECT * FROM hypertable_index_size('hypersize_time_idx');
  hypertable_index_size 
 -----------------------
                   8192
+(1 row)
+
+SELECT * FROM _timescaledb_functions.relation_approximate_size('hypersize');
+ total_size | heap_size | index_size | toast_size 
+------------+-----------+------------+------------
+       8192 |         0 |       8192 |          0
+(1 row)
+
+SELECT * FROM hypertable_approximate_size('hypersize');
+ hypertable_approximate_size 
+-----------------------------
+                        8192
+(1 row)
+
+SELECT * FROM hypertable_approximate_detailed_size('hypersize');
+ table_bytes | index_bytes | toast_bytes | total_bytes 
+-------------+-------------+-------------+-------------
+           0 |        8192 |           0 |        8192
 (1 row)
 
 -- Test size functions on non-empty hypertable
@@ -742,6 +852,72 @@ SELECT * FROM hypertable_index_size('hypersize_time_idx');
  hypertable_index_size 
 -----------------------
                  24576
+(1 row)
+
+SELECT * FROM _timescaledb_functions.relation_approximate_size('hypersize');
+ total_size | heap_size | index_size | toast_size 
+------------+-----------+------------+------------
+       8192 |         0 |       8192 |          0
+(1 row)
+
+SELECT * FROM hypertable_approximate_size('hypersize');
+ hypertable_approximate_size 
+-----------------------------
+                       32768
+(1 row)
+
+SELECT * FROM hypertable_approximate_detailed_size('hypersize');
+ table_bytes | index_bytes | toast_bytes | total_bytes 
+-------------+-------------+-------------+-------------
+        8192 |       24576 |           0 |       32768
+(1 row)
+
+-- Test approx size functions with toast entries
+SELECT * FROM _timescaledb_functions.relation_approximate_size('toast_test');
+ total_size | heap_size | index_size | toast_size 
+------------+-----------+------------+------------
+      16384 |         0 |       8192 |       8192
+(1 row)
+
+SELECT * FROM hypertable_approximate_size('toast_test');
+ hypertable_approximate_size 
+-----------------------------
+                       65536
+(1 row)
+
+SELECT * FROM hypertable_approximate_detailed_size('toast_test');
+ table_bytes | index_bytes | toast_bytes | total_bytes 
+-------------+-------------+-------------+-------------
+        8192 |       24576 |       32768 |       65536
+(1 row)
+
+-- Test approx size function against a regular table
+\set ON_ERROR_STOP 0
+CREATE TABLE regular(time TIMESTAMP, value TEXT);
+SELECT * FROM hypertable_approximate_size('regular');
+ERROR:  "regular" is not a hypertable or a continuous aggregate
+\set ON_ERROR_STOP 1
+-- Test approx size functions with dropped chunks
+CREATE TABLE drop_chunks_table(time BIGINT NOT NULL, data INTEGER);
+SELECT hypertable_id AS drop_chunks_table_id
+    FROM create_hypertable('drop_chunks_table', 'time', chunk_time_interval => 10) \gset
+INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(0, 29) AS i;
+SELECT * FROM hypertable_approximate_size('drop_chunks_table');
+ hypertable_approximate_size 
+-----------------------------
+                       81920
+(1 row)
+
+SELECT drop_chunks('drop_chunks_table', older_than => 19);
+               drop_chunks               
+-----------------------------------------
+ _timescaledb_internal._hyper_7_12_chunk
+(1 row)
+
+SELECT * FROM hypertable_approximate_size('drop_chunks_table');
+ hypertable_approximate_size 
+-----------------------------
+                       57344
 (1 row)
 
 -- github issue #4857

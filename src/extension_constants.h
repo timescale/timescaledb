@@ -8,12 +8,15 @@
 /* No function definitions here, only potentially globally available defines as this is used by the
  * loader*/
 
-#define EXTENSION_NAME "timescaledb"
+#define EXTENSION_NAME "timescaledb"	  /* Name of the actual extension */
+#define EXTENSION_NAMESPACE "timescaledb" /* Namespace for extension objects */
 #define EXTENSION_FDW_NAME "timescaledb_fdw"
 #define TSL_LIBRARY_NAME "timescaledb-tsl"
 #define TS_LIBDIR "$libdir/"
 #define EXTENSION_SO TS_LIBDIR "" EXTENSION_NAME
 #define EXTENSION_TSL_SO TS_LIBDIR TSL_LIBRARY_NAME "-" TIMESCALEDB_VERSION_MOD
+
+#define MAKE_EXTOPTION(NAME) (EXTENSION_NAMESPACE "." NAME)
 
 #define MAX_VERSION_LEN (NAMEDATALEN + 1)
 #define MAX_SO_NAME_LEN                                                                            \
@@ -44,4 +47,4 @@ typedef enum TsExtensionSchemas
 
 extern const char *const ts_extension_schema_names[];
 
-#define RENDEZVOUS_BGW_LOADER_API_VERSION "timescaledb.bgw_loader_api_version"
+#define RENDEZVOUS_BGW_LOADER_API_VERSION MAKE_EXTOPTION("bgw_loader_api_version")

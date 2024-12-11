@@ -15,9 +15,8 @@
 #include <utils/syscache.h>
 
 #include "debug_assert.h"
+#include "extension_constants.h"
 #include "with_clause_parser.h"
-
-#define TIMESCALEDB_NAMESPACE "timescaledb"
 
 /*
  * Filter a list of DefElem based on a namespace.
@@ -41,8 +40,7 @@ ts_with_clause_filter(const List *def_elems, List **within_namespace, List **not
 	{
 		DefElem *def = (DefElem *) lfirst(cell);
 
-		if (def->defnamespace != NULL &&
-			pg_strcasecmp(def->defnamespace, TIMESCALEDB_NAMESPACE) == 0)
+		if (def->defnamespace != NULL && pg_strcasecmp(def->defnamespace, EXTENSION_NAMESPACE) == 0)
 		{
 			if (within_namespace != NULL)
 				*within_namespace = lappend(*within_namespace, def);

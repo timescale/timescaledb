@@ -39,65 +39,69 @@
 Expr *
 ts_transform_cross_datatype_comparison(Expr *clause)
 {
-	clause = copyObject(clause);
-	if (IsA(clause, OpExpr) && list_length(castNode(OpExpr, clause)->args) == 2)
+	if (!IsA(clause, OpExpr) || list_length(castNode(OpExpr, clause)->args) != 2)
 	{
-		OpExpr *op = castNode(OpExpr, clause);
-		Oid left_type = exprType(linitial(op->args));
-		Oid right_type = exprType(lsecond(op->args));
+		return clause;
+	}
 
-		if (op->opresulttype != BOOLOID || op->opretset == true)
-			return clause;
+	OpExpr *op = castNode(OpExpr, clause);
+	Oid left_type = exprType(linitial(op->args));
+	Oid right_type = exprType(lsecond(op->args));
 
-		if (!IsA(linitial(op->args), Var) && !IsA(lsecond(op->args), Var))
-			return clause;
+	/*
+	 * Postgres doesn't allow non-bool or set returning functions in the WHERE
+	 * clause.
+	 */
+	Assert(op->opresulttype == BOOLOID && !op->opretset);
 
-		if (DATATYPE_PAIR(left_type, right_type, TIMESTAMPOID, TIMESTAMPTZOID) ||
-			DATATYPE_PAIR(left_type, right_type, TIMESTAMPTZOID, DATEOID))
+	if (!IsA(linitial(op->args), Var) && !IsA(lsecond(op->args), Var))
+		return clause;
+
+	if (DATATYPE_PAIR(left_type, right_type, TIMESTAMPOID, TIMESTAMPTZOID) ||
+		DATATYPE_PAIR(left_type, right_type, TIMESTAMPTZOID, DATEOID))
+	{
+		char *opname = get_opname(op->opno);
+		Oid source_type, target_type, opno, cast_oid;
+
+		/*
+		 * if Var is on left side we put cast on right side otherwise
+		 * it will be left
+		 */
+		if (IsA(linitial(op->args), Var))
 		{
-			char *opname = get_opname(op->opno);
-			Oid source_type, target_type, opno, cast_oid;
+			source_type = right_type;
+			target_type = left_type;
+		}
+		else
+		{
+			source_type = left_type;
+			target_type = right_type;
+		}
 
-			/*
-			 * if Var is on left side we put cast on right side otherwise
-			 * it will be left
-			 */
-			if (IsA(linitial(op->args), Var))
-			{
-				source_type = right_type;
-				target_type = left_type;
-			}
+		opno = ts_get_operator(opname, PG_CATALOG_NAMESPACE, target_type, target_type);
+		cast_oid = ts_get_cast_func(source_type, target_type);
+
+		if (OidIsValid(opno) && OidIsValid(cast_oid))
+		{
+			Expr *left = copyObject(linitial(op->args));
+			Expr *right = copyObject(lsecond(op->args));
+
+			if (source_type == left_type)
+				left = (Expr *) makeFuncExpr(cast_oid,
+											 target_type,
+											 list_make1(left),
+											 InvalidOid,
+											 InvalidOid,
+											 0);
 			else
-			{
-				source_type = left_type;
-				target_type = right_type;
-			}
+				right = (Expr *) makeFuncExpr(cast_oid,
+											  target_type,
+											  list_make1(right),
+											  InvalidOid,
+											  InvalidOid,
+											  0);
 
-			opno = ts_get_operator(opname, PG_CATALOG_NAMESPACE, target_type, target_type);
-			cast_oid = ts_get_cast_func(source_type, target_type);
-
-			if (OidIsValid(opno) && OidIsValid(cast_oid))
-			{
-				Expr *left = linitial(op->args);
-				Expr *right = lsecond(op->args);
-
-				if (source_type == left_type)
-					left = (Expr *) makeFuncExpr(cast_oid,
-												 target_type,
-												 list_make1(left),
-												 InvalidOid,
-												 InvalidOid,
-												 0);
-				else
-					right = (Expr *) makeFuncExpr(cast_oid,
-												  target_type,
-												  list_make1(right),
-												  InvalidOid,
-												  InvalidOid,
-												  0);
-
-				clause = make_opclause(opno, BOOLOID, false, left, right, InvalidOid, InvalidOid);
-			}
+			return make_opclause(opno, BOOLOID, false, left, right, InvalidOid, InvalidOid);
 		}
 	}
 	return clause;

@@ -272,11 +272,6 @@ ts_timestamptz_bucket(PG_FUNCTION_ARGS)
 	if (TIMESTAMP_NOT_FINITE(timestamp))
 		PG_RETURN_TIMESTAMPTZ(timestamp);
 
-	if (PG_NARGS() > 2)
-	{
-		origin = PG_GETARG_TIMESTAMPTZ(2);
-	}
-
 	if (interval->month)
 	{
 		DateADT origin_date = 0;

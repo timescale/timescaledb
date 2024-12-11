@@ -11,7 +11,7 @@
 #include "launcher_interface.h"
 #include "compat/compat.h"
 
-#define MIN_LOADER_API_VERSION 3
+#define MIN_LOADER_API_VERSION 4
 
 extern bool
 ts_bgw_worker_reserve(void)

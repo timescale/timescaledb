@@ -1,0 +1,2 @@
+Fixes: #6621 Remove metadata when dropping chunks
+Thanks: @ndjzurawsk For reporting error when dropping chunks

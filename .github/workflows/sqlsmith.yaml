@@ -34,7 +34,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install gnupg systemd-coredump gdb postgresql-common \
             libkrb5-dev build-essential autoconf autoconf-archive \
-            libboost-regex-dev libsqlite3-dev
+            libboost-regex-dev libsqlite3-dev jq
 
         yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
         sudo apt-get purge postgresql*
@@ -46,7 +46,7 @@ jobs:
         { psql -c "select 1" && exit 1 ; } || :
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Build TimescaleDB
       run: |
@@ -55,7 +55,7 @@ jobs:
         sudo make -C build install
 
     - name: Checkout sqlsmith
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: 'timescale/sqlsmith'
         path: 'sqlsmith'
@@ -74,7 +74,10 @@ jobs:
         /usr/lib/postgresql/${{ matrix.pg }}/bin/pg_ctl initdb -D ~/pgdata
         /usr/lib/postgresql/${{ matrix.pg }}/bin/pg_ctl -D ~/pgdata start \
             -o "-cshared_preload_libraries=timescaledb" -o "-cmax_connections=200" \
-            -o "-cmax_prepared_transactions=100" -o "-cunix_socket_directories=/tmp"
+            -o "-cmax_prepared_transactions=100" -o "-cunix_socket_directories=/tmp" \
+            -o "-clog_statement=all" -o "-clogging_collector=true" \
+            -o "-clog_destination=jsonlog,stderr" -o "-clog_directory=$(readlink -f .)" \
+            -o "-clog_error_verbosity=verbose" -o "-clog_filename=postmaster.log"
         psql -h /tmp postgres -c 'CREATE DATABASE smith;'
         psql -h /tmp smith -c 'CREATE EXTENSION timescaledb;'
         psql -h /tmp smith -c '\i ${{ github.workspace }}/tsl/test/shared/sql/include/shared_setup.sql'
@@ -84,6 +87,7 @@ jobs:
     # so total runtime should be around 200 minutes in nightly run and 40 minutes otherwise
     - name: Run SQLsmith
       run: |
+        set -xeu
         set -o pipefail
         if [ "${{ github.event_name }}" == "schedule" ]; then
           LOOPS=20
@@ -96,6 +100,8 @@ jobs:
             ./sqlsmith --seed=$((16#$(openssl rand -hex 3))) --exclude-catalog \
                 --target="host=/tmp dbname=smith" --max-queries=10000 \
             2>&1 | tee -a sqlsmith.log
+
+            psql "host=/tmp dbname=smith" -c "select 1"
         done
 
     - name: Check for coredumps
@@ -116,9 +122,9 @@ jobs:
           set verbose on
           set trace-commands on
           show debug-file-directory
-          printf "'"'"query = '%s'\n\n"'"'", debug_query_string
+          printf "'"'"query = '%s'\n\n"'"'", (char *) debug_query_string
           frame function ExceptionalCondition
-          printf "'"'"condition = '%s'\n"'"'", conditionName
+          printf "'"'"condition = '%s'\n"'"'", (char *) conditionName
           up 1
           l
           info args
@@ -130,10 +136,17 @@ jobs:
 
     - name: Upload Coredumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Coredumps sqlsmith ${{ matrix.os }} PG${{ matrix.pg }}
         path: coredumps
+
+    - name: Save PostgreSQL log
+      if: always() && steps.collectlogs.outputs.coredumps == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: PostgreSQL log for PG${{ matrix.pg }}
+        path: postgres.*
 
     - name: Upload test results to the database
       if: always()

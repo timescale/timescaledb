@@ -41,14 +41,6 @@
 /* find the length of a statically sized array */
 #define TS_ARRAY_LEN(array) (sizeof(array) / sizeof(*array))
 
-/* Use condition to check if out of memory */
-#define TS_OOM_CHECK(COND, FMT, ...)                                                               \
-	do                                                                                             \
-	{                                                                                              \
-		if (!(COND))                                                                               \
-			ereport(ERROR, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg(FMT, ##__VA_ARGS__)));          \
-	} while (0)
-
 extern TSDLLEXPORT bool ts_type_is_int8_binary_compatible(Oid sourcetype);
 
 typedef enum TimevalInfinity

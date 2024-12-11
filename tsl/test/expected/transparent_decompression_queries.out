@@ -92,7 +92,7 @@ GROUP BY 2, 3;
          ->  Merge Append (actual rows=745 loops=1)
                Sort Key: _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.measure_id
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=120 loops=1)
-                     Filter: ("time" < now())
+                     Vectorized Filter: ("time" < "timestamp"(now()))
                      ->  Index Scan using compress_hyper_4_10_chunk_device_id_measure_id__ts_meta_seq_idx on compress_hyper_4_10_chunk (actual rows=1 loops=1)
                ->  Sort (actual rows=168 loops=1)
                      Sort Key: _hyper_3_6_chunk.device_id, _hyper_3_6_chunk.measure_id

@@ -556,8 +556,8 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
         classid='pg_catalog.pg_class'::pg_catalog.regclass
         AND objid NOT IN (select unnest(extconfig) from pg_extension where extname='timescaledb')
         ORDER BY objid::regclass::text COLLATE "C";
-                       objid                       
----------------------------------------------------
+                          objid                          
+---------------------------------------------------------
  _timescaledb_cache.cache_inval_bgw_job
  _timescaledb_cache.cache_inval_extension
  _timescaledb_cache.cache_inval_hypertable
@@ -570,15 +570,17 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
  _timescaledb_internal.hypertable_chunk_local_size
  _timescaledb_internal.job_errors
  timescaledb_experimental.policies
+ timescaledb_information.chunk_compression_settings
  timescaledb_information.chunks
  timescaledb_information.compression_settings
  timescaledb_information.continuous_aggregates
  timescaledb_information.dimensions
+ timescaledb_information.hypertable_compression_settings
  timescaledb_information.hypertables
  timescaledb_information.job_errors
  timescaledb_information.job_stats
  timescaledb_information.jobs
-(20 rows)
+(22 rows)
 
 -- Make sure we can't run our restoring functions as a normal perm user as that would disable functionality for the whole db
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER

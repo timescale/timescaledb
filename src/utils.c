@@ -1025,6 +1025,272 @@ ts_relation_size_impl(Oid relid)
 	return relsize;
 }
 
+/*
+ * Try to get cached size for a provided relation across all forks. The
+ * size is returned in terms of number of blocks.
+ *
+ * The function calls the underlying smgrnblocks if there is no cached
+ * data. That call populates the cache for subsequent invocations. This
+ * cached data gets removed asynchronously by PG relcache invalidations
+ * and then the refresh/cache cycle repeats till the next invalidation.
+ */
+static int64
+ts_try_relation_cached_size(Relation rel, bool verbose)
+{
+	BlockNumber result = InvalidBlockNumber, nblocks = 0;
+	ForkNumber forkNum;
+	bool cached = true;
+
+	/* Get heap size, including FSM and VM */
+	for (forkNum = 0; forkNum <= MAX_FORKNUM; forkNum++)
+	{
+#if PG14_GE
+		/* PG13 does not have smgr_cached_nblocks */
+		result = RelationGetSmgr(rel)->smgr_cached_nblocks[forkNum];
+#endif
+
+		if (result != InvalidBlockNumber)
+		{
+			nblocks += result;
+		}
+		else
+		{
+			if (smgrexists(RelationGetSmgr(rel), forkNum))
+			{
+				cached = false;
+				nblocks += smgrnblocks(RelationGetSmgr(rel), forkNum);
+			}
+		}
+	}
+
+	if (verbose)
+		ereport(DEBUG2,
+				(errmsg("%s for %s",
+						cached ? "Cached size used" : "Fetching actual size",
+						RelationGetRelationName(rel))));
+
+	/* convert the size into bytes and return */
+	return (int64) nblocks * BLCKSZ;
+}
+
+static RelationSize
+ts_relation_approximate_size_impl(Oid relid)
+{
+	RelationSize relsize = { 0 };
+	Relation rel;
+
+	DEBUG_WAITPOINT("relation_approximate_size_before_lock");
+	/* Open relation earlier to keep a lock during all function calls */
+	rel = try_relation_open(relid, AccessShareLock);
+
+	if (!rel)
+		return relsize;
+
+	/* Get the main heap size */
+	relsize.heap_size = ts_try_relation_cached_size(rel, false);
+
+	/* Get the size of the relation's indexes */
+	if (rel->rd_rel->relhasindex)
+	{
+		List *index_oids = RelationGetIndexList(rel);
+		ListCell *cell;
+
+		foreach (cell, index_oids)
+		{
+			Oid idxOid = lfirst_oid(cell);
+			Relation idxRel;
+
+			idxRel = relation_open(idxOid, AccessShareLock);
+			relsize.index_size += ts_try_relation_cached_size(idxRel, false);
+			relation_close(idxRel, AccessShareLock);
+		}
+	}
+
+	/* If there's an associated TOAST table, calculate the total size (including its indexes) */
+	if (OidIsValid(rel->rd_rel->reltoastrelid))
+	{
+		Relation toastRel;
+		List *index_oids;
+		ListCell *cell;
+
+		toastRel = relation_open(rel->rd_rel->reltoastrelid, AccessShareLock);
+		relsize.toast_size = ts_try_relation_cached_size(toastRel, false);
+
+		/* Get the indexes size of the TOAST relation */
+		index_oids = RelationGetIndexList(toastRel);
+		foreach (cell, index_oids)
+		{
+			Oid idxOid = lfirst_oid(cell);
+			Relation idxRel;
+
+			idxRel = relation_open(idxOid, AccessShareLock);
+			relsize.toast_size += ts_try_relation_cached_size(idxRel, false);
+			relation_close(idxRel, AccessShareLock);
+		}
+
+		relation_close(toastRel, AccessShareLock);
+	}
+
+	relation_close(rel, AccessShareLock);
+
+	/* Add up the total size based on the heap size, indexes and toast */
+	relsize.total_size = relsize.heap_size + relsize.index_size + relsize.toast_size;
+
+	return relsize;
+}
+
+TS_FUNCTION_INFO_V1(ts_relation_approximate_size);
+Datum
+ts_relation_approximate_size(PG_FUNCTION_ARGS)
+{
+	Oid relid = PG_GETARG_OID(0);
+	RelationSize relsize = { 0 };
+	TupleDesc tupdesc;
+	HeapTuple tuple;
+	Datum values[4] = { 0 };
+	bool nulls[4] = { false };
+
+	/* Build a tuple descriptor for our result type */
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("function returning record called in context "
+						"that cannot accept type record")));
+
+	/* check if object exists, return NULL otherwise */
+	if (get_rel_name(relid) == NULL)
+		PG_RETURN_NULL();
+
+	relsize = ts_relation_approximate_size_impl(relid);
+
+	tupdesc = BlessTupleDesc(tupdesc);
+
+	values[0] = Int64GetDatum(relsize.total_size);
+	values[1] = Int64GetDatum(relsize.heap_size);
+	values[2] = Int64GetDatum(relsize.index_size);
+	values[3] = Int64GetDatum(relsize.toast_size);
+
+	tuple = heap_form_tuple(tupdesc, values, nulls);
+
+	return HeapTupleGetDatum(tuple);
+}
+
+static void
+init_scan_by_hypertable_id(ScanIterator *iterator, int32 hypertable_id)
+{
+	iterator->ctx.index = catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_HYPERTABLE_ID_INDEX);
+	ts_scan_iterator_scan_key_init(iterator,
+								   Anum_chunk_hypertable_id_idx_hypertable_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(hypertable_id));
+}
+
+#define ADD_RELATIONSIZE(total, rel)                                                               \
+	do                                                                                             \
+	{                                                                                              \
+		(total).heap_size += (rel).heap_size;                                                      \
+		(total).toast_size += (rel).toast_size;                                                    \
+		(total).index_size += (rel).index_size;                                                    \
+		(total).total_size += (rel).total_size;                                                    \
+	} while (0)
+
+TS_FUNCTION_INFO_V1(ts_hypertable_approximate_size);
+Datum
+ts_hypertable_approximate_size(PG_FUNCTION_ARGS)
+{
+	Oid relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	RelationSize total_relsize = { 0 };
+	TupleDesc tupdesc;
+	HeapTuple tuple;
+	Datum values[4] = { 0 };
+	bool nulls[4] = { false };
+	Cache *hcache;
+	Hypertable *ht;
+	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowExclusiveLock, CurrentMemoryContext);
+
+	/* Build a tuple descriptor for our result type */
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("function returning record called in context "
+						"that cannot accept type record")));
+
+	if (!OidIsValid(relid))
+		PG_RETURN_NULL();
+
+	/* go ahead only if this is a hypertable or a CAgg */
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_resolve_hypertable_from_table_or_cagg(hcache, relid, true);
+	if (ht == NULL)
+	{
+		ts_cache_release(hcache);
+		PG_RETURN_NULL();
+	}
+
+	/* get the main hypertable size */
+	total_relsize = ts_relation_approximate_size_impl(relid);
+
+	iterator = ts_scan_iterator_create(CHUNK, RowExclusiveLock, CurrentMemoryContext);
+	init_scan_by_hypertable_id(&iterator, ht->fd.id);
+	ts_scanner_foreach(&iterator)
+	{
+		bool isnull, dropped, is_osm_chunk;
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		Datum id = slot_getattr(ti->slot, Anum_chunk_id, &isnull);
+		Datum comp_id = DatumGetInt32(slot_getattr(ti->slot, Anum_chunk_id, &isnull));
+		int32 chunk_id, compressed_chunk_id;
+		Oid chunk_relid, compressed_chunk_relid;
+		RelationSize chunk_relsize, compressed_chunk_relsize;
+
+		if (isnull)
+			continue;
+
+		/* only consider chunks that are not dropped */
+		dropped = DatumGetBool(slot_getattr(ti->slot, Anum_chunk_dropped, &isnull));
+		Assert(!isnull);
+		if (dropped)
+			continue;
+
+		chunk_id = DatumGetInt32(id);
+
+		/* avoid if it's an OSM chunk */
+		is_osm_chunk = slot_getattr(ti->slot, Anum_chunk_osm_chunk, &isnull);
+		Assert(!isnull);
+		if (is_osm_chunk)
+			continue;
+
+		chunk_relid = ts_chunk_get_relid(chunk_id, false);
+		chunk_relsize = ts_relation_approximate_size_impl(chunk_relid);
+		/* add this chunk's size to the total size */
+		ADD_RELATIONSIZE(total_relsize, chunk_relsize);
+
+		/* check if the chunk has a compressed counterpart and add if yes */
+		comp_id = slot_getattr(ti->slot, Anum_chunk_compressed_chunk_id, &isnull);
+		if (isnull)
+			continue;
+
+		compressed_chunk_id = DatumGetInt32(comp_id);
+		compressed_chunk_relid = ts_chunk_get_relid(compressed_chunk_id, false);
+		compressed_chunk_relsize = ts_relation_approximate_size_impl(compressed_chunk_relid);
+		/* add this compressed chunk's size to the total size */
+		ADD_RELATIONSIZE(total_relsize, compressed_chunk_relsize);
+	}
+	ts_scan_iterator_close(&iterator);
+
+	tupdesc = BlessTupleDesc(tupdesc);
+
+	values[0] = Int64GetDatum(total_relsize.heap_size);
+	values[1] = Int64GetDatum(total_relsize.index_size);
+	values[2] = Int64GetDatum(total_relsize.toast_size);
+	values[3] = Int64GetDatum(total_relsize.total_size);
+
+	tuple = heap_form_tuple(tupdesc, values, nulls);
+	ts_cache_release(hcache);
+
+	return HeapTupleGetDatum(tuple);
+}
+
 #define STR_VALUE(str) #str
 #define NODE_CASE(name)                                                                            \
 	case T_##name:                                                                                 \
@@ -1277,8 +1543,8 @@ ts_copy_relation_acl(const Oid source_relid, const Oid target_relid, const Oid o
 		bool new_repl[Natts_pg_class] = { false };
 		Acl *acl = DatumGetAclP(acl_datum);
 
-		new_repl[Anum_pg_class_relacl - 1] = true;
-		new_val[Anum_pg_class_relacl - 1] = PointerGetDatum(acl);
+		new_repl[AttrNumberGetAttrOffset(Anum_pg_class_relacl)] = true;
+		new_val[AttrNumberGetAttrOffset(Anum_pg_class_relacl)] = PointerGetDatum(acl);
 
 		/* Find the tuple for the target in `pg_class` */
 		target_tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(target_relid));

@@ -129,3 +129,59 @@ SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t 
 
 :PREFIX
 SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
+
+RESET timescaledb.enable_chunkwise_aggregation;
+RESET enable_hashagg;
+
+-- Test aggregation pushdown with MergeAppend node
+CREATE TABLE merge_append_test (start_time timestamptz, sensor_id int, cluster varchar (253), cost_recommendation_memory numeric);
+SELECT * FROM create_hypertable('merge_append_test', 'start_time');
+CREATE INDEX merge_append_test_sensorid ON merge_append_test USING btree (start_time, sensor_id);
+
+INSERT INTO merge_append_test
+SELECT
+    date_series,
+    1,
+    'production-1',
+   random() * 100
+   FROM generate_series('2023-10-01 00:00:00', '2023-12-01 00:00:00', INTERVAL '1 hour') AS date_series
+;
+
+INSERT INTO merge_append_test
+SELECT
+    date_series,
+    sensor_id,
+    'production-2',
+   random() * 100
+   FROM generate_series('2023-10-01 00:00:00', '2023-12-01 00:00:00', INTERVAL '1 hour') AS date_series,
+generate_series(1, 100, 1) AS sensor_id
+;
+
+ANALYZE merge_append_test;
+
+SET enable_seqscan = off;
+SET random_page_cost = 0;
+SET cpu_operator_cost = 0;
+SET enable_hashagg = off;
+RESET parallel_setup_cost;
+RESET parallel_tuple_cost;
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END, 'off', false);
+
+:PREFIX
+SELECT
+    start_time, sensor_id,
+    SUM(cost_recommendation_memory)
+FROM
+    merge_append_test
+WHERE
+    start_time >= '2023-11-27 00:00:00Z'
+    AND start_time <= '2023-12-01 00:00:00Z'
+    AND sensor_id < 10
+    AND CLUSTER = 'production-2'
+GROUP BY
+    1, 2;
+
+RESET enable_seqscan;
+RESET random_page_cost;
+RESET cpu_operator_cost;
+RESET enable_hashagg;

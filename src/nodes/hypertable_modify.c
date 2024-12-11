@@ -761,6 +761,22 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 			CommandCounterIncrement();
 			/* mark rows visible */
 			estate->es_output_cid = GetCurrentCommandId(true);
+
+			if (ts_guc_max_tuples_decompressed_per_dml > 0)
+			{
+				if (ht_state->tuples_decompressed > ts_guc_max_tuples_decompressed_per_dml)
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
+							 errmsg("tuple decompression limit exceeded by operation"),
+							 errdetail("current limit: %d, tuples decompressed: %lld",
+									   ts_guc_max_tuples_decompressed_per_dml,
+									   (long long int) ht_state->tuples_decompressed),
+							 errhint("Consider increasing "
+									 "timescaledb.max_tuples_decompressed_per_dml_transaction or "
+									 "set to 0 (unlimited).")));
+				}
+			}
 		}
 	}
 	/*

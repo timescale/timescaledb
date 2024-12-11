@@ -52,6 +52,19 @@ endif()
 configure_file(${PRIMARY_TEST_DIR}/pg_hba.conf.in pg_hba.conf)
 set(TEST_PG_HBA_FILE ${TEST_OUTPUT_DIR}/pg_hba.conf)
 
+# Enable json logs that are supported since PG15, to get additional information
+# about errors from them for CI database.
+if(PG_VERSION_MAJOR LESS 15)
+  set(TEST_PG_LOG_DESTINATION stderr)
+else()
+  set(TEST_PG_LOG_DESTINATION jsonlog,stderr)
+endif()
+
+# This variable is set differently in CI. We use it to save the logs outside the
+# tmp instance, because it is deleted by pg_regress on successful test
+# completion, and we want to run some additional checks on the logs in any case.
+option(TEST_PG_LOG_DIRECTORY "Log directory for regression tests" "log")
+
 if(USE_TELEMETRY)
   set(TELEMETRY_DEFAULT_SETTING "timescaledb.telemetry_level=off")
 else()

@@ -73,6 +73,20 @@ SELECT compress_chunk(show_chunks('public.table_to_compress'));
  _timescaledb_internal._hyper_2_9_chunk
 (3 rows)
 
+-- check that approx size function works. We call VACUUM to ensure all forks exist
+VACUUM public.table_to_compress;
+SELECT * FROM hypertable_approximate_size('public.table_to_compress');
+ hypertable_approximate_size 
+-----------------------------
+                      262144
+(1 row)
+
+SELECT * FROM hypertable_size('public.table_to_compress');
+ hypertable_size 
+-----------------
+          262144
+(1 row)
+
 -- and run the queries again to make sure results are the same
 SELECT show_chunks('public.uncompressed_table');
               show_chunks               

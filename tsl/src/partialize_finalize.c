@@ -12,6 +12,7 @@
 #include <fmgr.h>
 #include <parser/parse_agg.h>
 #include <parser/parse_coerce.h>
+#include <utils/array.h>
 #include <utils/builtins.h>
 #include <utils/datum.h>
 #include <utils/fmgroids.h>

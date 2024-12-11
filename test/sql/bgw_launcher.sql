@@ -277,5 +277,14 @@ ALTER DATABASE :TEST_DBNAME SET TABLESPACE tablespace1;
 -- tear down test and clean up additional database
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
+SELECT _timescaledb_functions.stop_background_workers() \gset
+SET client_min_messages TO ERROR;
+REVOKE CONNECT ON DATABASE :TEST_DBNAME_2 FROM public;
+SELECT count(pg_terminate_backend(pg_stat_activity.pid)) AS TERMINATED
+FROM pg_stat_activity
+WHERE pg_stat_activity.datname = :'TEST_DBNAME_2'
+AND pg_stat_activity.pid <> pg_backend_pid() \gset
+RESET client_min_messages;
+
 DROP DATABASE :TEST_DBNAME_2 WITH (force);
 

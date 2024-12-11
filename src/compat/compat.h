@@ -7,6 +7,7 @@
 
 #include <postgres.h>
 #include <commands/cluster.h>
+#include <commands/defrem.h>
 #include <commands/explain.h>
 #include <commands/trigger.h>
 #include <executor/executor.h>
@@ -267,35 +268,6 @@
 #define pq_getmsgint32(buf) pq_getmsgint(buf, 4)
 
 #define ts_tuptableslot_set_table_oid(slot, table_oid) (slot)->tts_tableOid = table_oid
-
-#include <commands/vacuum.h>
-#include <commands/defrem.h>
-
-static inline int
-get_vacuum_options(const VacuumStmt *stmt)
-{
-	/* The vacuum options is a list of DefElems and require parsing. Here
-	 * we only parse the options we might be interested in since PostgreSQL
-	 * itself will parse the options fully when it executes the vacuum. */
-	ListCell *lc;
-	bool analyze = false;
-	bool verbose = false;
-
-	foreach (lc, stmt->options)
-	{
-		DefElem *opt = (DefElem *) lfirst(lc);
-
-		/* Parse common options for VACUUM and ANALYZE */
-		if (strcmp(opt->defname, "verbose") == 0)
-			verbose = defGetBoolean(opt);
-		/* Parse options available on VACUUM */
-		else if (strcmp(opt->defname, "analyze") == 0)
-			analyze = defGetBoolean(opt);
-	}
-
-	return (stmt->is_vacuumcmd ? VACOPT_VACUUM : VACOPT_ANALYZE) | (verbose ? VACOPT_VERBOSE : 0) |
-		   (analyze ? VACOPT_ANALYZE : 0);
-}
 
 /*
  * The number of arguments of pg_md5_hash() has changed in PG 15.

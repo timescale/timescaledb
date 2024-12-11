@@ -83,7 +83,7 @@ PG_MODULE_MAGIC;
 #endif
 
 #define POST_LOAD_INIT_FN "ts_post_load_init"
-#define GUC_LAUNCHER_POLL_TIME_MS "timescaledb.bgw_launcher_poll_time"
+#define GUC_LAUNCHER_POLL_TIME_MS MAKE_EXTOPTION("bgw_launcher_poll_time")
 
 /*
  * The loader really shouldn't load if we're in a parallel worker as there is a
@@ -146,10 +146,10 @@ TsExtension extensions[] = {
 	/* Redundant default initializers are here because we compile with
 	 * `-Werror -Wmissing-field-initializers` for our PG13 build... */
 	{
-		.name = "timescaledb",
+		.name = EXTENSION_NAME,
 		.schema_name = CACHE_SCHEMA_NAME,
 		.table_name = EXTENSION_PROXY_TABLE,
-		.guc_disable_load_name = "timescaledb.disable_load",
+		.guc_disable_load_name = MAKE_EXTOPTION("disable_load"),
 		.guc_disable_load = false,
 		.soversion = "",
 		.post_parse_analyze_hook = NULL,
@@ -699,9 +699,9 @@ do_load(TsExtension *const ext)
 	 * loader was preloaded, newer versions use rendezvous variables instead.
 	 */
 	if ((strcmp(version, "0.9.0") == 0 || strcmp(version, "0.9.1") == 0) &&
-		strcmp(ext->name, "timescaledb") == 0)
+		strcmp(ext->name, EXTENSION_NAME) == 0)
 	{
-		SetConfigOption("timescaledb.loader_present", "on", PGC_USERSET, PGC_S_SESSION);
+		SetConfigOption(MAKE_EXTOPTION("loader_present"), "on", PGC_USERSET, PGC_S_SESSION);
 	}
 
 	/*

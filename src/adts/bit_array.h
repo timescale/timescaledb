@@ -25,7 +25,7 @@ typedef struct BitArray BitArray;
 typedef struct BitArrayIterator BitArrayIterator;
 
 /* Main Interface */
-static void bit_array_init(BitArray *array);
+static void bit_array_init(BitArray *array, int expected_bits);
 
 /* Append num_bits to the array */
 static void bit_array_append(BitArray *array, uint8 num_bits, uint64 bits);

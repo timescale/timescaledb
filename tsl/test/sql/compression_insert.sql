@@ -688,3 +688,30 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('test_copy') ch;
 \copy test_copy FROM data/copy_data.csv WITH CSV HEADER;
 
 DROP TABLE test_copy;
+
+-- Text limitting decompressed tuple during an insert
+CREATE TABLE test_limit (
+    timestamp int not null,
+    id bigint
+);
+SELECT * FROM create_hypertable('test_limit', 'timestamp', chunk_time_interval=>1000);
+INSERT INTO test_limit SELECT t, i FROM generate_series(1,10000,1) t CROSS JOIN generate_series(1,3,1) i;
+CREATE UNIQUE INDEX timestamp_id_idx ON test_limit(timestamp, id);
+
+ALTER TABLE test_limit SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'timestamp'
+);
+SELECT count(compress_chunk(ch)) FROM show_chunks('test_limit') ch;
+
+SET timescaledb.max_tuples_decompressed_per_dml_transaction = 5000;
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+-- Inserting in the same period should decompress tuples
+INSERT INTO test_limit SELECT t, 11 FROM generate_series(1,6000,1000) t;
+-- Setting to 0 should remove the limit.
+SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0;
+INSERT INTO test_limit SELECT t, 11 FROM generate_series(1,6000,1000) t;
+\set ON_ERROR_STOP 1
+
+DROP TABLE test_limit;

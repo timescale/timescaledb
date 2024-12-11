@@ -15,3 +15,5 @@ extern TSDLLEXPORT void ts_cagg_watermark_insert(Hypertable *mat_ht, int64 water
 												 bool watermark_isnull);
 extern TSDLLEXPORT void ts_cagg_watermark_update(Hypertable *mat_ht, int64 watermark,
 												 bool watermark_isnull, bool force_update);
+
+extern TSDLLEXPORT int64 ts_cagg_watermark_get(int32 hypertable_id);

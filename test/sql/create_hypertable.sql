@@ -631,3 +631,17 @@ insert into tidrangescan_test (time, some_column) values ('2023-02-12 00:00:20+0
 select * from tidrangescan_test where time > '2023-02-12 00:00:00+02:40'::timestamp with time zone - interval '5 years' and ctid < '(1,1)'::tid ORDER BY time;
 
 drop table tidrangescan_test;
+
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+set client_min_messages = WARNING;
+-- test creating a hypertable from table referenced by a foreign key fails with
+-- error "cannot have FOREIGN KEY constraints to hypertable".
+create table test_schema.fk_parent(time timestamptz, id int, unique(time, id));
+create table test_schema.fk_child(
+  time timestamptz,
+  id int,
+  foreign key (time, id) references test_schema.fk_parent(time, id)
+);
+select create_hypertable ('test_schema.fk_parent', 'time');
+\set ON_ERROR_STOP 1

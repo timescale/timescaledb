@@ -858,7 +858,14 @@ collect_quals_walker(Node *node, CollectQualCtx *ctx)
 static int
 chunk_cmp_chunk_reloid(const void *c1, const void *c2)
 {
-	return (*(Chunk **) c1)->table_id - (*(Chunk **) c2)->table_id;
+	Oid lhs = (*(Chunk **) c1)->table_id;
+	Oid rhs = (*(Chunk **) c2)->table_id;
+
+	if (lhs < rhs)
+		return -1;
+	if (lhs > rhs)
+		return 1;
+	return 0;
 }
 
 static Chunk **

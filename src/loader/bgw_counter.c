@@ -16,6 +16,7 @@
 #include <utils/guc.h>
 
 #include "bgw_counter.h"
+#include "extension_constants.h"
 
 #define BGW_COUNTER_STATE_NAME "ts_bgw_counter_state"
 
@@ -60,7 +61,7 @@ bgw_counter_state_init()
 extern void
 ts_bgw_counter_setup_gucs(void)
 {
-	DefineCustomIntVariable("timescaledb.max_background_workers",
+	DefineCustomIntVariable(MAKE_EXTOPTION("max_background_workers"),
 							"Maximum background worker processes allocated to TimescaleDB",
 							"Max background worker processes allocated to TimescaleDB - set to at "
 							"least 1 + number of databases in Postgres instance to use background "

@@ -64,12 +64,26 @@ teardown {
 
 session "S1"
 step "s1_run_update" {
-   CALL refresh_continuous_aggregate('cagg_1', '2020-01-01 00:00:00', '2021-01-01 00:00:00');
+   CALL refresh_continuous_aggregate('cagg_1', '2020-01-01 00:00:00', '2025-01-01 00:00:00');
 }
 
 session "S2"
 step "s2_run_update" {
-   CALL refresh_continuous_aggregate('cagg_2', '2020-01-01 00:00:00', '2021-01-01 00:00:00');
+   CALL refresh_continuous_aggregate('cagg_2', '2020-01-01 00:00:00', '2025-01-01 00:00:00');
+}
+
+step "s2_insert_new_data_2022" {
+  INSERT INTO temperature
+    SELECT time, ceil(random() * 100)::int
+      FROM generate_series('2022-01-01 0:00:00+0'::timestamptz,
+                          '2022-01-01 23:59:59+0','1m') time;
+}
+
+step "s2_insert_new_data_2023" {
+  INSERT INTO temperature
+    SELECT time, ceil(random() * 100)::int
+      FROM generate_series('2023-01-01 0:00:00+0'::timestamptz,
+                          '2023-01-01 23:59:59+0','1m') time;
 }
 
 session "S3"
@@ -81,6 +95,14 @@ step "s3_release_invalidation" {
    SELECT debug_waitpoint_release('invalidation_threshold_scan_update_enter');
 }
 
+step "s3_lock_invalidation_tuple_found" {
+   SELECT debug_waitpoint_enable('invalidation_tuple_found_done');
+}
+
+step "s3_release_invalidation_tuple_found" {
+   SELECT debug_waitpoint_release('invalidation_tuple_found_done');
+}
+
 # Check that both CAggs have a watermark in 2020 after the updates are executed.
 # mat_hypertable_id is not included in the query to make the test independent of the
 # actual hypertable ids.
@@ -90,4 +112,17 @@ step "s3_check_watermarks" {
       ORDER BY mat_hypertable_id;
 }
 
+# Check that all watermarks in all sessions are up to date after running an update 
 permutation "s3_lock_invalidation" "s1_run_update" "s2_run_update" "s3_release_invalidation" "s3_check_watermarks"("s1_run_update", "s2_run_update")
+
+###
+# Check that we don't leak the old AND the new value of the invalidation watermark during an update into another session
+###
+
+# (1) Session 2 - Inserts new data of the year 2022 to give the CAgg refresh job some work to do.
+# (2) Session 3 - Blocks the invalidation watermark scanner after reading the first watermark for the hypertable.
+# (3) Session 2 - Inserts new data of the year 2023, during the commit it reads the current invalidation watermark and blocks due to (2).
+# (4) Session 1 - Refreshes a CAgg on this hypertable. During the update the invalidation watermark is deleted and a new one is written.
+# (5) Session 3 - Unblocks the scanner of session 2.
+# (6) Session 2 - Continues the scan. The new inserted invalidation watermark should not be seen since the transaction was started after s2 has started the scan in (3).
+permutation "s2_insert_new_data_2022" "s3_lock_invalidation_tuple_found" "s2_insert_new_data_2023" "s1_run_update" "s3_release_invalidation_tuple_found"

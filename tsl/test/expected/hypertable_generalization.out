@@ -55,6 +55,31 @@ SELECT by_hash('id', 3, partition_func => 'part_func');
  hash//id//3//part_func
 (1 row)
 
+-- Check if we handle the varlength of the datatype properly
+SELECT * FROM by_range('id') WHERE by_range IS NOT NULL;
+    by_range     
+-----------------
+ range//id//-//-
+(1 row)
+
+SELECT * FROM by_range('id', partition_func => 'part_func') WHERE by_range IS NOT NULL;
+        by_range         
+-------------------------
+ range//id//-//part_func
+(1 row)
+
+SELECT * FROM by_hash('id', 3) WHERE by_hash IS NOT NULL;
+    by_hash     
+----------------
+ hash//id//3//-
+(1 row)
+
+SELECT * FROM by_hash('id', 3, partition_func => 'part_func') WHERE by_hash IS NOT NULL;
+        by_hash         
+------------------------
+ hash//id//3//part_func
+(1 row)
+
 \set ON_ERROR_STOP 0
 SELECT 'hash//id//3//-'::_timescaledb_internal.dimension_info;
 ERROR:  cannot construct type "dimension_info" from string at character 8
