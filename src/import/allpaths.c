@@ -109,8 +109,8 @@ ts_create_plain_partial_paths(PlannerInfo *root, RelOptInfo *rel)
 }
 
 /* copied from allpaths.c */
-static void
-set_plain_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
+void
+set_plain_rel_pathlist(PlannerInfo *root, RelOptInfo *rel)
 {
 	Relids required_outer;
 
@@ -251,7 +251,7 @@ set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *r
 				else
 				{
 					/* Plain relation */
-					set_plain_rel_pathlist(root, rel, rte);
+					set_plain_rel_pathlist(root, rel);
 				}
 				break;
 			case RTE_SUBQUERY:

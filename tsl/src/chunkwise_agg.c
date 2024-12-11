@@ -437,7 +437,7 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 										  copy_append_like_path(root,
 																partially_compressed_append,
 																partially_compressed_sorted,
-																subpath->pathtarget));
+																partial_grouping_target));
 			}
 
 			if (can_hash)
@@ -446,7 +446,7 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 										  copy_append_like_path(root,
 																partially_compressed_append,
 																partially_compressed_hashed,
-																subpath->pathtarget));
+																partial_grouping_target));
 			}
 		}
 		else

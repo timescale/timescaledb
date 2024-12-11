@@ -961,6 +961,44 @@ ts_label_sort_with_costsize(PlannerInfo *root, Sort *plan, double limit_tuples)
 	plan->plan.parallel_safe = lefttree->parallel_safe;
 }
 
+static Var *
+find_var_subexpression(void *expr, Index varno)
+{
+	if (IsA(expr, Var))
+	{
+		Var *var = castNode(Var, expr);
+		if ((Index) var->varno == (Index) varno)
+		{
+			return var;
+		}
+
+		return NULL;
+	}
+
+	if (IsA(expr, List))
+	{
+		List *list = castNode(List, expr);
+		ListCell *lc;
+		foreach (lc, list)
+		{
+			Var *var = find_var_subexpression(lfirst(lc), varno);
+			if (var != NULL)
+			{
+				return var;
+			}
+		}
+
+		return NULL;
+	}
+
+	if (IsA(expr, FuncExpr))
+	{
+		return find_var_subexpression(castNode(FuncExpr, expr)->args, varno);
+	}
+
+	return NULL;
+}
+
 Plan *
 decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 							 List *output_targetlist, List *clauses, List *custom_plans)
@@ -1136,16 +1174,16 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 					continue;
 				}
 
-				Ensure(IsA(em->em_expr, Var),
-					   "non-Var pathkey not expected for compressed batch sorted merge");
-
 				/*
 				 * We found a Var equivalence member that belongs to the
 				 * decompressed relation. We have to convert its varattno which
 				 * is the varattno of the uncompressed chunk tuple, to the
 				 * decompressed scan tuple varattno.
 				 */
-				Var *var = castNode(Var, em->em_expr);
+				Var *var = find_var_subexpression(em->em_expr, em_relid);
+				Ensure(var != NULL,
+					   "non-Var pathkey not expected for compressed batch sorted merge");
+
 				Assert((Index) var->varno == (Index) em_relid);
 
 				const int decompressed_scan_attno =
