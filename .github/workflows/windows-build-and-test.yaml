@@ -77,7 +77,7 @@ jobs:
       TABLESPACE2: D:\tablespace2\
     steps:
     - name: Setup WSL
-      uses: Vampire/setup-wsl@v3.1.1
+      uses: Vampire/setup-wsl@v3.1.4
       with:
         additional-packages:
           cmake
@@ -191,12 +191,7 @@ jobs:
         export TEST_TABLESPACE2_PREFIX='${{ env.TABLESPACE2 }}'
         cmake -B build_wsl -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTEST_PGPORT_LOCAL=${{ env.PGPORT }}
 
-        # isolationtester is only packaged with pg14+ so we would have to build our own postgres
-        # to get it for earlier versions so we skip it for < 14.
-        if [[ "${{ matrix.pg }}" -ge "14" ]]; then
-          make -C build_wsl isolationchecklocal | tee -a installcheck.log
-        fi
-
+        make -C build_wsl isolationchecklocal | tee -a installcheck.log
         make -C build_wsl regresschecklocal IGNORES="${{ matrix.ignores }}" | tee -a installcheck.log
 
     - name: Setup postgres cluster for TSL tests
@@ -217,12 +212,7 @@ jobs:
         export TEST_TABLESPACE1_PREFIX='${{ env.TABLESPACE1 }}'
         export TEST_TABLESPACE2_PREFIX='${{ env.TABLESPACE2 }}'
 
-        # isolationtester is only packaged with pg14+ so we would have to build our own postgres
-        # to get it for earlier versions so we skip it for < 14.
-        if [[ "${{ matrix.pg }}" -ge "14" ]]; then
-          make -C build_wsl isolationchecklocal-t | tee -a installcheck.log
-        fi
-
+        make -C build_wsl isolationchecklocal-t | tee -a installcheck.log
         make -C build_wsl -k regresschecklocal-t \
           IGNORES="${{ matrix.tsl_ignores }} ${{ matrix.tsl_ignores_version }}" \
           SKIPS="${{ matrix.tsl_skips }} ${{ matrix.tsl_skips_version }}" | tee -a installcheck.log
