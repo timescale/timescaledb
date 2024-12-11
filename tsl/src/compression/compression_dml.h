@@ -36,7 +36,7 @@ ScanKeyData *build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *set
 										  TupleTableSlot *slot, int *num_scankeys);
 ScanKeyData *build_index_scankeys(Relation index_rel, List *index_filters, int *num_scankeys);
 ScanKeyData *build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel,
-											 Relation out_rel, Bitmapset *key_columns,
+											 Relation out_rel, Bitmapset *constraint_columns,
 											 TupleTableSlot *slot, Relation *result_index_rel,
 											 Bitmapset **index_columns, int *num_scan_keys);
 ScanKeyData *build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,

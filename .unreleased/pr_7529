@@ -1,0 +1,1 @@
+Fixes: #7529 Always use index for insert conflict resolution on compressed chunks

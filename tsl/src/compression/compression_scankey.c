@@ -269,7 +269,7 @@ build_index_scankeys(Relation index_rel, List *index_filters, int *num_scankeys)
  */
 ScanKeyData *
 build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel, Relation out_rel,
-								Bitmapset *key_columns, TupleTableSlot *slot,
+								Bitmapset *constraint_columns, TupleTableSlot *slot,
 								Relation *result_index_rel, Bitmapset **index_columns,
 								int *num_scan_keys)
 {
@@ -322,10 +322,12 @@ build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel, Relation 
 			const NameData *attname = attnumAttName(in_rel, in_attnum);
 			AttrNumber column_attno = get_attnum(out_rel->rd_id, NameStr(*attname));
 
-			/* Make sure we find columns in key columns in order to select the right index */
-			if (!bms_is_member(column_attno, key_columns))
+			/* Make sure we find columns in key columns in order to select the right index
+			 * We skip over any non-constraint columns
+			 */
+			if (!bms_is_member(column_attno, constraint_columns))
 			{
-				break;
+				continue;
 			}
 
 			bool isnull;

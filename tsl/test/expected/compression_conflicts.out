@@ -289,7 +289,7 @@ BEGIN;
   DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
   CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC, label);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
-INFO:  Using index scan with scan keys: index 1, heap 3, memory 1. 
+INFO:  Using index scan with scan keys: index 2, heap 2, memory 1. 
 ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
 ROLLBACK;
 -- ignore expression index
@@ -564,6 +564,74 @@ SELECT count(*) FROM ONLY :CHUNK;
      0
 (1 row)
 
+-- test conflict handling on compressed hypertables with unique constraints
+set timescaledb.debug_compression_path_info to on;
+-- test 5: multi-column primary key with partial segmentby coverage
+-- we should be using the index scan in every conflict resolution case
+CREATE TABLE comp_conflicts_5(time timestamptz NOT NULL, device text, label text DEFAULT 'label', value float, UNIQUE(time, label));
+SELECT table_name FROM create_hypertable('comp_conflicts_5','time');
+    table_name    
+------------------
+ comp_conflicts_5
+(1 row)
+
+ALTER TABLE comp_conflicts_5 SET (timescaledb.compress,timescaledb.compress_segmentby='device, label');
+NOTICE:  default order by for hypertable "comp_conflicts_5" is set to ""time" DESC"
+-- implicitly create chunk
+INSERT INTO comp_conflicts_5 VALUES ('2020-01-01','d1', 'label1', 0.1);
+INSERT INTO comp_conflicts_5 VALUES ('2020-01-01','d2', 'label2', 0.2);
+INSERT INTO comp_conflicts_5 VALUES ('2020-01-01',NULL, 'label3', 0.3);
+SELECT compress_chunk(c) AS "CHUNK" FROM show_chunks('comp_conflicts_5') c
+\gset
+INFO:  using tuplesort to scan rows from "_hyper_9_9_chunk" for compression
+-- after compression no data should be in uncompressed chunk
+SELECT count(*) FROM ONLY :CHUNK;
+ count 
+-------
+     0
+(1 row)
+
+-- should fail due to multiple entries with same time, device value
+\set ON_ERROR_STOP 0
+INSERT INTO comp_conflicts_5 VALUES ('2020-01-01','d1', 'label1', 0.1);
+INFO:  Using index scan with scan keys: index 1, heap 2, memory 1. 
+ERROR:  duplicate key value violates unique constraint "9_5_comp_conflicts_5_time_label_key"
+INSERT INTO comp_conflicts_5 VALUES ('2020-01-01','d2', 'label2', 0.2);
+INFO:  Using index scan with scan keys: index 1, heap 2, memory 1. 
+ERROR:  duplicate key value violates unique constraint "9_5_comp_conflicts_5_time_label_key"
+INSERT INTO comp_conflicts_5 VALUES
+('2020-01-01','d1', 'label', 0.1),
+('2020-01-01','d2', 'label', 0.2),
+('2020-01-01','d3', 'label', 0.3);
+INFO:  Using index scan with scan keys: index 1, heap 2, memory 1. 
+INFO:  Number of compressed rows fetched from index: 0. Number of compressed rows filtered by heap filters: 0.
+INFO:  Using index scan with scan keys: index 1, heap 2, memory 1. 
+INFO:  Number of compressed rows fetched from index: 0. Number of compressed rows filtered by heap filters: 0.
+ERROR:  duplicate key value violates unique constraint "9_5_comp_conflicts_5_time_label_key"
+-- should work the same without the index present
+BEGIN;
+  DROP INDEX _timescaledb_internal.compress_hyper_10_10_chunk_device_label__ts_meta_min_1__ts__idx;
+  INSERT INTO comp_conflicts_5 VALUES ('2020-01-01','d1', 'label1', 0.1);
+INFO:  Using table scan with scan keys: index 0, heap 3, memory 1. 
+ERROR:  duplicate key value violates unique constraint "9_5_comp_conflicts_5_time_label_key"
+ROLLBACK;
+BEGIN;
+  DROP INDEX _timescaledb_internal.compress_hyper_10_10_chunk_device_label__ts_meta_min_1__ts__idx;
+  INSERT INTO comp_conflicts_5 VALUES ('2020-01-01','d2', 'label2', 0.2);
+INFO:  Using table scan with scan keys: index 0, heap 3, memory 1. 
+ERROR:  duplicate key value violates unique constraint "9_5_comp_conflicts_5_time_label_key"
+ROLLBACK;
+BEGIN;
+  DROP INDEX _timescaledb_internal.compress_hyper_10_10_chunk_device_label__ts_meta_min_1__ts__idx;
+  INSERT INTO comp_conflicts_5 VALUES
+  ('2020-01-01','d1', 'label1', 0.1),
+  ('2020-01-01','d2', 'label2', 0.2),
+  ('2020-01-01','d3', 'label3', 0.3);
+INFO:  Using table scan with scan keys: index 0, heap 3, memory 1. 
+ERROR:  duplicate key value violates unique constraint "9_5_comp_conflicts_5_time_label_key"
+ROLLBACK;
+\set ON_ERROR_STOP 1
+reset timescaledb.debug_compression_path_info;
 CREATE OR REPLACE VIEW compressed_chunk_info_view AS
 SELECT
    h.schema_name AS hypertable_schema,
@@ -591,7 +659,7 @@ SELECT * FROM create_hypertable('compressed_ht', 'time',
 WARNING:  column type "character varying" used for "name" does not follow best practices
  hypertable_id | schema_name |  table_name   | created 
 ---------------+-------------+---------------+---------
-             9 | public      | compressed_ht | t
+            11 | public      | compressed_ht | t
 (1 row)
 
 -- create chunk 1
@@ -611,14 +679,11 @@ ALTER TABLE compressed_ht SET (
 );
 NOTICE:  default order by for hypertable "compressed_ht" is set to ""time" DESC"
 SELECT COMPRESS_CHUNK(SHOW_CHUNKS('compressed_ht'));
-INFO:  using tuplesort to scan rows from "_hyper_9_9_chunk" for compression
-INFO:  using tuplesort to scan rows from "_hyper_9_10_chunk" for compression
-INFO:  using tuplesort to scan rows from "_hyper_9_11_chunk" for compression
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_9_9_chunk
- _timescaledb_internal._hyper_9_10_chunk
- _timescaledb_internal._hyper_9_11_chunk
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_11_11_chunk
+ _timescaledb_internal._hyper_11_12_chunk
+ _timescaledb_internal._hyper_11_13_chunk
 (3 rows)
 
 -- check compression status
@@ -626,11 +691,11 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'compressed_ht' ORDER BY chunk_name;
- chunk_status |    CHUNK_NAME     
---------------+-------------------
-            1 | _hyper_9_10_chunk
-            1 | _hyper_9_11_chunk
-            1 | _hyper_9_9_chunk
+ chunk_status |     CHUNK_NAME     
+--------------+--------------------
+            1 | _hyper_11_11_chunk
+            1 | _hyper_11_12_chunk
+            1 | _hyper_11_13_chunk
 (3 rows)
 
 -- should report 0 row
@@ -643,8 +708,6 @@ SELECT COUNT(*) FROM compressed_ht WHERE name = 'ON CONFLICT DO UPDATE';
 INSERT INTO compressed_ht VALUES ('2017-12-28 01:10:28.192199+05:30', '1', 0.876, 4.123, 'new insert row')
   ON conflict(sensor_id, time)
 DO UPDATE SET sensor_id = excluded.sensor_id , name = 'ON CONFLICT DO UPDATE';
-INFO:  Using index scan with scan keys: index 1, heap 2, memory 1. 
-INFO:  Number of compressed rows fetched from index: 1. Number of compressed rows filtered by heap filters: 0.
 -- should report 1 row
 SELECT COUNT(*) FROM compressed_ht WHERE name = 'ON CONFLICT DO UPDATE';
  count 
@@ -657,18 +720,16 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'compressed_ht' ORDER BY chunk_name;
- chunk_status |    CHUNK_NAME     
---------------+-------------------
-            1 | _hyper_9_10_chunk
-            1 | _hyper_9_11_chunk
-            9 | _hyper_9_9_chunk
+ chunk_status |     CHUNK_NAME     
+--------------+--------------------
+            9 | _hyper_11_11_chunk
+            1 | _hyper_11_12_chunk
+            1 | _hyper_11_13_chunk
 (3 rows)
 
 INSERT INTO compressed_ht VALUES ('2022-01-24 01:10:28.192199+05:30', '6', 0.876, 4.123, 'new insert row')
   ON conflict(sensor_id, time)
 DO UPDATE SET sensor_id = excluded.sensor_id , name = 'ON CONFLICT DO UPDATE' RETURNING *;
-INFO:  Using index scan with scan keys: index 1, heap 2, memory 1. 
-INFO:  Number of compressed rows fetched from index: 1. Number of compressed rows filtered by heap filters: 0.
                 time                 | sensor_id |  cpu  | temperature |         name          
 -------------------------------------+-----------+-------+-------------+-----------------------
  Sun Jan 23 11:40:28.192199 2022 PST |         6 | 0.876 |       4.123 | ON CONFLICT DO UPDATE
@@ -679,11 +740,11 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'compressed_ht' ORDER BY chunk_name;
- chunk_status |    CHUNK_NAME     
---------------+-------------------
-            1 | _hyper_9_10_chunk
-            9 | _hyper_9_11_chunk
-            9 | _hyper_9_9_chunk
+ chunk_status |     CHUNK_NAME     
+--------------+--------------------
+            9 | _hyper_11_11_chunk
+            1 | _hyper_11_12_chunk
+            9 | _hyper_11_13_chunk
 (3 rows)
 
 -- test for disabling DML decompression
@@ -719,7 +780,7 @@ CREATE TABLE test_collation (
 SELECT create_hypertable('test_collation', 'time', chunk_time_interval => 2419200000);
       create_hypertable       
 ------------------------------
- (11,public,test_collation,t)
+ (13,public,test_collation,t)
 (1 row)
 
 ALTER TABLE test_collation
@@ -735,10 +796,9 @@ VALUES
   (1609478100000, 41, 'val1')
 ON CONFLICT DO NOTHING;
 SELECT compress_chunk(ch) FROM show_chunks('test_collation') ch;
-INFO:  using tuplesort to scan rows from "_hyper_11_15_chunk" for compression
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_11_15_chunk
+ _timescaledb_internal._hyper_13_17_chunk
 (1 row)
 
 INSERT INTO "test_collation"
@@ -747,4 +807,3 @@ VALUES
   (41, 1609477200000, 'val1'),
   (41, 1609478100000, 'val1')
 ON CONFLICT DO NOTHING;
-INFO:  Using index scan with scan keys: index 1, heap 4, memory 2. 
