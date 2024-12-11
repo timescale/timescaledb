@@ -877,7 +877,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 	pushdown_quals(root, compression_info->settings, chunk_rel, compressed_rel, consider_partial);
 
 	set_baserel_size_estimates(root, compressed_rel);
-	const double new_tuples_estimate = compressed_rel->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
+	const double new_tuples_estimate = compressed_rel->rows * TARGET_COMPRESSED_BATCH_SIZE;
 	const double new_rows_estimate =
 		new_tuples_estimate *
 		clauselist_selectivity(root, chunk_rel->baserestrictinfo, 0, JOIN_INNER, NULL);
