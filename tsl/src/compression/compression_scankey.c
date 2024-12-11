@@ -322,8 +322,7 @@ build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel, Relation 
 			const NameData *attname = attnumAttName(in_rel, in_attnum);
 			AttrNumber column_attno = get_attnum(out_rel->rd_id, NameStr(*attname));
 
-			/* Make sure we find columns in key columns in order to select the right index */
-			if (!bms_is_member(column_attno, key_columns))
+			if (!AttributeNumberIsValid(column_attno))
 			{
 				break;
 			}
