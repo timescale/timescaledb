@@ -89,9 +89,9 @@ Insert and query data in a hypertable via regular SQL commands. For example:
     ```sql
     INSERT INTO conditions
       VALUES
-        (pg_catalog.now(), 'office',   70.0, 50.0),
-        (pg_catalog.now(), 'basement', 66.5, 60.0),
-        (pg_catalog.now(), 'garage',   77.0, 65.2);
+        (NOW(), 'office',   70.0, 50.0),
+        (NOW(), 'basement', 66.5, 60.0),
+        (NOW(), 'garage',   77.0, 65.2);
     ```
 
 - Return the number of entries written to the table conditions in the last 12 hours:
@@ -132,8 +132,8 @@ When you enable compression, the data in your hypertable is compressed chunk by 
     FROM
       show_chunks(
         'conditions',
-        pg_catalog.now() - INTERVAL '1 week',
-        pg_catalog.now() - INTERVAL '3 weeks'
+        NOW() - INTERVAL '1 week',
+        NOW() - INTERVAL '3 weeks'
       ) AS chunk;
     ```
 
