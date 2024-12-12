@@ -50,6 +50,12 @@ select count(*), time_bucket('1 minute', time)
 from ht_metrics_partially_compressed
 group by 2 order by 2 limit 1;
 
+-- Batch sorted merge with grouping column not in SELECT list.
+:PREFIX
+select count(*)
+from ht_metrics_partially_compressed
+group by time_bucket('1 minute', time) limit 1;
+
 -- Ordering by time_bucket.
 :PREFIX
 select time_bucket('1 minute', time), *
