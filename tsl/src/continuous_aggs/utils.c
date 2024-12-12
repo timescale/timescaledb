@@ -324,14 +324,12 @@ build_const_value_for_origin(TimeBucketInfoContext *context, Oid origin_type)
 		case TIMESTAMPOID:
 			const_datum =
 				DirectFunctionCall1(timestamptz_timestamp,
-									TimestampTzGetDatum(
-										context->bucket_time_origin_to_replace));
+									TimestampTzGetDatum(context->bucket_time_origin_to_replace));
 			break;
 		case DATEOID:
 			const_datum =
 				DirectFunctionCall1(timestamptz_date,
-									TimestampTzGetDatum(
-										context->bucket_time_origin_to_replace));
+									TimestampTzGetDatum(context->bucket_time_origin_to_replace));
 			break;
 		default:
 			elog(ERROR,
@@ -462,13 +460,13 @@ continuous_agg_replace_function(ContinuousAgg *cagg, Oid function_to_replace,
 								TimestampTz bucket_time_origin_to_replace,
 								bool need_parameter_order_change)
 {
-	TimeBucketInfoContext context = { 
-		.cagg = cagg,
-		.function_to_replace = function_to_replace,
-		.origin_added_during_migration = origin_added_during_migration,
-		.bucket_time_origin_to_replace = bucket_time_origin_to_replace,
-		.need_parameter_order_change = need_parameter_order_change
-	};
+	TimeBucketInfoContext context = { .cagg = cagg,
+									  .function_to_replace = function_to_replace,
+									  .origin_added_during_migration =
+										  origin_added_during_migration,
+									  .bucket_time_origin_to_replace =
+										  bucket_time_origin_to_replace,
+									  .need_parameter_order_change = need_parameter_order_change };
 
 	/* Rewrite the direct_view */
 	Oid direct_view_oid = ts_get_relation_relid(NameStr(cagg->data.direct_view_schema),
@@ -598,7 +596,7 @@ continuous_agg_migrate_to_time_bucket(PG_FUNCTION_ARGS)
 	/* Update the time_bucket_fuction */
 	cagg->bucket_function->bucket_function = new_bucket_function;
 	bool origin_added_during_migration = false;
-	TimestampTz bucket_time_origin_to_replace;
+	TimestampTz bucket_time_origin_to_replace = 0;
 
 	/* Set new origin if not already present in the function definition. This is needed since
 	 * time_bucket and time_bucket_ng use different origin default values.

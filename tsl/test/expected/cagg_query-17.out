@@ -11,6 +11,7 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+\set TEST_BASE_NAME cagg_query
 SELECT
        format('%s/results/%s_results_view.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_VIEW",
        format('%s/results/%s_results_view_hashagg.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_VIEW_HASHAGG",
@@ -755,7 +756,7 @@ CREATE TABLE temperature_wo_tz (
   value float
 );
 SELECT create_hypertable('temperature_wo_tz', 'time');
-psql:include/cagg_query_common.sql:316: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+psql:include/cagg_query_common.sql:317: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
        create_hypertable        
 --------------------------------
  (5,public,temperature_wo_tz,t)
@@ -787,21 +788,21 @@ CREATE TABLE table_bigint (
   data bigint
 );
 SELECT create_hypertable('table_smallint', 'time', chunk_time_interval => 10);
-psql:include/cagg_query_common.sql:345: NOTICE:  adding not-null constraint to column "time"
+psql:include/cagg_query_common.sql:346: NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (7,public,table_smallint,t)
 (1 row)
 
 SELECT create_hypertable('table_int', 'time', chunk_time_interval => 10);
-psql:include/cagg_query_common.sql:346: NOTICE:  adding not-null constraint to column "time"
+psql:include/cagg_query_common.sql:347: NOTICE:  adding not-null constraint to column "time"
    create_hypertable    
 ------------------------
  (8,public,table_int,t)
 (1 row)
 
 SELECT create_hypertable('table_bigint', 'time', chunk_time_interval => 10);
-psql:include/cagg_query_common.sql:347: NOTICE:  adding not-null constraint to column "time"
+psql:include/cagg_query_common.sql:348: NOTICE:  adding not-null constraint to column "time"
      create_hypertable     
 ---------------------------
  (9,public,table_bigint,t)
@@ -833,7 +834,7 @@ INSERT INTO table_int VALUES(1,2);
 INSERT INTO table_bigint VALUES(1,2);
 CREATE VIEW caggs_info AS
 SELECT user_view_schema, user_view_name, bucket_func, bucket_width, bucket_origin, bucket_offset, bucket_timezone, bucket_fixed_width
-FROM _timescaledb_catalog.continuous_aggs_bucket_function NATURAL JOIN _timescaledb_catalog.continuous_agg;
+FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id);
 ---
 -- Tests with CAgg creation
 ---
@@ -842,128 +843,128 @@ CREATE MATERIALIZED VIEW cagg_4_hours
   SELECT time_bucket('4 hour', time), max(value)
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:372: NOTICE:  refreshing continuous aggregate "cagg_4_hours"
+psql:include/cagg_query_common.sql:373: NOTICE:  refreshing continuous aggregate "cagg_4_hours"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours';
- user_view_schema | user_view_name |                      bucket_func                      | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+----------------+-------------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
- public           | cagg_4_hours   | public.time_bucket(interval,timestamp with time zone) | @ 4 hours    |               |               |                 | t
+ user_view_schema | user_view_name |                  bucket_func                   | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+----------------+------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
+ public           | cagg_4_hours   | time_bucket(interval,timestamp with time zone) | @ 4 hours    |               |               |                 | t
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours;
-psql:include/cagg_query_common.sql:374: NOTICE:  drop cascades to table _timescaledb_internal._hyper_10_14_chunk
+psql:include/cagg_query_common.sql:375: NOTICE:  drop cascades to table _timescaledb_internal._hyper_10_14_chunk
 CREATE MATERIALIZED VIEW cagg_4_hours_offset
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
   SELECT time_bucket('4 hour', time, '30m'::interval), max(value)
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:380: NOTICE:  refreshing continuous aggregate "cagg_4_hours_offset"
+psql:include/cagg_query_common.sql:381: NOTICE:  refreshing continuous aggregate "cagg_4_hours_offset"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_offset';
- user_view_schema |   user_view_name    |                          bucket_func                           | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+---------------------+----------------------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
- public           | cagg_4_hours_offset | public.time_bucket(interval,timestamp with time zone,interval) | @ 4 hours    |               | @ 30 mins     |                 | t
+ user_view_schema |   user_view_name    |                       bucket_func                       | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+---------------------+---------------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
+ public           | cagg_4_hours_offset | time_bucket(interval,timestamp with time zone,interval) | @ 4 hours    |               | @ 30 mins     |                 | t
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_offset;
-psql:include/cagg_query_common.sql:382: NOTICE:  drop cascades to table _timescaledb_internal._hyper_11_15_chunk
+psql:include/cagg_query_common.sql:383: NOTICE:  drop cascades to table _timescaledb_internal._hyper_11_15_chunk
 CREATE MATERIALIZED VIEW cagg_4_hours_offset2
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
   SELECT time_bucket('4 hour', time, "offset"=>'30m'::interval), max(value)
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:388: NOTICE:  refreshing continuous aggregate "cagg_4_hours_offset2"
+psql:include/cagg_query_common.sql:389: NOTICE:  refreshing continuous aggregate "cagg_4_hours_offset2"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_offset2';
- user_view_schema |    user_view_name    |                          bucket_func                           | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+----------------------+----------------------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
- public           | cagg_4_hours_offset2 | public.time_bucket(interval,timestamp with time zone,interval) | @ 4 hours    |               | @ 30 mins     |                 | t
+ user_view_schema |    user_view_name    |                       bucket_func                       | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+----------------------+---------------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
+ public           | cagg_4_hours_offset2 | time_bucket(interval,timestamp with time zone,interval) | @ 4 hours    |               | @ 30 mins     |                 | t
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_offset2;
-psql:include/cagg_query_common.sql:390: NOTICE:  drop cascades to table _timescaledb_internal._hyper_12_16_chunk
+psql:include/cagg_query_common.sql:391: NOTICE:  drop cascades to table _timescaledb_internal._hyper_12_16_chunk
 -- Variable buckets (timezone is provided) with offset
 CREATE MATERIALIZED VIEW cagg_4_hours_offset_ts
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
   SELECT time_bucket('4 hour', time, "offset"=>'30m'::interval, timezone=>'UTC'), max(value)
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:397: NOTICE:  refreshing continuous aggregate "cagg_4_hours_offset_ts"
+psql:include/cagg_query_common.sql:398: NOTICE:  refreshing continuous aggregate "cagg_4_hours_offset_ts"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_offset_ts';
- user_view_schema |     user_view_name     |                                               bucket_func                                               | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+------------------------+---------------------------------------------------------------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
- public           | cagg_4_hours_offset_ts | public.time_bucket(interval,timestamp with time zone,pg_catalog.text,timestamp with time zone,interval) | @ 4 hours    |               | @ 30 mins     | UTC             | f
+ user_view_schema |     user_view_name     |                                      bucket_func                                      | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+------------------------+---------------------------------------------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
+ public           | cagg_4_hours_offset_ts | time_bucket(interval,timestamp with time zone,text,timestamp with time zone,interval) | @ 4 hours    |               | @ 30 mins     | UTC             | f
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_offset_ts;
-psql:include/cagg_query_common.sql:399: NOTICE:  drop cascades to table _timescaledb_internal._hyper_13_17_chunk
+psql:include/cagg_query_common.sql:400: NOTICE:  drop cascades to table _timescaledb_internal._hyper_13_17_chunk
 CREATE MATERIALIZED VIEW cagg_4_hours_origin
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
   SELECT time_bucket('4 hour', time, '2000-01-01 01:00:00 PST'::timestamptz), max(value)
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:405: NOTICE:  refreshing continuous aggregate "cagg_4_hours_origin"
+psql:include/cagg_query_common.sql:406: NOTICE:  refreshing continuous aggregate "cagg_4_hours_origin"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_origin';
- user_view_schema |   user_view_name    |                                  bucket_func                                   | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+---------------------+--------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
- public           | cagg_4_hours_origin | public.time_bucket(interval,timestamp with time zone,timestamp with time zone) | @ 4 hours    | Sat Jan 01 01:00:00 2000 PST |               |                 | t
+ user_view_schema |   user_view_name    |                               bucket_func                               | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+---------------------+-------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
+ public           | cagg_4_hours_origin | time_bucket(interval,timestamp with time zone,timestamp with time zone) | @ 4 hours    | Sat Jan 01 01:00:00 2000 PST |               |                 | t
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_origin;
-psql:include/cagg_query_common.sql:407: NOTICE:  drop cascades to table _timescaledb_internal._hyper_14_18_chunk
+psql:include/cagg_query_common.sql:408: NOTICE:  drop cascades to table _timescaledb_internal._hyper_14_18_chunk
 -- Using named parameter
 CREATE MATERIALIZED VIEW cagg_4_hours_origin2
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
   SELECT time_bucket('4 hour', time, origin=>'2000-01-01 01:00:00 PST'::timestamptz), max(value)
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:414: NOTICE:  refreshing continuous aggregate "cagg_4_hours_origin2"
+psql:include/cagg_query_common.sql:415: NOTICE:  refreshing continuous aggregate "cagg_4_hours_origin2"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_origin2';
- user_view_schema |    user_view_name    |                                  bucket_func                                   | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+----------------------+--------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
- public           | cagg_4_hours_origin2 | public.time_bucket(interval,timestamp with time zone,timestamp with time zone) | @ 4 hours    | Sat Jan 01 01:00:00 2000 PST |               |                 | t
+ user_view_schema |    user_view_name    |                               bucket_func                               | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+----------------------+-------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
+ public           | cagg_4_hours_origin2 | time_bucket(interval,timestamp with time zone,timestamp with time zone) | @ 4 hours    | Sat Jan 01 01:00:00 2000 PST |               |                 | t
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_origin2;
-psql:include/cagg_query_common.sql:416: NOTICE:  drop cascades to table _timescaledb_internal._hyper_15_19_chunk
+psql:include/cagg_query_common.sql:417: NOTICE:  drop cascades to table _timescaledb_internal._hyper_15_19_chunk
 -- Variable buckets (timezone is provided) with origin
 CREATE MATERIALIZED VIEW cagg_4_hours_origin_ts
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
   SELECT time_bucket('4 hour', time, origin=>'2000-01-01 01:00:00 PST'::timestamptz, timezone=>'UTC'), max(value)
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:423: NOTICE:  refreshing continuous aggregate "cagg_4_hours_origin_ts"
+psql:include/cagg_query_common.sql:424: NOTICE:  refreshing continuous aggregate "cagg_4_hours_origin_ts"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_origin_ts';
- user_view_schema |     user_view_name     |                                               bucket_func                                               | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+------------------------+---------------------------------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
- public           | cagg_4_hours_origin_ts | public.time_bucket(interval,timestamp with time zone,pg_catalog.text,timestamp with time zone,interval) | @ 4 hours    | Sat Jan 01 01:00:00 2000 PST |               | UTC             | f
+ user_view_schema |     user_view_name     |                                      bucket_func                                      | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+------------------------+---------------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
+ public           | cagg_4_hours_origin_ts | time_bucket(interval,timestamp with time zone,text,timestamp with time zone,interval) | @ 4 hours    | Sat Jan 01 01:00:00 2000 PST |               | UTC             | f
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_origin_ts;
-psql:include/cagg_query_common.sql:425: NOTICE:  drop cascades to table _timescaledb_internal._hyper_16_20_chunk
+psql:include/cagg_query_common.sql:426: NOTICE:  drop cascades to table _timescaledb_internal._hyper_16_20_chunk
 -- Without named parameter
 CREATE MATERIALIZED VIEW cagg_4_hours_origin_ts2
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
   SELECT time_bucket('4 hour', time, 'UTC', '2000-01-01 01:00:00 PST'::timestamptz), max(value)
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:432: NOTICE:  refreshing continuous aggregate "cagg_4_hours_origin_ts2"
+psql:include/cagg_query_common.sql:433: NOTICE:  refreshing continuous aggregate "cagg_4_hours_origin_ts2"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_origin_ts2';
- user_view_schema |     user_view_name      |                                               bucket_func                                               | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+-------------------------+---------------------------------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
- public           | cagg_4_hours_origin_ts2 | public.time_bucket(interval,timestamp with time zone,pg_catalog.text,timestamp with time zone,interval) | @ 4 hours    | Sat Jan 01 01:00:00 2000 PST |               | UTC             | f
+ user_view_schema |     user_view_name      |                                      bucket_func                                      | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+-------------------------+---------------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
+ public           | cagg_4_hours_origin_ts2 | time_bucket(interval,timestamp with time zone,text,timestamp with time zone,interval) | @ 4 hours    | Sat Jan 01 01:00:00 2000 PST |               | UTC             | f
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_origin_ts2;
-psql:include/cagg_query_common.sql:434: NOTICE:  drop cascades to table _timescaledb_internal._hyper_17_21_chunk
+psql:include/cagg_query_common.sql:435: NOTICE:  drop cascades to table _timescaledb_internal._hyper_17_21_chunk
 -- Timestamp based CAggs
 CREATE MATERIALIZED VIEW cagg_4_hours_wo_tz
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
   SELECT time_bucket('4 hour', time), max(value)
     FROM temperature_wo_tz
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:441: NOTICE:  refreshing continuous aggregate "cagg_4_hours_wo_tz"
+psql:include/cagg_query_common.sql:442: NOTICE:  refreshing continuous aggregate "cagg_4_hours_wo_tz"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_wo_tz';
- user_view_schema |   user_view_name   |                       bucket_func                        | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+--------------------+----------------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
- public           | cagg_4_hours_wo_tz | public.time_bucket(interval,timestamp without time zone) | @ 4 hours    |               |               |                 | t
+ user_view_schema |   user_view_name   |                    bucket_func                    | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+--------------------+---------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
+ public           | cagg_4_hours_wo_tz | time_bucket(interval,timestamp without time zone) | @ 4 hours    |               |               |                 | t
 (1 row)
 
 CREATE MATERIALIZED VIEW cagg_4_hours_origin_ts_wo_tz
@@ -971,67 +972,67 @@ CREATE MATERIALIZED VIEW cagg_4_hours_origin_ts_wo_tz
   SELECT time_bucket('4 hour', time, '2000-01-01 01:00:00'::timestamp), max(value)
     FROM temperature_wo_tz
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:448: NOTICE:  refreshing continuous aggregate "cagg_4_hours_origin_ts_wo_tz"
+psql:include/cagg_query_common.sql:449: NOTICE:  refreshing continuous aggregate "cagg_4_hours_origin_ts_wo_tz"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_origin_ts_wo_tz';
- user_view_schema |        user_view_name        |                                     bucket_func                                      | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+------------------------------+--------------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
- public           | cagg_4_hours_origin_ts_wo_tz | public.time_bucket(interval,timestamp without time zone,timestamp without time zone) | @ 4 hours    | Fri Dec 31 17:00:00 1999 PST |               |                 | t
+ user_view_schema |        user_view_name        |                                  bucket_func                                  | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+------------------------------+-------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
+ public           | cagg_4_hours_origin_ts_wo_tz | time_bucket(interval,timestamp without time zone,timestamp without time zone) | @ 4 hours    | Fri Dec 31 17:00:00 1999 PST |               |                 | t
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_origin_ts_wo_tz;
-psql:include/cagg_query_common.sql:450: NOTICE:  drop cascades to table _timescaledb_internal._hyper_19_23_chunk
+psql:include/cagg_query_common.sql:451: NOTICE:  drop cascades to table _timescaledb_internal._hyper_19_23_chunk
 -- Variable buckets (timezone is provided) with origin
 CREATE MATERIALIZED VIEW cagg_4_hours_origin_ts_wo_tz2
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
   SELECT time_bucket('4 hour', time, origin=>'2000-01-01 01:00:00'::timestamp), max(value)
     FROM temperature_wo_tz
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:457: NOTICE:  refreshing continuous aggregate "cagg_4_hours_origin_ts_wo_tz2"
+psql:include/cagg_query_common.sql:458: NOTICE:  refreshing continuous aggregate "cagg_4_hours_origin_ts_wo_tz2"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_origin_ts_wo_tz2';
- user_view_schema |        user_view_name         |                                     bucket_func                                      | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+-------------------------------+--------------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
- public           | cagg_4_hours_origin_ts_wo_tz2 | public.time_bucket(interval,timestamp without time zone,timestamp without time zone) | @ 4 hours    | Fri Dec 31 17:00:00 1999 PST |               |                 | t
+ user_view_schema |        user_view_name         |                                  bucket_func                                  | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+-------------------------------+-------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
+ public           | cagg_4_hours_origin_ts_wo_tz2 | time_bucket(interval,timestamp without time zone,timestamp without time zone) | @ 4 hours    | Fri Dec 31 17:00:00 1999 PST |               |                 | t
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_origin_ts_wo_tz2;
-psql:include/cagg_query_common.sql:459: NOTICE:  drop cascades to table _timescaledb_internal._hyper_20_24_chunk
+psql:include/cagg_query_common.sql:460: NOTICE:  drop cascades to table _timescaledb_internal._hyper_20_24_chunk
 CREATE MATERIALIZED VIEW cagg_4_hours_offset_wo_tz
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
   SELECT time_bucket('4 hour', time, "offset"=>'30m'::interval), max(value)
     FROM temperature_wo_tz
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:465: NOTICE:  refreshing continuous aggregate "cagg_4_hours_offset_wo_tz"
+psql:include/cagg_query_common.sql:466: NOTICE:  refreshing continuous aggregate "cagg_4_hours_offset_wo_tz"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_offset_wo_tz';
- user_view_schema |      user_view_name       |                            bucket_func                            | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+---------------------------+-------------------------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
- public           | cagg_4_hours_offset_wo_tz | public.time_bucket(interval,timestamp without time zone,interval) | @ 4 hours    |               | @ 30 mins     |                 | t
+ user_view_schema |      user_view_name       |                        bucket_func                         | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+---------------------------+------------------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
+ public           | cagg_4_hours_offset_wo_tz | time_bucket(interval,timestamp without time zone,interval) | @ 4 hours    |               | @ 30 mins     |                 | t
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_offset_wo_tz;
-psql:include/cagg_query_common.sql:467: NOTICE:  drop cascades to table _timescaledb_internal._hyper_21_25_chunk
+psql:include/cagg_query_common.sql:468: NOTICE:  drop cascades to table _timescaledb_internal._hyper_21_25_chunk
 DROP MATERIALIZED VIEW cagg_4_hours_wo_tz;
-psql:include/cagg_query_common.sql:468: NOTICE:  drop cascades to table _timescaledb_internal._hyper_18_22_chunk
+psql:include/cagg_query_common.sql:469: NOTICE:  drop cascades to table _timescaledb_internal._hyper_18_22_chunk
 -- Date based CAggs
 CREATE MATERIALIZED VIEW cagg_4_hours_date
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
   SELECT time_bucket('4 days', time), max(value)
     FROM temperature_date
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:475: NOTICE:  refreshing continuous aggregate "cagg_4_hours_date"
+psql:include/cagg_query_common.sql:476: NOTICE:  refreshing continuous aggregate "cagg_4_hours_date"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_date';
- user_view_schema |  user_view_name   |                 bucket_func                  | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+-------------------+----------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
- public           | cagg_4_hours_date | public.time_bucket(interval,pg_catalog.date) | @ 4 days     |               |               |                 | t
+ user_view_schema |  user_view_name   |        bucket_func         | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+-------------------+----------------------------+--------------+---------------+---------------+-----------------+--------------------
+ public           | cagg_4_hours_date | time_bucket(interval,date) | @ 4 days     |               |               |                 | t
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_date;
-psql:include/cagg_query_common.sql:477: NOTICE:  drop cascades to table _timescaledb_internal._hyper_22_26_chunk
+psql:include/cagg_query_common.sql:478: NOTICE:  drop cascades to table _timescaledb_internal._hyper_22_26_chunk
 CREATE MATERIALIZED VIEW cagg_4_hours_date_origin
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
   SELECT time_bucket('4 days', time, '2000-01-01'::date), max(value)
     FROM temperature_date
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:483: NOTICE:  refreshing continuous aggregate "cagg_4_hours_date_origin"
+psql:include/cagg_query_common.sql:484: NOTICE:  refreshing continuous aggregate "cagg_4_hours_date_origin"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_date_origin';
  user_view_schema |      user_view_name      |                         bucket_func                          | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+--------------------------+--------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
@@ -1039,13 +1040,13 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_date_origin';
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_date_origin;
-psql:include/cagg_query_common.sql:485: NOTICE:  drop cascades to table _timescaledb_internal._hyper_23_27_chunk
+psql:include/cagg_query_common.sql:486: NOTICE:  drop cascades to table _timescaledb_internal._hyper_23_27_chunk
 CREATE MATERIALIZED VIEW cagg_4_hours_date_origin2
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
   SELECT time_bucket('4 days', time, origin=>'2000-01-01'::date), max(value)
     FROM temperature_date
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:491: NOTICE:  refreshing continuous aggregate "cagg_4_hours_date_origin2"
+psql:include/cagg_query_common.sql:492: NOTICE:  refreshing continuous aggregate "cagg_4_hours_date_origin2"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_date_origin2';
  user_view_schema |      user_view_name       |                         bucket_func                          | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+---------------------------+--------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
@@ -1053,87 +1054,87 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_date_origin2';
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_date_origin2;
-psql:include/cagg_query_common.sql:493: NOTICE:  drop cascades to table _timescaledb_internal._hyper_24_28_chunk
+psql:include/cagg_query_common.sql:494: NOTICE:  drop cascades to table _timescaledb_internal._hyper_24_28_chunk
 CREATE MATERIALIZED VIEW cagg_4_hours_date_offset
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
   SELECT time_bucket('4 days', time, "offset"=>'30m'::interval), max(value)
     FROM temperature_date
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:499: NOTICE:  refreshing continuous aggregate "cagg_4_hours_date_offset"
+psql:include/cagg_query_common.sql:500: NOTICE:  refreshing continuous aggregate "cagg_4_hours_date_offset"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_date_offset';
- user_view_schema |      user_view_name      |                      bucket_func                      | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+--------------------------+-------------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
- public           | cagg_4_hours_date_offset | public.time_bucket(interval,pg_catalog.date,interval) | @ 4 days     |               | @ 30 mins     |                 | t
+ user_view_schema |      user_view_name      |             bucket_func             | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+--------------------------+-------------------------------------+--------------+---------------+---------------+-----------------+--------------------
+ public           | cagg_4_hours_date_offset | time_bucket(interval,date,interval) | @ 4 days     |               | @ 30 mins     |                 | t
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_date_offset;
-psql:include/cagg_query_common.sql:501: NOTICE:  drop cascades to table _timescaledb_internal._hyper_25_29_chunk
+psql:include/cagg_query_common.sql:502: NOTICE:  drop cascades to table _timescaledb_internal._hyper_25_29_chunk
 -- Integer based CAggs
 CREATE MATERIALIZED VIEW cagg_smallint
     WITH (timescaledb.continuous, timescaledb.materialized_only=true)
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM table_smallint
         GROUP BY 1;
-psql:include/cagg_query_common.sql:508: NOTICE:  refreshing continuous aggregate "cagg_smallint"
+psql:include/cagg_query_common.sql:509: NOTICE:  refreshing continuous aggregate "cagg_smallint"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_smallint';
- user_view_schema | user_view_name |              bucket_func              | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+----------------+---------------------------------------+--------------+---------------+---------------+-----------------+--------------------
- public           | cagg_smallint  | public.time_bucket(smallint,smallint) | 2            |               |               |                 | t
+ user_view_schema | user_view_name |          bucket_func           | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+----------------+--------------------------------+--------------+---------------+---------------+-----------------+--------------------
+ public           | cagg_smallint  | time_bucket(smallint,smallint) | 2            |               |               |                 | t
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_smallint;
-psql:include/cagg_query_common.sql:510: NOTICE:  drop cascades to table _timescaledb_internal._hyper_26_30_chunk
+psql:include/cagg_query_common.sql:511: NOTICE:  drop cascades to table _timescaledb_internal._hyper_26_30_chunk
 CREATE MATERIALIZED VIEW cagg_smallint_offset
     WITH (timescaledb.continuous, timescaledb.materialized_only=true)
     AS SELECT time_bucket('2', time, "offset"=>1::smallint), SUM(data) as value
         FROM table_smallint
         GROUP BY 1;
-psql:include/cagg_query_common.sql:516: NOTICE:  refreshing continuous aggregate "cagg_smallint_offset"
+psql:include/cagg_query_common.sql:517: NOTICE:  refreshing continuous aggregate "cagg_smallint_offset"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_smallint_offset';
- user_view_schema |    user_view_name    |                  bucket_func                   | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+----------------------+------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
- public           | cagg_smallint_offset | public.time_bucket(smallint,smallint,smallint) | 2            |               | 1             |                 | t
+ user_view_schema |    user_view_name    |               bucket_func               | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+----------------------+-----------------------------------------+--------------+---------------+---------------+-----------------+--------------------
+ public           | cagg_smallint_offset | time_bucket(smallint,smallint,smallint) | 2            |               | 1             |                 | t
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_smallint_offset;
-psql:include/cagg_query_common.sql:518: NOTICE:  drop cascades to table _timescaledb_internal._hyper_27_31_chunk
+psql:include/cagg_query_common.sql:519: NOTICE:  drop cascades to table _timescaledb_internal._hyper_27_31_chunk
 CREATE MATERIALIZED VIEW cagg_int
     WITH (timescaledb.continuous, timescaledb.materialized_only=true)
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM table_int
         GROUP BY 1;
-psql:include/cagg_query_common.sql:524: NOTICE:  refreshing continuous aggregate "cagg_int"
+psql:include/cagg_query_common.sql:525: NOTICE:  refreshing continuous aggregate "cagg_int"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_int';
- user_view_schema | user_view_name |             bucket_func             | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+----------------+-------------------------------------+--------------+---------------+---------------+-----------------+--------------------
- public           | cagg_int       | public.time_bucket(integer,integer) | 2            |               |               |                 | t
+ user_view_schema | user_view_name |         bucket_func          | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+----------------+------------------------------+--------------+---------------+---------------+-----------------+--------------------
+ public           | cagg_int       | time_bucket(integer,integer) | 2            |               |               |                 | t
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_int;
-psql:include/cagg_query_common.sql:526: NOTICE:  drop cascades to table _timescaledb_internal._hyper_28_32_chunk
+psql:include/cagg_query_common.sql:527: NOTICE:  drop cascades to table _timescaledb_internal._hyper_28_32_chunk
 CREATE MATERIALIZED VIEW cagg_int_offset
     WITH (timescaledb.continuous, timescaledb.materialized_only=true)
     AS SELECT time_bucket('2', time, "offset"=>1::int), SUM(data) as value
         FROM table_int
         GROUP BY 1;
-psql:include/cagg_query_common.sql:532: NOTICE:  refreshing continuous aggregate "cagg_int_offset"
+psql:include/cagg_query_common.sql:533: NOTICE:  refreshing continuous aggregate "cagg_int_offset"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_int_offset';
- user_view_schema | user_view_name  |                 bucket_func                 | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+-----------------+---------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
- public           | cagg_int_offset | public.time_bucket(integer,integer,integer) | 2            |               | 1             |                 | t
+ user_view_schema | user_view_name  |             bucket_func              | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+-----------------+--------------------------------------+--------------+---------------+---------------+-----------------+--------------------
+ public           | cagg_int_offset | time_bucket(integer,integer,integer) | 2            |               | 1             |                 | t
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_int_offset;
-psql:include/cagg_query_common.sql:534: NOTICE:  drop cascades to table _timescaledb_internal._hyper_29_33_chunk
+psql:include/cagg_query_common.sql:535: NOTICE:  drop cascades to table _timescaledb_internal._hyper_29_33_chunk
 CREATE MATERIALIZED VIEW cagg_bigint
     WITH (timescaledb.continuous, timescaledb.materialized_only=true)
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM table_bigint
         GROUP BY 1 WITH NO DATA;
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_bigint';
- user_view_schema | user_view_name |            bucket_func            | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+----------------+-----------------------------------+--------------+---------------+---------------+-----------------+--------------------
- public           | cagg_bigint    | public.time_bucket(bigint,bigint) | 2            |               |               |                 | t
+ user_view_schema | user_view_name |        bucket_func         | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+----------------+----------------------------+--------------+---------------+---------------+-----------------+--------------------
+ public           | cagg_bigint    | time_bucket(bigint,bigint) | 2            |               |               |                 | t
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_bigint;
@@ -1143,9 +1144,9 @@ CREATE MATERIALIZED VIEW cagg_bigint_offset
         FROM table_bigint
         GROUP BY 1 WITH NO DATA;
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_bigint_offset';
- user_view_schema |   user_view_name   |               bucket_func                | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+--------------------+------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
- public           | cagg_bigint_offset | public.time_bucket(bigint,bigint,bigint) | 2            |               | 1             |                 | t
+ user_view_schema |   user_view_name   |            bucket_func            | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+--------------------+-----------------------------------+--------------+---------------+---------------+-----------------+--------------------
+ public           | cagg_bigint_offset | time_bucket(bigint,bigint,bigint) | 2            |               | 1             |                 | t
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_bigint_offset;
@@ -1156,22 +1157,11 @@ CREATE MATERIALIZED VIEW cagg_bigint_offset2
         FROM table_bigint
         GROUP BY 1 WITH NO DATA;
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_bigint_offset2';
- user_view_schema |   user_view_name    |               bucket_func                | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+---------------------+------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
- public           | cagg_bigint_offset2 | public.time_bucket(bigint,bigint,bigint) | 2            |               | 1             |                 | t
+ user_view_schema |   user_view_name    |            bucket_func            | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+---------------------+-----------------------------------+--------------+---------------+---------------+-----------------+--------------------
+ public           | cagg_bigint_offset2 | time_bucket(bigint,bigint,bigint) | 2            |               | 1             |                 | t
 (1 row)
 
--- mess with the bucket_func signature to make sure it will raise an exception
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
-\set ON_ERROR_STOP 0
-BEGIN;
-UPDATE _timescaledb_catalog.continuous_aggs_bucket_function SET bucket_func = 'func_does_not_exist()';
--- should error because function does not exist
-CALL refresh_continuous_aggregate('cagg_bigint_offset2', NULL, NULL);
-psql:include/cagg_query_common.sql:566: ERROR:  function "func_does_not_exist()" does not exist
-ROLLBACK;
-\set ON_ERROR_STOP 1
-SET ROLE :ROLE_DEFAULT_PERM_USER;
 DROP MATERIALIZED VIEW cagg_bigint_offset2;
 -- Test invalid bucket definitions
 \set ON_ERROR_STOP 0
@@ -1181,14 +1171,14 @@ CREATE MATERIALIZED VIEW cagg_4_hours_offset_and_origin
   SELECT time_bucket('4 hour', time, "offset"=>'30m'::interval, origin=>'2000-01-01 01:00:00 PST'::timestamptz), max(value)
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:580: ERROR:  function time_bucket(unknown, timestamp with time zone, offset => interval, origin => timestamp with time zone) does not exist at character 140
+psql:include/cagg_query_common.sql:570: ERROR:  function time_bucket(unknown, timestamp with time zone, offset => interval, origin => timestamp with time zone) does not exist at character 140
 -- Offset and origin at the same time is not allowed (function does exists but invalid parameter combination)
 CREATE MATERIALIZED VIEW cagg_4_hours_offset_and_origin
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
   SELECT time_bucket('4 hour', time, "offset"=>'30m'::interval, origin=>'2000-01-01 01:00:00 PST'::timestamptz, timezone=>'UTC'), max(value)
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:587: ERROR:  using offset and origin in a time_bucket function at the same time is not supported
+psql:include/cagg_query_common.sql:577: ERROR:  using offset and origin in a time_bucket function at the same time is not supported
 \set ON_ERROR_STOP 1
 ---
 -- Tests with CAgg processing
@@ -1215,20 +1205,20 @@ CREATE MATERIALIZED VIEW cagg_4_hours
   SELECT time_bucket('4 hour', time), max(value)
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:613: NOTICE:  refreshing continuous aggregate "cagg_4_hours"
+psql:include/cagg_query_common.sql:603: NOTICE:  refreshing continuous aggregate "cagg_4_hours"
 CREATE MATERIALIZED VIEW cagg_4_hours_offset
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
   SELECT time_bucket('4 hour', time, '30m'::interval), max(value)
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:619: NOTICE:  refreshing continuous aggregate "cagg_4_hours_offset"
+psql:include/cagg_query_common.sql:609: NOTICE:  refreshing continuous aggregate "cagg_4_hours_offset"
 -- Align origin with first value
 CREATE MATERIALIZED VIEW cagg_4_hours_origin
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
   SELECT time_bucket('4 hour', time, '2000-01-01 01:00:00 PST'::timestamptz), max(value)
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:626: NOTICE:  refreshing continuous aggregate "cagg_4_hours_origin"
+psql:include/cagg_query_common.sql:616: NOTICE:  refreshing continuous aggregate "cagg_4_hours_origin"
 -- Query the CAggs and check that all buckets are materialized
 SELECT time_bucket('4 hour', time), max(value) FROM temperature GROUP BY 1 ORDER BY 1;
          time_bucket          | max 
@@ -1537,24 +1527,24 @@ SELECT * FROM cagg_4_hours_origin;
 -- Update materialized data
 SET client_min_messages TO DEBUG1;
 CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL);
-psql:include/cagg_query_common.sql:683: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL);
-psql:include/cagg_query_common.sql:683: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours" in window [ Thu Jan 02 00:00:00 2020 PST, Thu Jan 02 12:00:00 2020 PST ]
-psql:include/cagg_query_common.sql:683: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_33"
-psql:include/cagg_query_common.sql:683: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_33"
+psql:include/cagg_query_common.sql:673: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL);
+psql:include/cagg_query_common.sql:673: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours" in window [ Thu Jan 02 00:00:00 2020 PST, Thu Jan 02 12:00:00 2020 PST ]
+psql:include/cagg_query_common.sql:673: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_33"
+psql:include/cagg_query_common.sql:673: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_33"
 CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL);
-psql:include/cagg_query_common.sql:684: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL);
-psql:include/cagg_query_common.sql:684: DEBUG:  hypertable 4 existing watermark >= new invalidation threshold 1577995200000000 1577995200000000
-psql:include/cagg_query_common.sql:684: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_offset" in window [ Wed Jan 01 20:30:00 2020 PST, Thu Jan 02 12:30:00 2020 PST ]
-psql:include/cagg_query_common.sql:684: LOG:  deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_34"
-psql:include/cagg_query_common.sql:684: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_34"
+psql:include/cagg_query_common.sql:674: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL);
+psql:include/cagg_query_common.sql:674: DEBUG:  hypertable 4 existing watermark >= new invalidation threshold 1577995200000000 1577995200000000
+psql:include/cagg_query_common.sql:674: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_offset" in window [ Wed Jan 01 20:30:00 2020 PST, Thu Jan 02 12:30:00 2020 PST ]
+psql:include/cagg_query_common.sql:674: LOG:  deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_34"
+psql:include/cagg_query_common.sql:674: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_34"
 CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL);
-psql:include/cagg_query_common.sql:685: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL);
-psql:include/cagg_query_common.sql:685: DEBUG:  hypertable 4 existing watermark >= new invalidation threshold 1577995200000000 1577995200000000
-psql:include/cagg_query_common.sql:685: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_origin" in window [ Wed Jan 01 21:00:00 2020 PST, Thu Jan 02 13:00:00 2020 PST ]
-psql:include/cagg_query_common.sql:685: LOG:  deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_35"
-psql:include/cagg_query_common.sql:685: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_35"
+psql:include/cagg_query_common.sql:675: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL);
+psql:include/cagg_query_common.sql:675: DEBUG:  hypertable 4 existing watermark >= new invalidation threshold 1577995200000000 1577995200000000
+psql:include/cagg_query_common.sql:675: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_origin" in window [ Wed Jan 01 21:00:00 2020 PST, Thu Jan 02 13:00:00 2020 PST ]
+psql:include/cagg_query_common.sql:675: LOG:  deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_35"
+psql:include/cagg_query_common.sql:675: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_35"
 RESET client_min_messages;
-psql:include/cagg_query_common.sql:686: LOG:  statement: RESET client_min_messages;
+psql:include/cagg_query_common.sql:676: LOG:  statement: RESET client_min_messages;
 -- Query the CAggs and check that all buckets are materialized
 SELECT * FROM cagg_4_hours;
          time_bucket          | max  
@@ -1757,40 +1747,40 @@ INSERT INTO temperature values('2020-01-02 01:35:00+01', 5555);
 INSERT INTO temperature values('2020-01-02 05:05:00+01', 8888);
 SET client_min_messages TO DEBUG1;
 CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL);
-psql:include/cagg_query_common.sql:725: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL);
-psql:include/cagg_query_common.sql:725: DEBUG:  hypertable 4 existing watermark >= new invalidation threshold 1577995200000000 1577952000000000
-psql:include/cagg_query_common.sql:725: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours" in window [ Sat Jan 01 00:00:00 2000 PST, Sun Jan 02 00:00:00 2000 PST ]
-psql:include/cagg_query_common.sql:725: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_33"
-psql:include/cagg_query_common.sql:725: LOG:  inserted 6 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_33"
-psql:include/cagg_query_common.sql:725: DEBUG:  hypertable 33 existing watermark >= new watermark 1577995200000000 946800000000000
-psql:include/cagg_query_common.sql:725: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours" in window [ Wed Jan 01 00:00:00 2020 PST, Thu Jan 02 00:00:00 2020 PST ]
-psql:include/cagg_query_common.sql:725: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_33"
-psql:include/cagg_query_common.sql:725: LOG:  inserted 6 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_33"
-psql:include/cagg_query_common.sql:725: DEBUG:  hypertable 33 existing watermark >= new watermark 1577995200000000 1577952000000000
+psql:include/cagg_query_common.sql:715: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL);
+psql:include/cagg_query_common.sql:715: DEBUG:  hypertable 4 existing watermark >= new invalidation threshold 1577995200000000 1577952000000000
+psql:include/cagg_query_common.sql:715: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours" in window [ Sat Jan 01 00:00:00 2000 PST, Sun Jan 02 00:00:00 2000 PST ]
+psql:include/cagg_query_common.sql:715: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_33"
+psql:include/cagg_query_common.sql:715: LOG:  inserted 6 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_33"
+psql:include/cagg_query_common.sql:715: DEBUG:  hypertable 33 existing watermark >= new watermark 1577995200000000 946800000000000
+psql:include/cagg_query_common.sql:715: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours" in window [ Wed Jan 01 00:00:00 2020 PST, Thu Jan 02 00:00:00 2020 PST ]
+psql:include/cagg_query_common.sql:715: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_33"
+psql:include/cagg_query_common.sql:715: LOG:  inserted 6 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_33"
+psql:include/cagg_query_common.sql:715: DEBUG:  hypertable 33 existing watermark >= new watermark 1577995200000000 1577952000000000
 CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL);
-psql:include/cagg_query_common.sql:726: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL);
-psql:include/cagg_query_common.sql:726: DEBUG:  hypertable 4 existing watermark >= new invalidation threshold 1577995200000000 1577952000000000
-psql:include/cagg_query_common.sql:726: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_offset" in window [ Fri Dec 31 20:30:00 1999 PST, Sun Jan 02 00:30:00 2000 PST ]
-psql:include/cagg_query_common.sql:726: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_34"
-psql:include/cagg_query_common.sql:726: LOG:  inserted 6 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_34"
-psql:include/cagg_query_common.sql:726: DEBUG:  hypertable 34 existing watermark >= new watermark 1577997000000000 946801800000000
-psql:include/cagg_query_common.sql:726: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_offset" in window [ Tue Dec 31 20:30:00 2019 PST, Thu Jan 02 00:30:00 2020 PST ]
-psql:include/cagg_query_common.sql:726: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_34"
-psql:include/cagg_query_common.sql:726: LOG:  inserted 7 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_34"
-psql:include/cagg_query_common.sql:726: DEBUG:  hypertable 34 existing watermark >= new watermark 1577997000000000 1577953800000000
+psql:include/cagg_query_common.sql:716: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL);
+psql:include/cagg_query_common.sql:716: DEBUG:  hypertable 4 existing watermark >= new invalidation threshold 1577995200000000 1577952000000000
+psql:include/cagg_query_common.sql:716: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_offset" in window [ Fri Dec 31 20:30:00 1999 PST, Sun Jan 02 00:30:00 2000 PST ]
+psql:include/cagg_query_common.sql:716: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_34"
+psql:include/cagg_query_common.sql:716: LOG:  inserted 6 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_34"
+psql:include/cagg_query_common.sql:716: DEBUG:  hypertable 34 existing watermark >= new watermark 1577997000000000 946801800000000
+psql:include/cagg_query_common.sql:716: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_offset" in window [ Tue Dec 31 20:30:00 2019 PST, Thu Jan 02 00:30:00 2020 PST ]
+psql:include/cagg_query_common.sql:716: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_34"
+psql:include/cagg_query_common.sql:716: LOG:  inserted 7 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_34"
+psql:include/cagg_query_common.sql:716: DEBUG:  hypertable 34 existing watermark >= new watermark 1577997000000000 1577953800000000
 CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL);
-psql:include/cagg_query_common.sql:727: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL);
-psql:include/cagg_query_common.sql:727: DEBUG:  hypertable 4 existing watermark >= new invalidation threshold 1577995200000000 1577952000000000
-psql:include/cagg_query_common.sql:727: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_origin" in window [ Fri Dec 31 21:00:00 1999 PST, Sun Jan 02 01:00:00 2000 PST ]
-psql:include/cagg_query_common.sql:727: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_35"
-psql:include/cagg_query_common.sql:727: LOG:  inserted 6 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_35"
-psql:include/cagg_query_common.sql:727: DEBUG:  hypertable 35 existing watermark >= new watermark 1577998800000000 946803600000000
-psql:include/cagg_query_common.sql:727: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_origin" in window [ Tue Dec 31 21:00:00 2019 PST, Thu Jan 02 01:00:00 2020 PST ]
-psql:include/cagg_query_common.sql:727: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_35"
-psql:include/cagg_query_common.sql:727: LOG:  inserted 7 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_35"
-psql:include/cagg_query_common.sql:727: DEBUG:  hypertable 35 existing watermark >= new watermark 1577998800000000 1577955600000000
+psql:include/cagg_query_common.sql:717: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL);
+psql:include/cagg_query_common.sql:717: DEBUG:  hypertable 4 existing watermark >= new invalidation threshold 1577995200000000 1577952000000000
+psql:include/cagg_query_common.sql:717: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_origin" in window [ Fri Dec 31 21:00:00 1999 PST, Sun Jan 02 01:00:00 2000 PST ]
+psql:include/cagg_query_common.sql:717: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_35"
+psql:include/cagg_query_common.sql:717: LOG:  inserted 6 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_35"
+psql:include/cagg_query_common.sql:717: DEBUG:  hypertable 35 existing watermark >= new watermark 1577998800000000 946803600000000
+psql:include/cagg_query_common.sql:717: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_origin" in window [ Tue Dec 31 21:00:00 2019 PST, Thu Jan 02 01:00:00 2020 PST ]
+psql:include/cagg_query_common.sql:717: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_35"
+psql:include/cagg_query_common.sql:717: LOG:  inserted 7 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_35"
+psql:include/cagg_query_common.sql:717: DEBUG:  hypertable 35 existing watermark >= new watermark 1577998800000000 1577955600000000
 RESET client_min_messages;
-psql:include/cagg_query_common.sql:728: LOG:  statement: RESET client_min_messages;
+psql:include/cagg_query_common.sql:718: LOG:  statement: RESET client_min_messages;
 ALTER MATERIALIZED VIEW cagg_4_hours SET (timescaledb.materialized_only=true);
 SELECT * FROM cagg_4_hours;
          time_bucket          | max  
@@ -1986,7 +1976,7 @@ CREATE MATERIALIZED VIEW cagg_1_year
   SELECT time_bucket('1 year', time), max(value)
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:766: NOTICE:  refreshing continuous aggregate "cagg_1_year"
+psql:include/cagg_query_common.sql:756: NOTICE:  refreshing continuous aggregate "cagg_1_year"
 SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log ORDER BY 1, 2, 3;
  materialization_id | lowest_modified_value | greatest_modified_value 
 --------------------+-----------------------+-------------------------
@@ -2018,13 +2008,13 @@ CREATE MATERIALIZED VIEW cagg_int
     AS SELECT time_bucket('10', time), SUM(data) as value
         FROM table_int
         GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:783: NOTICE:  refreshing continuous aggregate "cagg_int"
+psql:include/cagg_query_common.sql:773: NOTICE:  refreshing continuous aggregate "cagg_int"
 CREATE MATERIALIZED VIEW cagg_int_offset
     WITH (timescaledb.continuous, timescaledb.materialized_only=false)
     AS SELECT time_bucket('10', time, "offset"=>5), SUM(data) as value
         FROM table_int
         GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:789: NOTICE:  refreshing continuous aggregate "cagg_int_offset"
+psql:include/cagg_query_common.sql:779: NOTICE:  refreshing continuous aggregate "cagg_int_offset"
 -- Compare bucketing results
 SELECT time_bucket('10', time), SUM(data) FROM table_int GROUP BY 1 ORDER BY 1;
  time_bucket | sum 
@@ -2239,14 +2229,14 @@ SELECT * FROM cagg_int_offset;
 INSERT INTO table_int VALUES(114, 0);
 SET client_min_messages TO DEBUG1;
 CALL refresh_continuous_aggregate('cagg_int_offset', 110, 130);
-psql:include/cagg_query_common.sql:824: LOG:  statement: CALL refresh_continuous_aggregate('cagg_int_offset', 110, 130);
-psql:include/cagg_query_common.sql:824: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_int_offset" in window [ 105, 135 ]
-psql:include/cagg_query_common.sql:824: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_38"
-psql:include/cagg_query_common.sql:824: DEBUG:  building index "_hyper_38_67_chunk__materialized_hypertable_38_time_bucket_idx" on table "_hyper_38_67_chunk" serially
-psql:include/cagg_query_common.sql:824: DEBUG:  index "_hyper_38_67_chunk__materialized_hypertable_38_time_bucket_idx" can safely use deduplication
-psql:include/cagg_query_common.sql:824: LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_38"
+psql:include/cagg_query_common.sql:814: LOG:  statement: CALL refresh_continuous_aggregate('cagg_int_offset', 110, 130);
+psql:include/cagg_query_common.sql:814: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_int_offset" in window [ 105, 135 ]
+psql:include/cagg_query_common.sql:814: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_38"
+psql:include/cagg_query_common.sql:814: DEBUG:  building index "_hyper_38_67_chunk__materialized_hypertable_38_time_bucket_idx" on table "_hyper_38_67_chunk" serially
+psql:include/cagg_query_common.sql:814: DEBUG:  index "_hyper_38_67_chunk__materialized_hypertable_38_time_bucket_idx" can safely use deduplication
+psql:include/cagg_query_common.sql:814: LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_38"
 RESET client_min_messages;
-psql:include/cagg_query_common.sql:825: LOG:  statement: RESET client_min_messages;
+psql:include/cagg_query_common.sql:815: LOG:  statement: RESET client_min_messages;
 SELECT * FROM cagg_int_offset;
  time_bucket | value 
 -------------+-------
@@ -2289,45 +2279,45 @@ CREATE MATERIALIZED VIEW cagg_1_hour_variable_bucket_fixed_origin
   SELECT time_bucket('1 year', time, origin=>'2000-01-01 01:05:00 UTC'::timestamptz, timezone=>'UTC') AS hour_bucket, max(value) AS max_value
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:835: NOTICE:  refreshing continuous aggregate "cagg_1_hour_variable_bucket_fixed_origin"
+psql:include/cagg_query_common.sql:825: NOTICE:  refreshing continuous aggregate "cagg_1_hour_variable_bucket_fixed_origin"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_1_hour_variable_bucket_fixed_origin';
- user_view_schema |              user_view_name              |                                               bucket_func                                               | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+------------------------------------------+---------------------------------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
- public           | cagg_1_hour_variable_bucket_fixed_origin | public.time_bucket(interval,timestamp with time zone,pg_catalog.text,timestamp with time zone,interval) | @ 1 year     | Fri Dec 31 17:05:00 1999 PST |               | UTC             | f
+ user_view_schema |              user_view_name              |                                      bucket_func                                      | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+------------------------------------------+---------------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
+ public           | cagg_1_hour_variable_bucket_fixed_origin | time_bucket(interval,timestamp with time zone,text,timestamp with time zone,interval) | @ 1 year     | Fri Dec 31 17:05:00 1999 PST |               | UTC             | f
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_1_hour_variable_bucket_fixed_origin;
-psql:include/cagg_query_common.sql:837: NOTICE:  drop cascades to 2 other objects
+psql:include/cagg_query_common.sql:827: NOTICE:  drop cascades to 2 other objects
 -- Variable due to the used timezone
 CREATE MATERIALIZED VIEW cagg_1_hour_variable_bucket_fixed_origin2
   WITH (timescaledb.continuous) AS
   SELECT time_bucket('1 hour', time, origin=>'2000-01-01 01:05:00 UTC'::timestamptz, timezone=>'UTC') AS hour_bucket, max(value) AS max_value
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:844: NOTICE:  refreshing continuous aggregate "cagg_1_hour_variable_bucket_fixed_origin2"
+psql:include/cagg_query_common.sql:834: NOTICE:  refreshing continuous aggregate "cagg_1_hour_variable_bucket_fixed_origin2"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_1_hour_variable_bucket_fixed_origin2';
- user_view_schema |              user_view_name               |                                               bucket_func                                               | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+-------------------------------------------+---------------------------------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
- public           | cagg_1_hour_variable_bucket_fixed_origin2 | public.time_bucket(interval,timestamp with time zone,pg_catalog.text,timestamp with time zone,interval) | @ 1 hour     | Fri Dec 31 17:05:00 1999 PST |               | UTC             | f
+ user_view_schema |              user_view_name               |                                      bucket_func                                      | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+-------------------------------------------+---------------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
+ public           | cagg_1_hour_variable_bucket_fixed_origin2 | time_bucket(interval,timestamp with time zone,text,timestamp with time zone,interval) | @ 1 hour     | Fri Dec 31 17:05:00 1999 PST |               | UTC             | f
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_1_hour_variable_bucket_fixed_origin2;
-psql:include/cagg_query_common.sql:846: NOTICE:  drop cascades to 2 other objects
+psql:include/cagg_query_common.sql:836: NOTICE:  drop cascades to 2 other objects
 -- Variable with offset
 CREATE MATERIALIZED VIEW cagg_1_hour_variable_bucket_fixed_origin3
   WITH (timescaledb.continuous) AS
   SELECT time_bucket('1 year', time, "offset"=>'5 minutes'::interval) AS hour_bucket, max(value) AS max_value
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:853: NOTICE:  refreshing continuous aggregate "cagg_1_hour_variable_bucket_fixed_origin3"
+psql:include/cagg_query_common.sql:843: NOTICE:  refreshing continuous aggregate "cagg_1_hour_variable_bucket_fixed_origin3"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_1_hour_variable_bucket_fixed_origin3';
- user_view_schema |              user_view_name               |                          bucket_func                           | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+-------------------------------------------+----------------------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
- public           | cagg_1_hour_variable_bucket_fixed_origin3 | public.time_bucket(interval,timestamp with time zone,interval) | @ 1 year     |               | @ 5 mins      |                 | f
+ user_view_schema |              user_view_name               |                       bucket_func                       | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+-------------------------------------------+---------------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
+ public           | cagg_1_hour_variable_bucket_fixed_origin3 | time_bucket(interval,timestamp with time zone,interval) | @ 1 year     |               | @ 5 mins      |                 | f
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_1_hour_variable_bucket_fixed_origin3;
-psql:include/cagg_query_common.sql:855: NOTICE:  drop cascades to 2 other objects
+psql:include/cagg_query_common.sql:845: NOTICE:  drop cascades to 2 other objects
 ---
 -- Test with blocking a few broken configurations
 ---
@@ -2340,26 +2330,26 @@ CREATE MATERIALIZED VIEW cagg_1_hour_origin
   SELECT time_bucket('1 hour', time, origin=>'2000-01-02 01:00:00 PST'::timestamptz) AS hour_bucket, max(value) AS max_value
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:870: NOTICE:  refreshing continuous aggregate "cagg_1_hour_origin"
+psql:include/cagg_query_common.sql:860: NOTICE:  refreshing continuous aggregate "cagg_1_hour_origin"
 CREATE MATERIALIZED VIEW cagg_1_week_origin
   WITH (timescaledb.continuous) AS
   SELECT time_bucket('1 week', hour_bucket, origin=>'2022-01-02 01:00:00 PST'::timestamptz) AS week_bucket, max(max_value) AS max_value
     FROM cagg_1_hour_origin
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:876: ERROR:  cannot create continuous aggregate with different bucket origin values
+psql:include/cagg_query_common.sql:866: ERROR:  cannot create continuous aggregate with different bucket origin values
 -- Different time offset
 CREATE MATERIALIZED VIEW cagg_1_hour_offset
   WITH (timescaledb.continuous) AS
   SELECT time_bucket('1 hour', time, "offset"=>'30m'::interval) AS hour_bucket, max(value) AS max_value
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:883: NOTICE:  refreshing continuous aggregate "cagg_1_hour_offset"
+psql:include/cagg_query_common.sql:873: NOTICE:  refreshing continuous aggregate "cagg_1_hour_offset"
 CREATE MATERIALIZED VIEW cagg_1_week_offset
   WITH (timescaledb.continuous) AS
   SELECT time_bucket('1 week', hour_bucket, "offset"=>'35m'::interval) AS week_bucket, max(max_value) AS max_value
     FROM cagg_1_hour_offset
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:889: ERROR:  cannot create continuous aggregate with different bucket offset values
+psql:include/cagg_query_common.sql:879: ERROR:  cannot create continuous aggregate with different bucket offset values
 -- Cagg with NULL offset on top of cagg with non-NULL offset
 \set VERBOSITY default
 CREATE MATERIALIZED VIEW cagg_1_week_null_offset
@@ -2367,7 +2357,7 @@ CREATE MATERIALIZED VIEW cagg_1_week_null_offset
   SELECT time_bucket('1 week', hour_bucket, "offset"=>NULL::interval) AS week_bucket, max(max_value) AS max_value
     FROM cagg_1_hour_offset
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:897: ERROR:  cannot create continuous aggregate with different bucket offset values
+psql:include/cagg_query_common.sql:887: ERROR:  cannot create continuous aggregate with different bucket offset values
 DETAIL:  Time origin of "public.cagg_1_week_null_offset" [NULL] and "public.cagg_1_hour_offset" [@ 30 mins] should be the same.
 -- Cagg with non-NULL offset on top of cagg with NULL offset
 CREATE MATERIALIZED VIEW cagg_1_hour_null_offset
@@ -2375,14 +2365,14 @@ CREATE MATERIALIZED VIEW cagg_1_hour_null_offset
   SELECT time_bucket('1 hour', time, "offset"=>NULL::interval) AS hour_bucket, max(value) AS max_value
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:904: NOTICE:  refreshing continuous aggregate "cagg_1_hour_null_offset"
+psql:include/cagg_query_common.sql:894: NOTICE:  refreshing continuous aggregate "cagg_1_hour_null_offset"
 HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
 CREATE MATERIALIZED VIEW cagg_1_week_non_null_offset
   WITH (timescaledb.continuous) AS
   SELECT time_bucket('1 week', hour_bucket, "offset"=>'35m'::interval) AS week_bucket, max(max_value) AS max_value
     FROM cagg_1_hour_null_offset
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:910: ERROR:  cannot create continuous aggregate with different bucket offset values
+psql:include/cagg_query_common.sql:900: ERROR:  cannot create continuous aggregate with different bucket offset values
 DETAIL:  Time origin of "public.cagg_1_week_non_null_offset" [@ 35 mins] and "public.cagg_1_hour_null_offset" [NULL] should be the same.
 \set VERBOSITY terse
 -- Different integer offset
@@ -2391,20 +2381,20 @@ CREATE MATERIALIZED VIEW cagg_int_offset_5
     AS SELECT time_bucket('10', time, "offset"=>5) AS time, SUM(data) AS value
         FROM table_int
         GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:918: NOTICE:  refreshing continuous aggregate "cagg_int_offset_5"
+psql:include/cagg_query_common.sql:908: NOTICE:  refreshing continuous aggregate "cagg_int_offset_5"
 CREATE MATERIALIZED VIEW cagg_int_offset_10
     WITH (timescaledb.continuous, timescaledb.materialized_only=false)
     AS SELECT time_bucket('10', time, "offset"=>10) AS time, SUM(value) AS value
         FROM cagg_int_offset_5
         GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:924: ERROR:  cannot create continuous aggregate with different bucket offset values
+psql:include/cagg_query_common.sql:914: ERROR:  cannot create continuous aggregate with different bucket offset values
 \set ON_ERROR_STOP 1
 DROP MATERIALIZED VIEW cagg_1_hour_origin;
-psql:include/cagg_query_common.sql:928: NOTICE:  drop cascades to 2 other objects
+psql:include/cagg_query_common.sql:918: NOTICE:  drop cascades to 2 other objects
 DROP MATERIALIZED VIEW cagg_1_hour_offset;
-psql:include/cagg_query_common.sql:929: NOTICE:  drop cascades to 2 other objects
+psql:include/cagg_query_common.sql:919: NOTICE:  drop cascades to 2 other objects
 DROP MATERIALIZED VIEW cagg_int_offset_5;
-psql:include/cagg_query_common.sql:930: NOTICE:  drop cascades to 3 other objects
+psql:include/cagg_query_common.sql:920: NOTICE:  drop cascades to 3 other objects
 ---
 -- CAGGs on CAGGs tests
 ---
@@ -2413,11 +2403,11 @@ CREATE MATERIALIZED VIEW cagg_1_hour_offset
   SELECT time_bucket('1 hour', time, origin=>'2000-01-02 01:00:00 PST'::timestamptz) AS hour_bucket, max(value) AS max_value
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:939: NOTICE:  refreshing continuous aggregate "cagg_1_hour_offset"
+psql:include/cagg_query_common.sql:929: NOTICE:  refreshing continuous aggregate "cagg_1_hour_offset"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_1_hour_offset';
- user_view_schema |   user_view_name   |                                  bucket_func                                   | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+--------------------+--------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
- public           | cagg_1_hour_offset | public.time_bucket(interval,timestamp with time zone,timestamp with time zone) | @ 1 hour     | Sun Jan 02 01:00:00 2000 PST |               |                 | t
+ user_view_schema |   user_view_name   |                               bucket_func                               | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+--------------------+-------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
+ public           | cagg_1_hour_offset | time_bucket(interval,timestamp with time zone,timestamp with time zone) | @ 1 hour     | Sun Jan 02 01:00:00 2000 PST |               |                 | t
 (1 row)
 
 CREATE MATERIALIZED VIEW cagg_1_week_offset
@@ -2425,11 +2415,11 @@ CREATE MATERIALIZED VIEW cagg_1_week_offset
   SELECT time_bucket('1 week', hour_bucket, origin=>'2000-01-02 01:00:00 PST'::timestamptz) AS week_bucket, max(max_value) AS max_value
     FROM cagg_1_hour_offset
     GROUP BY 1 ORDER BY 1;
-psql:include/cagg_query_common.sql:946: NOTICE:  refreshing continuous aggregate "cagg_1_week_offset"
+psql:include/cagg_query_common.sql:936: NOTICE:  refreshing continuous aggregate "cagg_1_week_offset"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_1_week_offset';
- user_view_schema |   user_view_name   |                                  bucket_func                                   | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+--------------------+--------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
- public           | cagg_1_week_offset | public.time_bucket(interval,timestamp with time zone,timestamp with time zone) | @ 7 days     | Sun Jan 02 01:00:00 2000 PST |               |                 | t
+ user_view_schema |   user_view_name   |                               bucket_func                               | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+--------------------+-------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
+ public           | cagg_1_week_offset | time_bucket(interval,timestamp with time zone,timestamp with time zone) | @ 7 days     | Sun Jan 02 01:00:00 2000 PST |               |                 | t
 (1 row)
 
 -- Compare output
