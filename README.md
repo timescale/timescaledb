@@ -89,16 +89,20 @@ Insert and query data in a hypertable via regular SQL commands. For example:
     ```sql
     INSERT INTO conditions
       VALUES
-        (NOW(), 'office', 70.0, 50.0),
-        (NOW(), 'basement', 66.5, 60.0),
-        (NOW(), 'garage', 77.0, 65.2);
+        (pg_catalog.now(), 'office',   70.0, 50.0),
+        (pg_catalog.now(), 'basement', 66.5, 60.0),
+        (pg_catalog.now(), 'garage',   77.0, 65.2);
     ```
 
 - Return the number of entries written to the table conditions in the last 12 hours:
 
     ```sql
-    SELECT COUNT(*) FROM conditions
-      WHERE time > NOW() - INTERVAL '12 hours';
+    SELECT
+      COUNT(*)
+    FROM
+      conditions
+    WHERE
+      time > NOW() - INTERVAL '12 hours';
     ```
 
 See more:
@@ -123,7 +127,14 @@ When you enable compression, the data in your hypertable is compressed chunk by 
 - Compress hypertable chunks manually:
 
     ```sql
-    SELECT compress_chunk(chunk, if_not_compressed => true) FROM show_chunks( 'conditions', now()::timestamp - INTERVAL '1 week', now()::timestamp - INTERVAL '3 weeks' ) AS chunk;
+    SELECT
+      compress_chunk(chunk, if_not_compressed => TRUE)
+    FROM
+      show_chunks(
+        'conditions',
+        pg_catalog.now() - INTERVAL '1 week',
+        pg_catalog.now() - INTERVAL '3 weeks'
+      ) AS chunk;
     ```
 
 - Create a policy to compress chunks that are older than seven days automatically:
@@ -144,11 +155,15 @@ Time buckets enable you to aggregate data in hypertables by time interval and ca
 For example, calculate the average daily temperature in a table named `conditions`. The table has a `time` and `temperature` columns:
 
 ```sql
-SELECT time_bucket('1 day', time) AS bucket,
-  avg(temperature) AS avg_temp
-FROM conditions
-GROUP BY bucket
-ORDER BY bucket ASC;
+SELECT
+  time_bucket('1 day', time) AS bucket,
+  AVG(temperature) AS avg_temp
+FROM
+  conditions
+GROUP BY
+  bucket
+ORDER BY
+  bucket ASC;
 ```
 
 See more:
@@ -169,22 +184,29 @@ For example, create a continuous aggregate view for daily weather data in two si
    ```sql
    CREATE MATERIALIZED VIEW conditions_summary_daily
    WITH (timescaledb.continuous) AS
-   SELECT device,
-   time_bucket(INTERVAL '1 day', time) AS bucket,
-   AVG(temperature),
-   MAX(temperature),
-   MIN(temperature)
-   FROM conditions
-   GROUP BY device, bucket;
+   SELECT
+     device,
+     time_bucket(INTERVAL '1 day', time) AS bucket,
+     AVG(temperature),
+     MAX(temperature),
+     MIN(temperature)
+   FROM
+     conditions
+   GROUP BY
+     device,
+     bucket;
    ```
 
 1. Create a policy to refresh the view every hour:
 
    ```sql
-   SELECT add_continuous_aggregate_policy('conditions_summary_daily',
-   start_offset => INTERVAL '1 month',
-   end_offset => INTERVAL '1 day',
-   schedule_interval => INTERVAL '1 hour');
+   SELECT
+     add_continuous_aggregate_policy(
+       'conditions_summary_daily',
+       start_offset => INTERVAL '1 month',
+       end_offset => INTERVAL '1 day',
+       schedule_interval => INTERVAL '1 hour'
+   );
    ```
 See more:
 
