@@ -783,12 +783,6 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, const Hypertabl
 			break;
 		}
 
-		/* We are only interested in sorting if this is a var */
-		if (!IsA(em_expr, Var))
-		{
-			break;
-		}
-
 		useful_pathkeys = lappend(useful_pathkeys, pathkey);
 	}
 
