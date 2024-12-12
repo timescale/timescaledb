@@ -19,6 +19,7 @@ set(TEST_FILES
     compress_default.sql
     compress_dml_copy.sql
     compress_float8_corrupt.sql
+    compress_sort_transform.sql
     compressed_collation.sql
     compressed_detoaster.sql
     compression.sql

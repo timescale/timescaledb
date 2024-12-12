@@ -468,7 +468,17 @@ ts_sort_transform_replace_pathkeys(void *node, List *transformed_pathkeys, List 
 		path->pathkeys = original_pathkeys;
 	}
 
-	if (IsA(path, MergeAppendPath))
+	if (IsA(path, CustomPath))
+	{
+		/*
+		 * We should only see ChunkAppend here.
+		 */
+		CustomPath *custom = castNode(CustomPath, path);
+		ts_sort_transform_replace_pathkeys(custom->custom_paths,
+										   transformed_pathkeys,
+										   original_pathkeys);
+	}
+	else if (IsA(path, MergeAppendPath))
 	{
 		MergeAppendPath *append = castNode(MergeAppendPath, path);
 		ts_sort_transform_replace_pathkeys(append->subpaths,
