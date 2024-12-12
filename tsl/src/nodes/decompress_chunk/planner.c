@@ -961,6 +961,12 @@ ts_label_sort_with_costsize(PlannerInfo *root, Sort *plan, double limit_tuples)
 	plan->plan.parallel_safe = lefttree->parallel_safe;
 }
 
+/*
+ * Find a variable of the given relation somewhere in the expression tree.
+ * Currently we use this to find the Var argument of time_bucket, when we prepare
+ * the batch sorted merge parameters after using the monotonous sorting transform
+ * optimization.
+ */
 static Var *
 find_var_subexpression(void *expr, Index varno)
 {
@@ -1175,10 +1181,9 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 				}
 
 				/*
-				 * We found a Var equivalence member that belongs to the
-				 * decompressed relation. We have to convert its varattno which
-				 * is the varattno of the uncompressed chunk tuple, to the
-				 * decompressed scan tuple varattno.
+				 * The equivalence member expression might be a monotonous
+				 * expression of the decompressed relation Var, so recurse to
+				 * find it.
 				 */
 				Var *var = find_var_subexpression(em->em_expr, em_relid);
 				Ensure(var != NULL,
@@ -1186,6 +1191,11 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 				Assert((Index) var->varno == (Index) em_relid);
 
+				/*
+				 * Convert its varattno which is the varattno of the
+				 * uncompressed chunk tuple, to the decompressed scan tuple
+				 * varattno.
+				 */
 				const int decompressed_scan_attno =
 					context.uncompressed_attno_info[var->varattno].custom_scan_attno;
 				Assert(decompressed_scan_attno > 0);

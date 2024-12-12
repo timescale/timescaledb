@@ -443,6 +443,10 @@ ts_sort_transform_get_pathkeys(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry
 	return transformed_query_pathkeys;
 }
 
+/*
+ * After we have created new paths with transformed pathkeys, replace them back
+ * with the original pathkeys.
+ */
 void
 ts_sort_transform_replace_pathkeys(void *node, List *transformed_pathkeys, List *original_pathkeys)
 {
