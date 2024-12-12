@@ -97,7 +97,7 @@ pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chu
 			decompress_clauses = lappend(decompress_clauses, ri);
 		}
 
-		if (context.needs_recheck)
+		if (context.can_pushdown && context.needs_recheck)
 		{
 			/*
 			 * If we managed to push down the comparison of orderby column
@@ -106,7 +106,6 @@ pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chu
 			 * close to 1.
 			 */
 			ri->norm_selec = 1;
-			Assert(context.can_pushdown);
 		}
 	}
 	chunk_rel->baserestrictinfo = decompress_clauses;
