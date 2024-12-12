@@ -7,6 +7,7 @@
 #include <access/attnum.h>
 #include <access/heapam.h>
 #include <access/hio.h>
+#include <access/htup_details.h>
 #include <access/rewriteheap.h>
 #include <access/sdir.h>
 #include <access/skey.h>
@@ -49,6 +50,7 @@
 #include <utils/palloc.h>
 #include <utils/rel.h>
 #include <utils/sampling.h>
+#include <utils/snapmgr.h>
 #include <utils/syscache.h>
 #include <utils/tuplesort.h>
 #include <utils/typcache.h>
@@ -1785,6 +1787,82 @@ hypercore_tuple_delete(Relation relation, ItemPointer tid, CommandId cid, Snapsh
 	}
 
 	return result;
+}
+
+/*
+ * Decompress a segment that contains the row given by ctid.
+ *
+ * This function is called during an upsert (ON CONFLICT DO UPDATE), where the
+ * conflicting row points to a compressed segment that needs to be
+ * decompressed before the update can take place. This function is used to
+ * decompress that segment into a set of individual rows and insert them into
+ * the non-compressed region.
+ *
+ * Returns the number of rows in the segment that were decompressed, or 0 if
+ * the TID pointed to a regular (non-compressed) tuple. If any rows are
+ * decompressed, the TID of the de-compressed conflicting row is returned via
+ * "new_ctid". If no rows were decompressed, the value of "new_ctid" is
+ * undefined.
+ */
+int
+hypercore_decompress_update_segment(Relation relation, const ItemPointer ctid, TupleTableSlot *slot,
+									Snapshot snapshot, ItemPointer new_ctid)
+{
+	HypercoreInfo *hcinfo;
+	Relation crel;
+	TupleTableSlot *cslot;
+	ItemPointerData decoded_tid;
+	TM_Result result;
+	TM_FailureData tmfd;
+	int n_batch_rows = 0;
+	uint16 tuple_index;
+	bool should_free;
+
+	/* Nothing to do if this is not a compressed segment */
+	if (!is_compressed_tid(ctid))
+		return 0;
+
+	Assert(TTS_IS_ARROWTUPLE(slot));
+	Assert(!TTS_EMPTY(slot));
+	Assert(ItemPointerEquals(ctid, &slot->tts_tid));
+
+	hcinfo = RelationGetHypercoreInfo(relation);
+	crel = table_open(hcinfo->compressed_relid, RowExclusiveLock);
+	tuple_index = hypercore_tid_decode(&decoded_tid, ctid);
+	cslot = arrow_slot_get_compressed_slot(slot, NULL);
+	HeapTuple tuple = ExecFetchSlotHeapTuple(cslot, false, &should_free);
+
+	RowDecompressor decompressor = build_decompressor(crel, relation);
+	heap_deform_tuple(tuple,
+					  RelationGetDescr(crel),
+					  decompressor.compressed_datums,
+					  decompressor.compressed_is_nulls);
+
+	/* Must delete the segment before calling the decompression function below
+	 * or otherwise index updates will lead to conflicts */
+	result = table_tuple_delete(decompressor.in_rel,
+								&cslot->tts_tid,
+								decompressor.mycid,
+								snapshot,
+								InvalidSnapshot,
+								true,
+								&tmfd,
+								false);
+
+	Ensure(result == TM_Ok, "could not delete compressed segment, result: %u", result);
+
+	n_batch_rows = row_decompressor_decompress_row_to_table(&decompressor);
+	/* Return the TID of the decompressed conflicting tuple. Tuple index is
+	 * 1-indexed, so subtract 1. */
+	slot = decompressor.decompressed_slots[tuple_index - 1];
+	ItemPointerCopy(&slot->tts_tid, new_ctid);
+
+	/* Need to make decompressed (and deleted segment) visible */
+	CommandCounterIncrement();
+	row_decompressor_close(&decompressor);
+	table_close(crel, NoLock);
+
+	return n_batch_rows;
 }
 
 #if PG16_LT
