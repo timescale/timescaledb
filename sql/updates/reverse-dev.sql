@@ -86,6 +86,3 @@ FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_ge
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_bucket_function', '');
 
 GRANT SELECT ON _timescaledb_catalog.continuous_aggs_bucket_function TO PUBLIC;
-
-DROP FUNCTION IF EXISTS _timescaledb_functions.cagg_get_bucket_function_info(INTEGER);
-
