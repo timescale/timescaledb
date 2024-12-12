@@ -1041,7 +1041,7 @@ psql:include/cagg_query_common.sql:483: NOTICE:  refreshing continuous aggregate
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_date_origin';
  user_view_schema |      user_view_name      |                         bucket_func                          | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+--------------------------+--------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
- public           | cagg_4_hours_date_origin | public.time_bucket(interval,pg_catalog.date,pg_catalog.date) | @ 4 days     | Fri Dec 31 16:00:00 1999 PST |               |                 | t
+ public           | cagg_4_hours_date_origin | public.time_bucket(interval,pg_catalog.date,pg_catalog.date) | @ 4 days     | Sat Jan 01 00:00:00 2000 PST |               |                 | t
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_date_origin;
@@ -1055,7 +1055,7 @@ psql:include/cagg_query_common.sql:491: NOTICE:  refreshing continuous aggregate
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_date_origin2';
  user_view_schema |      user_view_name       |                         bucket_func                          | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+---------------------------+--------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
- public           | cagg_4_hours_date_origin2 | public.time_bucket(interval,pg_catalog.date,pg_catalog.date) | @ 4 days     | Fri Dec 31 16:00:00 1999 PST |               |                 | t
+ public           | cagg_4_hours_date_origin2 | public.time_bucket(interval,pg_catalog.date,pg_catalog.date) | @ 4 days     | Sat Jan 01 00:00:00 2000 PST |               |                 | t
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_date_origin2;

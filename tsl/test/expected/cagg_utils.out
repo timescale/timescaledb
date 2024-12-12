@@ -378,10 +378,10 @@ ORDER BY user_view_name;
 -----------------------------+---------------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
  integer_ht_cagg             | time_bucket(integer,integer)                                                          | 1            |                              |               |                 | t
  integer_ht_cagg_offset      | time_bucket(integer,integer,integer)                                                  | 1            |                              | 10            |                 | t
- temperature_4h              | time_bucket(interval,timestamp without time zone)                                     | @ 4 hours    | Fri Dec 31 16:00:00 1999 PST |               |                 | t
- temperature_tz_4h           | time_bucket(interval,timestamp with time zone)                                        | @ 4 hours    | Fri Dec 31 16:00:00 1999 PST |               |                 | t
- temperature_tz_4h_ts        | time_bucket(interval,timestamp with time zone,text,timestamp with time zone,interval) | @ 4 hours    | Fri Dec 31 16:00:00 1999 PST |               | Europe/Berlin   | f
- temperature_tz_4h_ts_offset | time_bucket(interval,timestamp with time zone,text,timestamp with time zone,interval) | @ 4 hours    | Fri Dec 31 16:00:00 1999 PST | @ 1 hour      | Europe/Berlin   | f
+ temperature_4h              | time_bucket(interval,timestamp without time zone)                                     | @ 4 hours    |                              |               |                 | t
+ temperature_tz_4h           | time_bucket(interval,timestamp with time zone)                                        | @ 4 hours    |                              |               |                 | t
+ temperature_tz_4h_ts        | time_bucket(interval,timestamp with time zone,text,timestamp with time zone,interval) | @ 4 hours    |                              |               | Europe/Berlin   | f
+ temperature_tz_4h_ts_offset | time_bucket(interval,timestamp with time zone,text,timestamp with time zone,interval) | @ 4 hours    |                              | @ 1 hour      | Europe/Berlin   | f
  temperature_tz_4h_ts_origin | time_bucket(interval,timestamp with time zone,text,timestamp with time zone,interval) | @ 4 hours    | Mon Jan 01 00:00:00 2001 PST |               | Europe/Berlin   | f
 (7 rows)
 
