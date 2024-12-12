@@ -760,12 +760,7 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, const Hypertabl
 		return NULL;
 	}
 
-	/* Copy the decompress chunk path because the original can be recycled in add_path, and our
-	 * sorted path must be independent. */
-	if (!ts_is_decompress_chunk_path(path))
-	{
-		return NULL;
-	}
+	Assert(ts_is_decompress_chunk_path(path));
 
 	/* Iterate over the sort_pathkeys and generate all possible useful sorting */
 	List *useful_pathkeys = NIL;
@@ -802,12 +797,16 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, const Hypertabl
 		return NULL;
 	}
 
-	/* Create the sorted path for these useful_pathkeys */
-	if (pathkeys_contained_in(useful_pathkeys, path->pathkeys))
-	{
-		return NULL;
-	}
+	/*
+	 * We should be given an unsorted DecompressChunk path.
+	 */
+	Assert(path->pathkeys == NIL);
 
+	/*
+	 * Create the sorted path for these useful_pathkeys. Copy the decompress
+	 * chunk path because the original can be recycled in add_path, and our
+	 * sorted path must be independent.
+	 */
 	DecompressChunkPath *path_copy = copy_decompress_chunk_path((DecompressChunkPath *) path);
 
 	Path *sorted_path = (Path *)
