@@ -8,6 +8,7 @@ set(TEST_FILES
     chunks.sql
     chunk_adaptive.sql
     chunk_utils.sql
+    cluster.sql
     create_chunks.sql
     create_hypertable.sql
     create_table.sql
@@ -61,7 +62,6 @@ set(TEST_FILES
 set(TEST_TEMPLATES
     agg_bookends.sql.in
     append.sql.in
-    cluster.sql.in
     drop_owned.sql.in
     grant_hypertable.sql.in
     histogram_test.sql.in
