@@ -4,6 +4,42 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+
+## 2.18.0 (2024-12-13)
+
+This release contains performance improvements and bug fixes since
+the 2.17.2 release. We recommend that you upgrade at the next
+available opportunity.
+
+
+**Features**
+* #6901 Add hypertable support for transition tables
+* #7104 Hypercore table access method
+* #7271 Push down ORDER BY in real time continuous aggregate queries
+* #7295: Support ALTER TABLE SET ACCESS METHOD on hypertable.
+* #7390 Disable custom hashagg planner code
+* #7411 Change parameter name to enable Hypercore TAM
+* #7412 Add GUC for hypercore_use_access_method default
+* #7413: Add GUC for segmentwise recompression.
+* #7443 Add Hypercore function and view aliases
+* #7455: Support DROP NOT NULL on compressed hypertables
+* #7486 Prevent building against postgres versions with broken ABI
+
+**Bugfixes**
+* #7378 Remove obsolete job referencing policy_job_error_retention
+* #7409 Update bgw job table when altering procedure
+* #7410 "aggregated compressed column not found" error on aggregation query.
+* #7426 Fix datetime parsing error in chunk constraint creation
+* #7432 Verify that heap tuple is valid before using
+* #7434 Fixes segfault when internally set the replica identity for a given chunk
+* #7488 Emit error for transition table trigger on chunks
+* #7514 Fix error: invalid child of chunk append
+
+**Thanks**
+* @bharrisau for reporting the segfault when creating chunks
+* @pgloader for reporting an issue an internal background job
+* @uasiddiqi for reporting the "aggregated compressed column not found" error.
+
 ## 2.17.2 (2024-11-06)
 
 This release contains bug fixes since the 2.17.1 release. We recommend that you
