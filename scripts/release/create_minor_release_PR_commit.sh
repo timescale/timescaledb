@@ -29,7 +29,6 @@ done
 LAST_VERSION=$(echo "$LAST_UPDATE_FILE" |cut -d '-' -f 1 |cut -d '/' -f 2)
 
 echo "CURRENT_VERSION is $CURRENT_VERSION"
-#echo "LAST_UPDATE_FILE is $LAST_UPDATE_FILE"
 echo "LAST_VERSION is $LAST_VERSION"
 echo "RELEASE_BRANCH is $RELEASE_BRANCH"
 echo "NEW_VERSION is $NEW_VERSION"
@@ -37,18 +36,27 @@ cd ~/"$SOURCES_DIR"/"$FORK_DIR"
 
 
 # Derived Variables
-#RELEASE_PR_BRANCH="release-$NEW_VERSION-$RELEASE_BRANCH"
 RELEASE_PR_BRANCH="release-$NEW_VERSION"
 UPDATE_FILE="$CURRENT_VERSION--$NEW_VERSION.sql"
 DOWNGRADE_FILE="$NEW_VERSION--$CURRENT_VERSION.sql"
 LAST_UPDATE_FILE="$LAST_VERSION--$CURRENT_VERSION.sql"
 LAST_DOWNGRADE_FILE="$CURRENT_VERSION--$LAST_VERSION.sql"
 
+RELEASE_BRANCH_EXISTS=$(git branch -a |grep 'upstream/$RELEASE_BRANCH'|wc -l|cut -d ' ' -f 8)
+
+if [[ $RELEASE_BRANCH_EXISTS == '0' ]]; then
+  echo "git branch '$RELEASE_BRANCH' does not exist in the remote repository, yet"
+  echo "We want to raise this PR against main"
+  RELEASE_BRANCH="main"
+  RELEASE_PR_BRANCH="$RELEASE_PR_BRANCH-main"
+fi
+
+echo "final RELEASE_BRANCH is $RELEASE_BRANCH"
+echo "RELEASE_PR_BRANCH is $RELEASE_PR_BRANCH"
 
 echo "---- Creating release branch $RELEASE_PR_BRANCH from $RELEASE_BRANCH, on the fork ----"
 
 git checkout -b "$RELEASE_PR_BRANCH" upstream/"$RELEASE_BRANCH"
-#git checkout -b "$RELEASE_PR_BRANCH" upstream/main
 git branch
 git pull && git diff HEAD
 
