@@ -596,7 +596,6 @@ continuous_agg_migrate_to_time_bucket(PG_FUNCTION_ARGS)
 	/* Update the time_bucket_fuction */
 	cagg->bucket_function->bucket_function = new_bucket_function;
 	bool origin_added_during_migration = false;
-	TimestampTz bucket_time_origin_to_replace = cagg->bucket_function->bucket_time_origin;
 
 	/* Set new origin if not already present in the function definition. This is needed since
 	 * time_bucket and time_bucket_ng use different origin default values.
@@ -604,7 +603,7 @@ continuous_agg_migrate_to_time_bucket(PG_FUNCTION_ARGS)
 	if (cagg->bucket_function->bucket_time_based &&
 		TIMESTAMP_NOT_FINITE(cagg->bucket_function->bucket_time_origin))
 	{
-		bucket_time_origin_to_replace = continuous_agg_get_default_origin(new_bucket_function);
+		cagg->bucket_function->bucket_time_origin = continuous_agg_get_default_origin(new_bucket_function);;
 		origin_added_during_migration = true;
 	}
 
@@ -612,7 +611,7 @@ continuous_agg_migrate_to_time_bucket(PG_FUNCTION_ARGS)
 	continuous_agg_replace_function(cagg,
 									old_bucket_function,
 									origin_added_during_migration,
-									bucket_time_origin_to_replace,
+									cagg->bucket_function->bucket_time_origin,
 									need_parameter_order_change);
 
 	CommandCounterIncrement();

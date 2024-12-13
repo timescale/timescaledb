@@ -1040,9 +1040,9 @@ CREATE MATERIALIZED VIEW cagg_4_hours_date_origin
     GROUP BY 1 ORDER BY 1;
 psql:include/cagg_query_common.sql:484: NOTICE:  refreshing continuous aggregate "cagg_4_hours_date_origin"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_date_origin';
- user_view_schema |      user_view_name      |                         bucket_func                          | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+--------------------------+--------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
- public           | cagg_4_hours_date_origin | public.time_bucket(interval,pg_catalog.date,pg_catalog.date) | @ 4 days     | Sat Jan 01 00:00:00 2000 PST |               |                 | t
+ user_view_schema |      user_view_name      |           bucket_func           | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+--------------------------+---------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
+ public           | cagg_4_hours_date_origin | time_bucket(interval,date,date) | @ 4 days     | Sat Jan 01 00:00:00 2000 PST |               |                 | t
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_date_origin;
@@ -1054,9 +1054,9 @@ CREATE MATERIALIZED VIEW cagg_4_hours_date_origin2
     GROUP BY 1 ORDER BY 1;
 psql:include/cagg_query_common.sql:492: NOTICE:  refreshing continuous aggregate "cagg_4_hours_date_origin2"
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_date_origin2';
- user_view_schema |      user_view_name       |                         bucket_func                          | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
-------------------+---------------------------+--------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
- public           | cagg_4_hours_date_origin2 | public.time_bucket(interval,pg_catalog.date,pg_catalog.date) | @ 4 days     | Sat Jan 01 00:00:00 2000 PST |               |                 | t
+ user_view_schema |      user_view_name       |           bucket_func           | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
+------------------+---------------------------+---------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
+ public           | cagg_4_hours_date_origin2 | time_bucket(interval,date,date) | @ 4 days     | Sat Jan 01 00:00:00 2000 PST |               |                 | t
 (1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_date_origin2;
