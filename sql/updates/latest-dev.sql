@@ -114,3 +114,9 @@ CREATE FUNCTION @extschema@.hypertable_columnstore_stats (hypertable REGCLASS)
     STABLE STRICT
     AS 'SELECT * FROM @extschema@.hypertable_compression_stats($1)'
     SET search_path TO pg_catalog, pg_temp;
+
+-- Remove useless catalog metadata
+ALTER EXTENSION timescaledb
+    DROP TABLE _timescaledb_catalog.continuous_aggs_bucket_function;
+
+DROP TABLE _timescaledb_catalog.continuous_aggs_bucket_function;

@@ -170,7 +170,7 @@ SELECT mat_hypertable_id,
 SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function WHERE mat_hypertable_id = :mat_hypertable_id;
  mat_hypertable_id |                                    bucket_func                                    | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
 -------------------+-----------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
-                 5 | timescaledb_experimental.time_bucket_ng(interval,pg_catalog.date,pg_catalog.date) | @ 7 days     | Fri Jan 03 16:00:00 2020 PST |               |                 | t
+                 5 | timescaledb_experimental.time_bucket_ng(interval,pg_catalog.date,pg_catalog.date) | @ 7 days     | Sat Jan 04 00:00:00 2020 PST |               |                 | t
 (1 row)
 
 SELECT pg_get_viewdef(:'partial_view', true);
@@ -206,7 +206,7 @@ CALL _timescaledb_functions.cagg_migrate_to_time_bucket(:'CAGG_NAME');
 SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function WHERE mat_hypertable_id = :mat_hypertable_id;
  mat_hypertable_id |                         bucket_func                          | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
 -------------------+--------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
-                 5 | public.time_bucket(interval,pg_catalog.date,pg_catalog.date) | @ 7 days     | Fri Jan 03 16:00:00 2020 PST |               |                 | t
+                 5 | public.time_bucket(interval,pg_catalog.date,pg_catalog.date) | @ 7 days     | Sat Jan 04 00:00:00 2020 PST |               |                 | t
 (1 row)
 
 SELECT pg_get_viewdef(:'partial_view', true);

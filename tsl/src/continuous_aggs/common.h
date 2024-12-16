@@ -140,4 +140,4 @@ cagg_get_time_min(const ContinuousAgg *cagg)
 	return ts_time_get_min(cagg->partition_type);
 }
 
-ContinuousAggsBucketFunction *ts_cagg_get_bucket_function_info(Oid view_oid);
+extern ContinuousAggsBucketFunction *tsl_cagg_get_bucket_function_info(Oid view_oid);
