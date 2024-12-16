@@ -44,7 +44,7 @@ DOWNGRADE_FILE="$NEW_VERSION--$CURRENT_VERSION.sql"
 LAST_UPDATE_FILE="$LAST_VERSION--$CURRENT_VERSION.sql"
 LAST_DOWNGRADE_FILE="$CURRENT_VERSION--$LAST_VERSION.sql"
 
-RELEASE_BRANCH_EXISTS=$(git branch -a |grep 'upstream/$RELEASE_BRANCH'|wc -l|cut -d ' ' -f 8)
+RELEASE_BRANCH_EXISTS=$(git branch -a |grep -c 'upstream/$RELEASE_BRANCH'|cut -d ' ' -f 1)
 
 if [[ $RELEASE_BRANCH_EXISTS == '0' ]]; then
   echo "git branch '$RELEASE_BRANCH' does not exist in the remote repository, yet"
