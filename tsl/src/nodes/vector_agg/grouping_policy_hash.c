@@ -149,6 +149,7 @@ compute_single_aggregate(GroupingPolicyHash *policy, const DecompressBatchState 
 	const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
 	const uint64 *filter = arrow_combine_validity(num_words,
 												  policy->tmp_filter,
+												  agg_def->filter_result,
 												  batch_state->vector_qual_result,
 												  arg_validity_bitmap);
 
