@@ -17,6 +17,7 @@
 #include <utils/snapmgr.h>
 
 #include "debug_point.h"
+#include "guc.h"
 #include "hypertable.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
@@ -321,8 +322,10 @@ ts_cagg_watermark_update(Hypertable *mat_ht, int64 watermark, bool watermark_isn
 
 	/* If we have a real-time CAgg, it uses a watermark function. So, we have to invalidate the rel
 	 * cache to force a replanning of prepared statements. See cagg_watermark_update_internal for
-	 * more information. */
-	bool invalidate_rel_cache = !cagg->data.materialized_only;
+	 * more information. If the GUC enable_cagg_watermark_constify=false then it's not necessary
+	 * to invalidate relation cache. */
+	bool invalidate_rel_cache =
+		!cagg->data.materialized_only && ts_guc_enable_cagg_watermark_constify;
 
 	watermark = cagg_compute_watermark(cagg, watermark, watermark_isnull);
 	cagg_watermark_update_internal(mat_ht->fd.id,

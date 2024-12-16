@@ -29,10 +29,8 @@ where ts >= (select max(ts) from metrics);
                          Order: metrics_1.ts DESC
                          ->  Index Only Scan using _hyper_1_2_chunk_metrics_ts_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=1 loops=1)
                                Index Cond: (ts IS NOT NULL)
-                               Heap Fetches: 1
                          ->  Index Only Scan using _hyper_1_1_chunk_metrics_ts_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (never executed)
                                Index Cond: (ts IS NOT NULL)
-                               Heap Fetches: 0
    ->  Seq Scan on _hyper_1_1_chunk (never executed)
          Filter: (ts >= $1)
    ->  Seq Scan on _hyper_1_2_chunk (actual rows=1 loops=1)
@@ -56,10 +54,8 @@ where ts >= (select max(ts) from metrics)
                          Order: metrics_1.ts DESC
                          ->  Index Only Scan using _hyper_1_2_chunk_metrics_ts_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=1 loops=1)
                                Index Cond: (ts IS NOT NULL)
-                               Heap Fetches: 1
                          ->  Index Only Scan using _hyper_1_1_chunk_metrics_ts_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (never executed)
                                Index Cond: (ts IS NOT NULL)
-                               Heap Fetches: 0
    ->  Seq Scan on _hyper_1_1_chunk (never executed)
          Filter: ((ts >= $1) AND (id = 1))
    ->  Seq Scan on _hyper_1_2_chunk (actual rows=0 loops=1)
