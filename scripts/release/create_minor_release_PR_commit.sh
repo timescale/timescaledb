@@ -17,6 +17,8 @@ NEW_PATCH_VERSION="0"
 NEW_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
 RELEASE_BRANCH="${NEW_VERSION/%.$NEW_PATCH_VERSION/.x}"
 CURRENT_VERSION=$(tail -1 version.config | cut -d ' ' -f 3)
+CURRENT_MINOR_VERSION=$(echo $NEW_VERSION | cut -d '.' -f 2)
+NEW_MINOR_VERSION=$((CURRENT_MINOR_VERSION + 1))
 cd sql/updates
 
 for f in ./*
@@ -136,6 +138,15 @@ do
 done
 
 cd ..
+
+
+if [[ $RELEASE_BRANCH_EXISTS == '0' ]]; then
+  echo "---- Modifying version.config to the new versions , if current PR is for main----"
+  sed -i.bak "s/${NEW_VERSION}/${NEW_VERSION}-dev/g" version.config
+  sed -i.bak "s/${CURRENT_MINOR_VERSION}/${NEW_MINOR_VERSION}/g" version.config
+  sed -i.bak "s/${CURRENT_VERSION}/${NEW_VERSION}/g" version.config
+  rm version.config.bak
+fi
 
 git diff HEAD --name-only
 
