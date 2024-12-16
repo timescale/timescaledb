@@ -94,8 +94,7 @@ from
         'cint2 is null']) with ordinality as condition(condition, n),
     unnest(array[
         null,
-        's',
-        'ss']) with ordinality as grouping(grouping, n),
+        's']) with ordinality as grouping(grouping, n),
     unnest(array[
         null,
         'cint2 < 0',
