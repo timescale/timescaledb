@@ -403,5 +403,12 @@ CREATE OR REPLACE VIEW timescaledb_information.chunk_compression_settings AS
 		FROM unnest(s.orderby, s.orderby_desc, s.orderby_nullsfirst) un(orderby, "desc", nullsfirst)
 	) un ON true;
 
+
+CREATE OR REPLACE VIEW timescaledb_information.hypertable_columnstore_settings
+AS SELECT * FROM timescaledb_information.hypertable_compression_settings;
+
+CREATE OR REPLACE VIEW timescaledb_information.chunk_columnstore_settings AS
+SELECT * FROM timescaledb_information.chunk_compression_settings;
+
 GRANT SELECT ON ALL TABLES IN SCHEMA timescaledb_information TO PUBLIC;
 

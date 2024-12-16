@@ -333,9 +333,6 @@ make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx, Oid *sortOperator
 Scan *
 ts_chunk_append_get_scan_plan(Plan *plan)
 {
-	if (plan != NULL && (IsA(plan, Sort) || IsA(plan, Result)))
-		plan = plan->lefttree;
-
 	if (plan == NULL)
 		return NULL;
 
@@ -356,7 +353,6 @@ ts_chunk_append_get_scan_plan(Plan *plan)
 		case T_WorkTableScan:
 		case T_TidRangeScan:
 			return (Scan *) plan;
-			break;
 		case T_CustomScan:
 		{
 			CustomScan *custom = castNode(CustomScan, plan);
@@ -380,13 +376,10 @@ ts_chunk_append_get_scan_plan(Plan *plan)
 				 */
 				return ts_chunk_append_get_scan_plan(linitial(custom->custom_plans));
 			}
-
-			/*
-			 * This is some other unknown custom scan node, we can't recurse
-			 * into it.
-			 */
-			return NULL;
+			break;
 		}
+		case T_Sort:
+		case T_Result:
 		case T_Agg:
 			if (plan->lefttree != NULL)
 			{
@@ -394,12 +387,10 @@ ts_chunk_append_get_scan_plan(Plan *plan)
 				/* Let ts_chunk_append_get_scan_plan handle the subplan */
 				return ts_chunk_append_get_scan_plan(plan->lefttree);
 			}
-			return NULL;
 			break;
-		case T_MergeAppend:
-			return NULL;
 		default:
-			elog(ERROR, "invalid child of chunk append: %s", ts_get_node_name((Node *) plan));
+			break;
 	}
-	pg_unreachable();
+
+	return NULL;
 }

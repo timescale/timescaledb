@@ -32,11 +32,8 @@ QUERY PLAN
    ->  Custom Scan (ChunkAppend) on metrics m1 (actual rows=68370 loops=1)
          Order: m1."time"
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m1_1 (actual rows=17990 loops=1)
-               Heap Fetches: 17990
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m1_2 (actual rows=25190 loops=1)
-               Heap Fetches: 25190
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m1_3 (actual rows=25190 loops=1)
-               Heap Fetches: 25190
    ->  Memoize (actual rows=1 loops=68370)
          Cache Key: m1."time"
          Cache Mode: binary
@@ -46,13 +43,10 @@ QUERY PLAN
                      Chunks excluded during runtime: 2
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_1 (actual rows=1 loops=3598)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 3598
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_2 (actual rows=1 loops=5038)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 5038
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_3 (actual rows=1 loops=5038)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 5038
 (25 rows)
 
 \set TEST_TABLE 'metrics_space'
@@ -77,27 +71,18 @@ QUERY PLAN
          ->  Merge Append (actual rows=17990 loops=1)
                Sort Key: m1_1."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m1_1 (actual rows=3598 loops=1)
-                     Heap Fetches: 3598
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m1_2 (actual rows=10794 loops=1)
-                     Heap Fetches: 10794
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m1_3 (actual rows=3598 loops=1)
-                     Heap Fetches: 3598
          ->  Merge Append (actual rows=25190 loops=1)
                Sort Key: m1_4."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m1_4 (actual rows=5038 loops=1)
-                     Heap Fetches: 5038
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m1_5 (actual rows=15114 loops=1)
-                     Heap Fetches: 15114
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m1_6 (actual rows=5038 loops=1)
-                     Heap Fetches: 5038
          ->  Merge Append (actual rows=25190 loops=1)
                Sort Key: m1_7."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m1_7 (actual rows=5038 loops=1)
-                     Heap Fetches: 5038
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m1_8 (actual rows=15114 loops=1)
-                     Heap Fetches: 15114
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m1_9 (actual rows=5038 loops=1)
-                     Heap Fetches: 5038
    ->  Memoize (actual rows=1 loops=68370)
          Cache Key: m1."time"
          Cache Mode: binary
@@ -107,31 +92,22 @@ QUERY PLAN
                      Chunks excluded during runtime: 6
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_1 (actual rows=1 loops=3598)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 3598
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_2 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_3 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_4 (actual rows=1 loops=5038)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 5038
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_5 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_6 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_7 (actual rows=1 loops=5038)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 5038
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_8 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_9 (never executed)
                            Index Cond: ("time" = m1."time")
-                           Heap Fetches: 0
 (61 rows)
 
 \set TEST_TABLE 'metrics_compressed'

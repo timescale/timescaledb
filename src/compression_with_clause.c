@@ -25,20 +25,20 @@
 
 static const WithClauseDefinition compress_hypertable_with_clause_def[] = {
 		[CompressEnabled] = {
-			.arg_name = "compress",
+			.arg_names = {"compress", "enable_columnstore", NULL},
 			.type_id = BOOLOID,
 			.default_val = (Datum)false,
 		},
 		[CompressSegmentBy] = {
-			 .arg_name = "compress_segmentby",
+			.arg_names = {"compress_segmentby", "segmentby", NULL},
 			 .type_id = TEXTOID,
 		},
 		[CompressOrderBy] = {
-			 .arg_name = "compress_orderby",
+			.arg_names = {"compress_orderby", "orderby", NULL},
 			 .type_id = TEXTOID,
 		},
 		[CompressChunkTimeInterval] = {
-			 .arg_name = "compress_chunk_time_interval",
+			.arg_names = {"compress_chunk_time_interval", NULL},
 			 .type_id = INTERVALOID,
 		},
 };
