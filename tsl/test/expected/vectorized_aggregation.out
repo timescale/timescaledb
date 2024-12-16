@@ -180,7 +180,7 @@ SELECT sum(segment_by_value) FROM testtable WHERE segment_by_value > 0;
                            Filter: (_hyper_1_10_chunk.segment_by_value > 0)
 (65 rows)
 
--- Vectorization not possible due to a used filter
+-- Vectorization with filter on compressed columns
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable WHERE segment_by_value > 0 AND int_value > 0;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
@@ -2858,7 +2858,7 @@ SELECT sum(int_value) FROM testtable;
  3538
 (1 row)
 
--- Aggregation filters are not supported at the moment
+-- Vectorizable aggregation filters are supported
 :EXPLAIN
 SELECT sum(segment_by_value) FILTER (WHERE segment_by_value > 99999) FROM testtable;
                                                                                                                                                               QUERY PLAN                                                                                                                                                               
