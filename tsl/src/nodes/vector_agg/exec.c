@@ -163,9 +163,6 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 
 			Aggref *aggref = castNode(Aggref, tlentry->expr);
 
-			//			fprintf(stderr, "the aggref at execution is:\n");
-			//			my_print(aggref);
-
 			VectorAggFunctions *func = get_vector_aggregate(aggref->aggfnoid);
 			Assert(func != NULL);
 			def->func = *func;
@@ -268,6 +265,7 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 			break;
 		}
 	}
+
 	if (all_segmentby)
 	{
 		/*

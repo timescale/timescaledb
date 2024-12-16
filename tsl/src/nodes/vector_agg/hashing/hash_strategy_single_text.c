@@ -52,22 +52,22 @@ single_text_key_hashing_get_key(BatchHashingParams params, int row, void *restri
 	BytesView *restrict output_key = (BytesView *) output_key_ptr;
 	HASH_TABLE_KEY_TYPE *restrict hash_table_key = (HASH_TABLE_KEY_TYPE *) hash_table_key_ptr;
 
-	if (unlikely(params.single_key.decompression_type == DT_Scalar))
+	if (unlikely(params.single_grouping_column.decompression_type == DT_Scalar))
 	{
-		output_key->len = VARSIZE_ANY_EXHDR(*params.single_key.output_value);
-		output_key->data = (const uint8 *) VARDATA_ANY(*params.single_key.output_value);
-		*valid = !*params.single_key.output_isnull;
+		output_key->len = VARSIZE_ANY_EXHDR(*params.single_grouping_column.output_value);
+		output_key->data = (const uint8 *) VARDATA_ANY(*params.single_grouping_column.output_value);
+		*valid = !*params.single_grouping_column.output_isnull;
 	}
-	else if (params.single_key.decompression_type == DT_ArrowText)
+	else if (params.single_grouping_column.decompression_type == DT_ArrowText)
 	{
-		*output_key = get_bytes_view(&params.single_key, row);
-		*valid = arrow_row_is_valid(params.single_key.buffers[0], row);
+		*output_key = get_bytes_view(&params.single_grouping_column, row);
+		*valid = arrow_row_is_valid(params.single_grouping_column.buffers[0], row);
 	}
-	else if (params.single_key.decompression_type == DT_ArrowTextDict)
+	else if (params.single_grouping_column.decompression_type == DT_ArrowTextDict)
 	{
-		const int16 index = ((int16 *) params.single_key.buffers[3])[row];
-		*output_key = get_bytes_view(&params.single_key, index);
-		*valid = arrow_row_is_valid(params.single_key.buffers[0], row);
+		const int16 index = ((int16 *) params.single_grouping_column.buffers[3])[row];
+		*output_key = get_bytes_view(&params.single_grouping_column, index);
+		*valid = arrow_row_is_valid(params.single_grouping_column.buffers[0], row);
 	}
 	else
 	{
@@ -134,12 +134,12 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy,
 	policy->use_key_index_for_dict = false;
 
 	BatchHashingParams params = build_batch_hashing_params(policy, batch_state);
-	if (params.single_key.decompression_type != DT_ArrowTextDict)
+	if (params.single_grouping_column.decompression_type != DT_ArrowTextDict)
 	{
 		return;
 	}
 
-	const int dict_rows = params.single_key.arrow->dictionary->length;
+	const int dict_rows = params.single_grouping_column.arrow->dictionary->length;
 	if ((size_t) dict_rows >
 		arrow_num_valid(batch_state->vector_qual_result, batch_state->total_batch_rows))
 	{
@@ -192,7 +192,8 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy,
 	const uint64 word = row_filter[outer];                                                         \
 	for (int inner = 0; inner < INNER_MAX; inner++)                                                \
 	{                                                                                              \
-		const int16 index = ((int16 *) params.single_key.buffers[3])[outer * 64 + inner];          \
+		const int16 index =                                                                        \
+			((int16 *) params.single_grouping_column.buffers[3])[outer * 64 + inner];              \
 		tmp[index] = tmp[index] || (word & (1ull << inner));                                       \
 	}
 
@@ -238,23 +239,23 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy,
 	bool have_null_key = false;
 	if (batch_state->vector_qual_result != NULL)
 	{
-		if (params.single_key.arrow->null_count > 0)
+		if (params.single_grouping_column.arrow->null_count > 0)
 		{
-			Assert(params.single_key.buffers[0] != NULL);
+			Assert(params.single_grouping_column.buffers[0] != NULL);
 			const size_t batch_words = (batch_rows + 63) / 64;
 			for (size_t i = 0; i < batch_words; i++)
 			{
-				have_null_key =
-					have_null_key ||
-					(row_filter[i] & (~((uint64 *) params.single_key.buffers[0])[i])) != 0;
+				have_null_key = have_null_key ||
+								(row_filter[i] &
+								 (~((uint64 *) params.single_grouping_column.buffers[0])[i])) != 0;
 			}
 		}
 	}
 	else
 	{
-		if (params.single_key.arrow->null_count > 0)
+		if (params.single_grouping_column.arrow->null_count > 0)
 		{
-			Assert(params.single_key.buffers[0] != NULL);
+			Assert(params.single_grouping_column.buffers[0] != NULL);
 			have_null_key = true;
 		}
 	}
@@ -263,12 +264,12 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy,
 	 * Build key indexes for the dictionary entries as for normal non-nullable
 	 * text values.
 	 */
-	Assert(params.single_key.decompression_type = DT_ArrowTextDict);
+	Assert(params.single_grouping_column.decompression_type = DT_ArrowTextDict);
 	Assert((size_t) dict_rows <= policy->num_key_index_for_dict);
 	memset(policy->key_index_for_dict, 0, sizeof(*policy->key_index_for_dict) * dict_rows);
 
-	params.single_key.decompression_type = DT_ArrowText;
-	params.single_key.buffers[0] = NULL;
+	params.single_grouping_column.decompression_type = DT_ArrowText;
+	params.single_grouping_column.buffers[0] = NULL;
 	params.have_scalar_or_nullable_columns = false;
 	params.result_key_indexes = policy->key_index_for_dict;
 
@@ -339,8 +340,8 @@ single_text_offsets_translate_impl(BatchHashingParams params, int start_row, int
 
 	for (int row = start_row; row < end_row; row++)
 	{
-		const bool row_valid = arrow_row_is_valid(params.single_key.buffers[0], row);
-		const int16 dict_index = ((int16 *) params.single_key.buffers[3])[row];
+		const bool row_valid = arrow_row_is_valid(params.single_grouping_column.buffers[0], row);
+		const int16 dict_index = ((int16 *) params.single_grouping_column.buffers[3])[row];
 
 		if (row_valid)
 		{
@@ -356,8 +357,8 @@ single_text_offsets_translate_impl(BatchHashingParams params, int start_row, int
 }
 
 #define APPLY_FOR_VALIDITY(X, NAME, COND)                                                          \
-	X(NAME##_notnull, (COND) && (params.single_key.buffers[0] == NULL))                            \
-	X(NAME##_nullable, (COND) && (params.single_key.buffers[0] != NULL))
+	X(NAME##_notnull, (COND) && (params.single_grouping_column.buffers[0] == NULL))                \
+	X(NAME##_nullable, (COND) && (params.single_grouping_column.buffers[0] != NULL))
 
 #define APPLY_FOR_SPECIALIZATIONS(X) APPLY_FOR_VALIDITY(X, single_text_offsets_translate, true)
 

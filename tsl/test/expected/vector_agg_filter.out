@@ -2962,4 +2962,25 @@ select count(*) filter (where cint2 = stable_abs(0)) from aggfilter;
      7
 (1 row)
 
+-- With hash grouping
+select
+    ss,
+    count(*) filter (where s != 5),
+    count(*) filter (where cint2 < 0)
+from aggfilter
+group by ss;
+ ss | count | count 
+----+-------+-------
+  3 | 19981 | 10076
+ 11 | 40019 | 20008
+  8 | 20000 | 10082
+    |    19 |    12
+  9 | 20000 |  9961
+  7 | 20000 | 10008
+  5 |     0 |  9871
+  4 | 19981 | 10064
+  0 | 20000 |  9968
+  6 | 20000 | 10089
+(10 rows)
+
 reset timescaledb.debug_require_vector_agg;

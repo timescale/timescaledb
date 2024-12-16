@@ -3519,3 +3519,11 @@ SELECT sum(float_value) FROM testtable2 GROUP BY tableoid ORDER BY 1 LIMIT 1;
  82620
 (1 row)
 
+-- Postgres versions starting with 16 remove the grouping columns that are
+-- equated to a constant. Check that our planning code handles this well.
+SELECT sum(float_value), int_value FROM testtable2 WHERE int_value = 1 GROUP BY int_value;
+ sum  | int_value 
+------+-----------
+ 3162 |         1
+(1 row)
+

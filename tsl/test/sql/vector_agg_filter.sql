@@ -113,9 +113,18 @@ reset timescaledb.debug_require_vector_agg;
 -- FILTER that is not vectorizable
 set timescaledb.debug_require_vector_agg = 'forbid';
 select count(*) filter (where cint2 === 0) from aggfilter;
+
 -- FILTER with stable function
 set timescaledb.debug_require_vector_agg = 'require';
 select count(*) filter (where cint2 = stable_abs(0)) from aggfilter;
+
+-- With hash grouping
+select
+    ss,
+    count(*) filter (where s != 5),
+    count(*) filter (where cint2 < 0)
+from aggfilter
+group by ss;
 
 reset timescaledb.debug_require_vector_agg;
 

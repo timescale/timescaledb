@@ -5,7 +5,7 @@
  */
 
 /*
- * Implementation of column hashing for a single fixed size 2-byte column.
+ * Implementation of column hashing for a single fixed size 4-byte column.
  */
 
 #include <postgres.h>

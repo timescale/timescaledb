@@ -79,7 +79,7 @@ FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int e
 
 	struct FUNCTION_NAME(hash) *restrict table = hashing->table;
 
-	HASH_TABLE_KEY_TYPE prev_hash_table_key;
+	HASH_TABLE_KEY_TYPE prev_hash_table_key = { 0 };
 	uint32 previous_key_index = 0;
 	for (int row = start_row; row < end_row; row++)
 	{
@@ -166,8 +166,12 @@ FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int e
 	X(NAME##_filter, (COND) && (params.batch_filter != NULL))
 
 #define APPLY_FOR_NULLABILITY(X, NAME, COND)                                                       \
-	APPLY_FOR_BATCH_FILTER(X, NAME##_notnull, (COND) && params.single_key.buffers[0] == NULL)      \
-	APPLY_FOR_BATCH_FILTER(X, NAME##_nullable, (COND) && params.single_key.buffers[0] != NULL)
+	APPLY_FOR_BATCH_FILTER(X,                                                                      \
+						   NAME##_notnull,                                                         \
+						   (COND) && params.single_grouping_column.buffers[0] == NULL)             \
+	APPLY_FOR_BATCH_FILTER(X,                                                                      \
+						   NAME##_nullable,                                                        \
+						   (COND) && params.single_grouping_column.buffers[0] != NULL)
 
 #define APPLY_FOR_SCALARS(X, NAME, COND)                                                           \
 	APPLY_FOR_BATCH_FILTER(X,                                                                      \
@@ -180,15 +184,19 @@ FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int e
 #define APPLY_FOR_TYPE(X, NAME, COND)                                                              \
 	APPLY_FOR_NULLABILITY(X,                                                                       \
 						  NAME##_byval,                                                            \
-						  (COND) &&                                                                \
-							  params.single_key.decompression_type == sizeof(OUTPUT_KEY_TYPE))     \
+						  (COND) && params.single_grouping_column.decompression_type ==            \
+										sizeof(OUTPUT_KEY_TYPE))                                   \
 	APPLY_FOR_NULLABILITY(X,                                                                       \
 						  NAME##_text,                                                             \
-						  (COND) && params.single_key.decompression_type == DT_ArrowText)          \
+						  (COND) &&                                                                \
+							  params.single_grouping_column.decompression_type == DT_ArrowText)    \
 	APPLY_FOR_NULLABILITY(X,                                                                       \
 						  NAME##_dict,                                                             \
-						  (COND) && params.single_key.decompression_type == DT_ArrowTextDict)      \
-	APPLY_FOR_SCALARS(X, NAME##_multi, (COND) && params.single_key.decompression_type == DT_Invalid)
+						  (COND) && params.single_grouping_column.decompression_type ==            \
+										DT_ArrowTextDict)                                          \
+	APPLY_FOR_SCALARS(X,                                                                           \
+					  NAME##_multi,                                                                \
+					  (COND) && params.single_grouping_column.decompression_type == DT_Invalid)
 
 #define APPLY_FOR_SPECIALIZATIONS(X) APPLY_FOR_TYPE(X, index, true)
 
@@ -216,7 +224,8 @@ FUNCTION_NAME(dispatch_for_params)(BatchHashingParams params, int start_row, int
 		pg_unreachable();
 	}
 
-	if ((params.num_grouping_columns == 1) != (params.single_key.decompression_type != DT_Invalid))
+	if ((params.num_grouping_columns == 1) !=
+		(params.single_grouping_column.decompression_type != DT_Invalid))
 	{
 		pg_unreachable();
 	}
@@ -253,7 +262,7 @@ FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *ba
 #ifdef USE_DICT_HASHING
 	if (policy->use_key_index_for_dict)
 	{
-		Assert(params.single_key.decompression_type == DT_ArrowTextDict);
+		Assert(params.single_grouping_column.decompression_type == DT_ArrowTextDict);
 		single_text_offsets_translate(params, start_row, end_row);
 		return;
 	}

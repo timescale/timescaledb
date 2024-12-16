@@ -6,10 +6,14 @@
 
 #pragma once
 
+/*
+ * The data required to map the rows of the given compressed batch to the unique
+ * indexes of grouping keys, using a hash table.
+ */
 typedef struct BatchHashingParams
 {
 	const uint64 *batch_filter;
-	CompressedColumnValues single_key;
+	CompressedColumnValues single_grouping_column;
 
 	int num_grouping_columns;
 	const CompressedColumnValues *grouping_column_values;
@@ -40,7 +44,7 @@ build_batch_hashing_params(GroupingPolicyHash *policy, DecompressBatchState *bat
 	Assert(policy->num_grouping_columns > 0);
 	if (policy->num_grouping_columns == 1)
 	{
-		params.single_key = policy->current_batch_grouping_column_values[0];
+		params.single_grouping_column = policy->current_batch_grouping_column_values[0];
 	}
 
 	for (int i = 0; i < policy->num_grouping_columns; i++)

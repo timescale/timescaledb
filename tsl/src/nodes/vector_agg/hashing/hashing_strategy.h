@@ -15,6 +15,10 @@ typedef struct DecompressBatchState DecompressBatchState;
 
 typedef struct TupleTableSlot TupleTableSlot;
 
+/*
+ * The hashing strategy manages the details of how the grouping keys are stored
+ * in a hash table.
+ */
 typedef struct HashingStrategy
 {
 	char *explain_name;
