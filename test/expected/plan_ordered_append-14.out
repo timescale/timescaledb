@@ -335,13 +335,9 @@ ORDER BY 1,2 LIMIT 1;
    ->  Custom Scan (ChunkAppend) on dimension_only (actual rows=1 loops=1)
          Order: dimension_only."time" DESC
          ->  Index Only Scan using _hyper_3_11_chunk_dimension_only_time_idx on _hyper_3_11_chunk (actual rows=1 loops=1)
-               Heap Fetches: 1
          ->  Index Only Scan using _hyper_3_10_chunk_dimension_only_time_idx on _hyper_3_10_chunk (never executed)
-               Heap Fetches: 0
          ->  Index Only Scan using _hyper_3_9_chunk_dimension_only_time_idx on _hyper_3_9_chunk (never executed)
-               Heap Fetches: 0
          ->  Index Only Scan using _hyper_3_8_chunk_dimension_only_time_idx on _hyper_3_8_chunk (never executed)
-               Heap Fetches: 0
 (11 rows)
 
 -- test LEFT JOIN against hypertable
@@ -563,39 +559,23 @@ ORDER BY time DESC;
    ->  Merge Append (actual rows=49928 loops=1)
          Sort Key: _hyper_7_52_chunk."time" DESC
          ->  Index Only Scan using _hyper_7_52_chunk_space3_time_idx on _hyper_7_52_chunk (actual rows=6241 loops=1)
-               Heap Fetches: 6241
          ->  Index Only Scan using _hyper_7_50_chunk_space3_time_idx on _hyper_7_50_chunk (actual rows=6241 loops=1)
-               Heap Fetches: 6241
          ->  Index Only Scan using _hyper_7_48_chunk_space3_time_idx on _hyper_7_48_chunk (actual rows=6241 loops=1)
-               Heap Fetches: 6241
          ->  Index Only Scan using _hyper_7_46_chunk_space3_time_idx on _hyper_7_46_chunk (actual rows=6241 loops=1)
-               Heap Fetches: 6241
          ->  Index Only Scan using _hyper_7_44_chunk_space3_time_idx on _hyper_7_44_chunk (actual rows=6241 loops=1)
-               Heap Fetches: 6241
          ->  Index Only Scan using _hyper_7_42_chunk_space3_time_idx on _hyper_7_42_chunk (actual rows=6241 loops=1)
-               Heap Fetches: 6241
          ->  Index Only Scan using _hyper_7_40_chunk_space3_time_idx on _hyper_7_40_chunk (actual rows=6241 loops=1)
-               Heap Fetches: 6241
          ->  Index Only Scan using _hyper_7_38_chunk_space3_time_idx on _hyper_7_38_chunk (actual rows=6241 loops=1)
-               Heap Fetches: 6241
    ->  Merge Append (actual rows=53760 loops=1)
          Sort Key: _hyper_7_53_chunk."time" DESC
          ->  Index Only Scan using _hyper_7_53_chunk_space3_time_idx on _hyper_7_53_chunk (actual rows=6720 loops=1)
-               Heap Fetches: 6720
          ->  Index Only Scan using _hyper_7_51_chunk_space3_time_idx on _hyper_7_51_chunk (actual rows=6720 loops=1)
-               Heap Fetches: 6720
          ->  Index Only Scan using _hyper_7_49_chunk_space3_time_idx on _hyper_7_49_chunk (actual rows=6720 loops=1)
-               Heap Fetches: 6720
          ->  Index Only Scan using _hyper_7_47_chunk_space3_time_idx on _hyper_7_47_chunk (actual rows=6720 loops=1)
-               Heap Fetches: 6720
          ->  Index Only Scan using _hyper_7_45_chunk_space3_time_idx on _hyper_7_45_chunk (actual rows=6720 loops=1)
-               Heap Fetches: 6720
          ->  Index Only Scan using _hyper_7_43_chunk_space3_time_idx on _hyper_7_43_chunk (actual rows=6720 loops=1)
-               Heap Fetches: 6720
          ->  Index Only Scan using _hyper_7_41_chunk_space3_time_idx on _hyper_7_41_chunk (actual rows=6720 loops=1)
-               Heap Fetches: 6720
          ->  Index Only Scan using _hyper_7_39_chunk_space3_time_idx on _hyper_7_39_chunk (actual rows=6720 loops=1)
-               Heap Fetches: 6720
 (38 rows)
 
 -- test COLLATION
@@ -608,9 +588,7 @@ ORDER BY time DESC;
  Custom Scan (ChunkAppend) on sortopt_test (actual rows=12961 loops=1)
    Order: sortopt_test."time", sortopt_test.device NULLS FIRST
    ->  Index Only Scan using _hyper_8_55_chunk_time_device_nullsfirst on _hyper_8_55_chunk (actual rows=6720 loops=1)
-         Heap Fetches: 6720
    ->  Index Only Scan using _hyper_8_54_chunk_time_device_nullsfirst on _hyper_8_54_chunk (actual rows=6241 loops=1)
-         Heap Fetches: 6241
 (6 rows)
 
 -- test NULLS LAST
@@ -620,9 +598,7 @@ ORDER BY time DESC;
  Custom Scan (ChunkAppend) on sortopt_test (actual rows=12961 loops=1)
    Order: sortopt_test."time", sortopt_test.device DESC NULLS LAST
    ->  Index Only Scan using _hyper_8_55_chunk_time_device_nullslast on _hyper_8_55_chunk (actual rows=6720 loops=1)
-         Heap Fetches: 6720
    ->  Index Only Scan using _hyper_8_54_chunk_time_device_nullslast on _hyper_8_54_chunk (actual rows=6241 loops=1)
-         Heap Fetches: 6241
 (6 rows)
 
 --generate the results into two different files

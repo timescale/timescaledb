@@ -20,6 +20,7 @@ SET jit_above_cost=0;
 SET jit_inline_above_cost=0;
 SET jit_optimize_above_cost=0;
 SET jit_tuple_deforming=on;
+SET enable_hashagg=off;
 
 \ir :TEST_LOAD_NAME
 \set PREFIX 'EXPLAIN (VERBOSE, TIMING OFF, COSTS OFF, SUMMARY OFF)'

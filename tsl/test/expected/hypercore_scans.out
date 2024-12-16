@@ -1,6 +1,8 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+-- Avoid chunkwise aggregation to make the test stable
+set timescaledb.enable_chunkwise_aggregation to off;
 create table readings(time timestamptz,
        location text,
        device int,
@@ -222,43 +224,29 @@ select device, humidity from readings where device between 5 and 10;
 explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
 select device, avg(humidity) from readings where device between 5 and 10
 group by device;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
- Finalize GroupAggregate (actual rows=6 loops=1)
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ HashAggregate (actual rows=6 loops=1)
    Group Key: _hyper_1_1_chunk.device
-   ->  Sort (actual rows=36 loops=1)
-         Sort Key: _hyper_1_1_chunk.device
-         Sort Method: quicksort 
-         ->  Append (actual rows=36 loops=1)
-               ->  Partial GroupAggregate (actual rows=6 loops=1)
-                     Group Key: _hyper_1_1_chunk.device
-                     ->  Index Scan using _hyper_1_1_chunk_readings_device_idx on _hyper_1_1_chunk (actual rows=35 loops=1)
-                           Index Cond: ((device >= 5) AND (device <= 10))
-               ->  Partial GroupAggregate (actual rows=6 loops=1)
-                     Group Key: _hyper_1_2_chunk.device
-                     ->  Index Scan using _hyper_1_2_chunk_readings_device_idx on _hyper_1_2_chunk (actual rows=421 loops=1)
-                           Index Cond: ((device >= 5) AND (device <= 10))
-               ->  Partial GroupAggregate (actual rows=6 loops=1)
-                     Group Key: _hyper_1_3_chunk.device
-                     ->  Index Scan using _hyper_1_3_chunk_readings_device_idx on _hyper_1_3_chunk (actual rows=403 loops=1)
-                           Index Cond: ((device >= 5) AND (device <= 10))
-               ->  Partial GroupAggregate (actual rows=6 loops=1)
-                     Group Key: _hyper_1_4_chunk.device
-                     ->  Index Scan using _hyper_1_4_chunk_readings_device_idx on _hyper_1_4_chunk (actual rows=377 loops=1)
-                           Index Cond: ((device >= 5) AND (device <= 10))
-               ->  Partial GroupAggregate (actual rows=6 loops=1)
-                     Group Key: _hyper_1_5_chunk.device
-                     ->  Index Scan using _hyper_1_5_chunk_readings_device_idx on _hyper_1_5_chunk (actual rows=395 loops=1)
-                           Index Cond: ((device >= 5) AND (device <= 10))
-               ->  Partial GroupAggregate (actual rows=6 loops=1)
-                     Group Key: _hyper_1_6_chunk.device
-                     ->  Index Scan using _hyper_1_6_chunk_readings_device_idx on _hyper_1_6_chunk (actual rows=74 loops=1)
-                           Index Cond: ((device >= 5) AND (device <= 10))
+   Batches: 1 
+   ->  Append (actual rows=1705 loops=1)
+         ->  Index Scan using _hyper_1_1_chunk_readings_device_idx on _hyper_1_1_chunk (actual rows=35 loops=1)
+               Index Cond: ((device >= 5) AND (device <= 10))
+         ->  Index Scan using _hyper_1_2_chunk_readings_device_idx on _hyper_1_2_chunk (actual rows=421 loops=1)
+               Index Cond: ((device >= 5) AND (device <= 10))
+         ->  Index Scan using _hyper_1_3_chunk_readings_device_idx on _hyper_1_3_chunk (actual rows=403 loops=1)
+               Index Cond: ((device >= 5) AND (device <= 10))
+         ->  Index Scan using _hyper_1_4_chunk_readings_device_idx on _hyper_1_4_chunk (actual rows=377 loops=1)
+               Index Cond: ((device >= 5) AND (device <= 10))
+         ->  Index Scan using _hyper_1_5_chunk_readings_device_idx on _hyper_1_5_chunk (actual rows=395 loops=1)
+               Index Cond: ((device >= 5) AND (device <= 10))
+         ->  Index Scan using _hyper_1_6_chunk_readings_device_idx on _hyper_1_6_chunk (actual rows=74 loops=1)
+               Index Cond: ((device >= 5) AND (device <= 10))
  Array Cache Hits: 0
  Array Cache Misses: 6
  Array Cache Evictions: 0
  Array Decompressions: 6
-(34 rows)
+(20 rows)
 
 -- Test on conflict: insert the same data as before, but throw away
 -- the updates.

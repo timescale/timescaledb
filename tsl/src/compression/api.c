@@ -14,6 +14,7 @@
 #include <catalog/dependency.h>
 #include <catalog/index.h>
 #include <catalog/indexing.h>
+#include <catalog/pg_am.h>
 #include <commands/event_trigger.h>
 #include <commands/tablecmds.h>
 #include <commands/trigger.h>
@@ -777,13 +778,26 @@ set_access_method(Oid relid, const char *amname)
 	};
 	bool to_hypercore = strcmp(amname, TS_HYPERCORE_TAM_NAME) == 0;
 	Oid amoid = ts_get_rel_am(relid);
+	Oid new_amoid = get_am_oid(amname, false);
 
 	/* Setting the same access method is a no-op */
-	if (amoid == get_am_oid(amname, false))
+	if (amoid == new_amoid)
 		return relid;
 
 	hypercore_alter_access_method_begin(relid, !to_hypercore);
 	AlterTableInternal(relid, list_make1(&cmd), false);
+
+#if (PG_VERSION_NUM < 150004)
+	/* Fix for PostgreSQL bug where pg_depend was not updated to reflect the
+	 * new dependency between AM and relation. See related PG fix here:
+	 * https://github.com/postgres/postgres/commit/97d89101045fac8cb36f4ef6c08526ea0841a596 */
+	if (changeDependencyFor(RelationRelationId, relid, AccessMethodRelationId, amoid, new_amoid) !=
+		1)
+		elog(ERROR,
+			 "could not change access method dependency for relation \"%s.%s\"",
+			 get_namespace_name(get_rel_namespace(relid)),
+			 get_rel_name(relid));
+#endif
 	hypercore_alter_access_method_finish(relid, !to_hypercore);
 
 #else

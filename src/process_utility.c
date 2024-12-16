@@ -2960,10 +2960,10 @@ typedef enum HypertableIndexFlags
 } HypertableIndexFlags;
 
 static const WithClauseDefinition index_with_clauses[] = {
-	[HypertableIndexFlagMultiTransaction] = {.arg_name = "transaction_per_chunk", .type_id = BOOLOID,},
+	[HypertableIndexFlagMultiTransaction] = {.arg_names = {"transaction_per_chunk", NULL}, .type_id = BOOLOID,},
 #ifdef DEBUG
-	[HypertableIndexFlagBarrierTable] = {.arg_name = "barrier_table", .type_id = REGCLASSOID,},
-	[HypertableIndexFlagMaxChunks] = {.arg_name = "max_chunks", .type_id = INT4OID, .default_val = (Datum)-1},
+	[HypertableIndexFlagBarrierTable] = {.arg_names = {"barrier_table", NULL}, .type_id = REGCLASSOID,},
+	[HypertableIndexFlagMaxChunks] = {.arg_names = {"max_chunks", NULL}, .type_id = INT4OID, .default_val = (Datum)-1},
 #endif
 };
 
@@ -4440,6 +4440,13 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 	Hypertable *ht;
 	ObjectAddress PG_USED_FOR_ASSERTS_ONLY address;
 	Oid relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+	int16 tgtype;
+
+	TRIGGER_CLEAR_TYPE(tgtype);
+	if (stmt->row)
+		TRIGGER_SETT_ROW(tgtype);
+	tgtype |= stmt->timing;
+	tgtype |= stmt->events;
 
 	hcache = ts_hypertable_cache_pin();
 	ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
@@ -4456,21 +4463,31 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 			if (ts_chunk_get_by_relid(relid, false) != NULL)
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg(
-							 "trigger with transition tables not supported on hypertable chunks")));
+						 errmsg("triggers with transition tables are not supported on "
+								"hypertable chunks")));
 		return DDL_CONTINUE;
 	}
 
-	if (stmt->transitionRels)
+	/*
+	 * We do not support ROW triggers with transition tables on hypertables
+	 * since these are not supported on inheritance children, and we use
+	 * inheritance for our chunks (it is actually not supported for
+	 * declarative partition tables either).
+	 */
+	if (stmt->transitionRels && TRIGGER_FOR_ROW(tgtype))
 	{
 		ts_cache_release(hcache);
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("trigger with transition tables not supported on hypertables")));
+				 errmsg("ROW triggers with transition tables are not supported on hypertables")));
 	}
 
 	add_hypertable_to_process_args(args, ht);
 
+	/*
+	 * If it is not a ROW trigger, we do not need to create the ROW triggers
+	 * on the chunks, so we can return early.
+	 */
 	if (!stmt->row)
 	{
 		ts_cache_release(hcache);

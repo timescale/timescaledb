@@ -489,6 +489,10 @@ has_vector_agg_node(Plan *plan, bool *has_normal_agg)
 	{
 		append_plans = castNode(Append, plan)->appendplans;
 	}
+	if (IsA(plan, MergeAppend))
+	{
+		append_plans = castNode(MergeAppend, plan)->mergeplans;
+	}
 	else if (IsA(plan, CustomScan))
 	{
 		custom = castNode(CustomScan, plan);
@@ -550,6 +554,10 @@ try_insert_vector_agg_node(Plan *plan)
 	if (IsA(plan, Append))
 	{
 		append_plans = castNode(Append, plan)->appendplans;
+	}
+	else if (IsA(plan, MergeAppend))
+	{
+		append_plans = castNode(MergeAppend, plan)->mergeplans;
 	}
 	else if (IsA(plan, CustomScan))
 	{
