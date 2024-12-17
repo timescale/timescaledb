@@ -58,12 +58,6 @@ default_ignored_tests = {
 # the release and apache config inherit from the
 # debug config to reduce repetition
 def build_debug_config(overrides):
-    if str(overrides["pg"]).startswith("14."):
-        # This test has different output on PG14.
-        ignored_tests = default_ignored_tests.union({"compress_sort_transform"})
-    else:
-        ignored_tests = default_ignored_tests
-
     # llvm version and clang versions must match otherwise
     # there will be build errors this is true even when compiling
     # with gcc as clang is used to compile the llvm parts.
