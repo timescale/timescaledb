@@ -61,6 +61,8 @@ def build_debug_config(overrides):
     if str(overrides["pg"]).startswith("14."):
         # This test has different output on PG14.
         ignored_tests = default_ignored_tests.union({"compress_sort_transform"})
+    else:
+        ignored_tests = default_ignored_tests
 
     # llvm version and clang versions must match otherwise
     # there will be build errors this is true even when compiling
@@ -79,7 +81,7 @@ def build_debug_config(overrides):
             "coverage": True,
             "cxx": "g++",
             "extra_packages": "clang-14 llvm-14 llvm-14-dev llvm-14-tools",
-            "ignored_tests": default_ignored_tests,
+            "ignored_tests": ignored_tests,
             "name": "Debug",
             "os": "ubuntu-22.04",
             "pg_extra_args": "--enable-debug --enable-cassert --with-llvm LLVM_CONFIG=llvm-config-14",
