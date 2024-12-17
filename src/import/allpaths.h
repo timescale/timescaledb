@@ -13,5 +13,3 @@
 extern void ts_set_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
 extern void ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel,
 									   Index parent_rt_index, RangeTblEntry *parent_rte);
-
-extern void ts_set_plain_rel_pathlist(PlannerInfo *root, RelOptInfo *rel);

@@ -1193,14 +1193,8 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 				List *orig_query_pathkeys = root->query_pathkeys;
 				root->query_pathkeys = transformed_query_pathkeys;
 
-				/*
-				 * Create paths with transformed pathkeys. Note that we care not
-				 * only about the index paths, but about the sorted paths as
-				 * well. They might be useful as members of Append that doesn't
-				 * require its children to project to produce the original sort
-				 * expression like 'time_bucket'.
-				 */
-				ts_set_plain_rel_pathlist(root, rel);
+				/* Create index paths with transformed pathkeys */
+				create_index_paths(root, rel);
 
 				/*
 				 * Call the TSL hooks with the transformed pathkeys as well, so
