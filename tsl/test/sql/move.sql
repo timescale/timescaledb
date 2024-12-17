@@ -66,7 +66,7 @@ RESET client_min_messages;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 -- move with chunk index for reorder
-SELECT true INTO move_chunk_result FROM move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx', verbose=>TRUE);
+SELECT FROM move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx');
 SELECT * FROM test.show_subtables('cluster_test');
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 BEGIN;

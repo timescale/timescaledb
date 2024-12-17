@@ -184,25 +184,73 @@ arrow_set_row_validity(uint64 *bitmap, size_t row_number, bool value)
 }
 
 /*
- * AND two optional arrow validity bitmaps into the given storage.
+ * Combine the validity bitmaps into the given storage.
  */
 static inline const uint64 *
 arrow_combine_validity(size_t num_words, uint64 *restrict storage, const uint64 *filter1,
-					   const uint64 *filter2)
+					   const uint64 *filter2, const uint64 *filter3)
 {
+	/*
+	 * Any and all of the filters can be null. For simplicity, move the non-null
+	 * filters to the leading positions.
+	 */
+	const uint64 *tmp;
+#define SWAP(X, Y)                                                                                 \
+	tmp = (X);                                                                                     \
+	(X) = (Y);                                                                                     \
+	(Y) = tmp;
+
 	if (filter1 == NULL)
 	{
-		return filter2;
+		/*
+		 * We have at least one NULL that goes to the last position.
+		 */
+		SWAP(filter1, filter3);
+
+		if (filter1 == NULL)
+		{
+			/*
+			 * We have another NULL that goes to the second position.
+			 */
+			SWAP(filter1, filter2);
+		}
 	}
+	else
+	{
+		if (filter2 == NULL)
+		{
+			/*
+			 * We have at least one NULL that goes to the last position.
+			 */
+			SWAP(filter2, filter3);
+		}
+	}
+#undef SWAP
+
+	Assert(filter2 == NULL || filter1 != NULL);
+	Assert(filter3 == NULL || filter2 != NULL);
 
 	if (filter2 == NULL)
 	{
+		/* Either have one non-null filter, or all of them are null. */
 		return filter1;
 	}
 
-	for (size_t i = 0; i < num_words; i++)
+	if (filter3 == NULL)
 	{
-		storage[i] = filter1[i] & filter2[i];
+		/* Have two non-null filters. */
+		for (size_t i = 0; i < num_words; i++)
+		{
+			storage[i] = filter1[i] & filter2[i];
+		}
+	}
+	else
+	{
+		/* Have three non-null filters. */
+		for (size_t i = 0; i < num_words; i++)
+		{
+			storage[i] = filter1[i] & filter2[i] & filter3[i];
+		}
 	}
 
 	return storage;

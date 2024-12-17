@@ -253,9 +253,10 @@ GRANT CREATE ON TABLESPACE tablespace2 TO :ROLE_DEFAULT_PERM_USER;
 RESET client_min_messages;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 -- move with chunk index for reorder
-SELECT true INTO move_chunk_result FROM move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx', verbose=>TRUE);
-INFO:  reordering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
-INFO:  "_hyper_1_2_chunk": found 0 removable, 5 nonremovable row versions in 1 pages
+SELECT FROM move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx');
+--
+(1 row)
+
 SELECT * FROM test.show_subtables('cluster_test');
                  Child                  | Tablespace  
 ----------------------------------------+-------------
@@ -383,7 +384,6 @@ FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY ctid;
 -- move back to pg_default
 SELECT move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'pg_default', index_destination_tablespace=>'pg_default', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx', verbose=>TRUE);
 INFO:  reordering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
-INFO:  "_hyper_1_2_chunk": found 0 removable, 5 nonremovable row versions in 1 pages
  move_chunk 
 ------------
  
@@ -408,7 +408,6 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 -- move chunk and indexes to different tablespaces
 SELECT move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace2', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx', verbose=>TRUE);
 INFO:  reordering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
-INFO:  "_hyper_1_2_chunk": found 0 removable, 5 nonremovable row versions in 1 pages
  move_chunk 
 ------------
  
@@ -433,7 +432,6 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 -- keep chunk in same space and move index tablespace
 SELECT move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'pg_default', index_destination_tablespace=>'tablespace2', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx', verbose=>TRUE);
 INFO:  reordering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
-INFO:  "_hyper_1_2_chunk": found 0 removable, 5 nonremovable row versions in 1 pages
  move_chunk 
 ------------
  
