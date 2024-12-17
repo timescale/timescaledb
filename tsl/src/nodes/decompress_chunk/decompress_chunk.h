@@ -42,15 +42,15 @@ typedef struct CompressionInfo
 	/* compressed chunk attribute numbers for columns that are compressed */
 	Bitmapset *compressed_attnos_in_compressed_chunk;
 
-	bool single_chunk; /* query on explicit chunk */
-	bool has_seq_num;  /* legacy sequence number support */
-
+	bool single_chunk;	  /* query on explicit chunk */
+	bool has_seq_num;	  /* legacy sequence number support */
+	Relids parent_relids; /* relids of the parent hypertable and UNION */
 } CompressionInfo;
 
 typedef struct DecompressChunkPath
 {
 	CustomPath custom_path;
-	CompressionInfo *info;
+	const CompressionInfo *info;
 
 	List *required_compressed_pathkeys;
 	bool needs_sequence_num;

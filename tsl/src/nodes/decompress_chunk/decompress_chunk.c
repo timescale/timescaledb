@@ -65,9 +65,8 @@ static void create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compress
 										 const CompressionInfo *compression_info,
 										 const SortInfo *sort_info);
 
-static DecompressChunkPath *decompress_chunk_path_create(PlannerInfo *root, CompressionInfo *info,
-														 int parallel_workers,
-														 Path *compressed_path);
+static DecompressChunkPath *
+decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Path *compressed_path);
 
 static void decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info,
 											 const Chunk *chunk, RelOptInfo *chunk_rel,
@@ -79,7 +78,7 @@ static SortInfo build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo
 static Bitmapset *find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info);
 
 static bool
-is_compressed_column(CompressionInfo *info, Oid type)
+is_compressed_column(const CompressionInfo *info, Oid type)
 {
 	return type == info->compresseddata_oid;
 }
@@ -422,6 +421,16 @@ build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chun
 
 	info->chunk_const_segmentby = find_const_segmentby(chunk_rel, info);
 
+	/*
+	 * If the chunk is member of hypertable expansion or a UNION, find its
+	 * parent relation ids. We will use it later to filter out some parameterized
+	 * paths.
+	 */
+	if (chunk_rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
+	{
+		info->parent_relids = find_childrel_parents(root, chunk_rel);
+	}
+
 	return info;
 }
 
@@ -466,7 +475,7 @@ smoothstep(double x, double start, double end)
  * a binary heap.
  */
 static void
-cost_batch_sorted_merge(PlannerInfo *root, CompressionInfo *compression_info,
+cost_batch_sorted_merge(PlannerInfo *root, const CompressionInfo *compression_info,
 						DecompressChunkPath *dcpath, Path *compressed_path)
 {
 	Path sort_path; /* dummy for result of cost_sort */
@@ -641,7 +650,7 @@ cost_batch_sorted_merge(PlannerInfo *root, CompressionInfo *compression_info,
  * compatible and the optimization can be used.
  */
 static MergeBatchResult
-can_batch_sorted_merge(PlannerInfo *root, CompressionInfo *info, const Chunk *chunk)
+can_batch_sorted_merge(PlannerInfo *root, const CompressionInfo *info, const Chunk *chunk)
 {
 	PathKey *pk;
 	Var *var;
@@ -751,8 +760,7 @@ can_batch_sorted_merge(PlannerInfo *root, CompressionInfo *info, const Chunk *ch
  * To save planning time, we therefore refrain from adding them.
  */
 static Path *
-make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, const Hypertable *ht,
-					   Index ht_relid, Path *path, Path *compressed_path)
+make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *path, Path *compressed_path)
 {
 	if (root->query_pathkeys == NIL)
 	{
@@ -814,6 +822,13 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, const Hypertabl
 	return sorted_path;
 }
 
+static void build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk,
+											RelOptInfo *chunk_rel, Path *compressed_path,
+											bool add_uncompressed_part,
+											List *uncompressed_table_pathlist,
+											const SortInfo *sort_info,
+											const CompressionInfo *compression_info);
+
 void
 ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const Hypertable *ht,
 								   const Chunk *chunk)
@@ -857,8 +872,8 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 
 	Assert(chunk->fd.compressed_chunk_id > 0);
 
-	List *initial_pathlist = chunk_rel->pathlist;
-	List *initial_partial_pathlist = chunk_rel->partial_pathlist;
+	List *uncompressed_table_pathlist = chunk_rel->pathlist;
+	List *uncompressed_table_parallel_pathlist = chunk_rel->partial_pathlist;
 	chunk_rel->pathlist = NIL;
 	chunk_rel->partial_pathlist = NIL;
 
@@ -905,270 +920,19 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 
 	create_compressed_scan_paths(root, compressed_rel, compression_info, &sort_info);
 
-	/* compute parent relids of the chunk and use it to filter paths*/
-	Relids parent_relids = NULL;
-	if (!compression_info->single_chunk)
-		parent_relids = find_childrel_parents(root, chunk_rel);
-
 	/* create non-parallel paths */
 	ListCell *lc;
 	foreach (lc, compressed_rel->pathlist)
 	{
 		Path *compressed_path = lfirst(lc);
-
-		/*
-		 * We skip any BitmapScan parameterized paths here as supporting
-		 * those would require fixing up the internal scan. Since we
-		 * currently do not do this BitmapScans would be generated
-		 * when we have a parameterized path on a compressed column
-		 * that would have invalid references due to our
-		 * EquivalenceClasses.
-		 */
-		if (IsA(compressed_path, BitmapHeapPath) && compressed_path->param_info)
-			continue;
-
-		/*
-		 * Filter out all paths that try to JOIN the compressed chunk on the
-		 * hypertable or the uncompressed chunk
-		 * Ideally, we wouldn't create these paths in the first place.
-		 * However, create_join_clause code is called by PG while generating paths for the
-		 * compressed_rel via generate_implied_equalities_for_column.
-		 * create_join_clause ends up creating rinfo's between compressed_rel and ht because
-		 * PG does not know that compressed_rel is related to ht in anyway.
-		 * The parent-child relationship between chunk_rel and ht is known
-		 * to PG and so it does not try to create meaningless rinfos for that case.
-		 */
-		if (compressed_path->param_info != NULL)
-		{
-			if (bms_is_member(chunk_rel->relid, compressed_path->param_info->ppi_req_outer))
-				continue;
-			/* check if this is path made with references between
-			 * compressed_rel + hypertable or a nesting subquery.
-			 * The latter can happen in the case of UNION queries. see github 2917. This
-			 * happens since PG is not aware that the nesting
-			 * subquery that references the hypertable is a parent of compressed_rel as well.
-			 */
-			if (bms_overlap(parent_relids, compressed_path->param_info->ppi_req_outer))
-				continue;
-
-			ListCell *lc_ri;
-			bool references_compressed = false;
-			/*
-			 * Check if this path is parameterized on a compressed
-			 * column. Ideally those paths wouldn't be generated
-			 * in the first place but since we create compressed
-			 * EquivalenceMembers for all EquivalenceClasses these
-			 * Paths can happen and will fail at execution since
-			 * the left and right side of the expression are not
-			 * compatible. Therefore we skip any Path that is
-			 * parameterized on a compressed column here.
-			 */
-			foreach (lc_ri, compressed_path->param_info->ppi_clauses)
-			{
-				RestrictInfo *ri = lfirst_node(RestrictInfo, lc_ri);
-
-				if (ri->right_em && IsA(ri->right_em->em_expr, Var) &&
-					(Index) castNode(Var, ri->right_em->em_expr)->varno ==
-						compression_info->compressed_rel->relid)
-				{
-					Var *var = castNode(Var, ri->right_em->em_expr);
-					if (is_compressed_column(compression_info, var->vartype))
-					{
-						references_compressed = true;
-						break;
-					}
-				}
-				if (ri->left_em && IsA(ri->left_em->em_expr, Var) &&
-					(Index) castNode(Var, ri->left_em->em_expr)->varno ==
-						compression_info->compressed_rel->relid)
-				{
-					Var *var = castNode(Var, ri->left_em->em_expr);
-					if (is_compressed_column(compression_info, var->vartype))
-					{
-						references_compressed = true;
-						break;
-					}
-				}
-			}
-			if (references_compressed)
-				continue;
-		}
-
-		Path *chunk_path_no_sort =
-			(Path *) decompress_chunk_path_create(root, compression_info, 0, compressed_path);
-		List *decompressed_paths = list_make1(chunk_path_no_sort);
-
-		/*
-		 * If we can push down the sort below the DecompressChunk node, we set the pathkeys of
-		 * the decompress node to the query pathkeys, while remembering the compressed_pathkeys
-		 * corresponding to those query_pathkeys. We will determine whether to put a sort
-		 * between the decompression node and the scan during plan creation.
-		 */
-		if (sort_info.can_pushdown_sort)
-		{
-			if (pathkeys_contained_in(sort_info.required_compressed_pathkeys,
-									  compressed_path->pathkeys))
-			{
-				/*
-				 * The compressed path already has the required ordering. Modify
-				 * in place the no-sorting path we just created above.
-				 */
-				DecompressChunkPath *path = (DecompressChunkPath *) chunk_path_no_sort;
-				path->reverse = sort_info.reverse;
-				path->needs_sequence_num = sort_info.needs_sequence_num;
-				path->required_compressed_pathkeys = sort_info.required_compressed_pathkeys;
-				path->custom_path.path.pathkeys = root->query_pathkeys;
-			}
-			else
-			{
-				/*
-				 * We must sort the underlying compressed path to get the
-				 * required ordering. Make a copy of no-sorting path and modify
-				 * it accordingly
-				 */
-				DecompressChunkPath *path_copy =
-					copy_decompress_chunk_path((DecompressChunkPath *) chunk_path_no_sort);
-				path_copy->reverse = sort_info.reverse;
-				path_copy->needs_sequence_num = sort_info.needs_sequence_num;
-				path_copy->required_compressed_pathkeys = sort_info.required_compressed_pathkeys;
-				path_copy->custom_path.path.pathkeys = root->query_pathkeys;
-
-				/*
-				 * Add costing for a sort. The standard Postgres pattern is to add the cost during
-				 * path creation, but not add the sort path itself, that's done during plan
-				 * creation. Examples of this in: create_merge_append_path &
-				 * create_merge_append_plan
-				 */
-				Path sort_path; /* dummy for result of cost_sort */
-
-				cost_sort(&sort_path,
-						  root,
-						  sort_info.required_compressed_pathkeys,
-						  compressed_path->total_cost,
-						  compressed_path->rows,
-						  compressed_path->pathtarget->width,
-						  0.0,
-						  work_mem,
-						  -1);
-
-				cost_decompress_chunk(root, &path_copy->custom_path.path, &sort_path);
-
-				decompressed_paths = lappend(decompressed_paths, path_copy);
-			}
-		}
-		else if (ts_guc_enable_decompression_sorted_merge)
-		{
-			/*
-			 * Create a path for the batch sorted merge optimization. This
-			 * optimization performs a sorted merge of the involved batches by
-			 * using a binary heap and preserving the compression order. This
-			 * optimization is only taken into consideration if we can't push
-			 * down the sort to the compressed chunk. If we can push down the
-			 * sort, the batches can be directly consumed in this order and we
-			 * don't need to use this optimization.
-			 */
-			MergeBatchResult merge_result = can_batch_sorted_merge(root, compression_info, chunk);
-			if (merge_result != MERGE_NOT_POSSIBLE)
-			{
-				DecompressChunkPath *path_copy =
-					copy_decompress_chunk_path((DecompressChunkPath *) chunk_path_no_sort);
-
-				path_copy->reverse = (merge_result != SCAN_FORWARD);
-				path_copy->batch_sorted_merge = true;
-
-				/* The segment by optimization is only enabled if it can deliver the tuples in the
-				 * same order as the query requested it. So, we can just copy the pathkeys of the
-				 * query here.
-				 */
-				path_copy->custom_path.path.pathkeys = root->query_pathkeys;
-				cost_batch_sorted_merge(root, compression_info, path_copy, compressed_path);
-
-				decompressed_paths = lappend(decompressed_paths, path_copy);
-			}
-		}
-
-		/*
-		 * Add sorted version of the decompress path, if we couldn't push down
-		 * the sort.
-		 */
-		if (!sort_info.can_pushdown_sort)
-		{
-			Path *sort_above_chunk = make_chunk_sorted_path(root,
-															chunk_rel,
-															ht,
-															ht_relid,
-															chunk_path_no_sort,
-															compressed_path);
-			if (sort_above_chunk != NULL)
-			{
-				decompressed_paths = lappend(decompressed_paths, sort_above_chunk);
-			}
-		}
-
-		/*
-		 * If this is a partially compressed chunk we have to combine data
-		 * from compressed and uncompressed chunk.
-		 */
-		if (add_uncompressed_part)
-		{
-			Bitmapset *req_outer = PATH_REQ_OUTER(chunk_path_no_sort);
-			Path *uncompressed_path =
-				get_cheapest_path_for_pathkeys(initial_pathlist, NIL, req_outer, TOTAL_COST, false);
-
-			/*
-			 * All children of an append path are required to have the same parameterization
-			 * so we reparameterize here when we couldn't get a path with the parameterization
-			 * we need. Reparameterization should always succeed here since uncompressed_path
-			 * should always be a scan.
-			 */
-			if (!bms_equal(req_outer, PATH_REQ_OUTER(uncompressed_path)))
-			{
-				uncompressed_path = reparameterize_path(root, uncompressed_path, req_outer, 1.0);
-				if (!uncompressed_path)
-					continue;
-			}
-
-			ListCell *lc;
-			foreach (lc, decompressed_paths)
-			{
-				/*
-				 * Combine decompressed path with uncompressed part of the chunk,
-				 * using either MergeAppend or plain Append, depending on
-				 * whether it has sorting.
-				 */
-				Path *path = lfirst(lc);
-				if (path->pathkeys == NIL)
-				{
-					path = (Path *) create_append_path(root,
-													   chunk_rel,
-													   list_make2(path, uncompressed_path),
-													   /* partial_subpaths = */ NIL,
-													   /* pathkeys = */ NIL,
-													   req_outer,
-													   /* parallel_workers = */ 0,
-													   /* parallel_aware = */ false,
-													   path->rows + uncompressed_path->rows);
-				}
-				else
-				{
-					path = (Path *) create_merge_append_path(root,
-															 chunk_rel,
-															 list_make2(path, uncompressed_path),
-															 path->pathkeys,
-															 req_outer);
-				}
-
-				lfirst(lc) = path;
-			}
-		}
-
-		/*
-		 * Add the paths to the chunk relation.
-		 */
-		foreach (lc, decompressed_paths)
-		{
-			add_path(chunk_rel, lfirst(lc));
-		}
+		build_on_single_compressed_path(root,
+										chunk,
+										chunk_rel,
+										compressed_path,
+										add_uncompressed_part,
+										uncompressed_table_pathlist,
+										&sort_info,
+										compression_info);
 	}
 
 	/* the chunk_rel now owns the paths, remove them from the compressed_rel so they can't be freed
@@ -1192,10 +956,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 			 * If this is a partially compressed chunk we have to combine data
 			 * from compressed and uncompressed chunk.
 			 */
-			path = (Path *) decompress_chunk_path_create(root,
-														 compression_info,
-														 compressed_path->parallel_workers,
-														 compressed_path);
+			path = (Path *) decompress_chunk_path_create(root, compression_info, compressed_path);
 
 			if (add_uncompressed_part)
 			{
@@ -1203,16 +964,19 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 				Path *uncompressed_path = NULL;
 				bool uncompressed_path_is_partial = true;
 
-				if (initial_partial_pathlist)
-					uncompressed_path = get_cheapest_path_for_pathkeys(initial_partial_pathlist,
-																	   NIL,
-																	   req_outer,
-																	   TOTAL_COST,
-																	   true);
+				if (uncompressed_table_parallel_pathlist)
+				{
+					uncompressed_path =
+						get_cheapest_path_for_pathkeys(uncompressed_table_parallel_pathlist,
+													   NIL,
+													   req_outer,
+													   TOTAL_COST,
+													   true);
+				}
 
 				if (!uncompressed_path)
 				{
-					uncompressed_path = get_cheapest_path_for_pathkeys(initial_pathlist,
+					uncompressed_path = get_cheapest_path_for_pathkeys(uncompressed_table_pathlist,
 																	   NIL,
 																	   req_outer,
 																	   TOTAL_COST,
@@ -1269,6 +1033,286 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 
 	/* We should never get in the situation with no viable paths. */
 	Ensure(chunk_rel->pathlist, "could not create decompression path");
+}
+
+/*
+ * Add various decompression paths that are possible based on the given
+ * compressed path.
+ */
+static void
+build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
+								Path *compressed_path, bool add_uncompressed_part,
+								List *uncompressed_table_pathlist, const SortInfo *sort_info,
+								const CompressionInfo *compression_info)
+{
+	ListCell *lc;
+
+	/*
+	 * We skip any BitmapScan parameterized paths here as supporting
+	 * those would require fixing up the internal scan. Since we
+	 * currently do not do this BitmapScans would be generated
+	 * when we have a parameterized path on a compressed column
+	 * that would have invalid references due to our
+	 * EquivalenceClasses.
+	 */
+	if (IsA(compressed_path, BitmapHeapPath) && compressed_path->param_info)
+		return;
+
+	/*
+	 * Filter out all paths that try to JOIN the compressed chunk on the
+	 * hypertable or the uncompressed chunk
+	 * Ideally, we wouldn't create these paths in the first place.
+	 * However, create_join_clause code is called by PG while generating paths for the
+	 * compressed_rel via generate_implied_equalities_for_column.
+	 * create_join_clause ends up creating rinfo's between compressed_rel and ht because
+	 * PG does not know that compressed_rel is related to ht in anyway.
+	 * The parent-child relationship between chunk_rel and ht is known
+	 * to PG and so it does not try to create meaningless rinfos for that case.
+	 */
+	if (compressed_path->param_info != NULL)
+	{
+		if (bms_is_member(chunk_rel->relid, compressed_path->param_info->ppi_req_outer))
+			return;
+		/* check if this is path made with references between
+		 * compressed_rel + hypertable or a nesting subquery.
+		 * The latter can happen in the case of UNION queries. see github 2917. This
+		 * happens since PG is not aware that the nesting
+		 * subquery that references the hypertable is a parent of compressed_rel as well.
+		 */
+		if (bms_overlap(compression_info->parent_relids,
+						compressed_path->param_info->ppi_req_outer))
+		{
+			return;
+		}
+
+		ListCell *lc_ri;
+		bool references_compressed = false;
+		/*
+		 * Check if this path is parameterized on a compressed
+		 * column. Ideally those paths wouldn't be generated
+		 * in the first place but since we create compressed
+		 * EquivalenceMembers for all EquivalenceClasses these
+		 * Paths can happen and will fail at execution since
+		 * the left and right side of the expression are not
+		 * compatible. Therefore we skip any Path that is
+		 * parameterized on a compressed column here.
+		 */
+		foreach (lc_ri, compressed_path->param_info->ppi_clauses)
+		{
+			RestrictInfo *ri = lfirst_node(RestrictInfo, lc_ri);
+
+			if (ri->right_em && IsA(ri->right_em->em_expr, Var) &&
+				(Index) castNode(Var, ri->right_em->em_expr)->varno ==
+					compression_info->compressed_rel->relid)
+			{
+				Var *var = castNode(Var, ri->right_em->em_expr);
+				if (is_compressed_column(compression_info, var->vartype))
+				{
+					references_compressed = true;
+					break;
+				}
+			}
+			if (ri->left_em && IsA(ri->left_em->em_expr, Var) &&
+				(Index) castNode(Var, ri->left_em->em_expr)->varno ==
+					compression_info->compressed_rel->relid)
+			{
+				Var *var = castNode(Var, ri->left_em->em_expr);
+				if (is_compressed_column(compression_info, var->vartype))
+				{
+					references_compressed = true;
+					break;
+				}
+			}
+		}
+		if (references_compressed)
+			return;
+	}
+
+	Path *chunk_path_no_sort =
+		(Path *) decompress_chunk_path_create(root, compression_info, compressed_path);
+	List *decompressed_paths = list_make1(chunk_path_no_sort);
+
+	/*
+	 * If we can push down the sort below the DecompressChunk node, we set the pathkeys of
+	 * the decompress node to the query pathkeys, while remembering the compressed_pathkeys
+	 * corresponding to those query_pathkeys. We will determine whether to put a sort
+	 * between the decompression node and the scan during plan creation.
+	 */
+	if (sort_info->can_pushdown_sort)
+	{
+		if (pathkeys_contained_in(sort_info->required_compressed_pathkeys,
+								  compressed_path->pathkeys))
+		{
+			/*
+			 * The compressed path already has the required ordering. Modify
+			 * in place the no-sorting path we just created above.
+			 */
+			DecompressChunkPath *path = (DecompressChunkPath *) chunk_path_no_sort;
+			path->reverse = sort_info->reverse;
+			path->needs_sequence_num = sort_info->needs_sequence_num;
+			path->required_compressed_pathkeys = sort_info->required_compressed_pathkeys;
+			path->custom_path.path.pathkeys = root->query_pathkeys;
+		}
+		else
+		{
+			/*
+			 * We must sort the underlying compressed path to get the
+			 * required ordering. Make a copy of no-sorting path and modify
+			 * it accordingly
+			 */
+			DecompressChunkPath *path_copy =
+				copy_decompress_chunk_path((DecompressChunkPath *) chunk_path_no_sort);
+			path_copy->reverse = sort_info->reverse;
+			path_copy->needs_sequence_num = sort_info->needs_sequence_num;
+			path_copy->required_compressed_pathkeys = sort_info->required_compressed_pathkeys;
+			path_copy->custom_path.path.pathkeys = root->query_pathkeys;
+
+			/*
+			 * Add costing for a sort. The standard Postgres pattern is to add the cost during
+			 * path creation, but not add the sort path itself, that's done during plan
+			 * creation. Examples of this in: create_merge_append_path &
+			 * create_merge_append_plan
+			 */
+			Path sort_path; /* dummy for result of cost_sort */
+
+			cost_sort(&sort_path,
+					  root,
+					  sort_info->required_compressed_pathkeys,
+					  compressed_path->total_cost,
+					  compressed_path->rows,
+					  compressed_path->pathtarget->width,
+					  0.0,
+					  work_mem,
+					  -1);
+
+			cost_decompress_chunk(root, &path_copy->custom_path.path, &sort_path);
+
+			decompressed_paths = lappend(decompressed_paths, path_copy);
+		}
+	}
+	else if (ts_guc_enable_decompression_sorted_merge)
+	{
+		/*
+		 * Create a path for the batch sorted merge optimization. This
+		 * optimization performs a sorted merge of the involved batches by
+		 * using a binary heap and preserving the compression order. This
+		 * optimization is only taken into consideration if we can't push
+		 * down the sort to the compressed chunk. If we can push down the
+		 * sort, the batches can be directly consumed in this order and we
+		 * don't need to use this optimization.
+		 */
+		MergeBatchResult merge_result = can_batch_sorted_merge(root, compression_info, chunk);
+		if (merge_result != MERGE_NOT_POSSIBLE)
+		{
+			DecompressChunkPath *path_copy =
+				copy_decompress_chunk_path((DecompressChunkPath *) chunk_path_no_sort);
+
+			path_copy->reverse = (merge_result != SCAN_FORWARD);
+			path_copy->batch_sorted_merge = true;
+			path_copy->custom_path.path.parallel_workers = 0;
+
+			/* The segment by optimization is only enabled if it can deliver the tuples in the
+			 * same order as the query requested it. So, we can just copy the pathkeys of the
+			 * query here.
+			 */
+			path_copy->custom_path.path.pathkeys = root->query_pathkeys;
+			cost_batch_sorted_merge(root, compression_info, path_copy, compressed_path);
+
+			decompressed_paths = lappend(decompressed_paths, path_copy);
+		}
+	}
+
+	/*
+	 * Add sorted version of the decompress path, if we couldn't push down
+	 * the sort.
+	 */
+	if (!sort_info->can_pushdown_sort)
+	{
+		Path *sort_above_chunk =
+			make_chunk_sorted_path(root, chunk_rel, chunk_path_no_sort, compressed_path);
+		if (sort_above_chunk != NULL)
+		{
+			decompressed_paths = lappend(decompressed_paths, sort_above_chunk);
+		}
+	}
+
+	/*
+	 * If this is a partially compressed chunk we have to combine data
+	 * from compressed and uncompressed chunk.
+	 */
+	if (add_uncompressed_part)
+	{
+		Bitmapset *req_outer = PATH_REQ_OUTER(chunk_path_no_sort);
+		Path *uncompressed_path = get_cheapest_path_for_pathkeys(uncompressed_table_pathlist,
+																 NIL,
+																 req_outer,
+																 TOTAL_COST,
+																 false);
+
+		/*
+		 * All children of an append path are required to have the same parameterization
+		 * so we reparameterize here when we couldn't get a path with the parameterization
+		 * we need. Reparameterization should always succeed here since uncompressed_path
+		 * should always be a scan.
+		 */
+		if (!bms_equal(req_outer, PATH_REQ_OUTER(uncompressed_path)))
+		{
+			uncompressed_path = reparameterize_path(root, uncompressed_path, req_outer, 1.0);
+			if (!uncompressed_path)
+				return;
+		}
+
+		ListCell *lc;
+		foreach (lc, decompressed_paths)
+		{
+			/*
+			 * Combine decompressed path with uncompressed part of the chunk,
+			 * using either MergeAppend or plain Append, depending on
+			 * whether it has sorting.
+			 */
+			Path *path = lfirst(lc);
+			if (path->pathkeys == NIL)
+			{
+				const int workers =
+					Max(path->parallel_workers, uncompressed_path->parallel_workers);
+				path = (Path *) create_append_path(root,
+												   chunk_rel,
+												   list_make2(path, uncompressed_path),
+												   /* partial_subpaths = */ NIL,
+												   /* pathkeys = */ NIL,
+												   req_outer,
+												   workers,
+												   workers > 0,
+												   path->rows + uncompressed_path->rows);
+			}
+			else
+			{
+				path = (Path *) create_merge_append_path(root,
+														 chunk_rel,
+														 list_make2(path, uncompressed_path),
+														 path->pathkeys,
+														 req_outer);
+			}
+
+			lfirst(lc) = path;
+		}
+	}
+
+	/*
+	 * Add the paths to the chunk relation.
+	 */
+	foreach (lc, decompressed_paths)
+	{
+		Path *path = lfirst(lc);
+		if (path->parallel_workers > 0)
+		{
+			add_partial_path(chunk_rel, path);
+		}
+		else
+		{
+			add_path(chunk_rel, path);
+		}
+	}
 }
 
 /*
@@ -1911,8 +1955,7 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const
 }
 
 static DecompressChunkPath *
-decompress_chunk_path_create(PlannerInfo *root, CompressionInfo *info, int parallel_workers,
-							 Path *compressed_path)
+decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Path *compressed_path)
 {
 	DecompressChunkPath *path;
 
@@ -1951,8 +1994,8 @@ decompress_chunk_path_create(PlannerInfo *root, CompressionInfo *info, int paral
 	 * in a parallel plan we only set parallel_safe to true
 	 * when parallel_workers is greater than 0 which is only
 	 * the case when creating partial paths. */
-	path->custom_path.path.parallel_safe = parallel_workers > 0;
-	path->custom_path.path.parallel_workers = parallel_workers;
+	path->custom_path.path.parallel_safe = compressed_path->parallel_workers > 0;
+	path->custom_path.path.parallel_workers = compressed_path->parallel_workers;
 	path->custom_path.path.parallel_aware = false;
 
 	path->custom_path.custom_paths = list_make1(compressed_path);

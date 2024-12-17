@@ -252,7 +252,7 @@ static void
 build_decompression_map(DecompressionMapContext *context, List *compressed_scan_tlist)
 {
 	DecompressChunkPath *path = context->decompress_path;
-	CompressionInfo *info = path->info;
+	const CompressionInfo *info = path->info;
 	/*
 	 * Track which normal and metadata columns we were able to find in the
 	 * targetlist.
@@ -522,7 +522,7 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_scan_
  * uncompressed one. Based on replace_nestloop_params
  */
 static Node *
-replace_compressed_vars(Node *node, CompressionInfo *info)
+replace_compressed_vars(Node *node, const CompressionInfo *info)
 {
 	if (node == NULL)
 		return NULL;
