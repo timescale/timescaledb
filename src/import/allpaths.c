@@ -37,7 +37,7 @@
 #include "cross_module_fn.h"
 #include "planner/planner.h"
 
-static void set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
+static void ts_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
 
 /* copied from allpaths.c */
 static void
@@ -109,8 +109,8 @@ ts_create_plain_partial_paths(PlannerInfo *root, RelOptInfo *rel)
 }
 
 /* copied from allpaths.c */
-static void
-set_plain_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
+void
+ts_set_plain_rel_pathlist(PlannerInfo *root, RelOptInfo *rel)
 {
 	Relids required_outer;
 
@@ -206,7 +206,7 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 		 * Compute the child's access paths.
 		 */
 		RangeTblEntry *child_rte = root->simple_rte_array[child_rt_index];
-		set_rel_pathlist(root, child_rel, child_rt_index, child_rte);
+		ts_set_rel_pathlist(root, child_rel, child_rt_index, child_rte);
 
 		/*
 		 * If child is dummy, ignore it.
@@ -226,7 +226,7 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 
 /* based on the function in allpaths.c, with the irrelevant branches removed */
 static void
-set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
+ts_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
 {
 	if (IS_DUMMY_REL(rel))
 	{
@@ -251,7 +251,7 @@ set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *r
 				else
 				{
 					/* Plain relation */
-					set_plain_rel_pathlist(root, rel, rte);
+					ts_set_plain_rel_pathlist(root, rel);
 				}
 				break;
 			case RTE_SUBQUERY:
