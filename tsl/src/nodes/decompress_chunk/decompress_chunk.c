@@ -835,7 +835,10 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 			 * and the DML target relation are one and the same. But these kinds of queries
 			 * should be rare.
 			 */
-			if (IS_UPDL_CMD(proot->parse))
+			if (proot->parse->commandType == CMD_UPDATE || proot->parse->commandType == CMD_DELETE
+#if PG15_GE
+				|| proot->parse->commandType == CMD_MERGE)
+#endif
 			{
 				add_uncompressed_part = true;
 			}
