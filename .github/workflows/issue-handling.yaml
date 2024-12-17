@@ -52,7 +52,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "Issue <${{github.event.issue.url}}|#${{github.event.issue.number}} ${{github.event.issue.title}}> needs attention"
+                    "text": "Issue <${{github.event.issue.html_url}}|#${{github.event.issue.number}} ${{github.event.issue.title}}> needs attention"
                   }
                 }
               ]
