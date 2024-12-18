@@ -35,7 +35,7 @@ typedef struct GroupingPolicyHash GroupingPolicyHash;
  * strategy.
  *
  * 2) The key indexes are used to locate the aggregate function states
- * corresponding to a given row, and update it. This is done in bulk for all
+ * corresponding to a given row's key, and update it. This is done in bulk for all
  * rows of the batch, and for each aggregate function separately, to generate
  * simpler and potentially vectorizable code, and improve memory locality.
  *
