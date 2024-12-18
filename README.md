@@ -16,50 +16,29 @@
 
 </div>
 
-TimescaleDB scales PostgreSQL for ingesting and querying vast amounts of live data. From the perspective of both use and management, TimescaleDB looks and feels just like PostgreSQL, and can be managed and queried as such. However, it provides a wide range of features and optimizations that supercharge your queries - all while keeping the costs down. For example, our hybrid row-columnar engine makes queries up to 350x faster, ingests 44% faster, and reduces storage by 95%. Visit [timescale.com](https://www.timescale.com) for details, use cases, customer success stories, and more.
-
-If you prefer not to install or administer your TimescaleDB instance, try the 30 day
-[Timescale Cloud](https://console.cloud.timescale.com/signup) free trial. We tune your database for performance,
-handle scalability, high availability, backups and management so you can relax. Timescale is pay-as-you-go.
-We don't charge for storage you don't use, backups, snapshots, ingress or egress.
-
-
-<table style="width:100%;">
-<thead>
-  <tr>
-    <th width="500px">Get started with TimescaleDB</th>
-    <th width="500px">Learn more about TimescaleDB</th>
-  </tr>
-</thead>
-<tbody>
-  <tr>
-    <td><ul><li><a href="https://github.com/timescale/timescaledb/tree/main?tab=readme-ov-file#install-timescaledb">Install</a></li><li><a href="https://github.com/timescale/timescaledb/tree/main?tab=readme-ov-file#create-a-hypertable">Create a hypertable</a></li><li><a href="https://github.com/timescale/timescaledb/tree/main?tab=readme-ov-file#insert-and-query-data">Insert and query data</a></li><li><a href="https://github.com/timescale/timescaledb/tree/main?tab=readme-ov-file#compress-data">Compress data</a></li><li><a href="https://github.com/timescale/timescaledb/tree/main?tab=readme-ov-file#create-time-buckets">Create time buckets</a></li><li><a href="https://github.com/timescale/timescaledb/tree/main?tab=readme-ov-file#create-continuous-aggregates">Create continuous aggregates</a></li><li><a href="https://github.com/timescale/timescaledb/tree/main?tab=readme-ov-file#back-up-replicate-and-restore-data">Back up and replicate data</a></li></ul></td>
-    <td><ul><li><a href="https://docs.timescale.com/">Developer documentation</a></li><li><a href="https://tsdb.co/GitHubTimescaleDocsReleaseNotes">Release notes</a></li><li><a href="https://github.com/timescale/timescaledb/blob/main/test/README.md">Testing TimescaleDB</a></li><li><a href="https://www.timescale.com/forum/">Timescale community forum</a></li><li><a href="https://github.com/timescale/timescaledb/issues">GitHub issues</a></li><li><a href="https://tsdb.co/GitHubTimescaleSupport">Timescale support</a></li></ul></td>
-  </tr>
-</tbody>
-</table>
-
 ## Install TimescaleDB
 
-Installation options are:
+Install from a Docker container:
 
-- **Platform packages**: TimescaleDB is also available pre-packaged for several platforms such as
-  Linux, Windows, MacOS, Docker, and Kubernetes. For more information, see [Install TimescaleDB](https://docs.timescale.com/self-hosted/latest/install/).
+1. Run the TimescaleDB image:
 
-- **Build from source**: See [Building from source](https://docs.timescale.com/self-hosted/latest/install/installation-source/).
+    ```bash
+    docker pull timescale/timescaledb-ha:pg17
+    ```
 
-   We recommend not using TimescaleDB with PostgreSQL 17.1, 16.5, 15.9, 14.14, 13.17, 12.21.
-   These minor versions [introduced a breaking binary interface change](https://www.postgresql.org/about/news/postgresql-172-166-1510-1415-1318-and-1222-released-2965/) that,
-   once identified, was reverted in subsequent minor PostgreSQL versions 17.2, 16.6, 15.10, 14.15, 13.18, and 12.22.
-   When you build from source, best practice is to build with PostgreSQL 17.2, 16.6, etc and higher.
-   Users of [Timescale Cloud](https://console.cloud.timescale.com/) and Platform packages built and
-   distributed by Timescale are unaffected.
+1. Run the container:
 
-- **[Timescale Cloud](https://tsdb.co/GitHubTimescale)**: A fully-managed TimescaleDB in the cloud, is
-  available via a free trial. Create a PostgreSQL database in the cloud with TimescaleDB pre-installed
-  so you can power your application with TimescaleDB without the management overhead. [Learn more](#want-timescaledb-hosted-and-managed-for-you-try-timescale-cloud) about Timescale Cloud.
+    ```bash
+    docker run -d --name timescaledb -p 5432:5432 -e POSTGRES_PASSWORD=password timescale/timescaledb-ha:pg17
+    ```
 
-TimescaleDB comes in the following editions: Apache 2 and Community. See the [documentation](https://docs.timescale.com/about/latest/timescaledb-editions/) for differences between them. For reference and clarity, all code files in this repository reference [licensing](https://github.com/timescale/timescaledb/blob/main/tsl/LICENSE-TIMESCALE) in their header. Apache-2 licensed binaries can be built by passing `-DAPACHE_ONLY=1` to `bootstrap`.
+1. Connect to a database:
+
+    ```bash
+    psql -d "postgres://postgres:password@localhost/postgres"
+    ```
+
+See [other installation options](https://docs.timescale.com/self-hosted/latest/install/) or try [Timescale Cloud](https://docs.timescale.com/getting-started/latest/) for free.
 
 ## Create a hypertable
 
@@ -85,6 +64,31 @@ See more:
 
 - [About hypertables](https://docs.timescale.com/use-timescale/latest/hypertables/)
 - [API reference](https://docs.timescale.com/api/latest/hypertable/)
+
+## Enable columnstore
+
+You enable columnstore for your time-series data to reduce its size by more than 90%. This cuts storage costs and keeps your queries operating at lightning speed.
+
+- Enable columnstore on a hypertable:
+
+    ```sql
+    ALTER TABLE conditions SET (
+      timescaledb.compress,
+      timescaledb.compress_segmentby = 'device_id'
+    );
+    ```
+
+- Create a policy to enable columnstore for chunks that are older than seven days automatically:
+
+    ```sql
+    SELECT add_compression_policy('conditions', INTERVAL '7 days');
+    ```
+
+See more:
+
+- [About columnstore](https://docs.timescale.com/use-timescale/latest/compression/about-compression/)
+- [Enable columnstore manually](https://docs.timescale.com/use-timescale/latest/compression/manual-compression/)
+- [API reference](https://docs.timescale.com/api/latest/compression/)
 
 ## Insert and query data
 
@@ -115,44 +119,6 @@ See more:
 
 - [Query data](https://docs.timescale.com/use-timescale/latest/query-data/)
 - [Write data](https://docs.timescale.com/use-timescale/latest/write-data/)
-
-## Compress data
-
-You compress your time-series data to reduce its size by more than 90%. This cuts storage costs and keeps your queries operating at lightning speed.
-
-When you enable compression, the data in your hypertable is compressed chunk by chunk. When the chunk is compressed, multiple records are grouped into a single row. The columns of this row hold an array-like structure that stores all the data. This means that instead of using lots of rows to store the data, it stores the same data in a single row. Because a single row takes up less disk space than many rows, it decreases the amount of disk space required, and can also speed up your queries. For example:
-
-- Enable compression on hypertable
-
-    ```sql
-    ALTER TABLE conditions SET (
-      timescaledb.compress,
-      timescaledb.compress_segmentby = 'device_id'
-    );
-    ```
-- Compress hypertable chunks manually:
-
-    ```sql
-    SELECT
-      compress_chunk(chunk, if_not_compressed => TRUE)
-    FROM
-      show_chunks(
-        'conditions',
-        NOW() - INTERVAL '1 week',
-        NOW() - INTERVAL '3 weeks'
-      ) AS chunk;
-    ```
-
-- Create a policy to compress chunks that are older than seven days automatically:
-
-    ```sql
-    SELECT add_compression_policy('conditions', INTERVAL '7 days');
-    ```
-
-See more:
-
-- [About compression](https://docs.timescale.com/use-timescale/latest/compression/)
-- [API reference](https://docs.timescale.com/api/latest/compression/)
 
 ## Create time buckets
 
@@ -218,15 +184,6 @@ See more:
 
 - [About continuous aggregates](https://docs.timescale.com/use-timescale/latest/continuous-aggregates/)
 - [API reference](https://docs.timescale.com/api/latest/continuous-aggregates/create_materialized_view/)
-
-## Back up, replicate, and restore data
-
-TimescaleDB takes advantage of the reliable backup, restore, and replication functionality provided by PostgreSQL.
-
-See more:
-
-- [Backup and restore](https://docs.timescale.com/self-hosted/latest/backup-and-restore/)
-- [Replication and high availability](https://docs.timescale.com/self-hosted/latest/replication-and-ha/)
 
 ## Want TimescaleDB hosted and managed for you? Try Timescale Cloud
 
