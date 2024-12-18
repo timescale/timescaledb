@@ -792,24 +792,40 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	PreventInTransactionBlock(true, REFRESH_FUNCTION_NAME);
 
 	/* No bucketing when open ended */
-	if (!(start_isnull && end_isnull))
+	if (!(start_isnull && end_isnull) || (start_isnull && !ts_guc_enable_osm_reads))
 	{
+		int64 mints = 0;
+		bool min_isnull = true;
+		if (start_isnull && ts_guc_enable_osm_reads == false)
+		{
+			/*set refresh window start to min(ts) of raw hypertable as tiered
+			 * data is not visible */
+			const Hypertable *raw_ht = cagg_get_hypertable_or_fail(cagg->data.raw_hypertable_id);
+			mints = ts_hypertable_get_open_dim_min_value(raw_ht, 0, &min_isnull);
+		}
 		if (cagg->bucket_function->bucket_fixed_interval == false)
 		{
-			refresh_window = *refresh_window_arg;
+			if (!min_isnull)
+				refresh_window.start = mints;
+
 			ts_compute_inscribed_bucketed_refresh_window_variable(&refresh_window.start,
 																  &refresh_window.end,
 																  cagg->bucket_function);
 		}
 		else
 		{
+			InternalTimeRange refresh_window_arg_copy = *refresh_window_arg;
+			if (!min_isnull)
+				refresh_window_arg_copy.start = mints;
 			int64 bucket_width = ts_continuous_agg_fixed_bucket_width(cagg->bucket_function);
 			Assert(bucket_width > 0);
 			refresh_window =
-				compute_inscribed_bucketed_refresh_window(cagg, refresh_window_arg, bucket_width);
+				compute_inscribed_bucketed_refresh_window(cagg,
+														  (const InternalTimeRange
+															   *) (&refresh_window_arg_copy),
+														  bucket_width);
 		}
 	}
-
 	if (refresh_window.start >= refresh_window.end)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
