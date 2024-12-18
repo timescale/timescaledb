@@ -21,6 +21,7 @@
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/vector_quals.h"
 #include "nodes/vector_agg.h"
+#include "nodes/vector_agg/plan.h"
 
 static int
 get_input_offset(DecompressChunkState *decompress_state, Var *var)
@@ -187,22 +188,11 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 
 	/*
-	 * Determine which grouping policy we are going to use.
+	 * Create the grouping policy chosen at plan time.
 	 */
-	bool all_segmentby = true;
-	for (int i = 0; i < vector_agg_state->num_grouping_columns; i++)
-	{
-		GroupingColumn *col = &vector_agg_state->grouping_columns[i];
-		DecompressContext *dcontext = &decompress_state->decompress_context;
-		CompressionColumnDescription *desc = &dcontext->compressed_chunk_columns[col->input_offset];
-		if (desc->type != SEGMENTBY_COLUMN)
-		{
-			all_segmentby = false;
-			break;
-		}
-	}
-
-	if (all_segmentby)
+	const VectorAggGroupingType grouping_type =
+		intVal(list_nth(cscan->custom_private, VASI_GroupingType));
+	if (grouping_type == VAGT_Batch)
 	{
 		/*
 		 * Per-batch grouping.
@@ -222,7 +212,8 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 			create_grouping_policy_hash(vector_agg_state->num_agg_defs,
 										vector_agg_state->agg_defs,
 										vector_agg_state->num_grouping_columns,
-										vector_agg_state->grouping_columns);
+										vector_agg_state->grouping_columns,
+										grouping_type);
 	}
 }
 

@@ -54,10 +54,24 @@ typedef struct GroupingPolicy
 	char *(*gp_explain)(GroupingPolicy *gp);
 } GroupingPolicy;
 
+/*
+ * The various types of grouping we might use, as determined at planning time.
+ * The hashed subtypes are all implemented by hash grouping policy.
+ */
+typedef enum
+{
+	VAGT_Invalid,
+	VAGT_Batch,
+	VAGT_HashSingleFixed2,
+	VAGT_HashSingleFixed4,
+	VAGT_HashSingleFixed8
+} VectorAggGroupingType;
+
 extern GroupingPolicy *create_grouping_policy_batch(int num_agg_defs, VectorAggDef *agg_defs,
 													int num_grouping_columns,
 													GroupingColumn *grouping_columns);
 
 extern GroupingPolicy *create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs,
 												   int num_grouping_columns,
-												   GroupingColumn *grouping_columns);
+												   GroupingColumn *grouping_columns,
+												   VectorAggGroupingType grouping_type);

@@ -16,6 +16,7 @@
 #include "plan.h"
 
 #include "exec.h"
+#include "import/list.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/decompress_chunk/vector_quals.h"
 #include "nodes/vector_agg.h"
@@ -131,7 +132,8 @@ resolve_outer_special_vars(List *agg_tlist, CustomScan *custom)
  * node.
  */
 static Plan *
-vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk, List *resolved_targetlist)
+vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk, List *resolved_targetlist,
+					   VectorAggGroupingType grouping_type)
 {
 	CustomScan *vector_agg = (CustomScan *) makeNode(CustomScan);
 	vector_agg->custom_plans = list_make1(decompress_chunk);
@@ -171,13 +173,9 @@ vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk, List *resolved_ta
 	vector_agg->scan.plan.extParam = bms_copy(agg->plan.extParam);
 	vector_agg->scan.plan.allParam = bms_copy(agg->plan.allParam);
 
-	List *grouping_child_output_offsets = NIL;
-	for (int i = 0; i < agg->numCols; i++)
-	{
-		grouping_child_output_offsets =
-			lappend_int(grouping_child_output_offsets, AttrNumberGetAttrOffset(agg->grpColIdx[i]));
-	}
-	vector_agg->custom_private = list_make1(grouping_child_output_offsets);
+	vector_agg->custom_private = ts_new_list(T_List, VASI_Count);
+	lfirst(list_nth_cell(vector_agg->custom_private, VASI_GroupingType)) =
+		makeInteger(grouping_type);
 
 	return (Plan *) vector_agg;
 }
@@ -427,10 +425,10 @@ can_vectorize_aggref(Aggref *aggref, CustomScan *custom, VectorQualInfo *vqi)
 }
 
 /*
- * Whether we can perform vectorized aggregation with a given grouping.
+ * What vectorized grouping strategy we can use for the given grouping columns.
  */
-static bool
-can_vectorize_grouping(Agg *agg, CustomScan *custom, List *resolved_targetlist)
+static VectorAggGroupingType
+get_vectorized_grouping_type(Agg *agg, CustomScan *custom, List *resolved_targetlist)
 {
 	/*
 	 * The Agg->numCols value can be less than the number of the non-aggregated
@@ -459,7 +457,7 @@ can_vectorize_grouping(Agg *agg, CustomScan *custom, List *resolved_targetlist)
 			 * aggregated targetlists. Just say it's not vectorizable, because
 			 * here we are working with arbitrary plans that we don't control.
 			 */
-			return false;
+			return VAGT_Invalid;
 		}
 
 		num_grouping_columns++;
@@ -468,7 +466,7 @@ can_vectorize_grouping(Agg *agg, CustomScan *custom, List *resolved_targetlist)
 		bool is_segmentby;
 		if (!is_vector_var(custom, (Expr *) var, &is_segmentby))
 		{
-			return false;
+			return VAGT_Invalid;
 		}
 
 		all_segmentby &= is_segmentby;
@@ -495,7 +493,15 @@ can_vectorize_grouping(Agg *agg, CustomScan *custom, List *resolved_targetlist)
 	 */
 	if (num_grouping_columns == 0)
 	{
-		return true;
+		return VAGT_Batch;
+	}
+
+	/*
+	 * We support grouping by any number of columns if all of them are segmentby.
+	 */
+	if (all_segmentby)
+	{
+		return VAGT_Batch;
 	}
 
 	/*
@@ -507,16 +513,24 @@ can_vectorize_grouping(Agg *agg, CustomScan *custom, List *resolved_targetlist)
 		int16 typlen;
 		bool typbyval;
 		get_typlenbyval(single_grouping_var->vartype, &typlen, &typbyval);
-		if (typbyval && typlen > 0 && (size_t) typlen <= sizeof(Datum))
+		if (typbyval)
 		{
-			return true;
+			switch (typlen)
+			{
+				case 2:
+					return VAGT_HashSingleFixed2;
+				case 4:
+					return VAGT_HashSingleFixed4;
+				case 8:
+					return VAGT_HashSingleFixed8;
+				default:
+					Ensure(false, "invalid fixed size %d of a vector type", typlen);
+					break;
+			}
 		}
 	}
 
-	/*
-	 * We support grouping by any number of columns if all of them are segmentby.
-	 */
-	return all_segmentby;
+	return VAGT_Invalid;
 }
 
 /*
@@ -709,7 +723,9 @@ try_insert_vector_agg_node(Plan *plan)
 	 */
 	List *resolved_targetlist = resolve_outer_special_vars(agg->plan.targetlist, custom);
 
-	if (!can_vectorize_grouping(agg, custom, resolved_targetlist))
+	const VectorAggGroupingType grouping_type =
+		get_vectorized_grouping_type(agg, custom, resolved_targetlist);
+	if (grouping_type == VAGT_Invalid)
 	{
 		/* The grouping is not vectorizable. */
 		return plan;
@@ -758,5 +774,5 @@ try_insert_vector_agg_node(Plan *plan)
 	 * Finally, all requirements are satisfied and we can vectorize this partial
 	 * aggregation node.
 	 */
-	return vector_agg_plan_create(agg, custom, resolved_targetlist);
+	return vector_agg_plan_create(agg, custom, resolved_targetlist, grouping_type);
 }

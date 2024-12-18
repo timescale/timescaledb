@@ -39,7 +39,7 @@ static const GroupingPolicy grouping_policy_hash_functions;
 
 GroupingPolicy *
 create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_grouping_columns,
-							GroupingColumn *grouping_columns)
+							GroupingColumn *grouping_columns, VectorAggGroupingType grouping_type)
 {
 	GroupingPolicyHash *policy = palloc0(sizeof(GroupingPolicyHash));
 	policy->funcs = grouping_policy_hash_functions;
@@ -66,21 +66,19 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 	policy->current_batch_grouping_column_values =
 		palloc(sizeof(CompressedColumnValues) * num_grouping_columns);
 
-	Assert(num_grouping_columns == 1);
-	const GroupingColumn *g = &policy->grouping_columns[0];
-	switch (g->value_bytes)
+	switch (grouping_type)
 	{
-		case 8:
+		case VAGT_HashSingleFixed8:
 			policy->hashing = single_fixed_8_strategy;
 			break;
-		case 4:
+		case VAGT_HashSingleFixed4:
 			policy->hashing = single_fixed_4_strategy;
 			break;
-		case 2:
+		case VAGT_HashSingleFixed2:
 			policy->hashing = single_fixed_2_strategy;
 			break;
 		default:
-			Assert(false);
+			Ensure(false, "failed to determine the hashing strategy");
 			break;
 	}
 
