@@ -770,6 +770,7 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *path, Pat
 	Assert(ts_is_decompress_chunk_path(path));
 
 	/* Iterate over the sort_pathkeys and generate all possible useful sorting */
+	List *pathkey_exprs = NIL;
 	List *useful_pathkeys = NIL;
 	ListCell *lc;
 	foreach (lc, root->query_pathkeys)
@@ -791,6 +792,7 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *path, Pat
 		}
 
 		useful_pathkeys = lappend(useful_pathkeys, pathkey);
+		pathkey_exprs = lappend(pathkey_exprs, em_expr);
 	}
 
 	if (useful_pathkeys == NIL)
@@ -809,6 +811,35 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *path, Pat
 	 * sorted path must be independent.
 	 */
 	DecompressChunkPath *path_copy = copy_decompress_chunk_path((DecompressChunkPath *) path);
+
+	/*
+	 * Sorting might require a projection to evaluate the sorting keys. It is
+	 * added during Plan creation by prepare_sort_from_pathkeys(). However, we
+	 * must account for the costs of projection already at the Path stage.
+	 * One synthetic example is calculating min(x1 + x2 + ....), where the argument
+	 * of min() is a heavy expression. We choose between normal aggregation and a
+	 * special optimization for min() added by build_minmax_path(): an InitPlan
+	 * that does ORDER BY <argument> + LIMIT 1. The aggregate costs always account
+	 * for calculating the argument expression (see get_agg_clause_costs()). The
+	 * sorting must as well, otherwise the sorting plan will always have lower
+	 * costs, even when it's subpotimal in practice. The sorting cost with
+	 * LIMIT 1 is essentially linear in the number of input tuples (see
+	 * cost_tuplesort()).
+	 * There is another complication: normally, the cost of expressions in
+	 * targetlist is accounted for by the PathTarget.cost. However, the relation
+	 * targetlists don't have the argument expression and only have the plain
+	 * source Vars used there. The expression is added only later by
+	 * apply_scanjoin_target_to_paths(), after we have already chosen the best
+	 * path. Because of this, we have to account for it here in a hacky way.
+	 * For further improvements, we might research what the Postgres declarative
+	 * partitioning code does for this case, because it must have a similar
+	 * problem.
+	 */
+	QualCost pathkey_exprs_cost;
+	cost_qual_eval(&pathkey_exprs_cost, pathkey_exprs, root);
+	path_copy->custom_path.path.startup_cost += pathkey_exprs_cost.startup;
+	path_copy->custom_path.path.total_cost +=
+		path_copy->custom_path.path.rows * pathkey_exprs_cost.per_tuple;
 
 	Path *sorted_path = (Path *)
 		create_sort_path(root, chunk_rel, (Path *) path_copy, useful_pathkeys, root->limit_tuples);
@@ -1179,30 +1210,54 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 		 * whether it has sorting.
 		 */
 		Path *combined_path = NULL;
-		Path *decompressed_path = lfirst(lc);
+		Path *decompression_path = lfirst(lc);
 		const int workers =
-			Max(decompressed_path->parallel_workers, uncompressed_path->parallel_workers);
-		if (decompressed_path->pathkeys == NIL)
+			Max(decompression_path->parallel_workers, uncompressed_path->parallel_workers);
+		if (decompression_path->pathkeys == NIL)
 		{
+			/*
+			 * Append distinguishes paths that are parallel and not, and uses
+			 * this for cost estimation, so we have to get it right here.
+			 */
+			List *parallel_paths = NIL;
+			List *sequential_paths = NIL;
+
+			if (decompression_path->parallel_workers > 0)
+			{
+				parallel_paths = lappend(parallel_paths, decompression_path);
+			}
+			else
+			{
+				sequential_paths = lappend(sequential_paths, decompression_path);
+			}
+
+			if (uncompressed_path->parallel_workers > 0)
+			{
+				parallel_paths = lappend(parallel_paths, uncompressed_path);
+			}
+			else
+			{
+				sequential_paths = lappend(sequential_paths, uncompressed_path);
+			}
+
 			combined_path =
 				(Path *) create_append_path(root,
 											chunk_rel,
-											list_make2(decompressed_path, uncompressed_path),
-											/* partial_subpaths = */ NIL,
+											sequential_paths,
+											parallel_paths,
 											/* pathkeys = */ NIL,
 											req_outer,
 											workers,
-											///* parallel_aware = */ false,
 											workers > 0,
-											decompressed_path->rows + uncompressed_path->rows);
+											decompression_path->rows + uncompressed_path->rows);
 		}
 		else if (workers == 0)
 		{
 			combined_path =
 				(Path *) create_merge_append_path(root,
 												  chunk_rel,
-												  list_make2(decompressed_path, uncompressed_path),
-												  decompressed_path->pathkeys,
+												  list_make2(decompression_path, uncompressed_path),
+												  decompression_path->pathkeys,
 												  req_outer);
 		}
 		else
