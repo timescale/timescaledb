@@ -17,7 +17,8 @@ static void caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id
 									Oid hypertable_partition_coltype,
 									int64 hypertable_partition_col_interval,
 									int32 parent_mat_hypertable_id);
-static void process_additional_timebucket_parameter(ContinuousAggsBucketFunction *bf, Const *arg);
+static void process_additional_timebucket_parameter(ContinuousAggsBucketFunction *bf, Const *arg,
+													bool *custom_origin);
 static void process_timebucket_parameters(FuncExpr *fe, ContinuousAggsBucketFunction *bf,
 										  bool process_checks, bool is_cagg_create,
 										  AttrNumber htpartcolno);
@@ -181,7 +182,8 @@ destroy_union_query(Query *q)
  * Handle additional parameter of the timebucket function such as timezone, offset, or origin
  */
 static void
-process_additional_timebucket_parameter(ContinuousAggsBucketFunction *bf, Const *arg)
+process_additional_timebucket_parameter(ContinuousAggsBucketFunction *bf, Const *arg,
+										bool *custom_origin)
 {
 	char *tz_name;
 	switch (exprType((Node *) arg))
@@ -204,16 +206,20 @@ process_additional_timebucket_parameter(ContinuousAggsBucketFunction *bf, Const 
 			break;
 		case DATEOID:
 			/* Bucket origin as Date */
-			bf->bucket_time_origin =
-				date2timestamptz_opt_overflow(DatumGetDateADT(arg->constvalue), NULL);
+			if (!arg->constisnull)
+				bf->bucket_time_origin =
+					date2timestamptz_opt_overflow(DatumGetDateADT(arg->constvalue), NULL);
+			*custom_origin = true;
 			break;
 		case TIMESTAMPOID:
 			/* Bucket origin as Timestamp */
 			bf->bucket_time_origin = DatumGetTimestamp(arg->constvalue);
+			*custom_origin = true;
 			break;
 		case TIMESTAMPTZOID:
 			/* Bucket origin as TimestampTZ */
 			bf->bucket_time_origin = DatumGetTimestampTz(arg->constvalue);
+			*custom_origin = true;
 			break;
 		case INT2OID:
 			/* Bucket offset as smallint */
@@ -248,10 +254,12 @@ process_timebucket_parameters(FuncExpr *fe, ContinuousAggsBucketFunction *bf, bo
 	Node *width_arg;
 	Node *col_arg;
 	bool custom_origin = false;
-	Const *const_arg;
+	TIMESTAMP_NOBEGIN(bf->bucket_time_origin);
+	int nargs;
 
 	/* Only column allowed : time_bucket('1day', <column> ) */
 	col_arg = lsecond(fe->args);
+
 	/* Could be a named argument */
 	if (IsA(col_arg, NamedArgExpr))
 		col_arg = (Node *) castNode(NamedArgExpr, col_arg)->arg;
@@ -263,75 +271,52 @@ process_timebucket_parameters(FuncExpr *fe, ContinuousAggsBucketFunction *bf, bo
 				 errmsg("time bucket function must reference the primary hypertable "
 						"dimension column")));
 
-	if (list_length(fe->args) >= 3)
+	nargs = list_length(fe->args);
+	Assert(nargs >= 2 && nargs <= 5);
+
+	/*
+	 * Process the third argument of the time bucket function. This could be `timezone`, `offset`,
+	 * or `origin`.
+	 *
+	 * Time bucket function variations with 3 and 5 arguments:
+	 *   - time_bucket(width SMALLINT, ts SMALLINT,    offset SMALLINT)
+	 *   - time_bucket(width INTEGER,  ts INTEGER,     offset INTEGER)
+	 *   - time_bucket(width BIGINT,   ts BIGINT,      offset BIGINT)
+	 *   - time_bucket(width INTERVAL, ts DATE,        offset INTERVAL)
+	 *   - time_bucket(width INTERVAL, ts DATE,        origin DATE)
+	 *   - time_bucket(width INTERVAL, ts TIMESTAMPTZ, offset INTERVAL)
+	 *   - time_bucket(width INTERVAL, ts TIMESTAMPTZ, origin TIMESTAMPTZ)
+	 *   - time_bucket(width INTERVAL, ts TIMESTAMPTZ, timezone TEXT, origin TIMESTAMPTZ,
+	 *                 offset INTERVAL)
+	 *   - time_bucket(width INTERVAL, ts TIMESTAMP,   offset INTERVAL)
+	 *   - time_bucket(width INTERVAL, ts TIMESTAMP,   origin TIMESTAMP)
+	 */
+	if (nargs >= 3)
 	{
 		Const *arg = check_time_bucket_argument(lthird(fe->args), "third", process_checks);
-		process_additional_timebucket_parameter(bf, arg);
+		process_additional_timebucket_parameter(bf, arg, &custom_origin);
 	}
 
-	if (list_length(fe->args) >= 4)
+	/*
+	 * Process the fourth and fifth arguments of the time bucket function. This could be `origin` or
+	 * `offset`.
+	 *
+	 * Time bucket function variation with 5 arguments:
+	 *   - time_bucket(width INTERVAL, ts TIMESTAMPTZ, timezone TEXT, origin TIMESTAMPTZ,
+	 *                 offset INTERVAL)
+	 */
+	if (nargs >= 4)
 	{
 		Const *arg = check_time_bucket_argument(lfourth(fe->args), "fourth", process_checks);
-		process_additional_timebucket_parameter(bf, arg);
+		process_additional_timebucket_parameter(bf, arg, &custom_origin);
 	}
 
-	/* Check for custom origin. */
-	switch (exprType(col_arg))
+	if (nargs == 5)
 	{
-		case DATEOID:
-			/* Origin is always 3rd arg for date variants. */
-			if (list_length(fe->args) == 3 && exprType(lthird(fe->args)) == DATEOID)
-			{
-				Node *arg = lthird(fe->args);
-				custom_origin = true;
-				/* this function also takes care of named arguments */
-				const_arg = check_time_bucket_argument(arg, "third", process_checks);
-				bf->bucket_time_origin =
-					DatumGetTimestamp(DirectFunctionCall1(date_timestamp, const_arg->constvalue));
-			}
-			break;
-		case TIMESTAMPOID:
-			/* Origin is always 3rd arg for timestamp variants. */
-			if (list_length(fe->args) == 3 && exprType(lthird(fe->args)) == TIMESTAMPOID)
-			{
-				Node *arg = lthird(fe->args);
-				custom_origin = true;
-				const_arg = check_time_bucket_argument(arg, "third", process_checks);
-				bf->bucket_time_origin = DatumGetTimestamp(const_arg->constvalue);
-			}
-			break;
-		case TIMESTAMPTZOID:
-			/* Origin can be 3rd or 4th arg for timestamptz variants. */
-			if (list_length(fe->args) >= 3 && exprType(lthird(fe->args)) == TIMESTAMPTZOID)
-			{
-				Node *arg = lthird(fe->args);
-				custom_origin = true;
-				Const *constval = check_time_bucket_argument(arg, "third", process_checks);
-				bf->bucket_time_origin = DatumGetTimestampTz(constval->constvalue);
-			}
-			else if (list_length(fe->args) >= 4 && exprType(lfourth(fe->args)) == TIMESTAMPTZOID)
-			{
-				custom_origin = true;
-				if (IsA(lfourth(fe->args), Const))
-				{
-					bf->bucket_time_origin =
-						DatumGetTimestampTz(castNode(Const, lfourth(fe->args))->constvalue);
-				}
-				/* could happen in a statement like time_bucket('1h', .., 'utc', origin =>
-				 * ...) */
-				else if (IsA(lfourth(fe->args), NamedArgExpr))
-				{
-					Const *constval =
-						check_time_bucket_argument(lfourth(fe->args), "fourth", process_checks);
-
-					bf->bucket_time_origin = DatumGetTimestampTz(constval->constvalue);
-				}
-			}
-			break;
-		default:
-			/* Nothing to do for integer time column. */
-			break;
+		Const *arg = check_time_bucket_argument(lfifth(fe->args), "fifth", process_checks);
+		process_additional_timebucket_parameter(bf, arg, &custom_origin);
 	}
+
 	if (process_checks && custom_origin && TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
 	{
 		ereport(ERROR,
