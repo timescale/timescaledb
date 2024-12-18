@@ -70,6 +70,11 @@ select * from :chunk where device between 5 and 10;
 explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
 select time, temp + humidity from readings where device between 5 and 10 and humidity > 5;
 
+-- Testing JSON format to make sure it works and to get coverage for
+-- those parts of the code.
+explain (analyze, costs off, timing off, summary off, decompress_cache_stats, format json)
+select time, temp + humidity from readings where device between 5 and 10 and humidity > 5;
+
 -- Check the explain cache information output.
 --
 -- Query 1 and 3 should show the same explain plan, and the plan in

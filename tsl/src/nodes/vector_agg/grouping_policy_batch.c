@@ -151,6 +151,7 @@ compute_single_aggregate(GroupingPolicyBatch *policy, DecompressBatchState *batc
 	const uint64 *filter = arrow_combine_validity(num_words,
 												  policy->tmp_filter,
 												  batch_state->vector_qual_result,
+												  agg_def->filter_result,
 												  arg_validity_bitmap);
 
 	/*
@@ -166,15 +167,16 @@ compute_single_aggregate(GroupingPolicyBatch *policy, DecompressBatchState *batc
 		/*
 		 * Scalar argument, or count(*). Have to also count the valid rows in
 		 * the batch.
+		 *
+		 * The batches that are fully filtered out by vectorized quals should
+		 * have been skipped by the caller, but we also have to check for the
+		 * case when no rows match the aggregate FILTER clause.
 		 */
 		const int n = arrow_num_valid(filter, batch_state->total_batch_rows);
-
-		/*
-		 * The batches that are fully filtered out by vectorized quals should
-		 * have been skipped by the caller.
-		 */
-		Assert(n > 0);
-		agg_def->func.agg_scalar(agg_state, arg_datum, arg_isnull, n, agg_extra_mctx);
+		if (n > 0)
+		{
+			agg_def->func.agg_scalar(agg_state, arg_datum, arg_isnull, n, agg_extra_mctx);
+		}
 	}
 }
 
@@ -185,7 +187,7 @@ gp_batch_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 
 	/*
 	 * Allocate the temporary filter array for computing the combined results of
-	 * batch filter and column validity.
+	 * batch filter, aggregate filter and column validity.
 	 */
 	const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
 	if (num_words > policy->num_tmp_filter_words)

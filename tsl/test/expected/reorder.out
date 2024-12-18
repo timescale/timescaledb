@@ -289,7 +289,6 @@ COMMIT;
 -- reorder a chunk directly with an chunk index
 SELECT reorder_chunk('_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx', TRUE);
 INFO:  reordering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
-INFO:  "_hyper_1_2_chunk": found 0 removable, 5 nonremovable row versions in 1 pages
  reorder_chunk 
 ---------------
  
@@ -380,7 +379,6 @@ COMMIT;
 -- reorder a chunk without an index
 SELECT reorder_chunk('_timescaledb_internal._hyper_1_2_chunk', verbose => TRUE);
 INFO:  reordering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
-INFO:  "_hyper_1_2_chunk": found 0 removable, 5 nonremovable row versions in 1 pages
  reorder_chunk 
 ---------------
  
@@ -471,7 +469,6 @@ COMMIT;
 -- reorder a chunk directly with a hypertable index
 SELECT reorder_chunk('_timescaledb_internal._hyper_1_2_chunk', 'cluster_test_time_idx', TRUE);
 INFO:  reordering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
-INFO:  "_hyper_1_2_chunk": found 0 removable, 5 nonremovable row versions in 1 pages
  reorder_chunk 
 ---------------
  
@@ -686,7 +683,6 @@ FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY ctid;
 -- can perform first reorder using a hypertable index (also test non-toast)
 SELECT reorder_chunk('_timescaledb_internal._hyper_1_1_chunk', 'cluster_test_time_idx', verbose => TRUE);
 INFO:  reordering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
-INFO:  "_hyper_1_1_chunk": found 0 removable, 5 nonremovable row versions in 1 pages
  reorder_chunk 
 ---------------
  
@@ -777,7 +773,6 @@ COMMIT;
 -- and this sets the clustered index correctly
 SELECT reorder_chunk('_timescaledb_internal._hyper_1_1_chunk', verbose => TRUE);
 INFO:  reordering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
-INFO:  "_hyper_1_1_chunk": found 0 removable, 5 nonremovable row versions in 1 pages
  reorder_chunk 
 ---------------
  
@@ -1000,7 +995,6 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
 COMMIT;
 SELECT reorder_chunk('_timescaledb_internal._hyper_1_1_chunk', verbose => TRUE);
 INFO:  reordering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
-INFO:  "_hyper_1_1_chunk": found 0 removable, 5 nonremovable row versions in 1 pages
  reorder_chunk 
 ---------------
  
@@ -1111,7 +1105,6 @@ SET enable_indexscan=true;
 SET enable_bitmapscan=false;
 SELECT reorder_chunk('_timescaledb_internal._hyper_1_1_chunk', verbose => TRUE);
 INFO:  reordering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
-INFO:  "_hyper_1_1_chunk": found 0 removable, 5 nonremovable row versions in 1 pages
  reorder_chunk 
 ---------------
  
@@ -1256,7 +1249,6 @@ ERROR:  "_hyper_1_2_chunk_cluster_test_time_idx" is not a valid clustering index
 CLUSTER ct2 USING ct2_time_idx;
 SELECT reorder_chunk('_timescaledb_internal._hyper_2_3_chunk', verbose => TRUE);
 INFO:  reordering "_timescaledb_internal._hyper_2_3_chunk" using sequential scan and sort
-INFO:  "_hyper_2_3_chunk": found 0 removable, 5 nonremovable row versions in 1 pages
  reorder_chunk 
 ---------------
  
@@ -1276,7 +1268,6 @@ DELETE FROM ct2 where time < 2 OR val < 2;
 VACUUM ct2;
 SELECT reorder_chunk('_timescaledb_internal._hyper_2_3_chunk', verbose => TRUE);
 INFO:  reordering "_timescaledb_internal._hyper_2_3_chunk" using sequential scan and sort
-INFO:  "_hyper_2_3_chunk": found 0 removable, 3 nonremovable row versions in 1 pages
  reorder_chunk 
 ---------------
  
