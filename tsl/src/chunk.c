@@ -3,44 +3,63 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-
 #include <postgres.h>
+#include <access/htup.h>
 #include <access/htup_details.h>
+#include <access/multixact.h>
+#include <access/rewriteheap.h>
+#include <access/table.h>
+#include <access/tableam.h>
+#include <access/transam.h>
 #include <access/xact.h>
+#include <catalog/catalog.h>
 #include <catalog/dependency.h>
+#include <catalog/heap.h>
 #include <catalog/namespace.h>
+#include <catalog/objectaddress.h>
+#include <catalog/pg_class_d.h>
+#include <catalog/pg_constraint.h>
+#include <catalog/pg_constraint_d.h>
 #include <catalog/pg_foreign_server.h>
 #include <catalog/pg_foreign_table.h>
+#include <commands/tablecmds.h>
+#include <commands/vacuum.h>
+#include <common/relpath.h>
 #include <executor/executor.h>
 #include <fmgr.h>
 #include <foreign/foreign.h>
 #include <funcapi.h>
 #include <miscadmin.h>
+#include <nodes/lockoptions.h>
 #include <nodes/makefuncs.h>
+#include <nodes/nodes.h>
 #include <nodes/parsenodes.h>
 #include <parser/parse_func.h>
+#include <storage/block.h>
+#include <storage/bufmgr.h>
 #include <storage/lmgr.h>
+#include <storage/lockdefs.h>
+#include <storage/smgr.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
+#include <utils/elog.h>
+#include <utils/guc.h>
 #include <utils/inval.h>
 #include <utils/memutils.h>
 #include <utils/palloc.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
 #include <utils/tuplestore.h>
-#ifdef USE_ASSERT_CHECKING
-#endif
 
-#include <compat/compat.h>
-#include "hypercube.h"
-#include <error_utils.h>
-#include <errors.h>
-#include <extension.h>
-#include <hypertable_cache.h>
-
+#include "annotations.h"
+#include "cache.h"
 #include "chunk.h"
-#include "chunk_api.h"
 #include "debug_point.h"
+#include "extension.h"
+#include "hypercore/hypercore_handler.h"
+#include "hypercube.h"
+#include "hypertable.h"
+#include "hypertable_cache.h"
 #include "utils.h"
 
 /* Data in a frozen chunk cannot be modified. So any operation
@@ -185,4 +204,905 @@ chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_than_type, boo
 	FreeExecutorState(estate);
 
 	return num_results;
+}
+
+/*
+ * Check if a relation is currently being rewritten.
+ *
+ * A table that is being rewritten during a DDL operation will have relrewrite
+ * in pg_class set to the original relation's Oid (this includes cluster,
+ * vacuum full, or merge). In other words, given "relid" we look for any
+ * currently non-user visible relation in pg_class that references relid. If
+ * found, return the Oid of the non-user visible relation, otherwise
+ * InvalidOid.
+ */
+static Oid
+get_merge_table_relid(Oid relid, char *relpersistence)
+{
+	HeapTuple pg_class_tuple;
+	Relation pg_class_desc;
+	SysScanDesc pg_class_scan;
+	ScanKeyData key[1];
+	Oid merge_relid = InvalidOid;
+
+	/*
+	 * Based on PG code: If something goes wrong during backend startup, we
+	 * might find ourselves trying to read pg_class before we've selected a
+	 * database.  That ain't gonna work, so bail out with a useful error
+	 * message.  If this happens, it probably means a relcache entry that
+	 * needs to be nailed isn't.
+	 */
+	if (!OidIsValid(MyDatabaseId))
+		elog(FATAL, "cannot read pg_class without having selected a database");
+
+	ScanKeyInit(&key[0],
+				Anum_pg_class_relrewrite,
+				BTEqualStrategyNumber,
+				F_OIDEQ,
+				ObjectIdGetDatum(relid));
+
+	pg_class_desc = table_open(RelationRelationId, AccessShareLock);
+	pg_class_scan = systable_beginscan(pg_class_desc, InvalidOid, true, NULL, 1, key);
+	pg_class_tuple = systable_getnext(pg_class_scan);
+
+	if (HeapTupleIsValid(pg_class_tuple))
+	{
+		Form_pg_class form = (Form_pg_class) GETSTRUCT(pg_class_tuple);
+		merge_relid = form->oid;
+		if (relpersistence)
+			*relpersistence = form->relpersistence;
+	}
+
+	systable_endscan(pg_class_scan);
+	table_close(pg_class_desc, AccessShareLock);
+
+	return merge_relid;
+}
+
+#if PG16_LT
+/* VacuumCutoffs is defined in PG16 and greater. Define here for previous PG
+ * versions. */
+struct VacuumCutoffs
+{
+	TransactionId relfrozenxid;
+	MultiXactId relminmxid;
+	TransactionId OldestXmin;
+	MultiXactId OldestMxact;
+	TransactionId FreezeLimit;
+	MultiXactId MultiXactCutoff;
+};
+#endif
+
+typedef struct RelationMergeInfo
+{
+	Oid relid;
+	struct VacuumCutoffs cutoffs;
+	const Chunk *chunk;
+	Relation rel;
+} RelationMergeInfo;
+
+typedef enum MergeLockUpgrade
+{
+	MERGE_LOCK_UPGRADE,
+	MERGE_LOCK_CONDITIONAL_UPGRADE,
+	MERGE_LOCK_ACCESS_EXCLUSIVE,
+} MergeLockUpgrade;
+
+static void
+get_vacuum_cutoffs(Relation rel, struct VacuumCutoffs *cutoffs)
+{
+#if PG16_GE
+	VacuumParams params;
+	memset(&params, 0, sizeof(VacuumParams));
+
+	vacuum_get_cutoffs(rel, &params, cutoffs);
+#elif PG15
+	vacuum_set_xid_limits(rel,
+						  0,
+						  0,
+						  0,
+						  0,
+						  &cutoffs->OldestXmin,
+						  &cutoffs->OldestMxact,
+						  &cutoffs->FreezeLimit,
+						  &cutoffs->MultiXactCutoff);
+#elif PG14
+	vacuum_set_xid_limits(rel,
+						  0,
+						  0,
+						  0,
+						  0,
+						  &cutoffs->OldestXmin,
+						  &cutoffs->FreezeLimit,
+						  NULL,
+						  &cutoffs->MultiXactCutoff,
+						  NULL);
+#endif
+
+	/* Frozen Id should not go backwards */
+	TransactionId relfrozenxid = rel->rd_rel->relfrozenxid;
+
+	if (TransactionIdIsValid(relfrozenxid) &&
+		TransactionIdPrecedes(cutoffs->FreezeLimit, relfrozenxid))
+		cutoffs->FreezeLimit = relfrozenxid;
+
+	MultiXactId relminmxid = rel->rd_rel->relminmxid;
+
+	if (MultiXactIdIsValid(relminmxid) && MultiXactIdPrecedes(cutoffs->MultiXactCutoff, relminmxid))
+		cutoffs->MultiXactCutoff = relminmxid;
+}
+
+static void
+merge_chunks_finish(Oid new_relid, RelationMergeInfo *relinfos, int nrelids,
+					TransactionId freeze_limit, MultiXactId multi_cutoff, char relpersistence,
+					MergeLockUpgrade lock_upgrade)
+{
+	/*
+	 * The relations being merged are currently locked in ExclusiveLock, which
+	 * means other readers can have locks. To delete the relations, we first
+	 * need to upgrade to an exclusive lock. However, this might lead to
+	 * deadlocks so we need to bail out if we cannot get the lock immediately.
+	 */
+	for (int i = 0; i < nrelids; i++)
+	{
+		Oid relid = relinfos[i].relid;
+
+		switch (lock_upgrade)
+		{
+			case MERGE_LOCK_CONDITIONAL_UPGRADE:
+				if (!ConditionalLockRelationOid(relid, AccessExclusiveLock))
+					ereport(ERROR,
+							(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+							 errmsg("could not lock relation \"%s\" for merge",
+									get_rel_name(relid))));
+				break;
+			case MERGE_LOCK_UPGRADE:
+				LockRelationOid(relid, AccessExclusiveLock);
+				break;
+			case MERGE_LOCK_ACCESS_EXCLUSIVE:
+				/* We should already hold AccessExclusivelock. Could preventively
+				 * take it or assert the lock is taken, but it would require
+				 * opening the relation again. */
+				break;
+		}
+	}
+
+	finish_heap_swap(relinfos[0].relid,
+					 new_relid,
+					 false, /* system catalog */
+					 false /* swap toast by content */,
+					 false, /* check constraints */
+					 true,	/* internal? */
+					 freeze_limit,
+					 multi_cutoff,
+					 relpersistence);
+
+	/* Delete all the merged relations except the first one, since we are
+	 * keeping it for the heap swap. */
+	for (int i = 1; i < nrelids; i++)
+	{
+		Oid relid = relinfos[i].relid;
+		ObjectAddress object = {
+			.classId = RelationRelationId,
+			.objectId = relid,
+		};
+
+		/* Cannot drop if relation is still open */
+		Assert(relinfos[i].rel == NULL);
+
+		if (relinfos[i].chunk)
+		{
+			const Oid namespaceid = get_rel_namespace(relid);
+			const char *schemaname = get_namespace_name(namespaceid);
+			const char *tablename = get_rel_name(relid);
+
+			ts_chunk_delete_by_name(schemaname, tablename, DROP_RESTRICT);
+		}
+
+		/* Delete the actual table */
+		performDeletion(&object, DROP_RESTRICT, PERFORM_DELETION_INTERNAL);
+	}
+}
+
+static int
+cmp_relids(const void *left, const void *right)
+{
+	const Oid relid1 = DatumGetObjectId(*((Datum *) left));
+	const Oid relid2 = DatumGetObjectId(*((Datum *) right));
+	return relid1 - relid2;
+}
+
+static int
+cmp_relations(const void *left, const void *right)
+{
+	const RelationMergeInfo *linfo = ((RelationMergeInfo *) left);
+	const RelationMergeInfo *rinfo = ((RelationMergeInfo *) right);
+
+	if (linfo->chunk && rinfo->chunk)
+	{
+		const Hypercube *lcube = linfo->chunk->cube;
+		const Hypercube *rcube = rinfo->chunk->cube;
+
+		Assert(lcube->num_slices == rcube->num_slices);
+
+		for (int i = 0; i < lcube->num_slices; i++)
+		{
+			const DimensionSlice *lslice = lcube->slices[i];
+			const DimensionSlice *rslice = rcube->slices[i];
+
+			Assert(lslice->fd.dimension_id == rslice->fd.dimension_id);
+
+			/* Compare start of range for the dimension */
+			if (lslice->fd.range_start < rslice->fd.range_start)
+				return -1;
+
+			if (lslice->fd.range_start > rslice->fd.range_start)
+				return 1;
+
+			/* If start of range is equal, compare by end of range */
+			if (lslice->fd.range_end < rslice->fd.range_end)
+				return -1;
+
+			if (lslice->fd.range_end > rslice->fd.range_end)
+				return 1;
+		}
+
+		/* Should only reach here if partitioning is equal across all
+		 * dimensions. Fall back to comparing relids. */
+	}
+
+	return linfo->relid - rinfo->relid;
+}
+
+/*
+ * Check that the partition boundaries of two chunks align so that a new valid
+ * hypercube can be formed if the chunks are merged. This check assumes that
+ * the hypercubes are sorted so that cube2 "follows" cube1.
+ *
+ * The algorithm is simple and only allows merging along a single dimension in
+ * the same merge. For example, these two cases are mergeable:
+ *
+ * ' ____
+ * ' |__|
+ * ' |__|
+ *
+ * ' _______
+ * ' |__|__|
+ *
+ * while these cases are not mergeable:
+ * '    ____
+ * '  __|__|
+ * ' |__|
+ *
+ * ' ______
+ * ' |____|
+ * ' |__|
+ *
+ *
+ * The validation can handle merges of many chunks at once if they are
+ * "naively" aligned and this function is called on chunk hypercubes in
+ * "partition order":
+ *
+ * ' _____________
+ * ' |__|__|__|__|
+ *
+ * However, the validation currently won't accept merges of multiple
+ * dimensions at once:
+ *
+ * ' _____________
+ * ' |__|__|__|__|
+ * ' |__|__|__|__|
+ *
+ * It also cannot handle complicated merges of multi-dimensional partitioning
+ * schemes like the one below.
+ *
+ * ' _________
+ * ' |__a____|
+ * ' |_b_|_c_|
+ *
+ * Merging a,b,c, should be possible but the validation currently cannot
+ * handle such cases. Instead, it is necessary to first merge b,c. Then merge
+ * a with the result (b,c) in a separate merge. Note that it is not possible
+ * to merge only a,b or a,c.
+ *
+ * A future, more advanced, validation needs to handle corner-cases like the
+ * one below that has gaps:
+ *
+ * ' _____________
+ * ' |__|__|__|__|
+ * ' |____|  |___|
+ * '
+ */
+static void
+validate_merge_possible(const Hypercube *cube1, const Hypercube *cube2)
+{
+	int follow_edges = 0;
+	int equal_edges = 0;
+
+	Assert(cube1->num_slices == cube2->num_slices);
+
+	for (int i = 0; i < cube1->num_slices; i++)
+	{
+		const DimensionSlice *slice1 = cube1->slices[i];
+		const DimensionSlice *slice2 = cube2->slices[i];
+
+		if (ts_dimension_slices_equal(slice1, slice2))
+			equal_edges++;
+
+		if (slice1->fd.range_end == slice2->fd.range_start)
+			follow_edges++;
+	}
+
+	if (follow_edges != 1 || (cube1->num_slices - equal_edges) != 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot create new chunk partition boundaries"),
+				 errhint("Try merging chunks that have adjacent partitions.")));
+}
+
+static const ChunkConstraint *
+get_chunk_constraint_by_slice_id(const ChunkConstraints *ccs, int32 slice_id)
+{
+	for (int i = 0; i < ccs->num_constraints; i++)
+	{
+		const ChunkConstraint *cc = &ccs->constraints[i];
+
+		if (cc->fd.dimension_slice_id == slice_id)
+			return cc;
+	}
+
+	return NULL;
+}
+
+static void
+chunk_update_constraints(const Chunk *chunk, const Hypercube *new_cube)
+{
+	Cache *hcache;
+	const Hypertable *ht =
+		ts_hypertable_cache_get_cache_and_entry(chunk->hypertable_relid, CACHE_FLAG_NONE, &hcache);
+	List *new_constraints = NIL;
+
+	for (int i = 0; i < new_cube->num_slices; i++)
+	{
+		const DimensionSlice *old_slice = chunk->cube->slices[i];
+		DimensionSlice *new_slice = new_cube->slices[i];
+		const ChunkConstraint *cc;
+		ScanTupLock tuplock = {
+			.waitpolicy = LockWaitBlock,
+			.lockmode = LockTupleShare,
+		};
+
+		/* The new slice has merged range, but still old ID. Should match with
+		 * the old slice. */
+		Assert(old_slice->fd.id == new_slice->fd.id);
+
+		/* If nothing changed in this dimension, move on to the next */
+		if (ts_dimension_slices_equal(old_slice, new_slice))
+			continue;
+
+		cc = get_chunk_constraint_by_slice_id(chunk->constraints, old_slice->fd.id);
+
+		if (cc)
+		{
+			ObjectAddress constrobj = {
+				.classId = ConstraintRelationId,
+				.objectId = get_relation_constraint_oid(chunk->table_id,
+														NameStr(cc->fd.constraint_name),
+														false),
+			};
+
+			performDeletion(&constrobj, DROP_RESTRICT, 0);
+
+			/* Create the new check constraint */
+			const Dimension *dim =
+				ts_hyperspace_get_dimension_by_id(ht->space, old_slice->fd.dimension_id);
+			Constraint *constr =
+				ts_chunk_constraint_dimensional_create(dim,
+													   new_slice,
+													   NameStr(cc->fd.constraint_name));
+
+			/* Constraint could be NULL, e.g., if the merged chunk covers the
+			 * entire range in a space dimension it needs no constraint. */
+			if (constr != NULL)
+				new_constraints = lappend(new_constraints, constr);
+		}
+
+		/* Check if there's already a slice with the new range. If so, avoid
+		 * inserting a new slice. */
+		if (!ts_dimension_slice_scan_for_existing(new_slice, &tuplock))
+		{
+			new_slice->fd.id = -1;
+			ts_dimension_slice_insert(new_slice);
+			/* A new Id should be assigned */
+			Assert(new_slice->fd.id > 0);
+		}
+
+		/* Update the chunk constraint to point to the new slice ID */
+		ts_chunk_constraint_update_slice_id(chunk->fd.id, old_slice->fd.id, new_slice->fd.id);
+
+		/* Delete the old slice if it is orphaned now */
+		if (ts_chunk_constraint_scan_by_dimension_slice_id(old_slice->fd.id,
+														   NULL,
+														   CurrentMemoryContext) == 0)
+		{
+			ts_dimension_slice_delete_by_id(old_slice->fd.id, false);
+		}
+	}
+
+	/* Add new check constraints, if any */
+	if (new_constraints != NIL)
+	{
+		/* Adding a constraint should require AccessExclusivelock. It should
+		 * already be taken at this point, but specify it to be sure. */
+		Relation rel = table_open(chunk->table_id, AccessExclusiveLock);
+		AddRelationNewConstraints(rel,
+								  NIL /* List *newColDefaults */,
+								  new_constraints,
+								  false /* allow_merge */,
+								  true /* is_local */,
+								  false /* is_internal */,
+								  NULL /* query string */);
+		table_close(rel, NoLock);
+	}
+
+	ts_cache_release(hcache);
+}
+
+static void
+merge_cubes(Hypercube *merged_cube, const Hypercube *cube)
+{
+	/* Merge dimension slices */
+	for (int i = 0; i < cube->num_slices; i++)
+	{
+		const DimensionSlice *slice = cube->slices[i];
+		DimensionSlice *merged_slice = merged_cube->slices[i];
+
+		Assert(slice->fd.dimension_id == merged_slice->fd.dimension_id);
+
+		if (slice->fd.range_start < merged_slice->fd.range_start)
+			merged_slice->fd.range_start = slice->fd.range_start;
+
+		if (slice->fd.range_end > merged_slice->fd.range_end)
+			merged_slice->fd.range_end = slice->fd.range_end;
+	}
+}
+
+/*
+ * Get the locking mode for merge chunks.
+ *
+ * By default, a merge happens with access exclusive locks taken on chunks in
+ * order to avoid deadlocks. It is possible to use a weaker exclusive lock by
+ * setting a session variable, thus allowing reads during merges. However,
+ * that can easily lead to deadlocks as shown in isolation tests. Therefore,
+ * use the stricter locking settings by default.
+ */
+static MergeLockUpgrade
+merge_chunks_lock_upgrade_mode(void)
+{
+	const char *lockupgrade =
+		GetConfigOption("timescaledb.merge_chunks_lock_upgrade_mode", true, false);
+
+	if (lockupgrade == NULL)
+		return MERGE_LOCK_ACCESS_EXCLUSIVE;
+
+	if (strcmp("upgrade", lockupgrade) == 0)
+		return MERGE_LOCK_UPGRADE;
+
+	if (strcmp("conditional", lockupgrade) == 0)
+		return MERGE_LOCK_CONDITIONAL_UPGRADE;
+
+	return MERGE_LOCK_ACCESS_EXCLUSIVE;
+}
+
+#if (PG_VERSION_NUM >= 170000 && PG_VERSION_NUM <= 170002)
+/*
+ * Workaround for changed behavior in the relation rewrite code that appeared
+ * in PostgreSQL 17.0, but was fixed in 17.3.
+ *
+ * Merge chunks uses the relation rewrite functionality from CLUSTER and
+ * VACUUM FULL. This works for merge because, when writing into a non-empty
+ * relation, new pages are appended while the existing pages remain the
+ * same. In PG17.0, however, that changed so that existing pages in the
+ * relation were zeroed out. The changed behavior was introduced as part of
+ * this commit:
+ *
+ * https://github.com/postgres/postgres/commit/8af256524893987a3e534c6578dd60edfb782a77
+ *
+ * Fortunately, this was fixed in a follow up commit:
+ *
+ * https://github.com/postgres/postgres/commit/9695835538c2c8e9cd0048028b8c85e1bbf5c79c
+ *
+ * The fix is part of PG 17.3. Howevever, this still leaves PG 17.0 - 17.2
+ * with different behavior.
+ *
+ * To make the merge chunks code work for the "broken" versions we make PG
+ * believe the first rewrite operation is the size of the fully merged
+ * relation so that we reserve the full space needed and then "append"
+ * backwards into the zeroed space (see illustration below). By doing this, we
+ * ensure that no valid data is zeroed out. The downside of this approach is
+ * that there will be a lot of unnecessary writing of zero pages. Below is an
+ * example of what the rewrite would look like for merging three relations
+ * with one page each. When writing the first relation, PG believes the merged
+ * relation already contains two pages when starting the rewrite. These two
+ * existing pages will be zeroed. When writing the next relation we tell PG
+ * that there is only one existing page in the merged relation, and so forth.
+ *
+ *  _____________
+ *  |_0_|_0_|_x_|
+ *  _________
+ *  |_0_|_x_|
+ *  _____
+ *  |_x_|
+ *
+ *  Result:
+ *  _____________
+ *  |_x_|_x_|_x_|
+ *
+ */
+static BlockNumber merge_rel_nblocks = 0;
+static BlockNumber *blockoff = NULL;
+static const TableAmRoutine *old_routine = NULL;
+static TableAmRoutine routine = {};
+
+/*
+ * TAM relation size function to make PG believe that the merged relation
+ * contains as specific amount of existing data.
+ */
+static uint64
+merge_relation_size(Relation rel, ForkNumber forkNumber)
+{
+	if (forkNumber == MAIN_FORKNUM)
+		return merge_rel_nblocks * BLCKSZ;
+	return old_routine->relation_size(rel, forkNumber);
+}
+
+static void
+pg17_workaround_init(Relation rel, RelationMergeInfo *relinfos, int nrelids)
+{
+	routine = *rel->rd_tableam;
+	routine.relation_size = merge_relation_size;
+	old_routine = rel->rd_tableam;
+	rel->rd_tableam = &routine;
+	blockoff = palloc(sizeof(BlockNumber) * nrelids);
+
+	for (int i = 0; i < nrelids; i++)
+	{
+		if (i == 0)
+			blockoff[i] = 0;
+		else
+			blockoff[i] = RelationGetNumberOfBlocks(relinfos[i].rel) + blockoff[i - 1];
+	}
+}
+
+static void
+pg17_workaround_cleanup(Relation rel)
+{
+	pfree(blockoff);
+	rel->rd_tableam = old_routine;
+}
+
+static RelationMergeInfo *
+get_relmergeinfo(RelationMergeInfo *relinfos, int nrelids, int i)
+{
+	RelationMergeInfo *relinfo = &relinfos[nrelids - i - 1];
+	merge_rel_nblocks = blockoff[nrelids - i - 1];
+	return relinfo;
+}
+
+#else
+#define pg17_workaround_init(rel, relinfos, nrelids)
+#define pg17_workaround_cleanup(rel)
+#define get_relmergeinfo(relinfos, nrelids, i) &relinfos[i]
+#endif
+
+Datum
+chunk_merge_chunks(PG_FUNCTION_ARGS)
+{
+	ArrayType *chunks_array = PG_ARGISNULL(0) ? NULL : PG_GETARG_ARRAYTYPE_P(0);
+	Datum *relids;
+	bool *nulls;
+	int nrelids;
+	RelationMergeInfo *relinfos;
+	char relpersistence = '\0';
+	int32 hypertable_id = INVALID_HYPERTABLE_ID;
+	Hypercube *merged_cube = NULL;
+	const Hypercube *prev_cube = NULL;
+	const MergeLockUpgrade lock_upgrade = merge_chunks_lock_upgrade_mode();
+
+	PreventCommandIfReadOnly("merge_chunks");
+
+	if (chunks_array == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no chunks to merge specified")));
+
+	deconstruct_array(chunks_array,
+					  REGCLASSOID,
+					  sizeof(Oid),
+					  true,
+					  TYPALIGN_INT,
+					  &relids,
+					  &nulls,
+					  &nrelids);
+
+	if (nrelids < 2)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("must specify at least two chunks to merge")));
+
+	relinfos = palloc0(sizeof(struct RelationMergeInfo) * nrelids);
+
+	/* Sort relids array in order to find duplicates and lock relations in
+	 * consistent order to avoid deadlocks. It doesn't matter that we don't
+	 * order the nulls array the same since we only care about all relids
+	 * being non-null. */
+	qsort(relids, nrelids, sizeof(Datum), cmp_relids);
+
+	/* Step 1: Do sanity checks and then prepare to sort rels in consistent order. */
+	for (int i = 0; i < nrelids; i++)
+	{
+		Oid relid = DatumGetObjectId(relids[i]);
+		char relpers = '\0';
+		Oid merge_relid;
+		const Chunk *chunk;
+		Relation rel;
+
+		if (nulls[i] || !OidIsValid(relid))
+			ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid relation")));
+
+		if (i > 0 && DatumGetObjectId(relids[i]) == DatumGetObjectId(relids[i - 1]))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("duplicate relation \"%s\" in merge",
+							get_rel_name(DatumGetObjectId(relids[i])))));
+
+		/* Only owner is allowed to merge */
+		if (!object_ownercheck(RelationRelationId, relids[i], GetUserId()))
+			aclcheck_error(ACLCHECK_NOT_OWNER,
+						   get_relkind_objtype(get_rel_relkind(relids[i])),
+						   get_rel_name(relids[i]));
+
+		merge_relid = get_merge_table_relid(relid, &relpers);
+
+		if (OidIsValid(merge_relid))
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("a merge or other rewrite is already in progress for \"%s\"",
+							get_rel_name(relid))));
+
+		if (relpersistence != '\0' && relpersistence != relpers)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot merge relations with different persistence")));
+
+		/* Remember the relpersistence until processing next rel */
+		relpersistence = relpers;
+
+		/* Lock the relation and do additional checks on the open
+		 * relation. Note that if we take ExclusiveLock here to allow readers
+		 * while we are rewriting/merging the relations, the lock needs to be
+		 * upgraded to an AccessExclusiveLock later. This can lead to
+		 * deadlocks.
+		 *
+		 * Ideally, we should probably take locks on all dependent objects as
+		 * well, at least on the chunks that will be dropped. Otherwise, that
+		 * might also cause deadlocks later. For example, if doing a
+		 * concurrent DROP TABLE on one of the chunks will lead to deadlock
+		 * because it grabs locks on all dependencies before dropping.
+		 *
+		 * However, for now we won't do that because that requires scanning
+		 * pg_depends and concurrent operations will probably fail anyway if
+		 * we remove the objects. We might as well fail with a deadlock.
+		 */
+		LOCKMODE lockmode =
+			(lock_upgrade == MERGE_LOCK_ACCESS_EXCLUSIVE) ? AccessExclusiveLock : ExclusiveLock;
+
+		rel = try_table_open(relid, lockmode);
+
+		/* Check if the table actually exists. If not, it could have been
+		 * deleted in a concurrent merge. */
+		if (rel == NULL)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("table to merge does not exist")));
+
+		if (rel->rd_rel->relkind != RELKIND_RELATION)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot merge non-table relations")));
+
+		/* Lock toast table to prevent it from being cuncurrently vacuumed */
+		if (rel->rd_rel->reltoastrelid)
+			LockRelationOid(rel->rd_rel->reltoastrelid, lockmode);
+
+		/*
+		 * Check for active uses of the relation in the current transaction,
+		 * including open scans and pending AFTER trigger events.
+		 */
+		CheckTableNotInUse(rel, "merge_chunks");
+
+		if (IsSystemRelation(rel))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("cannot merge system catalog relations")));
+
+		if (rel->rd_tableam != GetHeapamTableAmRoutine()
+#if PG15_GE
+			&& rel->rd_tableam != hypercore_routine()
+#endif
+		)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("unsupported access method for merge")));
+
+		/* Find the chunk corresponding to the relation */
+		chunk = ts_chunk_get_by_relid(relid, false);
+
+		if (NULL == chunk)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("can only merge hypertable chunks")));
+
+		if (chunk->fd.osm_chunk)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("cannot merge OSM chunks")));
+
+		if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID && !ts_is_hypercore_am(chunk->amoid))
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot merge compressed chunks")));
+
+		if (hypertable_id == INVALID_HYPERTABLE_ID)
+			hypertable_id = chunk->fd.hypertable_id;
+		else if (hypertable_id != chunk->fd.hypertable_id)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot merge chunks across different hypertables")));
+
+		relinfos[i].relid = relid;
+		relinfos[i].rel = rel;
+		relinfos[i].chunk = chunk;
+	}
+
+	/* Sort rels in partition order (in case of chunks). This is necessary to
+	 * validate that a merge is possible. */
+	qsort(relinfos, nrelids, sizeof(RelationMergeInfo), cmp_relations);
+
+	/* Step 2: Check alignment/mergeability and create the merged hypercube
+	 * (partition ranges). */
+	for (int i = 0; i < nrelids; i++)
+	{
+		const Chunk *chunk = relinfos[i].chunk;
+
+		if (chunk)
+		{
+			if (merged_cube == NULL)
+			{
+				merged_cube = ts_hypercube_copy(chunk->cube);
+				Assert(prev_cube == NULL);
+			}
+			else
+			{
+				Assert(chunk->cube->num_slices == merged_cube->num_slices);
+				Assert(prev_cube != NULL);
+				validate_merge_possible(prev_cube, chunk->cube);
+				merge_cubes(merged_cube, chunk->cube);
+			}
+
+			prev_cube = chunk->cube;
+		}
+
+		get_vacuum_cutoffs(relinfos[i].rel, &relinfos[i].cutoffs);
+	}
+
+	Relation result_rel = relinfos[0].rel;
+	/* These will be our final cutoffs for the merged relation */
+	struct VacuumCutoffs *cutoffs = &relinfos[0].cutoffs;
+
+	/* Keep the first relation of the ones merged. It will receive a heap swap. */
+	Oid tablespace = result_rel->rd_rel->reltablespace;
+	relpersistence = result_rel->rd_rel->relpersistence;
+
+	/* Create the transient heap that will receive the re-ordered data */
+#if PG15_LT
+	Oid new_relid =
+		make_new_heap(RelationGetRelid(result_rel), tablespace, relpersistence, ExclusiveLock);
+#else
+	Oid am = result_rel->rd_rel->relam;
+	Oid new_relid =
+		make_new_heap(RelationGetRelid(result_rel), tablespace, am, relpersistence, ExclusiveLock);
+#endif
+
+	Relation new_rel = table_open(new_relid, AccessExclusiveLock);
+	double total_num_tuples = 0.0;
+
+	pg17_workaround_init(new_rel, relinfos, nrelids);
+
+	/* Step 3: write the data from all the rels into a new merged heap */
+	for (int i = 0; i < nrelids; i++)
+	{
+		RelationMergeInfo *relinfo = get_relmergeinfo(relinfos, nrelids, i);
+		struct VacuumCutoffs *cutoffs_i = &relinfo->cutoffs;
+		Relation rel = relinfo->rel;
+
+		double num_tuples = 0.0;
+		double tups_vacuumed = 0.0;
+		double tups_recently_dead = 0.0;
+
+		table_relation_copy_for_cluster(rel,
+										new_rel,
+										NULL,
+										false,
+										cutoffs_i->OldestXmin,
+										&cutoffs_i->FreezeLimit,
+										&cutoffs_i->MultiXactCutoff,
+										&num_tuples,
+										&tups_vacuumed,
+										&tups_recently_dead);
+
+		/* return selected values to caller, get set as relfrozenxid/minmxid */
+		elog(DEBUG1,
+			 "merge_chunks \"%s\": tuples %lf vacuumed %lf recently dead %lf",
+			 RelationGetRelationName(rel),
+			 num_tuples,
+			 tups_vacuumed,
+			 tups_recently_dead);
+
+		total_num_tuples += num_tuples;
+
+		if (TransactionIdPrecedes(cutoffs->FreezeLimit, cutoffs_i->FreezeLimit))
+			cutoffs->FreezeLimit = cutoffs_i->FreezeLimit;
+
+		if (MultiXactIdPrecedes(cutoffs->MultiXactCutoff, cutoffs_i->MultiXactCutoff))
+			cutoffs->MultiXactCutoff = cutoffs_i->MultiXactCutoff;
+
+		/* Close the relations before the heap swap. */
+		table_close(rel, NoLock);
+		relinfo->rel = NULL;
+	}
+
+	pg17_workaround_cleanup(new_rel);
+
+	/* Update table stats */
+	Relation relRelation = table_open(RelationRelationId, RowExclusiveLock);
+	HeapTuple reltup = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(new_relid));
+	if (!HeapTupleIsValid(reltup))
+		elog(ERROR, "cache lookup failed for relation %u", new_relid);
+	Form_pg_class relform = (Form_pg_class) GETSTRUCT(reltup);
+	BlockNumber num_pages = RelationGetNumberOfBlocks(new_rel);
+	relform->relpages = num_pages;
+	relform->reltuples = total_num_tuples;
+
+	CatalogTupleUpdate(relRelation, &reltup->t_self, reltup);
+	heap_freetuple(reltup);
+	table_close(relRelation, RowExclusiveLock);
+	CommandCounterIncrement();
+
+	table_close(new_rel, NoLock);
+
+	DEBUG_WAITPOINT("merge_chunks_before_heap_swap");
+
+	/* Step 4: Keep one of the original rels but transplant the merged heap
+	 * into it using a heap swap. Then close and delete the remaining merged
+	 * rels. */
+	merge_chunks_finish(new_relid,
+						relinfos,
+						nrelids,
+						cutoffs->FreezeLimit,
+						cutoffs->MultiXactCutoff,
+						relpersistence,
+						lock_upgrade);
+
+	/* Step 5: Update the dimensional metadata and constraints for the chunk
+	 * we are keeping. */
+	if (merged_cube)
+	{
+		Assert(relinfos[0].chunk);
+		chunk_update_constraints(relinfos[0].chunk, merged_cube);
+		ts_hypercube_free(merged_cube);
+	}
+
+	pfree(relids);
+	pfree(nulls);
+	pfree(relinfos);
+
+	PG_RETURN_VOID();
 }
