@@ -68,6 +68,7 @@ vacuum freeze analyze aggfilter;
 set timescaledb.debug_require_vector_agg = 'require';
 ---- Uncomment to generate reference.
 --set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
+set max_parallel_workers_per_gather = 0;
 select
     format('%sselect %s%s(%s)%s from aggfilter%s%s%s;',
             explain,
@@ -2968,19 +2969,21 @@ select
     count(*) filter (where s != 5),
     count(*) filter (where cint2 < 0)
 from aggfilter
-group by ss;
+group by ss
+order by 2, 3;
  ss | count | count 
 ----+-------+-------
-  3 | 19981 | 10076
- 11 | 40019 | 20008
-  8 | 20000 | 10082
-    |    19 |    12
-  9 | 20000 |  9961
-  7 | 20000 | 10008
   5 |     0 |  9871
+    |    19 |    12
   4 | 19981 | 10064
+  3 | 19981 | 10076
+  9 | 20000 |  9961
   0 | 20000 |  9968
+  7 | 20000 | 10008
+  8 | 20000 | 10082
   6 | 20000 | 10089
+ 11 | 40019 | 20008
 (10 rows)
 
 reset timescaledb.debug_require_vector_agg;
+reset max_parallel_workers_per_gather;

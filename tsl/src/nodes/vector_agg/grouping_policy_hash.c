@@ -41,7 +41,7 @@ static const GroupingPolicy grouping_policy_hash_functions;
 
 GroupingPolicy *
 create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_grouping_columns,
-							GroupingColumn *grouping_columns)
+							GroupingColumn *grouping_columns, VectorAggGroupingType grouping_type)
 {
 	GroupingPolicyHash *policy = palloc0(sizeof(GroupingPolicyHash));
 	policy->funcs = grouping_policy_hash_functions;
@@ -68,32 +68,26 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 	policy->current_batch_grouping_column_values =
 		palloc(sizeof(CompressedColumnValues) * num_grouping_columns);
 
-	if (num_grouping_columns == 1)
+	switch (grouping_type)
 	{
-		const GroupingColumn *g = &policy->grouping_columns[0];
-		switch (g->value_bytes)
-		{
-			case 8:
-				policy->hashing = single_fixed_8_strategy;
-				break;
-			case 4:
-				policy->hashing = single_fixed_4_strategy;
-				break;
-			case 2:
-				policy->hashing = single_fixed_2_strategy;
-				break;
-			case -1:
-				Assert(g->typid == TEXTOID);
-				policy->hashing = single_text_strategy;
-				break;
-			default:
-				Assert(false);
-				break;
-		}
-	}
-	else
-	{
-		policy->hashing = serialized_strategy;
+		case VAGT_HashSerialized:
+			policy->hashing = serialized_strategy;
+			break;
+		case VAGT_HashSingleText:
+			policy->hashing = single_text_strategy;
+			break;
+		case VAGT_HashSingleFixed8:
+			policy->hashing = single_fixed_8_strategy;
+			break;
+		case VAGT_HashSingleFixed4:
+			policy->hashing = single_fixed_4_strategy;
+			break;
+		case VAGT_HashSingleFixed2:
+			policy->hashing = single_fixed_2_strategy;
+			break;
+		default:
+			Ensure(false, "failed to determine the hashing strategy");
+			break;
 	}
 
 	policy->hashing.key_body_mctx = policy->agg_extra_mctx;

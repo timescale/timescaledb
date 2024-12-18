@@ -100,6 +100,8 @@ set timescaledb.debug_require_vector_agg = :'guc_value';
 ---- on float4 due to different numeric stability in our and PG implementations.
 --set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'forbid';
 
+set max_parallel_workers_per_gather = 0;
+
 select
     format('%sselect %s%s(%s) from aggfns%s%s%s;',
             explain,
@@ -174,3 +176,5 @@ select s, count(*), min(f1) from edges where f1 = 65 group by 1 order by 1;
 select ss, count(*), min(f1) from edges where f1 = 63 group by 1 order by 1;
 select ss, count(*), min(f1) from edges where f1 = 64 group by 1 order by 1;
 select ss, count(*), min(f1) from edges where f1 = 65 group by 1 order by 1;
+
+reset max_parallel_workers_per_gather;

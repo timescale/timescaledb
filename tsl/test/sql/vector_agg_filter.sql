@@ -65,6 +65,8 @@ set timescaledb.debug_require_vector_agg = 'require';
 ---- Uncomment to generate reference.
 --set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
 
+set max_parallel_workers_per_gather = 0;
+
 select
     format('%sselect %s%s(%s)%s from aggfilter%s%s%s;',
             explain,
@@ -124,7 +126,8 @@ select
     count(*) filter (where s != 5),
     count(*) filter (where cint2 < 0)
 from aggfilter
-group by ss;
+group by ss
+order by 2, 3;
 
 reset timescaledb.debug_require_vector_agg;
-
+reset max_parallel_workers_per_gather;

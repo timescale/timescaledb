@@ -169,9 +169,12 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     merge_compress.sql)
 endif()
 
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
+  list(APPEND TEST_TEMPLATES cagg_query_using_merge.sql.in)
+endif()
+
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
   list(APPEND TEST_FILES cagg_planning.sql hypercore_parallel.sql)
-  list(APPEND TEST_TEMPLATES cagg_query_using_merge.sql.in)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))

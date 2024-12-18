@@ -35,11 +35,11 @@ typedef struct GroupingPolicyHash GroupingPolicyHash;
  * strategy.
  *
  * 2) The key indexes are used to locate the aggregate function states
- * corresponding to a given row, and update it. This is done in bulk for all
+ * corresponding to a given row's key, and update it. This is done in bulk for all
  * rows of the batch, and for each aggregate function separately, to generate
  * simpler and potentially vectorizable code, and improve memory locality.
  *
- * 3) After the input have ended, or if the memory limit is reached, the partial
+ * 3) After the input has ended, or if the memory limit is reached, the partial
  * results are emitted into the output slot. This is done in the order of unique
  * grouping key indexes, thereby preserving the incoming key order. This
  * guarantees that this policy works correctly even in a Partial GroupAggregate

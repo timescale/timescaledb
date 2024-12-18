@@ -19,6 +19,7 @@ then
     exit 1
 fi
 
+# shellcheck disable=SC2317
 cleanup() {
     echo "cleaning"
     rm -rf ${TEMP_DIR}
@@ -83,4 +84,4 @@ do
     fi
 done
 
-exit 0;
+exit 0
