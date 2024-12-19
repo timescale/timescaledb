@@ -308,11 +308,6 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 		}
 	}
 
-	if (list_length(indexcols) == 0)
-	{
-		return;
-	}
-
 	SortByDir ordering;
 	SortByNulls nulls_ordering;
 
