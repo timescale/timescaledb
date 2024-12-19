@@ -56,6 +56,7 @@
 #include "partitioning.h"
 #include "planner/partialize.h"
 #include "planner/planner.h"
+#include "sort_transform.h"
 #include "utils.h"
 
 #include "compat/compat.h"
@@ -935,8 +936,6 @@ ts_classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable 
 	return TS_REL_OTHER;
 }
 
-extern void ts_sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel);
-
 static inline bool
 should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *path, bool ordered,
 					int order_attno)
@@ -1183,14 +1182,47 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 			break;
 		case TS_REL_CHUNK_STANDALONE:
 		case TS_REL_CHUNK_CHILD:
-			ts_sort_transform_optimization(root, rel);
+		{
 			/*
 			 * Since the sort optimization adds new paths to the rel it has
 			 * to happen before any optimizations that replace pathlist.
 			 */
-			if (ts_cm_functions->set_rel_pathlist_query != NULL)
-				ts_cm_functions->set_rel_pathlist_query(root, rel, rel->relid, rte, ht);
+			List *transformed_query_pathkeys = ts_sort_transform_get_pathkeys(root, rel, rte, ht);
+			if (transformed_query_pathkeys != NIL)
+			{
+				List *orig_query_pathkeys = root->query_pathkeys;
+				root->query_pathkeys = transformed_query_pathkeys;
+
+				/* Create index paths with transformed pathkeys */
+				create_index_paths(root, rel);
+
+				/*
+				 * Call the TSL hooks with the transformed pathkeys as well, so
+				 * that the decompression paths also use this optimization.
+				 */
+				if (ts_cm_functions->set_rel_pathlist_query != NULL)
+					ts_cm_functions->set_rel_pathlist_query(root, rel, rel->relid, rte, ht);
+
+				root->query_pathkeys = orig_query_pathkeys;
+
+				/*
+				 * change returned paths to use original pathkeys. have to go through
+				 * all paths since create_index_paths might have modified existing
+				 * pathkey. Always safe to do transform since ordering of
+				 * transformed_query_pathkey implements ordering of
+				 * orig_query_pathkeys.
+				 */
+				ts_sort_transform_replace_pathkeys(rel->pathlist,
+												   transformed_query_pathkeys,
+												   orig_query_pathkeys);
+			}
+			else
+			{
+				if (ts_cm_functions->set_rel_pathlist_query != NULL)
+					ts_cm_functions->set_rel_pathlist_query(root, rel, rel->relid, rte, ht);
+			}
 			break;
+		}
 		default:
 			break;
 	}
