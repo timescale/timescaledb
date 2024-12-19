@@ -15,7 +15,7 @@ name: APT ARM64 packages
 jobs:
   apt_tests:
     name: APT ARM64 ${{ matrix.image }} PG${{ matrix.pg }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
