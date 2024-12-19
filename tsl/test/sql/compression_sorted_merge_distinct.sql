@@ -23,7 +23,7 @@ alter table t set (timescaledb.compress = true, timescaledb.compress_segmentby =
 select count(compress_chunk(x, true)) from show_chunks('t') x;
 analyze t;
 
-explain (costs off) select * from t order by ts;
+explain (analyze, timing off, summary off) select * from t order by ts;
 explain (costs off) select * from t where low_card = 1 order by ts;
 explain (costs off) select * from t where high_card = 1 order by ts;
 explain (costs off) select * from t where low_card = 1 and high_card = 1 order by ts;

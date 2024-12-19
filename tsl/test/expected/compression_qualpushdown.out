@@ -274,6 +274,7 @@ EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar'::cha
          Filter: ((dev_vc)::bpchar = 'varchar   '::character(10))
 (4 rows)
 
+RESET enable_seqscan;
 -- github issue #5286
 CREATE TABLE deleteme AS
     SELECT generate_series AS timestamp, 1 AS segment, 0 AS data
@@ -299,18 +300,20 @@ SELECT compress_chunk(i) FROM show_chunks('deleteme') i;
 (1 row)
 
 VACUUM ANALYZE deleteme;
-EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE segment::text like '%4%';
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
- Finalize Aggregate
-   ->  Gather
+EXPLAIN (analyze, timing off, summary off) SELECT sum(data) FROM deleteme WHERE segment::text like '%4%';
+                                                                 QUERY PLAN                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize Aggregate  (cost=3235.23..3235.24 rows=1 width=8) (actual rows=1 loops=1)
+   ->  Gather  (cost=3235.12..3235.23 rows=1 width=8) (actual rows=2 loops=1)
          Workers Planned: 1
-         ->  Partial Aggregate
-               ->  Parallel Append
-                     ->  Custom Scan (DecompressChunk) on _hyper_7_8_chunk
-                           ->  Parallel Seq Scan on compress_hyper_8_9_chunk
+         Workers Launched: 1
+         ->  Partial Aggregate  (cost=2235.12..2235.13 rows=1 width=8) (actual rows=1 loops=2)
+               ->  Parallel Append  (cost=0.06..1790.12 rows=178000 width=4) (actual rows=0 loops=2)
+                     ->  Custom Scan (DecompressChunk) on _hyper_7_8_chunk  (cost=0.06..1790.12 rows=178000 width=4) (actual rows=0 loops=1)
+                           ->  Parallel Seq Scan on compress_hyper_8_9_chunk  (cost=0.00..10.12 rows=178 width=40) (actual rows=0 loops=1)
                                  Filter: ((segment)::text ~~ '%4%'::text)
-(8 rows)
+                                 Rows Removed by Filter: 303
+(10 rows)
 
 EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE '4' = segment::text;
                        QUERY PLAN                        
@@ -531,35 +534,35 @@ EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_SCHEMA;
 (5 rows)
 
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_bool;
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+                     QUERY PLAN                      
+-----------------------------------------------------
  Custom Scan (DecompressChunk) on _hyper_11_12_chunk
-   ->  Index Scan using compress_hyper_12_13_chunk_c_date_c_time_c_timetz_c_timesta_idx on compress_hyper_12_13_chunk
-         Index Cond: (c_bool = true)
+   ->  Seq Scan on compress_hyper_12_13_chunk
+         Filter: c_bool
 (3 rows)
 
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_bool = true;
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+                     QUERY PLAN                      
+-----------------------------------------------------
  Custom Scan (DecompressChunk) on _hyper_11_12_chunk
-   ->  Index Scan using compress_hyper_12_13_chunk_c_date_c_time_c_timetz_c_timesta_idx on compress_hyper_12_13_chunk
-         Index Cond: (c_bool = true)
+   ->  Seq Scan on compress_hyper_12_13_chunk
+         Filter: c_bool
 (3 rows)
 
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_bool = false;
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+                     QUERY PLAN                      
+-----------------------------------------------------
  Custom Scan (DecompressChunk) on _hyper_11_12_chunk
-   ->  Index Scan using compress_hyper_12_13_chunk_c_date_c_time_c_timetz_c_timesta_idx on compress_hyper_12_13_chunk
-         Index Cond: (c_bool = false)
+   ->  Seq Scan on compress_hyper_12_13_chunk
+         Filter: (NOT c_bool)
 (3 rows)
 
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE NOT c_bool;
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+                     QUERY PLAN                      
+-----------------------------------------------------
  Custom Scan (DecompressChunk) on _hyper_11_12_chunk
-   ->  Index Scan using compress_hyper_12_13_chunk_c_date_c_time_c_timetz_c_timesta_idx on compress_hyper_12_13_chunk
-         Index Cond: (c_bool = false)
+   ->  Seq Scan on compress_hyper_12_13_chunk
+         Filter: (NOT c_bool)
 (3 rows)
 
 -- current_query() is not a sqlvaluefunction and volatile so should not be pushed down
@@ -585,3 +588,4 @@ LATERAL(
 --
 (1 row)
 
+DROP TABLE svf_pushdown;

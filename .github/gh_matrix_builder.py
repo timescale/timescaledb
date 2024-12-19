@@ -24,6 +24,7 @@ sys.dont_write_bytecode = True
 
 import json
 import os
+import random
 import subprocess
 from ci_settings import (
     PG14_EARLIEST,
@@ -309,11 +310,12 @@ elif len(sys.argv) > 2:
             sys.exit(1)
 
     if tests:
+        to_run = " ".join(random.shuffle(list(tests) * 20))
         m["include"].append(
             build_debug_config(
                 {
                     "coverage": False,
-                    "installcheck_args": f'TESTS="{" ".join(list(tests) * 20)}"',
+                    "installcheck_args": f'TESTS="{to_run}"',
                     "name": "Flaky Check Debug",
                     "pg": PG16_LATEST,
                     "pginstallcheck": False,
@@ -324,7 +326,7 @@ elif len(sys.argv) > 2:
             build_debug_config(
                 {
                     "coverage": False,
-                    "installcheck_args": f'TESTS="{" ".join(list(tests) * 20)}"',
+                    "installcheck_args": f'TESTS="{to_run}"',
                     "name": "Flaky Check Debug",
                     "pg": PG17_LATEST,
                     "pginstallcheck": False,

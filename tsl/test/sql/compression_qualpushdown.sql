@@ -122,6 +122,7 @@ EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar';
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_c = 'char';
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar' AND dev_c = 'char';
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar'::char(10) AND dev_c = 'char'::varchar;
+RESET enable_seqscan;
 
 -- github issue #5286
 CREATE TABLE deleteme AS
@@ -138,7 +139,7 @@ ALTER TABLE deleteme SET (
 
 SELECT compress_chunk(i) FROM show_chunks('deleteme') i;
 VACUUM ANALYZE deleteme;
-EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE segment::text like '%4%';
+EXPLAIN (analyze, timing off, summary off) SELECT sum(data) FROM deleteme WHERE segment::text like '%4%';
 EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE '4' = segment::text;
 
 CREATE TABLE deleteme_with_bytea(time bigint NOT NULL, bdata bytea);
@@ -200,3 +201,4 @@ LATERAL(
     EXISTS (SELECT FROM meta) LIMIT 1
 ) l;
 
+DROP TABLE svf_pushdown;

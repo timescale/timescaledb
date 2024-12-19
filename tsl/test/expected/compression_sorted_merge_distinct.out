@@ -30,17 +30,20 @@ select count(compress_chunk(x, true)) from show_chunks('t') x;
 (1 row)
 
 analyze t;
-explain (costs off) select * from t order by ts;
-                              QUERY PLAN                               
------------------------------------------------------------------------
- Gather Merge
+explain (analyze, timing off, summary off) select * from t order by ts;
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ Gather Merge  (cost=152820.15..294845.15 rows=1235000 width=24) (actual rows=840000 loops=1)
    Workers Planned: 1
-   ->  Sort
+   Workers Launched: 1
+   ->  Sort  (cost=151820.14..154907.64 rows=1235000 width=24) (actual rows=420000 loops=2)
          Sort Key: _hyper_1_1_chunk.ts
-         ->  Parallel Append
-               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-                     ->  Parallel Seq Scan on compress_hyper_2_2_chunk
-(7 rows)
+         Sort Method: external merge  Disk: 15128kB
+         Worker 0:  Sort Method: external merge  Disk: 12888kB
+         ->  Parallel Append  (cost=0.03..12388.35 rows=1235000 width=24) (actual rows=420000 loops=2)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.03..12388.35 rows=1235000 width=24) (actual rows=420000 loops=2)
+                     ->  Parallel Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..38.35 rows=1235 width=92) (actual rows=1050 loops=2)
+(10 rows)
 
 explain (costs off) select * from t where low_card = 1 order by ts;
                                                         QUERY PLAN                                                        
