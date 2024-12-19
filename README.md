@@ -54,8 +54,6 @@ CREATE TABLE conditions (
 SELECT create_hypertable('conditions', by_range('time'));
 ```
 
-In the docker image, timescale db is already active in the postgres database instance. IAIN CREATE EXTENSION timescaledb;
-
 See more:
 
 - [About hypertables](https://docs.timescale.com/use-timescale/latest/hypertables/)
