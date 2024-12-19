@@ -92,6 +92,14 @@ extern TSDLLEXPORT bool ts_guc_auto_sparse_indexes;
 extern TSDLLEXPORT bool ts_guc_enable_columnarscan;
 extern TSDLLEXPORT int ts_guc_bgw_log_level;
 
+/*
+ * Exit code to use when scheduler exits.
+ *
+ * Mostly used for debugging, but defined also for non-debug builds since that
+ * simplifies the code (and also simplifies debugging non-debug builds).
+ */
+extern TSDLLEXPORT int ts_debug_bgw_scheduler_exit_status;
+
 #ifdef TS_DEBUG
 extern bool ts_shutdown_bgw;
 extern char *ts_current_timestamp_mock;
