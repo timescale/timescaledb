@@ -20,13 +20,7 @@
 
 Install from a Docker container:
 
-1. Run the TimescaleDB image:
-
-    ```bash
-    docker pull timescale/timescaledb-ha:pg17
-    ```
-
-1. Run the container:
+1. Run the TimescaleDB container:
 
     ```bash
     docker run -d --name timescaledb -p 5432:5432 -e POSTGRES_PASSWORD=password timescale/timescaledb-ha:pg17
@@ -35,14 +29,14 @@ Install from a Docker container:
 1. Connect to a database:
 
     ```bash
-    psql -d "postgres://postgres:password@localhost/postgres"
+    docker exec -it timescaledb psql -d "postgres://postgres:password@localhost/postgres"
     ```
 
 See [other installation options](https://docs.timescale.com/self-hosted/latest/install/) or try [Timescale Cloud](https://docs.timescale.com/getting-started/latest/) for free.
 
 ## Create a hypertable
 
-You create a regular table and then convert it into a hypertable.
+You create a regular table and then convert it into a hypertable. A hypertable automatically partitions data into chunks based on your configuration.
 
 ```sql
 -- Create timescaledb extension
@@ -67,9 +61,9 @@ See more:
 
 ## Enable columnstore
 
-You enable columnstore for your time-series data to reduce its size by more than 90%. This cuts storage costs and keeps your queries operating at lightning speed.
+TimescaleDB's hypercore is a hybrid row-columnar store to boost analytical query performance on your time-series and event data while also reducing data size size by more than 90%. This keeps your queries operating at lightning speed and ensures low storage costs as you scale. Data is inserted in row format in the rowstore and converted to columnar format in the columnstore based on your configuration.
 
-- Enable columnstore on a hypertable:
+- Configure the columnstore on a hypertable:
 
     ```sql
     ALTER TABLE conditions SET (
@@ -78,7 +72,7 @@ You enable columnstore for your time-series data to reduce its size by more than
     );
     ```
 
-- Create a policy to enable columnstore for chunks that are older than seven days automatically:
+- Create a policy to automatically convert chunks in row format that are older than seven days to chunks in the columnar format:
 
     ```sql
     SELECT add_compression_policy('conditions', INTERVAL '7 days');
