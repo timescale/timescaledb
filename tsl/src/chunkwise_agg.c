@@ -635,7 +635,7 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 	bool can_sort = grouping_is_sortable(parse->groupClause);
 
 	/* Is hashing possible ? */
-	bool can_hash = grouping_is_hashable(parse->groupClause) &&
+	bool can_hash = parse->groupClause != NIL && grouping_is_hashable(parse->groupClause) &&
 					!ts_is_gapfill_path(linitial(output_rel->pathlist)) && enable_hashagg;
 
 	Assert(extra != NULL);
