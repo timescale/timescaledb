@@ -13,6 +13,15 @@ typedef struct VectorAggPlan
 	CustomScan custom;
 } VectorAggPlan;
 
+/*
+ * The indexes of settings that we have to pass through the custom_private list.
+ */
+typedef enum
+{
+	VASI_GroupingType = 0,
+	VASI_Count
+} VectorAggSettingsIndex;
+
 extern void _vector_agg_init(void);
 
 Plan *try_insert_vector_agg_node(Plan *plan);
