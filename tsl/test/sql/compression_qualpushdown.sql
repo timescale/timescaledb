@@ -2,6 +2,9 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+-- debug
+select * from pg_settings where source = 'session' order by name;
+
 -- qual pushdown tests for decompresschunk ---
 -- Test qual pushdown with ints
 CREATE TABLE meta (device_id INT PRIMARY KEY);

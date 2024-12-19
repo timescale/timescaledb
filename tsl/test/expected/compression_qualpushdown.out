@@ -1,6 +1,12 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+-- debug
+select * from pg_settings where source = 'session' order by name;
+ name | setting | unit | category | short_desc | extra_desc | context | vartype | source | min_val | max_val | enumvals | boot_val | reset_val | sourcefile | sourceline | pending_restart 
+------+---------+------+----------+------------+------------+---------+---------+--------+---------+---------+----------+----------+-----------+------------+------------+-----------------
+(0 rows)
+
 -- qual pushdown tests for decompresschunk ---
 -- Test qual pushdown with ints
 CREATE TABLE meta (device_id INT PRIMARY KEY);
