@@ -1,0 +1,67 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Exercise the GatherMerge -> Sort -> Append -> Partial Aggregate plan.
+\set prefix 'explain (costs off, analyze, timing off, summary off)'
+set parallel_setup_cost = 0;
+set enable_hashagg to off;
+:prefix
+select count(*) from metrics group by v0;
+QUERY PLAN
+ Finalize GroupAggregate (actual rows=7 loops=1)
+   Group Key: _hyper_X_X_chunk.v0
+   ->  Gather Merge (actual rows=15 loops=1)
+         Workers Planned: 2
+         Workers Launched: 2
+         ->  Sort (actual rows=5 loops=3)
+               Sort Key: _hyper_X_X_chunk.v0
+               Sort Method: quicksort 
+               Worker 0:  Sort Method: quicksort 
+               Worker 1:  Sort Method: quicksort 
+               ->  Parallel Append (actual rows=5 loops=3)
+                     ->  Partial GroupAggregate (actual rows=5 loops=1)
+                           Group Key: _hyper_X_X_chunk.v0
+                           ->  Sort (actual rows=25190 loops=1)
+                                 Sort Key: _hyper_X_X_chunk.v0
+                                 Sort Method: quicksort 
+                                 ->  Parallel Seq Scan on _hyper_X_X_chunk (actual rows=25190 loops=1)
+                     ->  Partial GroupAggregate (actual rows=5 loops=1)
+                           Group Key: _hyper_X_X_chunk.v0
+                           ->  Sort (actual rows=25190 loops=1)
+                                 Sort Key: _hyper_X_X_chunk.v0
+                                 Sort Method: quicksort 
+                                 ->  Parallel Seq Scan on _hyper_X_X_chunk (actual rows=25190 loops=1)
+                     ->  Partial GroupAggregate (actual rows=5 loops=1)
+                           Group Key: _hyper_X_X_chunk.v0
+                           ->  Sort (actual rows=17990 loops=1)
+                                 Sort Key: _hyper_X_X_chunk.v0
+                                 Sort Method: quicksort 
+                                 ->  Parallel Seq Scan on _hyper_X_X_chunk (actual rows=17990 loops=1)
+(29 rows)
+
+reset enable_hashagg;
+:prefix
+select count(*) from metrics group by v0;
+QUERY PLAN
+ Finalize HashAggregate (actual rows=7 loops=1)
+   Group Key: _hyper_X_X_chunk.v0
+   Batches: 1 
+   ->  Gather (actual rows=15 loops=1)
+         Workers Planned: 2
+         Workers Launched: 2
+         ->  Parallel Append (actual rows=5 loops=3)
+               ->  Partial HashAggregate (actual rows=5 loops=1)
+                     Group Key: _hyper_X_X_chunk.v0
+                     Batches: 1 
+                     ->  Parallel Seq Scan on _hyper_X_X_chunk (actual rows=25190 loops=1)
+               ->  Partial HashAggregate (actual rows=5 loops=1)
+                     Group Key: _hyper_X_X_chunk.v0
+                     Batches: 1 
+                     ->  Parallel Seq Scan on _hyper_X_X_chunk (actual rows=25190 loops=1)
+               ->  Partial HashAggregate (actual rows=5 loops=1)
+                     Group Key: _hyper_X_X_chunk.v0
+                     Batches: 1 
+                     ->  Parallel Seq Scan on _hyper_X_X_chunk (actual rows=17990 loops=1)
+(19 rows)
+
+reset parallel_setup_cost;
