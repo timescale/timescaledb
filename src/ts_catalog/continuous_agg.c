@@ -1587,6 +1587,22 @@ ts_compute_circumscribed_bucketed_refresh_window_variable(int64 *start, int64 *e
 	*end = ts_time_value_to_internal(end_new, TIMESTAMPOID);
 }
 
+int64
+ts_compute_circumscribed_bucketed_refresh_window_start_variable(
+	int64 start, const ContinuousAggsBucketFunction *bf)
+{
+	Datum start_old, start_new;
+
+	/*
+	 * It's OK to use TIMESTAMPOID here.
+	 * See the comment in ts_compute_inscribed_bucketed_refresh_window_variable()
+	 */
+	start_old = ts_internal_to_time_value(start, TIMESTAMPOID);
+	start_new = generic_time_bucket(bf, start_old);
+
+	return ts_time_value_to_internal(start_new, TIMESTAMPOID);
+}
+
 /*
  * Calculates the beginning of the next bucket.
  *
