@@ -655,6 +655,12 @@ RelationGetSmgr(Relation rel)
 	GenerationContextCreate(parent, name, blockSize)
 #endif
 
+#if PG16_GE
+#define pgstat_get_local_beentry_by_index_compat(idx) pgstat_get_local_beentry_by_index(idx)
+#else
+#define pgstat_get_local_beentry_by_index_compat(idx) pgstat_fetch_stat_local_beentry(idx)
+#endif
+
 /*
  * PG16 adds a new parameter to DefineIndex, total_parts, that takes
  * in the total number of direct and indirect partitions of the relation.
