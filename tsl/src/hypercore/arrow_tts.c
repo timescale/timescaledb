@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 #include <access/attnum.h>
+#include <access/htup_details.h>
 #include <access/tupdesc.h>
 #include <catalog/pg_attribute.h>
 #include <executor/execdebug.h>
@@ -721,7 +722,17 @@ tts_arrow_copy_heap_tuple(TupleTableSlot *slot)
 
 	/* Clean up if the non-compressed slot was "borrowed" */
 	if (aslot->child_slot == aslot->compressed_slot)
+	{
 		ExecClearTuple(aslot->noncompressed_slot);
+		tuple->t_tableOid = aslot->compressed_slot->tts_tableOid;
+		Assert(TTS_IS_BUFFERTUPLE(aslot->compressed_slot));
+		BufferHeapTupleTableSlot *hslot = (BufferHeapTupleTableSlot *) aslot->compressed_slot;
+
+		/* Copy visibility information */
+		memcpy(&tuple->t_data->t_choice,
+			   &hslot->base.tuple->t_data->t_choice,
+			   sizeof(tuple->t_data->t_choice));
+	}
 
 	return tuple;
 }

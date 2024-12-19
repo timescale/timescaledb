@@ -114,3 +114,12 @@ CREATE FUNCTION @extschema@.hypertable_columnstore_stats (hypertable REGCLASS)
     STABLE STRICT
     AS 'SELECT * FROM @extschema@.hypertable_compression_stats($1)'
     SET search_path TO pg_catalog, pg_temp;
+
+-- Merge chunks
+CREATE PROCEDURE @extschema@.merge_chunks(
+    chunk1 REGCLASS, chunk2 REGCLASS
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
+
+CREATE PROCEDURE @extschema@.merge_chunks(
+    chunks REGCLASS[]
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';

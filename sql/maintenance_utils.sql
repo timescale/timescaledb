@@ -57,6 +57,14 @@ CREATE OR REPLACE PROCEDURE @extschema@.convert_to_rowstore(
     if_columnstore BOOLEAN = true
 ) AS '@MODULE_PATHNAME@', 'ts_decompress_chunk' LANGUAGE C;
 
+CREATE OR REPLACE PROCEDURE @extschema@.merge_chunks(
+   chunk1 REGCLASS, chunk2 REGCLASS
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_merge_two_chunks';
+
+CREATE OR REPLACE PROCEDURE @extschema@.merge_chunks(
+    chunks REGCLASS[]
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_merge_chunks';
+
 CREATE OR REPLACE FUNCTION _timescaledb_functions.recompress_chunk_segmentwise(
     uncompressed_chunk REGCLASS,
     if_compressed BOOLEAN = true
