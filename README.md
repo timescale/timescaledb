@@ -61,7 +61,7 @@ See more:
 
 ## Enable columnstore
 
-TimescaleDB's hypercore is a hybrid row-columnar store to boost analytical query performance on your time-series and event data while also reducing data size size by more than 90%. This keeps your queries operating at lightning speed and ensures low storage costs as you scale. Data is inserted in row format in the rowstore and converted to columnar format in the columnstore based on your configuration.
+TimescaleDB's hypercore is a hybrid row-columnar store that boosts analytical query performance on your time-series and event data, while reducing data size by more than 90%. This keeps your queries operating at lightning speed and ensures low storage costs as you scale. Data is inserted in row format in the rowstore and converted to columnar format in the columnstore based on your configuration.
 
 - Configure the columnstore on a hypertable:
 
