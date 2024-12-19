@@ -289,21 +289,16 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
                  3 |       2 | NOT STARTED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
                  3 |       3 | NOT STARTED | DISABLE POLICIES | {"policies": null}
                  3 |       4 | NOT STARTED | REFRESH NEW CAGG | {"window_start": "1008", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "integer"}
-                 3 |       5 | NOT STARTED | COPY DATA        | {"end_ts": "100", "start_ts": "0", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |       6 | NOT STARTED | COPY DATA        | {"end_ts": "200", "start_ts": "100", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |       7 | NOT STARTED | COPY DATA        | {"end_ts": "300", "start_ts": "200", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |       8 | NOT STARTED | COPY DATA        | {"end_ts": "400", "start_ts": "300", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |       9 | NOT STARTED | COPY DATA        | {"end_ts": "500", "start_ts": "400", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |      10 | NOT STARTED | COPY DATA        | {"end_ts": "600", "start_ts": "500", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |      11 | NOT STARTED | COPY DATA        | {"end_ts": "700", "start_ts": "600", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |      12 | NOT STARTED | COPY DATA        | {"end_ts": "800", "start_ts": "700", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |      13 | NOT STARTED | COPY DATA        | {"end_ts": "900", "start_ts": "800", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |      14 | NOT STARTED | COPY DATA        | {"end_ts": "1000", "start_ts": "900", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |      15 | NOT STARTED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_daily_new"}
-                 3 |      16 | NOT STARTED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                 3 |      17 | NOT STARTED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                 3 |      18 | NOT STARTED | ENABLE POLICIES  | 
-(18 rows)
+                 3 |       5 | NOT STARTED | COPY DATA        | {"end_ts": "240", "start_ts": "0", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 3 |       6 | NOT STARTED | COPY DATA        | {"end_ts": "480", "start_ts": "240", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 3 |       7 | NOT STARTED | COPY DATA        | {"end_ts": "720", "start_ts": "480", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 3 |       8 | NOT STARTED | COPY DATA        | {"end_ts": "960", "start_ts": "720", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 3 |       9 | NOT STARTED | COPY DATA        | {"end_ts": "1200", "start_ts": "960", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 3 |      10 | NOT STARTED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_daily_new"}
+                 3 |      11 | NOT STARTED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
+                 3 |      12 | NOT STARTED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
+                 3 |      13 | NOT STARTED | ENABLE POLICIES  | 
+(13 rows)
 
 -- should resume the execution
 CALL cagg_migrate('conditions_summary_daily');
@@ -316,21 +311,16 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
                  3 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
                  3 |       3 | FINISHED | DISABLE POLICIES | {"policies": null}
                  3 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "1008", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "integer"}
-                 3 |       5 | FINISHED | COPY DATA        | {"end_ts": "100", "start_ts": "0", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |       6 | FINISHED | COPY DATA        | {"end_ts": "200", "start_ts": "100", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |       7 | FINISHED | COPY DATA        | {"end_ts": "300", "start_ts": "200", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |       8 | FINISHED | COPY DATA        | {"end_ts": "400", "start_ts": "300", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |       9 | FINISHED | COPY DATA        | {"end_ts": "500", "start_ts": "400", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |      10 | FINISHED | COPY DATA        | {"end_ts": "600", "start_ts": "500", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |      11 | FINISHED | COPY DATA        | {"end_ts": "700", "start_ts": "600", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |      12 | FINISHED | COPY DATA        | {"end_ts": "800", "start_ts": "700", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |      13 | FINISHED | COPY DATA        | {"end_ts": "900", "start_ts": "800", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |      14 | FINISHED | COPY DATA        | {"end_ts": "1000", "start_ts": "900", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |      15 | FINISHED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_daily_new"}
-                 3 |      16 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                 3 |      17 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                 3 |      18 | FINISHED | ENABLE POLICIES  | 
-(18 rows)
+                 3 |       5 | FINISHED | COPY DATA        | {"end_ts": "240", "start_ts": "0", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 3 |       6 | FINISHED | COPY DATA        | {"end_ts": "480", "start_ts": "240", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 3 |       7 | FINISHED | COPY DATA        | {"end_ts": "720", "start_ts": "480", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 3 |       8 | FINISHED | COPY DATA        | {"end_ts": "960", "start_ts": "720", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 3 |       9 | FINISHED | COPY DATA        | {"end_ts": "1200", "start_ts": "960", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 3 |      10 | FINISHED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_daily_new"}
+                 3 |      11 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
+                 3 |      12 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
+                 3 |      13 | FINISHED | ENABLE POLICIES  | 
+(13 rows)
 
 \set ON_ERROR_STOP 0
 -- should error because plan already exists
@@ -450,21 +440,16 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
                  3 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
                  3 |       3 | FINISHED | DISABLE POLICIES | {"policies": [1000, 1002]}
                  3 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "1008", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "integer"}
-                 3 |       5 | FINISHED | COPY DATA        | {"end_ts": "100", "start_ts": "0", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |       6 | FINISHED | COPY DATA        | {"end_ts": "200", "start_ts": "100", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |       7 | FINISHED | COPY DATA        | {"end_ts": "300", "start_ts": "200", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |       8 | FINISHED | COPY DATA        | {"end_ts": "400", "start_ts": "300", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |       9 | FINISHED | COPY DATA        | {"end_ts": "500", "start_ts": "400", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |      10 | FINISHED | COPY DATA        | {"end_ts": "600", "start_ts": "500", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |      11 | FINISHED | COPY DATA        | {"end_ts": "700", "start_ts": "600", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |      12 | FINISHED | COPY DATA        | {"end_ts": "800", "start_ts": "700", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |      13 | FINISHED | COPY DATA        | {"end_ts": "900", "start_ts": "800", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |      14 | FINISHED | COPY DATA        | {"end_ts": "1000", "start_ts": "900", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 3 |      15 | FINISHED | COPY POLICIES    | {"policies": [1000, 1001, 1002], "cagg_name_new": "conditions_summary_daily_new"}
-                 3 |      16 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                 3 |      17 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                 3 |      18 | FINISHED | ENABLE POLICIES  | {"policies": [1003, 1004, 1005, 1000, 1001, 1002]}
-(18 rows)
+                 3 |       5 | FINISHED | COPY DATA        | {"end_ts": "240", "start_ts": "0", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 3 |       6 | FINISHED | COPY DATA        | {"end_ts": "480", "start_ts": "240", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 3 |       7 | FINISHED | COPY DATA        | {"end_ts": "720", "start_ts": "480", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 3 |       8 | FINISHED | COPY DATA        | {"end_ts": "960", "start_ts": "720", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 3 |       9 | FINISHED | COPY DATA        | {"end_ts": "1200", "start_ts": "960", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 3 |      10 | FINISHED | COPY POLICIES    | {"policies": [1000, 1001, 1002], "cagg_name_new": "conditions_summary_daily_new"}
+                 3 |      11 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
+                 3 |      12 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
+                 3 |      13 | FINISHED | ENABLE POLICIES  | {"policies": [1003, 1004, 1005, 1000, 1001, 1002]}
+(13 rows)
 
 -- check migrated data. should return 0 (zero) rows
 SELECT * FROM conditions_summary_daily
@@ -746,26 +731,18 @@ SELECT * FROM conditions_summary_weekly_new;
 (0 rows)
 
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
- mat_hypertable_id | step_id |  status  |       type       |                                                                         config                                                                          
--------------------+---------+----------+------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------
+ mat_hypertable_id | step_id |  status  |       type       |                                                                         config                                                                         
+-------------------+---------+----------+------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------
                  4 |       1 | FINISHED | SAVE WATERMARK   | {"watermark": "1008"}
                  4 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_weekly_new"}
                  4 |       3 | FINISHED | DISABLE POLICIES | {"policies": null}
                  4 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "1008", "cagg_name_new": "conditions_summary_weekly_new", "window_start_type": "integer"}
-                 4 |       5 | FINISHED | COPY DATA        | {"end_ts": "100", "start_ts": "0", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 4 |       6 | FINISHED | COPY DATA        | {"end_ts": "200", "start_ts": "100", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 4 |       7 | FINISHED | COPY DATA        | {"end_ts": "300", "start_ts": "200", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 4 |       8 | FINISHED | COPY DATA        | {"end_ts": "400", "start_ts": "300", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 4 |       9 | FINISHED | COPY DATA        | {"end_ts": "500", "start_ts": "400", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 4 |      10 | FINISHED | COPY DATA        | {"end_ts": "600", "start_ts": "500", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 4 |      11 | FINISHED | COPY DATA        | {"end_ts": "700", "start_ts": "600", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 4 |      12 | FINISHED | COPY DATA        | {"end_ts": "800", "start_ts": "700", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 4 |      13 | FINISHED | COPY DATA        | {"end_ts": "900", "start_ts": "800", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                 4 |      14 | FINISHED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_weekly_new"}
-                 4 |      15 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_weekly_new"}
-                 4 |      16 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_weekly_new"}
-                 4 |      17 | FINISHED | ENABLE POLICIES  | 
-(17 rows)
+                 4 |       5 | FINISHED | COPY DATA        | {"end_ts": "1680", "start_ts": "0", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 4 |       6 | FINISHED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_weekly_new"}
+                 4 |       7 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_weekly_new"}
+                 4 |       8 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_weekly_new"}
+                 4 |       9 | FINISHED | ENABLE POLICIES  | 
+(9 rows)
 
 RESET ROLE;
 -- according to the official documentation trying to execute a procedure with
@@ -1158,17 +1135,48 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
                  7 |       2 | NOT STARTED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
                  7 |       3 | NOT STARTED | DISABLE POLICIES | {"policies": null}
                  7 |       4 | NOT STARTED | REFRESH NEW CAGG | {"window_start": "2023-01-01 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "timestamp without time zone"}
-                 7 |       5 | NOT STARTED | COPY DATA        | {"end_ts": "2022-03-11 00:00:00", "start_ts": "2021-12-31 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 7 |       6 | NOT STARTED | COPY DATA        | {"end_ts": "2022-05-20 00:00:00", "start_ts": "2022-03-11 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 7 |       7 | NOT STARTED | COPY DATA        | {"end_ts": "2022-07-29 00:00:00", "start_ts": "2022-05-20 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 7 |       8 | NOT STARTED | COPY DATA        | {"end_ts": "2022-10-07 00:00:00", "start_ts": "2022-07-29 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 7 |       9 | NOT STARTED | COPY DATA        | {"end_ts": "2022-12-16 00:00:00", "start_ts": "2022-10-07 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 7 |      10 | NOT STARTED | COPY DATA        | {"end_ts": "2023-02-24 00:00:00", "start_ts": "2022-12-16 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 7 |      11 | NOT STARTED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_daily_new"}
-                 7 |      12 | NOT STARTED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                 7 |      13 | NOT STARTED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                 7 |      14 | NOT STARTED | ENABLE POLICIES  | 
-(14 rows)
+                 7 |       5 | NOT STARTED | COPY DATA        | {"end_ts": "2022-01-10 00:00:00", "start_ts": "2021-12-31 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |       6 | NOT STARTED | COPY DATA        | {"end_ts": "2022-01-20 00:00:00", "start_ts": "2022-01-10 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |       7 | NOT STARTED | COPY DATA        | {"end_ts": "2022-01-30 00:00:00", "start_ts": "2022-01-20 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |       8 | NOT STARTED | COPY DATA        | {"end_ts": "2022-02-09 00:00:00", "start_ts": "2022-01-30 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |       9 | NOT STARTED | COPY DATA        | {"end_ts": "2022-02-19 00:00:00", "start_ts": "2022-02-09 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      10 | NOT STARTED | COPY DATA        | {"end_ts": "2022-03-01 00:00:00", "start_ts": "2022-02-19 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      11 | NOT STARTED | COPY DATA        | {"end_ts": "2022-03-11 00:00:00", "start_ts": "2022-03-01 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      12 | NOT STARTED | COPY DATA        | {"end_ts": "2022-03-21 00:00:00", "start_ts": "2022-03-11 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      13 | NOT STARTED | COPY DATA        | {"end_ts": "2022-03-31 00:00:00", "start_ts": "2022-03-21 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      14 | NOT STARTED | COPY DATA        | {"end_ts": "2022-04-10 00:00:00", "start_ts": "2022-03-31 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      15 | NOT STARTED | COPY DATA        | {"end_ts": "2022-04-20 00:00:00", "start_ts": "2022-04-10 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      16 | NOT STARTED | COPY DATA        | {"end_ts": "2022-04-30 00:00:00", "start_ts": "2022-04-20 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      17 | NOT STARTED | COPY DATA        | {"end_ts": "2022-05-10 00:00:00", "start_ts": "2022-04-30 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      18 | NOT STARTED | COPY DATA        | {"end_ts": "2022-05-20 00:00:00", "start_ts": "2022-05-10 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      19 | NOT STARTED | COPY DATA        | {"end_ts": "2022-05-30 00:00:00", "start_ts": "2022-05-20 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      20 | NOT STARTED | COPY DATA        | {"end_ts": "2022-06-09 00:00:00", "start_ts": "2022-05-30 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      21 | NOT STARTED | COPY DATA        | {"end_ts": "2022-06-19 00:00:00", "start_ts": "2022-06-09 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      22 | NOT STARTED | COPY DATA        | {"end_ts": "2022-06-29 00:00:00", "start_ts": "2022-06-19 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      23 | NOT STARTED | COPY DATA        | {"end_ts": "2022-07-09 00:00:00", "start_ts": "2022-06-29 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      24 | NOT STARTED | COPY DATA        | {"end_ts": "2022-07-19 00:00:00", "start_ts": "2022-07-09 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      25 | NOT STARTED | COPY DATA        | {"end_ts": "2022-07-29 00:00:00", "start_ts": "2022-07-19 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      26 | NOT STARTED | COPY DATA        | {"end_ts": "2022-08-08 00:00:00", "start_ts": "2022-07-29 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      27 | NOT STARTED | COPY DATA        | {"end_ts": "2022-08-18 00:00:00", "start_ts": "2022-08-08 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      28 | NOT STARTED | COPY DATA        | {"end_ts": "2022-08-28 00:00:00", "start_ts": "2022-08-18 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      29 | NOT STARTED | COPY DATA        | {"end_ts": "2022-09-07 00:00:00", "start_ts": "2022-08-28 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      30 | NOT STARTED | COPY DATA        | {"end_ts": "2022-09-17 00:00:00", "start_ts": "2022-09-07 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      31 | NOT STARTED | COPY DATA        | {"end_ts": "2022-09-27 00:00:00", "start_ts": "2022-09-17 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      32 | NOT STARTED | COPY DATA        | {"end_ts": "2022-10-07 00:00:00", "start_ts": "2022-09-27 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      33 | NOT STARTED | COPY DATA        | {"end_ts": "2022-10-17 00:00:00", "start_ts": "2022-10-07 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      34 | NOT STARTED | COPY DATA        | {"end_ts": "2022-10-27 00:00:00", "start_ts": "2022-10-17 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      35 | NOT STARTED | COPY DATA        | {"end_ts": "2022-11-06 00:00:00", "start_ts": "2022-10-27 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      36 | NOT STARTED | COPY DATA        | {"end_ts": "2022-11-16 00:00:00", "start_ts": "2022-11-06 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      37 | NOT STARTED | COPY DATA        | {"end_ts": "2022-11-26 00:00:00", "start_ts": "2022-11-16 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      38 | NOT STARTED | COPY DATA        | {"end_ts": "2022-12-06 00:00:00", "start_ts": "2022-11-26 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      39 | NOT STARTED | COPY DATA        | {"end_ts": "2022-12-16 00:00:00", "start_ts": "2022-12-06 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      40 | NOT STARTED | COPY DATA        | {"end_ts": "2022-12-26 00:00:00", "start_ts": "2022-12-16 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      41 | NOT STARTED | COPY DATA        | {"end_ts": "2023-01-05 00:00:00", "start_ts": "2022-12-26 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      42 | NOT STARTED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_daily_new"}
+                 7 |      43 | NOT STARTED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
+                 7 |      44 | NOT STARTED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
+                 7 |      45 | NOT STARTED | ENABLE POLICIES  | 
+(45 rows)
 
 -- should resume the execution
 CALL cagg_migrate('conditions_summary_daily');
@@ -1181,17 +1189,48 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
                  7 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
                  7 |       3 | FINISHED | DISABLE POLICIES | {"policies": null}
                  7 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "2023-01-01 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "timestamp without time zone"}
-                 7 |       5 | FINISHED | COPY DATA        | {"end_ts": "2022-03-11 00:00:00", "start_ts": "2021-12-31 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 7 |       6 | FINISHED | COPY DATA        | {"end_ts": "2022-05-20 00:00:00", "start_ts": "2022-03-11 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 7 |       7 | FINISHED | COPY DATA        | {"end_ts": "2022-07-29 00:00:00", "start_ts": "2022-05-20 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 7 |       8 | FINISHED | COPY DATA        | {"end_ts": "2022-10-07 00:00:00", "start_ts": "2022-07-29 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 7 |       9 | FINISHED | COPY DATA        | {"end_ts": "2022-12-16 00:00:00", "start_ts": "2022-10-07 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 7 |      10 | FINISHED | COPY DATA        | {"end_ts": "2023-02-24 00:00:00", "start_ts": "2022-12-16 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 7 |      11 | FINISHED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_daily_new"}
-                 7 |      12 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                 7 |      13 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                 7 |      14 | FINISHED | ENABLE POLICIES  | 
-(14 rows)
+                 7 |       5 | FINISHED | COPY DATA        | {"end_ts": "2022-01-10 00:00:00", "start_ts": "2021-12-31 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |       6 | FINISHED | COPY DATA        | {"end_ts": "2022-01-20 00:00:00", "start_ts": "2022-01-10 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |       7 | FINISHED | COPY DATA        | {"end_ts": "2022-01-30 00:00:00", "start_ts": "2022-01-20 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |       8 | FINISHED | COPY DATA        | {"end_ts": "2022-02-09 00:00:00", "start_ts": "2022-01-30 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |       9 | FINISHED | COPY DATA        | {"end_ts": "2022-02-19 00:00:00", "start_ts": "2022-02-09 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      10 | FINISHED | COPY DATA        | {"end_ts": "2022-03-01 00:00:00", "start_ts": "2022-02-19 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      11 | FINISHED | COPY DATA        | {"end_ts": "2022-03-11 00:00:00", "start_ts": "2022-03-01 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      12 | FINISHED | COPY DATA        | {"end_ts": "2022-03-21 00:00:00", "start_ts": "2022-03-11 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      13 | FINISHED | COPY DATA        | {"end_ts": "2022-03-31 00:00:00", "start_ts": "2022-03-21 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      14 | FINISHED | COPY DATA        | {"end_ts": "2022-04-10 00:00:00", "start_ts": "2022-03-31 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      15 | FINISHED | COPY DATA        | {"end_ts": "2022-04-20 00:00:00", "start_ts": "2022-04-10 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      16 | FINISHED | COPY DATA        | {"end_ts": "2022-04-30 00:00:00", "start_ts": "2022-04-20 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      17 | FINISHED | COPY DATA        | {"end_ts": "2022-05-10 00:00:00", "start_ts": "2022-04-30 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      18 | FINISHED | COPY DATA        | {"end_ts": "2022-05-20 00:00:00", "start_ts": "2022-05-10 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      19 | FINISHED | COPY DATA        | {"end_ts": "2022-05-30 00:00:00", "start_ts": "2022-05-20 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      20 | FINISHED | COPY DATA        | {"end_ts": "2022-06-09 00:00:00", "start_ts": "2022-05-30 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      21 | FINISHED | COPY DATA        | {"end_ts": "2022-06-19 00:00:00", "start_ts": "2022-06-09 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      22 | FINISHED | COPY DATA        | {"end_ts": "2022-06-29 00:00:00", "start_ts": "2022-06-19 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      23 | FINISHED | COPY DATA        | {"end_ts": "2022-07-09 00:00:00", "start_ts": "2022-06-29 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      24 | FINISHED | COPY DATA        | {"end_ts": "2022-07-19 00:00:00", "start_ts": "2022-07-09 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      25 | FINISHED | COPY DATA        | {"end_ts": "2022-07-29 00:00:00", "start_ts": "2022-07-19 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      26 | FINISHED | COPY DATA        | {"end_ts": "2022-08-08 00:00:00", "start_ts": "2022-07-29 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      27 | FINISHED | COPY DATA        | {"end_ts": "2022-08-18 00:00:00", "start_ts": "2022-08-08 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      28 | FINISHED | COPY DATA        | {"end_ts": "2022-08-28 00:00:00", "start_ts": "2022-08-18 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      29 | FINISHED | COPY DATA        | {"end_ts": "2022-09-07 00:00:00", "start_ts": "2022-08-28 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      30 | FINISHED | COPY DATA        | {"end_ts": "2022-09-17 00:00:00", "start_ts": "2022-09-07 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      31 | FINISHED | COPY DATA        | {"end_ts": "2022-09-27 00:00:00", "start_ts": "2022-09-17 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      32 | FINISHED | COPY DATA        | {"end_ts": "2022-10-07 00:00:00", "start_ts": "2022-09-27 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      33 | FINISHED | COPY DATA        | {"end_ts": "2022-10-17 00:00:00", "start_ts": "2022-10-07 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      34 | FINISHED | COPY DATA        | {"end_ts": "2022-10-27 00:00:00", "start_ts": "2022-10-17 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      35 | FINISHED | COPY DATA        | {"end_ts": "2022-11-06 00:00:00", "start_ts": "2022-10-27 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      36 | FINISHED | COPY DATA        | {"end_ts": "2022-11-16 00:00:00", "start_ts": "2022-11-06 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      37 | FINISHED | COPY DATA        | {"end_ts": "2022-11-26 00:00:00", "start_ts": "2022-11-16 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      38 | FINISHED | COPY DATA        | {"end_ts": "2022-12-06 00:00:00", "start_ts": "2022-11-26 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      39 | FINISHED | COPY DATA        | {"end_ts": "2022-12-16 00:00:00", "start_ts": "2022-12-06 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      40 | FINISHED | COPY DATA        | {"end_ts": "2022-12-26 00:00:00", "start_ts": "2022-12-16 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      41 | FINISHED | COPY DATA        | {"end_ts": "2023-01-05 00:00:00", "start_ts": "2022-12-26 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      42 | FINISHED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_daily_new"}
+                 7 |      43 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
+                 7 |      44 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
+                 7 |      45 | FINISHED | ENABLE POLICIES  | 
+(45 rows)
 
 \set ON_ERROR_STOP 0
 -- should error because plan already exists
@@ -1311,17 +1350,48 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
                  7 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
                  7 |       3 | FINISHED | DISABLE POLICIES | {"policies": [1012, 1014]}
                  7 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "2023-01-01 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "timestamp without time zone"}
-                 7 |       5 | FINISHED | COPY DATA        | {"end_ts": "2022-03-11 00:00:00", "start_ts": "2021-12-31 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 7 |       6 | FINISHED | COPY DATA        | {"end_ts": "2022-05-20 00:00:00", "start_ts": "2022-03-11 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 7 |       7 | FINISHED | COPY DATA        | {"end_ts": "2022-07-29 00:00:00", "start_ts": "2022-05-20 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 7 |       8 | FINISHED | COPY DATA        | {"end_ts": "2022-10-07 00:00:00", "start_ts": "2022-07-29 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 7 |       9 | FINISHED | COPY DATA        | {"end_ts": "2022-12-16 00:00:00", "start_ts": "2022-10-07 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 7 |      10 | FINISHED | COPY DATA        | {"end_ts": "2023-02-24 00:00:00", "start_ts": "2022-12-16 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                 7 |      11 | FINISHED | COPY POLICIES    | {"policies": [1012, 1013, 1014], "cagg_name_new": "conditions_summary_daily_new"}
-                 7 |      12 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                 7 |      13 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                 7 |      14 | FINISHED | ENABLE POLICIES  | {"policies": [1015, 1016, 1017, 1012, 1013, 1014]}
-(14 rows)
+                 7 |       5 | FINISHED | COPY DATA        | {"end_ts": "2022-01-10 00:00:00", "start_ts": "2021-12-31 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |       6 | FINISHED | COPY DATA        | {"end_ts": "2022-01-20 00:00:00", "start_ts": "2022-01-10 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |       7 | FINISHED | COPY DATA        | {"end_ts": "2022-01-30 00:00:00", "start_ts": "2022-01-20 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |       8 | FINISHED | COPY DATA        | {"end_ts": "2022-02-09 00:00:00", "start_ts": "2022-01-30 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |       9 | FINISHED | COPY DATA        | {"end_ts": "2022-02-19 00:00:00", "start_ts": "2022-02-09 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      10 | FINISHED | COPY DATA        | {"end_ts": "2022-03-01 00:00:00", "start_ts": "2022-02-19 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      11 | FINISHED | COPY DATA        | {"end_ts": "2022-03-11 00:00:00", "start_ts": "2022-03-01 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      12 | FINISHED | COPY DATA        | {"end_ts": "2022-03-21 00:00:00", "start_ts": "2022-03-11 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      13 | FINISHED | COPY DATA        | {"end_ts": "2022-03-31 00:00:00", "start_ts": "2022-03-21 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      14 | FINISHED | COPY DATA        | {"end_ts": "2022-04-10 00:00:00", "start_ts": "2022-03-31 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      15 | FINISHED | COPY DATA        | {"end_ts": "2022-04-20 00:00:00", "start_ts": "2022-04-10 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      16 | FINISHED | COPY DATA        | {"end_ts": "2022-04-30 00:00:00", "start_ts": "2022-04-20 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      17 | FINISHED | COPY DATA        | {"end_ts": "2022-05-10 00:00:00", "start_ts": "2022-04-30 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      18 | FINISHED | COPY DATA        | {"end_ts": "2022-05-20 00:00:00", "start_ts": "2022-05-10 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      19 | FINISHED | COPY DATA        | {"end_ts": "2022-05-30 00:00:00", "start_ts": "2022-05-20 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      20 | FINISHED | COPY DATA        | {"end_ts": "2022-06-09 00:00:00", "start_ts": "2022-05-30 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      21 | FINISHED | COPY DATA        | {"end_ts": "2022-06-19 00:00:00", "start_ts": "2022-06-09 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      22 | FINISHED | COPY DATA        | {"end_ts": "2022-06-29 00:00:00", "start_ts": "2022-06-19 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      23 | FINISHED | COPY DATA        | {"end_ts": "2022-07-09 00:00:00", "start_ts": "2022-06-29 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      24 | FINISHED | COPY DATA        | {"end_ts": "2022-07-19 00:00:00", "start_ts": "2022-07-09 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      25 | FINISHED | COPY DATA        | {"end_ts": "2022-07-29 00:00:00", "start_ts": "2022-07-19 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      26 | FINISHED | COPY DATA        | {"end_ts": "2022-08-08 00:00:00", "start_ts": "2022-07-29 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      27 | FINISHED | COPY DATA        | {"end_ts": "2022-08-18 00:00:00", "start_ts": "2022-08-08 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      28 | FINISHED | COPY DATA        | {"end_ts": "2022-08-28 00:00:00", "start_ts": "2022-08-18 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      29 | FINISHED | COPY DATA        | {"end_ts": "2022-09-07 00:00:00", "start_ts": "2022-08-28 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      30 | FINISHED | COPY DATA        | {"end_ts": "2022-09-17 00:00:00", "start_ts": "2022-09-07 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      31 | FINISHED | COPY DATA        | {"end_ts": "2022-09-27 00:00:00", "start_ts": "2022-09-17 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      32 | FINISHED | COPY DATA        | {"end_ts": "2022-10-07 00:00:00", "start_ts": "2022-09-27 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      33 | FINISHED | COPY DATA        | {"end_ts": "2022-10-17 00:00:00", "start_ts": "2022-10-07 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      34 | FINISHED | COPY DATA        | {"end_ts": "2022-10-27 00:00:00", "start_ts": "2022-10-17 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      35 | FINISHED | COPY DATA        | {"end_ts": "2022-11-06 00:00:00", "start_ts": "2022-10-27 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      36 | FINISHED | COPY DATA        | {"end_ts": "2022-11-16 00:00:00", "start_ts": "2022-11-06 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      37 | FINISHED | COPY DATA        | {"end_ts": "2022-11-26 00:00:00", "start_ts": "2022-11-16 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      38 | FINISHED | COPY DATA        | {"end_ts": "2022-12-06 00:00:00", "start_ts": "2022-11-26 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      39 | FINISHED | COPY DATA        | {"end_ts": "2022-12-16 00:00:00", "start_ts": "2022-12-06 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      40 | FINISHED | COPY DATA        | {"end_ts": "2022-12-26 00:00:00", "start_ts": "2022-12-16 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      41 | FINISHED | COPY DATA        | {"end_ts": "2023-01-05 00:00:00", "start_ts": "2022-12-26 00:00:00", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                 7 |      42 | FINISHED | COPY POLICIES    | {"policies": [1012, 1013, 1014], "cagg_name_new": "conditions_summary_daily_new"}
+                 7 |      43 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
+                 7 |      44 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
+                 7 |      45 | FINISHED | ENABLE POLICIES  | {"policies": [1015, 1016, 1017, 1012, 1013, 1014]}
+(45 rows)
 
 -- check migrated data. should return 0 (zero) rows
 SELECT * FROM conditions_summary_daily
@@ -1998,17 +2068,48 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
                 11 |       2 | NOT STARTED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
                 11 |       3 | NOT STARTED | DISABLE POLICIES | {"policies": null}
                 11 |       4 | NOT STARTED | REFRESH NEW CAGG | {"window_start": "2022-12-31 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "timestamp with time zone"}
-                11 |       5 | NOT STARTED | COPY DATA        | {"end_ts": "2022-03-11 16:00:00-08", "start_ts": "2021-12-31 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                11 |       6 | NOT STARTED | COPY DATA        | {"end_ts": "2022-05-20 16:00:00-07", "start_ts": "2022-03-11 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                11 |       7 | NOT STARTED | COPY DATA        | {"end_ts": "2022-07-29 16:00:00-07", "start_ts": "2022-05-20 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                11 |       8 | NOT STARTED | COPY DATA        | {"end_ts": "2022-10-07 16:00:00-07", "start_ts": "2022-07-29 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                11 |       9 | NOT STARTED | COPY DATA        | {"end_ts": "2022-12-16 16:00:00-08", "start_ts": "2022-10-07 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                11 |      10 | NOT STARTED | COPY DATA        | {"end_ts": "2023-02-24 16:00:00-08", "start_ts": "2022-12-16 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                11 |      11 | NOT STARTED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_daily_new"}
-                11 |      12 | NOT STARTED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                11 |      13 | NOT STARTED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                11 |      14 | NOT STARTED | ENABLE POLICIES  | 
-(14 rows)
+                11 |       5 | NOT STARTED | COPY DATA        | {"end_ts": "2022-01-10 16:00:00-08", "start_ts": "2021-12-31 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |       6 | NOT STARTED | COPY DATA        | {"end_ts": "2022-01-20 16:00:00-08", "start_ts": "2022-01-10 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |       7 | NOT STARTED | COPY DATA        | {"end_ts": "2022-01-30 16:00:00-08", "start_ts": "2022-01-20 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |       8 | NOT STARTED | COPY DATA        | {"end_ts": "2022-02-09 16:00:00-08", "start_ts": "2022-01-30 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |       9 | NOT STARTED | COPY DATA        | {"end_ts": "2022-02-19 16:00:00-08", "start_ts": "2022-02-09 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      10 | NOT STARTED | COPY DATA        | {"end_ts": "2022-03-01 16:00:00-08", "start_ts": "2022-02-19 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      11 | NOT STARTED | COPY DATA        | {"end_ts": "2022-03-11 16:00:00-08", "start_ts": "2022-03-01 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      12 | NOT STARTED | COPY DATA        | {"end_ts": "2022-03-21 16:00:00-07", "start_ts": "2022-03-11 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      13 | NOT STARTED | COPY DATA        | {"end_ts": "2022-03-31 16:00:00-07", "start_ts": "2022-03-21 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      14 | NOT STARTED | COPY DATA        | {"end_ts": "2022-04-10 16:00:00-07", "start_ts": "2022-03-31 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      15 | NOT STARTED | COPY DATA        | {"end_ts": "2022-04-20 16:00:00-07", "start_ts": "2022-04-10 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      16 | NOT STARTED | COPY DATA        | {"end_ts": "2022-04-30 16:00:00-07", "start_ts": "2022-04-20 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      17 | NOT STARTED | COPY DATA        | {"end_ts": "2022-05-10 16:00:00-07", "start_ts": "2022-04-30 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      18 | NOT STARTED | COPY DATA        | {"end_ts": "2022-05-20 16:00:00-07", "start_ts": "2022-05-10 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      19 | NOT STARTED | COPY DATA        | {"end_ts": "2022-05-30 16:00:00-07", "start_ts": "2022-05-20 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      20 | NOT STARTED | COPY DATA        | {"end_ts": "2022-06-09 16:00:00-07", "start_ts": "2022-05-30 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      21 | NOT STARTED | COPY DATA        | {"end_ts": "2022-06-19 16:00:00-07", "start_ts": "2022-06-09 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      22 | NOT STARTED | COPY DATA        | {"end_ts": "2022-06-29 16:00:00-07", "start_ts": "2022-06-19 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      23 | NOT STARTED | COPY DATA        | {"end_ts": "2022-07-09 16:00:00-07", "start_ts": "2022-06-29 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      24 | NOT STARTED | COPY DATA        | {"end_ts": "2022-07-19 16:00:00-07", "start_ts": "2022-07-09 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      25 | NOT STARTED | COPY DATA        | {"end_ts": "2022-07-29 16:00:00-07", "start_ts": "2022-07-19 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      26 | NOT STARTED | COPY DATA        | {"end_ts": "2022-08-08 16:00:00-07", "start_ts": "2022-07-29 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      27 | NOT STARTED | COPY DATA        | {"end_ts": "2022-08-18 16:00:00-07", "start_ts": "2022-08-08 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      28 | NOT STARTED | COPY DATA        | {"end_ts": "2022-08-28 16:00:00-07", "start_ts": "2022-08-18 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      29 | NOT STARTED | COPY DATA        | {"end_ts": "2022-09-07 16:00:00-07", "start_ts": "2022-08-28 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      30 | NOT STARTED | COPY DATA        | {"end_ts": "2022-09-17 16:00:00-07", "start_ts": "2022-09-07 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      31 | NOT STARTED | COPY DATA        | {"end_ts": "2022-09-27 16:00:00-07", "start_ts": "2022-09-17 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      32 | NOT STARTED | COPY DATA        | {"end_ts": "2022-10-07 16:00:00-07", "start_ts": "2022-09-27 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      33 | NOT STARTED | COPY DATA        | {"end_ts": "2022-10-17 16:00:00-07", "start_ts": "2022-10-07 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      34 | NOT STARTED | COPY DATA        | {"end_ts": "2022-10-27 16:00:00-07", "start_ts": "2022-10-17 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      35 | NOT STARTED | COPY DATA        | {"end_ts": "2022-11-06 16:00:00-08", "start_ts": "2022-10-27 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      36 | NOT STARTED | COPY DATA        | {"end_ts": "2022-11-16 16:00:00-08", "start_ts": "2022-11-06 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      37 | NOT STARTED | COPY DATA        | {"end_ts": "2022-11-26 16:00:00-08", "start_ts": "2022-11-16 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      38 | NOT STARTED | COPY DATA        | {"end_ts": "2022-12-06 16:00:00-08", "start_ts": "2022-11-26 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      39 | NOT STARTED | COPY DATA        | {"end_ts": "2022-12-16 16:00:00-08", "start_ts": "2022-12-06 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      40 | NOT STARTED | COPY DATA        | {"end_ts": "2022-12-26 16:00:00-08", "start_ts": "2022-12-16 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      41 | NOT STARTED | COPY DATA        | {"end_ts": "2023-01-05 16:00:00-08", "start_ts": "2022-12-26 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      42 | NOT STARTED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_daily_new"}
+                11 |      43 | NOT STARTED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
+                11 |      44 | NOT STARTED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
+                11 |      45 | NOT STARTED | ENABLE POLICIES  | 
+(45 rows)
 
 -- should resume the execution
 CALL cagg_migrate('conditions_summary_daily');
@@ -2021,17 +2122,48 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
                 11 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
                 11 |       3 | FINISHED | DISABLE POLICIES | {"policies": null}
                 11 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "2022-12-31 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "timestamp with time zone"}
-                11 |       5 | FINISHED | COPY DATA        | {"end_ts": "2022-03-11 16:00:00-08", "start_ts": "2021-12-31 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                11 |       6 | FINISHED | COPY DATA        | {"end_ts": "2022-05-20 16:00:00-07", "start_ts": "2022-03-11 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                11 |       7 | FINISHED | COPY DATA        | {"end_ts": "2022-07-29 16:00:00-07", "start_ts": "2022-05-20 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                11 |       8 | FINISHED | COPY DATA        | {"end_ts": "2022-10-07 16:00:00-07", "start_ts": "2022-07-29 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                11 |       9 | FINISHED | COPY DATA        | {"end_ts": "2022-12-16 16:00:00-08", "start_ts": "2022-10-07 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                11 |      10 | FINISHED | COPY DATA        | {"end_ts": "2023-02-24 16:00:00-08", "start_ts": "2022-12-16 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                11 |      11 | FINISHED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_daily_new"}
-                11 |      12 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                11 |      13 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                11 |      14 | FINISHED | ENABLE POLICIES  | 
-(14 rows)
+                11 |       5 | FINISHED | COPY DATA        | {"end_ts": "2022-01-10 16:00:00-08", "start_ts": "2021-12-31 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |       6 | FINISHED | COPY DATA        | {"end_ts": "2022-01-20 16:00:00-08", "start_ts": "2022-01-10 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |       7 | FINISHED | COPY DATA        | {"end_ts": "2022-01-30 16:00:00-08", "start_ts": "2022-01-20 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |       8 | FINISHED | COPY DATA        | {"end_ts": "2022-02-09 16:00:00-08", "start_ts": "2022-01-30 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |       9 | FINISHED | COPY DATA        | {"end_ts": "2022-02-19 16:00:00-08", "start_ts": "2022-02-09 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      10 | FINISHED | COPY DATA        | {"end_ts": "2022-03-01 16:00:00-08", "start_ts": "2022-02-19 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      11 | FINISHED | COPY DATA        | {"end_ts": "2022-03-11 16:00:00-08", "start_ts": "2022-03-01 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      12 | FINISHED | COPY DATA        | {"end_ts": "2022-03-21 16:00:00-07", "start_ts": "2022-03-11 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      13 | FINISHED | COPY DATA        | {"end_ts": "2022-03-31 16:00:00-07", "start_ts": "2022-03-21 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      14 | FINISHED | COPY DATA        | {"end_ts": "2022-04-10 16:00:00-07", "start_ts": "2022-03-31 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      15 | FINISHED | COPY DATA        | {"end_ts": "2022-04-20 16:00:00-07", "start_ts": "2022-04-10 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      16 | FINISHED | COPY DATA        | {"end_ts": "2022-04-30 16:00:00-07", "start_ts": "2022-04-20 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      17 | FINISHED | COPY DATA        | {"end_ts": "2022-05-10 16:00:00-07", "start_ts": "2022-04-30 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      18 | FINISHED | COPY DATA        | {"end_ts": "2022-05-20 16:00:00-07", "start_ts": "2022-05-10 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      19 | FINISHED | COPY DATA        | {"end_ts": "2022-05-30 16:00:00-07", "start_ts": "2022-05-20 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      20 | FINISHED | COPY DATA        | {"end_ts": "2022-06-09 16:00:00-07", "start_ts": "2022-05-30 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      21 | FINISHED | COPY DATA        | {"end_ts": "2022-06-19 16:00:00-07", "start_ts": "2022-06-09 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      22 | FINISHED | COPY DATA        | {"end_ts": "2022-06-29 16:00:00-07", "start_ts": "2022-06-19 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      23 | FINISHED | COPY DATA        | {"end_ts": "2022-07-09 16:00:00-07", "start_ts": "2022-06-29 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      24 | FINISHED | COPY DATA        | {"end_ts": "2022-07-19 16:00:00-07", "start_ts": "2022-07-09 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      25 | FINISHED | COPY DATA        | {"end_ts": "2022-07-29 16:00:00-07", "start_ts": "2022-07-19 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      26 | FINISHED | COPY DATA        | {"end_ts": "2022-08-08 16:00:00-07", "start_ts": "2022-07-29 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      27 | FINISHED | COPY DATA        | {"end_ts": "2022-08-18 16:00:00-07", "start_ts": "2022-08-08 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      28 | FINISHED | COPY DATA        | {"end_ts": "2022-08-28 16:00:00-07", "start_ts": "2022-08-18 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      29 | FINISHED | COPY DATA        | {"end_ts": "2022-09-07 16:00:00-07", "start_ts": "2022-08-28 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      30 | FINISHED | COPY DATA        | {"end_ts": "2022-09-17 16:00:00-07", "start_ts": "2022-09-07 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      31 | FINISHED | COPY DATA        | {"end_ts": "2022-09-27 16:00:00-07", "start_ts": "2022-09-17 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      32 | FINISHED | COPY DATA        | {"end_ts": "2022-10-07 16:00:00-07", "start_ts": "2022-09-27 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      33 | FINISHED | COPY DATA        | {"end_ts": "2022-10-17 16:00:00-07", "start_ts": "2022-10-07 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      34 | FINISHED | COPY DATA        | {"end_ts": "2022-10-27 16:00:00-07", "start_ts": "2022-10-17 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      35 | FINISHED | COPY DATA        | {"end_ts": "2022-11-06 16:00:00-08", "start_ts": "2022-10-27 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      36 | FINISHED | COPY DATA        | {"end_ts": "2022-11-16 16:00:00-08", "start_ts": "2022-11-06 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      37 | FINISHED | COPY DATA        | {"end_ts": "2022-11-26 16:00:00-08", "start_ts": "2022-11-16 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      38 | FINISHED | COPY DATA        | {"end_ts": "2022-12-06 16:00:00-08", "start_ts": "2022-11-26 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      39 | FINISHED | COPY DATA        | {"end_ts": "2022-12-16 16:00:00-08", "start_ts": "2022-12-06 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      40 | FINISHED | COPY DATA        | {"end_ts": "2022-12-26 16:00:00-08", "start_ts": "2022-12-16 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      41 | FINISHED | COPY DATA        | {"end_ts": "2023-01-05 16:00:00-08", "start_ts": "2022-12-26 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      42 | FINISHED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_daily_new"}
+                11 |      43 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
+                11 |      44 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
+                11 |      45 | FINISHED | ENABLE POLICIES  | 
+(45 rows)
 
 \set ON_ERROR_STOP 0
 -- should error because plan already exists
@@ -2151,17 +2283,48 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
                 11 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
                 11 |       3 | FINISHED | DISABLE POLICIES | {"policies": [1024, 1026]}
                 11 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "2022-12-31 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "timestamp with time zone"}
-                11 |       5 | FINISHED | COPY DATA        | {"end_ts": "2022-03-11 16:00:00-08", "start_ts": "2021-12-31 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                11 |       6 | FINISHED | COPY DATA        | {"end_ts": "2022-05-20 16:00:00-07", "start_ts": "2022-03-11 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                11 |       7 | FINISHED | COPY DATA        | {"end_ts": "2022-07-29 16:00:00-07", "start_ts": "2022-05-20 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                11 |       8 | FINISHED | COPY DATA        | {"end_ts": "2022-10-07 16:00:00-07", "start_ts": "2022-07-29 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                11 |       9 | FINISHED | COPY DATA        | {"end_ts": "2022-12-16 16:00:00-08", "start_ts": "2022-10-07 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                11 |      10 | FINISHED | COPY DATA        | {"end_ts": "2023-02-24 16:00:00-08", "start_ts": "2022-12-16 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                11 |      11 | FINISHED | COPY POLICIES    | {"policies": [1024, 1025, 1026], "cagg_name_new": "conditions_summary_daily_new"}
-                11 |      12 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                11 |      13 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                11 |      14 | FINISHED | ENABLE POLICIES  | {"policies": [1027, 1028, 1029, 1024, 1025, 1026]}
-(14 rows)
+                11 |       5 | FINISHED | COPY DATA        | {"end_ts": "2022-01-10 16:00:00-08", "start_ts": "2021-12-31 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |       6 | FINISHED | COPY DATA        | {"end_ts": "2022-01-20 16:00:00-08", "start_ts": "2022-01-10 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |       7 | FINISHED | COPY DATA        | {"end_ts": "2022-01-30 16:00:00-08", "start_ts": "2022-01-20 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |       8 | FINISHED | COPY DATA        | {"end_ts": "2022-02-09 16:00:00-08", "start_ts": "2022-01-30 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |       9 | FINISHED | COPY DATA        | {"end_ts": "2022-02-19 16:00:00-08", "start_ts": "2022-02-09 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      10 | FINISHED | COPY DATA        | {"end_ts": "2022-03-01 16:00:00-08", "start_ts": "2022-02-19 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      11 | FINISHED | COPY DATA        | {"end_ts": "2022-03-11 16:00:00-08", "start_ts": "2022-03-01 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      12 | FINISHED | COPY DATA        | {"end_ts": "2022-03-21 16:00:00-07", "start_ts": "2022-03-11 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      13 | FINISHED | COPY DATA        | {"end_ts": "2022-03-31 16:00:00-07", "start_ts": "2022-03-21 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      14 | FINISHED | COPY DATA        | {"end_ts": "2022-04-10 16:00:00-07", "start_ts": "2022-03-31 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      15 | FINISHED | COPY DATA        | {"end_ts": "2022-04-20 16:00:00-07", "start_ts": "2022-04-10 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      16 | FINISHED | COPY DATA        | {"end_ts": "2022-04-30 16:00:00-07", "start_ts": "2022-04-20 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      17 | FINISHED | COPY DATA        | {"end_ts": "2022-05-10 16:00:00-07", "start_ts": "2022-04-30 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      18 | FINISHED | COPY DATA        | {"end_ts": "2022-05-20 16:00:00-07", "start_ts": "2022-05-10 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      19 | FINISHED | COPY DATA        | {"end_ts": "2022-05-30 16:00:00-07", "start_ts": "2022-05-20 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      20 | FINISHED | COPY DATA        | {"end_ts": "2022-06-09 16:00:00-07", "start_ts": "2022-05-30 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      21 | FINISHED | COPY DATA        | {"end_ts": "2022-06-19 16:00:00-07", "start_ts": "2022-06-09 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      22 | FINISHED | COPY DATA        | {"end_ts": "2022-06-29 16:00:00-07", "start_ts": "2022-06-19 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      23 | FINISHED | COPY DATA        | {"end_ts": "2022-07-09 16:00:00-07", "start_ts": "2022-06-29 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      24 | FINISHED | COPY DATA        | {"end_ts": "2022-07-19 16:00:00-07", "start_ts": "2022-07-09 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      25 | FINISHED | COPY DATA        | {"end_ts": "2022-07-29 16:00:00-07", "start_ts": "2022-07-19 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      26 | FINISHED | COPY DATA        | {"end_ts": "2022-08-08 16:00:00-07", "start_ts": "2022-07-29 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      27 | FINISHED | COPY DATA        | {"end_ts": "2022-08-18 16:00:00-07", "start_ts": "2022-08-08 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      28 | FINISHED | COPY DATA        | {"end_ts": "2022-08-28 16:00:00-07", "start_ts": "2022-08-18 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      29 | FINISHED | COPY DATA        | {"end_ts": "2022-09-07 16:00:00-07", "start_ts": "2022-08-28 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      30 | FINISHED | COPY DATA        | {"end_ts": "2022-09-17 16:00:00-07", "start_ts": "2022-09-07 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      31 | FINISHED | COPY DATA        | {"end_ts": "2022-09-27 16:00:00-07", "start_ts": "2022-09-17 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      32 | FINISHED | COPY DATA        | {"end_ts": "2022-10-07 16:00:00-07", "start_ts": "2022-09-27 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      33 | FINISHED | COPY DATA        | {"end_ts": "2022-10-17 16:00:00-07", "start_ts": "2022-10-07 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      34 | FINISHED | COPY DATA        | {"end_ts": "2022-10-27 16:00:00-07", "start_ts": "2022-10-17 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      35 | FINISHED | COPY DATA        | {"end_ts": "2022-11-06 16:00:00-08", "start_ts": "2022-10-27 16:00:00-07", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      36 | FINISHED | COPY DATA        | {"end_ts": "2022-11-16 16:00:00-08", "start_ts": "2022-11-06 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      37 | FINISHED | COPY DATA        | {"end_ts": "2022-11-26 16:00:00-08", "start_ts": "2022-11-16 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      38 | FINISHED | COPY DATA        | {"end_ts": "2022-12-06 16:00:00-08", "start_ts": "2022-11-26 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      39 | FINISHED | COPY DATA        | {"end_ts": "2022-12-16 16:00:00-08", "start_ts": "2022-12-06 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      40 | FINISHED | COPY DATA        | {"end_ts": "2022-12-26 16:00:00-08", "start_ts": "2022-12-16 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      41 | FINISHED | COPY DATA        | {"end_ts": "2023-01-05 16:00:00-08", "start_ts": "2022-12-26 16:00:00-08", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                11 |      42 | FINISHED | COPY POLICIES    | {"policies": [1024, 1025, 1026], "cagg_name_new": "conditions_summary_daily_new"}
+                11 |      43 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
+                11 |      44 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
+                11 |      45 | FINISHED | ENABLE POLICIES  | {"policies": [1027, 1028, 1029, 1024, 1025, 1026]}
+(45 rows)
 
 -- check migrated data. should return 0 (zero) rows
 SELECT * FROM conditions_summary_daily
