@@ -1208,16 +1208,25 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 		 * Combine decompressed path with uncompressed part of the chunk,
 		 * using either MergeAppend or plain Append, depending on
 		 * whether it has sorting.
+		 *
+		 * Another consideration is parallel plans. Postgres currently doesn't
+		 * use MergeAppend under GatherMerge, i.e. as part of parallel plans.
+		 * This is mostly relevant to the append over chunks which is created by
+		 * Postgres. Here we are creating a MergeAppend for a partial chunk,
+		 * parallelizing it by itself is probably less important, so in this
+		 * case we just create a plain Append instead of MergeAppend even for
+		 * ordered chunk paths.
 		 */
 		Path *combined_path = NULL;
 		Path *decompression_path = lfirst(lc);
 		const int workers =
 			Max(decompression_path->parallel_workers, uncompressed_path->parallel_workers);
-		if (decompression_path->pathkeys == NIL)
+		if (decompression_path->pathkeys == NIL || workers > 0)
 		{
 			/*
 			 * Append distinguishes paths that are parallel and not, and uses
-			 * this for cost estimation, so we have to get it right here.
+			 * this for cost estimation, so we have to distinguish them as well
+			 * here.
 			 */
 			List *parallel_paths = NIL;
 			List *sequential_paths = NIL;
@@ -1251,7 +1260,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 											workers > 0,
 											decompression_path->rows + uncompressed_path->rows);
 		}
-		else if (workers == 0)
+		else
 		{
 			combined_path =
 				(Path *) create_merge_append_path(root,
@@ -1259,10 +1268,6 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 												  list_make2(decompression_path, uncompressed_path),
 												  decompression_path->pathkeys,
 												  req_outer);
-		}
-		else
-		{
-			continue;
 		}
 
 		combined_paths = lappend(combined_paths, combined_path);

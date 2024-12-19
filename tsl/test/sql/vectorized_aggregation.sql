@@ -31,6 +31,7 @@ SELECT sum(segment_by_value), sum(int_value), sum(float_value) FROM testtable;
 -- Tests with some chunks compressed
 ---
 SELECT compress_chunk(ch) FROM show_chunks('testtable') ch LIMIT 3;
+VACUUM ANALYZE testtable;
 
 -- Vectorized aggregation possible
 SELECT sum(segment_by_value) FROM testtable;
@@ -89,6 +90,7 @@ SELECT sum(float_value) FROM testtable;
 -- Tests with all chunks compressed
 ---
 SELECT compress_chunk(ch, if_not_compressed => true) FROM show_chunks('testtable') ch;
+VACUUM ANALYZE testtable;
 
 -- Vectorized aggregation possible
 SELECT sum(segment_by_value) FROM testtable;
