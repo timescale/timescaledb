@@ -130,9 +130,9 @@ select * from :chunk_to_compress_2 ORDER BY a, c, time DESC;
                 time                 | a | b | c 
 -------------------------------------+---+---+---
  Sun Jan 01 11:56:20.048355 2023 PST | 2 |   | 2
+ Sun Jan 01 09:56:20.048355 2023 PST | 2 |   | 2
  Sun Jan 01 11:57:20.048355 2023 PST | 3 |   | 3
  Sun Jan 01 11:56:20.048355 2023 PST | 3 |   | 3
- Sun Jan 01 09:56:20.048355 2023 PST | 2 |   | 2
 (4 rows)
 
 SELECT compressed_chunk_schema || '.' || compressed_chunk_name as compressed_chunk_name_2
