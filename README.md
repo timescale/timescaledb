@@ -54,6 +54,8 @@ CREATE TABLE conditions (
 SELECT create_hypertable('conditions', by_range('time'));
 ```
 
+In the docker image, timescale db is already active in the postgres database instance. IAIN CREATE EXTENSION timescaledb;
+
 See more:
 
 - [About hypertables](https://docs.timescale.com/use-timescale/latest/hypertables/)
@@ -68,7 +70,7 @@ TimescaleDB's hypercore is a hybrid row-columnar store that boosts analytical qu
     ```sql
     ALTER TABLE conditions SET (
       timescaledb.compress,
-      timescaledb.compress_segmentby = 'device_id'
+      timescaledb.compress_segmentby = 'time'
     );
     ```
 
@@ -151,7 +153,7 @@ For example, create a continuous aggregate view for daily weather data in two si
    CREATE MATERIALIZED VIEW conditions_summary_daily
    WITH (timescaledb.continuous) AS
    SELECT
-     device,
+     location,
      time_bucket(INTERVAL '1 day', time) AS bucket,
      AVG(temperature),
      MAX(temperature),
@@ -159,7 +161,7 @@ For example, create a continuous aggregate view for daily weather data in two si
    FROM
      conditions
    GROUP BY
-     device,
+     location,
      bucket;
    ```
 
