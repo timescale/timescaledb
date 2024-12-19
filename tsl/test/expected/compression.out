@@ -1859,10 +1859,6 @@ SELECT sum(cpu) FROM f_sensor_data;
          Output: (PARTIAL sum(_hyper_37_73_chunk.cpu))
          Workers Planned: 4
          ->  Parallel Append
-               ->  Partial Aggregate
-                     Output: PARTIAL sum(_hyper_37_73_chunk.cpu)
-                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_37_73_chunk
-                           Output: _hyper_37_73_chunk.cpu
                ->  Custom Scan (VectorAgg)
                      Output: (PARTIAL sum(_hyper_37_73_chunk.cpu))
                      Grouping Policy: all compressed batches
@@ -1870,6 +1866,10 @@ SELECT sum(cpu) FROM f_sensor_data;
                            Output: _hyper_37_73_chunk.cpu
                            ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_38_74_chunk
                                  Output: compress_hyper_38_74_chunk._ts_meta_count, compress_hyper_38_74_chunk.sensor_id, compress_hyper_38_74_chunk._ts_meta_min_1, compress_hyper_38_74_chunk._ts_meta_max_1, compress_hyper_38_74_chunk."time", compress_hyper_38_74_chunk.cpu, compress_hyper_38_74_chunk.temperature
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_37_73_chunk.cpu)
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_37_73_chunk
+                           Output: _hyper_37_73_chunk.cpu
 (17 rows)
 
 :explain
@@ -1880,15 +1880,15 @@ SELECT * FROM f_sensor_data WHERE sensor_id > 100;
    Output: _hyper_37_73_chunk."time", _hyper_37_73_chunk.sensor_id, _hyper_37_73_chunk.cpu, _hyper_37_73_chunk.temperature
    Workers Planned: 3
    ->  Parallel Append
-         ->  Parallel Index Scan using _hyper_37_73_chunk_f_sensor_data_time_sensor_id_idx on _timescaledb_internal._hyper_37_73_chunk
-               Output: _hyper_37_73_chunk."time", _hyper_37_73_chunk.sensor_id, _hyper_37_73_chunk.cpu, _hyper_37_73_chunk.temperature
-               Index Cond: (_hyper_37_73_chunk.sensor_id > 100)
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_73_chunk
                Output: _hyper_37_73_chunk."time", _hyper_37_73_chunk.sensor_id, _hyper_37_73_chunk.cpu, _hyper_37_73_chunk.temperature
                Filter: (_hyper_37_73_chunk.sensor_id > 100)
                ->  Parallel Index Scan using compress_hyper_38_74_chunk_sensor_id__ts_meta_min_1__ts_met_idx on _timescaledb_internal.compress_hyper_38_74_chunk
                      Output: compress_hyper_38_74_chunk._ts_meta_count, compress_hyper_38_74_chunk.sensor_id, compress_hyper_38_74_chunk._ts_meta_min_1, compress_hyper_38_74_chunk._ts_meta_max_1, compress_hyper_38_74_chunk."time", compress_hyper_38_74_chunk.cpu, compress_hyper_38_74_chunk.temperature
                      Index Cond: (compress_hyper_38_74_chunk.sensor_id > 100)
+         ->  Parallel Index Scan using _hyper_37_73_chunk_f_sensor_data_time_sensor_id_idx on _timescaledb_internal._hyper_37_73_chunk
+               Output: _hyper_37_73_chunk."time", _hyper_37_73_chunk.sensor_id, _hyper_37_73_chunk.cpu, _hyper_37_73_chunk.temperature
+               Index Cond: (_hyper_37_73_chunk.sensor_id > 100)
 (13 rows)
 
 -- Test non-partial paths below append are not executed multiple times
@@ -2802,7 +2802,7 @@ COPY compressed_table (time,a,b,c) FROM stdin;
 ERROR:  duplicate key value violates unique constraint "_hyper_49_108_chunk_compressed_table_index"
 \set ON_ERROR_STOP 1
 COPY compressed_table (time,a,b,c) FROM stdin;
-SELECT * FROM compressed_table;
+SELECT * FROM compressed_table ORDER BY a;
                 time                | a  | b | c 
 ------------------------------------+----+---+---
  Thu Feb 29 01:00:00 2024 PST       |  5 | 1 | 1

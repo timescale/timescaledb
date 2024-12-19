@@ -134,6 +134,7 @@ ALTER TABLE deleteme SET (
 );
 
 SELECT compress_chunk(i) FROM show_chunks('deleteme') i;
+VACUUM ANALYZE deleteme;
 EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE segment::text like '%4%';
 EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE '4' = segment::text;
 

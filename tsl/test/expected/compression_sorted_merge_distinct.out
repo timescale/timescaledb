@@ -31,13 +31,16 @@ select count(compress_chunk(x, true)) from show_chunks('t') x;
 
 analyze t;
 explain (costs off) select * from t order by ts;
-                       QUERY PLAN                        
----------------------------------------------------------
- Sort
-   Sort Key: _hyper_1_1_chunk.ts
-   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-         ->  Seq Scan on compress_hyper_2_2_chunk
-(4 rows)
+                              QUERY PLAN                               
+-----------------------------------------------------------------------
+ Gather Merge
+   Workers Planned: 1
+   ->  Sort
+         Sort Key: _hyper_1_1_chunk.ts
+         ->  Parallel Append
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+                     ->  Parallel Seq Scan on compress_hyper_2_2_chunk
+(7 rows)
 
 explain (costs off) select * from t where low_card = 1 order by ts;
                                                         QUERY PLAN                                                        
@@ -95,14 +98,17 @@ explain (costs off) select * from t where high_card < 10 order by ts;
 (5 rows)
 
 explain (costs off) select * from t where high_card < 500 order by ts;
-                       QUERY PLAN                        
----------------------------------------------------------
- Sort
-   Sort Key: _hyper_1_1_chunk.ts
-   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-         ->  Seq Scan on compress_hyper_2_2_chunk
-               Filter: (high_card < 500)
-(5 rows)
+                              QUERY PLAN                               
+-----------------------------------------------------------------------
+ Gather Merge
+   Workers Planned: 1
+   ->  Sort
+         Sort Key: _hyper_1_1_chunk.ts
+         ->  Parallel Append
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+                     ->  Parallel Seq Scan on compress_hyper_2_2_chunk
+                           Filter: (high_card < 500)
+(8 rows)
 
 -- Test that batch sorted merge respects the working memory limit.
 set work_mem to 64;
