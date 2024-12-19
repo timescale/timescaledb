@@ -285,9 +285,21 @@ vector_agg_exec(CustomScanState *node)
 
 		compressed_batch_set_compressed_tuple(dcontext, batch_state, compressed_slot);
 
+		/*
+		 * This is required for the proper EXPLAIN output for the underlying
+		 * DecompressChunk node. In normal Postgres plan execution, it is
+		 * updated by InstrStopNode() and used in InstrEndLoop().
+		 */
+		if (dcontext->ps->instrument)
+		{
+			dcontext->ps->instrument->running = true;
+		}
+
+		/*
+		 * Skip the batch if it was fully filtered out by the vectorized filters.
+		 */
 		if (batch_state->next_batch_row >= batch_state->total_batch_rows)
 		{
-			/* This batch was fully filtered out. */
 			continue;
 		}
 
@@ -302,13 +314,14 @@ vector_agg_exec(CustomScanState *node)
 		const int not_filtered_rows =
 			arrow_num_valid(batch_state->vector_qual_result, batch_state->total_batch_rows);
 		InstrCountFiltered1(dcontext->ps, batch_state->total_batch_rows - not_filtered_rows);
+
+		/*
+		 * This is required for the proper EXPLAIN output for the underlying
+		 * DecompressChunk node. In normal Postgres plan execution, it is
+		 * updated by InstrStopNode() and used in InstrEndLoop().
+		 */
 		if (dcontext->ps->instrument)
 		{
-			/*
-			 * These values are normally updated by InstrStopNode(), and are
-			 * required so that the calculations in InstrEndLoop() run properly.
-			 */
-			dcontext->ps->instrument->running = true;
 			dcontext->ps->instrument->tuplecount += not_filtered_rows;
 		}
 
