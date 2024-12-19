@@ -377,7 +377,8 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 									&policy_data.refresh_window,
 									CAGG_REFRESH_POLICY,
 									policy_data.start_is_null,
-									policy_data.end_is_null);
+									policy_data.end_is_null,
+									false);
 
 	return true;
 }
