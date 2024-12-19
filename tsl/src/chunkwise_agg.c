@@ -749,7 +749,7 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 		/*
 		 * We have to add a Gather or Gather Merge on top of parallel plans. It
 		 * goes above the Sort we might have added just before, so that the Sort
-		 * is paralellized as well.
+		 * is parallelized as well.
 		 */
 		if (partially_aggregated_path->parallel_workers > 0)
 		{
