@@ -23,7 +23,7 @@ Install from a Docker container:
 1. Run the TimescaleDB container:
 
     ```bash
-    docker run -d --name timescaledb -p 5432:5432 -e POSTGRES_PASSWORD=password timescale/timescaledb-ha:pg17
+    docker run -d --name timescaledb -p 5432:5432 -e POSTGRES_PASSWORD=password timescale/timescaledb:latest-pg17
     ```
 
 1. Connect to a database:
@@ -68,7 +68,7 @@ TimescaleDB's hypercore is a hybrid row-columnar store that boosts analytical qu
     ```sql
     ALTER TABLE conditions SET (
       timescaledb.compress,
-      timescaledb.compress_segmentby = 'device_id'
+      timescaledb.compress_segmentby = 'location'
     );
     ```
 
@@ -151,7 +151,7 @@ For example, create a continuous aggregate view for daily weather data in two si
    CREATE MATERIALIZED VIEW conditions_summary_daily
    WITH (timescaledb.continuous) AS
    SELECT
-     device,
+     location,
      time_bucket(INTERVAL '1 day', time) AS bucket,
      AVG(temperature),
      MAX(temperature),
@@ -159,7 +159,7 @@ For example, create a continuous aggregate view for daily weather data in two si
    FROM
      conditions
    GROUP BY
-     device,
+     location,
      bucket;
    ```
 
