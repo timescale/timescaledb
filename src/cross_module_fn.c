@@ -98,6 +98,7 @@ CROSSMODULE_WRAPPER(chunk_create_empty_table);
 
 CROSSMODULE_WRAPPER(recompress_chunk_segmentwise);
 CROSSMODULE_WRAPPER(get_compressed_chunk_index_for_recompression);
+CROSSMODULE_WRAPPER(merge_chunks);
 
 /* hypercore */
 CROSSMODULE_WRAPPER(is_compressed_tid);
@@ -407,6 +408,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.recompress_chunk_segmentwise = error_no_default_fn_pg_community,
 	.get_compressed_chunk_index_for_recompression = error_no_default_fn_pg_community,
 	.preprocess_query_tsl = preprocess_query_tsl_default_fn_community,
+	.merge_chunks = error_no_default_fn_pg_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

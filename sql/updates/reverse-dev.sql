@@ -57,3 +57,6 @@ ALTER EXTENSION timescaledb DROP VIEW timescaledb_information.chunk_columnstore_
 DROP VIEW timescaledb_information.hypertable_columnstore_settings;
 DROP VIEW timescaledb_information.chunk_columnstore_settings;
 
+-- Merge chunks
+DROP PROCEDURE IF EXISTS @extschema@.merge_chunks(chunk1 REGCLASS, chunk2 REGCLASS);
+DROP PROCEDURE IF EXISTS @extschema@.merge_chunks(chunks REGCLASS[]);
