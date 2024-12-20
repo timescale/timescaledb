@@ -685,7 +685,8 @@ create_segmentby_scankeys(CompressionSettings *settings, Relation index_rel,
 	{
 		AttrNumber idx_attnum = AttrOffsetGetAttrNumber(i);
 		AttrNumber in_attnum = index_rel->rd_index->indkey.values[i];
-		const NameData *attname = attnumAttName(compressed_chunk_rel, in_attnum);
+		const NameData PG_USED_FOR_ASSERTS_ONLY *attname =
+			attnumAttName(compressed_chunk_rel, in_attnum);
 		Assert(strcmp(NameStr(*attname),
 					  ts_array_get_element_text(settings->fd.segmentby, i + 1)) == 0);
 
