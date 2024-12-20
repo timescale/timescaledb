@@ -685,7 +685,12 @@ create_segmentby_scankeys(CompressionSettings *settings, Relation index_rel,
 	{
 		AttrNumber idx_attnum = AttrOffsetGetAttrNumber(i);
 		AttrNumber in_attnum = index_rel->rd_index->indkey.values[i];
+#ifdef USE_ASSERT_CHECKING
+		/* Compiler cannot figure out if attnumAttName() has any side effects,
+		 * so we do not use pg_attribute_unused() and instead exclude the code when not using the
+		 * assert below. */
 		const NameData *attname = attnumAttName(compressed_chunk_rel, in_attnum);
+#endif
 		Assert(strcmp(NameStr(*attname),
 					  ts_array_get_element_text(settings->fd.segmentby, i + 1)) == 0);
 
