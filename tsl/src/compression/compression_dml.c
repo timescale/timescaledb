@@ -575,6 +575,21 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 }
 
 static bool
+slot_keys_test(TupleTableSlot *slot, int nkeys, ScanKey keys)
+{
+	int cur_nkeys = nkeys;
+	ScanKey cur_key = keys;
+
+	for (; cur_nkeys--; cur_key++)
+	{
+		if (!slot_key_test(slot, cur_key))
+			return false;
+	}
+
+	return true;
+}
+
+static bool
 batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
 			  tuple_filtering_constraints *constraints, bool *skip_current_tuple)
 {
@@ -585,12 +600,7 @@ batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scan
 	for (int row = 0; row < num_tuples; row++)
 	{
 		TupleTableSlot *decompressed_slot = decompressor->decompressed_slots[row];
-		HeapTuple tuple = decompressed_slot->tts_ops->get_heap_tuple(decompressed_slot);
-#if PG16_LT
-		HeapKeyTest(tuple, decompressor->out_desc, num_scankeys, scankeys, valid);
-#else
-		valid = HeapKeyTest(tuple, decompressor->out_desc, num_scankeys, scankeys);
-#endif
+		valid = slot_keys_test(decompressed_slot, num_scankeys, scankeys);
 		if (valid)
 		{
 			if (constraints)
