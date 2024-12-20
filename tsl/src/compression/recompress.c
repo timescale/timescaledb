@@ -13,6 +13,7 @@
 #include <utils/typcache.h>
 
 #include "compression.h"
+#include "compression_dml.h"
 #include "create.h"
 #include "guc.h"
 #include "hypercore/hypercore_handler.h"
@@ -515,20 +516,6 @@ update_orderby_scankeys(TupleTableSlot *uncompressed_slot, CompressedSegmentInfo
 		orderby_scankeys[max_index].sk_flags = is_null ? SK_ISNULL : 0;
 		orderby_scankeys[max_index].sk_argument = val;
 	}
-}
-
-static bool
-slot_key_test(TupleTableSlot *compressed_slot, ScanKey key)
-{
-	Datum val;
-	bool is_null;
-	val = slot_getattr(compressed_slot, key->sk_attno, &is_null);
-
-	/* NULL values only match the value is NULL */
-	if (key->sk_flags & SK_ISNULL)
-		return is_null;
-
-	return DatumGetBool(FunctionCall2Coll(&key->sk_func, key->sk_collation, val, key->sk_argument));
 }
 
 static enum Batch_match_result
