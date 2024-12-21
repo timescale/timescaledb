@@ -110,6 +110,7 @@ FUNCTION_NAME(one)(void *restrict agg_state, const CTYPE value)
 #endif
 }
 
+#include "agg_many_vector_helper.c"
 #include "agg_scalar_helper.c"
 #include "agg_vector_validity_helper.c"
 
@@ -119,6 +120,7 @@ VectorAggFunctions FUNCTION_NAME(argdef) = {
 	.agg_emit = FUNCTION_NAME(emit),
 	.agg_scalar = FUNCTION_NAME(scalar),
 	.agg_vector = FUNCTION_NAME(vector),
+	.agg_many_vector = FUNCTION_NAME(many_vector),
 };
 
 #endif
