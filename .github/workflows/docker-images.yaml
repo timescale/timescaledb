@@ -27,6 +27,7 @@ jobs:
         env:
           POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRESQL_PASSWORD: ci
+          PGPASSWORD: ci
           REPMGR_PARTNER_NODES: pg-0
           REPMGR_PRIMARY_HOST: localhost
           REPMGR_NODE_NAME: pg-0
@@ -38,6 +39,9 @@ jobs:
       PGHOST: localhost
       PGUSER: postgres
       PGPASSWORD: ci
+#      POSTGRESQL_PASSWORD: ci
+#      REPMGR_USERNAME: postgres
+#      REPMGR_PASSWORD: ci
 
     strategy:
       fail-fast: false
