@@ -1922,16 +1922,23 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const
 	 * This is not compatible with ts_classify_relation(), but on the other hand
 	 * the compressed chunk rel shouldn't exist anywhere outside of the
 	 * decompression planning, it is removed at the end.
+	 *
+	 * This is not needed for direct select from a single chunk, in which case
+	 * the chunk reloptkind will be RELOPT_BASEREL
 	 */
-	compressed_rel->reloptkind = RELOPT_OTHER_MEMBER_REL;
+	if (chunk_rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
+	{
+		compressed_rel->reloptkind = RELOPT_OTHER_MEMBER_REL;
 
-	/*
-	 * We have to minimally initialize the append relation info for the
-	 * compressed chunks, so that the generate_implied_equalities() works. Only
-	 * the parent hypertable relindex is needed.
-	 */
-	root->append_rel_array[compressed_rel->relid] = makeNode(AppendRelInfo);
-	root->append_rel_array[compressed_rel->relid]->parent_relid = info->ht_rel->relid;
+		/*
+		 * We have to minimally initialize the append relation info for the
+		 * compressed chunks, so that the generate_implied_equalities() works.
+		 * Only the parent hypertable relindex is needed.
+		 */
+		root->append_rel_array[compressed_rel->relid] = makeNode(AppendRelInfo);
+		root->append_rel_array[compressed_rel->relid]->parent_relid = info->ht_rel->relid;
+		compressed_rel->top_parent_relids = chunk_rel->top_parent_relids;
+	}
 }
 
 static DecompressChunkPath *
@@ -2008,7 +2015,7 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 	add_path(compressed_rel, compressed_path);
 
 	/*
-	 * Create parallel scan path.
+	 * Create parallel seq scan path.
 	 * We marked the compressed rel as RELOPT_OTHER_MEMBER_REL when creating it,
 	 * so we should get a nonzero number of parallel workers even for small
 	 * tables, so that they don't prevent paralellism in the entire append plan.
@@ -2022,9 +2029,11 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 													   -1,
 													   max_parallel_workers_per_gather);
 
-		/* Add an unordered partial path based on a parallel sequential scan. */
-		add_partial_path(compressed_rel,
-						 create_seqscan_path(root, compressed_rel, NULL, parallel_workers));
+		if (parallel_workers > 0)
+		{
+			add_partial_path(compressed_rel,
+							 create_seqscan_path(root, compressed_rel, NULL, parallel_workers));
+		}
 	}
 
 	/*
