@@ -139,7 +139,7 @@ ALTER TABLE deleteme SET (
 
 SELECT compress_chunk(i) FROM show_chunks('deleteme') i;
 VACUUM ANALYZE deleteme;
-EXPLAIN (analyze, timing off, summary off) SELECT sum(data) FROM deleteme WHERE segment::text like '%4%';
+EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE segment::text like '%4%';
 EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE '4' = segment::text;
 
 CREATE TABLE deleteme_with_bytea(time bigint NOT NULL, bdata bytea);
@@ -166,6 +166,7 @@ ALTER TABLE svf_pushdown SET (timescaledb.compress,timescaledb.compress_segmentb
 
 INSERT INTO svf_pushdown SELECT '2020-01-01';
 SELECT compress_chunk(show_chunks('svf_pushdown'));
+VACUUM ANALYZE svf_pushdown;
 
 -- constraints should be pushed down into scan below decompresschunk in all cases
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_date = CURRENT_DATE;
