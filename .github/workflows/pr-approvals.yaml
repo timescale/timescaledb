@@ -25,24 +25,37 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.number }}
         run: |
-          echo "Event is: "
-          cat <<EOF
-            ${{ toJSON(github.event) }}
-          EOF
           echo "PR number is $PR_NUMBER"
           echo "$BODY" | egrep -qsi '^disable-check:.*\<approval-count\>'
           if [[ $? -ne 0 ]]; then
             # Get the list of modified files in this pull request
             echo "Modified files: "
             gh pr view $PR_NUMBER --json files
-            files=$(gh pr view $PR_NUMBER --json files --jq '.files.[].path | select(startswith(".github") | not)')
+            # Get the number of modified files, but exclude those that
+            # are workflow files or are related to Hypercore table
+            # access method. These require only a single reviewer.
+            files=$(gh pr view $PR_NUMBER --json files --jq '[.files.[].path | select(startswith(".github") or test("hypercore|columnar_scan") | not)] | length')
 
             # Get the number of approvals in this pull request
             echo "Reviews: "
             gh pr view $PR_NUMBER --json reviews
-            approvals=$(gh pr view $PR_NUMBER --json reviews --jq '[.reviews.[] | select((.authorAssociation == "MEMBER" or .authorAssociation == "CONTRIBUTOR") and .state == "APPROVED")] | length')
-
-            if [[ $approvals -lt 2 ]] && [[ "${files}" ]] ; then
+            approvals=$(
+                gh pr view $PR_NUMBER --json reviews --jq '
+                    [
+                        .reviews.[]
+                        | select(
+                            (
+                                .authorAssociation == "NONE"
+                                or .authorAssociation == "MEMBER"
+                                or .authorAssociation == "CONTRIBUTOR"
+                            )
+                            and .state == "APPROVED"
+                          )
+                    ] | length
+                  '
+            )
+            echo "approvals: $approvals, files: $files"
+            if [[ $approvals -lt 2 ]] && [[ $files -gt 0 ]] ; then
               echo "This pull request requires 2 approvals before merging."
               echo
               echo "For trivial changes, you may disable this check by adding this trailer to the pull request message:"

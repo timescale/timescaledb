@@ -2,6 +2,9 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+-- Avoid chunkwise aggregation to make the test stable
+set timescaledb.enable_chunkwise_aggregation to off;
+
 create table readings(time timestamptz,
        location text,
        device int,
@@ -65,6 +68,11 @@ select * from :chunk where device between 5 and 10;
 \set ON_ERROR_STOP 1
 
 explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
+select time, temp + humidity from readings where device between 5 and 10 and humidity > 5;
+
+-- Testing JSON format to make sure it works and to get coverage for
+-- those parts of the code.
+explain (analyze, costs off, timing off, summary off, decompress_cache_stats, format json)
 select time, temp + humidity from readings where device between 5 and 10 and humidity > 5;
 
 -- Check the explain cache information output.

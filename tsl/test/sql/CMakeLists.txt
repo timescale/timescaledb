@@ -4,9 +4,9 @@ include(GenerateTestSchedule)
 # so unless you have a good reason, add new test files here.
 set(TEST_FILES
     agg_partials_pushdown.sql
-    bgw_security.sql
-    bgw_policy.sql
     bgw_job_ddl.sql
+    bgw_policy.sql
+    bgw_security.sql
     cagg_deprecated_bucket_ng.sql
     cagg_errors.sql
     cagg_invalidation.sql
@@ -14,24 +14,25 @@ set(TEST_FILES
     cagg_refresh.sql
     cagg_utils.sql
     cagg_watermark.sql
+    columnstore_aliases.sql
     compress_auto_sparse_index.sql
     compress_default.sql
     compress_dml_copy.sql
     compress_float8_corrupt.sql
-    compressed_detoaster.sql
     compressed_collation.sql
+    compressed_detoaster.sql
     compression.sql
-    compression_create_compressed_table.sql
     compression_conflicts.sql
+    compression_create_compressed_table.sql
     compression_defaults.sql
     compression_fks.sql
     compression_insert.sql
     compression_policy.sql
     compression_qualpushdown.sql
-    compression_settings.sql
     compression_sequence_num_removal.sql
-    compression_sorted_merge_distinct.sql
+    compression_settings.sql
     compression_sorted_merge_columns.sql
+    compression_sorted_merge_distinct.sql
     decompress_index.sql
     foreign_keys.sql
     move.sql
@@ -114,6 +115,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     recompress_chunk_segmentwise.sql
     feature_flags.sql
     vector_agg_default.sql
+    vector_agg_filter.sql
     vector_agg_memory.sql
     vector_agg_segmentby.sql)
 
@@ -141,14 +143,15 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
   list(
     APPEND
     TEST_FILES
-    merge_compress.sql
     cagg_refresh_using_merge.sql
     hypercore_columnar.sql
+    hypercore_constraints.sql
     hypercore_copy.sql
     hypercore_create.sql
     hypercore_cursor.sql
     hypercore_ddl.sql
     hypercore_delete.sql
+    hypercore_dump_restore.sql
     hypercore_index_btree.sql
     hypercore_index_hash.sql
     hypercore_insert.sql
@@ -157,15 +160,20 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     hypercore_policy.sql
     hypercore_scans.sql
     hypercore_stats.sql
+    hypercore_trigger.sql
     hypercore_types.sql
     hypercore_update.sql
     hypercore_vacuum.sql
-    hypercore_vacuum_full.sql)
+    hypercore_vacuum_full.sql
+    merge_compress.sql)
+endif()
+
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
+  list(APPEND TEST_TEMPLATES cagg_query_using_merge.sql.in)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
   list(APPEND TEST_FILES cagg_planning.sql hypercore_parallel.sql)
-  list(APPEND TEST_TEMPLATES cagg_query_using_merge.sql.in)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))

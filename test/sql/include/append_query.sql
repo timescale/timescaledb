@@ -320,6 +320,7 @@ SELECT time, device_id
 FROM generate_series('2000-01-01'::timestamptz,'2000-01-21','30m') g1(time),
   generate_series(1,10,1) g2(device_id)
 ORDER BY time, device_id;
+VACUUM (ANALYZE) join_limit;
 
 -- get 2nd chunk oid
 SELECT tableoid AS "CHUNK_OID" FROM join_limit WHERE time > '2000-01-07' ORDER BY time LIMIT 1
@@ -353,7 +354,7 @@ CREATE TABLE i3030(time timestamptz NOT NULL, a int, b int);
 SELECT table_name FROM create_hypertable('i3030', 'time', create_default_indexes=>false);
 CREATE INDEX ON i3030(a,time);
 INSERT INTO i3030 (time,a) SELECT time, a FROM generate_series('2000-01-01'::timestamptz,'2000-01-01 3:00:00'::timestamptz,'1min'::interval) time, generate_series(1,30) a;
-ANALYZE i3030;
+VACUUM (ANALYZE) i3030;
 
 :PREFIX SELECT * FROM i3030 where time BETWEEN '2000-01-01'::text::timestamptz AND '2000-01-03'::text::timestamptz ORDER BY a,time LIMIT 1;
 DROP TABLE i3030;

@@ -7,6 +7,7 @@
 #include <access/attnum.h>
 #include <access/heapam.h>
 #include <access/hio.h>
+#include <access/htup_details.h>
 #include <access/rewriteheap.h>
 #include <access/sdir.h>
 #include <access/skey.h>
@@ -49,6 +50,7 @@
 #include <utils/palloc.h>
 #include <utils/rel.h>
 #include <utils/sampling.h>
+#include <utils/snapmgr.h>
 #include <utils/syscache.h>
 #include <utils/tuplesort.h>
 #include <utils/typcache.h>
@@ -62,6 +64,7 @@
 #include "compression/compression.h"
 #include "compression/create.h"
 #include "debug_assert.h"
+#include "extension.h"
 #include "guc.h"
 #include "hypercore_handler.h"
 #include "relstats.h"
@@ -80,6 +83,20 @@ static void convert_to_hypercore_finish(Oid relid);
 static List *partially_compressed_relids = NIL; /* Relids that needs to have
 												 * updated status set at end of
 												 * transaction */
+/*
+ * For COPY <hypercore_rel> TO commands, track the relid of the hypercore
+ * being copied from. It is needed to filter out compressed data in the COPY
+ * scan so that pg_dump does not dump compressed data twice: once in
+ * uncompressed format via the hypercore rel and once in compressed format in
+ * the internal compressed rel that gets dumped separately.
+ */
+static Oid hypercore_skip_compressed_data_relid = InvalidOid;
+
+void
+hypercore_skip_compressed_data_for_relation(Oid relid)
+{
+	hypercore_skip_compressed_data_relid = relid;
+}
 
 static bool hypercore_truncate_compressed = true;
 
@@ -188,7 +205,7 @@ static HypercoreInfo *
 lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 								bool *compressed_relation_created)
 {
-	Assert(OidIsValid(rel->rd_id) && !ts_is_hypertable(rel->rd_id));
+	Assert(OidIsValid(rel->rd_id) && (!ts_extension_is_loaded() || !ts_is_hypertable(rel->rd_id)));
 
 	HypercoreInfo *hsinfo;
 	CompressionSettings *settings;
@@ -519,6 +536,27 @@ get_scan_type(uint32 flags)
 }
 #endif
 
+static inline bool
+should_skip_compressed_data(const TableScanDesc scan)
+{
+	/*
+	 * Skip compressed data in a scan if any of these apply:
+	 *
+	 * 1. Transparent decompression (DecompressChunk) is enabled for
+	 *    Hypercore TAM.
+	 *
+	 * 2. The scan was started with a flag indicating no compressed data
+	 *    should be returned.
+	 *
+	 * 3. A COPY <hypercore> TO <file> on the Hypercore TAM table is executed
+	 *    and we want to ensure such commands issued by pg_dump doesn't lead
+	 *    to dumping compressed data twice.
+	 */
+	return (ts_guc_enable_transparent_decompression == 2) ||
+		   RelationGetRelid(scan->rs_rd) == hypercore_skip_compressed_data_relid ||
+		   (scan->rs_flags & SO_HYPERCORE_SKIP_COMPRESSED);
+}
+
 static TableScanDesc
 hypercore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey keys,
 					ParallelTableScanDesc parallel_scan, uint32 flags)
@@ -555,7 +593,7 @@ hypercore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey key
 	HypercoreInfo *hsinfo = RelationGetHypercoreInfo(relation);
 	scan->compressed_rel = table_open(hsinfo->compressed_relid, AccessShareLock);
 
-	if ((ts_guc_enable_transparent_decompression == 2) || (flags & SO_HYPERCORE_SKIP_COMPRESSED))
+	if (should_skip_compressed_data(&scan->rs_base))
 	{
 		/*
 		 * Don't read compressed data if transparent decompression is enabled
@@ -564,8 +602,7 @@ hypercore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey key
 		 * Transparent decompression reads compressed data itself, directly
 		 * from the compressed chunk, so avoid reading it again here.
 		 */
-		scan->hs_scan_state = HYPERCORE_SCAN_NON_COMPRESSED;
-		scan->rs_base.rs_flags |= SO_HYPERCORE_SKIP_COMPRESSED;
+		hypercore_scan_set_skip_compressed(&scan->rs_base, true);
 	}
 
 	initscan(scan, keys, nkeys);
@@ -662,6 +699,9 @@ hypercore_endscan(TableScanDesc sscan)
 		pfree(scan->rs_base.rs_key);
 
 	pfree(scan);
+
+	/* Clear the COPY TO filter state */
+	hypercore_skip_compressed_data_relid = InvalidOid;
 }
 
 static bool
@@ -1471,6 +1511,8 @@ typedef struct ConversionState
 	Oid relid;
 	RelationSize before_size;
 	Tuplesortstate *tuplesortstate;
+	MemoryContext mcxt;
+	MemoryContextCallback cb;
 } ConversionState;
 
 static ConversionState *conversionstate = NULL;
@@ -1745,6 +1787,82 @@ hypercore_tuple_delete(Relation relation, ItemPointer tid, CommandId cid, Snapsh
 	}
 
 	return result;
+}
+
+/*
+ * Decompress a segment that contains the row given by ctid.
+ *
+ * This function is called during an upsert (ON CONFLICT DO UPDATE), where the
+ * conflicting row points to a compressed segment that needs to be
+ * decompressed before the update can take place. This function is used to
+ * decompress that segment into a set of individual rows and insert them into
+ * the non-compressed region.
+ *
+ * Returns the number of rows in the segment that were decompressed, or 0 if
+ * the TID pointed to a regular (non-compressed) tuple. If any rows are
+ * decompressed, the TID of the de-compressed conflicting row is returned via
+ * "new_ctid". If no rows were decompressed, the value of "new_ctid" is
+ * undefined.
+ */
+int
+hypercore_decompress_update_segment(Relation relation, const ItemPointer ctid, TupleTableSlot *slot,
+									Snapshot snapshot, ItemPointer new_ctid)
+{
+	HypercoreInfo *hcinfo;
+	Relation crel;
+	TupleTableSlot *cslot;
+	ItemPointerData decoded_tid;
+	TM_Result result;
+	TM_FailureData tmfd;
+	int n_batch_rows = 0;
+	uint16 tuple_index;
+	bool should_free;
+
+	/* Nothing to do if this is not a compressed segment */
+	if (!is_compressed_tid(ctid))
+		return 0;
+
+	Assert(TTS_IS_ARROWTUPLE(slot));
+	Assert(!TTS_EMPTY(slot));
+	Assert(ItemPointerEquals(ctid, &slot->tts_tid));
+
+	hcinfo = RelationGetHypercoreInfo(relation);
+	crel = table_open(hcinfo->compressed_relid, RowExclusiveLock);
+	tuple_index = hypercore_tid_decode(&decoded_tid, ctid);
+	cslot = arrow_slot_get_compressed_slot(slot, NULL);
+	HeapTuple tuple = ExecFetchSlotHeapTuple(cslot, false, &should_free);
+
+	RowDecompressor decompressor = build_decompressor(crel, relation);
+	heap_deform_tuple(tuple,
+					  RelationGetDescr(crel),
+					  decompressor.compressed_datums,
+					  decompressor.compressed_is_nulls);
+
+	/* Must delete the segment before calling the decompression function below
+	 * or otherwise index updates will lead to conflicts */
+	result = table_tuple_delete(decompressor.in_rel,
+								&cslot->tts_tid,
+								decompressor.mycid,
+								snapshot,
+								InvalidSnapshot,
+								true,
+								&tmfd,
+								false);
+
+	Ensure(result == TM_Ok, "could not delete compressed segment, result: %u", result);
+
+	n_batch_rows = row_decompressor_decompress_row_to_table(&decompressor);
+	/* Return the TID of the decompressed conflicting tuple. Tuple index is
+	 * 1-indexed, so subtract 1. */
+	slot = decompressor.decompressed_slots[tuple_index - 1];
+	ItemPointerCopy(&slot->tts_tid, new_ctid);
+
+	/* Need to make decompressed (and deleted segment) visible */
+	CommandCounterIncrement();
+	row_decompressor_close(&decompressor);
+	table_close(crel, NoLock);
+
+	return n_batch_rows;
 }
 
 #if PG16_LT
@@ -2402,7 +2520,7 @@ hypercore_scan_analyze_next_block(TableScanDesc scan, ReadStream *stream)
 {
 	HypercoreScanDescData *cscan = (HypercoreScanDescData *) scan;
 	HeapScanDesc uhscan = (HeapScanDesc) cscan->uscan_desc;
-	HeapScanDesc chscan = (HeapScanDesc) cscan->cscan_desc;
+	HeapScanDesc PG_USED_FOR_ASSERTS_ONLY chscan = (HeapScanDesc) cscan->cscan_desc;
 
 	/* We do not analyze parent table of hypertables. There is no data there. */
 	if (ts_is_hypertable(scan->rs_rd->rd_id))
@@ -3354,6 +3472,83 @@ hypercore_scan_sample_next_tuple(TableScanDesc scan, SampleScanState *scanstate,
 }
 
 /*
+ * Cleanup callback for Hypercore conversion state.
+ *
+ * The cleanup happens when the conversion state's memory context is
+ * destroyed. It ensures cleanup of tuplesort state, unless it was already
+ * performed.
+ *
+ * This is to cover two cases:
+ *
+ * 1. The tuplesort state is released due to normal processing and a call to
+ * tuplesort_end(), in which case the tuplesort state is released before the
+ * conversion state. This callback should therefore not call tuplesort_end().
+ *
+ * 2. The tuplesort state is released as a result of an ERROR, in which case
+ * the tuplesort_end() is called in this callback as a result of the
+ * conversion state being cleaned up.
+ */
+static void
+conversionstate_cleanup(void *arg)
+{
+	ConversionState *state = arg;
+
+	if (state->tuplesortstate)
+	{
+		tuplesort_end(state->tuplesortstate);
+		state->tuplesortstate = NULL;
+	}
+
+	if (conversionstate)
+	{
+		Assert(state == conversionstate);
+		conversionstate = NULL;
+	}
+}
+
+static ConversionState *
+conversionstate_create(const HypercoreInfo *hcinfo, const Relation rel)
+{
+	CompressionSettings *settings = ts_compression_settings_get(hcinfo->compressed_relid);
+	Tuplesortstate *tuplesortstate;
+	MemoryContext mcxt;
+	MemoryContext oldmcxt;
+	ConversionState *state;
+
+	oldmcxt = MemoryContextSwitchTo(PortalContext);
+	/*
+	 * We want to ensure the tuplesort state is cleaned up by calling
+	 * tuplesort_end() in case of failures. This is necessary to release disk
+	 * resources.
+	 *
+	 * A memory context callback is used for this purpose. The callback is
+	 * attached to the Hypercore conversion state. The tuplesort state will
+	 * allocate its own child context, but they cannot be children of the
+	 * conversion memory context because children are freed before the
+	 * parent. Instead, make both the tuplesort and conversion state children
+	 * of PortalContext. Since they are destroyed in reverse order, the memory
+	 * context callback for the conversion state can. in case of error, call
+	 * tuplesort_end() before the tuplesort is freed.
+	 */
+	tuplesortstate = compression_create_tuplesort_state(settings, rel);
+	mcxt = AllocSetContextCreate(PortalContext, "Hypercore conversion", ALLOCSET_DEFAULT_SIZES);
+
+	state = MemoryContextAlloc(mcxt, sizeof(ConversionState));
+	state->mcxt = mcxt;
+	state->before_size = ts_relation_size_impl(RelationGetRelid(rel));
+	state->tuplesortstate = tuplesortstate;
+	Assert(state->tuplesortstate);
+	state->relid = RelationGetRelid(rel);
+	state->cb.arg = state;
+	state->cb.func = conversionstate_cleanup;
+	conversionstate = state;
+	MemoryContextRegisterResetCallback(state->mcxt, &state->cb);
+	MemoryContextSwitchTo(oldmcxt);
+
+	return state;
+}
+
+/*
  * Convert a table to Hypercore.
  *
  * Need to setup the conversion state used to compress the data.
@@ -3363,7 +3558,7 @@ convert_to_hypercore(Oid relid)
 {
 	Relation relation = table_open(relid, AccessShareLock);
 	bool compress_chunk_created;
-	HypercoreInfo *hsinfo = lazy_build_hypercore_info_cache(relation,
+	HypercoreInfo *hcinfo = lazy_build_hypercore_info_cache(relation,
 															false /* create constraints */,
 															&compress_chunk_created);
 
@@ -3372,21 +3567,13 @@ convert_to_hypercore(Oid relid)
 		/* A compressed relation already exists, so converting from legacy
 		 * compression. It is only necessary to create the proxy vacuum
 		 * index. */
-		create_proxy_vacuum_index(relation, hsinfo->compressed_relid);
+		create_proxy_vacuum_index(relation, hcinfo->compressed_relid);
 		table_close(relation, AccessShareLock);
 		return;
 	}
 
-	MemoryContext oldcxt = MemoryContextSwitchTo(CacheMemoryContext);
-	ConversionState *state = palloc0(sizeof(ConversionState));
-	CompressionSettings *settings = ts_compression_settings_get(hsinfo->compressed_relid);
-	state->before_size = ts_relation_size_impl(relid);
-	state->tuplesortstate = compression_create_tuplesort_state(settings, relation);
-	Assert(state->tuplesortstate);
-	state->relid = relid;
-	conversionstate = state;
-	MemoryContextSwitchTo(oldcxt);
-	table_close(relation, AccessShareLock);
+	conversionstate = conversionstate_create(hcinfo, relation);
+	table_close(relation, NoLock);
 }
 
 /*
@@ -3440,6 +3627,7 @@ hypercore_xact_event(XactEvent event, void *arg)
 				Ensure(OidIsValid(hsinfo->compressed_relid),
 					   "hypercore \"%s\" has no compressed data relation",
 					   get_rel_name(relid));
+
 				Chunk *chunk = ts_chunk_get_by_relid(relid, true);
 				ts_chunk_set_partial(chunk);
 				table_close(rel, NoLock);
@@ -3464,14 +3652,6 @@ hypercore_xact_event(XactEvent event, void *arg)
 	{
 		list_free(cleanup_relids);
 		cleanup_relids = NIL;
-	}
-
-	if (conversionstate)
-	{
-		if (conversionstate->tuplesortstate)
-			tuplesort_end(conversionstate->tuplesortstate);
-		pfree(conversionstate);
-		conversionstate = NULL;
 	}
 }
 
@@ -3559,7 +3739,9 @@ convert_to_hypercore_finish(Oid relid)
 										   row_compressor.num_compressed_rows,
 										   row_compressor.num_compressed_rows);
 
-	conversionstate = NULL;
+	MemoryContextDelete(conversionstate->mcxt);
+	/* Deleting the memorycontext should reset the global conversionstate pointer to NULL */
+	Assert(conversionstate == NULL);
 }
 
 /*

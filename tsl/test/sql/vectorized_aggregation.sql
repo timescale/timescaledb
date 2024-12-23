@@ -42,7 +42,7 @@ SELECT sum(segment_by_value) FROM testtable;
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable WHERE segment_by_value > 0;
 
--- Vectorization not possible due to a used filter
+-- Vectorization with filter on compressed columns
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable WHERE segment_by_value > 0 AND int_value > 0;
 
@@ -330,7 +330,7 @@ SELECT sum(segment_by_value) FROM testtable;
 
 SELECT sum(int_value) FROM testtable;
 
--- Aggregation filters are not supported at the moment
+-- Vectorizable aggregation filters are supported
 :EXPLAIN
 SELECT sum(segment_by_value) FILTER (WHERE segment_by_value > 99999) FROM testtable;
 
@@ -403,3 +403,7 @@ SET max_parallel_workers_per_gather = 0;
 SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 1000 AND int_value > 1000;
 
 RESET max_parallel_workers_per_gather;
+
+
+-- Can't group by a system column
+SELECT sum(float_value) FROM testtable2 GROUP BY tableoid ORDER BY 1 LIMIT 1;

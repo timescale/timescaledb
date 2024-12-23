@@ -23,6 +23,7 @@
 #include "compression/api.h"
 #include "compression/compression.h"
 #include "compression/create.h"
+#include "compression/recompress.h"
 #include "compression/segment_meta.h"
 #include "config.h"
 #include "continuous_aggs/create.h"
@@ -175,6 +176,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.decompress_target_segments = decompress_target_segments,
 	.hypercore_handler = hypercore_handler,
 	.hypercore_proxy_handler = hypercore_proxy_handler,
+	.hypercore_decompress_update_segment = hypercore_decompress_update_segment,
 	.is_compressed_tid = tsl_is_compressed_tid,
 	.ddl_command_start = tsl_ddl_command_start,
 	.ddl_command_end = tsl_ddl_command_end,

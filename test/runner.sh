@@ -148,14 +148,4 @@ ${PSQL} -U ${TEST_PGUSER} \
      -v TSL_MODULE_PATHNAME="'timescaledb-tsl-${EXT_VERSION}'" \
      -v TEST_SUPPORT_FILE=${TEST_SUPPORT_FILE} \
      -v TEST_SUPPORT_FILE_INIT=${TEST_SUPPORT_FILE_INIT} \
-     "$@" -d ${TEST_DBNAME} 2>&1 | \
-          sed  -e '/<exclude_from_test>/,/<\/exclude_from_test>/d' \
-               -e 's! Memory: [0-9]\{1,\}kB!!' \
-               -e 's! Memory Usage: [0-9]\{1,\}kB!!' \
-               -e 's! Average  Peak Memory: [0-9]\{1,\}kB!!' | \
-          grep -v 'DEBUG:  rehashing catalog cache id' | \
-          grep -v 'DEBUG:  compacted fsync request queue from' | \
-          grep -v 'DEBUG:  creating and filling new WAL file' | \
-          grep -v 'DEBUG:  done creating and filling new WAL file' | \
-          grep -v 'DEBUG:  flushed relation because a checkpoint occurred concurrently' | \
-          grep -v 'NOTICE:  cancelling the background worker for job'
+     "$@" -d ${TEST_DBNAME} 2>&1 | ${CURRENT_DIR}/runner_cleanup_output.sh
