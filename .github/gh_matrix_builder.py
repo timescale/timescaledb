@@ -94,7 +94,6 @@ def build_debug_config(overrides):
 # builds. This will capture some cases where warnings are generated
 # for release builds but not for debug builds.
 def build_release_config(overrides):
-    base_config = build_debug_config({})
     release_config = dict(
         {
             "name": "Release",
@@ -103,26 +102,24 @@ def build_release_config(overrides):
             "coverage": False,
         }
     )
-    base_config.update(release_config)
-    base_config.update(overrides)
-    return base_config
+    release_config.update(overrides)
+    return build_debug_config(release_config)
 
 
 def build_without_telemetry(overrides):
-    config = build_release_config({})
-    config.update(
+    config = dict(
         {
             "name": "ReleaseWithoutTelemetry",
-            "tsdb_build_args": config["tsdb_build_args"] + " -DUSE_TELEMETRY=OFF",
             "coverage": False,
         }
     )
     config.update(overrides)
+    config = build_release_config(config)
+    config["tsdb_build_args"] += " -DUSE_TELEMETRY=OFF"
     return config
 
 
 def build_apache_config(overrides):
-    base_config = build_debug_config({})
     apache_config = dict(
         {
             "name": "ApacheOnly",
@@ -131,9 +128,8 @@ def build_apache_config(overrides):
             "coverage": False,
         }
     )
-    base_config.update(apache_config)
-    base_config.update(overrides)
-    return base_config
+    apache_config.update(overrides)
+    return build_debug_config(apache_config)
 
 
 def macos_config(overrides):
