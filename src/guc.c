@@ -183,6 +183,20 @@ bool ts_guc_debug_require_batch_sorted_merge = false;
 
 bool ts_guc_debug_allow_cagg_with_deprecated_funcs = false;
 
+/*
+ * Exit code for the scheduler.
+ *
+ * Normally it exits with a zero which means that it will not restart. If an
+ * error is raised, it exits with error code 1, which will trigger a
+ * restart.
+ *
+ * This variable exists to be able to trigger a restart for a normal exit,
+ * which is useful when debugging.
+ *
+ * See backend/postmaster/bgworker.c
+ */
+int ts_debug_bgw_scheduler_exit_status = 0;
+
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
 char *ts_current_timestamp_mock = NULL;
@@ -1054,6 +1068,19 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
+	DefineCustomIntVariable(/* name= */ MAKE_EXTOPTION("debug_bgw_scheduler_exit_status"),
+							/* short_desc= */ "exit status to use when shutting down the scheduler",
+							/* long_desc= */ "this is for debugging purposes",
+							/* valueAddr= */ &ts_debug_bgw_scheduler_exit_status,
+							/* bootValue= */ 0,
+							/* minValue= */ 0,
+							/* maxValue= */ 255,
+							/* context= */ PGC_SIGHUP,
+							/* flags= */ 0,
+							/* check_hook= */ NULL,
+							/* assign_hook= */ NULL,
+							/* show_hook= */ NULL);
 
 #ifdef TS_DEBUG
 	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("shutdown_bgw_scheduler"),

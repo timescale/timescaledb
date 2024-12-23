@@ -795,9 +795,11 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 	 * exit. */
 	if (ts_guc_restoring || IsBinaryUpgrade)
 	{
-		elog(LOG,
-			 "scheduler for database %u exiting since the database is restoring or upgrading",
-			 MyDatabaseId);
+		ereport(LOG,
+				errmsg("scheduler for database %u exiting with exit status %d",
+					   MyDatabaseId,
+					   ts_debug_bgw_scheduler_exit_status),
+				errdetail("the database is restoring or upgrading"));
 		terminate_all_jobs_and_release_workers();
 		goto scheduler_exit;
 	}
@@ -866,7 +868,10 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 		MemoryContextReset(scratch_mctx);
 	}
 
-	elog(DEBUG1, "database scheduler for database %u exiting", MyDatabaseId);
+	elog(DEBUG1,
+		 "scheduler for database %u exiting with exit status %d",
+		 MyDatabaseId,
+		 ts_debug_bgw_scheduler_exit_status);
 
 #ifdef TS_DEBUG
 	if (ts_shutdown_bgw)
@@ -879,6 +884,7 @@ scheduler_exit:
 	wait_for_all_jobs_to_shutdown();
 	check_for_stopped_and_timed_out_jobs();
 	scheduled_jobs = NIL;
+	proc_exit(ts_debug_bgw_scheduler_exit_status);
 }
 
 static void
