@@ -1000,9 +1000,12 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 	compressed_rel->pathlist = NIL;
 	compressed_rel->partial_pathlist = NIL;
 
-	/* Remove the compressed_rel from the simple_rel_array to prevent it from
-	 * being referenced again. */
+	/*
+	 * Remove the compressed_rel from planner arrays to prevent it from being
+	 * referenced again.
+	 */
 	root->simple_rel_array[compressed_rel->relid] = NULL;
+	root->append_rel_array[compressed_rel->relid] = NULL;
 
 	/* We should never get in the situation with no viable paths. */
 	Ensure(chunk_rel->pathlist, "could not create decompression path");
@@ -1913,6 +1916,22 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const
 	compressed_rel_setup_equivalence_classes(root, info);
 	/* translate chunk_rel->joininfo for compressed_rel */
 	compressed_rel_setup_joininfo(compressed_rel, info);
+
+	/*
+	 * Force parallel plan creation, see compute_parallel_worker().
+	 * This is not compatible with ts_classify_relation(), but on the other hand
+	 * the compressed chunk rel shouldn't exist anywhere outside of the
+	 * decompression planning, it is removed at the end.
+	 */
+	compressed_rel->reloptkind = RELOPT_OTHER_MEMBER_REL;
+
+	/*
+	 * We have to minimally initialize the append relation info for the
+	 * compressed chunks, so that the generate_implied_equalities() works. Only
+	 * the parent hypertable relindex is needed.
+	 */
+	root->append_rel_array[compressed_rel->relid] = makeNode(AppendRelInfo);
+	root->append_rel_array[compressed_rel->relid]->parent_relid = info->ht_rel->relid;
 }
 
 static DecompressChunkPath *
@@ -1988,23 +2007,20 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 	compressed_path = create_seqscan_path(root, compressed_rel, NULL, 0);
 	add_path(compressed_rel, compressed_path);
 
-	/* create parallel scan path */
+	/*
+	 * Create parallel scan path.
+	 * We marked the compressed rel as RELOPT_OTHER_MEMBER_REL when creating it,
+	 * so we should get a nonzero number of parallel workers even for small
+	 * tables, so that they don't prevent paralellism in the entire append plan.
+	 * See compute_parallel_workers(). This also applies to the creation of
+	 * index paths below.
+	 */
 	if (compressed_rel->consider_parallel)
 	{
-		/* Almost the same functionality as ts_create_plain_partial_paths.
-		 *
-		 * However, we also create a partial path for small chunks to allow PostgreSQL to choose
-		 * a parallel plan for decompression. If no partial path is present for a single chunk,
-		 * PostgreSQL will not use a parallel plan and all chunks are decompressed by a
-		 * non-parallel plan (even if there are a few bigger chunks).
-		 */
 		int parallel_workers = compute_parallel_worker(compressed_rel,
 													   compressed_rel->pages,
 													   -1,
 													   max_parallel_workers_per_gather);
-
-		/* Use at least one worker */
-		parallel_workers = Max(parallel_workers, 1);
 
 		/* Add an unordered partial path based on a parallel sequential scan. */
 		add_partial_path(compressed_rel,
