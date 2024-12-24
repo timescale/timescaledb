@@ -48,7 +48,8 @@ typedef struct SortInfo
 	List *required_compressed_pathkeys;
 	List *required_eq_classes;
 	bool needs_sequence_num;
-	bool can_pushdown_sort; /* sort can be pushed below DecompressChunk */
+	bool use_compressed_sort; /* sort can be pushed below DecompressChunk */
+	bool use_batch_sorted_merge;
 	bool reverse;
 
 	List *decompressed_sort_pathkeys;
@@ -893,7 +894,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 									 chunk_rel,
 									 sort_info.needs_sequence_num);
 
-	if (sort_info.can_pushdown_sort)
+	if (sort_info.use_compressed_sort)
 	{
 		sort_info.required_compressed_pathkeys =
 			build_compressed_scan_pathkeys(&sort_info,
@@ -1054,7 +1055,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	 * corresponding to those query_pathkeys. We will determine whether to put a sort
 	 * between the decompression node and the scan during plan creation.
 	 */
-	if (sort_info->can_pushdown_sort)
+	if (sort_info->use_compressed_sort)
 	{
 		if (pathkeys_contained_in(sort_info->required_compressed_pathkeys,
 								  compressed_path->pathkeys))
@@ -1115,15 +1116,17 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	 * can push down the sort, the batches can be directly consumed in this
 	 * order and we don't need to use this optimization.
 	 */
-	if (!sort_info->can_pushdown_sort && ts_guc_enable_decompression_sorted_merge)
+	if (!sort_info->use_compressed_sort && ts_guc_enable_decompression_sorted_merge)
 	{
 		MergeBatchResult merge_result = can_batch_sorted_merge(root, compression_info, chunk);
 		if (merge_result != MERGE_NOT_POSSIBLE)
 		{
+			Assert(sort_info->use_batch_sorted_merge);
 			DecompressChunkPath *path_copy =
 				copy_decompress_chunk_path((DecompressChunkPath *) chunk_path_no_sort);
 
 			path_copy->reverse = (merge_result != SCAN_FORWARD);
+			Assert(path_copy->reverse == sort_info->reverse);
 			path_copy->batch_sorted_merge = true;
 
 			/* The segment by optimization is only enabled if it can deliver the tuples in the
@@ -1135,6 +1138,10 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 
 			decompressed_paths = lappend(decompressed_paths, path_copy);
 		}
+		else
+		{
+			Assert(!sort_info->use_batch_sorted_merge);
+		}
 	}
 
 	/*
@@ -1144,7 +1151,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	 * per-worker buckets, so splitting the buckets further per-chunk is less
 	 * important.
 	 */
-	if (!sort_info->can_pushdown_sort && chunk_path_no_sort->parallel_workers == 0)
+	if (!sort_info->use_compressed_sort && chunk_path_no_sort->parallel_workers == 0)
 	{
 		Path *sort_above_chunk =
 			make_chunk_sorted_path(root, chunk_rel, chunk_path_no_sort, compressed_path, sort_info);
@@ -2026,7 +2033,7 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 	bool old_bitmapscan = enable_bitmapscan;
 	enable_bitmapscan = false;
 
-	if (sort_info->can_pushdown_sort)
+	if (sort_info->use_compressed_sort)
 	{
 		/*
 		 * If we can push down sort below decompression we temporarily switch
@@ -2195,6 +2202,101 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 }
 
 /*
+ * Returns whether the pathkeys starting at the given offset match the compression
+ * orderby, and whether the order is reverse.
+ */
+static bool
+match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
+									  int starting_pathkey_offset,
+									  const CompressionInfo *compression_info, bool *out_reverse)
+{
+	int compressed_pk_index = 0;
+	for (int i = starting_pathkey_offset; i < list_length(pathkeys); i++)
+	{
+		compressed_pk_index++;
+		PathKey *pk = list_nth_node(PathKey, pathkeys, i);
+		Expr *expr = (Expr *) list_nth(chunk_em_exprs, i);
+
+		if (expr == NULL || !IsA(expr, Var))
+		{
+			return false;
+		}
+
+		Var *var = castNode(Var, expr);
+
+		if (var->varattno <= 0)
+		{
+			return false;
+		}
+
+		char *column_name = get_attname(compression_info->chunk_rte->relid, var->varattno, false);
+		int orderby_index = ts_array_position(compression_info->settings->fd.orderby, column_name);
+
+		if (orderby_index != compressed_pk_index)
+		{
+			return false;
+		}
+
+		bool orderby_desc =
+			ts_array_get_element_bool(compression_info->settings->fd.orderby_desc, orderby_index);
+		bool orderby_nullsfirst =
+			ts_array_get_element_bool(compression_info->settings->fd.orderby_nullsfirst,
+									  orderby_index);
+
+		/*
+		 * pk_strategy is either BTLessStrategyNumber (for ASC) or
+		 * BTGreaterStrategyNumber (for DESC)
+		 */
+		bool this_pathkey_reverse = false;
+		if (pk->pk_strategy == BTLessStrategyNumber)
+		{
+			if (!orderby_desc && orderby_nullsfirst == pk->pk_nulls_first)
+			{
+				this_pathkey_reverse = false;
+			}
+			else if (orderby_desc && orderby_nullsfirst != pk->pk_nulls_first)
+			{
+				this_pathkey_reverse = true;
+			}
+			else
+			{
+				return false;
+			}
+		}
+		else if (pk->pk_strategy == BTGreaterStrategyNumber)
+		{
+			if (orderby_desc && orderby_nullsfirst == pk->pk_nulls_first)
+			{
+				this_pathkey_reverse = false;
+			}
+			else if (!orderby_desc && orderby_nullsfirst != pk->pk_nulls_first)
+			{
+				this_pathkey_reverse = true;
+			}
+			else
+			{
+				return false;
+			}
+		}
+
+		/*
+		 * first pathkey match determines if this is forward or backward scan
+		 * any further pathkey items need to have same direction
+		 */
+		if (compressed_pk_index == 1)
+		{
+			*out_reverse = this_pathkey_reverse;
+		}
+		else if (this_pathkey_reverse != *out_reverse)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+/*
  * Check if we can push down the sort below the DecompressChunk node and fill
  * SortInfo accordingly
  *
@@ -2211,7 +2313,7 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 	Var *var;
 	char *column_name;
 	ListCell *lc;
-	SortInfo sort_info = { .can_pushdown_sort = false, .needs_sequence_num = false };
+	SortInfo sort_info = { 0 };
 
 	if (pathkeys == NIL)
 	{
@@ -2307,94 +2409,54 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		}
 
 		/*
-		 * if pathkeys still has items but we didn't find all segmentby columns
-		 * we cannot push down sort
+		 * If pathkeys still has items, but we didn't find all segmentby columns,
+		 * we cannot satisfy these pathkeys by sorting the compressed chunk table.
 		 */
 		if (i != list_length(pathkeys) &&
 			bms_num_members(segmentby_columns) != compression_info->num_segmentby_columns)
 		{
+			/*
+			 * If we didn't have any segmentby columns in pathkeys, try batch sorted merge
+			 * instead.
+			 */
+			if (i == 0)
+			{
+				sort_info.use_batch_sorted_merge =
+					match_pathkeys_to_compression_orderby(pathkeys,
+														  chunk_em_exprs,
+														  /* starting_pathkey_offset = */ 0,
+														  compression_info,
+														  &sort_info.reverse);
+			}
 			return sort_info;
 		}
 	}
 
-	/*
-	 * if pathkeys includes columns past segmentby columns
-	 * we need sequence_num in the targetlist for ordering
-	 */
-	if (i != list_length(pathkeys))
+	if (i == list_length(pathkeys))
 	{
-		sort_info.needs_sequence_num = true;
+		/*
+		 * Pathkeys satisfied by sorting the compressed data on segmentby columns.
+		 */
+		sort_info.use_compressed_sort = true;
+		return sort_info;
 	}
+
+	/*
+	 * Pathkeys includes columns past segmentby columns, so we need sequence_num
+	 * in the targetlist for ordering.
+	 */
+	sort_info.needs_sequence_num = true;
 
 	/*
 	 * loop over the rest of pathkeys
 	 * this needs to exactly match the configured compress_orderby
 	 */
-	int compressed_pk_index = 0;
-	for (; i < list_length(pathkeys); i++)
-	{
-		compressed_pk_index++;
-		PathKey *pk = list_nth_node(PathKey, pathkeys, i);
-		Expr *expr = (Expr *) list_nth(chunk_em_exprs, i);
+	sort_info.use_compressed_sort = match_pathkeys_to_compression_orderby(pathkeys,
+																		  chunk_em_exprs,
+																		  i,
+																		  compression_info,
+																		  &sort_info.reverse);
 
-		if (expr == NULL || !IsA(expr, Var))
-			return sort_info;
-
-		var = castNode(Var, expr);
-
-		if (var->varattno <= 0)
-			return sort_info;
-
-		column_name = get_attname(compression_info->chunk_rte->relid, var->varattno, false);
-		int orderby_index = ts_array_position(compression_info->settings->fd.orderby, column_name);
-
-		if (orderby_index != compressed_pk_index)
-			return sort_info;
-
-		bool orderby_desc =
-			ts_array_get_element_bool(compression_info->settings->fd.orderby_desc, orderby_index);
-		bool orderby_nullsfirst =
-			ts_array_get_element_bool(compression_info->settings->fd.orderby_nullsfirst,
-									  orderby_index);
-
-		/*
-		 * pk_strategy is either BTLessStrategyNumber (for ASC) or
-		 * BTGreaterStrategyNumber (for DESC)
-		 */
-		bool reverse = false;
-		if (pk->pk_strategy == BTLessStrategyNumber)
-		{
-			if (!orderby_desc && orderby_nullsfirst == pk->pk_nulls_first)
-				reverse = false;
-			else if (orderby_desc && orderby_nullsfirst != pk->pk_nulls_first)
-				reverse = true;
-			else
-				return sort_info;
-		}
-		else if (pk->pk_strategy == BTGreaterStrategyNumber)
-		{
-			if (orderby_desc && orderby_nullsfirst == pk->pk_nulls_first)
-				reverse = false;
-			else if (!orderby_desc && orderby_nullsfirst != pk->pk_nulls_first)
-				reverse = true;
-			else
-				return sort_info;
-		}
-
-		/*
-		 * first pathkey match determines if this is forward or backward scan
-		 * any further pathkey items need to have same direction
-		 */
-		if (compressed_pk_index == 1)
-			sort_info.reverse = reverse;
-		else if (reverse != sort_info.reverse)
-			return sort_info;
-	}
-
-	/* all pathkeys should be processed */
-	Assert(i == list_length(pathkeys));
-
-	sort_info.can_pushdown_sort = true;
 	return sort_info;
 }
 
