@@ -2208,9 +2208,7 @@ static SortInfo
 build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 			   const CompressionInfo *compression_info, List *pathkeys)
 {
-	int pk_index;
 	Var *var;
-	Expr *expr;
 	char *column_name;
 	ListCell *lc;
 	SortInfo sort_info = { .can_pushdown_sort = false, .needs_sequence_num = false };
@@ -2272,7 +2270,7 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		return sort_info;
 
 	/* all segmentby columns need to be prefix of pathkeys */
-	lc = list_head(pathkeys);
+	int i = 0;
 	if (compression_info->num_segmentby_columns > 0)
 	{
 		Bitmapset *segmentby_columns;
@@ -2288,11 +2286,11 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		 * we keep looping even if we found all segmentby columns in case a
 		 * columns appears both in baserestrictinfo and in ORDER BY clause
 		 */
-		for (; lc != NULL; lc = lnext(pathkeys, lc))
+		for (i = 0; i < list_length(pathkeys); i++)
 		{
 			Assert(bms_num_members(segmentby_columns) <= compression_info->num_segmentby_columns);
-			PathKey *pk = lfirst(lc);
-			expr = find_em_expr_for_rel(pk->pk_eclass, compression_info->chunk_rel);
+
+			Expr *expr = (Expr *) list_nth(chunk_em_exprs, i);
 
 			if (expr == NULL || !IsA(expr, Var))
 				break;
@@ -2312,27 +2310,32 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		 * if pathkeys still has items but we didn't find all segmentby columns
 		 * we cannot push down sort
 		 */
-		if (lc != NULL &&
+		if (i != list_length(pathkeys) &&
 			bms_num_members(segmentby_columns) != compression_info->num_segmentby_columns)
+		{
 			return sort_info;
+		}
 	}
 
 	/*
 	 * if pathkeys includes columns past segmentby columns
 	 * we need sequence_num in the targetlist for ordering
 	 */
-	if (lc != NULL)
+	if (i != list_length(pathkeys))
+	{
 		sort_info.needs_sequence_num = true;
+	}
 
 	/*
 	 * loop over the rest of pathkeys
 	 * this needs to exactly match the configured compress_orderby
 	 */
-	for (pk_index = 1; lc != NULL; lc = lnext(pathkeys, lc), pk_index++)
+	int compressed_pk_index = 0;
+	for (; i < list_length(pathkeys); i++)
 	{
-		bool reverse = false;
-		PathKey *pk = lfirst(lc);
-		expr = find_em_expr_for_rel(pk->pk_eclass, compression_info->chunk_rel);
+		compressed_pk_index++;
+		PathKey *pk = list_nth_node(PathKey, pathkeys, i);
+		Expr *expr = (Expr *) list_nth(chunk_em_exprs, i);
 
 		if (expr == NULL || !IsA(expr, Var))
 			return sort_info;
@@ -2345,7 +2348,7 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		column_name = get_attname(compression_info->chunk_rte->relid, var->varattno, false);
 		int orderby_index = ts_array_position(compression_info->settings->fd.orderby, column_name);
 
-		if (orderby_index != pk_index)
+		if (orderby_index != compressed_pk_index)
 			return sort_info;
 
 		bool orderby_desc =
@@ -2358,6 +2361,7 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		 * pk_strategy is either BTLessStrategyNumber (for ASC) or
 		 * BTGreaterStrategyNumber (for DESC)
 		 */
+		bool reverse = false;
 		if (pk->pk_strategy == BTLessStrategyNumber)
 		{
 			if (!orderby_desc && orderby_nullsfirst == pk->pk_nulls_first)
@@ -2381,14 +2385,14 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		 * first pathkey match determines if this is forward or backward scan
 		 * any further pathkey items need to have same direction
 		 */
-		if (pk_index == 1)
+		if (compressed_pk_index == 1)
 			sort_info.reverse = reverse;
 		else if (reverse != sort_info.reverse)
 			return sort_info;
 	}
 
 	/* all pathkeys should be processed */
-	Assert(lc == NULL);
+	Assert(i == list_length(pathkeys));
 
 	sort_info.can_pushdown_sort = true;
 	return sort_info;
