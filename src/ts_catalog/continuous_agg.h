@@ -215,3 +215,6 @@ extern TSDLLEXPORT Query *ts_continuous_agg_get_query(ContinuousAgg *cagg);
 
 extern TSDLLEXPORT int64
 ts_continuous_agg_fixed_bucket_width(const ContinuousAggsBucketFunction *bucket_function);
+
+extern TSDLLEXPORT int64 ts_compute_circumscribed_bucketed_refresh_window_start_variable(
+	int64 start, const ContinuousAggsBucketFunction *bf);
