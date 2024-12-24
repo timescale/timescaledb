@@ -56,13 +56,6 @@ typedef struct SortInfo
 	QualCost decompressed_sort_pathkeys_cost;
 } SortInfo;
 
-typedef enum MergeBatchResult
-{
-	MERGE_NOT_POSSIBLE,
-	SCAN_FORWARD,
-	SCAN_BACKWARD
-} MergeBatchResult;
-
 static RangeTblEntry *decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode,
 												Query *parse);
 static void create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
@@ -475,8 +468,62 @@ smoothstep(double x, double start, double end)
 }
 
 /*
- * Calculate the costs for retrieving the decompressed in-order using
- * a binary heap.
+ * If the query 'order by' is prefix of the compression 'order by' (or equal), we can exploit
+ * the ordering of the individual batches to create a total ordered result without resorting
+ * the tuples. This speeds up all queries that use this ordering (because no sort node is
+ * needed). In particular, queries that use a LIMIT are speed-up because only the top elements
+ * of the affected batches needs to be decompressed. Without the optimization, the entire batches
+ * are decompressed, sorted, and then the top elements are taken from the result.
+ *
+ * The idea is to do something similar to the MergeAppend node; a BinaryHeap is used
+ * to merge the per segment by column sorted individual batches into a sorted result. So, we end
+ * up which a data flow which looks as follows:
+ *
+ * DecompressChunk
+ *   * Decompress Batch 1
+ *   * Decompress Batch 2
+ *   * Decompress Batch 3
+ *       [....]
+ *   * Decompress Batch N
+ *
+ * Using the presorted batches, we are able to open these batches dynamically. If we don't presort
+ * them, we would have to open all batches at the same time. This would be similar to the work the
+ * MergeAppend does, but this is not needed in our case and we could reduce the size of the heap and
+ * the amount of parallel open batches.
+ *
+ * The algorithm works as follows:
+ *
+ *   (1) A sort node is placed below the decompress scan node and on top of the scan
+ *       on the compressed chunk. This sort node uses the min/max values of the 'order by'
+ *       columns from the metadata of the batch to get them into an order which can be
+ *       used to merge them.
+ *
+ *       [Scan on compressed chunk] -> [Sort on min/max values] -> [Decompress and merge]
+ *
+ *       For example, the batches are sorted on the min value of the 'order by' metadata
+ *       column: [0, 3] [0, 5] [3, 7] [6, 10]
+ *
+ *   (2) The decompress chunk node initializes a binary heap, opens the first batch and
+ *       decompresses the first tuple from the batch. The tuple is put on the heap. In addition
+ *       the opened batch is marked as the most recent batch (MRB).
+ *
+ *   (3) As soon as a tuple is requested from the heap, the following steps are performed:
+ *       (3a) If the heap is empty, we are done.
+ *       (3b) The top tuple from the heap is taken. It is checked if this tuple is from the
+ *            MRB. If this is the case, the next batch is opened, the first tuple is decompressed,
+ *            placed on the heap and this batch is marked as MRB. This is repeated until the
+ *            top tuple from the heap is not from the MRB. After the top tuple is not from the
+ *            MRB, all batches (and one ahead) which might contain the most recent tuple are
+ *            opened and placed on the heap.
+ *
+ *            In the example above, the first three batches are opened because the first two
+ *            batches might contain tuples with a value of 0.
+ *       (3c) The top element from the heap is removed, the next tuple from the batch is
+ *            decompressed (if present) and placed on the heap.
+ *       (3d) The former top tuple of the heap is returned.
+ *
+ * This function calculate the costs for retrieving the decompressed in-order
+ * using a binary heap.
  */
 static void
 cost_batch_sorted_merge(PlannerInfo *root, const CompressionInfo *compression_info,
@@ -593,149 +640,6 @@ cost_batch_sorted_merge(PlannerInfo *root, const CompressionInfo *compression_in
 	dcpath->custom_path.path.total_cost = dcpath->custom_path.path.startup_cost +
 										  sort_path_cost_rest +
 										  dcpath->custom_path.path.rows * uncompressed_row_cost;
-}
-
-/*
- * If the query 'order by' is prefix of the compression 'order by' (or equal), we can exploit
- * the ordering of the individual batches to create a total ordered result without resorting
- * the tuples. This speeds up all queries that use this ordering (because no sort node is
- * needed). In particular, queries that use a LIMIT are speed-up because only the top elements
- * of the affected batches needs to be decompressed. Without the optimization, the entire batches
- * are decompressed, sorted, and then the top elements are taken from the result.
- *
- * The idea is to do something similar to the MergeAppend node; a BinaryHeap is used
- * to merge the per segment by column sorted individual batches into a sorted result. So, we end
- * up which a data flow which looks as follows:
- *
- * DecompressChunk
- *   * Decompress Batch 1
- *   * Decompress Batch 2
- *   * Decompress Batch 3
- *       [....]
- *   * Decompress Batch N
- *
- * Using the presorted batches, we are able to open these batches dynamically. If we don't presort
- * them, we would have to open all batches at the same time. This would be similar to the work the
- * MergeAppend does, but this is not needed in our case and we could reduce the size of the heap and
- * the amount of parallel open batches.
- *
- * The algorithm works as follows:
- *
- *   (1) A sort node is placed below the decompress scan node and on top of the scan
- *       on the compressed chunk. This sort node uses the min/max values of the 'order by'
- *       columns from the metadata of the batch to get them into an order which can be
- *       used to merge them.
- *
- *       [Scan on compressed chunk] -> [Sort on min/max values] -> [Decompress and merge]
- *
- *       For example, the batches are sorted on the min value of the 'order by' metadata
- *       column: [0, 3] [0, 5] [3, 7] [6, 10]
- *
- *   (2) The decompress chunk node initializes a binary heap, opens the first batch and
- *       decompresses the first tuple from the batch. The tuple is put on the heap. In addition
- *       the opened batch is marked as the most recent batch (MRB).
- *
- *   (3) As soon as a tuple is requested from the heap, the following steps are performed:
- *       (3a) If the heap is empty, we are done.
- *       (3b) The top tuple from the heap is taken. It is checked if this tuple is from the
- *            MRB. If this is the case, the next batch is opened, the first tuple is decompressed,
- *            placed on the heap and this batch is marked as MRB. This is repeated until the
- *            top tuple from the heap is not from the MRB. After the top tuple is not from the
- *            MRB, all batches (and one ahead) which might contain the most recent tuple are
- *            opened and placed on the heap.
- *
- *            In the example above, the first three batches are opened because the first two
- *            batches might contain tuples with a value of 0.
- *       (3c) The top element from the heap is removed, the next tuple from the batch is
- *            decompressed (if present) and placed on the heap.
- *       (3d) The former top tuple of the heap is returned.
- *
- * This function checks if the compression 'order by' and the query 'order by' are
- * compatible and the optimization can be used.
- */
-static MergeBatchResult
-can_batch_sorted_merge(PlannerInfo *root, const CompressionInfo *info, const Chunk *chunk)
-{
-	PathKey *pk;
-	Var *var;
-	Expr *expr;
-	char *column_name;
-	List *pathkeys = root->query_pathkeys;
-	MergeBatchResult merge_result = SCAN_FORWARD;
-
-	/* Ensure that we have path keys and the chunk is ordered */
-	if (pathkeys == NIL || ts_chunk_is_unordered(chunk))
-		return MERGE_NOT_POSSIBLE;
-
-	int nkeys = list_length(pathkeys);
-
-	/*
-	 * Loop over the pathkeys of the query. These pathkeys need to match the
-	 * configured compress_orderby pathkeys.
-	 */
-	for (int pk_index = 0; pk_index < nkeys; pk_index++)
-	{
-		pk = list_nth(pathkeys, pk_index);
-		expr = find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
-
-		if (expr == NULL || !IsA(expr, Var))
-			return MERGE_NOT_POSSIBLE;
-
-		var = castNode(Var, expr);
-
-		if (var->varattno <= 0)
-			return MERGE_NOT_POSSIBLE;
-
-		column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
-		int16 orderby_index = ts_array_position(info->settings->fd.orderby, column_name);
-
-		if (orderby_index != pk_index + 1)
-			return MERGE_NOT_POSSIBLE;
-
-		/* Check order, if the order of the first column do not match, switch to backward scan */
-		Assert(pk->pk_strategy == BTLessStrategyNumber ||
-			   pk->pk_strategy == BTGreaterStrategyNumber);
-
-		bool orderby_desc =
-			ts_array_get_element_bool(info->settings->fd.orderby_desc, orderby_index);
-		bool orderby_nullsfirst =
-			ts_array_get_element_bool(info->settings->fd.orderby_nullsfirst, orderby_index);
-
-		if (pk->pk_strategy != BTLessStrategyNumber)
-		{
-			/* Test that ORDER BY and NULLS first/last do match in forward scan */
-			if (orderby_desc && orderby_nullsfirst == pk->pk_nulls_first &&
-				merge_result == SCAN_FORWARD)
-				continue;
-			/* Exact opposite in backward scan */
-			else if (!orderby_desc && orderby_nullsfirst != pk->pk_nulls_first &&
-					 merge_result == SCAN_BACKWARD)
-				continue;
-			/* Switch scan direction on exact opposite order for first attribute */
-			else if (!orderby_desc && orderby_nullsfirst != pk->pk_nulls_first && pk_index == 0)
-				merge_result = SCAN_BACKWARD;
-			else
-				return MERGE_NOT_POSSIBLE;
-		}
-		else
-		{
-			/* Test that ORDER BY and NULLS first/last do match in forward scan */
-			if (!orderby_desc && orderby_nullsfirst == pk->pk_nulls_first &&
-				merge_result == SCAN_FORWARD)
-				continue;
-			/* Exact opposite in backward scan */
-			else if (orderby_desc && orderby_nullsfirst != pk->pk_nulls_first &&
-					 merge_result == SCAN_BACKWARD)
-				continue;
-			/* Switch scan direction on exact opposite order for first attribute */
-			else if (orderby_desc && orderby_nullsfirst != pk->pk_nulls_first && pk_index == 0)
-				merge_result = SCAN_BACKWARD;
-			else
-				return MERGE_NOT_POSSIBLE;
-		}
-	}
-
-	return merge_result;
 }
 
 /*
@@ -1116,32 +1020,24 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	 * can push down the sort, the batches can be directly consumed in this
 	 * order and we don't need to use this optimization.
 	 */
-	if (!sort_info->use_compressed_sort && ts_guc_enable_decompression_sorted_merge)
+	if (sort_info->use_batch_sorted_merge && ts_guc_enable_decompression_sorted_merge)
 	{
-		MergeBatchResult merge_result = can_batch_sorted_merge(root, compression_info, chunk);
-		if (merge_result != MERGE_NOT_POSSIBLE)
-		{
-			Assert(sort_info->use_batch_sorted_merge);
-			DecompressChunkPath *path_copy =
-				copy_decompress_chunk_path((DecompressChunkPath *) chunk_path_no_sort);
+		Assert(!sort_info->use_compressed_sort);
 
-			path_copy->reverse = (merge_result != SCAN_FORWARD);
-			Assert(path_copy->reverse == sort_info->reverse);
-			path_copy->batch_sorted_merge = true;
+		DecompressChunkPath *path_copy =
+			copy_decompress_chunk_path((DecompressChunkPath *) chunk_path_no_sort);
 
-			/* The segment by optimization is only enabled if it can deliver the tuples in the
-			 * same order as the query requested it. So, we can just copy the pathkeys of the
-			 * query here.
-			 */
-			path_copy->custom_path.path.pathkeys = root->query_pathkeys;
-			cost_batch_sorted_merge(root, compression_info, path_copy, compressed_path);
+		path_copy->reverse = sort_info->reverse;
+		path_copy->batch_sorted_merge = true;
 
-			decompressed_paths = lappend(decompressed_paths, path_copy);
-		}
-		else
-		{
-			Assert(!sort_info->use_batch_sorted_merge);
-		}
+		/* The segment by optimization is only enabled if it can deliver the tuples in the
+		 * same order as the query requested it. So, we can just copy the pathkeys of the
+		 * query here.
+		 */
+		path_copy->custom_path.path.pathkeys = root->query_pathkeys;
+		cost_batch_sorted_merge(root, compression_info, path_copy, compressed_path);
+
+		decompressed_paths = lappend(decompressed_paths, path_copy);
 	}
 
 	/*
