@@ -96,7 +96,10 @@ ts_indexing_verify_columns(const Hyperspace *hs, const List *indexelems)
 					(errcode(ERRCODE_TS_BAD_HYPERTABLE_INDEX_DEFINITION),
 					 errmsg("cannot create a unique index without the column \"%s\" (used in "
 							"partitioning)",
-							NameStr(dim->fd.column_name))));
+							NameStr(dim->fd.column_name)),
+					 errhint(
+						 "If you're creating a hypertable on a table with a primary key, ensure "
+						 "the partitioning column is part of the primary or composite key.")));
 	}
 }
 
