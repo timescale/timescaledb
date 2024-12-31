@@ -13,6 +13,7 @@
 #include <nodes/makefuncs.h>
 #include <storage/lmgr.h>
 #include <utils/builtins.h>
+#include <utils/date.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 #include <utils/timestamp.h>
@@ -159,6 +160,12 @@ dimension_type(TupleInfo *ti)
 		return DIMENSION_TYPE_CLOSED;
 
 	if (!slot_attisnull(ti->slot, Anum_dimension_interval_length) &&
+		slot_attisnull(ti->slot, Anum_dimension_interval) &&
+		slot_attisnull(ti->slot, Anum_dimension_num_slices))
+		return DIMENSION_TYPE_OPEN;
+
+	if (slot_attisnull(ti->slot, Anum_dimension_interval_length) &&
+		!slot_attisnull(ti->slot, Anum_dimension_interval) &&
 		slot_attisnull(ti->slot, Anum_dimension_num_slices))
 		return DIMENSION_TYPE_OPEN;
 
@@ -232,11 +239,33 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 			DatumGetInt16(values[AttrNumberGetAttrOffset(Anum_dimension_num_slices)]);
 	else
 	{
-		d->fd.interval_length =
-			DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)]);
+		Assert(isnull[AttrNumberGetAttrOffset(Anum_dimension_interval)] ||
+			   isnull[AttrNumberGetAttrOffset(Anum_dimension_interval_length)]);
+
+		if (!isnull[AttrNumberGetAttrOffset(Anum_dimension_interval)])
+		{
+			d->fd.interval =
+				*DatumGetIntervalP(values[AttrNumberGetAttrOffset(Anum_dimension_interval)]);
+			d->calendar_based = true;
+		}
+		else
+		{
+			d->calendar_based = false;
+		}
+
+		if (!isnull[AttrNumberGetAttrOffset(Anum_dimension_interval_length)])
+			d->fd.interval_length =
+				DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)]);
+
 		if (!isnull[AttrNumberGetAttrOffset(Anum_dimension_compress_interval_length)])
 			d->fd.compress_interval_length = DatumGetInt64(
 				values[AttrNumberGetAttrOffset(Anum_dimension_compress_interval_length)]);
+
+		if (!isnull[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)])
+		{
+			d->fd.interval_origin =
+				DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)]);
+		}
 	}
 
 	d->column_attno = get_attnum(main_table_relid, NameStr(d->fd.column_name));
@@ -269,8 +298,34 @@ create_range_datum(FunctionCallInfo fcinfo, DimensionSlice *slice)
 static DimensionSlice *
 calculate_open_range_default(const Dimension *dim, int64 value)
 {
-	int64 range_start, range_end;
+	int64 range_start = 0, range_end = 0;
 	Oid dimtype = ts_dimension_get_partition_type(dim);
+
+	if (dim->calendar_based)
+	{
+		int tz;
+		struct pg_tm tt, *tm = &tt;
+		pg_tz *attimezone = session_timezone;
+		fsec_t fsec;
+
+		if (timestamp2tm(value, &tz, tm, &fsec, NULL, attimezone) != 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+					 errmsg("timestamp out of range")));
+
+		// Hack to produce monthly chunks. Should check with interval to see
+		// it is really month-based.
+		tt.tm_hour = 0;
+		tt.tm_sec = 0;
+		tt.tm_min = 0;
+		tt.tm_mday = 0;
+
+		tm2timestamp(tm, fsec, &tz, &range_start);
+		tt.tm_mon = tt.tm_mon + dim->fd.interval.month; // TODO mod 12
+		tm2timestamp(tm, fsec, &tz, &range_end);
+
+		return ts_dimension_slice_create(dim->fd.id, range_start, range_end);
+	}
 
 	if (value < 0)
 	{
@@ -782,7 +837,8 @@ dimension_tuple_update(TupleInfo *ti, void *data)
 
 static int32
 dimension_insert_relation(Relation rel, int32 hypertable_id, Name colname, Oid coltype,
-						  int16 num_slices, regproc partitioning_func, int64 interval_length)
+						  int16 num_slices, regproc partitioning_func, int64 interval_length,
+						  const Interval *interval, int64 interval_origin)
 {
 	TupleDesc desc = RelationGetDescr(rel);
 	Datum values[Natts_dimension];
@@ -816,13 +872,33 @@ dimension_insert_relation(Relation rel, int32 hypertable_id, Name colname, Oid c
 		values[AttrNumberGetAttrOffset(Anum_dimension_num_slices)] = Int16GetDatum(num_slices);
 		values[AttrNumberGetAttrOffset(Anum_dimension_aligned)] = BoolGetDatum(false);
 		nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_length)] = true;
+		nulls[AttrNumberGetAttrOffset(Anum_dimension_interval)] = true;
+		nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)] = true;
 	}
 	else
 	{
 		/* Open (time) dimension */
-		Assert(num_slices <= 0 && interval_length > 0);
-		values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)] =
-			Int64GetDatum(interval_length);
+		Assert(num_slices <= 0);
+		Assert(interval != NULL || interval_length > 0);
+
+		if (interval)
+		{
+			/* Calendar-based interval */
+			values[AttrNumberGetAttrOffset(Anum_dimension_interval)] = IntervalPGetDatum(interval);
+			nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_length)] = true;
+			values[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)] =
+				TimestampTzGetDatum(interval_origin);
+		}
+		else
+		{
+			/* Integer interval */
+			values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)] =
+				Int64GetDatum(interval_length);
+			nulls[AttrNumberGetAttrOffset(Anum_dimension_interval)] = true;
+			values[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)] =
+				Int64GetDatum(interval_origin);
+		}
+
 		values[AttrNumberGetAttrOffset(Anum_dimension_aligned)] = BoolGetDatum(true);
 		nulls[AttrNumberGetAttrOffset(Anum_dimension_num_slices)] = true;
 	}
@@ -831,7 +907,8 @@ dimension_insert_relation(Relation rel, int32 hypertable_id, Name colname, Oid c
 	nulls[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func_schema)] = true;
 	nulls[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func)] = true;
 
-	/* no compress interval length by default */
+	/* no compress interval by default */
+	nulls[AttrNumberGetAttrOffset(Anum_dimension_compress_interval)] = true;
 	nulls[AttrNumberGetAttrOffset(Anum_dimension_compress_interval_length)] = true;
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
@@ -845,7 +922,8 @@ dimension_insert_relation(Relation rel, int32 hypertable_id, Name colname, Oid c
 
 static int32
 dimension_insert(int32 hypertable_id, Name colname, Oid coltype, int16 num_slices,
-				 regproc partitioning_func, int64 interval_length)
+				 regproc partitioning_func, int64 interval_length, const Interval *interval,
+				 int64 interval_origin)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -858,7 +936,9 @@ dimension_insert(int32 hypertable_id, Name colname, Oid coltype, int16 num_slice
 											 coltype,
 											 num_slices,
 											 partitioning_func,
-											 interval_length);
+											 interval_length,
+											 interval,
+											 interval_origin);
 	table_close(rel, RowExclusiveLock);
 	return dimension_id;
 }
@@ -1305,16 +1385,41 @@ ts_dimension_set_interval(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
+static Datum
+open_dim_default_calendar_origin(Oid coltype)
+{
+	switch (coltype)
+	{
+		case TIMESTAMPOID:
+		case TIMESTAMPTZOID:
+			return TimestampTzGetDatum((int64) POSTGRES_EPOCH_JDATE * SECS_PER_DAY);
+		case DATEOID:
+			return DateADTGetDatum(POSTGRES_EPOCH_JDATE);
+		default:
+			break;
+	}
+
+	return Int64GetDatum(0);
+}
+
 DimensionInfo *
 ts_dimension_info_create_open(Oid table_relid, Name column_name, Datum interval, Oid interval_type,
-							  regproc partitioning_func)
+							  regproc partitioning_func, Datum interval_origin,
+							  bool interval_origin_isnull, Oid interval_origin_type)
 {
 	DimensionInfo *info = palloc(sizeof(*info));
+	AttrNumber colnum = get_attnum(table_relid, NameStr(*column_name));
+	Oid coltype = get_atttype(table_relid, colnum);
+
 	*info = (DimensionInfo){
 		.type = DIMENSION_TYPE_OPEN,
 		.table_relid = table_relid,
+		.coltype = coltype,
 		.interval_datum = interval,
 		.interval_type = interval_type,
+		.interval_origin = interval_origin_isnull ? 0 : interval_origin,
+		.interval_origin_isnull = interval_origin_isnull,
+		.interval_origin_type = interval_origin_type,
 		.partitioning_func = partitioning_func,
 	};
 	namestrcpy(&info->colname, NameStr(*column_name));
@@ -1326,9 +1431,12 @@ ts_dimension_info_create_closed(Oid table_relid, Name column_name, int32 num_sli
 								regproc partitioning_func)
 {
 	DimensionInfo *info = palloc(sizeof(*info));
+	AttrNumber colnum = get_attnum(table_relid, NameStr(*column_name));
+
 	*info = (DimensionInfo){
 		.type = DIMENSION_TYPE_CLOSED,
 		.table_relid = table_relid,
+		.coltype = get_atttype(table_relid, colnum),
 		.num_slices = num_slices,
 		.num_slices_is_set = (num_slices > 0),
 		.partitioning_func = partitioning_func,
@@ -1359,11 +1467,18 @@ dimension_info_validate_open(DimensionInfo *info)
 		dimtype = get_func_rettype(info->partitioning_func);
 	}
 
-	info->interval = dimension_interval_to_internal(NameStr(info->colname),
-													dimtype,
-													info->interval_type,
-													info->interval_datum,
-													info->adaptive_chunking);
+	if (IS_TIMESTAMP_TYPE(dimtype))
+	{
+		info->interval = 0;
+	}
+	else
+	{
+		info->interval = dimension_interval_to_internal(NameStr(info->colname),
+														dimtype,
+														info->interval_type,
+														info->interval_datum,
+														info->adaptive_chunking);
+	}
 }
 
 /* Validate the configuration of a closed ("space") dimension */
@@ -1419,8 +1534,7 @@ ts_dimension_info_validate(DimensionInfo *info)
 
 	datum = SysCacheGetAttr(ATTNAME, tuple, Anum_pg_attribute_atttypid, &isnull);
 	Assert(!isnull);
-
-	info->coltype = DatumGetObjectId(datum);
+	Assert(info->coltype == DatumGetObjectId(datum));
 
 	datum = SysCacheGetAttr(ATTNAME, tuple, Anum_pg_attribute_attnotnull, &isnull);
 	Assert(!isnull);
@@ -1487,12 +1601,24 @@ ts_dimension_add_from_info(DimensionInfo *info)
 
 	Assert(info->ht != NULL);
 
-	info->dimension_id = dimension_insert(info->ht->fd.id,
-										  &info->colname,
-										  info->coltype,
-										  info->num_slices,
-										  info->partitioning_func,
-										  info->interval);
+	if (IS_TIMESTAMP_TYPE(info->interval_type))
+		info->dimension_id = dimension_insert(info->ht->fd.id,
+											  &info->colname,
+											  info->coltype,
+											  info->num_slices,
+											  info->partitioning_func,
+											  DatumGetInt64(info->interval_datum),
+											  NULL,
+											  DatumGetInt64(info->interval_origin));
+	else
+		info->dimension_id = dimension_insert(info->ht->fd.id,
+											  &info->colname,
+											  info->coltype,
+											  info->num_slices,
+											  info->partitioning_func,
+											  0,
+											  DatumGetIntervalP(info->interval_datum),
+											  DatumGetTimestampTz(info->interval_origin));
 
 	return info->dimension_id;
 }
@@ -1543,6 +1669,31 @@ dimension_create_datum(FunctionCallInfo fcinfo, DimensionInfo *info, bool is_gen
 	}
 
 	return HeapTupleGetDatum(tuple);
+}
+
+void
+ts_dimension_info_set_defaults(DimensionInfo *info)
+{
+	if (info->type == DIMENSION_TYPE_OPEN)
+	{
+		AttrNumber attnum = get_attnum(info->table_relid, NameStr(info->colname));
+		Oid atttype = get_atttype(info->table_relid, attnum);
+
+		if (info->interval_origin_isnull)
+		{
+			info->interval_origin_type = atttype;
+			info->interval_origin = open_dim_default_calendar_origin(atttype);
+			info->interval_origin_isnull = false;
+			elog(NOTICE, "set interval_datum default");
+		}
+		else
+		{
+			/* TODO: coerce origin_type to column type */
+			Ensure(info->interval_origin_type == atttype,
+				   "origin must have the same as type as column \"%s\"",
+				   NameStr(info->colname));
+		}
+	}
 }
 
 /*
@@ -1598,6 +1749,7 @@ ts_dimension_add_internal(FunctionCallInfo fcinfo, DimensionInfo *info, bool is_
 				 errmsg("cannot omit both the number of partitions and the interval")));
 
 	ts_dimension_info_validate(info);
+	ts_dimension_info_set_defaults(info);
 
 	if (!info->skip)
 	{
@@ -1666,6 +1818,8 @@ TS_FUNCTION_INFO_V1(ts_dimension_add_general);
 Datum
 ts_dimension_add(PG_FUNCTION_ARGS)
 {
+	bool origin_isnull = PG_ARGISNULL(6);
+	Name colname = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1);
 	DimensionInfo info = {
 		.type = PG_ARGISNULL(2) ? DIMENSION_TYPE_OPEN : DIMENSION_TYPE_CLOSED,
 		.table_relid = PG_GETARG_OID(0),
@@ -1675,12 +1829,18 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 		.interval_type = PG_ARGISNULL(3) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 3),
 		.partitioning_func = PG_ARGISNULL(4) ? InvalidOid : PG_GETARG_OID(4),
 		.if_not_exists = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5),
+		.interval_origin_isnull = origin_isnull,
+		.interval_origin = origin_isnull ? 0 : PG_GETARG_DATUM(6),
+		.interval_origin_type = origin_isnull ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 6),
 	};
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
-	if (!PG_ARGISNULL(1))
-		namestrcpy(&info.colname, NameStr(*PG_GETARG_NAME(1)));
+	if (NULL == colname)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("column_name cannot be NULL")));
+
+	namestrcpy(&info.colname, NameStr(*colname));
 
 	if (PG_ARGISNULL(0))
 		ereport(ERROR,
@@ -1772,7 +1932,7 @@ make_dimension_info(Name colname, DimensionType dimtype)
 Datum
 ts_hash_dimension(PG_FUNCTION_ARGS)
 {
-	Ensure(PG_NARGS() > 2, "expected at most 3 arguments, invoked with %d arguments", PG_NARGS());
+	Ensure(PG_NARGS() > 2, "expected at least 3 arguments, invoked with %d arguments", PG_NARGS());
 	Name column_name;
 	GETARG_NOTNULL_NULLABLE(column_name, 0, "column_name", NAME);
 	DimensionInfo *info = make_dimension_info(column_name, DIMENSION_TYPE_CLOSED);
@@ -1791,13 +1951,18 @@ ts_hash_dimension(PG_FUNCTION_ARGS)
 Datum
 ts_range_dimension(PG_FUNCTION_ARGS)
 {
-	Ensure(PG_NARGS() > 2, "expected at most 3 arguments, invoked with %d arguments", PG_NARGS());
+	Ensure(PG_NARGS() > 2, "expected at least 3 arguments, invoked with %d arguments", PG_NARGS());
 	Name column_name;
 	GETARG_NOTNULL_NULLABLE(column_name, 0, "column_name", NAME);
 	DimensionInfo *info = make_dimension_info(column_name, DIMENSION_TYPE_OPEN);
 	info->interval_datum = PG_ARGISNULL(1) ? Int32GetDatum(-1) : PG_GETARG_DATUM(1);
 	info->interval_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
 	info->partitioning_func = PG_ARGISNULL(2) ? InvalidOid : PG_GETARG_OID(2);
+	info->interval_origin_isnull = PG_ARGISNULL(3);
+	info->interval_origin = info->interval_origin_isnull ? 0 : PG_GETARG_DATUM(3);
+	info->interval_origin_type =
+		info->interval_origin_isnull ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 3);
+
 	PG_RETURN_POINTER(info);
 }
 
@@ -1805,8 +1970,11 @@ Datum
 ts_dimension_add_general(PG_FUNCTION_ARGS)
 {
 	DimensionInfo *info = NULL;
+	Oid relid = PG_GETARG_OID(0);
 	GETARG_NOTNULL_POINTER(info, 1, "dimension", DimensionInfo);
-	info->table_relid = PG_GETARG_OID(0);
+	AttrNumber colattr = get_attnum(relid, NameStr(info->colname));
+	info->coltype = get_atttype(relid, colattr);
+	info->table_relid = relid;
 	if (PG_GETARG_BOOL(2))
 		info->if_not_exists = true;
 	return ts_dimension_add_internal(fcinfo, info, true);
