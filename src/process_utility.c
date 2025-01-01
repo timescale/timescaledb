@@ -93,6 +93,7 @@ void _process_utility_fini(void);
 static ProcessUtility_hook_type prev_ProcessUtility_hook;
 
 static bool expect_chunk_modification = false;
+static ProcessUtilityContext last_process_utility_context = PROCESS_UTILITY_TOPLEVEL;
 static DDLResult process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht);
 static DDLResult process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht);
 
@@ -5031,6 +5032,8 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string, bool
 							  QueryEnvironment *queryEnv, DestReceiver *dest,
 							  QueryCompletion *completion_tag)
 {
+	last_process_utility_context = context;
+
 	ProcessUtilityArgs args = { .query_string = query_string,
 								.context = context,
 								.params = params,
@@ -5062,6 +5065,7 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string, bool
 	if (altering_timescaledb || !ts_extension_is_loaded_and_not_upgrading())
 	{
 		prev_ProcessUtility(&args);
+		ts_process_utility_context_reset();
 		return;
 	}
 
@@ -5086,6 +5090,8 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string, bool
 	 */
 	if (result == DDL_CONTINUE)
 		prev_ProcessUtility(&args);
+
+	ts_process_utility_context_reset();
 }
 
 static void
@@ -5154,6 +5160,19 @@ extern void
 ts_process_utility_set_expect_chunk_modification(bool expect)
 {
 	expect_chunk_modification = expect;
+}
+
+bool
+ts_process_utility_is_context_nonatomic(void)
+{
+	ProcessUtilityContext context = last_process_utility_context;
+	return context == PROCESS_UTILITY_TOPLEVEL || context == PROCESS_UTILITY_QUERY_NONATOMIC;
+}
+
+void
+ts_process_utility_context_reset(void)
+{
+	last_process_utility_context = PROCESS_UTILITY_TOPLEVEL;
 }
 
 static void
