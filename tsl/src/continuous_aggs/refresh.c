@@ -31,6 +31,7 @@
 #include "invalidation.h"
 #include "invalidation_threshold.h"
 #include "materialize.h"
+#include "process_utility.h"
 #include "refresh.h"
 
 #define CAGG_REFRESH_LOG_LEVEL (callctx == CAGG_REFRESH_POLICY ? LOG : DEBUG1)
@@ -768,6 +769,24 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	int32 mat_id = cagg->data.mat_hypertable_id;
 	InternalTimeRange refresh_window = *refresh_window_arg;
 	int64 invalidation_threshold;
+	bool nonatomic = ts_process_utility_is_context_nonatomic();
+
+	/* Reset the saved ProcessUtilityContext value promptly before
+	 * calling Prevent* checks so the potential unsupported (atomic)
+	 * value won't linger there in case of ereport exit.
+	 */
+	ts_process_utility_context_reset();
+
+	PreventCommandIfReadOnly(REFRESH_FUNCTION_NAME);
+
+	/* Prevent running refresh if we're in a transaction block since a refresh
+	 * can run two transactions and might take a long time to release locks if
+	 * there's a lot to materialize. Strictly, it is optional to prohibit
+	 * transaction blocks since there will be only one transaction if the
+	 * invalidation threshold needs no update. However, materialization might
+	 * still take a long time and it is probably best for consistency to always
+	 * prevent transaction blocks.  */
+	PreventInTransactionBlock(nonatomic, REFRESH_FUNCTION_NAME);
 
 	/* Connect to SPI manager due to the underlying SPI calls */
 	int rc = SPI_connect_ext(SPI_OPT_NONATOMIC);
@@ -783,17 +802,6 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		aclcheck_error(ACLCHECK_NOT_OWNER,
 					   get_relkind_objtype(get_rel_relkind(cagg->relid)),
 					   get_rel_name(cagg->relid));
-
-	PreventCommandIfReadOnly(REFRESH_FUNCTION_NAME);
-
-	/* Prevent running refresh if we're in a transaction block since a refresh
-	 * can run two transactions and might take a long time to release locks if
-	 * there's a lot to materialize. Strictly, it is optional to prohibit
-	 * transaction blocks since there will be only one transaction if the
-	 * invalidation threshold needs no update. However, materialization might
-	 * still take a long time and it is probably best for consistency to always
-	 * prevent transaction blocks.  */
-	PreventInTransactionBlock(true, REFRESH_FUNCTION_NAME);
 
 	/* No bucketing when open ended */
 	if (!(start_isnull && end_isnull))
