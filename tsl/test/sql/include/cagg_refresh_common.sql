@@ -333,3 +333,77 @@ SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions
 GROUP BY 1,2 WITH NO DATA;
 COMMIT;
+
+-- refresh_continuous_aggregate can run two transactions, thus it cannot be
+-- called in a transaction block (from a function, from dynamic SQL) or in a
+-- subtransaction (from a procedure block with an EXCEPTION clause). Though it
+-- does NOT require a top level context and can be called from a procedure
+-- block without an EXCEPTION clause.
+
+-- DO block
+DO $$
+BEGIN
+  CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-04 00:00 UTC');
+END; $$;
+
+-- Procedure without subtransaction
+CREATE OR REPLACE PROCEDURE refresh_cagg_proc_normal()
+LANGUAGE PLPGSQL AS
+$$
+BEGIN
+  CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-04 00:00 UTC');
+END; $$;
+
+CALL refresh_cagg_proc_normal();
+
+\set ON_ERROR_STOP 0
+
+-- Procedure with subtransaction
+CREATE OR REPLACE PROCEDURE refresh_cagg_proc_subtransaction()
+LANGUAGE PLPGSQL AS
+$$
+DECLARE
+  errmsg TEXT;
+BEGIN
+  CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-04 00:00 UTC');
+EXCEPTION WHEN OTHERS THEN
+  GET STACKED DIAGNOSTICS errmsg = MESSAGE_TEXT;
+  RAISE EXCEPTION '%', errmsg;
+END; $$;
+
+CALL refresh_cagg_proc_subtransaction();
+
+-- Function
+CREATE OR REPLACE FUNCTION refresh_cagg_fun()
+RETURNS INT LANGUAGE PLPGSQL AS
+$$
+BEGIN
+  CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-04 00:00 UTC');
+  RETURN 1;
+END; $$;
+
+SELECT * from  refresh_cagg_fun();
+
+-- Dynamic SQL
+DO $$
+BEGIN
+  EXECUTE $inner$
+      CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-04 00:00 UTC');
+  $inner$;
+END; $$;
+
+-- Trigger
+CREATE TABLE refresh_cagg_trigger_table(a int);
+
+CREATE FUNCTION refresh_cagg_trigger_fun()
+RETURNS TRIGGER LANGUAGE PLPGSQL AS $$
+BEGIN
+  CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-04 00:00 UTC');
+END; $$;
+
+CREATE TRIGGER refresh_cagg_trigger AFTER INSERT ON refresh_cagg_trigger_table
+EXECUTE FUNCTION refresh_cagg_trigger_fun();
+
+INSERT INTO refresh_cagg_trigger_table VALUES(1);
+
+\set ON_ERROR_STOP 1
