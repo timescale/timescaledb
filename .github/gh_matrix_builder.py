@@ -24,6 +24,7 @@ sys.dont_write_bytecode = True
 
 import json
 import os
+import random
 import subprocess
 from ci_settings import (
     PG14_EARLIEST,
@@ -93,7 +94,6 @@ def build_debug_config(overrides):
 # builds. This will capture some cases where warnings are generated
 # for release builds but not for debug builds.
 def build_release_config(overrides):
-    base_config = build_debug_config({})
     release_config = dict(
         {
             "name": "Release",
@@ -102,26 +102,24 @@ def build_release_config(overrides):
             "coverage": False,
         }
     )
-    base_config.update(release_config)
-    base_config.update(overrides)
-    return base_config
+    release_config.update(overrides)
+    return build_debug_config(release_config)
 
 
 def build_without_telemetry(overrides):
-    config = build_release_config({})
-    config.update(
+    config = dict(
         {
             "name": "ReleaseWithoutTelemetry",
-            "tsdb_build_args": config["tsdb_build_args"] + " -DUSE_TELEMETRY=OFF",
             "coverage": False,
         }
     )
     config.update(overrides)
+    config = build_release_config(config)
+    config["tsdb_build_args"] += " -DUSE_TELEMETRY=OFF"
     return config
 
 
 def build_apache_config(overrides):
-    base_config = build_debug_config({})
     apache_config = dict(
         {
             "name": "ApacheOnly",
@@ -130,9 +128,8 @@ def build_apache_config(overrides):
             "coverage": False,
         }
     )
-    base_config.update(apache_config)
-    base_config.update(overrides)
-    return base_config
+    apache_config.update(overrides)
+    return build_debug_config(apache_config)
 
 
 def macos_config(overrides):
@@ -309,11 +306,13 @@ elif len(sys.argv) > 2:
             sys.exit(1)
 
     if tests:
+        to_run = list(tests) * 20
+        random.shuffle(to_run)
         m["include"].append(
             build_debug_config(
                 {
                     "coverage": False,
-                    "installcheck_args": f'TESTS="{" ".join(list(tests) * 20)}"',
+                    "installcheck_args": f'TESTS="{" ".join(to_run)}"',
                     "name": "Flaky Check Debug",
                     "pg": PG16_LATEST,
                     "pginstallcheck": False,
@@ -324,7 +323,7 @@ elif len(sys.argv) > 2:
             build_debug_config(
                 {
                     "coverage": False,
-                    "installcheck_args": f'TESTS="{" ".join(list(tests) * 20)}"',
+                    "installcheck_args": f'TESTS="{" ".join(to_run)}"',
                     "name": "Flaky Check Debug",
                     "pg": PG17_LATEST,
                     "pginstallcheck": False,

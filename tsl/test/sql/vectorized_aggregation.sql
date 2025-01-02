@@ -52,12 +52,16 @@ SELECT sum(segment_by_value) FROM testtable WHERE int_value > 0;
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable WHERE float_value > 0;
 
--- Vectorization not possible due grouping
+-- Vectorization possible with grouping by one fixed-size column
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable GROUP BY float_value;
 
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable GROUP BY int_value;
+
+-- Vectorization not possible with grouping by multiple columns
+:EXPLAIN
+SELECT sum(segment_by_value) FROM testtable GROUP BY int_value, float_value;
 
 -- Vectorization possible with grouping by a segmentby column.
 :EXPLAIN
@@ -407,3 +411,7 @@ RESET max_parallel_workers_per_gather;
 
 -- Can't group by a system column
 SELECT sum(float_value) FROM testtable2 GROUP BY tableoid ORDER BY 1 LIMIT 1;
+
+-- Postgres versions starting with 16 remove the grouping columns that are
+-- equated to a constant. Check that our planning code handles this well.
+SELECT sum(float_value), int_value FROM testtable2 WHERE int_value = 1 GROUP BY int_value;

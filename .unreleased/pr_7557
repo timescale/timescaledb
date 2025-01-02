@@ -1,0 +1,1 @@
+Fixes: #7557 Fix NULL handling for in-memory tuple filtering 
