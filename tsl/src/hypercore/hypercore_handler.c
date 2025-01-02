@@ -2520,7 +2520,7 @@ hypercore_scan_analyze_next_block(TableScanDesc scan, ReadStream *stream)
 {
 	HypercoreScanDescData *cscan = (HypercoreScanDescData *) scan;
 	HeapScanDesc uhscan = (HeapScanDesc) cscan->uscan_desc;
-	HeapScanDesc chscan = (HeapScanDesc) cscan->cscan_desc;
+	HeapScanDesc PG_USED_FOR_ASSERTS_ONLY chscan = (HeapScanDesc) cscan->cscan_desc;
 
 	/* We do not analyze parent table of hypertables. There is no data there. */
 	if (ts_is_hypertable(scan->rs_rd->rd_id))

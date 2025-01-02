@@ -23,6 +23,31 @@ static int create_segment_filter_scankey(Relation in_rel, char *segment_filter_c
 										 bool is_array_op);
 
 /*
+ * Test ScanKey against a slot.
+ *
+ * Unlike HeapKeyTest, this function takes into account SK_ISNULL
+ * and works correctly when looking for null values.
+ */
+bool
+slot_key_test(TupleTableSlot *compressed_slot, ScanKey key)
+{
+	/* No need to get the datum if we are only checking for NULLs */
+	if (key->sk_flags & SK_ISNULL)
+	{
+		return slot_attisnull(compressed_slot, key->sk_attno);
+	}
+
+	Datum val;
+	bool is_null;
+	val = slot_getattr(compressed_slot, key->sk_attno, &is_null);
+
+	if (is_null)
+		return false;
+
+	return DatumGetBool(FunctionCall2Coll(&key->sk_func, key->sk_collation, val, key->sk_argument));
+}
+
+/*
  * Build scankeys for decompressed tuple to check if it is part of the batch.
  *
  * The key_columns are the columns of the uncompressed chunk.

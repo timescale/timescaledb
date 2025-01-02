@@ -475,14 +475,12 @@ get_vectorized_grouping_type(Agg *agg, CustomScan *custom, List *resolved_target
 		 * If we have a single grouping column, record it for the additional
 		 * checks later.
 		 */
-		if (num_grouping_columns == 1)
-		{
-			single_grouping_var = var;
-		}
-		else
-		{
-			single_grouping_var = NULL;
-		}
+		single_grouping_var = var;
+	}
+
+	if (num_grouping_columns != 1)
+	{
+		single_grouping_var = NULL;
 	}
 
 	Assert(num_grouping_columns == 1 || single_grouping_var == NULL);
