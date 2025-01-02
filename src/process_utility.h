@@ -42,12 +42,12 @@ extern void ts_process_utility_set_expect_chunk_modification(bool expect);
  * block (from a function, from dynamic SQL) or in a subtransaction (from a
  * procedure block with an EXCEPTION clause). Such procedures use
  * PreventInTransactionBlock function to check whether they can be run.
- * 
- * Though currently such checks are incompete, because
+ *
+ * Though currently such checks are incomplete, because
  * PreventInTransactionBlock requires isTopLevel argument to throw a
  * consistent error when the call originates from a function. This
  * isTopLevel flag (that is a bit poorly named - see below) is not readily
- * available inside C procedures. The source of truth for it - 
+ * available inside C procedures. The source of truth for it -
  * ProcessUtilityContext parameter is passed to ProcessUtility hooks, but
  * is not included with the function calls. There is an undocumented
  * SPI_inside_nonatomic_context function, that would have been sufficient
@@ -64,7 +64,7 @@ extern void ts_process_utility_set_expect_chunk_modification(bool expect);
  * in standard_ProcessUtility is insufficient for C procedures - it
  * excludes PROCESS_UTILITY_QUERY_NONATOMIC value (used when called from
  * PLPG procedure without an EXCEPTION clause) that is a valid use case for
- * C procedures with transactions. See details in the description of 
+ * C procedures with transactions. See details in the description of
  * ExecuteCallStmt function.
  *
  * It is expected that calls to C procedures are done with CALL and always
@@ -82,7 +82,7 @@ extern void ts_process_utility_set_expect_chunk_modification(bool expect);
 extern TSDLLEXPORT bool ts_process_utility_is_context_nonatomic(void);
 
 /*
- * Curently in TS ProcessUtility hook the saved ProcessUtilityContext
+ * Currently in TS ProcessUtility hook the saved ProcessUtilityContext
  * value is reset back to PROCESS_UTILITY_TOPLEVEL on normal exit but
  * is NOT reset in case of ereport exit. C procedures can call this
  * function to reset the saved value before doing the checks that can

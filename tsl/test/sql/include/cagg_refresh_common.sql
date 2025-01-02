@@ -368,7 +368,7 @@ END; $$;
 -- Trigger
 CREATE TABLE refresh_cagg_trigger_table(a int);
 
-CREATE FUNCTION refresh_cagg_trigger_fun() 
+CREATE FUNCTION refresh_cagg_trigger_fun()
 RETURNS TRIGGER LANGUAGE PLPGSQL AS $$
 BEGIN
   CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-04 00:00 UTC');
