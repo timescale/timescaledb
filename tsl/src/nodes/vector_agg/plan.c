@@ -16,6 +16,7 @@
 #include "plan.h"
 
 #include "exec.h"
+#include "import/list.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/decompress_chunk/vector_quals.h"
 #include "nodes/vector_agg.h"
@@ -131,7 +132,8 @@ resolve_outer_special_vars(List *agg_tlist, CustomScan *custom)
  * node.
  */
 static Plan *
-vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk, List *resolved_targetlist)
+vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk, List *resolved_targetlist,
+					   VectorAggGroupingType grouping_type)
 {
 	CustomScan *vector_agg = (CustomScan *) makeNode(CustomScan);
 	vector_agg->custom_plans = list_make1(decompress_chunk);
@@ -171,13 +173,9 @@ vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk, List *resolved_ta
 	vector_agg->scan.plan.extParam = bms_copy(agg->plan.extParam);
 	vector_agg->scan.plan.allParam = bms_copy(agg->plan.allParam);
 
-	List *grouping_child_output_offsets = NIL;
-	for (int i = 0; i < agg->numCols; i++)
-	{
-		grouping_child_output_offsets =
-			lappend_int(grouping_child_output_offsets, AttrNumberGetAttrOffset(agg->grpColIdx[i]));
-	}
-	vector_agg->custom_private = list_make1(grouping_child_output_offsets);
+	vector_agg->custom_private = ts_new_list(T_List, VASI_Count);
+	lfirst(list_nth_cell(vector_agg->custom_private, VASI_GroupingType)) =
+		makeInteger(grouping_type);
 
 	return (Plan *) vector_agg;
 }
@@ -427,38 +425,110 @@ can_vectorize_aggref(Aggref *aggref, CustomScan *custom, VectorQualInfo *vqi)
 }
 
 /*
- * Whether we can perform vectorized aggregation with a given grouping.
- * Currently supports either no grouping or grouping by segmentby columns.
+ * What vectorized grouping strategy we can use for the given grouping columns.
  */
-static bool
-can_vectorize_grouping(Agg *agg, CustomScan *custom, List *resolved_targetlist)
+static VectorAggGroupingType
+get_vectorized_grouping_type(Agg *agg, CustomScan *custom, List *resolved_targetlist)
 {
+	/*
+	 * The Agg->numCols value can be less than the number of the non-aggregated
+	 * vars in the aggregated targetlist, if some of them are equated to a
+	 * constant. This behavior started with PG 16. This case is not very
+	 * important, so we treat all non-aggregated columns as grouping columns to
+	 * keep the vectorized aggregation node simple.
+	 */
+	int num_grouping_columns = 0;
+	bool all_segmentby = true;
+	Var *single_grouping_var = NULL;
+
+	ListCell *lc;
+	foreach (lc, resolved_targetlist)
+	{
+		TargetEntry *target_entry = lfirst_node(TargetEntry, lc);
+		if (IsA(target_entry->expr, Aggref))
+		{
+			continue;
+		}
+
+		if (!IsA(target_entry->expr, Var))
+		{
+			/*
+			 * We shouldn't see anything except Vars or Aggrefs in the
+			 * aggregated targetlists. Just say it's not vectorizable, because
+			 * here we are working with arbitrary plans that we don't control.
+			 */
+			return VAGT_Invalid;
+		}
+
+		num_grouping_columns++;
+
+		Var *var = castNode(Var, target_entry->expr);
+		bool is_segmentby;
+		if (!is_vector_var(custom, (Expr *) var, &is_segmentby))
+		{
+			return VAGT_Invalid;
+		}
+
+		all_segmentby &= is_segmentby;
+
+		/*
+		 * If we have a single grouping column, record it for the additional
+		 * checks later.
+		 */
+		single_grouping_var = var;
+	}
+
+	if (num_grouping_columns != 1)
+	{
+		single_grouping_var = NULL;
+	}
+
+	Assert(num_grouping_columns == 1 || single_grouping_var == NULL);
+	Assert(num_grouping_columns >= agg->numCols);
+
 	/*
 	 * We support vectorized aggregation without grouping.
 	 */
-	if (agg->numCols == 0)
+	if (num_grouping_columns == 0)
 	{
-		return true;
+		return VAGT_Batch;
 	}
 
-	for (int i = 0; i < agg->numCols; i++)
+	/*
+	 * We support grouping by any number of columns if all of them are segmentby.
+	 */
+	if (all_segmentby)
 	{
-		int offset = AttrNumberGetAttrOffset(agg->grpColIdx[i]);
-		TargetEntry *entry = list_nth_node(TargetEntry, resolved_targetlist, offset);
+		return VAGT_Batch;
+	}
 
-		bool is_segmentby = false;
-		if (!is_vector_var(custom, entry->expr, &is_segmentby))
+	/*
+	 * We support hashed vectorized grouping by one fixed-size by-value
+	 * compressed column.
+	 */
+	if (num_grouping_columns == 1)
+	{
+		int16 typlen;
+		bool typbyval;
+		get_typlenbyval(single_grouping_var->vartype, &typlen, &typbyval);
+		if (typbyval)
 		{
-			return false;
-		}
-
-		if (!is_segmentby)
-		{
-			return false;
+			switch (typlen)
+			{
+				case 2:
+					return VAGT_HashSingleFixed2;
+				case 4:
+					return VAGT_HashSingleFixed4;
+				case 8:
+					return VAGT_HashSingleFixed8;
+				default:
+					Ensure(false, "invalid fixed size %d of a vector type", typlen);
+					break;
+			}
 		}
 	}
 
-	return true;
+	return VAGT_Invalid;
 }
 
 /*
@@ -651,9 +721,11 @@ try_insert_vector_agg_node(Plan *plan)
 	 */
 	List *resolved_targetlist = resolve_outer_special_vars(agg->plan.targetlist, custom);
 
-	if (!can_vectorize_grouping(agg, custom, resolved_targetlist))
+	const VectorAggGroupingType grouping_type =
+		get_vectorized_grouping_type(agg, custom, resolved_targetlist);
+	if (grouping_type == VAGT_Invalid)
 	{
-		/* No GROUP BY support for now. */
+		/* The grouping is not vectorizable. */
 		return plan;
 	}
 
@@ -667,7 +739,7 @@ try_insert_vector_agg_node(Plan *plan)
 	ListCell *lc;
 	foreach (lc, resolved_targetlist)
 	{
-		TargetEntry *target_entry = castNode(TargetEntry, lfirst(lc));
+		TargetEntry *target_entry = lfirst_node(TargetEntry, lc);
 		if (IsA(target_entry->expr, Aggref))
 		{
 			Aggref *aggref = castNode(Aggref, target_entry->expr);
@@ -700,5 +772,5 @@ try_insert_vector_agg_node(Plan *plan)
 	 * Finally, all requirements are satisfied and we can vectorize this partial
 	 * aggregation node.
 	 */
-	return vector_agg_plan_create(agg, custom, resolved_targetlist);
+	return vector_agg_plan_create(agg, custom, resolved_targetlist, grouping_type);
 }
