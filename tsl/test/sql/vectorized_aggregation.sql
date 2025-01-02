@@ -52,12 +52,16 @@ SELECT sum(segment_by_value) FROM testtable WHERE int_value > 0;
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable WHERE float_value > 0;
 
--- Vectorization not possible due grouping
+-- Vectorization possible with grouping by one fixed-size column
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable GROUP BY float_value;
 
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable GROUP BY int_value;
+
+-- Vectorization not possible with grouping by multiple columns
+:EXPLAIN
+SELECT sum(segment_by_value) FROM testtable GROUP BY int_value, float_value;
 
 -- Vectorization possible with grouping by a segmentby column.
 :EXPLAIN
