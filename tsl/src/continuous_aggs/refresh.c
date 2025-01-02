@@ -31,6 +31,7 @@
 #include "invalidation.h"
 #include "invalidation_threshold.h"
 #include "materialize.h"
+#include "process_utility.h"
 #include "refresh.h"
 
 #define CAGG_REFRESH_LOG_LEVEL (callctx == CAGG_REFRESH_POLICY ? LOG : DEBUG1)
@@ -764,9 +765,16 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	int32 mat_id = cagg->data.mat_hypertable_id;
 	InternalTimeRange refresh_window = *refresh_window_arg;
 	int64 invalidation_threshold;
+	bool nonatomic = ts_process_utility_is_context_nonatomic();
+
+	/* Reset the saved ProcessUtilityContext value promptly before
+	 * calling PreventCommandIfReadOnly so the potential unsupported
+	 * (atomic) value won't linger there in case of ereport exit.
+	 */
+	ts_process_utility_context_reset();
 
 	/* Connect to SPI manager due to the underlying SPI calls */
-	int rc = SPI_connect_ext(SPI_OPT_NONATOMIC);
+	int rc = SPI_connect_ext(nonatomic ? SPI_OPT_NONATOMIC : 0);
 	if (rc != SPI_OK_CONNECT)
 		elog(ERROR, "SPI_connect failed: %s", SPI_result_code_string(rc));
 
@@ -789,7 +797,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	 * invalidation threshold needs no update. However, materialization might
 	 * still take a long time and it is probably best for consistency to always
 	 * prevent transaction blocks.  */
-	PreventInTransactionBlock(true, REFRESH_FUNCTION_NAME);
+	PreventInTransactionBlock(nonatomic, REFRESH_FUNCTION_NAME);
 
 	/* No bucketing when open ended */
 	if (!(start_isnull && end_isnull))
