@@ -23,12 +23,12 @@ select count(compress_chunk(x)) from show_chunks('sparse') x;
      1
 (1 row)
 
-explain select * from sparse where value = 1;
+explain (costs off) select * from sparse where value = 1;
                                                        QUERY PLAN                                                        
 -------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.27..20.20 rows=76000 width=12)
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk
    Vectorized Filter: (value = '1'::double precision)
-   ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..20.20 rows=76 width=76)
+   ->  Seq Scan on compress_hyper_2_2_chunk
          Filter: ((_ts_meta_v2_min_value <= '1'::double precision) AND (_ts_meta_v2_max_value >= '1'::double precision))
 (4 rows)
 
@@ -40,12 +40,12 @@ select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
      1
 (1 row)
 
-explain select * from sparse where value = 1;
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.02..17.80 rows=780000 width=12)
+explain (costs off) select * from sparse where value = 1;
+                      QUERY PLAN                      
+------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk
    Vectorized Filter: (value = '1'::double precision)
-   ->  Seq Scan on compress_hyper_2_3_chunk  (cost=0.00..17.80 rows=780 width=76)
+   ->  Seq Scan on compress_hyper_2_3_chunk
 (3 rows)
 
 reset timescaledb.auto_sparse_indexes;
@@ -55,33 +55,33 @@ select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
      1
 (1 row)
 
-explain select * from sparse where value = 1;
+explain (costs off) select * from sparse where value = 1;
                                                        QUERY PLAN                                                        
 -------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.27..20.20 rows=76000 width=12)
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk
    Vectorized Filter: (value = '1'::double precision)
-   ->  Seq Scan on compress_hyper_2_4_chunk  (cost=0.00..20.20 rows=76 width=76)
+   ->  Seq Scan on compress_hyper_2_4_chunk
          Filter: ((_ts_meta_v2_min_value <= '1'::double precision) AND (_ts_meta_v2_max_value >= '1'::double precision))
 (4 rows)
 
 -- Should survive renames.
 alter table sparse rename column value to wert;
-explain select * from sparse where wert = 1;
+explain (costs off) select * from sparse where wert = 1;
                                                       QUERY PLAN                                                       
 -----------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.27..20.20 rows=76000 width=12)
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk
    Vectorized Filter: (wert = '1'::double precision)
-   ->  Seq Scan on compress_hyper_2_4_chunk  (cost=0.00..20.20 rows=76 width=76)
+   ->  Seq Scan on compress_hyper_2_4_chunk
          Filter: ((_ts_meta_v2_min_wert <= '1'::double precision) AND (_ts_meta_v2_max_wert >= '1'::double precision))
 (4 rows)
 
 alter table sparse rename column wert to value;
-explain select * from sparse where value = 1;
+explain (costs off) select * from sparse where value = 1;
                                                        QUERY PLAN                                                        
 -------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.27..20.20 rows=76000 width=12)
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk
    Vectorized Filter: (value = '1'::double precision)
-   ->  Seq Scan on compress_hyper_2_4_chunk  (cost=0.00..20.20 rows=76 width=76)
+   ->  Seq Scan on compress_hyper_2_4_chunk
          Filter: ((_ts_meta_v2_min_value <= '1'::double precision) AND (_ts_meta_v2_max_value >= '1'::double precision))
 (4 rows)
 
@@ -94,12 +94,12 @@ select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
      1
 (1 row)
 
-explain select * from sparse where value = 1;
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.02..17.80 rows=780000 width=12)
+explain (costs off) select * from sparse where value = 1;
+                      QUERY PLAN                      
+------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk
    Vectorized Filter: (value = '1'::double precision)
-   ->  Seq Scan on compress_hyper_2_5_chunk  (cost=0.00..17.80 rows=780 width=76)
+   ->  Seq Scan on compress_hyper_2_5_chunk
 (3 rows)
 
 -- Not for other index types.
@@ -111,12 +111,12 @@ select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
      1
 (1 row)
 
-explain select * from sparse where value = 1;
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.02..17.80 rows=780000 width=12)
+explain (costs off) select * from sparse where value = 1;
+                      QUERY PLAN                      
+------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk
    Vectorized Filter: (value = '1'::double precision)
-   ->  Seq Scan on compress_hyper_2_6_chunk  (cost=0.00..17.80 rows=780 width=76)
+   ->  Seq Scan on compress_hyper_2_6_chunk
 (3 rows)
 
 -- When the chunk is recompressed without index, no sparse index is created.
@@ -127,12 +127,12 @@ select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
      1
 (1 row)
 
-explain select * from sparse where value = 1;
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.02..17.80 rows=780000 width=12)
+explain (costs off) select * from sparse where value = 1;
+                      QUERY PLAN                      
+------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk
    Vectorized Filter: (value = '1'::double precision)
-   ->  Seq Scan on compress_hyper_2_7_chunk  (cost=0.00..17.80 rows=780 width=76)
+   ->  Seq Scan on compress_hyper_2_7_chunk
 (3 rows)
 
 -- Long column names.
@@ -149,12 +149,12 @@ select count(compress_chunk(x)) from show_chunks('sparse') x;
      1
 (1 row)
 
-explain select * from sparse where Abcdef012345678_Bbcdef012345678_Cbcdef012345678_Dbcdef0 = 1;
+explain (costs off) select * from sparse where Abcdef012345678_Bbcdef012345678_Cbcdef012345678_Dbcdef0 = 1;
                                                                           QUERY PLAN                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=3.48..10.45 rows=3000 width=264)
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk
    Vectorized Filter: (abcdef012345678_bbcdef012345678_cbcdef012345678_dbcdef0 = 1)
-   ->  Seq Scan on compress_hyper_2_8_chunk  (cost=0.00..10.45 rows=3 width=2092)
+   ->  Seq Scan on compress_hyper_2_8_chunk
          Filter: ((_ts_meta_v2_min_9218_abcdef012345678_bbcdef012345678_cbcdef0 <= 1) AND (_ts_meta_v2_max_9218_abcdef012345678_bbcdef012345678_cbcdef0 >= 1))
 (4 rows)
 
