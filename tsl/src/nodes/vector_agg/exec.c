@@ -21,6 +21,7 @@
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/vector_quals.h"
 #include "nodes/vector_agg.h"
+#include "nodes/vector_agg/plan.h"
 
 static int
 get_input_offset(DecompressChunkState *decompress_state, Var *var)
@@ -54,6 +55,25 @@ get_input_offset(DecompressChunkState *decompress_state, Var *var)
 
 	const int index = value_column_description - dcontext->compressed_chunk_columns;
 	return index;
+}
+
+static int
+grouping_column_comparator(const void *a_ptr, const void *b_ptr)
+{
+	const GroupingColumn *a = (GroupingColumn *) a_ptr;
+	const GroupingColumn *b = (GroupingColumn *) b_ptr;
+
+	if (a->value_bytes == b->value_bytes)
+	{
+		return 0;
+	}
+
+	if (a->value_bytes > b->value_bytes)
+	{
+		return -1;
+	}
+
+	return 1;
 }
 
 static void
@@ -179,17 +199,84 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 
 			Var *var = castNode(Var, tlentry->expr);
 			col->input_offset = get_input_offset(decompress_state, var);
+
+			DecompressContext *dcontext = &decompress_state->decompress_context;
+			CompressionColumnDescription *desc =
+				&dcontext->compressed_chunk_columns[col->input_offset];
+
+			col->typid = desc->typid;
+			col->value_bytes = desc->value_bytes;
+			col->by_value = desc->by_value;
+			if (col->value_bytes == -1)
+			{
+				/*
+				 * long varlena requires 4 byte alignment, not sure why text has 'i'
+				 * typalign in pg catalog.
+				 */
+				col->alignment_bytes = 4;
+			}
+			else
+			{
+				switch (desc->typalign)
+				{
+					case TYPALIGN_CHAR:
+						col->alignment_bytes = 1;
+						break;
+					case TYPALIGN_SHORT:
+						col->alignment_bytes = ALIGNOF_SHORT;
+						break;
+					case TYPALIGN_INT:
+						col->alignment_bytes = ALIGNOF_INT;
+						break;
+					case TYPALIGN_DOUBLE:
+						col->alignment_bytes = ALIGNOF_DOUBLE;
+						break;
+					default:
+						Assert(false);
+						col->alignment_bytes = 1;
+				}
+			}
 		}
 	}
 
 	/*
-	 * Currently the only grouping policy we use is per-batch grouping.
+	 * Sort grouping columns by descending column size, variable size last. This
+	 * helps improve branch predictability and key packing when we use hashed
+	 * serialized multi-column keys.
 	 */
-	vector_agg_state->grouping =
-		create_grouping_policy_batch(vector_agg_state->num_agg_defs,
-									 vector_agg_state->agg_defs,
-									 vector_agg_state->num_grouping_columns,
-									 vector_agg_state->grouping_columns);
+	qsort(vector_agg_state->grouping_columns,
+		  vector_agg_state->num_grouping_columns,
+		  sizeof(GroupingColumn),
+		  grouping_column_comparator);
+
+	/*
+	 * Create the grouping policy chosen at plan time.
+	 */
+	const VectorAggGroupingType grouping_type =
+		intVal(list_nth(cscan->custom_private, VASI_GroupingType));
+	if (grouping_type == VAGT_Batch)
+	{
+		/*
+		 * Per-batch grouping.
+		 */
+		vector_agg_state->grouping =
+			create_grouping_policy_batch(vector_agg_state->num_agg_defs,
+										 vector_agg_state->agg_defs,
+										 vector_agg_state->num_grouping_columns,
+										 vector_agg_state->grouping_columns);
+	}
+	else
+	{
+		/*
+		 * Hash grouping.
+		 */
+		vector_agg_state->grouping =
+			create_grouping_policy_hash(vector_agg_state->num_agg_defs,
+										vector_agg_state->agg_defs,
+										vector_agg_state->num_grouping_columns,
+										vector_agg_state->grouping_columns,
+										grouping_type);
+	}
 }
 
 static void

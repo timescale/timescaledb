@@ -1,2 +1,2 @@
-set(SOURCES "")
-target_sources(${PROJECT_NAME} PRIVATE ${SOURCES})
+set(SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/umash.c)
+target_sources(${TSL_LIBRARY_NAME} PRIVATE ${SOURCES})

@@ -26,7 +26,7 @@ typedef enum VectorQualSummary
 } VectorQualSummary;
 
 static pg_attribute_always_inline VectorQualSummary
-get_vector_qual_summary(uint64 *restrict qual_result, size_t n_rows)
+get_vector_qual_summary(const uint64 *qual_result, size_t n_rows)
 {
 	bool any_rows_pass = false;
 	bool all_rows_pass = true;
