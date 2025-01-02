@@ -98,7 +98,7 @@ limit 1
 set timescaledb.debug_require_vector_agg = :'guc_value';
 ---- Uncomment to generate reference. Note that there are minor discrepancies
 ---- on float4 due to different numeric stability in our and PG implementations.
---set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'forbid';
+--set timescaledb.enable_chunkwise_aggregation to off; set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'forbid';
 
 set max_parallel_workers_per_gather = 0;
 
