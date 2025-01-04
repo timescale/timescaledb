@@ -307,7 +307,7 @@ FROM conditions
 GROUP BY 1,2 WITH NO DATA;
 COMMIT;
 
--- refresh_continuous_aggregate can run two transactions, thus it cannot be 
+-- refresh_continuous_aggregate can run two transactions, thus it cannot be
 -- called in a transaction block (from a function, from dynamic SQL) or in a
 -- subtransaction (from a procedure block with an EXCEPTION clause). Though it
 -- does NOT require a top level context and can be called from a procedure
