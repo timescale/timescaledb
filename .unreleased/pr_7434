@@ -1,2 +1,2 @@
-Fixes: #7434 Fixes segfault when internally set the replica identity for a given chunk
-Thanks: @bharrisau for reporting the segfault when creating chunks
+Fixes: #7434: Fixes the segfault when internally set the replica identity for a given chunk.
+Thanks: @bharrisau for reporting the segfault when creating chunks.
