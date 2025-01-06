@@ -114,7 +114,7 @@ limit 1
 set timescaledb.debug_require_vector_agg = :'guc_value';
 ---- Uncomment to generate reference. Note that there are minor discrepancies
 ---- on float4 due to different numeric stability in our and PG implementations.
---set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'forbid';
+--set timescaledb.enable_chunkwise_aggregation to off; set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'forbid';
 set max_parallel_workers_per_gather = 0;
 select
     format('%sselect %s%s(%s) from aggfns%s%s%s;',
@@ -6881,7 +6881,8 @@ select ss, min(cint2) from aggfns where cfloat8 > 1000 group by ss order by min(
 select stddev(cint2) from aggfns where cfloat8 > 1000;
  stddev 
 --------
-(0 rows)
+       
+(1 row)
 
 select s, stddev(cint2) from aggfns where cfloat8 > 1000 group by s order by stddev(cint2), s limit 10;
  s | stddev 
@@ -6960,7 +6961,8 @@ select ss, min(cint4) from aggfns where cfloat8 > 1000 group by ss order by min(
 select stddev(cint4) from aggfns where cfloat8 > 1000;
  stddev 
 --------
-(0 rows)
+       
+(1 row)
 
 select s, stddev(cint4) from aggfns where cfloat8 > 1000 group by s order by stddev(cint4), s limit 10;
  s | stddev 
@@ -6991,7 +6993,8 @@ select ss, sum(cint4) from aggfns where cfloat8 > 1000 group by ss order by sum(
 select avg(cint8) from aggfns where cfloat8 > 1000;
  avg 
 -----
-(0 rows)
+    
+(1 row)
 
 select s, avg(cint8) from aggfns where cfloat8 > 1000 group by s order by avg(cint8), s limit 10;
  s | avg 
@@ -7038,7 +7041,8 @@ select ss, min(cint8) from aggfns where cfloat8 > 1000 group by ss order by min(
 select sum(cint8) from aggfns where cfloat8 > 1000;
  sum 
 -----
-(0 rows)
+    
+(1 row)
 
 select s, sum(cint8) from aggfns where cfloat8 > 1000 group by s order by sum(cint8), s limit 10;
  s | sum 
@@ -7181,7 +7185,8 @@ select ss, min(s) from aggfns where cfloat8 > 1000 group by ss order by min(s), 
 select stddev(s) from aggfns where cfloat8 > 1000;
  stddev 
 --------
-(0 rows)
+       
+(1 row)
 
 select s, stddev(s) from aggfns where cfloat8 > 1000 group by s order by stddev(s), s limit 10;
  s | stddev 
@@ -7260,7 +7265,8 @@ select ss, min(ss) from aggfns where cfloat8 > 1000 group by ss order by min(ss)
 select stddev(ss) from aggfns where cfloat8 > 1000;
  stddev 
 --------
-(0 rows)
+       
+(1 row)
 
 select s, stddev(ss) from aggfns where cfloat8 > 1000 group by s order by stddev(ss), s limit 10;
  s | stddev 
