@@ -123,7 +123,7 @@ ORDER BY time, device_id;
 :PREFIX SELECT count(*) FROM :TEST_TABLE;
 
 -- test aggregate with GROUP BY
-explain (analyze, timing off, summary off) SELECT count(*) FROM :TEST_TABLE GROUP BY device_id ORDER BY device_id;
+:PREFIX SELECT count(*) FROM :TEST_TABLE GROUP BY device_id ORDER BY device_id;
 
 -- test window functions with GROUP BY
 :PREFIX SELECT sum(count(*)) OVER () FROM :TEST_TABLE GROUP BY device_id ORDER BY device_id;

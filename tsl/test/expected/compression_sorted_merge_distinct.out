@@ -3,6 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Test that the compressed batch sorted merge plan is chosen based on the
 -- cardinality of the segmentby columns.
+set max_parallel_workers_per_gather = 0;
 -- helper function: float -> pseudorandom float [0..1].
 create or replace function mix(x float4) returns float4 as $$ select ((hashfloat4(x) / (pow(2., 31) - 1) + 1) / 2)::float4 $$ language sql;
 create table t(ts timestamp, low_card int, high_card int, value float);
@@ -30,20 +31,14 @@ select count(compress_chunk(x, true)) from show_chunks('t') x;
 (1 row)
 
 analyze t;
-explain (analyze, timing off, summary off) select * from t order by ts;
-                                                                  QUERY PLAN                                                                   
------------------------------------------------------------------------------------------------------------------------------------------------
- Gather Merge  (cost=152820.15..294845.15 rows=1235000 width=24) (actual rows=840000 loops=1)
-   Workers Planned: 1
-   Workers Launched: 1
-   ->  Sort  (cost=151820.14..154907.64 rows=1235000 width=24) (actual rows=420000 loops=2)
-         Sort Key: _hyper_1_1_chunk.ts
-         Sort Method: external merge  Disk: 15128kB
-         Worker 0:  Sort Method: external merge  Disk: 12888kB
-         ->  Parallel Append  (cost=0.03..12388.35 rows=1235000 width=24) (actual rows=420000 loops=2)
-               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.03..12388.35 rows=1235000 width=24) (actual rows=420000 loops=2)
-                     ->  Parallel Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..38.35 rows=1235 width=92) (actual rows=1050 loops=2)
-(10 rows)
+explain (costs off) select * from t order by ts;
+                       QUERY PLAN                        
+---------------------------------------------------------
+ Sort
+   Sort Key: _hyper_1_1_chunk.ts
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Seq Scan on compress_hyper_2_2_chunk
+(4 rows)
 
 explain (costs off) select * from t where low_card = 1 order by ts;
                                                         QUERY PLAN                                                        
@@ -101,17 +96,14 @@ explain (costs off) select * from t where high_card < 10 order by ts;
 (5 rows)
 
 explain (costs off) select * from t where high_card < 500 order by ts;
-                              QUERY PLAN                               
------------------------------------------------------------------------
- Gather Merge
-   Workers Planned: 1
-   ->  Sort
-         Sort Key: _hyper_1_1_chunk.ts
-         ->  Parallel Append
-               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-                     ->  Parallel Seq Scan on compress_hyper_2_2_chunk
-                           Filter: (high_card < 500)
-(8 rows)
+                       QUERY PLAN                        
+---------------------------------------------------------
+ Sort
+   Sort Key: _hyper_1_1_chunk.ts
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Seq Scan on compress_hyper_2_2_chunk
+               Filter: (high_card < 500)
+(5 rows)
 
 -- Test that batch sorted merge respects the working memory limit.
 set work_mem to 64;
@@ -143,3 +135,4 @@ explain (costs off) select * from t where high_card < 10 order by ts;
 (5 rows)
 
 reset work_mem;
+reset max_parallel_workers_per_gather;
