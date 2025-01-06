@@ -690,22 +690,20 @@ JOIN LATERAL
     WHERE  node = f1.device_id) q
 ON met.device_id = q.node and met.device_id_peer = q.device_id_peer
    and met.v0 = q.v0 and met.v0 > 2 and time = '2018-01-19 20:00:00-05';
-                                                                                                                                QUERY PLAN                                                                                                                                
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                   QUERY PLAN                                                                                                                                   
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop (actual rows=1 loops=1)
-   Join Filter: (nodetime.node = met.device_id)
+   Join Filter: ("*VALUES*".column1 = nodetime.node)
    ->  Nested Loop (actual rows=1 loops=1)
-         Join Filter: (nodetime.node = "*VALUES*".column1)
-         Rows Removed by Join Filter: 1
-         ->  Seq Scan on nodetime (actual rows=1 loops=1)
          ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk met (actual rows=1 loops=1)
-         Filter: ("*VALUES*".column3 = v0)
-         Rows Removed by Filter: 47
-         Vectorized Filter: ((v0 > 2) AND ("time" = 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone))
-         ->  Index Scan using compress_hyper_2_9_chunk_device_id_device_id_peer__ts_meta__idx on compress_hyper_2_9_chunk (actual rows=1 loops=1)
-               Index Cond: ((device_id = "*VALUES*".column1) AND (device_id_peer = "*VALUES*".column2) AND (_ts_meta_min_1 <= 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone) AND (_ts_meta_max_1 >= 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone))
-(13 rows)
+         ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk met (actual rows=0 loops=2)
+               Filter: ("*VALUES*".column3 = v0)
+               Rows Removed by Filter: 24
+               Vectorized Filter: ((v0 > 2) AND ("time" = 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone))
+               ->  Index Scan using compress_hyper_2_9_chunk_device_id_device_id_peer__ts_meta__idx on compress_hyper_2_9_chunk (actual rows=0 loops=2)
+                     Index Cond: ((device_id = "*VALUES*".column1) AND (device_id_peer = "*VALUES*".column2) AND (_ts_meta_min_1 <= 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone) AND (_ts_meta_max_1 >= 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone))
+   ->  Seq Scan on nodetime (actual rows=1 loops=1)
+(11 rows)
 
 -- filter on compressed attr (v0) with seqscan enabled and indexscan
 -- disabled. filters on compressed attr should be above the seq scan.
@@ -841,24 +839,22 @@ GROUP BY m.device_id,
 ORDER BY 1,
     2,
     3;
-                                    QUERY PLAN                                    
-----------------------------------------------------------------------------------
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
  Sort (actual rows=0 loops=1)
    Sort Key: m.device_id, d.v0, (count(*))
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=0 loops=1)
          Group Key: m.device_id, d.v0
          Batches: 1 
-         ->  Hash Join (actual rows=0 loops=1)
-               Hash Cond: ((d.device_id = m.device_id) AND (d."time" = m."time"))
+         ->  Nested Loop (actual rows=0 loops=1)
                ->  Custom Scan (ConstraintAwareAppend) (actual rows=0 loops=1)
                      Hypertable: metrics_ordered_idx
                      Chunks excluded during startup: 2
-               ->  Hash (never executed)
-                     ->  Custom Scan (ConstraintAwareAppend) (never executed)
-                           Hypertable: metrics_ordered_idx
-                           Chunks excluded during startup: 2
-(15 rows)
+               ->  Custom Scan (ConstraintAwareAppend) (never executed)
+                     Hypertable: metrics_ordered_idx
+                     Chunks excluded during startup: 2
+(13 rows)
 
 --query with no results --
 :PREFIX
