@@ -62,8 +62,10 @@ static void create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compress
 										 const CompressionInfo *compression_info,
 										 const SortInfo *sort_info);
 
-static DecompressChunkPath *
-decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Path *compressed_path);
+static DecompressChunkPath *decompress_chunk_path_create(PlannerInfo *root,
+														 const CompressionInfo *info,
+														 int parallel_workers,
+														 Path *compressed_path);
 
 static void decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info,
 											 const Chunk *chunk, RelOptInfo *chunk_rel,
@@ -893,7 +895,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 		}
 
 		Path *chunk_path =
-			(Path *) decompress_chunk_path_create(root, compression_info, compressed_path);
+			(Path *) decompress_chunk_path_create(root, compression_info, 0, compressed_path);
 
 		/*
 		 * Create a path for the batch sorted merge optimization. This optimization performs a
@@ -1074,7 +1076,10 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 			 * If this is a partially compressed chunk we have to combine data
 			 * from compressed and uncompressed chunk.
 			 */
-			path = (Path *) decompress_chunk_path_create(root, compression_info, compressed_path);
+			path = (Path *) decompress_chunk_path_create(root,
+														 compression_info,
+														 compressed_path->parallel_workers,
+														 compressed_path);
 
 			if (consider_partial)
 			{
@@ -1785,7 +1790,8 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const
 }
 
 static DecompressChunkPath *
-decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Path *compressed_path)
+decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, int parallel_workers,
+							 Path *compressed_path)
 {
 	DecompressChunkPath *path;
 
@@ -1824,10 +1830,9 @@ decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Pat
 	 * in a parallel plan we only set parallel_safe to true
 	 * when parallel_workers is greater than 0 which is only
 	 * the case when creating partial paths. */
+	path->custom_path.path.parallel_safe = parallel_workers > 0;
+	path->custom_path.path.parallel_workers = parallel_workers;
 	path->custom_path.path.parallel_aware = false;
-	path->custom_path.path.parallel_safe =
-		info->chunk_rel->consider_parallel && compressed_path->parallel_safe;
-	path->custom_path.path.parallel_workers = compressed_path->parallel_workers;
 
 	path->custom_path.custom_paths = list_make1(compressed_path);
 	path->reverse = false;
