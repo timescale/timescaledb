@@ -54,11 +54,7 @@ select * from :chunk where ctid = :'ctid';
 ------------------------------------------------------
  Tid Scan on _hyper_1_1_chunk (actual rows=1 loops=1)
    TID Cond: (ctid = '(2147483650,1)'::tid)
- Array Cache Hits: 0
- Array Cache Misses: 0
- Array Cache Evictions: 0
- Array Decompressions: 0
-(6 rows)
+(2 rows)
 
 select * from :chunk where ctid = :'ctid';
              time             | location | device |       temp       |     humidity     
@@ -75,11 +71,7 @@ select * from :chunk where ctid = :'ctid';
 ------------------------------------------------------
  Tid Scan on _hyper_1_1_chunk (actual rows=1 loops=1)
    TID Cond: (ctid = '(0,1)'::tid)
- Array Cache Hits: 0
- Array Cache Misses: 0
- Array Cache Evictions: 0
- Array Decompressions: 0
-(6 rows)
+(2 rows)
 
 select * from :chunk where ctid = :'ctid';
              time             | location | device | temp | humidity 
@@ -123,11 +115,147 @@ select time, temp + humidity from readings where device between 5 and 10 and hum
                Index Cond: ((device >= 5) AND (device <= 10))
                Filter: (humidity > '5'::double precision)
                Rows Removed by Filter: 6
- Array Cache Hits: 0
- Array Cache Misses: 6
- Array Cache Evictions: 0
- Array Decompressions: 18
-(30 rows)
+ Array: cache misses=6, decompress count=18 calls=105
+(27 rows)
+
+-- Testing JSON format to make sure it works and to get coverage for
+-- those parts of the code.
+explain (analyze, costs off, timing off, summary off, decompress_cache_stats, format json)
+select time, temp + humidity from readings where device between 5 and 10 and humidity > 5;
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ [                                                                  +
+   {                                                                +
+     "Plan": {                                                      +
+       "Node Type": "Result",                                       +
+       "Parallel Aware": false,                                     +
+       "Async Capable": false,                                      +
+       "Actual Rows": 1624,                                         +
+       "Actual Loops": 1,                                           +
+       "Plans": [                                                   +
+         {                                                          +
+           "Node Type": "Append",                                   +
+           "Parent Relationship": "Outer",                          +
+           "Parallel Aware": false,                                 +
+           "Async Capable": false,                                  +
+           "Actual Rows": 1624,                                     +
+           "Actual Loops": 1,                                       +
+           "Subplans Removed": 0,                                   +
+           "Plans": [                                               +
+             {                                                      +
+               "Node Type": "Index Scan",                           +
+               "Parent Relationship": "Member",                     +
+               "Parallel Aware": false,                             +
+               "Async Capable": false,                              +
+               "Scan Direction": "Forward",                         +
+               "Index Name": "_hyper_1_1_chunk_readings_device_idx",+
+               "Relation Name": "_hyper_1_1_chunk",                 +
+               "Alias": "_hyper_1_1_chunk",                         +
+               "Actual Rows": 34,                                   +
+               "Actual Loops": 1,                                   +
+               "Index Cond": "((device >= 5) AND (device <= 10))",  +
+               "Rows Removed by Index Recheck": 0,                  +
+               "Filter": "(humidity > '5'::double precision)",      +
+               "Rows Removed by Filter": 1                          +
+             },                                                     +
+             {                                                      +
+               "Node Type": "Index Scan",                           +
+               "Parent Relationship": "Member",                     +
+               "Parallel Aware": false,                             +
+               "Async Capable": false,                              +
+               "Scan Direction": "Forward",                         +
+               "Index Name": "_hyper_1_2_chunk_readings_device_idx",+
+               "Relation Name": "_hyper_1_2_chunk",                 +
+               "Alias": "_hyper_1_2_chunk",                         +
+               "Actual Rows": 404,                                  +
+               "Actual Loops": 1,                                   +
+               "Index Cond": "((device >= 5) AND (device <= 10))",  +
+               "Rows Removed by Index Recheck": 0,                  +
+               "Filter": "(humidity > '5'::double precision)",      +
+               "Rows Removed by Filter": 17                         +
+             },                                                     +
+             {                                                      +
+               "Node Type": "Index Scan",                           +
+               "Parent Relationship": "Member",                     +
+               "Parallel Aware": false,                             +
+               "Async Capable": false,                              +
+               "Scan Direction": "Forward",                         +
+               "Index Name": "_hyper_1_3_chunk_readings_device_idx",+
+               "Relation Name": "_hyper_1_3_chunk",                 +
+               "Alias": "_hyper_1_3_chunk",                         +
+               "Actual Rows": 380,                                  +
+               "Actual Loops": 1,                                   +
+               "Index Cond": "((device >= 5) AND (device <= 10))",  +
+               "Rows Removed by Index Recheck": 0,                  +
+               "Filter": "(humidity > '5'::double precision)",      +
+               "Rows Removed by Filter": 23                         +
+             },                                                     +
+             {                                                      +
+               "Node Type": "Index Scan",                           +
+               "Parent Relationship": "Member",                     +
+               "Parallel Aware": false,                             +
+               "Async Capable": false,                              +
+               "Scan Direction": "Forward",                         +
+               "Index Name": "_hyper_1_4_chunk_readings_device_idx",+
+               "Relation Name": "_hyper_1_4_chunk",                 +
+               "Alias": "_hyper_1_4_chunk",                         +
+               "Actual Rows": 359,                                  +
+               "Actual Loops": 1,                                   +
+               "Index Cond": "((device >= 5) AND (device <= 10))",  +
+               "Rows Removed by Index Recheck": 0,                  +
+               "Filter": "(humidity > '5'::double precision)",      +
+               "Rows Removed by Filter": 18                         +
+             },                                                     +
+             {                                                      +
+               "Node Type": "Index Scan",                           +
+               "Parent Relationship": "Member",                     +
+               "Parallel Aware": false,                             +
+               "Async Capable": false,                              +
+               "Scan Direction": "Forward",                         +
+               "Index Name": "_hyper_1_5_chunk_readings_device_idx",+
+               "Relation Name": "_hyper_1_5_chunk",                 +
+               "Alias": "_hyper_1_5_chunk",                         +
+               "Actual Rows": 379,                                  +
+               "Actual Loops": 1,                                   +
+               "Index Cond": "((device >= 5) AND (device <= 10))",  +
+               "Rows Removed by Index Recheck": 0,                  +
+               "Filter": "(humidity > '5'::double precision)",      +
+               "Rows Removed by Filter": 16                         +
+             },                                                     +
+             {                                                      +
+               "Node Type": "Index Scan",                           +
+               "Parent Relationship": "Member",                     +
+               "Parallel Aware": false,                             +
+               "Async Capable": false,                              +
+               "Scan Direction": "Forward",                         +
+               "Index Name": "_hyper_1_6_chunk_readings_device_idx",+
+               "Relation Name": "_hyper_1_6_chunk",                 +
+               "Alias": "_hyper_1_6_chunk",                         +
+               "Actual Rows": 68,                                   +
+               "Actual Loops": 1,                                   +
+               "Index Cond": "((device >= 5) AND (device <= 10))",  +
+               "Rows Removed by Index Recheck": 0,                  +
+               "Filter": "(humidity > '5'::double precision)",      +
+               "Rows Removed by Filter": 6                          +
+             }                                                      +
+           ]                                                        +
+         }                                                          +
+       ]                                                            +
+     },                                                             +
+     "Triggers": [                                                  +
+     ]                                                              +
+   },                                                               +
+   "Arrow Array Cache": {                                           +
+     "hits": 0,                                                     +
+     "misses": 6,                                                   +
+     "evictions": 0                                                 +
+   },                                                               +
+   "Arrow Array Decompress": {                                      +
+     "count": 18,                                                   +
+     "calls": 105                                                   +
+   }                                                                +
+ ]
+(1 row)
 
 -- Check the explain cache information output.
 --
@@ -163,11 +291,8 @@ select time, temp + humidity from readings where device between 5 and 10 and hum
                Index Cond: ((device >= 5) AND (device <= 10))
                Filter: (humidity > '5'::double precision)
                Rows Removed by Filter: 6
- Array Cache Hits: 0
- Array Cache Misses: 6
- Array Cache Evictions: 0
- Array Decompressions: 18
-(30 rows)
+ Array: cache misses=6, decompress count=18 calls=105
+(27 rows)
 
 -- Check the explain cache information output. Query 1 and 3 should
 -- show the same explain plan, and the plan in the middle should not
@@ -178,11 +303,7 @@ select * from :chunk where device between 5 and 10;
 ----------------------------------------------------------------------------------------------------
  Index Scan using _hyper_1_1_chunk_readings_device_idx on _hyper_1_1_chunk (actual rows=35 loops=1)
    Index Cond: ((device >= 5) AND (device <= 10))
- Array Cache Hits: 0
- Array Cache Misses: 0
- Array Cache Evictions: 0
- Array Decompressions: 0
-(6 rows)
+(2 rows)
 
 explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
 select * from :chunk where device between 5 and 10;
@@ -190,11 +311,7 @@ select * from :chunk where device between 5 and 10;
 ----------------------------------------------------------------------------------------------------
  Index Scan using _hyper_1_1_chunk_readings_device_idx on _hyper_1_1_chunk (actual rows=35 loops=1)
    Index Cond: ((device >= 5) AND (device <= 10))
- Array Cache Hits: 0
- Array Cache Misses: 0
- Array Cache Evictions: 0
- Array Decompressions: 0
-(6 rows)
+(2 rows)
 
 -- Queries that will select just a few columns
 set max_parallel_workers_per_gather to 0;
@@ -215,11 +332,8 @@ select device, humidity from readings where device between 5 and 10;
          Index Cond: ((device >= 5) AND (device <= 10))
    ->  Index Scan using _hyper_1_6_chunk_readings_device_idx on _hyper_1_6_chunk (actual rows=74 loops=1)
          Index Cond: ((device >= 5) AND (device <= 10))
- Array Cache Hits: 0
- Array Cache Misses: 6
- Array Cache Evictions: 0
- Array Decompressions: 6
-(17 rows)
+ Array: cache misses=6, decompress count=6 calls=35
+(14 rows)
 
 explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
 select device, avg(humidity) from readings where device between 5 and 10
@@ -242,11 +356,8 @@ group by device;
                Index Cond: ((device >= 5) AND (device <= 10))
          ->  Index Scan using _hyper_1_6_chunk_readings_device_idx on _hyper_1_6_chunk (actual rows=74 loops=1)
                Index Cond: ((device >= 5) AND (device <= 10))
- Array Cache Hits: 0
- Array Cache Misses: 6
- Array Cache Evictions: 0
- Array Decompressions: 6
-(20 rows)
+ Array: cache misses=6, decompress count=6 calls=35
+(17 rows)
 
 -- Test on conflict: insert the same data as before, but throw away
 -- the updates.
@@ -266,11 +377,8 @@ on conflict (location, device, time) do nothing;
          ->  Custom Scan (ChunkDispatch) (actual rows=8641 loops=1)
                ->  Subquery Scan on "*SELECT*" (actual rows=8641 loops=1)
                      ->  Function Scan on generate_series t (actual rows=8641 loops=1)
- Array Cache Hits: 0
- Array Cache Misses: 2
- Array Cache Evictions: 0
- Array Decompressions: 4
-(13 rows)
+ Array: cache misses=2, decompress count=4 calls=4
+(10 rows)
 
 -- This should show values for all columns
 explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
@@ -299,11 +407,7 @@ select time, temp + humidity from readings where device between 5 and 10 and hum
                ->  Index Scan using _hyper_1_6_chunk_readings_device_idx on _hyper_1_6_chunk (never executed)
                      Index Cond: ((device >= 5) AND (device <= 10))
                      Filter: (humidity > '5'::double precision)
- Array Cache Hits: 0
- Array Cache Misses: 0
- Array Cache Evictions: 0
- Array Decompressions: 0
-(26 rows)
+(22 rows)
 
 select time, temp + humidity from readings where device between 5 and 10 and humidity > 5 limit 5;
              time             |     ?column?     
@@ -342,11 +446,8 @@ order by time desc;
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=88 loops=1)
          Vectorized Filter: (location = '1'::text)
          Rows Removed by Filter: 319
- Array Cache Hits: 0
- Array Cache Misses: 30
- Array Cache Evictions: 0
- Array Decompressions: 84
-(10 rows)
+ Array: cache misses=30, decompress count=84 calls=242
+(7 rows)
 
 --  Save the data for comparison with seqscan
 create temp table chunk_saved as
@@ -404,11 +505,7 @@ select count(*) from :chunk where device = 1;
  Aggregate (actual rows=1 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=17 loops=1)
          Scankey: (device = 1)
- Array Cache Hits: 0
- Array Cache Misses: 0
- Array Cache Evictions: 0
- Array Decompressions: 0
-(7 rows)
+(3 rows)
 
 explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
 select device from :chunk where device = 1;
@@ -416,11 +513,7 @@ select device from :chunk where device = 1;
 -------------------------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=17 loops=1)
    Scankey: (device = 1)
- Array Cache Hits: 0
- Array Cache Misses: 0
- Array Cache Evictions: 0
- Array Decompressions: 0
-(6 rows)
+(2 rows)
 
 -- Using a non-segmentby column will decompress that column
 explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
@@ -431,11 +524,8 @@ select count(*) from :chunk where location = 1::text;
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=89 loops=1)
          Vectorized Filter: (location = '1'::text)
          Rows Removed by Filter: 320
- Array Cache Hits: 0
- Array Cache Misses: 30
- Array Cache Evictions: 0
- Array Decompressions: 30
-(8 rows)
+ Array: cache misses=30, decompress count=30 calls=30
+(5 rows)
 
 -- Testing same thing with SeqScan. It still decompresses in the
 -- count(*) case, although it shouldn't have to. So, probably an
@@ -449,11 +539,8 @@ select count(*) from :chunk where device = 1;
    ->  Seq Scan on _hyper_1_1_chunk (actual rows=17 loops=1)
          Filter: (device = 1)
          Rows Removed by Filter: 392
- Array Cache Hits: 0
- Array Cache Misses: 30
- Array Cache Evictions: 0
- Array Decompressions: 62
-(8 rows)
+ Array: cache misses=30, decompress count=62 calls=410
+(5 rows)
 
 explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
 select device from :chunk where device = 1;
@@ -462,11 +549,7 @@ select device from :chunk where device = 1;
  Seq Scan on _hyper_1_1_chunk (actual rows=17 loops=1)
    Filter: (device = 1)
    Rows Removed by Filter: 392
- Array Cache Hits: 0
- Array Cache Misses: 0
- Array Cache Evictions: 0
- Array Decompressions: 0
-(7 rows)
+(3 rows)
 
 explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
 select count(*) from :chunk where location = 1::text;
@@ -476,11 +559,8 @@ select count(*) from :chunk where location = 1::text;
    ->  Seq Scan on _hyper_1_1_chunk (actual rows=89 loops=1)
          Filter: (location = '1'::text)
          Rows Removed by Filter: 320
- Array Cache Hits: 0
- Array Cache Misses: 30
- Array Cache Evictions: 0
- Array Decompressions: 62
-(8 rows)
+ Array: cache misses=30, decompress count=62 calls=410
+(5 rows)
 
 -- ColumnarScan declares itself as projection capable. This query
 -- would add a Result node on top if ColumnarScan couldn't project.

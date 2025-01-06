@@ -132,6 +132,9 @@ typedef struct CrossModuleFunctions
 	PGFunction decompress_chunk;
 	void (*decompress_batches_for_insert)(const ChunkInsertState *state, TupleTableSlot *slot);
 	bool (*decompress_target_segments)(HypertableModifyState *ht_state);
+	int (*hypercore_decompress_update_segment)(Relation relation, const ItemPointer ctid,
+											   TupleTableSlot *slot, Snapshot snapshot,
+											   ItemPointer new_tid);
 	/* The compression functions below are not installed in SQL as part of create extension;
 	 *  They are installed and tested during testing scripts. They are exposed in cross-module
 	 *  functions because they may be very useful for debugging customer problems if the sql

@@ -27,12 +27,6 @@ jobs:
         env:
           POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRESQL_PASSWORD: ci
-          REPMGR_PARTNER_NODES: pg-0
-          REPMGR_PRIMARY_HOST: localhost
-          REPMGR_NODE_NAME: pg-0
-          REPMGR_NODE_NETWORK_NAME: localhost
-          REPMGR_USERNAME: postgres
-          REPMGR_PASSWORD: ci
 
     env:
       PGHOST: localhost
@@ -47,16 +41,11 @@ jobs:
             "timescaledb:latest-pg15",
             "timescaledb:latest-pg16",
             "timescaledb:latest-pg17",
-            "timescaledb:latest-pg14-bitnami",
-            "timescaledb:latest-pg15-bitnami",
-            "timescaledb:latest-pg16-bitnami",
-            "timescaledb:latest-pg17-bitnami",
-            "timescaledb:latest-pg14-repmgr-bitnami",
-            "timescaledb:latest-pg15-repmgr-bitnami",
-            "timescaledb:latest-pg16-repmgr-bitnami",
             "timescaledb-ha:pg14",
             "timescaledb-ha:pg15",
             "timescaledb-ha:pg16",
+            "timescaledb-ha:pg17",
+            "timescaledb:latest-pg17-bitnami",
           ]
 
     steps:
