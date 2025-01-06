@@ -212,7 +212,13 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 										node->ss.ss_ScanTupleSlot->tts_tupleDescriptor);
 		}
 	}
-	/* Sort keys should only be present when batch sorted merge is used. */
+
+	/*
+	 * Sort keys should only be present at the level of this node when batch
+	 * sorted merge is used.
+	 * In other cases of sort pushdown, sorting is performed by the underlying
+	 * compressed scan.
+	 */
 	Assert(dcontext->batch_sorted_merge == true || list_length(chunk_state->sortinfo) == 0);
 
 	/*
