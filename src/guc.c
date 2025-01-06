@@ -39,6 +39,14 @@ ts_function_telemetry_on()
 	return ts_guc_telemetry_level > TELEMETRY_NO_FUNCTIONS;
 }
 
+static const struct config_enum_entry telemetry_level_options[] = {
+	{ "off", TELEMETRY_OFF, false },
+	{ "no_functions", TELEMETRY_NO_FUNCTIONS, false },
+	{ "basic", TELEMETRY_BASIC, false },
+	{ NULL, 0, false }
+};
+#endif
+
 bool
 ts_is_whitelisted_indexam(const char *amname)
 {
@@ -66,14 +74,6 @@ ts_is_whitelisted_indexam(const char *amname)
 	list_free(namelist);
 	return false;
 }
-
-static const struct config_enum_entry telemetry_level_options[] = {
-	{ "off", TELEMETRY_OFF, false },
-	{ "no_functions", TELEMETRY_NO_FUNCTIONS, false },
-	{ "basic", TELEMETRY_BASIC, false },
-	{ NULL, 0, false }
-};
-#endif
 
 /* Copied from contrib/auto_explain/auto_explain.c */
 static const struct config_enum_entry loglevel_options[] = {

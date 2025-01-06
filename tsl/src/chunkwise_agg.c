@@ -273,8 +273,8 @@ create_hashed_partial_agg_path(PlannerInfo *root, Path *path, PathTarget *target
 static void
 add_partially_aggregated_subpaths(PlannerInfo *root, PathTarget *input_target,
 								  PathTarget *partial_grouping_target, double d_num_groups,
-								  GroupPathExtraData *extra_data, bool can_sort, bool can_hash,
-								  Path *subpath, List **sorted_paths, List **hashed_paths)
+								  GroupPathExtraData *extra_data, Path *subpath,
+								  List **sorted_paths, List **hashed_paths)
 {
 	/* Translate targetlist for partition */
 	AppendRelInfo *appinfo = ts_get_appendrelinfo(root, subpath->parent->relid, false);
@@ -321,7 +321,7 @@ add_partially_aggregated_subpaths(PlannerInfo *root, PathTarget *input_target,
 			create_projection_path(root, subpath->parent, subpath, chunk_target_before_grouping);
 	}
 
-	if (can_sort)
+	if (extra_data->flags & GROUPING_CAN_USE_SORT)
 	{
 		AggPath *agg_path = create_sorted_partial_agg_path(root,
 														   subpath,
@@ -332,7 +332,7 @@ add_partially_aggregated_subpaths(PlannerInfo *root, PathTarget *input_target,
 		*sorted_paths = lappend(*sorted_paths, (Path *) agg_path);
 	}
 
-	if (can_hash)
+	if (extra_data->flags & GROUPING_CAN_USE_HASH)
 	{
 		AggPath *agg_path = create_hashed_partial_agg_path(root,
 														   subpath,
@@ -358,8 +358,7 @@ static void
 generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptInfo *input_rel,
 						   RelOptInfo *output_rel, RelOptInfo *partially_grouped_rel,
 						   PathTarget *grouping_target, PathTarget *partial_grouping_target,
-						   bool can_sort, bool can_hash, double d_num_groups,
-						   GroupPathExtraData *extra_data)
+						   double d_num_groups, GroupPathExtraData *extra_data)
 {
 	/* Get subpaths */
 	List *subpaths = NIL;
@@ -424,14 +423,12 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 												  partial_grouping_target,
 												  d_num_groups,
 												  extra_data,
-												  can_sort,
-												  can_hash,
 												  partially_compressed_path,
 												  &partially_compressed_sorted /* Result path */,
 												  &partially_compressed_hashed /* Result path */);
 			}
 
-			if (can_sort)
+			if (extra_data->flags & GROUPING_CAN_USE_SORT)
 			{
 				sorted_subpaths = lappend(sorted_subpaths,
 										  copy_append_like_path(root,
@@ -440,7 +437,7 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 																subpath->pathtarget));
 			}
 
-			if (can_hash)
+			if (extra_data->flags & GROUPING_CAN_USE_HASH)
 			{
 				hashed_subpaths = lappend(hashed_subpaths,
 										  copy_append_like_path(root,
@@ -456,8 +453,6 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 											  partial_grouping_target,
 											  d_num_groups,
 											  extra_data,
-											  can_sort,
-											  can_hash,
 											  subpath,
 											  &sorted_subpaths /* Result paths */,
 											  &hashed_subpaths /* Result paths */);
@@ -631,13 +626,6 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 	if (has_min_max_agg_path(output_rel))
 		return;
 
-	/* Is sorting possible ? */
-	bool can_sort = grouping_is_sortable(parse->groupClause);
-
-	/* Is hashing possible ? */
-	bool can_hash = parse->groupClause != NIL && grouping_is_hashable(parse->groupClause) &&
-					!ts_is_gapfill_path(linitial(output_rel->pathlist)) && enable_hashagg;
-
 	Assert(extra != NULL);
 	GroupPathExtraData *extra_data = (GroupPathExtraData *) extra;
 
@@ -717,8 +705,6 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 								   partially_grouped_rel,
 								   grouping_target,
 								   partial_grouping_target,
-								   can_sort,
-								   can_hash,
 								   d_num_groups,
 								   extra_data);
 	}
