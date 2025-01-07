@@ -4482,6 +4482,23 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 				 errmsg("ROW triggers with transition tables are not supported on hypertables")));
 	}
 
+	/*
+	 * We currently cannot support delete triggers with transition tables on
+	 * compressed tables that are not using hypercore table access method
+	 * since deleting a complete segment will not build a transition table for
+	 * the delete.
+	 */
+	if (stmt->transitionRels && TRIGGER_FOR_DELETE(tgtype) &&
+		TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht) && !ts_is_hypercore_am(ht->amoid))
+	{
+		ts_cache_release(hcache);
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("DELETE triggers with transition tables not supported"),
+				 errdetail("Compressed hypertables not using \"hypercore\" access method are not "
+						   "supported if the trigger use transition tables.")));
+	}
+
 	add_hypertable_to_process_args(args, ht);
 
 	/*
