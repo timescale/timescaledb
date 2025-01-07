@@ -51,6 +51,7 @@ typedef struct Hypertable
 	FormData_hypertable fd;
 	Oid main_table_relid;
 	Oid chunk_sizing_func;
+	Oid amoid;
 	Hyperspace *space;
 	SubspaceStore *chunk_cache;
 	ChunkRangeSpace *range_space;
