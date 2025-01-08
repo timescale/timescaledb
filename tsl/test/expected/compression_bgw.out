@@ -175,8 +175,8 @@ WHERE compression_status LIKE 'Compressed'
 ORDER BY chunk_name;
     chunk_name    | before_compression_total_bytes | after_compression_total_bytes 
 ------------------+--------------------------------+-------------------------------
- _hyper_3_5_chunk |                          24576 |                         24576
- _hyper_3_6_chunk |                          24576 |                         24576
+ _hyper_3_5_chunk |                          24576 |                         40960
+ _hyper_3_6_chunk |                          24576 |                         40960
 (2 rows)
 
 --integer tests
@@ -215,8 +215,8 @@ WHERE compression_status LIKE 'Compressed'
 ORDER BY chunk_name;
     chunk_name     | before_compression_total_bytes | after_compression_total_bytes 
 -------------------+--------------------------------+-------------------------------
- _hyper_5_12_chunk |                          24576 |                         24576
- _hyper_5_13_chunk |                          24576 |                         24576
+ _hyper_5_12_chunk |                          24576 |                         40960
+ _hyper_5_13_chunk |                          24576 |                         40960
 (2 rows)
 
 --bigint test
@@ -255,8 +255,8 @@ WHERE compression_status LIKE 'Compressed'
 ORDER BY chunk_name;
     chunk_name     | before_compression_total_bytes | after_compression_total_bytes 
 -------------------+--------------------------------+-------------------------------
- _hyper_7_19_chunk |                          24576 |                         24576
- _hyper_7_20_chunk |                          24576 |                         24576
+ _hyper_7_19_chunk |                          24576 |                         40960
+ _hyper_7_20_chunk |                          24576 |                         40960
 (2 rows)
 
 --TEST 8
