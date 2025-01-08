@@ -1051,6 +1051,15 @@ get_compressed_chunk_index_for_recompression(Chunk *uncompressed_chunk)
 
 	CompressionSettings *settings = ts_compression_settings_get(compressed_chunk->table_id);
 
+	int num_segmentby = ts_array_length(settings->fd.segmentby);
+
+	if (num_segmentby == 0)
+	{
+		table_close(compressed_chunk_rel, NoLock);
+		table_close(uncompressed_chunk_rel, NoLock);
+		return InvalidOid;
+	}
+
 	CatalogIndexState indstate = CatalogOpenIndexes(compressed_chunk_rel);
 	Oid index_oid = get_compressed_chunk_index(indstate, settings);
 	CatalogCloseIndexes(indstate);
