@@ -112,6 +112,13 @@ prev_ProcessUtility(ProcessUtilityArgs *args)
 		 args->queryEnv,
 		 args->dest,
 		 args->completion_tag);
+
+	/*
+	 * Reset the last_process_utility_context value that is saved at the
+	 * entrance of the TS ProcessUtility hook and can be used for transaction
+	 * checks inside refresh_cagg and other procedures.
+	 */
+	ts_process_utility_context_reset();
 }
 
 static void
@@ -5065,7 +5072,6 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string, bool
 	if (altering_timescaledb || !ts_extension_is_loaded_and_not_upgrading())
 	{
 		prev_ProcessUtility(&args);
-		ts_process_utility_context_reset();
 		return;
 	}
 
@@ -5090,8 +5096,6 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string, bool
 	 */
 	if (result == DDL_CONTINUE)
 		prev_ProcessUtility(&args);
-
-	ts_process_utility_context_reset();
 }
 
 static void
