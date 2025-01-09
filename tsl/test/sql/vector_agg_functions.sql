@@ -101,6 +101,10 @@ set timescaledb.debug_require_vector_agg = :'guc_value';
 --set timescaledb.enable_chunkwise_aggregation to off; set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'forbid';
 
 set max_parallel_workers_per_gather = 0;
+-- Disable sorting to force vectorized agg plans for min and max,
+-- which otherwise can produce a non-vectorized init-plan that does a
+-- sort with limit 1.
+set enable_sort = false;
 
 select
     format('%sselect %s%s(%s) from aggfns%s%s%s;',
