@@ -32,6 +32,12 @@ single_text_key_hashing_init(HashingStrategy *hashing)
 	hashing->umash_params = umash_key_hashing_init();
 }
 
+typedef struct BytesView
+{
+	const uint8 *data;
+	uint32 len;
+} BytesView;
+
 static BytesView
 get_bytes_view(CompressedColumnValues *column_values, int arrow_row)
 {
