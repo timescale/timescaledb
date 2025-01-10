@@ -2,8 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
--- debug
-select * from pg_settings where source = 'session' order by name;
+set max_parallel_workers_per_gather = 0;
 
 -- qual pushdown tests for decompresschunk ---
 -- Test qual pushdown with ints
