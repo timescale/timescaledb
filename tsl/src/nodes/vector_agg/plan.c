@@ -530,6 +530,7 @@ get_vectorized_grouping_type(Agg *agg, CustomScan *custom, List *resolved_target
 					break;
 			}
 		}
+#ifdef TS_USE_UMASH
 		else
 		{
 			Ensure(single_grouping_var->vartype == TEXTOID,
@@ -537,12 +538,17 @@ get_vectorized_grouping_type(Agg *agg, CustomScan *custom, List *resolved_target
 				   single_grouping_var->vartype);
 			return VAGT_HashSingleText;
 		}
+#endif
 	}
 
+#ifdef TS_USE_UMASH
 	/*
 	 * Use hashing of serialized keys when we have many grouping columns.
 	 */
 	return VAGT_HashSerialized;
+#else
+	return VAGT_Invalid;
+#endif
 }
 
 /*

@@ -34,8 +34,10 @@
 extern HashingStrategy single_fixed_2_strategy;
 extern HashingStrategy single_fixed_4_strategy;
 extern HashingStrategy single_fixed_8_strategy;
+#ifdef TS_USE_UMASH
 extern HashingStrategy single_text_strategy;
 extern HashingStrategy serialized_strategy;
+#endif
 
 static const GroupingPolicy grouping_policy_hash_functions;
 
@@ -70,12 +72,14 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 
 	switch (grouping_type)
 	{
+#ifdef TS_USE_UMASH
 		case VAGT_HashSerialized:
 			policy->hashing = serialized_strategy;
 			break;
 		case VAGT_HashSingleText:
 			policy->hashing = single_text_strategy;
 			break;
+#endif
 		case VAGT_HashSingleFixed8:
 			policy->hashing = single_fixed_8_strategy;
 			break;
