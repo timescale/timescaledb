@@ -18,6 +18,7 @@
 #include <catalog/pg_opfamily.h>
 #include <catalog/pg_trigger.h>
 #include <catalog/pg_type.h>
+#include <catalog/pg_type_d.h>
 #include <catalog/toasting.h>
 #include <commands/defrem.h>
 #include <commands/tablecmds.h>
@@ -31,6 +32,7 @@
 #include <storage/lmgr.h>
 #include <tcop/tcopprot.h>
 #include <utils/acl.h>
+#include <utils/array.h>
 #include <utils/builtins.h>
 #include <utils/datum.h>
 #include <utils/hsearch.h>
@@ -5157,4 +5159,15 @@ ts_chunk_drop_osm_chunk(PG_FUNCTION_ARGS)
 	ts_hypertable_update_status_osm(ht);
 	ts_cache_release(hcache);
 	PG_RETURN_BOOL(true);
+}
+
+TS_FUNCTION_INFO_V1(ts_merge_two_chunks);
+
+Datum
+ts_merge_two_chunks(PG_FUNCTION_ARGS)
+{
+	Datum chunks[2] = { PG_GETARG_DATUM(0), PG_GETARG_DATUM(1) };
+	ArrayType *chunk_array =
+		construct_array(chunks, 2, REGCLASSOID, sizeof(Oid), true, TYPALIGN_INT);
+	return DirectFunctionCall1(ts_cm_functions->merge_chunks, PointerGetDatum(chunk_array));
 }
