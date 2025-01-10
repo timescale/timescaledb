@@ -34,6 +34,9 @@
 extern HashingStrategy single_fixed_2_strategy;
 extern HashingStrategy single_fixed_4_strategy;
 extern HashingStrategy single_fixed_8_strategy;
+#ifdef TS_USE_UMASH
+extern HashingStrategy single_text_strategy;
+#endif
 
 static const GroupingPolicy grouping_policy_hash_functions;
 
@@ -68,6 +71,11 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 
 	switch (grouping_type)
 	{
+#ifdef TS_USE_UMASH
+		case VAGT_HashSingleText:
+			policy->hashing = single_text_strategy;
+			break;
+#endif
 		case VAGT_HashSingleFixed8:
 			policy->hashing = single_fixed_8_strategy;
 			break;
@@ -81,6 +89,8 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 			Ensure(false, "failed to determine the hashing strategy");
 			break;
 	}
+
+	policy->hashing.key_body_mctx = policy->agg_extra_mctx;
 
 	policy->hashing.init(&policy->hashing, policy);
 
@@ -97,6 +107,13 @@ gp_hash_reset(GroupingPolicy *obj)
 	policy->returning_results = false;
 
 	policy->hashing.reset(&policy->hashing);
+
+	/*
+	 * Have to reset this because it's in the key body context which is also
+	 * reset here.
+	 */
+	policy->tmp_key_storage = NULL;
+	policy->num_tmp_key_storage_bytes = 0;
 
 	policy->last_used_key_index = 0;
 

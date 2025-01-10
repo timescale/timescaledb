@@ -64,7 +64,8 @@ typedef enum
 	VAGT_Batch,
 	VAGT_HashSingleFixed2,
 	VAGT_HashSingleFixed4,
-	VAGT_HashSingleFixed8
+	VAGT_HashSingleFixed8,
+	VAGT_HashSingleText
 } VectorAggGroupingType;
 
 extern GroupingPolicy *create_grouping_policy_batch(int num_agg_defs, VectorAggDef *agg_defs,
