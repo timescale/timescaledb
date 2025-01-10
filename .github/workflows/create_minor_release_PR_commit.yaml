@@ -1,0 +1,32 @@
+name: Backport Bug Fixes
+on:
+  workflow_dispatch:
+
+# The workflow needs the permission to push branches
+permissions:
+  contents: write
+
+jobs:
+  create-minor-release-PR-commit:
+    name: Create minor release PR commit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install Linux Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install pip
+
+      - name: Install Python Dependencies
+        run: |
+          pip install PyGithub requests
+
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@v4
+
+      - name: Run the Backport Script
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        run: |
+          git remote --verbose
+          scripts/release/create_minor_release_PR_commit.sh
