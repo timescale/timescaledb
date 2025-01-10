@@ -441,7 +441,7 @@ select c.relname, a.amname from pg_class c
 inner join pg_am a ON (c.relam = a.oid)
 where c.oid = :'unique_chunk'::regclass;
 
-select _timescaledb_debug.is_compressed_tid(ctid), * from :unique_chunk order by time;
+select _timescaledb_debug.is_compressed_tid(ctid), * from :unique_chunk order by time, value;
 
 -- Unique index creation should work but fail on uniqueness check
 \set ON_ERROR_STOP 0
@@ -452,7 +452,7 @@ create unique index time_key on uniquetable (time);
 select compress_chunk(:'unique_chunk');
 
 -- Everything's compressed
-select _timescaledb_debug.is_compressed_tid(ctid), * from :unique_chunk order by time;
+select _timescaledb_debug.is_compressed_tid(ctid), * from :unique_chunk order by time, value;
 
 -- Unique index creation should still fail
 \set ON_ERROR_STOP 0

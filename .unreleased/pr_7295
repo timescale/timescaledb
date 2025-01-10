@@ -1,1 +1,1 @@
-Implements: #7295: Support ALTER TABLE SET ACCESS METHOD on hypertable.
+Implements: #7295: Support `alter table set access method` on hypertable.

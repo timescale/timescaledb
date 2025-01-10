@@ -1,1 +1,1 @@
-Fixes: #7426 Fix datetime parsing error in chunk constraint creation
+Fixes: #7426: Fix `datetime` parsing error in chunk constraint creation.

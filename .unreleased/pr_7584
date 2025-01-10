@@ -1,0 +1,1 @@
+Fixes: #7584 Fix NaN-handling for vectorized aggregation

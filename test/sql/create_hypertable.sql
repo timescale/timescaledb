@@ -666,3 +666,17 @@ SELECT FROM create_hypertable('test', 'time', create_default_indexes => FALSE, m
 -- only user indexes should be returned
 SELECT * FROM test.show_indexes('test') ORDER BY 1;
 SELECT * FROM show_chunks('test') ch, LATERAL test.show_indexes(ch) ORDER BY 1, 2;
+
+-- test creating a hypertable with a primary key where the partitioning column is not part of the primary key
+CREATE TABLE test_schema.partition_not_pk (id INT NOT NULL, device_id INT NOT NULL, time TIMESTAMPTZ NOT NULL, a TEXT NOT NULL, PRIMARY KEY (id));
+\set ON_ERROR_STOP 0
+select create_hypertable ('test_schema.partition_not_pk', 'time');
+\set ON_ERROR_STOP 1
+DROP TABLE test_schema.partition_not_pk;
+
+-- test creating a hypertable with a composite key where the partitioning column is not part of the composite key
+CREATE TABLE test_schema.partition_not_pk (id INT NOT NULL, device_id INT NOT NULL, time TIMESTAMPTZ NOT NULL, a TEXT NOT NULL, PRIMARY KEY (id, device_id));
+\set ON_ERROR_STOP 0
+select create_hypertable ('test_schema.partition_not_pk', 'time');
+\set ON_ERROR_STOP 1
+DROP TABLE test_schema.partition_not_pk;

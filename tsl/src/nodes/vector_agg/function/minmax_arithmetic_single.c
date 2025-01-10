@@ -26,8 +26,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 		 * Note that we have to properly handle NaNs and Infinities for floats.
 		 */
 		const bool do_replace =
-			new_value_ok && (unlikely(!outer_isvalid) || PREDICATE(outer_result, new_value) ||
-							 isnan((double) new_value));
+			new_value_ok && (unlikely(!outer_isvalid) || PREDICATE(outer_result, new_value));
 
 		outer_result = do_replace ? new_value : outer_result;
 		outer_isvalid = outer_isvalid || do_replace;
