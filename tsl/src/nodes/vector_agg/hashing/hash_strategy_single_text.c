@@ -91,7 +91,7 @@ single_text_key_hashing_get_key(BatchHashingParams params, int row, void *restri
 	DEBUG_PRINT("\n");
 
 	const struct umash_fp fp = umash_fprint(params.policy->hashing.umash_params,
-											/* seed = */ -1ull,
+											/* seed = */ ~0ULL,
 											output_key->data,
 											output_key->len);
 	*hash_table_key = umash_fingerprint_get_key(fp);
