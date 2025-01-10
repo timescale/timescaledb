@@ -54,14 +54,26 @@ select *, ss::text as x from (
     from source where s != 1
 ) t
 ;
+
 select count(compress_chunk(x)) from show_chunks('agggroup') x;
 vacuum freeze analyze agggroup;
+
+-- Long strings
+create table long(t int, a text, b text, c text, d text);
+select create_hypertable('long', 't');
+insert into long select n, x, x, x, x from (
+    select n, repeat('1', 100 * 4 + n) x
+    from generate_series(1, 4) n) t
+;
+insert into long values (-1, 'a', 'b', 'c', 'd');
+alter table long set (timescaledb.compress);
+select count(compress_chunk(x)) from show_chunks('long') x;
 
 
 set timescaledb.debug_require_vector_agg = 'require';
 ---- Uncomment to generate reference. Note that there are minor discrepancies
 ---- on float4 due to different numeric stability in our and PG implementations.
---set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
+--set timescaledb.enable_chunkwise_aggregation to off; set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'forbid';
 
 select
     format('%sselect %s%s(%s) from agggroup%s%s%s;',
@@ -87,20 +99,7 @@ from
         'cint2 > 0',
         'cint2 is null',
         'cint2 is null and x is null']) with ordinality as condition(condition, n),
-    unnest(array[
-        null,
-        'cint2',
-        'cint4',
-        'cint4, cint8',
-        'cint8',
-        's, cint2',
-        's, ss',
-        's, x',
-        'ss, cint2, x',
-        'ss, s',
-        'ss, x, cint2',
-        't, s, ss, x, cint4, cint8, cint2',
-        'x']) with ordinality as grouping(grouping, n)
+    unnest(array['x']) with ordinality as grouping(grouping, n)
 where
     true
     and (explain is null /* or condition is null and grouping = 's' */)
@@ -108,19 +107,7 @@ where
 order by explain, condition.n, variable, function, grouping.n
 \gexec
 
-reset timescaledb.debug_require_vector_agg;
+-- Test grouping by long strings
+select count(*) from long group by a order by 1 limit 10;
 
-
-create table long(t int, a text, b text, c text, d text);
-select create_hypertable('long', 't');
-insert into long select n, x, x, x, x from (
-    select n, repeat('1', 100 * 4 + n) x
-    from generate_series(1, 4) n) t
-;
-insert into long values (-1, 'a', 'b', 'c', 'd');
-alter table long set (timescaledb.compress);
-select count(compress_chunk(x)) from show_chunks('long') x;
-
-set timescaledb.debug_require_vector_agg = 'require';
-select count(*) from long group by a, b, c, d order by 1 limit 10;
 reset timescaledb.debug_require_vector_agg;

@@ -108,13 +108,6 @@ gp_hash_reset(GroupingPolicy *obj)
 
 	policy->hashing.reset(&policy->hashing);
 
-	/*
-	 * Have to reset this because it's in the key body context which is also
-	 * reset here.
-	 */
-	policy->tmp_key_storage = NULL;
-	policy->num_tmp_key_storage_bytes = 0;
-
 	policy->last_used_key_index = 0;
 
 	policy->stat_input_valid_rows = 0;
