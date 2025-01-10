@@ -331,7 +331,7 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 	/*
 	 * Add the batch rows to aggregate function states.
 	 */
-	const uint64_t *restrict filter = batch_state->vector_qual_result;
+	const uint64 *restrict filter = batch_state->vector_qual_result;
 	if (filter == NULL)
 	{
 		/*

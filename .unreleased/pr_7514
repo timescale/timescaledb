@@ -1,1 +1,1 @@
-Fixes: #7514 Fix error: invalid child of chunk append
+Fixes: #7514: Fix the error: `invalid child of chunk append`.

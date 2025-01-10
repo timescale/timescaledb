@@ -116,6 +116,10 @@ set timescaledb.debug_require_vector_agg = :'guc_value';
 ---- on float4 due to different numeric stability in our and PG implementations.
 --set timescaledb.enable_chunkwise_aggregation to off; set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'forbid';
 set max_parallel_workers_per_gather = 0;
+-- Disable sorting to force vectorized agg plans for min and max,
+-- which otherwise can produce a non-vectorized init-plan that does a
+-- sort with limit 1.
+set enable_sort = false;
 select
     format('%sselect %s%s(%s) from aggfns%s%s%s;',
             explain,
@@ -378,13 +382,13 @@ select ss, min(cfloat4) from aggfns group by ss order by min(cfloat4), ss limit 
   3 | -Infinity
   4 |  -49.9999
   6 |  -49.9995
+ 11 |  -49.9991
   7 |  -49.9984
   8 |  -49.9969
   0 |  -49.9949
   5 |  -49.9942
   9 |  -49.9911
     |  -45.4083
- 11 |       NaN
 (10 rows)
 
 select stddev(cfloat4) from aggfns;
@@ -1997,6 +2001,7 @@ select ss, min(cfloat4) from aggfns where cfloat8 > 0 group by ss order by min(c
 ----+-----------
   3 | -Infinity
   4 |  -49.9993
+ 11 |  -49.9974
   8 |  -49.9969
   7 |  -49.9969
   0 |  -49.9915
@@ -2004,7 +2009,6 @@ select ss, min(cfloat4) from aggfns where cfloat8 > 0 group by ss order by min(c
   5 |  -49.9892
   6 |  -49.9891
     |  -41.6131
- 11 |       NaN
 (10 rows)
 
 select stddev(cfloat4) from aggfns where cfloat8 > 0;
@@ -5193,13 +5197,13 @@ select ss, min(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by mi
   3 | -Infinity
   4 |  -49.9999
   6 |  -49.9995
+ 11 |  -49.9991
   7 |  -49.9984
   8 |  -49.9969
   0 |  -49.9949
   5 |  -49.9942
   9 |  -49.9911
     |  -45.4083
- 11 |       NaN
 (10 rows)
 
 select stddev(cfloat4) from aggfns where cfloat8 < 1000;

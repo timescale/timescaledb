@@ -270,7 +270,7 @@ ts_bgw_job_stat_history_mark_end(BgwJob *job, JobResult result, Jsonb *edata)
 										  bgw_job_stat_history_tuple_mark_end,
 										  NULL,
 										  &context,
-										  ShareRowExclusiveLock))
+										  RowExclusiveLock))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("unable to find job history " INT64_FORMAT, new_job->job_history.id)));

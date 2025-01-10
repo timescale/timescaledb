@@ -1,1 +1,1 @@
-Implements: #7271 Push down ORDER BY in real time continuous aggregate queries
+Implements: #7271: Push down `order by` in real-time continuous aggregate queries.
