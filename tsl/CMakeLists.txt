@@ -14,11 +14,14 @@ if(CC_PCLMUL)
   set(CMAKE_REQUIRED_FLAGS -mpclmul)
 endif()
 
+# Detect if we have the needed instructions.
+# Also refer to this link for the proper way of detecting i386:
+# https://wiki.debian.org/X32Port
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 check_c_source_compiles(
   "
 #if !defined(__PCLMUL__) && !defined(__ARM_FEATURE_CRYPTO) \
-    && !(defined(__aarch64__) || defined(__x86_64__))
+    && !(defined(__aarch64__) || (defined(__x86_64__) && !defined(__ILP32__)))
 #error Unsupported platform for UMASH
 #endif
 "
