@@ -16,9 +16,13 @@ endif()
 
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 check_c_source_compiles(
-  "#if !defined(__PCLMUL__) && !defined(__ARM_FEATURE_CRYPTO)
+  "
+#if !defined(__PCLMUL__) && !defined(__ARM_FEATURE_CRYPTO) \
+    && !(defined(__aarch64__) || defined(__x86_64__))
 #error Unsupported platform for UMASH
-#endif" UMASH_SUPPORTED)
+#endif
+"
+  UMASH_SUPPORTED)
 unset(CMAKE_REQUIRED_FLAGS)
 unset(CMAKE_TRY_COMPILE_TARGET_TYPE)
 
