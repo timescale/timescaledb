@@ -505,6 +505,10 @@ get_vectorized_grouping_type(Agg *agg, CustomScan *custom, List *resolved_target
 	/*
 	 * We support hashed vectorized grouping by one fixed-size by-value
 	 * compressed column.
+	 * We can use our hash table for GroupAggregate as well, because it preserves
+	 * the input order of the keys.
+	 * FIXME write a test for that.
+	 * FIXME rewrite to use num_grouping_columns
 	 */
 	if (num_grouping_columns == 1)
 	{
@@ -526,6 +530,15 @@ get_vectorized_grouping_type(Agg *agg, CustomScan *custom, List *resolved_target
 					break;
 			}
 		}
+#ifdef TS_USE_UMASH
+		else
+		{
+			Ensure(single_grouping_var->vartype == TEXTOID,
+				   "invalid vector type %d for grouping",
+				   single_grouping_var->vartype);
+			return VAGT_HashSingleText;
+		}
+#endif
 	}
 
 	return VAGT_Invalid;
