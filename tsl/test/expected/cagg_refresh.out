@@ -223,6 +223,47 @@ psql:include/cagg_refresh_common.sql:105: ERROR:  invalid time argument type "te
 CALL refresh_continuous_aggregate('daily_temp', 0, '2020-05-01');
 psql:include/cagg_refresh_common.sql:106: ERROR:  invalid time argument type "integer"
 \set ON_ERROR_STOP 1
+-- Test forceful refreshment. Here we simulate the situation that we've seen
+-- with tiered data when `timescaledb.enable_tiered_reads` were disabled on the
+-- server level. In that case we would not see materialized tiered data and
+-- we wouldn't be able to re-materialize the data using a normal refresh call
+-- because it would skip previously materialized ranges, but it should be
+-- possible with `force=>true` parameter. To simulate this use-case we clear
+-- the materialization hypertable and forefully re-materialize it.
+SELECT ht.schema_name || '.' || ht.table_name AS mat_ht, mat_hypertable_id FROM _timescaledb_catalog.continuous_agg cagg
+JOIN _timescaledb_catalog.hypertable ht ON cagg.mat_hypertable_id = ht.id
+WHERE user_view_name = 'daily_temp' \gset
+-- Delete the data from the materialization hypertable
+DELETE FROM :mat_ht;
+-- Run regular refresh, it should not touch previously materialized range
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-02', '2020-05-05 17:00');
+psql:include/cagg_refresh_common.sql:124: NOTICE:  continuous aggregate "daily_temp" is already up-to-date
+SELECT * FROM daily_temp
+ORDER BY day DESC, device;
+ day | device | avg_temp 
+-----+--------+----------
+(0 rows)
+
+-- Run it again with force=>true, the data should be rematerialized
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-02', '2020-05-05 17:00', force=>true);
+SELECT * FROM daily_temp
+ORDER BY day DESC, device;
+             day              | device |     avg_temp     
+------------------------------+--------+------------------
+ Mon May 04 17:00:00 2020 PDT |      0 | 19.3846153846154
+ Mon May 04 17:00:00 2020 PDT |      1 | 16.5555555555556
+ Mon May 04 17:00:00 2020 PDT |      2 | 18.5714285714286
+ Mon May 04 17:00:00 2020 PDT |      3 | 23.5714285714286
+ Sun May 03 17:00:00 2020 PDT |      0 | 15.7647058823529
+ Sun May 03 17:00:00 2020 PDT |      1 | 24.3142857142857
+ Sun May 03 17:00:00 2020 PDT |      2 | 14.8205128205128
+ Sun May 03 17:00:00 2020 PDT |      3 | 18.1111111111111
+ Sat May 02 17:00:00 2020 PDT |      0 |               17
+ Sat May 02 17:00:00 2020 PDT |      1 |            18.75
+ Sat May 02 17:00:00 2020 PDT |      2 |               20
+ Sat May 02 17:00:00 2020 PDT |      3 | 21.5217391304348
+(12 rows)
+
 -- Test different time types
 CREATE TABLE conditions_date (time date NOT NULL, device int, temp float);
 SELECT create_hypertable('conditions_date', 'time');
@@ -268,7 +309,7 @@ AS
 SELECT time_bucket(SMALLINT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_smallint c
 GROUP BY 1,2 WITH NO DATA;
-psql:include/cagg_refresh_common.sql:150: ERROR:  custom time function required on hypertable "conditions_smallint"
+psql:include/cagg_refresh_common.sql:173: ERROR:  custom time function required on hypertable "conditions_smallint"
 \set ON_ERROR_STOP 1
 SELECT set_integer_now_func('conditions_smallint', 'smallint_now');
  set_integer_now_func 
@@ -423,7 +464,7 @@ AS
 SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions
 GROUP BY 1,2 WITH DATA;
-psql:include/cagg_refresh_common.sql:255: NOTICE:  refreshing continuous aggregate "weekly_temp_with_data"
+psql:include/cagg_refresh_common.sql:278: NOTICE:  refreshing continuous aggregate "weekly_temp_with_data"
 SELECT * FROM weekly_temp_without_data;
  day | device | avg_temp 
 -----+--------+----------
@@ -445,7 +486,7 @@ SELECT * FROM weekly_temp_with_data ORDER BY 1,2;
 \set ON_ERROR_STOP 0
 -- REFRESH MATERIALIZED VIEW is blocked on continuous aggregates
 REFRESH MATERIALIZED VIEW weekly_temp_without_data;
-psql:include/cagg_refresh_common.sql:262: ERROR:  operation not supported on continuous aggregate
+psql:include/cagg_refresh_common.sql:285: ERROR:  operation not supported on continuous aggregate
 -- These should fail since we do not allow refreshing inside a
 -- transaction, not even as part of CREATE MATERIALIZED VIEW.
 DO LANGUAGE PLPGSQL $$ BEGIN
@@ -457,7 +498,7 @@ SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions
 GROUP BY 1,2 WITH DATA;
 END $$;
-psql:include/cagg_refresh_common.sql:274: ERROR:  CREATE MATERIALIZED VIEW ... WITH DATA cannot be executed from a function
+psql:include/cagg_refresh_common.sql:297: ERROR:  CREATE MATERIALIZED VIEW ... WITH DATA cannot be executed from a function
 BEGIN;
 CREATE MATERIALIZED VIEW weekly_conditions
 WITH (timescaledb.continuous,
@@ -466,7 +507,7 @@ AS
 SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions
 GROUP BY 1,2 WITH DATA;
-psql:include/cagg_refresh_common.sql:283: ERROR:  CREATE MATERIALIZED VIEW ... WITH DATA cannot run inside a transaction block
+psql:include/cagg_refresh_common.sql:306: ERROR:  CREATE MATERIALIZED VIEW ... WITH DATA cannot run inside a transaction block
 COMMIT;
 \set ON_ERROR_STOP 1
 -- This should not fail since we do not refresh the continuous

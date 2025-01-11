@@ -114,3 +114,14 @@ CREATE FUNCTION @extschema@.hypertable_columnstore_stats (hypertable REGCLASS)
     STABLE STRICT
     AS 'SELECT * FROM @extschema@.hypertable_compression_stats($1)'
     SET search_path TO pg_catalog, pg_temp;
+
+-- Recreate `refresh_continuous_aggregate` procedure to add `force` argument
+DROP PROCEDURE IF EXISTS @extschema@.refresh_continuous_aggregate (continuous_aggregate REGCLASS, window_start "any", window_end "any");
+
+CREATE PROCEDURE @extschema@.refresh_continuous_aggregate(
+    continuous_aggregate     REGCLASS,
+    window_start             "any",
+    window_end               "any",
+    force                    BOOLEAN = FALSE
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
+
