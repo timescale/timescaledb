@@ -385,10 +385,57 @@ SELECT count(*) FROM ONLY :CHUNK;
 
 INSERT INTO comp_conflicts_4 VALUES ('2020-01-01 0:00:01','d1',0.1) ON CONFLICT DO NOTHING;
 INSERT INTO comp_conflicts_4 VALUES ('2020-01-01 0:30:00','d1',0.1) ON CONFLICT DO NOTHING;
-
 -- data should have move into uncompressed chunk for conflict check
 -- 2 segments (count = 2000)
 SELECT count(*) FROM ONLY :CHUNK;
+
+-- test conflict handling on compressed hypertables with unique constraints
+set timescaledb.debug_compression_path_info to on;
+-- test 5: multi-column primary key with partial segmentby coverage
+-- we should be using the index scan in every conflict resolution case
+CREATE TABLE comp_conflicts_5(time timestamptz NOT NULL, device text, label text DEFAULT 'label', value float, UNIQUE(time, label));
+
+SELECT table_name FROM create_hypertable('comp_conflicts_5','time');
+ALTER TABLE comp_conflicts_5 SET (timescaledb.compress,timescaledb.compress_segmentby='device, label');
+
+-- implicitly create chunk
+INSERT INTO comp_conflicts_5 VALUES ('2020-01-01','d1', 'label1', 0.1);
+INSERT INTO comp_conflicts_5 VALUES ('2020-01-01','d2', 'label2', 0.2);
+INSERT INTO comp_conflicts_5 VALUES ('2020-01-01',NULL, 'label3', 0.3);
+
+SELECT compress_chunk(c) AS "CHUNK" FROM show_chunks('comp_conflicts_5') c
+\gset
+
+-- after compression no data should be in uncompressed chunk
+SELECT count(*) FROM ONLY :CHUNK;
+
+-- should fail due to multiple entries with same time, device value
+\set ON_ERROR_STOP 0
+INSERT INTO comp_conflicts_5 VALUES ('2020-01-01','d1', 'label1', 0.1);
+INSERT INTO comp_conflicts_5 VALUES ('2020-01-01','d2', 'label2', 0.2);
+INSERT INTO comp_conflicts_5 VALUES
+('2020-01-01','d1', 'label', 0.1),
+('2020-01-01','d2', 'label', 0.2),
+('2020-01-01','d3', 'label', 0.3);
+-- should work the same without the index present
+BEGIN;
+  DROP INDEX _timescaledb_internal.compress_hyper_10_10_chunk_device_label__ts_meta_min_1__ts__idx;
+  INSERT INTO comp_conflicts_5 VALUES ('2020-01-01','d1', 'label1', 0.1);
+ROLLBACK;
+BEGIN;
+  DROP INDEX _timescaledb_internal.compress_hyper_10_10_chunk_device_label__ts_meta_min_1__ts__idx;
+  INSERT INTO comp_conflicts_5 VALUES ('2020-01-01','d2', 'label2', 0.2);
+ROLLBACK;
+BEGIN;
+  DROP INDEX _timescaledb_internal.compress_hyper_10_10_chunk_device_label__ts_meta_min_1__ts__idx;
+  INSERT INTO comp_conflicts_5 VALUES
+  ('2020-01-01','d1', 'label1', 0.1),
+  ('2020-01-01','d2', 'label2', 0.2),
+  ('2020-01-01','d3', 'label3', 0.3);
+ROLLBACK;
+\set ON_ERROR_STOP 1
+reset timescaledb.debug_compression_path_info;
+
 
 CREATE OR REPLACE VIEW compressed_chunk_info_view AS
 SELECT
