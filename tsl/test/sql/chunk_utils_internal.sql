@@ -419,6 +419,59 @@ SET timescaledb.enable_tiered_reads=true;
 :EXPLAIN SELECT * from ht_try WHERE timec > '2022-01-01 01:00';
 :EXPLAIN SELECT * from ht_try WHERE timec < '2023-01-01 01:00';
 
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE USER MAPPING FOR :ROLE_SUPERUSER SERVER s3_server
+OPTIONS (user :'ROLE_SUPERUSER', password_required 'false');
+
+CREATE FUNCTION create_test_cagg(enable_tiered_reads JSONB)
+RETURNS INTEGER AS
+$$
+DECLARE
+	job_id INTEGER;
+BEGIN
+	CREATE MATERIALIZED VIEW ht_try_weekly
+	WITH (timescaledb.continuous) AS
+	SELECT time_bucket(interval '1 week', timec) AS ts_bucket, avg(value)
+	FROM ht_try
+	GROUP BY 1
+	WITH NO DATA;
+
+	-- SELECT * FROM ht_try_weekly;
+	-- SHOW timescaledb.enable_tiered_reads;
+
+	job_id := add_continuous_aggregate_policy(
+		'ht_try_weekly',
+		start_offset => NULL,
+		end_offset => INTERVAL '1 hour',
+		schedule_interval => INTERVAL '1 hour'
+	);
+
+	UPDATE _timescaledb_config.bgw_job
+	SET config = jsonb_insert(config, '{enable_tiered_reads}'::TEXT[], enable_tiered_reads)
+	WHERE id = job_id;
+
+	RETURN job_id;
+END
+$$ LANGUAGE plpgsql;
+
+SELECT create_test_cagg('true') AS job_id \gset
+CALL run_job(:job_id);
+SELECT * FROM ht_try_weekly;
+DROP MATERIALIZED VIEW ht_try_weekly;
+
+SELECT create_test_cagg('false') AS job_id \gset
+CALL run_job(:job_id);
+SELECT * FROM ht_try_weekly;
+DROP MATERIALIZED VIEW ht_try_weekly;
+
+-- default behavior: use instance-wide GUC value
+SELECT create_test_cagg('null') AS job_id \gset
+CALL run_job(:job_id);
+SELECT * FROM ht_try_weekly;
+DROP MATERIALIZED VIEW ht_try_weekly;
+
+\c :TEST_DBNAME :ROLE_4;
+
 -- This test verifies that a bugfix regarding the way `ROWID_VAR`s are adjusted
 -- in the chunks' targetlists on DELETE/UPDATE works (including partially
 -- compressed chunks)

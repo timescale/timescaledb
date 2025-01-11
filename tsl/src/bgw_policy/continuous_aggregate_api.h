@@ -20,6 +20,7 @@ int64 policy_refresh_cagg_get_refresh_start(const ContinuousAgg *cagg, const Dim
 											const Jsonb *config, bool *start_isnull);
 int64 policy_refresh_cagg_get_refresh_end(const Dimension *dim, const Jsonb *config,
 										  bool *end_isnull);
+bool policy_refresh_cagg_get_enable_tiered_reads(const Jsonb *config, bool *isnull);
 bool policy_refresh_cagg_refresh_start_lt(int32 materialization_id, Oid cmp_type,
 										  Datum cmp_interval);
 bool policy_refresh_cagg_exists(int32 materialization_id);

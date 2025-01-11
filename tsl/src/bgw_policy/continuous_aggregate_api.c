@@ -136,6 +136,16 @@ policy_refresh_cagg_get_refresh_end(const Dimension *dim, const Jsonb *config, b
 	return res;
 }
 
+bool
+policy_refresh_cagg_get_enable_tiered_reads(const Jsonb *config, bool *isnull)
+{
+	bool found;
+	bool res = ts_jsonb_get_bool_field(config, POL_REFRESH_CONF_KEY_ENABLE_TIERED_READS, &found);
+
+	*isnull = !found;
+	return res;
+}
+
 /* returns false if a policy could not be found */
 bool
 policy_refresh_cagg_exists(int32 materialization_id)
