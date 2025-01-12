@@ -7,4 +7,12 @@
 
 #include <postgres.h>
 
+#include "hypertable.h"
+
 extern Expr *ts_sort_transform_expr(Expr *expr);
+
+extern List *ts_sort_transform_get_pathkeys(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte,
+											Hypertable *ht);
+
+extern void ts_sort_transform_replace_pathkeys(void *node, List *transformed_pathkeys,
+											   List *original_pathkeys);
