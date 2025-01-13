@@ -759,7 +759,7 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *path, Pat
 	 * startup cost that is quadratic in the current chunk index, which
 	 * hopefully should be a good enough replacement.
 	 */
-	const int parent_relindex = bms_first_member(chunk_rel->top_parent_relids);
+	const int parent_relindex = bms_next_member(chunk_rel->top_parent_relids, -1);
 	if (parent_relindex)
 	{
 		const int chunk_index = chunk_rel->relid - parent_relindex;
