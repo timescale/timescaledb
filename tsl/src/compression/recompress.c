@@ -13,6 +13,7 @@
 #include <utils/typcache.h>
 
 #include "compression.h"
+#include "compression_dml.h"
 #include "create.h"
 #include "guc.h"
 #include "hypercore/hypercore_handler.h"
@@ -517,20 +518,6 @@ update_orderby_scankeys(TupleTableSlot *uncompressed_slot, CompressedSegmentInfo
 	}
 }
 
-static bool
-slot_key_test(TupleTableSlot *compressed_slot, ScanKey key)
-{
-	Datum val;
-	bool is_null;
-	val = slot_getattr(compressed_slot, key->sk_attno, &is_null);
-
-	/* NULL values only match the value is NULL */
-	if (key->sk_flags & SK_ISNULL)
-		return is_null;
-
-	return DatumGetBool(FunctionCall2Coll(&key->sk_func, key->sk_collation, val, key->sk_argument));
-}
-
 static enum Batch_match_result
 handle_null_scan(int key_flags, bool nulls_first, enum Batch_match_result result)
 {
@@ -685,7 +672,8 @@ create_segmentby_scankeys(CompressionSettings *settings, Relation index_rel,
 	{
 		AttrNumber idx_attnum = AttrOffsetGetAttrNumber(i);
 		AttrNumber in_attnum = index_rel->rd_index->indkey.values[i];
-		const NameData *attname = attnumAttName(compressed_chunk_rel, in_attnum);
+		const NameData PG_USED_FOR_ASSERTS_ONLY *attname =
+			attnumAttName(compressed_chunk_rel, in_attnum);
 		Assert(strcmp(NameStr(*attname),
 					  ts_array_get_element_text(settings->fd.segmentby, i + 1)) == 0);
 

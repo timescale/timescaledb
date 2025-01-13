@@ -24,6 +24,7 @@ sys.dont_write_bytecode = True
 
 import json
 import os
+import random
 import subprocess
 from ci_settings import (
     PG14_EARLIEST,
@@ -51,6 +52,16 @@ default_ignored_tests = {
     "bgw_db_scheduler_fixed",
     "telemetry",
     "memoize",
+}
+
+# Tests that we do not run as part of a Flake tests
+flaky_exclude_tests = {
+    # Not executed as a flake test since it easily exhausts available
+    # background worker slots.
+    "bgw_launcher",
+    # Not executed as a flake test since it takes a very long time and
+    # easily interferes with other tests.
+    "bgw_scheduler_restart",
 }
 
 
@@ -93,7 +104,6 @@ def build_debug_config(overrides):
 # builds. This will capture some cases where warnings are generated
 # for release builds but not for debug builds.
 def build_release_config(overrides):
-    base_config = build_debug_config({})
     release_config = dict(
         {
             "name": "Release",
@@ -102,26 +112,24 @@ def build_release_config(overrides):
             "coverage": False,
         }
     )
-    base_config.update(release_config)
-    base_config.update(overrides)
-    return base_config
+    release_config.update(overrides)
+    return build_debug_config(release_config)
 
 
 def build_without_telemetry(overrides):
-    config = build_release_config({})
-    config.update(
+    config = dict(
         {
             "name": "ReleaseWithoutTelemetry",
-            "tsdb_build_args": config["tsdb_build_args"] + " -DUSE_TELEMETRY=OFF",
             "coverage": False,
         }
     )
     config.update(overrides)
+    config = build_release_config(config)
+    config["tsdb_build_args"] += " -DUSE_TELEMETRY=OFF"
     return config
 
 
 def build_apache_config(overrides):
-    base_config = build_debug_config({})
     apache_config = dict(
         {
             "name": "ApacheOnly",
@@ -130,9 +138,8 @@ def build_apache_config(overrides):
             "coverage": False,
         }
     )
-    base_config.update(apache_config)
-    base_config.update(overrides)
-    return base_config
+    apache_config.update(overrides)
+    return build_debug_config(apache_config)
 
 
 def macos_config(overrides):
@@ -309,11 +316,14 @@ elif len(sys.argv) > 2:
             sys.exit(1)
 
     if tests:
+        to_run = [t for t in list(tests) if t not in flaky_exclude_tests] * 20
+        random.shuffle(to_run)
+        installcheck_args = f'TESTS="{" ".join(to_run)}"'
         m["include"].append(
             build_debug_config(
                 {
                     "coverage": False,
-                    "installcheck_args": f'TESTS="{" ".join(list(tests) * 20)}"',
+                    "installcheck_args": installcheck_args,
                     "name": "Flaky Check Debug",
                     "pg": PG16_LATEST,
                     "pginstallcheck": False,
@@ -324,7 +334,7 @@ elif len(sys.argv) > 2:
             build_debug_config(
                 {
                     "coverage": False,
-                    "installcheck_args": f'TESTS="{" ".join(list(tests) * 20)}"',
+                    "installcheck_args": installcheck_args,
                     "name": "Flaky Check Debug",
                     "pg": PG17_LATEST,
                     "pginstallcheck": False,

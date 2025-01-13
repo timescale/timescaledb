@@ -8,11 +8,12 @@
 -- we can still test its interactions with its children, but can't test some of the things specific to the launcher.
 -- So we've added some bits about the version number as needed.
 
-CREATE VIEW worker_counts as SELECT count(*) filter (WHERE application_name = 'TimescaleDB Background Worker Launcher') as launcher,
-count(*) filter (WHERE application_name = 'TimescaleDB Background Worker Scheduler' AND datname = :'TEST_DBNAME') as single_scheduler,
-count(*) filter (WHERE application_name = 'TimescaleDB Background Worker Scheduler' AND datname = :'TEST_DBNAME_2') as single_2_scheduler,
-count(*) filter (WHERE application_name = 'TimescaleDB Background Worker Scheduler' AND datname = 'template1') as template1_scheduler
-FROM pg_stat_activity;
+CREATE VIEW worker_counts as
+SELECT count(*) filter (WHERE backend_type = 'TimescaleDB Background Worker Launcher') as launcher,
+       count(*) filter (WHERE backend_type = 'TimescaleDB Background Worker Scheduler' AND datname = :'TEST_DBNAME') as single_scheduler,
+       count(*) filter (WHERE backend_type = 'TimescaleDB Background Worker Scheduler' AND datname = :'TEST_DBNAME_2') as single_2_scheduler,
+       count(*) filter (WHERE backend_type = 'TimescaleDB Background Worker Scheduler' AND datname = 'template1') as template1_scheduler
+  FROM pg_stat_activity;
 
 CREATE FUNCTION wait_worker_counts(launcher_ct INTEGER,  scheduler1_ct INTEGER, scheduler2_ct INTEGER, template1_ct INTEGER) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
 $BODY$

@@ -47,13 +47,17 @@ minmax_emit(void *agg_state, Datum *out_result, bool *out_isnull)
 
 /*
  * Templated parts for vectorized min(), max().
+ *
+ * NaN handled similar to equivalent PG functions.
  */
 #define AGG_NAME MIN
-#define PREDICATE(CURRENT, NEW) ((CURRENT) > (NEW))
+#define PREDICATE(CURRENT, NEW)                                                                    \
+	(unlikely(!isnan((double) (NEW))) && (isnan((double) (CURRENT)) || (CURRENT) > (NEW)))
 #include "minmax_arithmetic_types.c"
 
 #define AGG_NAME MAX
-#define PREDICATE(CURRENT, NEW) ((CURRENT) < (NEW))
+#define PREDICATE(CURRENT, NEW)                                                                    \
+	(unlikely(!isnan((double) (CURRENT))) && (isnan((double) (NEW)) || (CURRENT) < (NEW)))
 #include "minmax_arithmetic_types.c"
 
 #undef AGG_NAME

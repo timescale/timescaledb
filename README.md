@@ -40,7 +40,7 @@ You create a regular table and then convert it into a hypertable. A hypertable a
 
 ```sql
 -- Create timescaledb extension
-CREATE EXTENSION timescaledb;
+CREATE EXTENSION IF NOT EXISTS timescaledb;
 
 -- Create a regular SQL table
 CREATE TABLE conditions (

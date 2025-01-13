@@ -1,1 +1,1 @@
-Fixes: #7488 Emit error for transition table trigger on chunks
+Fixes: #7488: Emit error for transition table trigger on chunks.
