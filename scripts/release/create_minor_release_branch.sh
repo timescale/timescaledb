@@ -4,8 +4,6 @@ set -eu
 # Folder, where we have cloned repositories' sources
 SOURCES_DIR="timescaledb"
 
-GH_USERNAME=$(gh auth status | grep 'Logged in to' |cut -d ' ' -f 9)
-
 FORK_DIR="timescaledb"
 
 echo "---- Deriving the release related versions from main ----"
@@ -25,6 +23,6 @@ echo "NEW_VERSION is $NEW_VERSION"
 echo "---- Creating the version branch from main ----"
 
 git fetch --all
-git checkout -b "$RELEASE_BRANCH" upstream/main
-git push upstream "$RELEASE_BRANCH":"$RELEASE_BRANCH"
+git checkout -b "$RELEASE_BRANCH" origin/main
+git push origin "$RELEASE_BRANCH":"$RELEASE_BRANCH"
 
