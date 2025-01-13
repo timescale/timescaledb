@@ -2,11 +2,12 @@
 set -eu
 
 # Folder, where we have cloned repositories' sources
-SOURCES_DIR="sources"
+SOURCES_DIR="timescaledb"
 
 GH_USERNAME=$(gh auth status | grep 'Logged in to' |cut -d ' ' -f 9)
 
-FORK_DIR="$GH_USERNAME-timescaledb"
+#folder-name
+FORK_DIR="timescaledb"
 
 echo "---- Deriving the release related versions from main ----"
 
@@ -17,6 +18,8 @@ NEW_PATCH_VERSION="0"
 NEW_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
 RELEASE_BRANCH="${NEW_VERSION/%.$NEW_PATCH_VERSION/.x}"
 CURRENT_VERSION=$(tail -1 version.config | cut -d ' ' -f 3)
+CURRENT_MINOR_VERSION=$(echo $NEW_VERSION | cut -d '.' -f 2)
+NEW_MINOR_VERSION=$((CURRENT_MINOR_VERSION + 1))
 cd sql/updates
 
 for f in ./*
@@ -29,7 +32,6 @@ done
 LAST_VERSION=$(echo "$LAST_UPDATE_FILE" |cut -d '-' -f 1 |cut -d '/' -f 2)
 
 echo "CURRENT_VERSION is $CURRENT_VERSION"
-#echo "LAST_UPDATE_FILE is $LAST_UPDATE_FILE"
 echo "LAST_VERSION is $LAST_VERSION"
 echo "RELEASE_BRANCH is $RELEASE_BRANCH"
 echo "NEW_VERSION is $NEW_VERSION"
@@ -37,18 +39,27 @@ cd ~/"$SOURCES_DIR"/"$FORK_DIR"
 
 
 # Derived Variables
-#RELEASE_PR_BRANCH="release-$NEW_VERSION-$RELEASE_BRANCH"
-RELEASE_PR_BRANCH="release-$NEW_VERSION"
+RELEASE_PR_BRANCH="release/release-$NEW_VERSION"
 UPDATE_FILE="$CURRENT_VERSION--$NEW_VERSION.sql"
 DOWNGRADE_FILE="$NEW_VERSION--$CURRENT_VERSION.sql"
 LAST_UPDATE_FILE="$LAST_VERSION--$CURRENT_VERSION.sql"
 LAST_DOWNGRADE_FILE="$CURRENT_VERSION--$LAST_VERSION.sql"
 
+RELEASE_BRANCH_EXISTS=$(git branch -a |grep -c "origin/$RELEASE_BRANCH"|cut -d ' ' -f 1)
+
+if [[ $RELEASE_BRANCH_EXISTS == '0' ]]; then
+  echo "git branch '$RELEASE_BRANCH' does not exist in the remote repository, yet"
+  echo "We want to raise this PR against main"
+  RELEASE_BRANCH="main"
+  RELEASE_PR_BRANCH="$RELEASE_PR_BRANCH-main"
+fi
+
+echo "final RELEASE_BRANCH is $RELEASE_BRANCH"
+echo "RELEASE_PR_BRANCH is $RELEASE_PR_BRANCH"
 
 echo "---- Creating release branch $RELEASE_PR_BRANCH from $RELEASE_BRANCH, on the fork ----"
 
-git checkout -b "$RELEASE_PR_BRANCH" upstream/"$RELEASE_BRANCH"
-#git checkout -b "$RELEASE_PR_BRANCH" upstream/main
+git checkout -b "$RELEASE_PR_BRANCH" origin/"$RELEASE_BRANCH"
 git branch
 git pull && git diff HEAD
 
@@ -128,6 +139,15 @@ do
 done
 
 cd ..
+
+
+if [[ $RELEASE_BRANCH_EXISTS == '0' ]]; then
+  echo "---- Modifying version.config to the new versions , if current PR is for main----"
+  sed -i.bak "s/${NEW_VERSION}/${NEW_VERSION}-dev/g" version.config
+  sed -i.bak "s/${CURRENT_MINOR_VERSION}/${NEW_MINOR_VERSION}/g" version.config
+  sed -i.bak "s/${CURRENT_VERSION}/${NEW_VERSION}/g" version.config
+  rm version.config.bak
+fi
 
 git diff HEAD --name-only
 
