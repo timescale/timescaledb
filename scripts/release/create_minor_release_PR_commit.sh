@@ -4,8 +4,6 @@ set -eu
 # Folder, where we have cloned repositories' sources
 SOURCES_DIR="timescaledb"
 
-GH_USERNAME=$(gh auth status | grep 'Logged in to' |cut -d ' ' -f 9)
-
 #folder-name
 FORK_DIR="timescaledb"
 
