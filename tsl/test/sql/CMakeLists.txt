@@ -145,6 +145,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     APPEND
     TEST_FILES
     cagg_refresh_using_merge.sql
+    compress_sort_transform.sql
     hypercore_columnar.sql
     hypercore_constraints.sql
     hypercore_copy.sql
