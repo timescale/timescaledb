@@ -2,11 +2,11 @@
 set -eu
 
 # Folder, where we have cloned repositories' sources
-SOURCES_DIR="sources"
+SOURCES_DIR="timescaledb"
 
 GH_USERNAME=$(gh auth status | grep 'Logged in to' |cut -d ' ' -f 9)
 
-FORK_DIR="$GH_USERNAME-timescaledb"
+FORK_DIR="timescaledb"
 
 echo "---- Deriving the release related versions from main ----"
 
