@@ -986,7 +986,7 @@ where c.oid = :'unique_chunk'::regclass;
  _hyper_7_19_chunk | hypercore
 (1 row)
 
-select _timescaledb_debug.is_compressed_tid(ctid), * from :unique_chunk order by time;
+select _timescaledb_debug.is_compressed_tid(ctid), * from :unique_chunk order by time, value;
  is_compressed_tid |             time             | value 
 -------------------+------------------------------+-------
  t                 | Mon Jan 01 01:00:00 2024 PST |     1
@@ -1008,11 +1008,11 @@ select compress_chunk(:'unique_chunk');
 (1 row)
 
 -- Everything's compressed
-select _timescaledb_debug.is_compressed_tid(ctid), * from :unique_chunk order by time;
+select _timescaledb_debug.is_compressed_tid(ctid), * from :unique_chunk order by time, value;
  is_compressed_tid |             time             | value 
 -------------------+------------------------------+-------
- t                 | Mon Jan 01 01:00:00 2024 PST |     3
  t                 | Mon Jan 01 01:00:00 2024 PST |     1
+ t                 | Mon Jan 01 01:00:00 2024 PST |     3
  t                 | Mon Jan 01 02:00:00 2024 PST |     2
 (3 rows)
 

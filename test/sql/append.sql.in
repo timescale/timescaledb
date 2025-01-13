@@ -16,6 +16,9 @@ SET timescaledb.enable_now_constify TO false;
 -- disable memoize node to avoid flaky results
 SET enable_memoize TO 'off';
 
+-- disable index only scans to avoid some flaky results
+SET enable_indexonlyscan TO FALSE;
+
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
 
 \ir :TEST_LOAD_NAME

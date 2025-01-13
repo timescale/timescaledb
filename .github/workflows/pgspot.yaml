@@ -39,17 +39,17 @@ jobs:
 
     steps:
 
-    - name: Setup python 3.12
+    - name: Setup python 3.13
       uses: actions/setup-python@v5
       with:
-        python-version: '3.12'
+        python-version: '3.13'
 
     - name: Checkout timescaledb
       uses: actions/checkout@v4
 
     - name: Install pgspot
       run: |
-        python -m pip install pgspot==0.8.1
+        python -m pip install pgspot==0.9.0
 
     - name: Build timescaledb sqlfiles
       run: |

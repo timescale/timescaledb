@@ -29,6 +29,9 @@ set(PG_IGNORE_TESTS
     sanity_check
     type_sanity
     create_am
+    # Ignoring because it spawns different number of workers in different
+    # versions.
+    select_parallel
     psql)
 
 # Modify the test schedule to ignore some tests
