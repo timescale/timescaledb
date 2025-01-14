@@ -80,9 +80,17 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	{
 		for (uint32 inner = 0; inner < INNER_LOOP_SIZE; inner++)
 		{
-			current_delta += zig_zag_decode(deltas_zigzag[outer + inner]);
+			decompressed_values[outer + inner] = zig_zag_decode(deltas_zigzag[outer + inner]);
+		}
+	}
+
+	for (uint32 outer = 0; outer < n_notnull_padded; outer += INNER_LOOP_SIZE)
+	{
+		for (uint32 inner = 0; inner < INNER_LOOP_SIZE; inner++)
+		{
+			current_delta+= decompressed_values[outer+inner];
 			current_element += current_delta;
-			decompressed_values[outer + inner] = current_element;
+			decompressed_values[outer+inner] = current_element;
 		}
 	}
 #undef INNER_LOOP_SIZE_LOG2
