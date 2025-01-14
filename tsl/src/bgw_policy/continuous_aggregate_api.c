@@ -136,6 +136,16 @@ policy_refresh_cagg_get_refresh_end(const Dimension *dim, const Jsonb *config, b
 	return res;
 }
 
+bool
+policy_refresh_cagg_get_include_tiered_data(const Jsonb *config, bool *isnull)
+{
+	bool found;
+	bool res = ts_jsonb_get_bool_field(config, POL_REFRESH_CONF_KEY_INCLUDE_TIERED_DATA, &found);
+
+	*isnull = !found;
+	return res;
+}
+
 /* returns false if a policy could not be found */
 bool
 policy_refresh_cagg_exists(int32 materialization_id)
@@ -519,7 +529,8 @@ Datum
 policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDatum start_offset,
 								 Oid end_offset_type, NullableDatum end_offset,
 								 Interval refresh_interval, bool if_not_exists, bool fixed_schedule,
-								 TimestampTz initial_start, const char *timezone)
+								 TimestampTz initial_start, const char *timezone,
+								 NullableDatum include_tiered_data)
 {
 	NameData application_name;
 	NameData proc_name, proc_schema, check_name, check_schema, owner;
@@ -630,6 +641,10 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 									policyconf.offset_end.value);
 	else
 		ts_jsonb_add_null(parse_state, POL_REFRESH_CONF_KEY_END_OFFSET);
+	if (!include_tiered_data.isnull)
+		ts_jsonb_add_bool(parse_state,
+						  POL_REFRESH_CONF_KEY_INCLUDE_TIERED_DATA,
+						  include_tiered_data.value);
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	Jsonb *config = JsonbValueToJsonb(result);
 
@@ -660,6 +675,7 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	Interval refresh_interval;
 	bool if_not_exists;
 	NullableDatum start_offset, end_offset;
+	NullableDatum include_tiered_data;
 
 	ts_feature_flag_check(FEATURE_POLICY);
 
@@ -682,6 +698,8 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	bool fixed_schedule = !PG_ARGISNULL(5);
 	text *timezone = PG_ARGISNULL(6) ? NULL : PG_GETARG_TEXT_PP(6);
 	char *valid_timezone = NULL;
+	include_tiered_data.value = PG_GETARG_DATUM(7);
+	include_tiered_data.isnull = PG_ARGISNULL(7);
 
 	Datum retval;
 	/* if users pass in -infinity for initial_start, then use the current_timestamp instead */
@@ -704,7 +722,8 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 											  if_not_exists,
 											  fixed_schedule,
 											  initial_start,
-											  valid_timezone);
+											  valid_timezone,
+											  include_tiered_data);
 	if (!TIMESTAMP_NOT_FINITE(initial_start))
 	{
 		int32 job_id = DatumGetInt32(retval);

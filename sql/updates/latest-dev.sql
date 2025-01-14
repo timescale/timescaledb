@@ -125,3 +125,22 @@ CREATE PROCEDURE @extschema@.refresh_continuous_aggregate(
     force                    BOOLEAN = FALSE
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
 
+-- Add `include_tiered_data` argument to `add_continuous_aggregate_policy`
+DROP FUNCTION @extschema@.add_continuous_aggregate_policy(
+    continuous_aggregate REGCLASS, start_offset "any",
+    end_offset "any", schedule_interval INTERVAL,
+    if_not_exists BOOL,
+    initial_start TIMESTAMPTZ,
+    timezone TEXT
+);
+CREATE FUNCTION @extschema@.add_continuous_aggregate_policy(
+    continuous_aggregate REGCLASS, start_offset "any",
+    end_offset "any", schedule_interval INTERVAL,
+    if_not_exists BOOL = false,
+    initial_start TIMESTAMPTZ = NULL,
+    timezone TEXT = NULL,
+	include_tiered_data BOOL = NULL
+)
+RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
+LANGUAGE C VOLATILE;
