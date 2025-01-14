@@ -763,7 +763,8 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *path, Pat
 	if (parent_relindex)
 	{
 		const int chunk_index = chunk_rel->relid - parent_relindex;
-		sorted_path->startup_cost += cpu_tuple_cost * chunk_index * chunk_index;
+		sorted_path->startup_cost += cpu_operator_cost * chunk_index * chunk_index;
+		sorted_path->total_cost += cpu_operator_cost * chunk_index * chunk_index;
 	}
 
 	return sorted_path;
