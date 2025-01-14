@@ -37,7 +37,7 @@ cd ~/"$SOURCES_DIR"/"$FORK_DIR"
 
 
 # Derived Variables
-RELEASE_PR_BRANCH="release/release-$NEW_VERSION"
+RELEASE_PR_BRANCH="release/$NEW_VERSION"
 UPDATE_FILE="$CURRENT_VERSION--$NEW_VERSION.sql"
 DOWNGRADE_FILE="$NEW_VERSION--$CURRENT_VERSION.sql"
 LAST_UPDATE_FILE="$LAST_VERSION--$CURRENT_VERSION.sql"
@@ -49,7 +49,7 @@ if [[ $RELEASE_BRANCH_EXISTS == '0' ]]; then
   echo "git branch '$RELEASE_BRANCH' does not exist in the remote repository, yet"
   echo "We want to raise this PR against main"
   RELEASE_BRANCH="main"
-  RELEASE_PR_BRANCH="$RELEASE_PR_BRANCH-main"
+  RELEASE_PR_BRANCH="$RELEASE_PR_BRANCH-to-main"
 fi
 
 echo "final RELEASE_BRANCH is $RELEASE_BRANCH"

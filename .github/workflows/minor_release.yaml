@@ -1,4 +1,4 @@
-name: Create minor release branch
+name: Minor release
 on:
   workflow_dispatch:
 
@@ -7,8 +7,8 @@ permissions:
   contents: write
 
 jobs:
-  create-minor-release-branch:
-    name: Create minor release branch
+  minor-release:
+    name: Minor release
     runs-on: ubuntu-latest
 
     steps:
@@ -24,9 +24,23 @@ jobs:
       - name: Checkout TimescaleDB
         uses: actions/checkout@v4
 
-      - name: Run the minor-release branch creation Script
+      - name: Create PR to main branch for minor release
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        run: |
+          git remote --verbose
+          scripts/release/create_minor_release_PR_commit.sh
+
+      - name: Create release branch for minor release
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           git remote --verbose
           scripts/release/create_minor_release_branch.sh
+
+      - name: Create PR to release branch for minor release
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        run: |
+          git remote --verbose
+          scripts/release/create_minor_release_PR_commit.sh
