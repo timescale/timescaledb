@@ -2403,7 +2403,8 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 }
 
 /*
- * Get the min value of an open dimension.
+ * Get the min value of an open dimension for the hypertable based on the dimension slice info
+ * Note: only takes non-tiered chunks into account.
  */
 int64
 ts_hypertable_get_open_dim_min_value(const Hypertable *ht, int dimension_index, bool *isnull)
@@ -2415,6 +2416,14 @@ ts_hypertable_get_open_dim_min_value(const Hypertable *ht, int dimension_index, 
 	Datum mindat;
 	Oid timetype;
 
+	const char *query_str = " SELECT min(dimsl.range_start) FROM _timescaledb_catalog.chunk srcch \
+                   INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = srcch.hypertable_id  \
+      INNER JOIN _timescaledb_catalog.chunk_constraint chcons ON srcch.id = chcons.chunk_id \
+      INNER JOIN _timescaledb_catalog.dimension dim ON srcch.hypertable_id = dim.hypertable_id \
+      INNER JOIN _timescaledb_catalog.dimension_slice dimsl ON dim.id = dimsl.dimension_id \
+        AND chcons.dimension_slice_id = dimsl.id \
+        AND dimsl.id = %d and ht.id = %d  AND srcch.osm_chunk = false";
+
 	dim = hyperspace_get_open_dimension(ht->space, dimension_index);
 
 	if (NULL == dim)
@@ -2424,14 +2433,9 @@ ts_hypertable_get_open_dim_min_value(const Hypertable *ht, int dimension_index, 
 
 	/*
 	 * Query for the oldest chunk in the hypertable.
-	 * Anyway to optimize this better?
 	 */
 	command = makeStringInfo();
-	appendStringInfo(command,
-					 "SELECT pg_catalog.min(%s) FROM %s.%s",
-					 quote_identifier(NameStr(dim->fd.column_name)),
-					 quote_identifier(NameStr(ht->fd.schema_name)),
-					 quote_identifier(NameStr(ht->fd.table_name)));
+	appendStringInfo(command, query_str, ht->fd.id, dim->fd.id);
 
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI");
@@ -2444,17 +2448,13 @@ ts_hypertable_get_open_dim_min_value(const Hypertable *ht, int dimension_index, 
 				 (errmsg("could not find the minimum time value for hypertable \"%s\"",
 						 get_rel_name(ht->main_table_relid)))));
 
-	Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == timetype,
-		   "partition types for result (%d) and dimension (%d) do not match",
-		   SPI_gettypeid(SPI_tuptable->tupdesc, 1),
-		   ts_dimension_get_partition_type(dim));
 	mindat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &min_isnull);
 
 	if (isnull)
 		*isnull = min_isnull;
 
-	int64 min_value =
-		min_isnull ? ts_time_get_min(timetype) : ts_time_value_to_internal(mindat, timetype);
+	/* we fetch the int64 value from the dimension slice catalog. so read it back as int64 */
+	int64 min_value = min_isnull ? ts_time_get_min(timetype) : DatumGetInt64(mindat);
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
