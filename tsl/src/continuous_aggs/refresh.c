@@ -53,6 +53,10 @@ static InternalTimeRange
 compute_circumscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
 											  const InternalTimeRange *const refresh_window,
 											  const ContinuousAggsBucketFunction *bucket_function);
+static int64
+compute_circumscribed_refresh_window_start(const ContinuousAgg *cagg,
+										   const InternalTimeRange *const refresh_window,
+										   const ContinuousAggsBucketFunction *bucket_function);
 static void continuous_agg_refresh_init(CaggRefreshState *refresh, const ContinuousAgg *cagg,
 										const InternalTimeRange *refresh_window);
 static void continuous_agg_refresh_execute(const CaggRefreshState *refresh,
@@ -370,6 +374,57 @@ compute_circumscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
 		result.end = ts_time_saturating_add(bucketed_end, bucket_width, refresh_window->type);
 	}
 	return result;
+}
+
+static int64
+compute_circumscribed_refresh_window_start(const ContinuousAgg *cagg,
+										   const InternalTimeRange *const refresh_window,
+										   const ContinuousAggsBucketFunction *bucket_function)
+{
+	Assert(refresh_window != NULL);
+	Assert(bucket_function != NULL);
+
+	if (bucket_function->bucket_fixed_interval == false)
+	{
+		InternalTimeRange result = *refresh_window;
+		result.start =
+			ts_compute_circumscribed_bucketed_refresh_window_start_variable(refresh_window->start,
+																			bucket_function);
+		return result.start;
+	}
+
+	/* Interval is fixed */
+	int64 bucket_width = ts_continuous_agg_fixed_bucket_width(bucket_function);
+	Assert(bucket_width > 0);
+
+	InternalTimeRange result = *refresh_window;
+	InternalTimeRange largest_bucketed_window =
+		get_largest_bucketed_window(refresh_window->type, bucket_width);
+
+	/* Get offset and origin for bucket function */
+	NullableDatum offset = INIT_NULL_DATUM;
+	NullableDatum origin = INIT_NULL_DATUM;
+	fill_bucket_offset_origin(cagg, refresh_window, &offset, &origin);
+
+	/* Defined offset and origin in one function is not supported */
+	Assert(offset.isnull == true || origin.isnull == true);
+
+	if (refresh_window->start <= largest_bucketed_window.start)
+	{
+		result.start = largest_bucketed_window.start;
+	}
+	else
+	{
+		/* For alignment with a bucket, which includes the start of the refresh window, we just
+		 * need to get start of the bucket. */
+		result.start = ts_time_bucket_by_type_extended(bucket_width,
+													   refresh_window->start,
+													   refresh_window->type,
+													   offset,
+													   origin);
+	}
+
+	return result.start;
 }
 
 /*
@@ -794,26 +849,61 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	 * still take a long time and it is probably best for consistency to always
 	 * prevent transaction blocks.  */
 	PreventInTransactionBlock(true, REFRESH_FUNCTION_NAME);
-
-	/* No bucketing when open ended */
-	if (!(start_isnull && end_isnull))
+	/*	elog(NOTICE,
+			 "refresh window INPUT IS (%ld %ld) (start_is_null %d)",
+			 refresh_window.start,
+			 refresh_window.end,
+			 start_isnull);
+	*/
+	/* No bucketing when open ended .
+	 * Special case: if we have OSM reads disabled, use bucketed start so that
+	 * the refresh window reflects the data that is visible to the cagg.
+	 */
+	if (!(start_isnull && end_isnull) || (start_isnull && !ts_guc_enable_osm_reads))
 	{
+		int64 bucket_mints = 0;
+		bool min_isnull = true;
+		if (start_isnull && ts_guc_enable_osm_reads == false)
+		{
+			/*set refresh window start to min(ts) of raw hypertable as tiered
+			 * data is not visible */
+			int64 mints = 0;
+			InternalTimeRange tw = *refresh_window_arg;
+			const Hypertable *raw_ht = cagg_get_hypertable_or_fail(cagg->data.raw_hypertable_id);
+			mints = ts_hypertable_get_open_dim_min_value(raw_ht, 0, &min_isnull);
+			tw.start = mints;
+			bucket_mints =
+				compute_circumscribed_refresh_window_start(cagg, &tw, cagg->bucket_function);
+			// elog(NOTICE, "got mints=%ld bucketmints=%ld ", mints, bucket_mints);
+		}
 		if (cagg->bucket_function->bucket_fixed_interval == false)
 		{
-			refresh_window = *refresh_window_arg;
+			if (!min_isnull)
+				refresh_window.start = bucket_mints;
+
 			ts_compute_inscribed_bucketed_refresh_window_variable(&refresh_window.start,
 																  &refresh_window.end,
 																  cagg->bucket_function);
+			// elog(NOTICE, "NOT FIXED INTERVAL adjusted (%ld %ld)", refresh_window.start,
+			// refresh_window.end);
 		}
 		else
 		{
+			InternalTimeRange refresh_window_arg_copy = *refresh_window_arg;
+			if (!min_isnull)
+				refresh_window_arg_copy.start = bucket_mints;
 			int64 bucket_width = ts_continuous_agg_fixed_bucket_width(cagg->bucket_function);
 			Assert(bucket_width > 0);
 			refresh_window =
-				compute_inscribed_bucketed_refresh_window(cagg, refresh_window_arg, bucket_width);
+				compute_inscribed_bucketed_refresh_window(cagg,
+														  (const InternalTimeRange
+															   *) (&refresh_window_arg_copy),
+														  bucket_width);
+			// elog(NOTICE, "FIXED INTERVAL orig(%ld %ld) adjusted (%ld %ld)",
+			// refresh_window_arg_copy.start, refresh_window_arg_copy.end, refresh_window.start,
+			// refresh_window.end);
 		}
 	}
-
 	if (refresh_window.start >= refresh_window.end)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -863,6 +953,11 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		(IS_TIMESTAMP_TYPE(refresh_window.type) &&
 		 invalidation_threshold == ts_time_get_min(refresh_window.type)))
 	{
+		elog(NOTICE,
+			 "upto date (start=%ld end=%ld) threshold=%ld",
+			 refresh_window.start,
+			 refresh_window.end,
+			 invalidation_threshold);
 		emit_up_to_date_notice(cagg, callctx);
 
 		/* Restore search_path */
