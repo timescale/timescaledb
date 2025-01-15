@@ -11,6 +11,7 @@
 #include <commands/defrem.h>
 #include <commands/explain.h>
 #include <commands/trigger.h>
+#include <commands/vacuum.h>
 #include <executor/executor.h>
 #include <executor/tuptable.h>
 #include <nodes/execnodes.h>
@@ -417,74 +418,54 @@ pg_strtoint64(const char *str)
 	check_index_is_clusterable(rel, indexOid, true, lock)
 #endif
 
+#if PG16_LT
 /*
  * PG15 consolidate VACUUM xid cutoff logic.
  *
  * https://github.com/postgres/postgres/commit/efa4a946
+ *
+ * PG16 introduced VacuumCutoffs so define here for previous PG versions.
  */
-#if PG15_LT
-#define vacuum_set_xid_limits_compat(rel,                                                          \
-									 freeze_min_age,                                               \
-									 freeze_table_age,                                             \
-									 multixact_freeze_min_age,                                     \
-									 multixact_freeze_table_age,                                   \
-									 oldestXmin,                                                   \
-									 freezeLimit,                                                  \
-									 multiXactCutoff)                                              \
-	vacuum_set_xid_limits(rel,                                                                     \
-						  freeze_min_age,                                                          \
-						  freeze_table_age,                                                        \
-						  multixact_freeze_min_age,                                                \
-						  multixact_freeze_table_age,                                              \
-						  oldestXmin,                                                              \
-						  freezeLimit,                                                             \
-						  NULL,                                                                    \
-						  multiXactCutoff,                                                         \
-						  NULL)
-#elif PG16_LT
-#define vacuum_set_xid_limits_compat(rel,                                                          \
-									 freeze_min_age,                                               \
-									 freeze_table_age,                                             \
-									 multixact_freeze_min_age,                                     \
-									 multixact_freeze_table_age,                                   \
-									 oldestXmin,                                                   \
-									 freezeLimit,                                                  \
-									 multiXactCutoff)                                              \
-	do                                                                                             \
-	{                                                                                              \
-		MultiXactId oldestMxact;                                                                   \
-		vacuum_set_xid_limits(rel,                                                                 \
-							  freeze_min_age,                                                      \
-							  freeze_table_age,                                                    \
-							  multixact_freeze_min_age,                                            \
-							  multixact_freeze_table_age,                                          \
-							  oldestXmin,                                                          \
-							  &oldestMxact,                                                        \
-							  freezeLimit,                                                         \
-							  multiXactCutoff);                                                    \
-	} while (0)
-#else
-#define vacuum_set_xid_limits_compat(rel,                                                          \
-									 freezeMinAge,                                                 \
-									 freezeTableAge,                                               \
-									 multixactFreezeMinAge,                                        \
-									 multixactFreezeTableAge,                                      \
-									 oldestXmin,                                                   \
-									 freezeLimit,                                                  \
-									 multiXactCutoff)                                              \
-	do                                                                                             \
-	{                                                                                              \
-		struct VacuumCutoffs cutoffs;                                                              \
-		/* vacuum_get_cutoffs uses only the *_age members of the VacuumParams object */            \
-		VacuumParams params = { .freeze_min_age = freezeMinAge,                                    \
-								.freeze_table_age = freezeTableAge,                                \
-								.multixact_freeze_min_age = multixactFreezeMinAge,                 \
-								.multixact_freeze_table_age = multixactFreezeTableAge };           \
-		vacuum_get_cutoffs(rel, &params, &cutoffs);                                                \
-		*(oldestXmin) = cutoffs.OldestXmin;                                                        \
-		*(freezeLimit) = cutoffs.FreezeLimit;                                                      \
-		*(multiXactCutoff) = cutoffs.MultiXactCutoff;                                              \
-	} while (0)
+struct VacuumCutoffs
+{
+	TransactionId relfrozenxid;
+	MultiXactId relminmxid;
+	TransactionId OldestXmin;
+	MultiXactId OldestMxact;
+	TransactionId FreezeLimit;
+	MultiXactId MultiXactCutoff;
+};
+
+static inline bool
+vacuum_get_cutoffs(Relation rel, const VacuumParams *params, struct VacuumCutoffs *cutoffs)
+{
+#if PG15
+	return vacuum_set_xid_limits(rel,
+								 0,
+								 0,
+								 0,
+								 0,
+								 &cutoffs->OldestXmin,
+								 &cutoffs->OldestMxact,
+								 &cutoffs->FreezeLimit,
+								 &cutoffs->MultiXactCutoff);
+#elif PG14
+	vacuum_set_xid_limits(rel,
+						  0,
+						  0,
+						  0,
+						  0,
+						  &cutoffs->OldestXmin,
+						  &cutoffs->FreezeLimit,
+						  NULL,
+						  &cutoffs->MultiXactCutoff,
+						  NULL);
+
+	/* Should aggressive vacuum be done? PG14 doesn't support the return value
+	 * so return false. */
+	return false;
+#endif
+}
 #endif
 
 /*
@@ -977,3 +958,4 @@ RestrictSearchPath(void)
 				 is_internal,                                                                      \
 				 constraintId)
 #endif
+
