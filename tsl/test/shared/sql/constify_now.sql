@@ -228,7 +228,7 @@ VALUES
 (5, '2023-01-20'::timestamptz, 13, 1);
 
 -- four chunks, all of them should be excluded at plantime
-SELECT COUNT(*) FROM show_chunks('logged_data');
+SELECT row_number() OVER (), range_start, range_end FROM timescaledb_information.chunks WHERE hypertable_schema = 'public' AND hypertable_name = 'logged_data' ORDER BY 2,3;
 
 SET timescaledb.current_timestamp_mock TO '2024-01-01 0:30:00+00';
 
@@ -236,15 +236,15 @@ SET timescaledb.enable_chunk_append TO true;
 SET timescaledb.enable_constraint_aware_append TO true;
 
 -- for all the queries below, exclusion should be happening at plantime
-EXPLAIN (ANALYZE, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
 timestamp BETWEEN now() - interval '1 day' AND now()
 AND rawtag_id = 1 ORDER BY "timestamp" ASC;
 
-EXPLAIN (ANALYZE, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
 timestamp <= now() AND timestamp >= now() - interval '1 day'
 AND rawtag_id = 1 ORDER BY "timestamp" ASC;
 
-EXPLAIN (ANALYZE, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
 timestamp <= now() AND timestamp >= now() - interval '1 day'
 ORDER BY "timestamp" ASC;
 
@@ -254,15 +254,15 @@ PREPARE pbtw AS SELECT * FROM logged_data WHERE
 timestamp BETWEEN now() - interval '5 day' AND now() AND rawtag_id = 1
 ORDER BY "timestamp" ASC;
 
-EXPLAIN (SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 EXECUTE pbtw;
 -- now move mock_now() to the future
 SET timescaledb.current_timestamp_mock TO '2023-01-21 0:30:00+00';
-EXPLAIN (SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 EXECUTE pbtw;
 -- much further into the future, no rows should be returned
 SET timescaledb.current_timestamp_mock TO '2024-01-21 0:30:00+00';
-EXPLAIN (SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 EXECUTE pbtw;
 DEALLOCATE pbtw;
 
@@ -274,15 +274,15 @@ PREPARE pbtw AS SELECT * FROM logged_data WHERE
 timestamp BETWEEN now() - interval '5 day' AND now() AND rawtag_id = 1
 ORDER BY "timestamp" ASC;
 
-EXPLAIN (SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 EXECUTE pbtw;
 -- now move mock_now() to the future
 SET timescaledb.current_timestamp_mock TO '2023-01-21 0:30:00+00';
-EXPLAIN (SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 EXECUTE pbtw;
 -- much further into the future, no rows should be returned
 SET timescaledb.current_timestamp_mock TO '2024-01-21 0:30:00+00';
-EXPLAIN (SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 EXECUTE pbtw;
 DEALLOCATE pbtw;
 
