@@ -534,9 +534,6 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 	int natts;
 	Datum *values;
 	bool *isnull;
-	TransactionId OldestXmin;
-	TransactionId FreezeXid;
-	MultiXactId MultiXactCutoff;
 	bool use_sort;
 	double num_tuples = 0, tups_vacuumed = 0, tups_recently_dead = 0;
 	BlockNumber num_pages;
@@ -626,24 +623,38 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 	 * Since we're going to rewrite the whole table anyway, there's no reason
 	 * not to be aggressive about this.
 	 */
-	vacuum_set_xid_limits_compat(OldHeap, 0, 0, 0, 0, &OldestXmin, &FreezeXid, &MultiXactCutoff);
+	struct VacuumCutoffs cutoffs;
+	VacuumParams params;
+
+	memset(&params, 0, sizeof(VacuumParams));
+	vacuum_get_cutoffs(OldHeap, &params, &cutoffs);
 
 	/*
 	 * FreezeXid will become the table's new relfrozenxid, and that mustn't go
 	 * backwards, so take the max.
 	 */
-	if (TransactionIdPrecedes(FreezeXid, OldHeap->rd_rel->relfrozenxid))
-		FreezeXid = OldHeap->rd_rel->relfrozenxid;
+	{
+		TransactionId relfrozenxid = OldHeap->rd_rel->relfrozenxid;
+
+		if (TransactionIdIsValid(relfrozenxid) &&
+			TransactionIdPrecedes(cutoffs.FreezeLimit, relfrozenxid))
+			cutoffs.FreezeLimit = relfrozenxid;
+	}
 
 	/*
 	 * MultiXactCutoff, similarly, shouldn't go backwards either.
 	 */
-	if (MultiXactIdPrecedes(MultiXactCutoff, OldHeap->rd_rel->relminmxid))
-		MultiXactCutoff = OldHeap->rd_rel->relminmxid;
+	{
+		MultiXactId relminmxid = OldHeap->rd_rel->relminmxid;
+
+		if (MultiXactIdIsValid(relminmxid) &&
+			MultiXactIdPrecedes(cutoffs.MultiXactCutoff, relminmxid))
+			cutoffs.MultiXactCutoff = relminmxid;
+	}
 
 	/* return selected values to caller */
-	*pFreezeXid = FreezeXid;
-	*pCutoffMulti = MultiXactCutoff;
+	*pFreezeXid = cutoffs.FreezeLimit;
+	*pCutoffMulti = cutoffs.MultiXactCutoff;
 
 	/*
 	 * We know how to use a sort to duplicate the ordering of a btree index,
@@ -677,9 +688,9 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 									NewHeap,
 									OldIndex,
 									use_sort,
-									OldestXmin,
-									&FreezeXid,
-									&MultiXactCutoff,
+									cutoffs.OldestXmin,
+									&cutoffs.FreezeLimit,
+									&cutoffs.MultiXactCutoff,
 									&num_tuples,
 									&tups_vacuumed,
 									&tups_recently_dead);
