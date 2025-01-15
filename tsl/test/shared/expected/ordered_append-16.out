@@ -2186,19 +2186,17 @@ ORDER BY time ASC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
-         Order: metrics_compressed."time"
-         Chunks excluded during startup: 1
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
+   ->  Sort (actual rows=1 loops=1)
+         Sort Key: metrics_compressed."time"
+         Sort Method: top-N heapsort 
+         ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=7195 loops=1)
+               Chunks excluded during startup: 1
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=7195 loops=1)
                      Vectorized Filter: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > ('2000-01-08'::cstring)::timestamp with time zone))
                      Rows Removed by Filter: 7805
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=15 loops=1)
-                           Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
-                           Rows Removed by Filter: 15
-(13 rows)
+                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=15 loops=1)
+                           Index Cond: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
+(11 rows)
 
 :PREFIX
 SELECT time
@@ -2209,19 +2207,17 @@ ORDER BY time ASC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
-         Order: metrics_compressed."time"
-         Chunks excluded during startup: 1
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
+   ->  Sort (actual rows=1 loops=1)
+         Sort Key: metrics_compressed."time"
+         Sort Method: top-N heapsort 
+         ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=3595 loops=1)
+               Chunks excluded during startup: 1
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3595 loops=1)
                      Vectorized Filter: (("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < ('2000-01-08'::cstring)::timestamp with time zone))
                      Rows Removed by Filter: 6405
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=10 loops=1)
-                           Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
-                           Rows Removed by Filter: 20
-(13 rows)
+                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=10 loops=1)
+                           Index Cond: ((_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone) AND (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone))
+(11 rows)
 
 -- Disable hash aggregation to get a deterministic test output
 SET enable_hashagg = OFF;
@@ -2402,21 +2398,34 @@ ORDER BY time_bucket('1d', time),
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: (time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
-         Sort Method: top-N heapsort 
-         ->  Result (actual rows=27348 loops=1)
-               ->  Append (actual rows=27348 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=7196 loops=1)
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=8 loops=1)
-                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10076 loops=1)
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10076 loops=1)
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-(15 rows)
+   ->  Result (actual rows=1 loops=1)
+         ->  Merge Append (actual rows=1 loops=1)
+               Sort Key: (time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: (time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
+                     Sort Method: top-N heapsort 
+                     ->  Result (actual rows=7196 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=7196 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=8 loops=1)
+                                       Filter: (device_id = ANY ('{1,2}'::integer[]))
+                                       Rows Removed by Filter: 12
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: (time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
+                     Sort Method: top-N heapsort 
+                     ->  Result (actual rows=10076 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10076 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                                       Filter: (device_id = ANY ('{1,2}'::integer[]))
+                                       Rows Removed by Filter: 18
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: (time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
+                     Sort Method: top-N heapsort 
+                     ->  Result (actual rows=10076 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10076 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                                       Filter: (device_id = ANY ('{1,2}'::integer[]))
+                                       Rows Removed by Filter: 18
+(28 rows)
 
 -- test query with ORDER BY date_trunc
 :PREFIX
@@ -2489,21 +2498,34 @@ ORDER BY 1,
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: (date_trunc('day'::text, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
-         Sort Method: top-N heapsort 
-         ->  Result (actual rows=27348 loops=1)
-               ->  Append (actual rows=27348 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=7196 loops=1)
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=8 loops=1)
-                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10076 loops=1)
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10076 loops=1)
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-(15 rows)
+   ->  Result (actual rows=1 loops=1)
+         ->  Merge Append (actual rows=1 loops=1)
+               Sort Key: (date_trunc('day'::text, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: (date_trunc('day'::text, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
+                     Sort Method: top-N heapsort 
+                     ->  Result (actual rows=7196 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=7196 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=8 loops=1)
+                                       Filter: (device_id = ANY ('{1,2}'::integer[]))
+                                       Rows Removed by Filter: 12
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: (date_trunc('day'::text, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
+                     Sort Method: top-N heapsort 
+                     ->  Result (actual rows=10076 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10076 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                                       Filter: (device_id = ANY ('{1,2}'::integer[]))
+                                       Rows Removed by Filter: 18
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: (date_trunc('day'::text, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
+                     Sort Method: top-N heapsort 
+                     ->  Result (actual rows=10076 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10076 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                                       Filter: (device_id = ANY ('{1,2}'::integer[]))
+                                       Rows Removed by Filter: 18
+(28 rows)
 
 -- test query with now() should result in ordered ChunkAppend
 :PREFIX
@@ -2683,24 +2705,17 @@ ORDER BY time
 LIMIT 3;
 QUERY PLAN
  Limit (actual rows=3 loops=1)
-   ->  Merge Append (actual rows=3 loops=1)
+   ->  Sort (actual rows=3 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
-         ->  Sort (actual rows=3 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
+         Sort Method: top-N heapsort 
+         ->  Append (actual rows=68370 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-(18 rows)
+(11 rows)
 
 RESET timescaledb.enable_ordered_append;
 :PREFIX
@@ -2736,24 +2751,17 @@ ORDER BY time
 LIMIT 3;
 QUERY PLAN
  Limit (actual rows=3 loops=1)
-   ->  Merge Append (actual rows=3 loops=1)
+   ->  Sort (actual rows=3 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
-         ->  Sort (actual rows=3 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
+         Sort Method: top-N heapsort 
+         ->  Append (actual rows=68370 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-(18 rows)
+(11 rows)
 
 RESET timescaledb.enable_chunk_append;
 :PREFIX
@@ -4048,30 +4056,55 @@ ORDER BY time_bucket('1d', time),
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: (time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
-         Sort Method: top-N heapsort 
-         ->  Result (actual rows=27348 loops=1)
-               ->  Append (actual rows=27348 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-(24 rows)
+   ->  Result (actual rows=1 loops=1)
+         ->  Merge Append (actual rows=1 loops=1)
+               Sort Key: (time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: (time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
+                     Sort Method: top-N heapsort 
+                     ->  Result (actual rows=3598 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                                       Filter: (device_id = ANY ('{1,2}'::integer[]))
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: (time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
+                     Sort Method: top-N heapsort 
+                     ->  Result (actual rows=3598 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                                       Filter: (device_id = ANY ('{1,2}'::integer[]))
+                                       Rows Removed by Filter: 8
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: (time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
+                     Sort Method: top-N heapsort 
+                     ->  Result (actual rows=5038 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                       Filter: (device_id = ANY ('{1,2}'::integer[]))
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: (time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
+                     Sort Method: top-N heapsort 
+                     ->  Result (actual rows=5038 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                       Filter: (device_id = ANY ('{1,2}'::integer[]))
+                                       Rows Removed by Filter: 12
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: (time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
+                     Sort Method: top-N heapsort 
+                     ->  Result (actual rows=5038 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                       Filter: (device_id = ANY ('{1,2}'::integer[]))
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: (time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
+                     Sort Method: top-N heapsort 
+                     ->  Result (actual rows=5038 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                       Filter: (device_id = ANY ('{1,2}'::integer[]))
+                                       Rows Removed by Filter: 12
+(49 rows)
 
 -- test query with ORDER BY date_trunc
 :PREFIX
@@ -4220,30 +4253,55 @@ ORDER BY 1,
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: (date_trunc('day'::text, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
-         Sort Method: top-N heapsort 
-         ->  Result (actual rows=27348 loops=1)
-               ->  Append (actual rows=27348 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-(24 rows)
+   ->  Result (actual rows=1 loops=1)
+         ->  Merge Append (actual rows=1 loops=1)
+               Sort Key: (date_trunc('day'::text, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: (date_trunc('day'::text, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
+                     Sort Method: top-N heapsort 
+                     ->  Result (actual rows=3598 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                                       Filter: (device_id = ANY ('{1,2}'::integer[]))
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: (date_trunc('day'::text, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
+                     Sort Method: top-N heapsort 
+                     ->  Result (actual rows=3598 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                                       Filter: (device_id = ANY ('{1,2}'::integer[]))
+                                       Rows Removed by Filter: 8
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: (date_trunc('day'::text, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
+                     Sort Method: top-N heapsort 
+                     ->  Result (actual rows=5038 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                       Filter: (device_id = ANY ('{1,2}'::integer[]))
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: (date_trunc('day'::text, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
+                     Sort Method: top-N heapsort 
+                     ->  Result (actual rows=5038 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                       Filter: (device_id = ANY ('{1,2}'::integer[]))
+                                       Rows Removed by Filter: 12
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: (date_trunc('day'::text, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
+                     Sort Method: top-N heapsort 
+                     ->  Result (actual rows=5038 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                       Filter: (device_id = ANY ('{1,2}'::integer[]))
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: (date_trunc('day'::text, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
+                     Sort Method: top-N heapsort 
+                     ->  Result (actual rows=5038 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                       Filter: (device_id = ANY ('{1,2}'::integer[]))
+                                       Rows Removed by Filter: 12
+(49 rows)
 
 -- test query with now() should result in ordered ChunkAppend
 :PREFIX
@@ -4603,54 +4661,29 @@ ORDER BY time
 LIMIT 3;
 QUERY PLAN
  Limit (actual rows=3 loops=1)
-   ->  Merge Append (actual rows=3 loops=1)
+   ->  Sort (actual rows=3 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
-         ->  Sort (actual rows=2 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
+         Sort Method: top-N heapsort 
+         ->  Append (actual rows=68370 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-         ->  Sort (actual rows=2 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-(48 rows)
+(23 rows)
 
 RESET timescaledb.enable_ordered_append;
 :PREFIX
@@ -4718,54 +4751,29 @@ ORDER BY time
 LIMIT 3;
 QUERY PLAN
  Limit (actual rows=3 loops=1)
-   ->  Merge Append (actual rows=3 loops=1)
+   ->  Sort (actual rows=3 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
-         ->  Sort (actual rows=2 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
+         Sort Method: top-N heapsort 
+         ->  Append (actual rows=68370 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-         ->  Sort (actual rows=2 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-(48 rows)
+(23 rows)
 
 RESET timescaledb.enable_chunk_append;
 :PREFIX
