@@ -1585,6 +1585,7 @@ select count(*), min(ts), max(ts), min(d), max(d) from text_table where a > 'sam
 
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bulk_decompression;
+-- Test the nonstandard Postgres NaN comparison that doesn't match the IEEE floats.
 create table nans(t int, cfloat4 float4, cfloat8 float8);
 select create_hypertable('nans', 't', chunk_time_interval => 1024 * 1024 * 1024);
 NOTICE:  adding not-null constraint to column "t"
