@@ -1585,3 +1585,1333 @@ select count(*), min(ts), max(ts), min(d), max(d) from text_table where a > 'sam
 
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bulk_decompression;
+create table nans(t int, cfloat4 float4, cfloat8 float8);
+select create_hypertable('nans', 't', chunk_time_interval => 1024 * 1024 * 1024);
+NOTICE:  adding not-null constraint to column "t"
+ create_hypertable  
+--------------------
+ (11,public,nans,t)
+(1 row)
+
+alter table nans set (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "nans" is set to ""
+NOTICE:  default order by for hypertable "nans" is set to "t DESC"
+insert into nans select pow(2, n), x, x
+    from unnest(array[null, 0, 1, 'nan', '-inf', '+inf']::float8[])
+        with ordinality as x(x, n)
+;
+select count(compress_chunk(x)) from show_chunks('nans') x;
+ count 
+-------
+     1
+(1 row)
+
+set timescaledb.enable_bulk_decompression to on;
+set timescaledb.debug_require_vector_qual to 'require';
+select format('select sum(t) from nans where %s %s %s::%s;',
+    variable, op, value, type)
+from
+    unnest(array['cfloat4', 'cfloat8']) variable,
+    unnest(array['=', '!=', '<', '<=', '>', '>=']) op,
+    unnest(array['null', '0', '1', '''nan''', '''-inf''', '''+inf''']) value,
+    unnest(array['float4', 'float8', 'numeric']) type
+\gexec
+select sum(t) from nans where cfloat4 = null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 = null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 = null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 = null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 = null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 = null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 != null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 != null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 != null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 != null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 != null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 != null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 < null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 < null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 < null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 < null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 < null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 < null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 <= null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 <= null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 <= null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 <= null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 <= null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 <= null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 > null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 > null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 > null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 > null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 > null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 > null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 >= null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 >= null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 >= null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 >= null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 >= null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 >= null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 = 0::float4;
+ sum 
+-----
+   4
+(1 row)
+
+select sum(t) from nans where cfloat4 = 0::float8;
+ sum 
+-----
+   4
+(1 row)
+
+select sum(t) from nans where cfloat4 = 0::numeric;
+ sum 
+-----
+   4
+(1 row)
+
+select sum(t) from nans where cfloat8 = 0::float4;
+ sum 
+-----
+   4
+(1 row)
+
+select sum(t) from nans where cfloat8 = 0::float8;
+ sum 
+-----
+   4
+(1 row)
+
+select sum(t) from nans where cfloat8 = 0::numeric;
+ sum 
+-----
+   4
+(1 row)
+
+select sum(t) from nans where cfloat4 != 0::float4;
+ sum 
+-----
+ 120
+(1 row)
+
+select sum(t) from nans where cfloat4 != 0::float8;
+ sum 
+-----
+ 120
+(1 row)
+
+select sum(t) from nans where cfloat4 != 0::numeric;
+ sum 
+-----
+ 120
+(1 row)
+
+select sum(t) from nans where cfloat8 != 0::float4;
+ sum 
+-----
+ 120
+(1 row)
+
+select sum(t) from nans where cfloat8 != 0::float8;
+ sum 
+-----
+ 120
+(1 row)
+
+select sum(t) from nans where cfloat8 != 0::numeric;
+ sum 
+-----
+ 120
+(1 row)
+
+select sum(t) from nans where cfloat4 < 0::float4;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat4 < 0::float8;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat4 < 0::numeric;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat8 < 0::float4;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat8 < 0::float8;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat8 < 0::numeric;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat4 <= 0::float4;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat4 <= 0::float8;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat4 <= 0::numeric;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat8 <= 0::float4;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat8 <= 0::float8;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat8 <= 0::numeric;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat4 > 0::float4;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat4 > 0::float8;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat4 > 0::numeric;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat8 > 0::float4;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat8 > 0::float8;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat8 > 0::numeric;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat4 >= 0::float4;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat4 >= 0::float8;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat4 >= 0::numeric;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat8 >= 0::float4;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat8 >= 0::float8;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat8 >= 0::numeric;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat4 = 1::float4;
+ sum 
+-----
+   8
+(1 row)
+
+select sum(t) from nans where cfloat4 = 1::float8;
+ sum 
+-----
+   8
+(1 row)
+
+select sum(t) from nans where cfloat4 = 1::numeric;
+ sum 
+-----
+   8
+(1 row)
+
+select sum(t) from nans where cfloat8 = 1::float4;
+ sum 
+-----
+   8
+(1 row)
+
+select sum(t) from nans where cfloat8 = 1::float8;
+ sum 
+-----
+   8
+(1 row)
+
+select sum(t) from nans where cfloat8 = 1::numeric;
+ sum 
+-----
+   8
+(1 row)
+
+select sum(t) from nans where cfloat4 != 1::float4;
+ sum 
+-----
+ 116
+(1 row)
+
+select sum(t) from nans where cfloat4 != 1::float8;
+ sum 
+-----
+ 116
+(1 row)
+
+select sum(t) from nans where cfloat4 != 1::numeric;
+ sum 
+-----
+ 116
+(1 row)
+
+select sum(t) from nans where cfloat8 != 1::float4;
+ sum 
+-----
+ 116
+(1 row)
+
+select sum(t) from nans where cfloat8 != 1::float8;
+ sum 
+-----
+ 116
+(1 row)
+
+select sum(t) from nans where cfloat8 != 1::numeric;
+ sum 
+-----
+ 116
+(1 row)
+
+select sum(t) from nans where cfloat4 < 1::float4;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat4 < 1::float8;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat4 < 1::numeric;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat8 < 1::float4;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat8 < 1::float8;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat8 < 1::numeric;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat4 <= 1::float4;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat4 <= 1::float8;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat4 <= 1::numeric;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat8 <= 1::float4;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat8 <= 1::float8;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat8 <= 1::numeric;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat4 > 1::float4;
+ sum 
+-----
+  80
+(1 row)
+
+select sum(t) from nans where cfloat4 > 1::float8;
+ sum 
+-----
+  80
+(1 row)
+
+select sum(t) from nans where cfloat4 > 1::numeric;
+ sum 
+-----
+  80
+(1 row)
+
+select sum(t) from nans where cfloat8 > 1::float4;
+ sum 
+-----
+  80
+(1 row)
+
+select sum(t) from nans where cfloat8 > 1::float8;
+ sum 
+-----
+  80
+(1 row)
+
+select sum(t) from nans where cfloat8 > 1::numeric;
+ sum 
+-----
+  80
+(1 row)
+
+select sum(t) from nans where cfloat4 >= 1::float4;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat4 >= 1::float8;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat4 >= 1::numeric;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat8 >= 1::float4;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat8 >= 1::float8;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat8 >= 1::numeric;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat4 = 'nan'::float4;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat4 = 'nan'::float8;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat4 = 'nan'::numeric;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat8 = 'nan'::float4;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat8 = 'nan'::float8;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat8 = 'nan'::numeric;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat4 != 'nan'::float4;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat4 != 'nan'::float8;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat4 != 'nan'::numeric;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat8 != 'nan'::float4;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat8 != 'nan'::float8;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat8 != 'nan'::numeric;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat4 < 'nan'::float4;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat4 < 'nan'::float8;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat4 < 'nan'::numeric;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat8 < 'nan'::float4;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat8 < 'nan'::float8;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat8 < 'nan'::numeric;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat4 <= 'nan'::float4;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat4 <= 'nan'::float8;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat4 <= 'nan'::numeric;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat8 <= 'nan'::float4;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat8 <= 'nan'::float8;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat8 <= 'nan'::numeric;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat4 > 'nan'::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 > 'nan'::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 > 'nan'::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 > 'nan'::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 > 'nan'::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 > 'nan'::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 >= 'nan'::float4;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat4 >= 'nan'::float8;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat4 >= 'nan'::numeric;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat8 >= 'nan'::float4;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat8 >= 'nan'::float8;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat8 >= 'nan'::numeric;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat4 = '-inf'::float4;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat4 = '-inf'::float8;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat4 = '-inf'::numeric;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat8 = '-inf'::float4;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat8 = '-inf'::float8;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat8 = '-inf'::numeric;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat4 != '-inf'::float4;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat4 != '-inf'::float8;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat4 != '-inf'::numeric;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat8 != '-inf'::float4;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat8 != '-inf'::float8;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat8 != '-inf'::numeric;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat4 < '-inf'::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 < '-inf'::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 < '-inf'::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 < '-inf'::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 < '-inf'::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 < '-inf'::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 <= '-inf'::float4;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat4 <= '-inf'::float8;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat4 <= '-inf'::numeric;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat8 <= '-inf'::float4;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat8 <= '-inf'::float8;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat8 <= '-inf'::numeric;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat4 > '-inf'::float4;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat4 > '-inf'::float8;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat4 > '-inf'::numeric;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat8 > '-inf'::float4;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat8 > '-inf'::float8;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat8 > '-inf'::numeric;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat4 >= '-inf'::float4;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat4 >= '-inf'::float8;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat4 >= '-inf'::numeric;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat8 >= '-inf'::float4;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat8 >= '-inf'::float8;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat8 >= '-inf'::numeric;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat4 = '+inf'::float4;
+ sum 
+-----
+  64
+(1 row)
+
+select sum(t) from nans where cfloat4 = '+inf'::float8;
+ sum 
+-----
+  64
+(1 row)
+
+select sum(t) from nans where cfloat4 = '+inf'::numeric;
+ sum 
+-----
+  64
+(1 row)
+
+select sum(t) from nans where cfloat8 = '+inf'::float4;
+ sum 
+-----
+  64
+(1 row)
+
+select sum(t) from nans where cfloat8 = '+inf'::float8;
+ sum 
+-----
+  64
+(1 row)
+
+select sum(t) from nans where cfloat8 = '+inf'::numeric;
+ sum 
+-----
+  64
+(1 row)
+
+select sum(t) from nans where cfloat4 != '+inf'::float4;
+ sum 
+-----
+  60
+(1 row)
+
+select sum(t) from nans where cfloat4 != '+inf'::float8;
+ sum 
+-----
+  60
+(1 row)
+
+select sum(t) from nans where cfloat4 != '+inf'::numeric;
+ sum 
+-----
+  60
+(1 row)
+
+select sum(t) from nans where cfloat8 != '+inf'::float4;
+ sum 
+-----
+  60
+(1 row)
+
+select sum(t) from nans where cfloat8 != '+inf'::float8;
+ sum 
+-----
+  60
+(1 row)
+
+select sum(t) from nans where cfloat8 != '+inf'::numeric;
+ sum 
+-----
+  60
+(1 row)
+
+select sum(t) from nans where cfloat4 < '+inf'::float4;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat4 < '+inf'::float8;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat4 < '+inf'::numeric;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat8 < '+inf'::float4;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat8 < '+inf'::float8;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat8 < '+inf'::numeric;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat4 <= '+inf'::float4;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat4 <= '+inf'::float8;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat4 <= '+inf'::numeric;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat8 <= '+inf'::float4;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat8 <= '+inf'::float8;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat8 <= '+inf'::numeric;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat4 > '+inf'::float4;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat4 > '+inf'::float8;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat4 > '+inf'::numeric;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat8 > '+inf'::float4;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat8 > '+inf'::float8;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat8 > '+inf'::numeric;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat4 >= '+inf'::float4;
+ sum 
+-----
+  80
+(1 row)
+
+select sum(t) from nans where cfloat4 >= '+inf'::float8;
+ sum 
+-----
+  80
+(1 row)
+
+select sum(t) from nans where cfloat4 >= '+inf'::numeric;
+ sum 
+-----
+  80
+(1 row)
+
+select sum(t) from nans where cfloat8 >= '+inf'::float4;
+ sum 
+-----
+  80
+(1 row)
+
+select sum(t) from nans where cfloat8 >= '+inf'::float8;
+ sum 
+-----
+  80
+(1 row)
+
+select sum(t) from nans where cfloat8 >= '+inf'::numeric;
+ sum 
+-----
+  80
+(1 row)
+
+reset timescaledb.debug_require_vector_qual;
+reset timescaledb.enable_bulk_decompression;
