@@ -103,7 +103,7 @@ typedef struct DecompressBatchState
 	 * row. Indexed same as arrow arrays, w/o accounting for the reverse scan
 	 * direction. Initialized to all ones, i.e. all rows pass.
 	 */
-	uint64 *restrict vector_qual_result;
+	const uint64 *restrict vector_qual_result;
 
 	/*
 	 * This follows DecompressContext.compressed_chunk_columns, but does not
