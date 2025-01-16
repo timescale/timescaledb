@@ -169,6 +169,9 @@ where
     and (explain is null /* or condition is null and grouping = 's' */)
     and (variable != '*' or function = 'count')
     and (variable not in ('t', 'cts', 'ctstz', 'cdate') or function in ('min', 'max'))
+    -- For minmax w/o grouping we can get the ORDER BY LIMIT 1 InitPlan instead
+    -- of vectorized aggregation, with no easy way to disable it.
+    and (grouping is not null or function not in ('min', 'max'))
     -- This is not vectorized yet
     and (variable != 'cint8' or function != 'stddev')
     and (function != 'count' or variable in ('cint2', 's', '*'))
@@ -211,12 +214,6 @@ select ss, count(*) from aggfns group by ss order by count(*), ss limit 10;
  11 | 40019
 (10 rows)
 
-select max(cdate) from aggfns;
-    max     
-------------
- 06-01-2267
-(1 row)
-
 select s, max(cdate) from aggfns group by s order by max(cdate), s limit 10;
  s |    max     
 ---+------------
@@ -246,12 +243,6 @@ select ss, max(cdate) from aggfns group by ss order by max(cdate), ss limit 10;
   8 | 01-14-2240
   9 | 06-01-2267
 (10 rows)
-
-select min(cdate) from aggfns;
-    min     
-------------
- 01-01-2021
-(1 row)
 
 select s, min(cdate) from aggfns group by s order by min(cdate), s limit 10;
  s |    min     
@@ -319,12 +310,6 @@ select ss, avg(cfloat4) from aggfns group by ss order by avg(cfloat4), ss limit 
  11 |                  NaN
 (10 rows)
 
-select max(cfloat4) from aggfns;
- max 
------
- NaN
-(1 row)
-
 select s, max(cfloat4) from aggfns group by s order by max(cfloat4), s limit 10;
  s |   max    
 ---+----------
@@ -354,12 +339,6 @@ select ss, max(cfloat4) from aggfns group by ss order by max(cfloat4), ss limit 
   8 | 49.9997
  11 |     NaN
 (10 rows)
-
-select min(cfloat4) from aggfns;
-    min    
------------
- -Infinity
-(1 row)
 
 select s, min(cfloat4) from aggfns group by s order by min(cfloat4), s limit 10;
  s |    min    
@@ -499,12 +478,6 @@ select ss, avg(cfloat8) from aggfns group by ss order by avg(cfloat8), ss limit 
  11 |   6.59778165165114
 (10 rows)
 
-select max(cfloat8) from aggfns;
-       max        
-------------------
- 49.9995574122295
-(1 row)
-
 select s, max(cfloat8) from aggfns group by s order by max(cfloat8), s limit 10;
  s |       max        
 ---+------------------
@@ -534,12 +507,6 @@ select ss, max(cfloat8) from aggfns group by ss order by max(cfloat8), ss limit 
   4 | 49.9978997278959
   9 | 49.9995574122295
 (10 rows)
-
-select min(cfloat8) from aggfns;
-        min        
--------------------
- -49.9994775978848
-(1 row)
 
 select s, min(cfloat8) from aggfns group by s order by min(cfloat8), s limit 10;
  s |        min        
@@ -715,12 +682,6 @@ select ss, count(cint2) from aggfns group by ss order by count(cint2), ss limit 
  11 | 39981
 (10 rows)
 
-select max(cint2) from aggfns;
-  max  
--------
- 16383
-(1 row)
-
 select s, max(cint2) from aggfns group by s order by max(cint2), s limit 10;
  s |  max  
 ---+-------
@@ -750,12 +711,6 @@ select ss, max(cint2) from aggfns group by ss order by max(cint2), ss limit 10;
   9 | 16383
  11 | 16383
 (10 rows)
-
-select min(cint2) from aggfns;
-  min   
---------
- -16383
-(1 row)
 
 select s, min(cint2) from aggfns group by s order by min(cint2), s limit 10;
  s |  min   
@@ -895,12 +850,6 @@ select ss, avg(cint4) from aggfns group by ss order by avg(cint4), ss limit 10;
     | 2197.6842105263157895
 (10 rows)
 
-select max(cint4) from aggfns;
-  max  
--------
- 16383
-(1 row)
-
 select s, max(cint4) from aggfns group by s order by max(cint4), s limit 10;
  s |  max  
 ---+-------
@@ -930,12 +879,6 @@ select ss, max(cint4) from aggfns group by ss order by max(cint4), ss limit 10;
   9 | 16383
  11 | 16383
 (10 rows)
-
-select min(cint4) from aggfns;
-  min   
---------
- -16383
-(1 row)
 
 select s, min(cint4) from aggfns group by s order by min(cint4), s limit 10;
  s |  min   
@@ -1075,12 +1018,6 @@ select ss, avg(cint8) from aggfns group by ss order by avg(cint8), ss limit 10;
     | 2467.2631578947368421
 (10 rows)
 
-select max(cint8) from aggfns;
-  max  
--------
- 16383
-(1 row)
-
 select s, max(cint8) from aggfns group by s order by max(cint8), s limit 10;
  s |  max  
 ---+-------
@@ -1110,12 +1047,6 @@ select ss, max(cint8) from aggfns group by ss order by max(cint8), ss limit 10;
   5 | 16383
  11 | 16383
 (10 rows)
-
-select min(cint8) from aggfns;
-  min   
---------
- -16383
-(1 row)
 
 select s, min(cint8) from aggfns group by s order by min(cint8), s limit 10;
  s |  min   
@@ -1183,12 +1114,6 @@ select ss, sum(cint8) from aggfns group by ss order by sum(cint8), ss limit 10;
   9 |  1234935
 (10 rows)
 
-select max(cts) from aggfns;
-           max            
---------------------------
- Sat Jan 02 02:01:01 2021
-(1 row)
-
 select s, max(cts) from aggfns group by s order by max(cts), s limit 10;
  s |           max            
 ---+--------------------------
@@ -1218,12 +1143,6 @@ select ss, max(cts) from aggfns group by ss order by max(cts), ss limit 10;
   8 | Fri Jan 01 23:14:21 2021
   9 | Sat Jan 02 02:01:01 2021
 (10 rows)
-
-select min(cts) from aggfns;
-           min            
---------------------------
- Fri Jan 01 01:01:01 2021
-(1 row)
 
 select s, min(cts) from aggfns group by s order by min(cts), s limit 10;
  s |           min            
@@ -1255,12 +1174,6 @@ select ss, min(cts) from aggfns group by ss order by min(cts), ss limit 10;
   9 | Sat Jan 02 02:01:01 2021
 (10 rows)
 
-select max(ctstz) from aggfns;
-             max              
-------------------------------
- Sat Jan 02 02:01:01 2021 PST
-(1 row)
-
 select s, max(ctstz) from aggfns group by s order by max(ctstz), s limit 10;
  s |             max              
 ---+------------------------------
@@ -1290,12 +1203,6 @@ select ss, max(ctstz) from aggfns group by ss order by max(ctstz), ss limit 10;
   8 | Fri Jan 01 23:14:21 2021 PST
   9 | Sat Jan 02 02:01:01 2021 PST
 (10 rows)
-
-select min(ctstz) from aggfns;
-             min              
-------------------------------
- Fri Jan 01 01:01:01 2021 PST
-(1 row)
 
 select s, min(ctstz) from aggfns group by s order by min(ctstz), s limit 10;
  s |             min              
@@ -1399,12 +1306,6 @@ select ss, count(s) from aggfns group by ss order by count(s), ss limit 10;
  11 | 40019
 (10 rows)
 
-select max(s) from aggfns;
- max 
------
-   9
-(1 row)
-
 select s, max(s) from aggfns group by s order by max(s), s limit 10;
  s | max 
 ---+-----
@@ -1434,12 +1335,6 @@ select ss, max(s) from aggfns group by ss order by max(s), ss limit 10;
   8 |   8
   9 |   9
 (10 rows)
-
-select min(s) from aggfns;
- min 
------
-   0
-(1 row)
 
 select s, min(s) from aggfns group by s order by min(s), s limit 10;
  s | min 
@@ -1579,12 +1474,6 @@ select ss, avg(ss) from aggfns group by ss order by avg(ss), ss limit 10;
     |                           
 (10 rows)
 
-select max(ss) from aggfns;
- max 
------
-  11
-(1 row)
-
 select s, max(ss) from aggfns group by s order by max(ss), s limit 10;
  s | max 
 ---+-----
@@ -1614,12 +1503,6 @@ select ss, max(ss) from aggfns group by ss order by max(ss), ss limit 10;
  11 |  11
     |    
 (10 rows)
-
-select min(ss) from aggfns;
- min 
------
-   0
-(1 row)
 
 select s, min(ss) from aggfns group by s order by min(ss), s limit 10;
  s | min 
@@ -1723,12 +1606,6 @@ select ss, sum(ss) from aggfns group by ss order by sum(ss), ss limit 10;
     |       
 (10 rows)
 
-select max(t) from aggfns;
-  max   
---------
- 110000
-(1 row)
-
 select s, max(t) from aggfns group by s order by max(t), s limit 10;
  s |  max   
 ---+--------
@@ -1758,12 +1635,6 @@ select ss, max(t) from aggfns group by ss order by max(t), ss limit 10;
   8 | 100000
   9 | 110000
 (10 rows)
-
-select min(t) from aggfns;
- min 
------
-   1
-(1 row)
 
 select s, min(t) from aggfns group by s order by min(t), s limit 10;
  s |  min  
@@ -1831,12 +1702,6 @@ select ss, count(*) from aggfns where cfloat8 > 0 group by ss order by count(*),
  11 | 30084
 (10 rows)
 
-select max(cdate) from aggfns where cfloat8 > 0;
-    max     
-------------
- 06-01-2267
-(1 row)
-
 select s, max(cdate) from aggfns where cfloat8 > 0 group by s order by max(cdate), s limit 10;
  s |    max     
 ---+------------
@@ -1866,12 +1731,6 @@ select ss, max(cdate) from aggfns where cfloat8 > 0 group by ss order by max(cda
   8 | 01-14-2240
   9 | 06-01-2267
 (10 rows)
-
-select min(cdate) from aggfns where cfloat8 > 0;
-    min     
-------------
- 01-01-2021
-(1 row)
 
 select s, min(cdate) from aggfns where cfloat8 > 0 group by s order by min(cdate), s limit 10;
  s |    min     
@@ -1939,12 +1798,6 @@ select ss, avg(cfloat4) from aggfns where cfloat8 > 0 group by ss order by avg(c
  11 |                NaN
 (10 rows)
 
-select max(cfloat4) from aggfns where cfloat8 > 0;
- max 
------
- NaN
-(1 row)
-
 select s, max(cfloat4) from aggfns where cfloat8 > 0 group by s order by max(cfloat4), s limit 10;
  s |   max   
 ---+---------
@@ -1974,12 +1827,6 @@ select ss, max(cfloat4) from aggfns where cfloat8 > 0 group by ss order by max(c
   5 | 49.9992
  11 |     NaN
 (10 rows)
-
-select min(cfloat4) from aggfns where cfloat8 > 0;
-    min    
------------
- -Infinity
-(1 row)
 
 select s, min(cfloat4) from aggfns where cfloat8 > 0 group by s order by min(cfloat4), s limit 10;
  s |    min    
@@ -2119,12 +1966,6 @@ select ss, avg(cfloat8) from aggfns where cfloat8 > 0 group by ss order by avg(c
   0 | 25.0776526587937
 (10 rows)
 
-select max(cfloat8) from aggfns where cfloat8 > 0;
-       max        
-------------------
- 49.9995574122295
-(1 row)
-
 select s, max(cfloat8) from aggfns where cfloat8 > 0 group by s order by max(cfloat8), s limit 10;
  s |       max        
 ---+------------------
@@ -2154,12 +1995,6 @@ select ss, max(cfloat8) from aggfns where cfloat8 > 0 group by ss order by max(c
   4 | 49.9978997278959
   9 | 49.9995574122295
 (10 rows)
-
-select min(cfloat8) from aggfns where cfloat8 > 0;
-         min          
-----------------------
- 0.000765081495046616
-(1 row)
 
 select s, min(cfloat8) from aggfns where cfloat8 > 0 group by s order by min(cfloat8), s limit 10;
  s |         min          
@@ -2335,12 +2170,6 @@ select ss, count(cint2) from aggfns where cfloat8 > 0 group by ss order by count
  11 | 30053
 (10 rows)
 
-select max(cint2) from aggfns where cfloat8 > 0;
-  max  
--------
- 16383
-(1 row)
-
 select s, max(cint2) from aggfns where cfloat8 > 0 group by s order by max(cint2), s limit 10;
  s |  max  
 ---+-------
@@ -2370,12 +2199,6 @@ select ss, max(cint2) from aggfns where cfloat8 > 0 group by ss order by max(cin
   9 | 16383
  11 | 16383
 (10 rows)
-
-select min(cint2) from aggfns where cfloat8 > 0;
-  min   
---------
- -16383
-(1 row)
 
 select s, min(cint2) from aggfns where cfloat8 > 0 group by s order by min(cint2), s limit 10;
  s |  min   
@@ -2515,12 +2338,6 @@ select ss, avg(cint4) from aggfns where cfloat8 > 0 group by ss order by avg(cin
     |  868.6923076923076923
 (10 rows)
 
-select max(cint4) from aggfns where cfloat8 > 0;
-  max  
--------
- 16383
-(1 row)
-
 select s, max(cint4) from aggfns where cfloat8 > 0 group by s order by max(cint4), s limit 10;
  s |  max  
 ---+-------
@@ -2550,12 +2367,6 @@ select ss, max(cint4) from aggfns where cfloat8 > 0 group by ss order by max(cin
   8 | 16382
  11 | 16383
 (10 rows)
-
-select min(cint4) from aggfns where cfloat8 > 0;
-  min   
---------
- -16383
-(1 row)
 
 select s, min(cint4) from aggfns where cfloat8 > 0 group by s order by min(cint4), s limit 10;
  s |  min   
@@ -2695,12 +2506,6 @@ select ss, avg(cint8) from aggfns where cfloat8 > 0 group by ss order by avg(cin
     |  2876.8461538461538462
 (10 rows)
 
-select max(cint8) from aggfns where cfloat8 > 0;
-  max  
--------
- 16383
-(1 row)
-
 select s, max(cint8) from aggfns where cfloat8 > 0 group by s order by max(cint8), s limit 10;
  s |  max  
 ---+-------
@@ -2730,12 +2535,6 @@ select ss, max(cint8) from aggfns where cfloat8 > 0 group by ss order by max(cin
   5 | 16383
  11 | 16383
 (10 rows)
-
-select min(cint8) from aggfns where cfloat8 > 0;
-  min   
---------
- -16383
-(1 row)
 
 select s, min(cint8) from aggfns where cfloat8 > 0 group by s order by min(cint8), s limit 10;
  s |  min   
@@ -2803,12 +2602,6 @@ select ss, sum(cint8) from aggfns where cfloat8 > 0 group by ss order by sum(cin
   3 |  1055717
 (10 rows)
 
-select max(cts) from aggfns where cfloat8 > 0;
-           max            
---------------------------
- Sat Jan 02 02:01:01 2021
-(1 row)
-
 select s, max(cts) from aggfns where cfloat8 > 0 group by s order by max(cts), s limit 10;
  s |           max            
 ---+--------------------------
@@ -2838,12 +2631,6 @@ select ss, max(cts) from aggfns where cfloat8 > 0 group by ss order by max(cts),
   8 | Fri Jan 01 23:14:21 2021
   9 | Sat Jan 02 02:01:01 2021
 (10 rows)
-
-select min(cts) from aggfns where cfloat8 > 0;
-           min            
---------------------------
- Fri Jan 01 01:01:01 2021
-(1 row)
 
 select s, min(cts) from aggfns where cfloat8 > 0 group by s order by min(cts), s limit 10;
  s |           min            
@@ -2875,12 +2662,6 @@ select ss, min(cts) from aggfns where cfloat8 > 0 group by ss order by min(cts),
   9 | Sat Jan 02 02:01:01 2021
 (10 rows)
 
-select max(ctstz) from aggfns where cfloat8 > 0;
-             max              
-------------------------------
- Sat Jan 02 02:01:01 2021 PST
-(1 row)
-
 select s, max(ctstz) from aggfns where cfloat8 > 0 group by s order by max(ctstz), s limit 10;
  s |             max              
 ---+------------------------------
@@ -2910,12 +2691,6 @@ select ss, max(ctstz) from aggfns where cfloat8 > 0 group by ss order by max(cts
   8 | Fri Jan 01 23:14:21 2021 PST
   9 | Sat Jan 02 02:01:01 2021 PST
 (10 rows)
-
-select min(ctstz) from aggfns where cfloat8 > 0;
-             min              
-------------------------------
- Fri Jan 01 01:01:01 2021 PST
-(1 row)
 
 select s, min(ctstz) from aggfns where cfloat8 > 0 group by s order by min(ctstz), s limit 10;
  s |             min              
@@ -3019,12 +2794,6 @@ select ss, count(s) from aggfns where cfloat8 > 0 group by ss order by count(s),
  11 | 30084
 (10 rows)
 
-select max(s) from aggfns where cfloat8 > 0;
- max 
------
-   9
-(1 row)
-
 select s, max(s) from aggfns where cfloat8 > 0 group by s order by max(s), s limit 10;
  s | max 
 ---+-----
@@ -3054,12 +2823,6 @@ select ss, max(s) from aggfns where cfloat8 > 0 group by ss order by max(s), ss 
   8 |   8
   9 |   9
 (10 rows)
-
-select min(s) from aggfns where cfloat8 > 0;
- min 
------
-   0
-(1 row)
 
 select s, min(s) from aggfns where cfloat8 > 0 group by s order by min(s), s limit 10;
  s | min 
@@ -3199,12 +2962,6 @@ select ss, avg(ss) from aggfns where cfloat8 > 0 group by ss order by avg(ss), s
     |                       
 (10 rows)
 
-select max(ss) from aggfns where cfloat8 > 0;
- max 
------
-  11
-(1 row)
-
 select s, max(ss) from aggfns where cfloat8 > 0 group by s order by max(ss), s limit 10;
  s | max 
 ---+-----
@@ -3234,12 +2991,6 @@ select ss, max(ss) from aggfns where cfloat8 > 0 group by ss order by max(ss), s
  11 |  11
     |    
 (10 rows)
-
-select min(ss) from aggfns where cfloat8 > 0;
- min 
------
-   0
-(1 row)
 
 select s, min(ss) from aggfns where cfloat8 > 0 group by s order by min(ss), s limit 10;
  s | min 
@@ -3343,12 +3094,6 @@ select ss, sum(ss) from aggfns where cfloat8 > 0 group by ss order by sum(ss), s
     |       
 (10 rows)
 
-select max(t) from aggfns where cfloat8 > 0;
-  max   
---------
- 110000
-(1 row)
-
 select s, max(t) from aggfns where cfloat8 > 0 group by s order by max(t), s limit 10;
  s |  max   
 ---+--------
@@ -3378,12 +3123,6 @@ select ss, max(t) from aggfns where cfloat8 > 0 group by ss order by max(t), ss 
   8 |  99997
   9 | 110000
 (10 rows)
-
-select min(t) from aggfns where cfloat8 > 0;
- min 
------
-   1
-(1 row)
 
 select s, min(t) from aggfns where cfloat8 > 0 group by s order by min(t), s limit 10;
  s |  min  
@@ -3450,12 +3189,6 @@ select ss, count(*) from aggfns where cfloat8 <= 0 group by ss order by count(*)
   0 | 10119
 (10 rows)
 
-select max(cdate) from aggfns where cfloat8 <= 0;
-    max     
-------------
- 06-01-2267
-(1 row)
-
 select s, max(cdate) from aggfns where cfloat8 <= 0 group by s order by max(cdate), s limit 10;
  s |    max     
 ---+------------
@@ -3484,12 +3217,6 @@ select ss, max(cdate) from aggfns where cfloat8 <= 0 group by ss order by max(cd
   8 | 01-14-2240
   9 | 06-01-2267
 (10 rows)
-
-select min(cdate) from aggfns where cfloat8 <= 0;
-    min     
-------------
- 01-01-2021
-(1 row)
 
 select s, min(cdate) from aggfns where cfloat8 <= 0 group by s order by min(cdate), s limit 10;
  s |    min     
@@ -3555,12 +3282,6 @@ select ss, avg(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by avg(
  11 |           Infinity
 (10 rows)
 
-select max(cfloat4) from aggfns where cfloat8 <= 0;
-   max    
-----------
- Infinity
-(1 row)
-
 select s, max(cfloat4) from aggfns where cfloat8 <= 0 group by s order by max(cfloat4), s limit 10;
  s |   max    
 ---+----------
@@ -3589,12 +3310,6 @@ select ss, max(cfloat4) from aggfns where cfloat8 <= 0 group by ss order by max(
   8 |  49.9997
  11 | Infinity
 (10 rows)
-
-select min(cfloat4) from aggfns where cfloat8 <= 0;
-   min    
-----------
- -49.9999
-(1 row)
 
 select s, min(cfloat4) from aggfns where cfloat8 <= 0 group by s order by min(cfloat4), s limit 10;
  s |   min    
@@ -3730,12 +3445,6 @@ select ss, avg(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by avg(
     | -18.9533624914475
 (10 rows)
 
-select max(cfloat8) from aggfns where cfloat8 <= 0;
-         max          
-----------------------
- -0.00172397121787071
-(1 row)
-
 select s, max(cfloat8) from aggfns where cfloat8 <= 0 group by s order by max(cfloat8), s limit 10;
  s |         max          
 ---+----------------------
@@ -3764,12 +3473,6 @@ select ss, max(cfloat8) from aggfns where cfloat8 <= 0 group by ss order by max(
   8 | -0.00182925723493099
  11 | -0.00172397121787071
 (10 rows)
-
-select min(cfloat8) from aggfns where cfloat8 <= 0;
-        min        
--------------------
- -49.9994775978848
-(1 row)
 
 select s, min(cfloat8) from aggfns where cfloat8 <= 0 group by s order by min(cfloat8), s limit 10;
  s |        min        
@@ -3940,12 +3643,6 @@ select ss, count(cint2) from aggfns where cfloat8 <= 0 group by ss order by coun
   0 | 10105
 (10 rows)
 
-select max(cint2) from aggfns where cfloat8 <= 0;
-  max  
--------
- 16383
-(1 row)
-
 select s, max(cint2) from aggfns where cfloat8 <= 0 group by s order by max(cint2), s limit 10;
  s |  max  
 ---+-------
@@ -3974,12 +3671,6 @@ select ss, max(cint2) from aggfns where cfloat8 <= 0 group by ss order by max(ci
   4 | 16383
   6 | 16383
 (10 rows)
-
-select min(cint2) from aggfns where cfloat8 <= 0;
-  min   
---------
- -16383
-(1 row)
 
 select s, min(cint2) from aggfns where cfloat8 <= 0 group by s order by min(cint2), s limit 10;
  s |  min   
@@ -4115,12 +3806,6 @@ select ss, avg(cint4) from aggfns where cfloat8 <= 0 group by ss order by avg(ci
     | 5077.1666666666666667
 (10 rows)
 
-select max(cint4) from aggfns where cfloat8 <= 0;
-  max  
--------
- 16383
-(1 row)
-
 select s, max(cint4) from aggfns where cfloat8 <= 0 group by s order by max(cint4), s limit 10;
  s |  max  
 ---+-------
@@ -4149,12 +3834,6 @@ select ss, max(cint4) from aggfns where cfloat8 <= 0 group by ss order by max(ci
   8 | 16383
   9 | 16383
 (10 rows)
-
-select min(cint4) from aggfns where cfloat8 <= 0;
-  min   
---------
- -16383
-(1 row)
 
 select s, min(cint4) from aggfns where cfloat8 <= 0 group by s order by min(cint4), s limit 10;
  s |  min   
@@ -4290,12 +3969,6 @@ select ss, avg(cint8) from aggfns where cfloat8 <= 0 group by ss order by avg(ci
     | 1579.8333333333333333
 (10 rows)
 
-select max(cint8) from aggfns where cfloat8 <= 0;
-  max  
--------
- 16383
-(1 row)
-
 select s, max(cint8) from aggfns where cfloat8 <= 0 group by s order by max(cint8), s limit 10;
  s |  max  
 ---+-------
@@ -4324,12 +3997,6 @@ select ss, max(cint8) from aggfns where cfloat8 <= 0 group by ss order by max(ci
   0 | 16383
   4 | 16383
 (10 rows)
-
-select min(cint8) from aggfns where cfloat8 <= 0;
-  min   
---------
- -16383
-(1 row)
 
 select s, min(cint8) from aggfns where cfloat8 <= 0 group by s order by min(cint8), s limit 10;
  s |  min   
@@ -4395,12 +4062,6 @@ select ss, sum(cint8) from aggfns where cfloat8 <= 0 group by ss order by sum(ci
   9 |   791704
 (10 rows)
 
-select max(cts) from aggfns where cfloat8 <= 0;
-           max            
---------------------------
- Sat Jan 02 02:01:01 2021
-(1 row)
-
 select s, max(cts) from aggfns where cfloat8 <= 0 group by s order by max(cts), s limit 10;
  s |           max            
 ---+--------------------------
@@ -4429,12 +4090,6 @@ select ss, max(cts) from aggfns where cfloat8 <= 0 group by ss order by max(cts)
   8 | Fri Jan 01 23:14:21 2021
   9 | Sat Jan 02 02:01:01 2021
 (10 rows)
-
-select min(cts) from aggfns where cfloat8 <= 0;
-           min            
---------------------------
- Fri Jan 01 01:01:01 2021
-(1 row)
 
 select s, min(cts) from aggfns where cfloat8 <= 0 group by s order by min(cts), s limit 10;
  s |           min            
@@ -4465,12 +4120,6 @@ select ss, min(cts) from aggfns where cfloat8 <= 0 group by ss order by min(cts)
   9 | Sat Jan 02 02:01:01 2021
 (10 rows)
 
-select max(ctstz) from aggfns where cfloat8 <= 0;
-             max              
-------------------------------
- Sat Jan 02 02:01:01 2021 PST
-(1 row)
-
 select s, max(ctstz) from aggfns where cfloat8 <= 0 group by s order by max(ctstz), s limit 10;
  s |             max              
 ---+------------------------------
@@ -4499,12 +4148,6 @@ select ss, max(ctstz) from aggfns where cfloat8 <= 0 group by ss order by max(ct
   8 | Fri Jan 01 23:14:21 2021 PST
   9 | Sat Jan 02 02:01:01 2021 PST
 (10 rows)
-
-select min(ctstz) from aggfns where cfloat8 <= 0;
-             min              
-------------------------------
- Fri Jan 01 01:01:01 2021 PST
-(1 row)
 
 select s, min(ctstz) from aggfns where cfloat8 <= 0 group by s order by min(ctstz), s limit 10;
  s |             min              
@@ -4605,12 +4248,6 @@ select ss, count(s) from aggfns where cfloat8 <= 0 group by ss order by count(s)
   0 | 10119
 (10 rows)
 
-select max(s) from aggfns where cfloat8 <= 0;
- max 
------
-   9
-(1 row)
-
 select s, max(s) from aggfns where cfloat8 <= 0 group by s order by max(s), s limit 10;
  s | max 
 ---+-----
@@ -4639,12 +4276,6 @@ select ss, max(s) from aggfns where cfloat8 <= 0 group by ss order by max(s), ss
   8 |   8
   9 |   9
 (10 rows)
-
-select min(s) from aggfns where cfloat8 <= 0;
- min 
------
-   0
-(1 row)
 
 select s, min(s) from aggfns where cfloat8 <= 0 group by s order by min(s), s limit 10;
  s | min 
@@ -4780,12 +4411,6 @@ select ss, avg(ss) from aggfns where cfloat8 <= 0 group by ss order by avg(ss), 
     |                           
 (10 rows)
 
-select max(ss) from aggfns where cfloat8 <= 0;
- max 
------
-  11
-(1 row)
-
 select s, max(ss) from aggfns where cfloat8 <= 0 group by s order by max(ss), s limit 10;
  s | max 
 ---+-----
@@ -4814,12 +4439,6 @@ select ss, max(ss) from aggfns where cfloat8 <= 0 group by ss order by max(ss), 
  11 |  11
     |    
 (10 rows)
-
-select min(ss) from aggfns where cfloat8 <= 0;
- min 
------
-   0
-(1 row)
 
 select s, min(ss) from aggfns where cfloat8 <= 0 group by s order by min(ss), s limit 10;
  s | min 
@@ -4920,12 +4539,6 @@ select ss, sum(ss) from aggfns where cfloat8 <= 0 group by ss order by sum(ss), 
     |       
 (10 rows)
 
-select max(t) from aggfns where cfloat8 <= 0;
-  max   
---------
- 109998
-(1 row)
-
 select s, max(t) from aggfns where cfloat8 <= 0 group by s order by max(t), s limit 10;
  s |  max   
 ---+--------
@@ -4954,12 +4567,6 @@ select ss, max(t) from aggfns where cfloat8 <= 0 group by ss order by max(t), ss
   8 | 100000
   9 | 109998
 (10 rows)
-
-select min(t) from aggfns where cfloat8 <= 0;
- min 
------
-   8
-(1 row)
 
 select s, min(t) from aggfns where cfloat8 <= 0 group by s order by min(t), s limit 10;
  s |  min  
@@ -5026,12 +4633,6 @@ select ss, count(*) from aggfns where cfloat8 < 1000 group by ss order by count(
  11 | 40019
 (10 rows)
 
-select max(cdate) from aggfns where cfloat8 < 1000;
-    max     
-------------
- 06-01-2267
-(1 row)
-
 select s, max(cdate) from aggfns where cfloat8 < 1000 group by s order by max(cdate), s limit 10;
  s |    max     
 ---+------------
@@ -5061,12 +4662,6 @@ select ss, max(cdate) from aggfns where cfloat8 < 1000 group by ss order by max(
   8 | 01-14-2240
   9 | 06-01-2267
 (10 rows)
-
-select min(cdate) from aggfns where cfloat8 < 1000;
-    min     
-------------
- 01-01-2021
-(1 row)
 
 select s, min(cdate) from aggfns where cfloat8 < 1000 group by s order by min(cdate), s limit 10;
  s |    min     
@@ -5134,12 +4729,6 @@ select ss, avg(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by av
  11 |                  NaN
 (10 rows)
 
-select max(cfloat4) from aggfns where cfloat8 < 1000;
- max 
------
- NaN
-(1 row)
-
 select s, max(cfloat4) from aggfns where cfloat8 < 1000 group by s order by max(cfloat4), s limit 10;
  s |   max    
 ---+----------
@@ -5169,12 +4758,6 @@ select ss, max(cfloat4) from aggfns where cfloat8 < 1000 group by ss order by ma
   8 | 49.9997
  11 |     NaN
 (10 rows)
-
-select min(cfloat4) from aggfns where cfloat8 < 1000;
-    min    
------------
- -Infinity
-(1 row)
 
 select s, min(cfloat4) from aggfns where cfloat8 < 1000 group by s order by min(cfloat4), s limit 10;
  s |    min    
@@ -5314,12 +4897,6 @@ select ss, avg(cfloat8) from aggfns where cfloat8 < 1000 group by ss order by av
  11 |   6.59778165165114
 (10 rows)
 
-select max(cfloat8) from aggfns where cfloat8 < 1000;
-       max        
-------------------
- 49.9995574122295
-(1 row)
-
 select s, max(cfloat8) from aggfns where cfloat8 < 1000 group by s order by max(cfloat8), s limit 10;
  s |       max        
 ---+------------------
@@ -5349,12 +4926,6 @@ select ss, max(cfloat8) from aggfns where cfloat8 < 1000 group by ss order by ma
   4 | 49.9978997278959
   9 | 49.9995574122295
 (10 rows)
-
-select min(cfloat8) from aggfns where cfloat8 < 1000;
-        min        
--------------------
- -49.9994775978848
-(1 row)
 
 select s, min(cfloat8) from aggfns where cfloat8 < 1000 group by s order by min(cfloat8), s limit 10;
  s |        min        
@@ -5530,12 +5101,6 @@ select ss, count(cint2) from aggfns where cfloat8 < 1000 group by ss order by co
  11 | 39981
 (10 rows)
 
-select max(cint2) from aggfns where cfloat8 < 1000;
-  max  
--------
- 16383
-(1 row)
-
 select s, max(cint2) from aggfns where cfloat8 < 1000 group by s order by max(cint2), s limit 10;
  s |  max  
 ---+-------
@@ -5565,12 +5130,6 @@ select ss, max(cint2) from aggfns where cfloat8 < 1000 group by ss order by max(
   9 | 16383
  11 | 16383
 (10 rows)
-
-select min(cint2) from aggfns where cfloat8 < 1000;
-  min   
---------
- -16383
-(1 row)
 
 select s, min(cint2) from aggfns where cfloat8 < 1000 group by s order by min(cint2), s limit 10;
  s |  min   
@@ -5710,12 +5269,6 @@ select ss, avg(cint4) from aggfns where cfloat8 < 1000 group by ss order by avg(
     | 2197.6842105263157895
 (10 rows)
 
-select max(cint4) from aggfns where cfloat8 < 1000;
-  max  
--------
- 16383
-(1 row)
-
 select s, max(cint4) from aggfns where cfloat8 < 1000 group by s order by max(cint4), s limit 10;
  s |  max  
 ---+-------
@@ -5745,12 +5298,6 @@ select ss, max(cint4) from aggfns where cfloat8 < 1000 group by ss order by max(
   9 | 16383
  11 | 16383
 (10 rows)
-
-select min(cint4) from aggfns where cfloat8 < 1000;
-  min   
---------
- -16383
-(1 row)
 
 select s, min(cint4) from aggfns where cfloat8 < 1000 group by s order by min(cint4), s limit 10;
  s |  min   
@@ -5890,12 +5437,6 @@ select ss, avg(cint8) from aggfns where cfloat8 < 1000 group by ss order by avg(
     | 2467.2631578947368421
 (10 rows)
 
-select max(cint8) from aggfns where cfloat8 < 1000;
-  max  
--------
- 16383
-(1 row)
-
 select s, max(cint8) from aggfns where cfloat8 < 1000 group by s order by max(cint8), s limit 10;
  s |  max  
 ---+-------
@@ -5925,12 +5466,6 @@ select ss, max(cint8) from aggfns where cfloat8 < 1000 group by ss order by max(
   5 | 16383
  11 | 16383
 (10 rows)
-
-select min(cint8) from aggfns where cfloat8 < 1000;
-  min   
---------
- -16383
-(1 row)
 
 select s, min(cint8) from aggfns where cfloat8 < 1000 group by s order by min(cint8), s limit 10;
  s |  min   
@@ -5998,12 +5533,6 @@ select ss, sum(cint8) from aggfns where cfloat8 < 1000 group by ss order by sum(
   9 |  1234935
 (10 rows)
 
-select max(cts) from aggfns where cfloat8 < 1000;
-           max            
---------------------------
- Sat Jan 02 02:01:01 2021
-(1 row)
-
 select s, max(cts) from aggfns where cfloat8 < 1000 group by s order by max(cts), s limit 10;
  s |           max            
 ---+--------------------------
@@ -6033,12 +5562,6 @@ select ss, max(cts) from aggfns where cfloat8 < 1000 group by ss order by max(ct
   8 | Fri Jan 01 23:14:21 2021
   9 | Sat Jan 02 02:01:01 2021
 (10 rows)
-
-select min(cts) from aggfns where cfloat8 < 1000;
-           min            
---------------------------
- Fri Jan 01 01:01:01 2021
-(1 row)
 
 select s, min(cts) from aggfns where cfloat8 < 1000 group by s order by min(cts), s limit 10;
  s |           min            
@@ -6070,12 +5593,6 @@ select ss, min(cts) from aggfns where cfloat8 < 1000 group by ss order by min(ct
   9 | Sat Jan 02 02:01:01 2021
 (10 rows)
 
-select max(ctstz) from aggfns where cfloat8 < 1000;
-             max              
-------------------------------
- Sat Jan 02 02:01:01 2021 PST
-(1 row)
-
 select s, max(ctstz) from aggfns where cfloat8 < 1000 group by s order by max(ctstz), s limit 10;
  s |             max              
 ---+------------------------------
@@ -6105,12 +5622,6 @@ select ss, max(ctstz) from aggfns where cfloat8 < 1000 group by ss order by max(
   8 | Fri Jan 01 23:14:21 2021 PST
   9 | Sat Jan 02 02:01:01 2021 PST
 (10 rows)
-
-select min(ctstz) from aggfns where cfloat8 < 1000;
-             min              
-------------------------------
- Fri Jan 01 01:01:01 2021 PST
-(1 row)
 
 select s, min(ctstz) from aggfns where cfloat8 < 1000 group by s order by min(ctstz), s limit 10;
  s |             min              
@@ -6214,12 +5725,6 @@ select ss, count(s) from aggfns where cfloat8 < 1000 group by ss order by count(
  11 | 40019
 (10 rows)
 
-select max(s) from aggfns where cfloat8 < 1000;
- max 
------
-   9
-(1 row)
-
 select s, max(s) from aggfns where cfloat8 < 1000 group by s order by max(s), s limit 10;
  s | max 
 ---+-----
@@ -6249,12 +5754,6 @@ select ss, max(s) from aggfns where cfloat8 < 1000 group by ss order by max(s), 
   8 |   8
   9 |   9
 (10 rows)
-
-select min(s) from aggfns where cfloat8 < 1000;
- min 
------
-   0
-(1 row)
 
 select s, min(s) from aggfns where cfloat8 < 1000 group by s order by min(s), s limit 10;
  s | min 
@@ -6394,12 +5893,6 @@ select ss, avg(ss) from aggfns where cfloat8 < 1000 group by ss order by avg(ss)
     |                           
 (10 rows)
 
-select max(ss) from aggfns where cfloat8 < 1000;
- max 
------
-  11
-(1 row)
-
 select s, max(ss) from aggfns where cfloat8 < 1000 group by s order by max(ss), s limit 10;
  s | max 
 ---+-----
@@ -6429,12 +5922,6 @@ select ss, max(ss) from aggfns where cfloat8 < 1000 group by ss order by max(ss)
  11 |  11
     |    
 (10 rows)
-
-select min(ss) from aggfns where cfloat8 < 1000;
- min 
------
-   0
-(1 row)
 
 select s, min(ss) from aggfns where cfloat8 < 1000 group by s order by min(ss), s limit 10;
  s | min 
@@ -6538,12 +6025,6 @@ select ss, sum(ss) from aggfns where cfloat8 < 1000 group by ss order by sum(ss)
     |       
 (10 rows)
 
-select max(t) from aggfns where cfloat8 < 1000;
-  max   
---------
- 110000
-(1 row)
-
 select s, max(t) from aggfns where cfloat8 < 1000 group by s order by max(t), s limit 10;
  s |  max   
 ---+--------
@@ -6573,12 +6054,6 @@ select ss, max(t) from aggfns where cfloat8 < 1000 group by ss order by max(t), 
   8 | 100000
   9 | 110000
 (10 rows)
-
-select min(t) from aggfns where cfloat8 < 1000;
- min 
------
-   1
-(1 row)
 
 select s, min(t) from aggfns where cfloat8 < 1000 group by s order by min(t), s limit 10;
  s |  min  
@@ -6626,12 +6101,6 @@ select ss, count(*) from aggfns where cfloat8 > 1000 group by ss order by count(
 ----+-------
 (0 rows)
 
-select max(cdate) from aggfns where cfloat8 > 1000;
- max 
------
- 
-(1 row)
-
 select s, max(cdate) from aggfns where cfloat8 > 1000 group by s order by max(cdate), s limit 10;
  s | max 
 ---+-----
@@ -6641,12 +6110,6 @@ select ss, max(cdate) from aggfns where cfloat8 > 1000 group by ss order by max(
  ss | max 
 ----+-----
 (0 rows)
-
-select min(cdate) from aggfns where cfloat8 > 1000;
- min 
------
- 
-(1 row)
 
 select s, min(cdate) from aggfns where cfloat8 > 1000 group by s order by min(cdate), s limit 10;
  s | min 
@@ -6674,12 +6137,6 @@ select ss, avg(cfloat4) from aggfns where cfloat8 > 1000 group by ss order by av
 ----+-----
 (0 rows)
 
-select max(cfloat4) from aggfns where cfloat8 > 1000;
- max 
------
-    
-(1 row)
-
 select s, max(cfloat4) from aggfns where cfloat8 > 1000 group by s order by max(cfloat4), s limit 10;
  s | max 
 ---+-----
@@ -6689,12 +6146,6 @@ select ss, max(cfloat4) from aggfns where cfloat8 > 1000 group by ss order by ma
  ss | max 
 ----+-----
 (0 rows)
-
-select min(cfloat4) from aggfns where cfloat8 > 1000;
- min 
------
-    
-(1 row)
 
 select s, min(cfloat4) from aggfns where cfloat8 > 1000 group by s order by min(cfloat4), s limit 10;
  s | min 
@@ -6754,12 +6205,6 @@ select ss, avg(cfloat8) from aggfns where cfloat8 > 1000 group by ss order by av
 ----+-----
 (0 rows)
 
-select max(cfloat8) from aggfns where cfloat8 > 1000;
- max 
------
-    
-(1 row)
-
 select s, max(cfloat8) from aggfns where cfloat8 > 1000 group by s order by max(cfloat8), s limit 10;
  s | max 
 ---+-----
@@ -6769,12 +6214,6 @@ select ss, max(cfloat8) from aggfns where cfloat8 > 1000 group by ss order by ma
  ss | max 
 ----+-----
 (0 rows)
-
-select min(cfloat8) from aggfns where cfloat8 > 1000;
- min 
------
-    
-(1 row)
 
 select s, min(cfloat8) from aggfns where cfloat8 > 1000 group by s order by min(cfloat8), s limit 10;
  s | min 
@@ -6850,12 +6289,6 @@ select ss, count(cint2) from aggfns where cfloat8 > 1000 group by ss order by co
 ----+-------
 (0 rows)
 
-select max(cint2) from aggfns where cfloat8 > 1000;
- max 
------
-    
-(1 row)
-
 select s, max(cint2) from aggfns where cfloat8 > 1000 group by s order by max(cint2), s limit 10;
  s | max 
 ---+-----
@@ -6865,12 +6298,6 @@ select ss, max(cint2) from aggfns where cfloat8 > 1000 group by ss order by max(
  ss | max 
 ----+-----
 (0 rows)
-
-select min(cint2) from aggfns where cfloat8 > 1000;
- min 
------
-    
-(1 row)
 
 select s, min(cint2) from aggfns where cfloat8 > 1000 group by s order by min(cint2), s limit 10;
  s | min 
@@ -6930,12 +6357,6 @@ select ss, avg(cint4) from aggfns where cfloat8 > 1000 group by ss order by avg(
 ----+-----
 (0 rows)
 
-select max(cint4) from aggfns where cfloat8 > 1000;
- max 
------
-    
-(1 row)
-
 select s, max(cint4) from aggfns where cfloat8 > 1000 group by s order by max(cint4), s limit 10;
  s | max 
 ---+-----
@@ -6945,12 +6366,6 @@ select ss, max(cint4) from aggfns where cfloat8 > 1000 group by ss order by max(
  ss | max 
 ----+-----
 (0 rows)
-
-select min(cint4) from aggfns where cfloat8 > 1000;
- min 
------
-    
-(1 row)
 
 select s, min(cint4) from aggfns where cfloat8 > 1000 group by s order by min(cint4), s limit 10;
  s | min 
@@ -7010,12 +6425,6 @@ select ss, avg(cint8) from aggfns where cfloat8 > 1000 group by ss order by avg(
 ----+-----
 (0 rows)
 
-select max(cint8) from aggfns where cfloat8 > 1000;
- max 
------
-    
-(1 row)
-
 select s, max(cint8) from aggfns where cfloat8 > 1000 group by s order by max(cint8), s limit 10;
  s | max 
 ---+-----
@@ -7025,12 +6434,6 @@ select ss, max(cint8) from aggfns where cfloat8 > 1000 group by ss order by max(
  ss | max 
 ----+-----
 (0 rows)
-
-select min(cint8) from aggfns where cfloat8 > 1000;
- min 
------
-    
-(1 row)
 
 select s, min(cint8) from aggfns where cfloat8 > 1000 group by s order by min(cint8), s limit 10;
  s | min 
@@ -7058,12 +6461,6 @@ select ss, sum(cint8) from aggfns where cfloat8 > 1000 group by ss order by sum(
 ----+-----
 (0 rows)
 
-select max(cts) from aggfns where cfloat8 > 1000;
- max 
------
- 
-(1 row)
-
 select s, max(cts) from aggfns where cfloat8 > 1000 group by s order by max(cts), s limit 10;
  s | max 
 ---+-----
@@ -7073,12 +6470,6 @@ select ss, max(cts) from aggfns where cfloat8 > 1000 group by ss order by max(ct
  ss | max 
 ----+-----
 (0 rows)
-
-select min(cts) from aggfns where cfloat8 > 1000;
- min 
------
- 
-(1 row)
 
 select s, min(cts) from aggfns where cfloat8 > 1000 group by s order by min(cts), s limit 10;
  s | min 
@@ -7090,12 +6481,6 @@ select ss, min(cts) from aggfns where cfloat8 > 1000 group by ss order by min(ct
 ----+-----
 (0 rows)
 
-select max(ctstz) from aggfns where cfloat8 > 1000;
- max 
------
- 
-(1 row)
-
 select s, max(ctstz) from aggfns where cfloat8 > 1000 group by s order by max(ctstz), s limit 10;
  s | max 
 ---+-----
@@ -7105,12 +6490,6 @@ select ss, max(ctstz) from aggfns where cfloat8 > 1000 group by ss order by max(
  ss | max 
 ----+-----
 (0 rows)
-
-select min(ctstz) from aggfns where cfloat8 > 1000;
- min 
------
- 
-(1 row)
 
 select s, min(ctstz) from aggfns where cfloat8 > 1000 group by s order by min(ctstz), s limit 10;
  s | min 
@@ -7154,12 +6533,6 @@ select ss, count(s) from aggfns where cfloat8 > 1000 group by ss order by count(
 ----+-------
 (0 rows)
 
-select max(s) from aggfns where cfloat8 > 1000;
- max 
------
-    
-(1 row)
-
 select s, max(s) from aggfns where cfloat8 > 1000 group by s order by max(s), s limit 10;
  s | max 
 ---+-----
@@ -7169,12 +6542,6 @@ select ss, max(s) from aggfns where cfloat8 > 1000 group by ss order by max(s), 
  ss | max 
 ----+-----
 (0 rows)
-
-select min(s) from aggfns where cfloat8 > 1000;
- min 
------
-    
-(1 row)
 
 select s, min(s) from aggfns where cfloat8 > 1000 group by s order by min(s), s limit 10;
  s | min 
@@ -7234,12 +6601,6 @@ select ss, avg(ss) from aggfns where cfloat8 > 1000 group by ss order by avg(ss)
 ----+-----
 (0 rows)
 
-select max(ss) from aggfns where cfloat8 > 1000;
- max 
------
-    
-(1 row)
-
 select s, max(ss) from aggfns where cfloat8 > 1000 group by s order by max(ss), s limit 10;
  s | max 
 ---+-----
@@ -7249,12 +6610,6 @@ select ss, max(ss) from aggfns where cfloat8 > 1000 group by ss order by max(ss)
  ss | max 
 ----+-----
 (0 rows)
-
-select min(ss) from aggfns where cfloat8 > 1000;
- min 
------
-    
-(1 row)
 
 select s, min(ss) from aggfns where cfloat8 > 1000 group by s order by min(ss), s limit 10;
  s | min 
@@ -7298,12 +6653,6 @@ select ss, sum(ss) from aggfns where cfloat8 > 1000 group by ss order by sum(ss)
 ----+-----
 (0 rows)
 
-select max(t) from aggfns where cfloat8 > 1000;
- max 
------
-    
-(1 row)
-
 select s, max(t) from aggfns where cfloat8 > 1000 group by s order by max(t), s limit 10;
  s | max 
 ---+-----
@@ -7313,12 +6662,6 @@ select ss, max(t) from aggfns where cfloat8 > 1000 group by ss order by max(t), 
  ss | max 
 ----+-----
 (0 rows)
-
-select min(t) from aggfns where cfloat8 > 1000;
- min 
------
-    
-(1 row)
 
 select s, min(t) from aggfns where cfloat8 > 1000 group by s order by min(t), s limit 10;
  s | min 
@@ -7400,12 +6743,6 @@ select ss, count(cint2) from aggfns where cint2 is null group by ss order by cou
  11 |     0
 (9 rows)
 
-select max(cint2) from aggfns where cint2 is null;
- max 
------
-    
-(1 row)
-
 select s, max(cint2) from aggfns where cint2 is null group by s order by max(cint2), s limit 10;
  s | max 
 ---+-----
@@ -7434,12 +6771,6 @@ select ss, max(cint2) from aggfns where cint2 is null group by ss order by max(c
   9 |    
  11 |    
 (9 rows)
-
-select min(cint2) from aggfns where cint2 is null;
- min 
------
-    
-(1 row)
 
 select s, min(cint2) from aggfns where cint2 is null group by s order by min(cint2), s limit 10;
  s | min 
