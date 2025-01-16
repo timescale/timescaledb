@@ -1,1 +1,0 @@
-Implements: #7341: Vectorized aggregation with grouping by one fixed-size by-value compressed column (such as arithmetic types).
