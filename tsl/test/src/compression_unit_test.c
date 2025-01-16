@@ -29,7 +29,7 @@
 #include "compression/algorithms/float_utils.h"
 #include "compression/algorithms/gorilla.h"
 #include "compression/arrow_c_data_interface.h"
-#include "compression/segment_meta.h"
+#include "compression/batch_metadata_builder_minmax.h"
 
 #define TEST_ELEMENTS 1015
 
@@ -649,8 +649,8 @@ TS_FUNCTION_INFO_V1(ts_segment_meta_min_max_append);
 Datum
 ts_segment_meta_min_max_append(PG_FUNCTION_ARGS)
 {
-	SegmentMetaMinMaxBuilder *builder =
-		(SegmentMetaMinMaxBuilder *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
+	BatchMetadataBuilder *builder =
+		(BatchMetadataBuilder *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
 	MemoryContext agg_context;
 	MemoryContext old_context;
 
@@ -665,12 +665,13 @@ ts_segment_meta_min_max_append(PG_FUNCTION_ARGS)
 	if (builder == NULL)
 	{
 		Oid type_to_compress = get_fn_expr_argtype(fcinfo->flinfo, 1);
-		builder = segment_meta_min_max_builder_create(type_to_compress, fcinfo->fncollation);
+		builder =
+			batch_metadata_builder_minmax_create(type_to_compress, fcinfo->fncollation, -1, -1);
 	}
 	if (PG_ARGISNULL(1))
-		segment_meta_min_max_builder_update_null(builder);
+		builder->update_null(builder);
 	else
-		segment_meta_min_max_builder_update_val(builder, PG_GETARG_DATUM(1));
+		builder->update_val(builder, PG_GETARG_DATUM(1));
 
 	MemoryContextSwitchTo(old_context);
 	PG_RETURN_POINTER(builder);
@@ -680,26 +681,26 @@ TS_FUNCTION_INFO_V1(ts_segment_meta_min_max_finish_max);
 Datum
 ts_segment_meta_min_max_finish_max(PG_FUNCTION_ARGS)
 {
-	SegmentMetaMinMaxBuilder *builder =
-		(SegmentMetaMinMaxBuilder *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
+	BatchMetadataBuilderMinMax *builder =
+		(BatchMetadataBuilderMinMax *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
 
-	if (builder == NULL || segment_meta_min_max_builder_empty(builder))
+	if (builder == NULL || batch_metadata_builder_minmax_empty(builder))
 		PG_RETURN_NULL();
 
-	PG_RETURN_DATUM(segment_meta_min_max_builder_max(builder));
+	PG_RETURN_DATUM(batch_metadata_builder_minmax_max(builder));
 }
 
 TS_FUNCTION_INFO_V1(ts_segment_meta_min_max_finish_min);
 Datum
 ts_segment_meta_min_max_finish_min(PG_FUNCTION_ARGS)
 {
-	SegmentMetaMinMaxBuilder *builder =
-		(SegmentMetaMinMaxBuilder *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
+	BatchMetadataBuilderMinMax *builder =
+		(BatchMetadataBuilderMinMax *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
 
-	if (builder == NULL || segment_meta_min_max_builder_empty(builder))
+	if (builder == NULL || batch_metadata_builder_minmax_empty(builder))
 		PG_RETURN_NULL();
 
-	PG_RETURN_DATUM(segment_meta_min_max_builder_min(builder));
+	PG_RETURN_DATUM(batch_metadata_builder_minmax_min(builder));
 }
 
 TS_FUNCTION_INFO_V1(ts_compression_custom_type_in);

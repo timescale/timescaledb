@@ -16,9 +16,9 @@
 typedef struct BulkInsertStateData *BulkInsertState;
 
 #include "compat/compat.h"
+#include "batch_metadata_builder_minmax.h"
 #include "hypertable.h"
 #include "nodes/decompress_chunk/detoaster.h"
-#include "segment_meta.h"
 #include "ts_catalog/compression_settings.h"
 
 /*
@@ -215,9 +215,7 @@ typedef struct PerColumn
 	 * Information on the metadata we'll store for this column (currently only min/max).
 	 * Only used for order-by columns right now, will be {-1, NULL} for others.
 	 */
-	int16 min_metadata_attr_offset;
-	int16 max_metadata_attr_offset;
-	SegmentMetaMinMaxBuilder *min_max_metadata_builder;
+	BatchMetadataBuilder *metadata_builder;
 
 	/* segment info; only used if compressor is NULL */
 	SegmentInfo *segment_info;

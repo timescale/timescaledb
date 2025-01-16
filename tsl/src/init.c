@@ -24,7 +24,6 @@
 #include "compression/compression.h"
 #include "compression/create.h"
 #include "compression/recompress.h"
-#include "compression/segment_meta.h"
 #include "config.h"
 #include "continuous_aggs/create.h"
 #include "continuous_aggs/insert.h"

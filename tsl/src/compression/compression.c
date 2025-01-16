@@ -22,6 +22,7 @@
 #include "algorithms/deltadelta.h"
 #include "algorithms/dictionary.h"
 #include "algorithms/gorilla.h"
+#include "batch_metadata_builder.h"
 #include "chunk.h"
 #include "compression.h"
 #include "create.h"
@@ -31,7 +32,6 @@
 #include "guc.h"
 #include "hypercore/hypercore_handler.h"
 #include "nodes/chunk_dispatch/chunk_insert_state.h"
-#include "segment_meta.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_chunk_size.h"
@@ -742,7 +742,7 @@ build_column_map(CompressionSettings *settings, Relation uncompressed_table,
 			int16 segment_min_attr_offset = segment_min_attr_number - 1;
 			int16 segment_max_attr_offset = segment_max_attr_number - 1;
 
-			SegmentMetaMinMaxBuilder *segment_min_max_builder = NULL;
+			BatchMetadataBuilder *batch_minmax_builder = NULL;
 			if (segment_min_attr_number != InvalidAttrNumber ||
 				segment_max_attr_number != InvalidAttrNumber)
 			{
@@ -750,18 +750,19 @@ build_column_map(CompressionSettings *settings, Relation uncompressed_table,
 					   "could not find the min metadata column");
 				Ensure(segment_max_attr_number != InvalidAttrNumber,
 					   "could not find the min metadata column");
-				segment_min_max_builder =
-					segment_meta_min_max_builder_create(attr->atttypid, attr->attcollation);
+				batch_minmax_builder =
+					batch_metadata_builder_minmax_create(attr->atttypid,
+														 attr->attcollation,
+														 segment_min_attr_offset,
+														 segment_max_attr_offset);
 			}
 
-			Ensure(!is_orderby || segment_min_max_builder != NULL,
+			Ensure(!is_orderby || batch_minmax_builder != NULL,
 				   "orderby columns must have minmax metadata");
 
 			*column = (PerColumn){
 				.compressor = compressor_for_type(attr->atttypid),
-				.min_metadata_attr_offset = segment_min_attr_offset,
-				.max_metadata_attr_offset = segment_max_attr_offset,
-				.min_max_metadata_builder = segment_min_max_builder,
+				.metadata_builder = batch_minmax_builder,
 				.segmentby_column_index = -1,
 			};
 		}
@@ -775,8 +776,6 @@ build_column_map(CompressionSettings *settings, Relation uncompressed_table,
 			*column = (PerColumn){
 				.segment_info = segment_info_new(attr),
 				.segmentby_column_index = index,
-				.min_metadata_attr_offset = -1,
-				.max_metadata_attr_offset = -1,
 			};
 		}
 	}
@@ -972,21 +971,23 @@ row_compressor_append_row(RowCompressor *row_compressor, TupleTableSlot *row)
 		/* Performance Improvement: Since we call getallatts at the beginning, slot_getattr is
 		 * useless overhead here, and we should just access the array directly.
 		 */
+		BatchMetadataBuilder *builder = row_compressor->per_column[col].metadata_builder;
 		val = slot_getattr(row, AttrOffsetGetAttrNumber(col), &is_null);
 		if (is_null)
 		{
 			compressor->append_null(compressor);
-			if (row_compressor->per_column[col].min_max_metadata_builder != NULL)
-				segment_meta_min_max_builder_update_null(
-					row_compressor->per_column[col].min_max_metadata_builder);
+			if (builder != NULL)
+			{
+				builder->update_null(builder);
+			}
 		}
 		else
 		{
 			compressor->append_val(compressor, val);
-			if (row_compressor->per_column[col].min_max_metadata_builder != NULL)
-				segment_meta_min_max_builder_update_val(row_compressor->per_column[col]
-															.min_max_metadata_builder,
-														val);
+			if (builder != NULL)
+			{
+				builder->update_val(builder, val);
+			}
 		}
 	}
 
@@ -1024,28 +1025,10 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 				row_compressor->compressed_values[compressed_col] =
 					PointerGetDatum(compressed_data);
 
-			if (column->min_max_metadata_builder != NULL)
+			if (column->metadata_builder != NULL)
 			{
-				Assert(column->min_metadata_attr_offset >= 0);
-				Assert(column->max_metadata_attr_offset >= 0);
-
-				if (!segment_meta_min_max_builder_empty(column->min_max_metadata_builder))
-				{
-					Assert(compressed_data != NULL);
-					row_compressor->compressed_is_null[column->min_metadata_attr_offset] = false;
-					row_compressor->compressed_is_null[column->max_metadata_attr_offset] = false;
-
-					row_compressor->compressed_values[column->min_metadata_attr_offset] =
-						segment_meta_min_max_builder_min(column->min_max_metadata_builder);
-					row_compressor->compressed_values[column->max_metadata_attr_offset] =
-						segment_meta_min_max_builder_max(column->min_max_metadata_builder);
-				}
-				else
-				{
-					Assert(compressed_data == NULL);
-					row_compressor->compressed_is_null[column->min_metadata_attr_offset] = true;
-					row_compressor->compressed_is_null[column->max_metadata_attr_offset] = true;
-				}
+				column->metadata_builder->insert_to_compressed_row(column->metadata_builder,
+																   row_compressor);
 			}
 		}
 		else if (column->segment_info != NULL)
@@ -1096,20 +1079,9 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 		if (column->compressor != NULL || !column->segment_info->typ_by_val)
 			pfree(DatumGetPointer(row_compressor->compressed_values[compressed_col]));
 
-		if (column->min_max_metadata_builder != NULL)
+		if (column->metadata_builder != NULL)
 		{
-			/* segment_meta_min_max_builder_reset will free the values, so  clear here */
-			if (!row_compressor->compressed_is_null[column->min_metadata_attr_offset])
-			{
-				row_compressor->compressed_values[column->min_metadata_attr_offset] = 0;
-				row_compressor->compressed_is_null[column->min_metadata_attr_offset] = true;
-			}
-			if (!row_compressor->compressed_is_null[column->max_metadata_attr_offset])
-			{
-				row_compressor->compressed_values[column->max_metadata_attr_offset] = 0;
-				row_compressor->compressed_is_null[column->max_metadata_attr_offset] = true;
-			}
-			segment_meta_min_max_builder_reset(column->min_max_metadata_builder);
+			column->metadata_builder->reset(column->metadata_builder, row_compressor);
 		}
 
 		row_compressor->compressed_values[compressed_col] = 0;
