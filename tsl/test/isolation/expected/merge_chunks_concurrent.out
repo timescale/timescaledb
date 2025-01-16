@@ -276,10 +276,7 @@ count
 (1 row)
 
 
-starting permutation: s2_set_lock_upgrade s4_wp_enable s2_show_chunks s1_begin s1_show_data s2_merge_chunks s1_show_data s1_row_exclusive_lock s4_wp_release s1_commit s1_show_data s1_show_chunks
-step s2_set_lock_upgrade: 
-    set timescaledb.merge_chunks_lock_upgrade_mode='upgrade';
-
+starting permutation: s4_wp_enable s2_show_chunks s1_begin s1_show_data s2_merge_chunks s1_show_data s1_row_exclusive_lock s4_wp_release s1_commit s1_show_data s1_show_chunks
 step s4_wp_enable: SELECT debug_waitpoint_enable('merge_chunks_before_heap_swap');
 debug_waitpoint_enable
 ----------------------
@@ -338,16 +335,89 @@ num_device_all|num_device_1|num_device_5
              4|           1|           0
 (1 row)
 
-step s1_row_exclusive_lock: call lock_one_chunk('readings'); <waiting ...>
+step s1_row_exclusive_lock: call lock_one_chunk('readings');
 step s4_wp_release: SELECT debug_waitpoint_release('merge_chunks_before_heap_swap');
 debug_waitpoint_release
 -----------------------
                        
 (1 row)
 
-step s1_row_exclusive_lock: <... completed>
-ERROR:  deadlock detected
+step s1_commit: commit;
 step s2_merge_chunks: <... completed>
+step s1_show_data: 
+    select * from readings order by time desc, device;
+    select count(*) as num_device_all, count(*) filter (where device=1) as num_device_1, count(*) filter (where device=5) as num_device_5 from readings;
+
+time                        |device|temp
+----------------------------+------+----
+Mon Jan 01 02:00:00 2024 PST|     3|   3
+Mon Jan 01 02:00:00 2024 PST|     4|   4
+Mon Jan 01 01:01:00 2024 PST|     2|   2
+Mon Jan 01 01:00:00 2024 PST|     1|   1
+(4 rows)
+
+num_device_all|num_device_1|num_device_5
+--------------+------------+------------
+             4|           1|           0
+(1 row)
+
+step s1_show_chunks: select count(*) from show_chunks('readings');
+count
+-----
+    1
+(1 row)
+
+
+starting permutation: s4_wp_enable s2_show_chunks s1_begin s2_merge_chunks s1_show_data s4_wp_release s1_commit s1_show_data s1_show_chunks
+step s4_wp_enable: SELECT debug_waitpoint_enable('merge_chunks_before_heap_swap');
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s2_show_chunks: select count(*) from show_chunks('readings');
+count
+-----
+    2
+(1 row)
+
+step s1_begin: 
+    start transaction isolation level repeatable read;
+    select count(*) > 0 from pg_class;
+
+?column?
+--------
+t       
+(1 row)
+
+step s2_merge_chunks: 
+    call merge_all_chunks('readings');
+ <waiting ...>
+step s1_show_data: 
+    select * from readings order by time desc, device;
+    select count(*) as num_device_all, count(*) filter (where device=1) as num_device_1, count(*) filter (where device=5) as num_device_5 from readings;
+ <waiting ...>
+step s4_wp_release: SELECT debug_waitpoint_release('merge_chunks_before_heap_swap');
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s2_merge_chunks: <... completed>
+step s1_show_data: <... completed>
+time                        |device|temp
+----------------------------+------+----
+Mon Jan 01 02:00:00 2024 PST|     3|   3
+Mon Jan 01 02:00:00 2024 PST|     4|   4
+Mon Jan 01 01:01:00 2024 PST|     2|   2
+Mon Jan 01 01:00:00 2024 PST|     1|   1
+(4 rows)
+
+num_device_all|num_device_1|num_device_5
+--------------+------------+------------
+             4|           1|           0
+(1 row)
+
 step s1_commit: commit;
 step s1_show_data: 
     select * from readings order by time desc, device;
@@ -509,100 +579,6 @@ num_device_all|num_device_1|num_device_5
              4|           1|           0
 (1 row)
 
-step s1_show_chunks: select count(*) from show_chunks('readings');
-count
------
-    1
-(1 row)
-
-
-starting permutation: s4_wp_enable s2_merge_chunks s3_compress_chunks s4_wp_release s1_show_data s1_show_chunks
-step s4_wp_enable: SELECT debug_waitpoint_enable('merge_chunks_before_heap_swap');
-debug_waitpoint_enable
-----------------------
-                      
-(1 row)
-
-step s2_merge_chunks: 
-    call merge_all_chunks('readings');
- <waiting ...>
-step s3_compress_chunks: 
-    select compress_chunk(show_chunks('readings'));
- <waiting ...>
-step s4_wp_release: SELECT debug_waitpoint_release('merge_chunks_before_heap_swap');
-debug_waitpoint_release
------------------------
-                       
-(1 row)
-
-step s1_show_data: 
-    select * from readings order by time desc, device;
-    select count(*) as num_device_all, count(*) filter (where device=1) as num_device_1, count(*) filter (where device=5) as num_device_5 from readings;
- <waiting ...>
-step s1_show_data: <... completed>
-time                        |device|temp
-----------------------------+------+----
-Mon Jan 01 02:00:00 2024 PST|     3|   3
-Mon Jan 01 02:00:00 2024 PST|     4|   4
-Mon Jan 01 01:01:00 2024 PST|     2|   2
-Mon Jan 01 01:00:00 2024 PST|     1|   1
-(4 rows)
-
-num_device_all|num_device_1|num_device_5
---------------+------------+------------
-             4|           1|           0
-(1 row)
-
-step s2_merge_chunks: <... completed>
-step s3_compress_chunks: <... completed>
-ERROR:  deadlock detected
-step s1_show_chunks: select count(*) from show_chunks('readings');
-count
------
-    1
-(1 row)
-
-
-starting permutation: s4_wp_enable s2_merge_chunks s3_drop_chunks s4_wp_release s1_show_data s1_show_chunks
-step s4_wp_enable: SELECT debug_waitpoint_enable('merge_chunks_before_heap_swap');
-debug_waitpoint_enable
-----------------------
-                      
-(1 row)
-
-step s2_merge_chunks: 
-    call merge_all_chunks('readings');
- <waiting ...>
-step s3_drop_chunks: 
-    call drop_one_chunk('readings');
- <waiting ...>
-step s4_wp_release: SELECT debug_waitpoint_release('merge_chunks_before_heap_swap');
-debug_waitpoint_release
------------------------
-                       
-(1 row)
-
-step s1_show_data: 
-    select * from readings order by time desc, device;
-    select count(*) as num_device_all, count(*) filter (where device=1) as num_device_1, count(*) filter (where device=5) as num_device_5 from readings;
- <waiting ...>
-step s1_show_data: <... completed>
-time                        |device|temp
-----------------------------+------+----
-Mon Jan 01 02:00:00 2024 PST|     3|   3
-Mon Jan 01 02:00:00 2024 PST|     4|   4
-Mon Jan 01 01:01:00 2024 PST|     2|   2
-Mon Jan 01 01:00:00 2024 PST|     1|   1
-(4 rows)
-
-num_device_all|num_device_1|num_device_5
---------------+------------+------------
-             4|           1|           0
-(1 row)
-
-step s2_merge_chunks: <... completed>
-step s3_drop_chunks: <... completed>
-ERROR:  deadlock detected
 step s1_show_chunks: select count(*) from show_chunks('readings');
 count
 -----
