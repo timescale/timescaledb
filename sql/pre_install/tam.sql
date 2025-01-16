@@ -2,10 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-CREATE ACCESS METHOD hypercore TYPE TABLE HANDLER @extschema@.ts_hypercore_handler;
+CREATE ACCESS METHOD hypercore TYPE TABLE HANDLER ts_hypercore_handler;
 COMMENT ON ACCESS METHOD hypercore IS 'Storage engine using hybrid row/columnar compression';
 
-CREATE ACCESS METHOD hypercore_proxy TYPE INDEX HANDLER @extschema@.ts_hypercore_proxy_handler;
+CREATE ACCESS METHOD hypercore_proxy TYPE INDEX HANDLER ts_hypercore_proxy_handler;
 COMMENT ON ACCESS METHOD hypercore_proxy IS 'Hypercore proxy index access method';
 
 -- An index AM needs at least one operator class for the column type
