@@ -514,6 +514,30 @@ set timescaledb.debug_require_vector_qual to 'forbid';
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a < 'same';
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a > 'same';
 
+reset timescaledb.debug_require_vector_qual;
+reset timescaledb.enable_bulk_decompression;
+
+-- Test the nonstandard Postgres NaN comparison that doesn't match the IEEE floats.
+create table nans(t int, cfloat4 float4, cfloat8 float8);
+select create_hypertable('nans', 't', chunk_time_interval => 1024 * 1024 * 1024);
+alter table nans set (timescaledb.compress);
+insert into nans select pow(2, n), x, x
+    from unnest(array[null, 0, 1, 'nan', '-inf', '+inf']::float8[])
+        with ordinality as x(x, n)
+;
+select count(compress_chunk(x)) from show_chunks('nans') x;
+
+set timescaledb.enable_bulk_decompression to on;
+set timescaledb.debug_require_vector_qual to 'require';
+
+select format('select sum(t) from nans where %s %s %s::%s;',
+    variable, op, value, type)
+from
+    unnest(array['cfloat4', 'cfloat8']) variable,
+    unnest(array['=', '!=', '<', '<=', '>', '>=']) op,
+    unnest(array['null', '0', '1', '''nan''', '''-inf''', '''+inf''']) value,
+    unnest(array['float4', 'float8', 'numeric']) type
+\gexec
 
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bulk_decompression;
