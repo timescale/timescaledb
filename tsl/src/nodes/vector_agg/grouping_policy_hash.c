@@ -34,6 +34,10 @@
 extern HashingStrategy single_fixed_2_strategy;
 extern HashingStrategy single_fixed_4_strategy;
 extern HashingStrategy single_fixed_8_strategy;
+#ifdef TS_USE_UMASH
+extern HashingStrategy single_text_strategy;
+extern HashingStrategy serialized_strategy;
+#endif
 
 static const GroupingPolicy grouping_policy_hash_functions;
 
@@ -68,6 +72,14 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 
 	switch (grouping_type)
 	{
+#ifdef TS_USE_UMASH
+		case VAGT_HashSerialized:
+			policy->hashing = serialized_strategy;
+			break;
+		case VAGT_HashSingleText:
+			policy->hashing = single_text_strategy;
+			break;
+#endif
 		case VAGT_HashSingleFixed8:
 			policy->hashing = single_fixed_8_strategy;
 			break;
@@ -81,6 +93,8 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 			Ensure(false, "failed to determine the hashing strategy");
 			break;
 	}
+
+	policy->hashing.key_body_mctx = policy->agg_extra_mctx;
 
 	policy->hashing.init(&policy->hashing, policy);
 
@@ -98,10 +112,18 @@ gp_hash_reset(GroupingPolicy *obj)
 
 	policy->hashing.reset(&policy->hashing);
 
+	/*
+	 * Have to reset this because it's in the key body context which is also
+	 * reset here.
+	 */
+	policy->tmp_key_storage = NULL;
+	policy->num_tmp_key_storage_bytes = 0;
+
 	policy->last_used_key_index = 0;
 
 	policy->stat_input_valid_rows = 0;
 	policy->stat_input_total_rows = 0;
+	policy->stat_bulk_filtered_rows = 0;
 	policy->stat_consecutive_keys = 0;
 }
 
@@ -331,7 +353,71 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 	 * Add the batch rows to aggregate function states.
 	 */
 	const uint64 *restrict filter = batch_state->vector_qual_result;
-	add_one_range(policy, batch_state, 0, n);
+	if (filter == NULL)
+	{
+		/*
+		 * We don't have a filter on this batch, so aggregate it entirely in one
+		 * go.
+		 */
+		add_one_range(policy, batch_state, 0, n);
+	}
+	else
+	{
+		/*
+		 * If we have a filter, skip the rows for which the entire words of the
+		 * filter bitmap are zero. This improves performance for highly
+		 * selective filters.
+		 */
+		int statistics_range_row = 0;
+		int start_word = 0;
+		int end_word = 0;
+		int past_the_end_word = (n - 1) / 64 + 1;
+		for (;;)
+		{
+			/*
+			 * Skip the bitmap words which are zero.
+			 */
+			for (start_word = end_word; start_word < past_the_end_word && filter[start_word] == 0;
+				 start_word++)
+				;
+
+			if (start_word >= past_the_end_word)
+			{
+				break;
+			}
+
+			/*
+			 * Collect the consecutive bitmap words which are nonzero.
+			 */
+			for (end_word = start_word + 1; end_word < past_the_end_word && filter[end_word] != 0;
+				 end_word++)
+				;
+
+			/*
+			 * Now we have the [start, end] range of bitmap words that are
+			 * nonzero.
+			 *
+			 * Determine starting and ending rows, also skipping the starting
+			 * and trailing zero bits at the ends of the range.
+			 */
+			const int start_row = start_word * 64 + pg_rightmost_one_pos64(filter[start_word]);
+			Assert(start_row <= n);
+
+			/*
+			 * The bits for past-the-end rows must be set to zero, so this
+			 * calculation should yield no more than n.
+			 */
+			Assert(end_word > start_word);
+			const int end_row =
+				(end_word - 1) * 64 + pg_leftmost_one_pos64(filter[end_word - 1]) + 1;
+			Assert(end_row <= n);
+
+			statistics_range_row += end_row - start_row;
+
+			add_one_range(policy, batch_state, start_row, end_row);
+		}
+		policy->stat_bulk_filtered_rows += batch_state->total_batch_rows - statistics_range_row;
+	}
 
 	policy->stat_input_total_rows += batch_state->total_batch_rows;
 	policy->stat_input_valid_rows += arrow_num_valid(filter, batch_state->total_batch_rows);
@@ -378,7 +464,7 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 					  "%f ratio, %ld curctx bytes, %ld aggstate bytes",
 					  policy->stat_input_total_rows,
 					  policy->stat_input_valid_rows,
-					  0UL,
+					  policy->stat_bulk_filtered_rows,
 					  policy->stat_consecutive_keys,
 					  keys,
 					  policy->stat_input_valid_rows / keys,
