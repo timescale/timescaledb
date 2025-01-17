@@ -429,13 +429,22 @@ build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chun
 static void
 cost_decompress_chunk(PlannerInfo *root, Path *path, Path *compressed_path)
 {
+	/* Set the row number estimate. */
+	if (path->param_info != NULL)
+	{
+		path->rows = path->param_info->ppi_rows;
+	}
+	else
+	{
+		path->rows = path->parent->rows;
+	}
+
 	/* startup_cost is cost before fetching first tuple */
 	if (compressed_path->rows > 0)
 		path->startup_cost = compressed_path->total_cost / compressed_path->rows;
 
 	/* total_cost is cost for fetching all tuples */
 	path->total_cost = compressed_path->total_cost + path->rows * cpu_tuple_cost;
-	path->rows = compressed_path->rows * TARGET_COMPRESSED_BATCH_SIZE;
 }
 
 /* Smoothstep function S1 (the h01 cubic Hermite spline). */
@@ -866,8 +875,12 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
 	/* translate chunk_rel->baserestrictinfo */
 	pushdown_quals(root, compression_info->settings, chunk_rel, compressed_rel, consider_partial);
+
 	set_baserel_size_estimates(root, compressed_rel);
-	double new_row_estimate = compressed_rel->rows * TARGET_COMPRESSED_BATCH_SIZE;
+	const double new_tuples_estimate = compressed_rel->rows * TARGET_COMPRESSED_BATCH_SIZE;
+	const double new_rows_estimate =
+		new_tuples_estimate *
+		clauselist_selectivity(root, chunk_rel->baserestrictinfo, 0, JOIN_INNER, NULL);
 
 	if (!compression_info->single_chunk)
 	{
@@ -876,10 +889,19 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 		Assert(chunk_info->parent_reloid == ht->main_table_relid);
 		ht_relid = chunk_info->parent_relid;
 		RelOptInfo *hypertable_rel = root->simple_rel_array[ht_relid];
-		hypertable_rel->rows += (new_row_estimate - chunk_rel->rows);
+		hypertable_rel->rows =
+			clamp_row_est(hypertable_rel->rows + new_rows_estimate - chunk_rel->rows);
+		hypertable_rel->tuples =
+			clamp_row_est(hypertable_rel->tuples + new_tuples_estimate - chunk_rel->tuples);
 	}
 
-	chunk_rel->rows = new_row_estimate;
+	/*
+	 * Note that we can be overwriting the estimate for uncompressed chunk part of a
+	 * partial chunk here, but the paths for the uncompressed part were already
+	 * built, so it is OK.
+	 */
+	chunk_rel->tuples = new_tuples_estimate;
+	chunk_rel->rows = new_rows_estimate;
 
 	create_compressed_scan_paths(root, compressed_rel, compression_info, &sort_info);
 
