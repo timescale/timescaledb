@@ -11,7 +11,6 @@ This release contains performance improvements and bug fixes since
 the 2.17.2 release. We recommend that you upgrade at the next
 available opportunity.
 
-
 **Features**
 * #6901: Add hypertable support for transition tables.
 * #7104: Hypercore table access method.
@@ -22,17 +21,17 @@ available opportunity.
 * #7411: Change parameter name to enable hypercore table access method.
 * #7412: Add GUC for `hypercore_use_access_method` default.
 * #7413: Add GUC for segmentwise recompression.
-* #7433 Add support for merging chunks
-* #7436 Add index creation on orderby columns
+* #7433: Add support for merging chunks.
+* #7436: Add index creation on `order by` columns.
 * #7443: Add hypercore function and view aliases.
 * #7455: Support `drop not null` on compressed hypertables.
 * #7458: Support vecorized aggregation with aggregate `filter` clauses that are also vectorizable.
 * #7482: Optimize recompression of partially compressed chunks.
 * #7486: Prevent building against postgres versions with broken ABI.
-* #7521 Add optional `force` argument to `refresh_continuous_aggregate`
-* #7528 Transform sorting on `time_bucket` to sorting on time for compressed chunks in some cases.
-* #7565 Add hint when hypertable creation fails
-* #7587 Add `include_tiered_data` parameter to `add_continuous_aggregate_policy` API
+* #7521: Add optional `force` argument to `refresh_continuous_aggregate`.
+* #7528: Transform sorting on `time_bucket` to sorting on time for compressed chunks in some cases.
+* #7565: Add hint when hypertable creation fails.
+* #7587: Add `include_tiered_data` parameter to `add_continuous_aggregate_policy` API.
 
 **Bugfixes**
 * #7378: Remove obsolete job referencing `policy_job_error_retention`.
@@ -43,17 +42,17 @@ available opportunity.
 * #7434: Fixes the segfault when internally setting the replica identity for a given chunk.
 * #7488: Emit error for transition table trigger on chunks.
 * #7514: Fix the error: `invalid child of chunk append`.
-* #7517 Fixes performance regression on `cagg_migrate` procedure
-* #7527 Restart scheduler on error
+* #7517: Fixes the performance regression on `cagg_migrate` procedure.
+* #7527: Restart scheduler on error.
 * #7557: Fix null handling for in-memory tuple filtering.
-* #7566 Improve transaction check in CAgg refresh
-* #7584 Fix NaN-handling for vectorized aggregation
+* #7566: Improve transaction check in CAgg refresh.
+* #7584: Fix NaN-handling for vectorized aggregation.
 
 **Thanks**
 * @bharrisau for reporting the segfault when creating chunks.
-* @k-rus for suggesting the improvement
+* @k-rus for suggesting the improvement to add a hint when hypertable creation fails.
 * @pgloader for reporting the issue in an internal background job.
-* @staticlibs for sending PR to improve transaction check in CAgg refresh
+* @staticlibs for sending Pull Request to improve the transaction check in CAgg refresh.
 * @uasiddiqi for reporting the `aggregated compressed column not found` error.
 
 ## 2.17.2 (2024-11-06)
