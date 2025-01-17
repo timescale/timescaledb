@@ -1,1 +1,0 @@
-Fixes: #7517 Fixes performance regression on `cagg_migrate` procedure
