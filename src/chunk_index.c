@@ -573,16 +573,69 @@ typedef struct ChunkIndexDeleteData
 	bool drop_index;
 } ChunkIndexDeleteData;
 
-/* Find all internal dependencies to be able to delete all the objects in one
+/*
+ * Lock object.
+ *
+ * In particular, we need to ensure that we lock the table of an index before
+ * locking the index, or run the risk of ending up in a deadlock since the
+ * normal locking order is table first, index second. Since we're not a
+ * concurrent delete, we take a strong lock for this.
+ *
+ * It is also necessary that the parent table is locked first, but we have
+ * already done that at this stage, so it does not need to be done explicitly.
+ */
+static bool
+chunk_lock_object_for_deletion(const ObjectAddress *obj)
+{
+	/*
+	 * If we're locking an index, we need to lock the table first. See
+	 * RangeVarCallbackForDropRelation() in tablecmds.c. We can ignore
+	 * partition indexes since we're not using that.
+	 */
+	char relkind = get_rel_relkind(obj->objectId);
+
+	/*
+	 * If we cannot find the object, it might have been concurrently deleted
+	 * (we do not have locks on objects yet).
+	 */
+	if (relkind == '\0')
+		return false;
+	if (relkind == RELKIND_INDEX)
+	{
+		Oid heapOid = IndexGetRelation(obj->objectId, true);
+		if (OidIsValid(heapOid))
+			LockRelationOid(heapOid, AccessExclusiveLock);
+	}
+
+	LockRelationOid(obj->objectId, AccessExclusiveLock);
+	return true;
+}
+
+/*
+ * Find all internal dependencies to be able to delete all the objects in one
  * go. We do this by scanning the dependency table and keeping all the tables
- * in our internal schema. */
-static void
-chunk_collect_objects_for_deletion(const ObjectAddress *relobj, ObjectAddresses *objects)
+ * in our internal schema.
+ *
+ * We also lock the objects in the correct order (meaning table first, index
+ * second) here to make sure that we do not end up with deadlocks.
+ *
+ * We return 'true' if we added any objects, and 'false' otherwise.
+ */
+static bool
+chunk_collect_and_lock_objects_for_deletion(const ObjectAddress *relobj, ObjectAddresses *objects)
 {
 	Relation deprel = table_open(DependRelationId, RowExclusiveLock);
 	ScanKeyData scankey[2];
 	SysScanDesc scan;
 	HeapTuple tup;
+
+	/*
+	 * If the object disappeared before we managed to get a lock on it, there
+	 * is nothing more to do so just return early and indicate that there are
+	 * no objects to delete.
+	 */
+	if (!chunk_lock_object_for_deletion(relobj))
+		return false;
 
 	add_exact_object_address(relobj, objects);
 
@@ -608,18 +661,13 @@ chunk_collect_objects_for_deletion(const ObjectAddress *relobj, ObjectAddresses 
 	{
 		Form_pg_depend record = (Form_pg_depend) GETSTRUCT(tup);
 		ObjectAddress refobj = { .classId = record->refclassid, .objectId = record->refobjid };
-
-		switch (record->deptype)
-		{
-			case DEPENDENCY_INTERNAL:
-				add_exact_object_address(&refobj, objects);
-				break;
-			default:
-				continue; /* Do nothing */
-		}
+		if (record->deptype == DEPENDENCY_INTERNAL && chunk_lock_object_for_deletion(&refobj))
+			add_exact_object_address(&refobj, objects);
 	}
+
 	systable_endscan(scan);
 	table_close(deprel, RowExclusiveLock);
+	return true;
 }
 
 static ScanTupleResult
@@ -642,7 +690,8 @@ chunk_index_tuple_delete(TupleInfo *ti, void *data)
 
 		if (OidIsValid(idxobj.objectId))
 		{
-			/* If we use performDeletion here it will fail if there are
+			/*
+			 * If we use performDeletion() here it will fail if there are
 			 * internal dependencies on the object since we are restricting
 			 * the cascade.
 			 *
@@ -651,15 +700,28 @@ chunk_index_tuple_delete(TupleInfo *ti, void *data)
 			 * internal dependencies and use the function
 			 * performMultipleDeletions.
 			 *
-			 * The function performMultipleDeletions accept a list of objects
-			 * and if there are dependencies between any of the objects given
-			 * to the function, it will not generate an error for that but
-			 * rather proceed with the deletion. If there are any dependencies
-			 * (internal or not) outside this set of objects, it will still
-			 * abort the deletion and print an error. */
+			 * We lock the objects to delete first to make sure that the lock
+			 * order is correct. This is done inside RemoveRelations and
+			 * performMultipleDeletions() expect these locks to be taken
+			 * first. If not, it will take very rudimentary locks, which will
+			 * cause deadlocks in some cases because the lock order is not
+			 * correct.
+			 *
+			 * Since we do not have any locks on any objects at this point,
+			 * the relations might have disappeared before we had a chance to
+			 * lock them. In this case it is not necessary to do an explicit
+			 * call to performMultipleDeletions().
+			 *
+			 * The function performMultipleDeletions() accept a list of
+			 * objects and if there are dependencies between any of the
+			 * objects given to the function, it will not generate an error
+			 * for that but rather proceed with the deletion. If there are any
+			 * dependencies (internal or not) outside this set of objects, it
+			 * will still abort the deletion and print an error.
+			 */
 			ObjectAddresses *objects = new_object_addresses();
-			chunk_collect_objects_for_deletion(&idxobj, objects);
-			performMultipleDeletions(objects, DROP_RESTRICT, 0);
+			if (chunk_collect_and_lock_objects_for_deletion(&idxobj, objects))
+				performMultipleDeletions(objects, DROP_RESTRICT, 0);
 			free_object_addresses(objects);
 		}
 	}
