@@ -1,1 +1,0 @@
-Fixes: #7557: Fix null handling for in-memory tuple filtering.
