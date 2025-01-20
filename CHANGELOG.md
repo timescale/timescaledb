@@ -11,6 +11,7 @@ This release contains performance improvements and bug fixes since
 the 2.17.2 release. We recommend that you upgrade at the next
 available opportunity.
 
+
 **Features**
 * #6901: Add hypertable support for transition tables.
 * #7104: Hypercore table access method.
@@ -19,7 +20,7 @@ available opportunity.
 * #7341: Vectorized aggregation with grouping by one fixed-size by-value compressed column (such as arithmetic types).
 * #7390: Disable custom `hashagg` planner code.
 * #7411: Change parameter name to enable hypercore table access method.
-* #7412: Add GUC for `hypercore_use_access_method` default.
+* #7412: Add [GUC](https://www.postgresql.org/docs/current/acronyms.html#:~:text=GUC) for the `hypercore_use_access_method` default.
 * #7413: Add GUC for segmentwise recompression.
 * #7433: Add support for merging chunks.
 * #7436: Add index creation on `order by` columns.
@@ -39,10 +40,10 @@ available opportunity.
 * #7410: Fix the `aggregated compressed column not found` error on aggregation query.
 * #7426: Fix `datetime` parsing error in chunk constraint creation.
 * #7432: Verify that the heap tuple is valid before using.
-* #7434: Fixes the segfault when internally setting the replica identity for a given chunk.
+* #7434: Fix the segfault when internally setting the replica identity for a given chunk.
 * #7488: Emit error for transition table trigger on chunks.
 * #7514: Fix the error: `invalid child of chunk append`.
-* #7517: Fixes the performance regression on `cagg_migrate` procedure.
+* #7517: Fix the performance regression on the `cagg_migrate` procedure.
 * #7527: Restart scheduler on error.
 * #7557: Fix null handling for in-memory tuple filtering.
 * #7566: Improve transaction check in CAgg refresh.
@@ -50,9 +51,9 @@ available opportunity.
 
 **Thanks**
 * @bharrisau for reporting the segfault when creating chunks.
-* @k-rus for suggesting the improvement to add a hint when hypertable creation fails.
+* @k-rus for suggesting that we add a hint when hypertable creation fails.
 * @pgloader for reporting the issue in an internal background job.
-* @staticlibs for sending Pull Request to improve the transaction check in CAgg refresh.
+* @staticlibs for sending the pull request that improves the transaction check in CAgg refresh.
 * @uasiddiqi for reporting the `aggregated compressed column not found` error.
 
 ## 2.17.2 (2024-11-06)
