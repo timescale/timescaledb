@@ -440,6 +440,54 @@ CALL refresh_continuous_aggregate('ht_try_weekly', '2019-12-29', '2020-01-10', f
 SELECT * FROM ht_try_weekly;
 DROP MATERIALIZED VIEW ht_try_weekly;
 
+-- Test refresh policy with different settings of `include_tiered_data` parameter
+CREATE FUNCTION create_test_cagg(include_tiered_data BOOL)
+RETURNS INTEGER AS
+$$
+DECLARE
+	cfg jsonb;
+	job_id INTEGER;
+BEGIN
+	CREATE MATERIALIZED VIEW ht_try_weekly
+	WITH (timescaledb.continuous) AS
+	SELECT time_bucket(interval '1 week', timec) AS ts_bucket, avg(value)
+	FROM ht_try
+	GROUP BY 1
+	WITH NO DATA;
+
+	job_id := add_continuous_aggregate_policy(
+		'ht_try_weekly',
+		start_offset => NULL,
+		end_offset => INTERVAL '1 hour',
+		schedule_interval => INTERVAL '1 hour',
+		include_tiered_data => include_tiered_data
+	);
+
+	cfg := config FROM _timescaledb_config.bgw_job WHERE id = job_id;
+	RAISE NOTICE 'config: %', jsonb_pretty(cfg);
+
+	RETURN job_id;
+END
+$$ LANGUAGE plpgsql;
+
+-- include tiered data
+SELECT create_test_cagg(true) AS job_id \gset
+CALL run_job(:job_id);
+SELECT * FROM ht_try_weekly ORDER BY 1;
+DROP MATERIALIZED VIEW ht_try_weekly;
+
+-- exclude tiered data
+SELECT create_test_cagg(false) AS job_id \gset
+CALL run_job(:job_id);
+SELECT * FROM ht_try_weekly ORDER BY 1;
+DROP MATERIALIZED VIEW ht_try_weekly;
+
+-- default behavior: use instance-wide GUC value
+SELECT create_test_cagg(null) AS job_id \gset
+CALL run_job(:job_id);
+SELECT * FROM ht_try_weekly ORDER BY 1;
+DROP MATERIALIZED VIEW ht_try_weekly;
+
 -- This test verifies that a bugfix regarding the way `ROWID_VAR`s are adjusted
 -- in the chunks' targetlists on DELETE/UPDATE works (including partially
 -- compressed chunks)
