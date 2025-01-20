@@ -24,12 +24,22 @@ jobs:
       - name: Checkout TimescaleDB
         uses: actions/checkout@v4
 
+      - name: Set env var NEW_VERSION
+        run: echo "NEW_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)" >> $GITHUB_ENV
+      - name: Test env var NEW_VERSION
+        run: echo $NEW_VERSION
+
+      - name: Set env var RELEASE_BRANCH
+        run: echo "RELEASE_BRANCH="${${{ env.NEW_VERSION }}/%.0/.x}"" >> $GITHUB_ENV
+      - name: Test env var RELEASE_BRANCH
+        run: echo $RELEASE_BRANCH
+
       - name: Create PR to main branch for minor release
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           git remote --verbose
-          scripts/release/create_minor_release_PR_commit.sh
+          scripts/release/create_minor_release_PR_commit.sh main
 
       - name: Create release branch for minor release
         env:
@@ -43,4 +53,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           git remote --verbose
-          scripts/release/create_minor_release_PR_commit.sh
+          scripts/release/create_minor_release_PR_commit.sh ${{ env. RELEASE_BRANCH }}

@@ -43,21 +43,15 @@ DOWNGRADE_FILE="$NEW_VERSION--$CURRENT_VERSION.sql"
 LAST_UPDATE_FILE="$LAST_VERSION--$CURRENT_VERSION.sql"
 LAST_DOWNGRADE_FILE="$CURRENT_VERSION--$LAST_VERSION.sql"
 
-RELEASE_BRANCH_EXISTS=$(git branch -a |grep -c "origin/$RELEASE_BRANCH"|cut -d ' ' -f 1)
+BASE_BRANCH="$1"
+RELEASE_PR_BRANCH="$RELEASE_PR_BRANCH-to-$BASE_BRANCH"
 
-if [[ $RELEASE_BRANCH_EXISTS == '0' ]]; then
-  echo "git branch '$RELEASE_BRANCH' does not exist in the remote repository, yet"
-  echo "We want to raise this PR against main"
-  RELEASE_BRANCH="main"
-  RELEASE_PR_BRANCH="$RELEASE_PR_BRANCH-to-main"
-fi
-
-echo "final RELEASE_BRANCH is $RELEASE_BRANCH"
+echo "final BASE_BRANCH is $BASE_BRANCH"
 echo "RELEASE_PR_BRANCH is $RELEASE_PR_BRANCH"
 
-echo "---- Creating release branch $RELEASE_PR_BRANCH from $RELEASE_BRANCH, on the fork ----"
+echo "---- Creating release branch $RELEASE_PR_BRANCH from $BASE_BRANCH, on the fork ----"
 
-git checkout -b "$RELEASE_PR_BRANCH" origin/"$RELEASE_BRANCH"
+git checkout -b "$RELEASE_PR_BRANCH" origin/"$BASE_BRANCH"
 git branch
 git pull && git diff HEAD
 
@@ -139,7 +133,7 @@ done
 cd ..
 
 
-if [[ $RELEASE_BRANCH_EXISTS == '0' ]]; then
+if [[ "$BASE_BRANCH" = "main" ]]; then
   echo "---- Modifying version.config to the new versions , if current PR is for main----"
   sed -i.bak "s/${NEW_VERSION}/${NEW_VERSION}-dev/g" version.config
   sed -i.bak "s/${CURRENT_MINOR_VERSION}/${NEW_MINOR_VERSION}/g" version.config
