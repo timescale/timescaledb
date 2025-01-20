@@ -196,10 +196,11 @@ version_config = dict(
     ]
 )
 
-previous_version = version_config["update_from_version"]
-previous_version_parts = previous_version.split(".")
-previous_version_parts[-1] = "x"
-backport_target = ".".join(previous_version_parts)
+version = version_config["version"].split("-")
+version_parts = version.split(".")
+version_parts[1] = str(int(version_parts[1]) - 1)
+version_parts[2] = "x"
+backport_target = ".".join(version_parts)
 backported_label = f"backported-{backport_target}"
 
 print(f"Will backport to {backport_target}.")
