@@ -1,3 +1,2 @@
 Fixes: #6884 Match the Postgres NaN comparison behavior in WHERE clause over compressed tables.
-
 Thanks: @jakehedlund for reporting the incompatible NaN behavior in WHERE clause over compressed tables.
