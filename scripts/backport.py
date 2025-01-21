@@ -18,10 +18,12 @@ HISTORY_DEPTH = 1000
 def run_query(query):
     """A simple function to use requests.post to make the GraphQL API call."""
 
+    token = os.environ.get("GITHUB_TOKEN")
+
     request = requests.post(
         "https://api.github.com/graphql",
         json={"query": query},
-        headers={"Authorization": f'Bearer {os.environ.get("GITHUB_TOKEN")}'},
+        headers={"Authorization": f"Bearer {token}"} if token else None,
         timeout=20,
     )
     response = request.json()
@@ -189,22 +191,6 @@ backport_target = ".".join(version_parts)
 backported_label = f"backported-{backport_target}"
 
 print(f"Will backport to {backport_target}.")
-
-
-# Set git name and email corresponding to the token user.
-token_user = github.get_user()
-os.environ["GIT_COMMITTER_NAME"] = token_user.name
-
-# This is an email that is used by Github when you opt to hide your real email
-# address. It is required so that the commits are recognized by Github as made
-# by the user. That is, if you use a wrong e-mail, there won't be a clickable
-# profile picture next to the commit in the Github interface.
-os.environ["GIT_COMMITTER_EMAIL"] = (
-    f"{token_user.id}+{token_user.login}@users.noreply.github.com"
-)
-print(
-    f"Will commit as {os.environ['GIT_COMMITTER_NAME']} <{os.environ['GIT_COMMITTER_EMAIL']}>"
-)
 
 
 # Fetch the target branch. Apparently the local repo can be shallow in some cases
@@ -390,6 +376,22 @@ def report_backport_not_done(original_pr, reason, details=None):
 
     original_pr.create_issue_comment(github_comment)
     original_pr.add_to_labels("auto-backport-not-done")
+
+
+# Set git name and email corresponding to the token user.
+token_user = github.get_user()
+os.environ["GIT_COMMITTER_NAME"] = token_user.name
+
+# This is an email that is used by Github when you opt to hide your real email
+# address. It is required so that the commits are recognized by Github as made
+# by the user. That is, if you use a wrong e-mail, there won't be a clickable
+# profile picture next to the commit in the Github interface.
+os.environ["GIT_COMMITTER_EMAIL"] = (
+    f"{token_user.id}+{token_user.login}@users.noreply.github.com"
+)
+print(
+    f"Will commit as {os.environ['GIT_COMMITTER_NAME']} <{os.environ['GIT_COMMITTER_EMAIL']}>"
+)
 
 
 # Now, go over the list of PRs that we have collected, and try to backport
