@@ -18,10 +18,12 @@ HISTORY_DEPTH = 1000
 def run_query(query):
     """A simple function to use requests.post to make the GraphQL API call."""
 
+    token = os.environ.get("GITHUB_TOKEN")
+
     request = requests.post(
         "https://api.github.com/graphql",
         json={"query": query},
-        headers={"Authorization": f'Bearer {os.environ.get("GITHUB_TOKEN")}'},
+        headers={"Authorization": f"Bearer {token}"} if token else None,
         timeout=20,
     )
     response = request.json()
@@ -164,21 +166,6 @@ print(
 source_repo = github.get_repo(source_repo_name)
 target_repo = github.get_repo(target_repo_name)
 
-# Set git name and email corresponding to the token user.
-token_user = github.get_user()
-os.environ["GIT_COMMITTER_NAME"] = token_user.name
-
-# This is an email that is used by Github when you opt to hide your real email
-# address. It is required so that the commits are recognized by Github as made
-# by the user. That is, if you use a wrong e-mail, there won't be a clickable
-# profile picture next to the commit in the Github interface.
-os.environ["GIT_COMMITTER_EMAIL"] = (
-    f"{token_user.id}+{token_user.login}@users.noreply.github.com"
-)
-print(
-    f"Will commit as {os.environ['GIT_COMMITTER_NAME']} <{os.environ['GIT_COMMITTER_EMAIL']}>"
-)
-
 # Fetch the main branch. Apparently the local repo can be shallow in some cases
 # in Github Actions, so specify the depth. --unshallow will complain on normal
 # repositories, this is why we don't use it here.
@@ -196,14 +183,15 @@ version_config = dict(
     ]
 )
 
-version = version_config["version"].split("-")
-version_parts = version.split(".")
+version = version_config["version"].split("-")[0]  # Split off the 'dev' suffix.
+version_parts = version.split(".")  # Split the three version numbers.
 version_parts[1] = str(int(version_parts[1]) - 1)
 version_parts[2] = "x"
 backport_target = ".".join(version_parts)
 backported_label = f"backported-{backport_target}"
 
 print(f"Will backport to {backport_target}.")
+
 
 # Fetch the target branch. Apparently the local repo can be shallow in some cases
 # in Github Actions, so specify the depth. --unshallow will complain on normal
@@ -388,6 +376,22 @@ def report_backport_not_done(original_pr, reason, details=None):
 
     original_pr.create_issue_comment(github_comment)
     original_pr.add_to_labels("auto-backport-not-done")
+
+
+# Set git name and email corresponding to the token user.
+token_user = github.get_user()
+os.environ["GIT_COMMITTER_NAME"] = token_user.name
+
+# This is an email that is used by Github when you opt to hide your real email
+# address. It is required so that the commits are recognized by Github as made
+# by the user. That is, if you use a wrong e-mail, there won't be a clickable
+# profile picture next to the commit in the Github interface.
+os.environ["GIT_COMMITTER_EMAIL"] = (
+    f"{token_user.id}+{token_user.login}@users.noreply.github.com"
+)
+print(
+    f"Will commit as {os.environ['GIT_COMMITTER_NAME']} <{os.environ['GIT_COMMITTER_EMAIL']}>"
+)
 
 
 # Now, go over the list of PRs that we have collected, and try to backport
