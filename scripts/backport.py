@@ -352,6 +352,43 @@ for commit_sha, commit_title in main_commits:
     prs_to_backport[pull.number].pygithub_commits.insert(0, pygithub_commit)
 
 
+def branch_has_open_pr(repo, branch):
+    """Check whether the given branch has an open PR."""
+    result = run_query(
+        string.Template(
+            """
+                query {
+                  repository(name: "$repo_name", owner: "$repo_owner") {
+                    ref(qualifiedName: "$branch") {
+                      associatedPullRequests(first: 1) {
+                          nodes {
+                            closed
+                          }
+                        }
+                    }
+                  }
+                }
+          """
+        ).substitute(
+            {
+                "branch": branch,
+                "repo_name": repo.name,
+                "repo_owner": repo.owner.login,
+            }
+        )
+    )
+
+    # This returns:
+    # {'data': {'repository': {'ref': {'associatedPullRequests': {'nodes': [{'closed': True}]}}}}}
+
+    prs = result["data"]["repository"]["ref"]["associatedPullRequests"]["nodes"]
+
+    if not prs or len(prs) != 1 or not prs[0]:
+        return None
+
+    return not prs[0]["closed"]
+
+
 def report_backport_not_done(original_pr, reason, details=None):
     """If something prevents us from backporting the PR automatically,
     report it in a comment to original PR, and add a label preventing
@@ -420,8 +457,16 @@ for index, pr_info in enumerate(prs_to_backport.values()):
         == 0
     ):
         print(
-            f'Backport branch {backport_branch} for PR #{original_pr.number}: "{original_pr.title}" already exists. Updating.'
+            f'Backport branch {backport_branch} for PR #{original_pr.number}: "{original_pr.title}" already exists.'
         )
+
+        if not branch_has_open_pr(target_repo, backport_branch):
+            # The PR can be closed manually when the backport is not needed, or
+            # can not exist when there was some error. We are only interested in
+            # the most certain case when there is an open backport PR.
+            continue
+
+        print(f"Updating the branch {backport_branch} because it has an open PR.")
         git_check("reset --hard")
         git_check("clean -xfd")
         git_check(
