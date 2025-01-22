@@ -163,6 +163,7 @@ typedef struct CrossModuleFunctions
 	PGFunction recompress_chunk_segmentwise;
 	PGFunction get_compressed_chunk_index_for_recompression;
 	void (*preprocess_query_tsl)(Query *parse, int *cursor_opts);
+	PGFunction merge_chunks;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;
