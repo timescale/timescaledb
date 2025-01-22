@@ -171,8 +171,10 @@ jobs:
       with:
         name: CMake Logs ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: |
-            build/compile_commands.json
+            build/CMakeCache.txt
             build/CMakeFiles/CMakeError.log
+            build/CMakeFiles/CMakeOutput.log
+            build/compile_commands.json
 
     - name: Check exported symbols
       run: ./build/scripts/export_prefix_check.sh

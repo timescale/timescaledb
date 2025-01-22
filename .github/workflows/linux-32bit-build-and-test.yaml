@@ -151,8 +151,10 @@ jobs:
       with:
         name: CMake Logs linux-i386 PG${{ matrix.pg }}
         path: |
-            build/compile_commands.json
+            build/CMakeCache.txt
             build/CMakeFiles/CMakeError.log
+            build/CMakeFiles/CMakeOutput.log
+            build/compile_commands.json
 
     - name: make installcheck
       id: installcheck
