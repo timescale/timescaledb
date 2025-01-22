@@ -411,19 +411,33 @@ for index, pr_info in enumerate(prs_to_backport.values()):
     backport_branch = f"backport/{backport_target}/{original_pr.number}"
 
     # If there is already a backport branch for this PR, this probably means
-    # that we already created the backport PR. Skip it.
+    # that we already created the backport PR. Update it, because the PR might
+    # not auto-merge when the branch is not up to date with the target branch,
+    # depending on the branch protection settings. We want to update to the
+    # recent target automatically to minimize the amount of manual work.
     if (
         git_returncode(f"rev-parse {target_remote}/{backport_branch} > /dev/null 2>&1")
         == 0
     ):
         print(
-            f'Backport branch {backport_branch} for PR #{original_pr.number}: "{original_pr.title}" already exists. Skipping.'
+            f'Backport branch {backport_branch} for PR #{original_pr.number}: "{original_pr.title}" already exists. Updating.'
         )
+        git_check("reset --hard")
+        git_check("clean -xfd")
+        git_check(
+            f"checkout --quiet --force --detach {target_remote}/{backport_branch} > /dev/null"
+        )
+        # Use merge and no force-push, so that the simultaneous changes made by
+        # other users are not accidentally overwritten.
+        git_check(f"merge --quiet {target_remote}/{backport_target}")
+        git_check(f"push --quiet {target_remote} @:{backport_branch}")
         continue
 
     # Try to cherry-pick the commits.
+    git_check("reset --hard")
+    git_check("clean -xfd")
     git_check(
-        f"checkout --quiet --detach {target_remote}/{backport_target} > /dev/null"
+        f"checkout --quiet --force --detach {target_remote}/{backport_target} > /dev/null"
     )
 
     commit_shas = [commit.sha for commit in pr_info.pygithub_commits]
