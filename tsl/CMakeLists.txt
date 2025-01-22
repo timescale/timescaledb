@@ -18,16 +18,18 @@ if(NOT CMAKE_CROSSCOMPILING)
   endif()
 endif()
 
-# Detect if we can compile UMASH on this platform.
-set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
-check_c_source_compiles(
-  "
+# Detect if we can compile UMASH on this platform. It is not tested on Windows
+# and leads to a weird CI freeze, so don't even try for now.
+if(NOT WIN32)
+  set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+  check_c_source_compiles(
+    "
 #if defined(__PCLMUL__)
 #include <stdint.h>
 #include <immintrin.h>
 /*
  * For some reason, this doesn't compile on our i386 CI, but I also can't detect
- * it using the standart condition of defined(__x86_64__) && !defined(__ILP32__),
+ * it using the standard condition of defined(__x86_64__) && !defined(__ILP32__),
  * as described at https://wiki.debian.org/X32Port .
  */
 void test() { (void) _mm_cvtsi64_si128((uint64_t) 0); }
@@ -36,9 +38,12 @@ void test() { (void) _mm_cvtsi64_si128((uint64_t) 0); }
 #error Unsupported platform for UMASH
 #endif
 "
-  UMASH_SUPPORTED)
-unset(CMAKE_REQUIRED_FLAGS)
-unset(CMAKE_TRY_COMPILE_TARGET_TYPE)
+    UMASH_SUPPORTED)
+  unset(CMAKE_REQUIRED_FLAGS)
+  unset(CMAKE_TRY_COMPILE_TARGET_TYPE)
+else()
+  set(UMASH_SUPPORTED CACHE OFF)
+endif()
 
 option(USE_UMASH
        "Use the UMASH hash for string and multi-column vectorized grouping"
