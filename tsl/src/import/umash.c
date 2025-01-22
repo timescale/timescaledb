@@ -138,7 +138,7 @@ v128_shift(v128 x)
 static inline v128
 v128_clmul(uint64_t x, uint64_t y)
 {
-	return _mm_clmulepi64_si128(_mm_cvtsi64_si128(x), _mm_cvtsi64_si128(y), 0);
+	return _mm_clmulepi64_si128(_mm_cvtsi64x_si128(x), _mm_cvtsi64x_si128(y), 0);
 }
 
 /* Computes the 128-bit carryless product of the high and low halves of x. */
