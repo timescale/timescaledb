@@ -1,4 +1,3 @@
-
 /*
  * This file and its contents are licensed under the Timescale License.
  * Please see the included NOTICE for copyright information and
@@ -15,8 +14,9 @@
 
 #include "compression.h"
 
+static void minmax_update_val(void *builder_, Datum val);
+static void minmax_update_null(void *builder_);
 static void minmax_insert_to_compressed_row(void *builder_, RowCompressor *compressor);
-
 static void minmax_reset(void *builder_, RowCompressor *compressor);
 
 BatchMetadataBuilder *

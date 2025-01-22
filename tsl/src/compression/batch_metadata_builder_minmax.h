@@ -39,8 +39,6 @@ typedef struct RowCompressor RowCompressor;
  * with functional tests inspecting the compressed chunk table, and this
  * test-only interface should be removed.
  */
-void minmax_update_val(void *builder_, Datum val);
-void minmax_update_null(void *builder_);
 Datum batch_metadata_builder_minmax_min(void *builder_);
 Datum batch_metadata_builder_minmax_max(void *builder_);
 bool batch_metadata_builder_minmax_empty(void *builder_);
