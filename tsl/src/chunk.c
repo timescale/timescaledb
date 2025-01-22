@@ -12,6 +12,7 @@
 #include <access/tableam.h>
 #include <access/transam.h>
 #include <access/xact.h>
+#include <c.h>
 #include <catalog/catalog.h>
 #include <catalog/dependency.h>
 #include <catalog/heap.h>
@@ -661,8 +662,10 @@ static TableAmRoutine routine = {};
 static uint64
 pq17_workaround_merge_relation_size(Relation rel, ForkNumber forkNumber)
 {
+	uint64 nblocks = merge_rel_nblocks;
+
 	if (forkNumber == MAIN_FORKNUM)
-		return merge_rel_nblocks * BLCKSZ;
+		return nblocks * BLCKSZ;
 
 	return old_routine->relation_size(rel, forkNumber);
 }
