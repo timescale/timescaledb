@@ -354,29 +354,20 @@ for commit_sha, commit_title in main_commits:
 
 def branch_has_open_pr(repo, branch):
     """Check whether the given branch has an open PR."""
-    result = run_query(
-        string.Template(
-            """
-                query {
-                  repository(name: "$repo_name", owner: "$repo_owner") {
-                    ref(qualifiedName: "$branch") {
-                      associatedPullRequests(first: 1) {
-                          nodes {
-                            closed
-                          }
-                        }
-                    }
-                  }
-                }
-          """
-        ).substitute(
-            {
-                "branch": branch,
-                "repo_name": repo.name,
-                "repo_owner": repo.owner.login,
-            }
-        )
-    )
+
+    template = """query {
+      repository(name: "$repo_name", owner: "$repo_owner") {
+        ref(qualifiedName: "$branch") {
+          associatedPullRequests(first: 1) {
+            nodes { closed }}}}}"""
+
+    params = {
+        "branch": branch,
+        "repo_name": repo.name,
+        "repo_owner": repo.owner.login,
+    }
+
+    result = run_query(string.Template(template).substitute(params))
 
     # This returns:
     # {'data': {'repository': {'ref': {'associatedPullRequests': {'nodes': [{'closed': True}]}}}}}
