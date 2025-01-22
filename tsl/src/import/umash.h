@@ -6,8 +6,16 @@
 
 /*
  * This file contains source code that was copied and/or modified from
- * the UMASH hash implementation at https://github.com/backtrace-labs/umash,
- * which is licensed under the MIT License:
+ * the UMASH hash implementation at https://github.com/backtrace-labs/umash.
+ *
+ * This is a copy of umash.h, git commit sha
+ * fc4c5b6ca1f06c308e96c43aa080bd766238e092.
+ */
+
+/*
+ * UMASH is distributed under the MIT license.
+ *
+ * SPDX-License-Identifier: MIT
  *
  * Copyright 2020-2022 Backtrace I/O, Inc.
  * Copyright 2022 Paul Khuong
@@ -31,9 +39,6 @@
  * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
  * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * This is a copy of umash.h, git commit sha
- * fc4c5b6ca1f06c308e96c43aa080bd766238e092.
  */
 
 #ifndef UMASH_H
