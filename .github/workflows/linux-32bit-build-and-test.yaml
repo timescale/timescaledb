@@ -152,6 +152,7 @@ jobs:
         name: CMake Logs linux-i386 PG${{ matrix.pg }}
         path: |
             build/CMakeCache.txt
+            build/CMakeFiles/CMakeConfigureLog.yaml
             build/CMakeFiles/CMakeError.log
             build/CMakeFiles/CMakeOutput.log
             build/compile_commands.json

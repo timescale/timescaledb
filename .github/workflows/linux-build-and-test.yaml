@@ -162,7 +162,6 @@ jobs:
           -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
           ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
-        tree
         make -j $(nproc) -C build
         make -C build install
 
@@ -173,6 +172,7 @@ jobs:
         name: CMake Logs ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: |
             build/CMakeCache.txt
+            build/CMakeFiles/CMakeConfigureLog.yaml
             build/CMakeFiles/CMakeError.log
             build/CMakeFiles/CMakeOutput.log
             build/compile_commands.json
