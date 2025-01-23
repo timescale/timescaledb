@@ -188,8 +188,8 @@ jobs:
       shell: wsl-bash {0}
       run: |
         cmake -version
-        apt-get purge cmake
-        apt-get install cmake
+        apt-get purge -y cmake
+        apt-get install -y cmake
         cmake -version
 
     - name: Run tests
