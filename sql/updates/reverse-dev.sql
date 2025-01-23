@@ -1,8 +1,8 @@
 -- Hypercore AM
 DROP ACCESS METHOD IF EXISTS hypercore_proxy;
-DROP FUNCTION IF EXISTS ts_hypercore_proxy_handler;
+DROP FUNCTION IF EXISTS @extschema@.ts_hypercore_proxy_handler;
 DROP ACCESS METHOD IF EXISTS hypercore;
-DROP FUNCTION IF EXISTS ts_hypercore_handler;
+DROP FUNCTION IF EXISTS @extschema@.ts_hypercore_handler;
 DROP FUNCTION IF EXISTS _timescaledb_debug.is_compressed_tid;
 
 DROP FUNCTION IF EXISTS @extschema@.compress_chunk(uncompressed_chunk REGCLASS,	if_not_compressed BOOLEAN, recompress BOOLEAN, hypercore_use_access_method BOOL);

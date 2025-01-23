@@ -153,3 +153,20 @@ CREATE PROCEDURE @extschema@.merge_chunks(
 CREATE PROCEDURE @extschema@.merge_chunks(
     chunks REGCLASS[]
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
+
+CREATE FUNCTION @extschema@.ts_hypercore_handler(internal) RETURNS table_am_handler
+AS '@MODULE_PATHNAME@', 'ts_hypercore_handler' LANGUAGE C;
+
+CREATE FUNCTION @extschema@.ts_hypercore_proxy_handler(internal) RETURNS index_am_handler
+AS '@MODULE_PATHNAME@', 'ts_hypercore_proxy_handler' LANGUAGE C;
+
+CREATE ACCESS METHOD hypercore TYPE TABLE HANDLER @extschema@.ts_hypercore_handler;
+COMMENT ON ACCESS METHOD hypercore IS 'Storage engine using hybrid row/columnar compression';
+
+CREATE ACCESS METHOD hypercore_proxy TYPE INDEX HANDLER @extschema@.ts_hypercore_proxy_handler;
+COMMENT ON ACCESS METHOD hypercore_proxy IS 'Hypercore proxy index access method';
+
+CREATE OPERATOR CLASS int4_ops
+DEFAULT FOR TYPE int4 USING hypercore_proxy AS
+       OPERATOR 1 = (int4, int4),
+       FUNCTION 1 hashint4(int4);
