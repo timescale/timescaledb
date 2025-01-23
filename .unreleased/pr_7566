@@ -1,0 +1,2 @@
+Fixes: #7566 Improve transaction check in CAgg refresh
+Thanks: @staticlibs for sending PR to improve transaction check in CAgg refresh

@@ -5,6 +5,18 @@
 CREATE TABLE conditions (time timestamptz NOT NULL, device int, temp float);
 SELECT create_hypertable('conditions', 'time');
 
+-- Test refresh on a cagg built on an empty table
+CREATE MATERIALIZED VIEW daily_temp
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
+AS
+SELECT time_bucket('1 day', time) AS day, device, avg(temp) AS avg_temp
+FROM conditions
+GROUP BY 1,2 WITH NO DATA;
+
+CALL refresh_continuous_aggregate('daily_temp', NULL, NULL);
+CALL refresh_continuous_aggregate('daily_temp', NULL, NULL, force => true);
+
 SELECT setseed(.12);
 
 INSERT INTO conditions
@@ -15,14 +27,6 @@ FROM generate_series('2020-05-01', '2020-05-05', '10 minutes'::interval) t;
 SELECT * FROM conditions
 ORDER BY time DESC, device
 LIMIT 10;
-
-CREATE MATERIALIZED VIEW daily_temp
-WITH (timescaledb.continuous,
-      timescaledb.materialized_only=true)
-AS
-SELECT time_bucket('1 day', time) AS day, device, avg(temp) AS avg_temp
-FROM conditions
-GROUP BY 1,2 WITH NO DATA;
 
 -- The continuous aggregate should be empty
 SELECT * FROM daily_temp
@@ -105,6 +109,29 @@ CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-01');
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::text, '2020-05-03'::text);
 CALL refresh_continuous_aggregate('daily_temp', 0, '2020-05-01');
 \set ON_ERROR_STOP 1
+
+-- Test forceful refreshment. Here we simulate the situation that we've seen
+-- with tiered data when `timescaledb.enable_tiered_reads` were disabled on the
+-- server level. In that case we would not see materialized tiered data and
+-- we wouldn't be able to re-materialize the data using a normal refresh call
+-- because it would skip previously materialized ranges, but it should be
+-- possible with `force=>true` parameter. To simulate this use-case we clear
+-- the materialization hypertable and forefully re-materialize it.
+SELECT format('%I.%I', ht.schema_name, ht.table_name) AS mat_ht, mat_hypertable_id FROM _timescaledb_catalog.continuous_agg cagg
+JOIN _timescaledb_catalog.hypertable ht ON cagg.mat_hypertable_id = ht.id
+WHERE user_view_name = 'daily_temp' \gset
+
+-- Delete the data from the materialization hypertable
+DELETE FROM :mat_ht;
+
+-- Run regular refresh, it should not touch previously materialized range
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-02', '2020-05-05 17:00');
+SELECT * FROM daily_temp
+ORDER BY day DESC, device;
+-- Run it again with force=>true, the data should be rematerialized
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-02', '2020-05-05 17:00', force=>true);
+SELECT * FROM daily_temp
+ORDER BY day DESC, device;
 
 -- Test different time types
 CREATE TABLE conditions_date (time date NOT NULL, device int, temp float);
@@ -306,3 +333,77 @@ SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions
 GROUP BY 1,2 WITH NO DATA;
 COMMIT;
+
+-- refresh_continuous_aggregate can run two transactions, thus it cannot be
+-- called in a transaction block (from a function, from dynamic SQL) or in a
+-- subtransaction (from a procedure block with an EXCEPTION clause). Though it
+-- does NOT require a top level context and can be called from a procedure
+-- block without an EXCEPTION clause.
+
+-- DO block
+DO $$
+BEGIN
+  CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-04 00:00 UTC');
+END; $$;
+
+-- Procedure without subtransaction
+CREATE OR REPLACE PROCEDURE refresh_cagg_proc_normal()
+LANGUAGE PLPGSQL AS
+$$
+BEGIN
+  CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-04 00:00 UTC');
+END; $$;
+
+CALL refresh_cagg_proc_normal();
+
+\set ON_ERROR_STOP 0
+
+-- Procedure with subtransaction
+CREATE OR REPLACE PROCEDURE refresh_cagg_proc_subtransaction()
+LANGUAGE PLPGSQL AS
+$$
+DECLARE
+  errmsg TEXT;
+BEGIN
+  CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-04 00:00 UTC');
+EXCEPTION WHEN OTHERS THEN
+  GET STACKED DIAGNOSTICS errmsg = MESSAGE_TEXT;
+  RAISE EXCEPTION '%', errmsg;
+END; $$;
+
+CALL refresh_cagg_proc_subtransaction();
+
+-- Function
+CREATE OR REPLACE FUNCTION refresh_cagg_fun()
+RETURNS INT LANGUAGE PLPGSQL AS
+$$
+BEGIN
+  CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-04 00:00 UTC');
+  RETURN 1;
+END; $$;
+
+SELECT * from  refresh_cagg_fun();
+
+-- Dynamic SQL
+DO $$
+BEGIN
+  EXECUTE $inner$
+      CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-04 00:00 UTC');
+  $inner$;
+END; $$;
+
+-- Trigger
+CREATE TABLE refresh_cagg_trigger_table(a int);
+
+CREATE FUNCTION refresh_cagg_trigger_fun()
+RETURNS TRIGGER LANGUAGE PLPGSQL AS $$
+BEGIN
+  CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-04 00:00 UTC');
+END; $$;
+
+CREATE TRIGGER refresh_cagg_trigger AFTER INSERT ON refresh_cagg_trigger_table
+EXECUTE FUNCTION refresh_cagg_trigger_fun();
+
+INSERT INTO refresh_cagg_trigger_table VALUES(1);
+
+\set ON_ERROR_STOP 1

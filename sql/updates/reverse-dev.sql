@@ -58,3 +58,36 @@ DROP VIEW timescaledb_information.hypertable_columnstore_settings;
 DROP VIEW timescaledb_information.chunk_columnstore_settings;
 
 DROP PROCEDURE IF EXISTS _timescaledb_functions.cagg_migrate_update_watermark(INTEGER);
+
+-- Recreate `refresh_continuous_aggregate` procedure to remove the `force` argument
+DROP PROCEDURE IF EXISTS @extschema@.refresh_continuous_aggregate (continuous_aggregate REGCLASS, window_start "any", window_end "any", force BOOLEAN);
+
+CREATE PROCEDURE @extschema@.refresh_continuous_aggregate(
+    continuous_aggregate     REGCLASS,
+    window_start             "any",
+    window_end               "any"
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_continuous_agg_refresh';
+
+-- Remove `include_tiered_data` argument from `add_continuous_aggregate_policy`
+DROP FUNCTION @extschema@.add_continuous_aggregate_policy(
+    continuous_aggregate REGCLASS, start_offset "any",
+    end_offset "any", schedule_interval INTERVAL,
+    if_not_exists BOOL,
+    initial_start TIMESTAMPTZ,
+    timezone TEXT,
+    include_tiered_data BOOL
+);
+CREATE FUNCTION @extschema@.add_continuous_aggregate_policy(
+    continuous_aggregate REGCLASS, start_offset "any",
+    end_offset "any", schedule_interval INTERVAL,
+    if_not_exists BOOL = false,
+    initial_start TIMESTAMPTZ = NULL,
+    timezone TEXT = NULL
+)
+RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_add'
+LANGUAGE C VOLATILE;
+
+-- Merge chunks
+DROP PROCEDURE IF EXISTS @extschema@.merge_chunks(chunk1 REGCLASS, chunk2 REGCLASS);
+DROP PROCEDURE IF EXISTS @extschema@.merge_chunks(chunks REGCLASS[]);

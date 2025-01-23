@@ -114,3 +114,42 @@ CREATE FUNCTION @extschema@.hypertable_columnstore_stats (hypertable REGCLASS)
     STABLE STRICT
     AS 'SELECT * FROM @extschema@.hypertable_compression_stats($1)'
     SET search_path TO pg_catalog, pg_temp;
+
+-- Recreate `refresh_continuous_aggregate` procedure to add `force` argument
+DROP PROCEDURE IF EXISTS @extschema@.refresh_continuous_aggregate (continuous_aggregate REGCLASS, window_start "any", window_end "any");
+
+CREATE PROCEDURE @extschema@.refresh_continuous_aggregate(
+    continuous_aggregate     REGCLASS,
+    window_start             "any",
+    window_end               "any",
+    force                    BOOLEAN = FALSE
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
+
+-- Add `include_tiered_data` argument to `add_continuous_aggregate_policy`
+DROP FUNCTION @extschema@.add_continuous_aggregate_policy(
+    continuous_aggregate REGCLASS, start_offset "any",
+    end_offset "any", schedule_interval INTERVAL,
+    if_not_exists BOOL,
+    initial_start TIMESTAMPTZ,
+    timezone TEXT
+);
+CREATE FUNCTION @extschema@.add_continuous_aggregate_policy(
+    continuous_aggregate REGCLASS, start_offset "any",
+    end_offset "any", schedule_interval INTERVAL,
+    if_not_exists BOOL = false,
+    initial_start TIMESTAMPTZ = NULL,
+    timezone TEXT = NULL,
+	include_tiered_data BOOL = NULL
+)
+RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
+LANGUAGE C VOLATILE;
+
+-- Merge chunks
+CREATE PROCEDURE @extschema@.merge_chunks(
+    chunk1 REGCLASS, chunk2 REGCLASS
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
+
+CREATE PROCEDURE @extschema@.merge_chunks(
+    chunks REGCLASS[]
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';

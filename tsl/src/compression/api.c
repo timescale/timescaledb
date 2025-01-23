@@ -786,15 +786,30 @@ set_access_method(Oid relid, const char *amname)
 	AlterTableInternal(relid, list_make1(&cmd), false);
 
 #if (PG_VERSION_NUM < 150004)
-	/* Fix for PostgreSQL bug where pg_depend was not updated to reflect the
-	 * new dependency between AM and relation. See related PG fix here:
-	 * https://github.com/postgres/postgres/commit/97d89101045fac8cb36f4ef6c08526ea0841a596 */
-	if (changeDependencyFor(RelationRelationId, relid, AccessMethodRelationId, amoid, new_amoid) !=
-		1)
-		elog(ERROR,
-			 "could not change access method dependency for relation \"%s.%s\"",
-			 get_namespace_name(get_rel_namespace(relid)),
-			 get_rel_name(relid));
+
+	/*
+	 * Also do a runtime check in order to be ABI compatible with PG server
+	 * upgrades, e.g., upgrading from 15.3 to 15.4 without updating the
+	 * extension.
+	 */
+	const char *version_num_str = GetConfigOption("server_version_num", false, false);
+	int server_version_num;
+
+	if (parse_int(version_num_str, &server_version_num, 0, NULL) && server_version_num < 150004)
+	{
+		/* Fix for PostgreSQL bug where pg_depend was not updated to reflect the
+		 * new dependency between AM and relation. See related PG fix here:
+		 * https://github.com/postgres/postgres/commit/97d89101045fac8cb36f4ef6c08526ea0841a596 */
+		if (changeDependencyFor(RelationRelationId,
+								relid,
+								AccessMethodRelationId,
+								amoid,
+								new_amoid) != 1)
+			elog(ERROR,
+				 "could not change access method dependency for relation \"%s.%s\"",
+				 get_namespace_name(get_rel_namespace(relid)),
+				 get_rel_name(relid));
+	}
 #endif
 	hypercore_alter_access_method_finish(relid, !to_hypercore);
 
@@ -1050,6 +1065,18 @@ get_compressed_chunk_index_for_recompression(Chunk *uncompressed_chunk)
 	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, ShareLock);
 
 	CompressionSettings *settings = ts_compression_settings_get(compressed_chunk->table_id);
+
+	// For chunks with no segmentby, we don't want to do segmentwise recompression as it is less
+	// performant than a full recompression. This is temporary; once we optimize recompression
+	// code for chunks with no segments we should remove this check.
+	int num_segmentby = ts_array_length(settings->fd.segmentby);
+
+	if (num_segmentby == 0)
+	{
+		table_close(compressed_chunk_rel, NoLock);
+		table_close(uncompressed_chunk_rel, NoLock);
+		return InvalidOid;
+	}
 
 	CatalogIndexState indstate = CatalogOpenIndexes(compressed_chunk_rel);
 	Oid index_oid = get_compressed_chunk_index(indstate, settings);
