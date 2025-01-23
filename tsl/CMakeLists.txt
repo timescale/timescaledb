@@ -44,7 +44,7 @@ void test() { (void) _mm_cvtsi64_si128((uint64_t) 0); }
   unset(CMAKE_REQUIRED_FLAGS)
   unset(CMAKE_TRY_COMPILE_TARGET_TYPE)
 else()
-  set(UMASH_SUPPORTED CACHE OFF)
+  set(UMASH_SUPPORTED OFF)
 endif()
 
 option(USE_UMASH
