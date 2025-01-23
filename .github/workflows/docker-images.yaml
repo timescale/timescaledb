@@ -46,7 +46,6 @@ jobs:
             "timescaledb-ha:pg15",
             "timescaledb-ha:pg16",
             "timescaledb-ha:pg17",
-            "timescaledb:latest-pg17-bitnami",
           ]
 
     steps:
@@ -66,7 +65,6 @@ jobs:
         echo "version=${version}" >>$GITHUB_OUTPUT
 
     - name: Wait for services to start
-      # bitnami images have trouble using the docker builtin healthcheck so we are doing it here
       run: |
         sleep 10
         pg_isready -t 30
