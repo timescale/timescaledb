@@ -197,7 +197,8 @@ jobs:
       run: |
         export TEST_TABLESPACE1_PREFIX='${{ env.TABLESPACE1 }}'
         export TEST_TABLESPACE2_PREFIX='${{ env.TABLESPACE2 }}'
-        cmake --trace -B build_wsl -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTEST_PGPORT_LOCAL=${{ env.PGPORT }}
+        timeout 60 cmake --trace -B build_wsl -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTEST_PGPORT_LOCAL=${{ env.PGPORT }}
+        echo $?
 
         make -C build_wsl isolationchecklocal | tee -a installcheck.log
         make -C build_wsl regresschecklocal IGNORES="${{ matrix.ignores }}" | tee -a installcheck.log
