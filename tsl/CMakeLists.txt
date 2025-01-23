@@ -21,6 +21,8 @@ endif()
 # Detect if we can compile UMASH on this platform. It is not tested on Windows
 # and leads to a weird CI freeze, so don't even try for now.
 if(NOT WIN32)
+  set(CMAKE_REQUIRED_FLAGS
+      "${CMAKE_REQUIRED_FLAGS} -Werror=implicit-function-declaration")
   set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
   check_c_source_compiles(
     "
