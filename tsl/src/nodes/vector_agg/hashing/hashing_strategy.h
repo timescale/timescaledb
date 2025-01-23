@@ -57,10 +57,12 @@ typedef struct HashingStrategy
 	 */
 	uint32 null_key_index;
 
+#ifdef TS_USE_UMASH
 	/*
 	 * UMASH fingerprinting parameters.
 	 */
 	struct umash_params *umash_params;
+#endif
 } HashingStrategy;
 
 void hash_strategy_output_key_alloc(GroupingPolicyHash *policy, DecompressBatchState *batch_state);

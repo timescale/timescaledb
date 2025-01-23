@@ -4,10 +4,11 @@ if(COMPRESSION_FUZZING)
   add_compile_definitions(TS_COMPRESSION_FUZZING=1)
 endif()
 
-# We use the UMASH library for hashing in vectorized grouping. Detect if we can
-# compile it on this platform. It is not tested on Windows and leads to a weird
-# CI freeze, so don't even try for now.
-if(NOT WIN32)
+# We use the UMASH library for hashing in vectorized grouping. If it was not
+# explicitly disabled already, detect if we can compile it on this platform. It
+# is not tested on Windows and leads to a weird CI freeze, so don't even try for
+# now.
+if((NOT WIN32) AND ((NOT DEFINED USE_UMASH) OR USE_UMASH))
   # Check whether we can enable the pclmul instruction required for the UMASH
   # hashing on amd64. Shouldn't be done if the user has manually specified the
   # target architecture, no idea how to detect this, but at least we shouldn't
