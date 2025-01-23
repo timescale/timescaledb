@@ -27,12 +27,11 @@
 #include <utils/typcache.h>
 
 #include "columnar_scan.h"
-#include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
 #include "hypercore/arrow_tts.h"
 #include "hypercore/hypercore_handler.h"
+#include "hypercore/vector_quals.h"
 #include "import/ts_explain.h"
-#include "nodes/decompress_chunk/vector_quals.h"
 
 typedef struct SimpleProjInfo
 {
@@ -65,60 +64,6 @@ match_relvar(Expr *expr, Index relid)
 			return true;
 	}
 	return false;
-}
-
-/*
- * ColumnarScan implementation of VectorQualState->get_arrow_array().
- *
- * Given a VectorQualState return the ArrowArray in the contained slot.
- */
-static const ArrowArray *
-vector_qual_state_get_arrow_array(VectorQualState *vqstate, Expr *expr, bool *is_default_value)
-{
-	TupleTableSlot *slot = vqstate->slot;
-	const Var *var = castNode(Var, expr);
-	const int attoff = AttrNumberGetAttrOffset(var->varattno);
-	const ArrowArray *array = arrow_slot_get_array(slot, var->varattno);
-
-	if (array == NULL)
-	{
-		Form_pg_attribute attr = &slot->tts_tupleDescriptor->attrs[attoff];
-		/*
-		 * If getting here, this is a non-compressed value or a compressed
-		 * column with a default value. We can treat non-compressed values the
-		 * same as default ones. It is not possible to fall back to the
-		 * non-vectorized quals now, so build a single-value ArrowArray with
-		 * this (default) value, check if it passes the predicate, and apply
-		 * it to the entire batch.
-		 */
-		array = make_single_value_arrow(attr->atttypid,
-										slot->tts_values[attoff],
-										slot->tts_isnull[attoff]);
-		*is_default_value = true;
-	}
-	else
-		*is_default_value = false;
-
-	return array;
-}
-
-static void
-vector_qual_state_reset(VectorQualState *vqstate, ExprContext *econtext)
-{
-	MemoryContextReset(vqstate->per_vector_mcxt);
-	vqstate->vector_qual_result = NULL;
-	vqstate->slot = econtext->ecxt_scantuple;
-	vqstate->num_results = arrow_slot_total_row_count(vqstate->slot);
-}
-
-static void
-vector_qual_state_init(VectorQualState *vqstate, ExprContext *econtext)
-{
-	vqstate->per_vector_mcxt = GenerationContextCreateCompat(econtext->ecxt_per_query_memory,
-															 "Per-vector memory context",
-															 64 * 1024);
-	vqstate->get_arrow_array = vector_qual_state_get_arrow_array;
-	vqstate->slot = econtext->ecxt_scantuple;
 }
 
 /*
@@ -284,62 +229,6 @@ create_scankeys_from_quals(const HypercoreInfo *hsinfo, Index relid, const List 
 	return scankeys;
 }
 
-/*
- * Execute vectorized filter over a vector/array of values.
- *
- * Returns the number of values filtered until the first valid value.
- */
-static inline uint16
-ExecVectorQual(VectorQualState *vqstate, ExprContext *econtext)
-{
-	TupleTableSlot *slot = econtext->ecxt_scantuple;
-	const uint16 rowindex = arrow_slot_row_index(slot);
-
-	/* Compute the vector quals over both compressed and non-compressed
-	 * tuples. In case a non-compressed tuple is filtered, return SomeRowsPass
-	 * although only one row will pass. */
-	if (rowindex <= 1)
-	{
-		vector_qual_state_reset(vqstate, econtext);
-		VectorQualSummary vector_qual_summary = vqstate->vectorized_quals_constified != NIL ?
-													vector_qual_compute(vqstate) :
-													AllRowsPass;
-
-		switch (vector_qual_summary)
-		{
-			case NoRowsPass:
-				return arrow_slot_total_row_count(slot);
-			case AllRowsPass:
-				/*
-				 * If all rows pass, no need to test the vector qual for each row. This
-				 * is a common case for time range conditions.
-				 */
-				vector_qual_state_reset(vqstate, econtext);
-				return 0;
-			case SomeRowsPass:
-				break;
-		}
-	}
-
-	/* Fast path when all rows have passed (i.e., no rows filtered). No need
-	 * to check qual result and it should be NULL. */
-	if (vqstate->vector_qual_result == NULL)
-		return 0;
-
-	const uint16 nrows = arrow_slot_total_row_count(slot);
-	const uint16 off = arrow_slot_arrow_offset(slot);
-	uint16 nfiltered = 0;
-
-	for (uint16 i = off; i < nrows; i++)
-	{
-		if (arrow_row_is_valid(vqstate->vector_qual_result, i))
-			break;
-		nfiltered++;
-	}
-
-	return nfiltered;
-}
-
 static pg_attribute_always_inline TupleTableSlot *
 exec_projection(SimpleProjInfo *spi)
 {
@@ -391,6 +280,17 @@ getnextslot(TableScanDesc scandesc, ScanDirection direction, TupleTableSlot *slo
 	return table_scan_getnextslot(scandesc, direction, slot);
 }
 
+static bool
+should_project(const CustomScanState *state)
+{
+#if PG15_GE
+	const CustomScan *scan = castNode(CustomScan, state->ss.ps.plan);
+	return scan->flags & CUSTOMPATH_SUPPORT_PROJECTION;
+#else
+	return false;
+#endif
+}
+
 static TupleTableSlot *
 columnar_scan_exec(CustomScanState *state)
 {
@@ -399,16 +299,19 @@ columnar_scan_exec(CustomScanState *state)
 	EState *estate;
 	ExprContext *econtext;
 	ExprState *qual;
-	ProjectionInfo *projinfo;
 	ScanDirection direction;
 	TupleTableSlot *slot;
 	bool has_vecquals = cstate->vqstate.vectorized_quals_constified != NIL;
+	/*
+	 * The VectorAgg node could have requested no projection by unsetting the
+	 * "projection support flag", so only project if the flag is still set.
+	 */
+	ProjectionInfo *projinfo = should_project(state) ? state->ss.ps.ps_ProjInfo : NULL;
 
 	scandesc = state->ss.ss_currentScanDesc;
 	estate = state->ss.ps.state;
 	econtext = state->ss.ps.ps_ExprContext;
 	qual = state->ss.ps.qual;
-	projinfo = state->ss.ps.ps_ProjInfo;
 	direction = estate->es_direction;
 	slot = state->ss.ss_ScanTupleSlot;
 
@@ -627,7 +530,7 @@ columnar_scan_begin(CustomScanState *state, EState *estate, int eflags)
 	ExecAssignScanProjectionInfo(&state->ss);
 	state->ss.ps.qual = ExecInitQual(state->ss.ps.plan->qual, (PlanState *) state);
 #endif
-	vector_qual_state_init(&cstate->vqstate, state->ss.ps.ps_ExprContext);
+	List *vectorized_quals_constified = NIL;
 
 	if (cstate->nscankeys > 0)
 	{
@@ -647,9 +550,15 @@ columnar_scan_begin(CustomScanState *state, EState *estate, int eflags)
 	foreach (lc, cstate->vectorized_quals_orig)
 	{
 		Node *constified = estimate_expression_value(&root, (Node *) lfirst(lc));
-		cstate->vqstate.vectorized_quals_constified =
-			lappend(cstate->vqstate.vectorized_quals_constified, constified);
+		vectorized_quals_constified = lappend(vectorized_quals_constified, constified);
 	}
+
+	/*
+	 * Initialize the state to compute vectorized quals.
+	 */
+	vector_qual_state_init(&cstate->vqstate,
+						   vectorized_quals_constified,
+						   state->ss.ss_ScanTupleSlot);
 
 	/* If the node is supposed to project, then try to make it a simple
 	 * projection. If not possible, it will fall back to standard PostgreSQL
@@ -811,6 +720,7 @@ columnar_scan_initialize_worker(CustomScanState *node, shm_toc *toc, void *arg)
 }
 
 static CustomExecMethods columnar_scan_state_methods = {
+	.CustomName = "ColumnarScan",
 	.BeginCustomScan = columnar_scan_begin,
 	.ExecCustomScan = columnar_scan_exec,
 	.EndCustomScan = columnar_scan_end,
@@ -844,6 +754,12 @@ static CustomScanMethods columnar_scan_plan_methods = {
 	.CustomName = "ColumnarScan",
 	.CreateCustomScanState = columnar_scan_state_create,
 };
+
+bool
+is_columnar_scan(const CustomScan *scan)
+{
+	return scan->methods == &columnar_scan_plan_methods;
+}
 
 typedef struct VectorQualInfoHypercore
 {
