@@ -9,7 +9,7 @@ accidentally triggering the load of a previous DB version.**
 
 This release introduces the ability to add secondary indexes to the columnstore, improves group by and filtering performance through columnstore vectorization, and contains the highly upvoted community request of transition table support. We recommend that you upgrade at the next available opportunity.
 
-**Highlighted features in TimescaleDB v2.17.0**
+**Highlighted features in TimescaleDB v2.18.0**
 
 * The ability to add secondary indexes to the columnstore through the new hypercore table access method.
 * Significant performance improvements through vectorization (`SIMD`) for aggregations using a group by with one column and/or using a filter clause when querying the columnstore.
