@@ -184,6 +184,14 @@ jobs:
         yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh || true
         apt-get install -y --force-yes postgresql-server-dev-${{ matrix.pg }}
 
+    - name: FIXME reinstall cmake
+      shell: wsl-bash {0}
+      run: |
+        cmake -version
+        apt-get purge cmake
+        apt-get install cmake
+        cmake -version
+
     - name: Run tests
       shell: wsl-bash {0}
       run: |
