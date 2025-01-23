@@ -48,7 +48,9 @@ jobs:
         DEBIAN_FRONTEND: noninteractive
         # vectorized_aggregation has different output on i386 because int8 is by
         # reference and currently it cannot be used for vectorized hash grouping.
-        IGNORES: "append-* transparent_decompression-* transparent_decompress_chunk-* pg_dump telemetry bgw_db_scheduler* hypercore_vacuum vectorized_aggregation"
+        # vector_agg_text uses the UMASH hashing library that we can't compile
+        # on i386.
+        IGNORES: "append-* transparent_decompression-* transparent_decompress_chunk-* pg_dump telemetry bgw_db_scheduler* hypercore_vacuum vectorized_aggregation vector_agg_text"
         SKIPS: chunk_adaptive histogram_test-*
         EXTENSIONS: "postgres_fdw test_decoding pageinspect pgstattuple"
     strategy:
