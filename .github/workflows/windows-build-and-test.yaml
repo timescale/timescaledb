@@ -20,6 +20,7 @@ name: Regression Windows
       - 'LICENSE*'
       - NOTICE
       - 'bootstrap*'
+  workflow_dispatch:
 jobs:
   config:
     runs-on: ubuntu-latest
