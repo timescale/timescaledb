@@ -172,6 +172,10 @@ function(generate_downgrade_script)
     _epilog_files
     IGNORE_ERRORS)
 
+  if(_downgrade_TARGET_VERSION VERSION_EQUAL 2.18.0)
+    list(TRANSFORM _epilog_files REPLACE "^.*/hypercore.sql" "${CMAKE_CURRENT_SOURCE_DIR}/pre_install/tam.functions.sql")
+  endif()
+
   foreach(_downgrade_file ${_downgrade_PRE_FILES})
     get_filename_component(_downgrade_filename ${_downgrade_file} NAME)
     configure_file(${_downgrade_file} ${_downgrade_INPUT_DIRECTORY}/${_downgrade_filename} COPYONLY)
