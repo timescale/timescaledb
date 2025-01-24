@@ -105,7 +105,8 @@ jobs:
       run: |
         tar -xf timescaledb.zip
         cd timescaledb
-        ./setup.exe -yes-tune -pgconfig "$HOME/PostgreSQL/${{ matrix.pg }}/bin/pg_config"
+        ./setup.exe -no-tune -pgconfig "$HOME/PostgreSQL/${{ matrix.pg }}/bin/pg_config"
+
 
     - name: Create DB
       run: |
@@ -116,7 +117,8 @@ jobs:
       run: |
         ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -X `
           -c "CREATE EXTENSION timescaledb" `
-          -c "SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb'"
+          -c "SELECT version(), current_setting('config_file'), current_setting('log_filename')" `
+          -c "SELECT extname,extversion FROM pg_extension WHERE extname='timescaledb'"
         $installed_version = ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres `
           -d postgres -qtAX -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb'"
         $installed_version = $installed_version.Trim()
