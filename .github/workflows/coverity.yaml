@@ -6,6 +6,7 @@ name: Coverity
   push:
     branches:
       - coverity_scan
+  workflow_dispatch:
 jobs:
 
   coverity:
