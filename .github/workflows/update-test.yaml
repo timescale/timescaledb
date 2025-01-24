@@ -37,11 +37,12 @@ jobs:
         PATH="/usr/lib/postgresql/${{ matrix.pg }}/bin:$PATH"
         ./scripts/test_updates.sh
 
-    - name: Downgrade tests PG${{ matrix.pg }}
-      if: always()
-      run: |
-        PATH="/usr/lib/postgresql/${{ matrix.pg }}/bin:$PATH"
-        ./scripts/test_downgrade.sh
+#    Temporary disabled downgrade for 2.18.0 
+#    - name: Downgrade tests PG${{ matrix.pg }}
+#      if: always()
+#      run: |
+#        PATH="/usr/lib/postgresql/${{ matrix.pg }}/bin:$PATH"
+#        ./scripts/test_downgrade.sh
 
     - name: Update diff
       if: failure()
