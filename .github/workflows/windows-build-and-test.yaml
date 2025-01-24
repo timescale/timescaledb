@@ -201,8 +201,8 @@ jobs:
         timeout 60 cmake --trace -B build_wsl -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTEST_PGPORT_LOCAL=${{ env.PGPORT }} 2>&1 > cmake.log
         echo $?
 
-#        make -C build_wsl isolationchecklocal | tee -a installcheck.log
-#        make -C build_wsl regresschecklocal IGNORES="${{ matrix.ignores }}" | tee -a installcheck.log
+        #make -C build_wsl isolationchecklocal | tee -a installcheck.log
+        #make -C build_wsl regresschecklocal IGNORES="${{ matrix.ignores }}" | tee -a installcheck.log
         exit 1
 
     - name: Upload CMake Logs (FIXME)
