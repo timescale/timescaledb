@@ -31,27 +31,27 @@ if((NOT WIN32)
     endif()
   endif()
 
-#  set(CMAKE_REQUIRED_FLAGS
-#      "${CMAKE_REQUIRED_FLAGS} -Werror=implicit-function-declaration")
-#  set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
-#  check_c_source_compiles(
-#    "
-##if defined(__PCLMUL__)
-##include <stdint.h>
-##include <immintrin.h>
-#/*
-# * For some reason, this doesn't compile on our i386 CI, but I also can't detect
-# * it using the standard condition of defined(__x86_64__) && !defined(__ILP32__),
-# * as described at https://wiki.debian.org/X32Port .
-# */
-#static void test() { (void) _mm_cvtsi64_si128((uint64_t) 0); }
-##elif defined(__ARM_FEATURE_CRYPTO)
-#/* OK */
-##else
-##error Unsupported platform for UMASH
-##endif
-#"
-#    UMASH_SUPPORTED)
+  set(CMAKE_REQUIRED_FLAGS
+      "${CMAKE_REQUIRED_FLAGS} -Werror=implicit-function-declaration")
+  check_c_source_compiles(
+    "
+#if defined(__PCLMUL__)
+#include <stdint.h>
+#include <immintrin.h>
+/*
+ * For some reason, this doesn't compile on our i386 CI, but I also can't detect
+ * it using the standard condition of defined(__x86_64__) && !defined(__ILP32__),
+ * as described at https://wiki.debian.org/X32Port .
+ */
+static void test() { (void) _mm_cvtsi64_si128((uint64_t) 0); }
+#elif defined(__ARM_FEATURE_CRYPTO)
+/* OK */
+#else
+#error Unsupported platform for UMASH
+#endif
+void main(void) {};
+"
+    UMASH_SUPPORTED)
   unset(CMAKE_REQUIRED_FLAGS)
   unset(CMAKE_TRY_COMPILE_TARGET_TYPE)
 else()
