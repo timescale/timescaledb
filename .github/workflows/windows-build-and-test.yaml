@@ -197,8 +197,8 @@ jobs:
       run: |
         export TEST_TABLESPACE1_PREFIX='${{ env.TABLESPACE1 }}'
         export TEST_TABLESPACE2_PREFIX='${{ env.TABLESPACE2 }}'
-        sleep 300 && killall -9 cmake &
-        timeout 60 cmake --trace -B build_wsl -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTEST_PGPORT_LOCAL=${{ env.PGPORT }} 2>&1 > cmake.log
+        sleep 60 && killall -9 cmake &
+        timeout 60 cmake --trace -B build_wsl -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTEST_PGPORT_LOCAL=${{ env.PGPORT }} > cmake.log 2>&1
         echo $?
 
         #make -C build_wsl isolationchecklocal | tee -a installcheck.log
