@@ -17,6 +17,7 @@ name: ABI Test
       - trigger/abi
   pull_request:
     paths: .github/workflows/abi.yaml
+  workflow_dispatch:
 jobs:
   config:
     runs-on: ubuntu-latest

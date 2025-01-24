@@ -11,6 +11,7 @@ name: Sanitizer test
       - trigger/sanitizer
   pull_request:
     paths: .github/workflows/sanitizer-build-and-test.yaml
+  workflow_dispatch:
 
 env:
   name: "Sanitizer"

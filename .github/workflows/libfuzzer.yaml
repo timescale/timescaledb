@@ -12,6 +12,7 @@ name: Libfuzzer
     paths:
       - .github/workflows/libfuzzer.yaml
       - 'tsl/test/fuzzing/compression/**'
+  workflow_dispatch:
 
 jobs:
   build:
