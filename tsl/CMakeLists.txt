@@ -5,10 +5,8 @@ if(COMPRESSION_FUZZING)
 endif()
 
 # We use the UMASH library for hashing in vectorized grouping. If it was not
-# explicitly disabled already, detect if we can compile it on this platform. It
-# is not tested on Windows and leads to a weird CI freeze, so don't even try for
-# now.
-if((NOT WIN32) AND ((NOT DEFINED USE_UMASH) OR USE_UMASH))
+# explicitly disabled already, detect if we can compile it on this platform.
+if((NOT DEFINED USE_UMASH) OR USE_UMASH)
   # Check whether we can enable the pclmul instruction required for the UMASH
   # hashing on amd64. Shouldn't be done if the user has manually specified the
   # target architecture, no idea how to detect this, but at least we shouldn't
@@ -25,7 +23,6 @@ if((NOT WIN32) AND ((NOT DEFINED USE_UMASH) OR USE_UMASH))
 
   set(CMAKE_REQUIRED_FLAGS
       "${CMAKE_REQUIRED_FLAGS} -Werror=implicit-function-declaration")
-  set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
   check_c_source_compiles(
     "
 #if defined(__PCLMUL__)
@@ -42,10 +39,10 @@ static void test() { (void) _mm_cvtsi64_si128((uint64_t) 0); }
 #else
 #error Unsupported platform for UMASH
 #endif
+void main(void) {};
 "
     UMASH_SUPPORTED)
   unset(CMAKE_REQUIRED_FLAGS)
-  unset(CMAKE_TRY_COMPILE_TARGET_TYPE)
 else()
   set(UMASH_SUPPORTED OFF)
 endif()

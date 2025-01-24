@@ -161,6 +161,8 @@ class SQLVisitor(Visitor):
                 lang
                 and lang[0].arg.sval == "c"
                 and code[-1].sval != "ts_update_placeholder"
+                and node.returnType.names[0].sval
+                not in ["table_am_handler", "index_am_handler"]
             ):
                 self.errors += 1
                 functype = "procedure" if node.is_procedure else "function"

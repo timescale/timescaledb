@@ -4,6 +4,87 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+
+## 2.18.0 (2025-01-23)
+
+This release introduces the ability to add secondary indexes to the columnstore, improves group by and filtering performance through columnstore vectorization, and contains the highly upvoted community request of transition table support. We recommend that you upgrade at the next available opportunity.
+
+**Highlighted features in TimescaleDB v2.18.0**
+
+* The ability to add secondary indexes to the columnstore through the new hypercore table access method.
+* Significant performance improvements through vectorization (`SIMD`) for aggregations using a group by with one column and/or using a filter clause when querying the columnstore.
+* Hypertables support triggers for transition tables, which is one of the most upvoted community feature requests.
+* Updated methods to manage Timescale's hybrid row-columnar store (hypercore) that highlight the usage of the columnstore which includes both an optimized columnar format as well as compression.
+
+**Dropping support for Bitnami images**
+
+After the recent change in Bitnami’s [LTS support policy](https://github.com/bitnami/containers/issues/75671), we are no longer building Bitnami images for TimescaleDB. We recommend using the [official TimescaleDB Docker image](https://hub.docker.com/r/timescale/timescaledb-ha)
+
+**Deprecation Notice**
+
+We are deprecating the following parameters, functions, procedures and views. They will be removed with the next major release of TimescaleDB. Please find the replacements in the table below:
+
+| Deprecated | Replacement | Type |
+| --- | --- | --- |
+| decompress_chunk | convert_to_rowstore | Procedure |
+| compress_chunk | convert_to_columnstore | Procedure | 
+| add_compression_policy | add_columnstore_policy | Function | 
+| remove_compression_policy | remove_columnstore_policy | Function | 
+| hypertable_compression_stats | hypertable_columnstore_stats | Function | 
+| chunk_compression_stats | chunk_columnstore_stats | Function | 
+| hypertable_compression_settings | hypertable_columnstore_settings | View | 
+| chunk_compression_settings | chunk_columnstore_settings | View | 
+| compression_settings | columnstore_settings | View | 
+| timescaledb.compress | timescaledb.enable_columnstore | Parameter | 
+| timescaledb.compress_segmentby | timescaledb.segmentby | Parameter | 
+| timescaledb.compress_orderby  | timescaledb.orderby | Parameter | 
+
+**Features**
+* #7341: Vectorized aggregation with grouping by one fixed-size by-value compressed column (such as arithmetic types).
+* #7104: Hypercore table access method.
+* #6901: Add hypertable support for transition tables.
+* #7482: Optimize recompression of partially compressed chunks.
+* #7458: Support vectorized aggregation with aggregate `filter` clauses that are also vectorizable.
+* #7433: Add support for merging chunks.
+* #7271: Push down `order by` in real-time continuous aggregate queries.
+* #7455: Support `drop not null` on compressed hypertables.
+* #7295: Support `alter table set access method` on hypertable.
+* #7411: Change parameter name to enable hypercore table access method.
+* #7436: Add index creation on `order by` columns.
+* #7443: Add hypercore function and view aliases.
+* #7521: Add optional `force` argument to `refresh_continuous_aggregate`.
+* #7528: Transform sorting on `time_bucket` to sorting on time for compressed chunks in some cases.
+* #7565: Add hint when hypertable creation fails.
+* #7390: Disable custom `hashagg` planner code.
+* #7587: Add `include_tiered_data` parameter to `add_continuous_aggregate_policy` API.
+* #7486: Prevent building against PostgreSQL versions with broken ABI.
+* #7412: Add [GUC](https://www.postgresql.org/docs/current/acronyms.html#:~:text=GUC) for the `hypercore_use_access_method` default.
+* #7413: Add GUC for segmentwise recompression.
+
+**Bugfixes**
+* #7378: Remove obsolete job referencing `policy_job_error_retention`.
+* #7409: Update `bgw_job` table when altering procedure.
+* #7410: Fix the `aggregated compressed column not found` error on aggregation query.
+* #7426: Fix `datetime` parsing error in chunk constraint creation.
+* #7432: Verify that the heap tuple is valid before using.
+* #7434: Fix the segfault when internally setting the replica identity for a given chunk.
+* #7488: Emit error for transition table trigger on chunks.
+* #7514: Fix the error: `invalid child of chunk append`.
+* #7517: Fix the performance regression on the `cagg_migrate` procedure.
+* #7527: Restart scheduler on error.
+* #7557: Fix null handling for in-memory tuple filtering.
+* #7566: Improve transaction check in CAGG refresh.
+* #7584: Fix NaN-handling for vectorized aggregation.
+* #7598: Match the Postgres NaN comparison behavior in WHERE clause over compressed tables.
+
+**Thanks**
+* @bharrisau for reporting the segfault when creating chunks.
+* @jakehedlund for reporting the incompatible NaN behavior in WHERE clause over compressed tables.
+* @k-rus for suggesting that we add a hint when hypertable creation fails.
+* @staticlibs for sending the pull request that improves the transaction check in CAGG refresh.
+* @uasiddiqi for reporting the `aggregated compressed column not found` error.
+
+
 ## 2.17.2 (2024-11-06)
 
 This release contains bug fixes since the 2.17.1 release. We recommend that you
