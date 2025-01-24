@@ -17,19 +17,19 @@ endif()
 if((NOT WIN32)
    AND (NOT (CMAKE_HOST_SYSTEM_VERSION MATCHES "microsoft-standard-WSL2$"))
    AND ((NOT DEFINED USE_UMASH) OR USE_UMASH))
-  # Check whether we can enable the pclmul instruction required for the UMASH
-  # hashing on amd64. Shouldn't be done if the user has manually specified the
-  # target architecture, no idea how to detect this, but at least we shouldn't
-  # do this when cross-compiling.
-  if(NOT CMAKE_CROSSCOMPILING)
-    check_c_compiler_flag(-mpclmul CC_PCLMUL)
-    if(CC_PCLMUL)
-      add_compile_options(-mpclmul)
-      # The "C source compiles" check below doesn't use the global compilation
-      # flags, so we have to modify its flags separately.
-      set(CMAKE_REQUIRED_FLAGS -mpclmul)
-    endif()
-  endif()
+#  # Check whether we can enable the pclmul instruction required for the UMASH
+#  # hashing on amd64. Shouldn't be done if the user has manually specified the
+#  # target architecture, no idea how to detect this, but at least we shouldn't
+#  # do this when cross-compiling.
+#  if(NOT CMAKE_CROSSCOMPILING)
+#    check_c_compiler_flag(-mpclmul CC_PCLMUL)
+#    if(CC_PCLMUL)
+#      add_compile_options(-mpclmul)
+#      # The "C source compiles" check below doesn't use the global compilation
+#      # flags, so we have to modify its flags separately.
+#      set(CMAKE_REQUIRED_FLAGS -mpclmul)
+#    endif()
+#  endif()
 
   set(CMAKE_REQUIRED_FLAGS
       "${CMAKE_REQUIRED_FLAGS} -Werror=implicit-function-declaration")
