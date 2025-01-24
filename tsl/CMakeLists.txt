@@ -53,7 +53,6 @@ void main(void) {};
 "
     UMASH_SUPPORTED)
   unset(CMAKE_REQUIRED_FLAGS)
-  unset(CMAKE_TRY_COMPILE_TARGET_TYPE)
 else()
   set(UMASH_SUPPORTED OFF)
 endif()

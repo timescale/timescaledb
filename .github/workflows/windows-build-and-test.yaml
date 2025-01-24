@@ -184,34 +184,15 @@ jobs:
         yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh || true
         apt-get install -y --force-yes postgresql-server-dev-${{ matrix.pg }}
 
-    - name: FIXME reinstall cmake
-      shell: wsl-bash {0}
-      run: |
-        cmake -version
-        apt-get purge -y cmake
-        apt-get install -y cmake
-        cmake -version
-
     - name: Run tests
       shell: wsl-bash {0}
       run: |
         export TEST_TABLESPACE1_PREFIX='${{ env.TABLESPACE1 }}'
         export TEST_TABLESPACE2_PREFIX='${{ env.TABLESPACE2 }}'
-        sleep 60 && killall -9 cmake &
-        timeout 60 cmake --trace -B build_wsl -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTEST_PGPORT_LOCAL=${{ env.PGPORT }} > cmake.log 2>&1
-        echo $?
+        cmake -B build_wsl -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTEST_PGPORT_LOCAL=${{ env.PGPORT }}
 
-        #make -C build_wsl isolationchecklocal | tee -a installcheck.log
-        #make -C build_wsl regresschecklocal IGNORES="${{ matrix.ignores }}" | tee -a installcheck.log
-        exit 1
-
-    - name: Upload CMake Logs (FIXME)
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: CMake (FIXME) Logs ${{ matrix.pg }} ${{ matrix.os }} ${{ matrix.build_type }}
-        path: |
-            cmake.log
+        make -C build_wsl isolationchecklocal | tee -a installcheck.log
+        make -C build_wsl regresschecklocal IGNORES="${{ matrix.ignores }}" | tee -a installcheck.log
 
     - name: Setup postgres cluster for TSL tests
       run: |
