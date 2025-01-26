@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+
+# Check SQL update script for undesirable patterns. This script is
+# intended to be run on the compiled update script or subsets of
+# the update script (e.g. latest-dev.sql and reverse-dev.sql)
+
 from pglast import parse_sql
 from pglast.ast import ColumnDef
 from pglast.visitors import Visitor
