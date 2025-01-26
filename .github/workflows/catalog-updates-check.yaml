@@ -22,9 +22,15 @@ jobs:
         run: |
           python scripts/check_updates_ast.py --latest "sql/updates/latest-dev.sql"
 
+      - name: Check for idempotency in SQL scripts
+        if: always()
+        run: |
+          python scripts/check_sql_script.py sql/*.sql
+
       # To allow fixing previous mistakes we run the check against reverse-dev but don't
       # fail it on errors.
       - name: Check reverse-dev contents
         if: always()
         run: |
           python scripts/check_updates_ast.py "sql/updates/reverse-dev.sql" || true
+
