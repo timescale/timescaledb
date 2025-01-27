@@ -18,12 +18,16 @@ set(PRE_INSTALL_SOURCE_FILES
     pre_install/cache.sql
     pre_install/tam.functions.sql
     pre_install/tam.sql
-    pre_install/insert_data.sql)
+    pre_install/insert_data.sql
+    pre_install/ddl_triggers.functions.sql
+    pre_install/ddl_triggers.sql
+    )
 
 # Source files that define functions and need to be rerun in update
 set(PRE_INSTALL_FUNCTION_FILES
     pre_install/types.functions.sql
     pre_install/tam.functions.sql
+    pre_install/ddl_triggers.functions.sql
     )
 
 # The rest of the source files defining mostly functions
@@ -36,7 +40,6 @@ set(SOURCE_FILES
     chunk_constraint.sql
     partitioning.sql
     ddl_api.sql
-    ddl_triggers.sql
     bookend.sql
     time_bucket.sql
     time_bucket_ng.sql
