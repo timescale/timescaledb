@@ -167,9 +167,7 @@ jobs:
         copy build_win/test/pg_hba.conf ${{ env.PGDATA }}
         icacls . /grant runneradmin:F /T
         ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log=postmaster.log
-        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_isready -U postgres -d postgres --timeout=60
-        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
-        echo "PG version:"
+        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_isready -U postgres -d postgres --timeout=60 ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;' echo "PG version:"
         ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SELECT version();'
         echo "Log configuration:"
         ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SHOW logging_collector;'
@@ -246,6 +244,13 @@ jobs:
         name: PostgreSQL ${{ matrix.pg }} log ${{ matrix.os }} ${{ matrix.build_type }} Build
         path: ${{ env.PGDATA }}\log\postmaster.log
 
+    - name: Upload build 
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: Win Debug Build
+        path: |
+            ~\PostgreSQL\${{ matrix.pg }}/lib/timescaledb-2.19.0-dev.dll
     - name: Upload CMake Logs
       if: always()
       uses: actions/upload-artifact@v4
