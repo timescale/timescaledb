@@ -1063,8 +1063,8 @@ static Oid
 get_compressed_chunk_index_for_recompression(Chunk *uncompressed_chunk)
 {
 	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
-	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, ShareLock);
-	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, ShareLock);
+	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, AccessShareLock);
+	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, AccessShareLock);
 
 	CompressionSettings *settings = ts_compression_settings_get(uncompressed_chunk->table_id);
 
