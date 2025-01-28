@@ -280,33 +280,34 @@ ORDER BY hypertable_name,
 CREATE OR REPLACE VIEW timescaledb_information.job_errors
 WITH (security_barrier = true) AS
 SELECT
-    job_id,
-    data->'job'->>'proc_schema' as proc_schema,
-    data->'job'->>'proc_name' as proc_name,
-    pid,
-    execution_start AS start_time,
-    execution_finish AS finish_time,
-    data->'error_data'->>'sqlerrcode' AS sqlerrcode,
-    CASE WHEN data->'error_data'->>'message' IS NOT NULL THEN
-      CASE WHEN data->'error_data'->>'detail' IS NOT NULL THEN
-        CASE WHEN data->'error_data'->>'hint' IS NOT NULL THEN concat(data->'error_data'->>'message', '. ', data->'error_data'->>'detail', '. ', data->'error_data'->>'hint')
-        ELSE concat(data->'error_data'->>'message', ' ', data->'error_data'->>'detail')
+    h.job_id,
+    h.data->'job'->>'proc_schema' as proc_schema,
+    h.data->'job'->>'proc_name' as proc_name,
+    h.pid,
+    h.execution_start AS start_time,
+    h.execution_finish AS finish_time,
+    h.data->'error_data'->>'sqlerrcode' AS sqlerrcode,
+    CASE
+      WHEN h.succeeded IS NULL AND h.execution_finish IS NULL AND h.pid IS NULL THEN
+        'job crash detected, see server logs'
+      WHEN h.data->'error_data'->>'message' IS NOT NULL THEN
+        CASE WHEN h.data->'error_data'->>'detail' IS NOT NULL THEN
+          CASE WHEN h.data->'error_data'->>'hint' IS NOT NULL THEN concat(h.data->'error_data'->>'message', '. ', h.data->'error_data'->>'detail', '. ', h.data->'error_data'->>'hint')
+          ELSE concat(h.data->'error_data'->>'message', ' ', h.data->'error_data'->>'detail')
+          END
+        ELSE
+          CASE WHEN h.data->'error_data'->>'hint' IS NOT NULL THEN concat(h.data->'error_data'->>'message', '. ', h.data->'error_data'->>'hint')
+          ELSE h.data->'error_data'->>'message'
+          END
         END
-      ELSE
-        CASE WHEN data->'error_data'->>'hint' IS NOT NULL THEN concat(data->'error_data'->>'message', '. ', data->'error_data'->>'hint')
-        ELSE data->'error_data'->>'message'
-        END
-      END
-    ELSE
-      'job crash detected, see server logs'
-    END
-    AS err_message
+    END AS err_message
 FROM
-    _timescaledb_internal.bgw_job_stat_history
+    _timescaledb_internal.bgw_job_stat_history h
 LEFT JOIN
-    _timescaledb_config.bgw_job ON (bgw_job.id = bgw_job_stat_history.job_id)
+    _timescaledb_config.bgw_job j ON (j.id = h.job_id)
 WHERE
-    succeeded IS FALSE
+    h.succeeded IS FALSE
+    OR h.succeeded IS NULL
     AND (pg_catalog.pg_has_role(current_user,
 			   (SELECT pg_catalog.pg_get_userbyid(datdba)
 			      FROM pg_catalog.pg_database
@@ -328,6 +329,8 @@ SELECT
     h.data->'job'->'config' AS config,
     h.data->'error_data'->>'sqlerrcode' AS sqlerrcode,
     CASE
+      WHEN h.succeeded IS NULL AND h.execution_finish IS NULL AND h.pid IS NULL THEN
+        'job crash detected, see server logs'
       WHEN h.succeeded IS FALSE AND h.data->'error_data'->>'message' IS NOT NULL THEN
         CASE WHEN h.data->'error_data'->>'detail' IS NOT NULL THEN
           CASE WHEN h.data->'error_data'->>'hint' IS NOT NULL THEN concat(h.data->'error_data'->>'message', '. ', h.data->'error_data'->>'detail', '. ', h.data->'error_data'->>'hint')
@@ -338,10 +341,6 @@ SELECT
           ELSE h.data->'error_data'->>'message'
           END
         END
-      WHEN h.succeeded IS FALSE AND h.execution_finish IS NOT NULL THEN
-        'job crash detected, see server logs'
-      WHEN h.execution_finish IS NULL THEN
-        E'job didn\'t finish yet'
     END AS err_message
 FROM
     _timescaledb_internal.bgw_job_stat_history h
