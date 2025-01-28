@@ -5,6 +5,7 @@
 **/CMakeCache.txt
 /sql/tests/unit/testoutputs.tmp
 /sql/timescaledb--*.sql
+/sql/pre_install/*.gen
 /sql/updates/*.gen
 /data/
 /src/*.o
