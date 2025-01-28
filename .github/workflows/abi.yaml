@@ -18,6 +18,12 @@ name: ABI Test
   pull_request:
     paths: .github/workflows/abi.yaml
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      branch:
+        description: 'Branch to checkout'
+        type: string
+        default: 'main'
 jobs:
   config:
     runs-on: ubuntu-latest
@@ -34,6 +40,8 @@ jobs:
     steps:
     - name: Checkout source code
       uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.branch }}
     - name: Read configuration
       id: config
       run: python .github/gh_config_reader.py

@@ -12,6 +12,12 @@ name: Sanitizer test
   pull_request:
     paths: .github/workflows/sanitizer-build-and-test.yaml
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      branch:
+        description: 'Branch to checkout'
+        type: string
+        default: 'main'
 
 env:
   name: "Sanitizer"
@@ -59,6 +65,9 @@ jobs:
     steps:
     - name: Checkout source code
       uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.branch }}
+
     - name: Read configuration
       id: setter
       run: python .github/gh_config_reader.py

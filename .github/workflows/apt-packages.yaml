@@ -13,6 +13,12 @@ name: APT packages
     - release_test
     - trigger/package_test
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      branch:
+        description: 'Branch to checkout'
+        type: string
+        default: 'main'
 jobs:
   apt_tests:
     name: APT ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }}
@@ -59,6 +65,8 @@ jobs:
         dpkg -L timescaledb-2${{ matrix.pkg_suffix }}-postgresql-${{ matrix.pg }}
 
     - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.branch }}
 
     - name: Read versions
       id: versions

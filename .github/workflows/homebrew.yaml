@@ -12,7 +12,12 @@ name: Homebrew
     - trigger/package_test
     - trigger/homebrew_test
   workflow_dispatch:
-
+  workflow_call:
+    inputs:
+      branch:
+        description: 'Branch to checkout'
+        type: string
+        default: 'main'
 jobs:
   homebrew:
     name: Homebrew

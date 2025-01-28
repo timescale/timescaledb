@@ -16,6 +16,12 @@ name: Test Docker images
     - release_test
     - trigger/package_test
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      branch:
+        description: 'Branch to checkout'
+        type: string
+        default: 'main'
 jobs:
   docker_tests:
     name: ${{ matrix.image }}
@@ -50,6 +56,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.branch }}
 
     - name: Read versions
       id: versions

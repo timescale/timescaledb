@@ -13,6 +13,12 @@ name: Windows Packages
     - release_test
     - trigger/windows_packages
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      branch:
+        description: 'Branch to checkout'
+        type: string
+        default: 'main'
 
 jobs:
   config:
@@ -30,6 +36,8 @@ jobs:
     steps:
     - name: Checkout source code
       uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.branch }}
     - name: Read configuration
       id: config
       run: python .github/gh_config_reader.py
@@ -76,6 +84,8 @@ jobs:
 
     - name: Checkout TimescaleDB source
       uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.branch }}
 
     - name: Get version
       id: version

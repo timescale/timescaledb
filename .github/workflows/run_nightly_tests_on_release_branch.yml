@@ -1,0 +1,24 @@
+name: "Run nightly tests on release branch"
+
+"on":
+  schedule:
+    # run daily at 12:00 on the release branch
+    - cron: '0 12 * * *'
+
+jobs:
+  run-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+        - name: Run nightly tests
+          env:
+            GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+            RELEASE_BRANCH: '2.18.x'
+          run: |
+            gh workflow run linux-32bit-build-and-test.yaml -R timescale/timescaledb -f branch="$RELEASE_BRANCH"
+            gh workflow run linux-build-and-test.yaml -R timescale/timescaledb -f branch="$RELEASE_BRANCH"
+            gh workflow run rpm-packages.yaml -R timescale/timescaledb -f branch="$RELEASE_BRANCH"
+            gh workflow run sanitizer-build-and-test.yaml -R timescale/timescaledb -f branch="$RELEASE_BRANCH"
+            gh workflow run windows-build-and-test.yaml -R timescale/timescaledb -f branch="$RELEASE_BRANCH"
+            gh workflow run snapshot-abi.yaml -R timescale/timescaledb -f branch="$RELEASE_BRANCH"
+            gh workflow run abi.yaml -R timescale/timescaledb -f branch="$RELEASE_BRANCH"

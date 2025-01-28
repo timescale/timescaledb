@@ -20,6 +20,12 @@ name: Regression Linux i386
       - '**.md'
       - 'LICENSE*'
       - NOTICE
+  workflow_call:
+    inputs:
+      branch:
+        description: 'Branch to checkout'
+        type: string
+        default: 'main'
 jobs:
   config:
     runs-on: ubuntu-latest
@@ -28,7 +34,10 @@ jobs:
     steps:
     - name: Checkout source code
       uses: actions/checkout@v4
-    - name: Read configuration
+      with:
+        ref: ${{ github.event.inputs.branch }}
+
+- name: Read configuration
       id: setter
       run: python .github/gh_config_reader.py
 
@@ -76,6 +85,8 @@ jobs:
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.branch }}
 
     # We are going to rebuild Postgres daily, so that it doesn't suddenly break
     # ages after the original problem.

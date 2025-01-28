@@ -13,6 +13,12 @@ name: Libfuzzer
       - .github/workflows/libfuzzer.yaml
       - 'tsl/test/fuzzing/compression/**'
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      branch:
+        description: 'Branch to checkout'
+        type: string
+        default: 'main'
 
 jobs:
   build:
@@ -33,6 +39,8 @@ jobs:
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.branch }}
 
     - name: Read configuration
       id: config
@@ -145,6 +153,8 @@ jobs:
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.branch }}
 
     - name: Download the installation directory
       uses: actions/download-artifact@v4

@@ -14,6 +14,12 @@ name: ABI Test Against Snapshot
   pull_request:
     paths: .github/workflows/snapshot-abi.yaml
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      branch:
+        description: 'Branch to checkout'
+        type: string
+        default: 'main'
 
 jobs:
   config:
@@ -27,6 +33,8 @@ jobs:
     steps:
     - name: Checkout source code
       uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.branch }}
     - name: Read configuration
       id: config
       run: python .github/gh_config_reader.py
@@ -67,6 +75,8 @@ jobs:
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.branch }}
 
     - name: Download Postgres ${{ matrix.pg }}
       run: |

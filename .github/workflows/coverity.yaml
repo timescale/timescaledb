@@ -7,6 +7,12 @@ name: Coverity
     branches:
       - coverity_scan
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      branch:
+        description: 'Branch to checkout'
+        type: string
+        default: 'main'
 jobs:
 
   coverity:
@@ -29,6 +35,8 @@ jobs:
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.branch }}
 
     - name: Coverity tools
       run: |

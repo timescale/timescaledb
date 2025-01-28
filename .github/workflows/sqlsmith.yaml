@@ -10,6 +10,12 @@ name: SQLsmith
       - main
   pull_request:
     paths: .github/workflows/sqlsmith.yaml
+  workflow_call:
+    inputs:
+      branch:
+        description: 'Branch to checkout'
+        type: string
+        default: 'main'
 
 jobs:
   sqlsmith:
@@ -47,6 +53,8 @@ jobs:
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.branch }}
 
     - name: Build TimescaleDB
       run: |
