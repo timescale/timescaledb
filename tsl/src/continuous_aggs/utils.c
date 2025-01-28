@@ -40,7 +40,7 @@ create_cagg_validate_query_datum(TupleDesc tupdesc, const bool is_valid_query,
 
 	tupdesc = BlessTupleDesc(tupdesc);
 
-	ts_datum_set_bool(Anum_cagg_validate_query_valid, datums, is_valid_query);
+	ts_datum_set_bool(Anum_cagg_validate_query_valid, datums, is_valid_query, false);
 	ts_datum_set_text_from_cstring(Anum_cagg_validate_query_error_level,
 								   datums,
 								   edata->elevel > 0 ? error_severity(edata->elevel) : NULL);
@@ -861,7 +861,10 @@ create_cagg_get_bucket_function_datum(TupleDesc tupdesc, ContinuousAggsBucketFun
 	ts_datum_set_text_from_cstring(Anum_cagg_bucket_function_timezone,
 								   datums,
 								   bf->bucket_time_timezone);
-	ts_datum_set_bool(Anum_cagg_bucket_function_fixed_width, datums, bf->bucket_fixed_interval);
+	ts_datum_set_bool(Anum_cagg_bucket_function_fixed_width,
+					  datums,
+					  bf->bucket_fixed_interval,
+					  false);
 
 	Assert(tupdesc->natts == Natts_cagg_validate_query);
 	tuple = ts_heap_form_tuple(tupdesc, datums);

@@ -28,12 +28,6 @@ SELECT _timescaledb_functions.start_background_workers();
  t
 (1 row)
 
-SELECT pg_sleep(6);
- pg_sleep 
-----------
- 
-(1 row)
-
 SELECT add_job('custom_job_ok', schedule_interval => interval '1 hour', initial_start := now()) AS job_id_1 \gset
 SELECT add_job('custom_job_error', schedule_interval => interval '1 hour', initial_start := now()) AS job_id_2 \gset
 SELECT test.wait_for_job_to_run(:job_id_1, 1);
@@ -81,6 +75,8 @@ SELECT pg_reload_conf();
  t
 (1 row)
 
+-- Reconnect to make sure the GUC is set
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT scheduled FROM alter_job(:job_id_1, next_start => now());
  scheduled 
 -----------
