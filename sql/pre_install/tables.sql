@@ -317,7 +317,7 @@ CREATE TABLE _timescaledb_internal.bgw_job_stat_history (
   pid INTEGER,
   execution_start TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   execution_finish TIMESTAMPTZ,
-  succeeded boolean NOT NULL DEFAULT FALSE,
+  succeeded boolean,
   data jsonb,
   -- table constraints
   CONSTRAINT bgw_job_stat_history_pkey PRIMARY KEY (id)

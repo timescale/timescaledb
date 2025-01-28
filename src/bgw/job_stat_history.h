@@ -11,5 +11,12 @@
 
 #define INVALID_BGW_JOB_STAT_HISTORY_ID 0
 
-extern void ts_bgw_job_stat_history_mark_start(BgwJob *job);
-extern void ts_bgw_job_stat_history_mark_end(BgwJob *job, JobResult result, Jsonb *edata);
+typedef enum BgwJobStatHistoryUpdateType
+{
+	JOB_STAT_HISTORY_UPDATE_START,
+	JOB_STAT_HISTORY_UPDATE_END,
+	JOB_STAT_HISTORY_UPDATE_PID,
+} BgwJobStatHistoryUpdateType;
+
+extern void ts_bgw_job_stat_history_update(BgwJobStatHistoryUpdateType update_type, BgwJob *job,
+										   JobResult result, Jsonb *edata);
