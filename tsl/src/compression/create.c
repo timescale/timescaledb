@@ -153,7 +153,8 @@ compressed_column_metadata_attno(CompressionSettings *settings, Oid chunk_reloid
 	char *attname = get_attname(chunk_reloid, chunk_attno, /* missing_ok = */ false);
 	int16 orderby_pos = ts_array_position(settings->fd.orderby, attname);
 
-	if (orderby_pos != 0)
+	if (orderby_pos != 0
+		&& (strcmp(metadata_type, "min") == 0 || strcmp(metadata_type, "max") == 0))
 	{
 		char *metadata_name = compression_column_segment_metadata_name(metadata_type, orderby_pos);
 		return get_attnum(compressed_reloid, metadata_name);
