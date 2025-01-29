@@ -50,7 +50,8 @@ jobs:
         # reference and currently it cannot be used for vectorized hash grouping.
         # vector_agg_text and vector_agg_groupagg use the UMASH hashing library
         # that we can't compile on i386.
-        IGNORES: >- append-* transparent_decompression-*
+        IGNORES: >-
+          append-* transparent_decompression-*
           transparent_decompress_chunk-* pg_dump telemetry bgw_db_scheduler*
           hypercore_vacuum vectorized_aggregation vector_agg_text
           vector_agg_groupagg
