@@ -63,7 +63,8 @@ single_text_key_hashing_get_key(BatchHashingParams params, int row, void *restri
 		if (*valid)
 		{
 			output_key->len = VARSIZE_ANY_EXHDR(*params.single_grouping_column.output_value);
-			output_key->data = (const uint8 *) VARDATA_ANY(*params.single_grouping_column.output_value);
+			output_key->data =
+				(const uint8 *) VARDATA_ANY(*params.single_grouping_column.output_value);
 		}
 		else
 		{
