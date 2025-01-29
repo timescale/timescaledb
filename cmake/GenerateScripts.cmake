@@ -137,21 +137,9 @@ function(generate_downgrade_script)
   endforeach()
 
   # Fetch manifest with list of files for the prolog and epilog from the target
-  # version, if we are in a version that supports downgrades.  Otherwise, take
-  # the one in the current version.
-  #
-  # We have a specific exception where we allow a missing manifest for the first
-  # version that supports downgrades and assume that the files to include are
-  # the same in the target version as the current one.
-  if(_downgrade_TARGET_VERSION VERSION_GREATER 2.3)
-    git_versioned_get(VERSION ${_downgrade_TARGET_VERSION} FILES
-                      ${CMAKE_SOURCE_DIR}/cmake/ScriptFiles.cmake)
-  else()
-    file(MAKE_DIRECTORY
-         "${CMAKE_BINARY_DIR}/v${_downgrade_TARGET_VERSION}/cmake")
-    file(COPY "${CMAKE_SOURCE_DIR}/cmake/ScriptFiles.cmake"
-         DESTINATION "${CMAKE_BINARY_DIR}/v${_downgrade_TARGET_VERSION}/cmake")
-  endif()
+  # version.
+  git_versioned_get(VERSION ${_downgrade_TARGET_VERSION} FILES
+                    ${CMAKE_SOURCE_DIR}/cmake/ScriptFiles.cmake)
 
   # This will include the variables in this scope, but not in the parent scope
   # so we can read them locally without affecting the parent scope.
@@ -171,6 +159,10 @@ function(generate_downgrade_script)
     RESULT_FILES
     _epilog_files
     IGNORE_ERRORS)
+
+  if(_downgrade_TARGET_VERSION VERSION_EQUAL 2.18.0)
+    list(TRANSFORM _epilog_files REPLACE "^.*/hypercore.sql" "${CMAKE_CURRENT_SOURCE_DIR}/pre_install/tam.functions.sql")
+  endif()
 
   foreach(_downgrade_file ${_downgrade_PRE_FILES})
     get_filename_component(_downgrade_filename ${_downgrade_file} NAME)

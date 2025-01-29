@@ -5,6 +5,8 @@ name: Test Update and Downgrade
       - main
       - prerelease_test
   pull_request:
+  workflow_dispatch:
+
 jobs:
   update_test:
     name: Update test PG${{ matrix.pg }}
@@ -37,12 +39,11 @@ jobs:
         PATH="/usr/lib/postgresql/${{ matrix.pg }}/bin:$PATH"
         ./scripts/test_updates.sh
 
-#    Temporary disabled downgrade for 2.18.0 
-#    - name: Downgrade tests PG${{ matrix.pg }}
-#      if: always()
-#      run: |
-#        PATH="/usr/lib/postgresql/${{ matrix.pg }}/bin:$PATH"
-#        ./scripts/test_downgrade.sh
+    - name: Downgrade tests PG${{ matrix.pg }}
+      if: always()
+      run: |
+        PATH="/usr/lib/postgresql/${{ matrix.pg }}/bin:$PATH"
+        ./scripts/test_downgrade.sh
 
     - name: Update diff
       if: failure()

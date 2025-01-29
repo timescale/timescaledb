@@ -21,9 +21,7 @@ BEGIN
 END
 $$ SET search_path TO pg_catalog, pg_temp;
 
--- CREATE OR REPLACE TRIGGER is PG14+ only
-DROP TRIGGER IF EXISTS metadata_insert_trigger ON _timescaledb_catalog.metadata;
-CREATE TRIGGER metadata_insert_trigger BEFORE INSERT ON _timescaledb_catalog.metadata FOR EACH ROW EXECUTE PROCEDURE _timescaledb_functions.metadata_insert_trigger();
+CREATE OR REPLACE TRIGGER metadata_insert_trigger BEFORE INSERT ON _timescaledb_catalog.metadata FOR EACH ROW EXECUTE PROCEDURE _timescaledb_functions.metadata_insert_trigger();
 
 -- Insert uuid and install_timestamp on database creation since the trigger
 -- will turn these into UPDATEs on conflicts we can't use ON CONFLICT DO NOTHING.
