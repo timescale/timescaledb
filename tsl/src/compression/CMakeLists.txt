@@ -6,7 +6,8 @@ set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/compression_scankey.c
     ${CMAKE_CURRENT_SOURCE_DIR}/compression_storage.c
     ${CMAKE_CURRENT_SOURCE_DIR}/create.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/recompress.c)
+    ${CMAKE_CURRENT_SOURCE_DIR}/recompress.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/sparse_bloom.c)
 target_sources(${TSL_LIBRARY_NAME} PRIVATE ${SOURCES})
 
 add_subdirectory(algorithms)

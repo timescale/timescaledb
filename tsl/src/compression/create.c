@@ -52,7 +52,7 @@
 #include "utils.h"
 #include <executor/spi.h>
 
-static const char *sparse_index_types[] = { "min", "max" };
+static const char *sparse_index_types[] = { "min", "max", "bloom1" };
 
 #ifdef USE_ASSERT_CHECKING
 static bool
@@ -153,8 +153,8 @@ compressed_column_metadata_attno(CompressionSettings *settings, Oid chunk_reloid
 	char *attname = get_attname(chunk_reloid, chunk_attno, /* missing_ok = */ false);
 	int16 orderby_pos = ts_array_position(settings->fd.orderby, attname);
 
-	if (orderby_pos != 0
-		&& (strcmp(metadata_type, "min") == 0 || strcmp(metadata_type, "max") == 0))
+	if (orderby_pos != 0 &&
+		(strcmp(metadata_type, "min") == 0 || strcmp(metadata_type, "max") == 0))
 	{
 		char *metadata_name = compression_column_segment_metadata_name(metadata_type, orderby_pos);
 		return get_attnum(compressed_reloid, metadata_name);
@@ -255,9 +255,11 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 		 * respective compressed column, because they are accessed before
 		 * decompression.
 		 */
-		bool is_orderby = ts_array_is_member(settings->fd.orderby, NameStr(attr->attname));
+		bool should_add_metadata = false;
+		const bool is_orderby = ts_array_is_member(settings->fd.orderby, NameStr(attr->attname));
 		if (is_orderby)
 		{
+			should_add_metadata = true;
 			int index = ts_array_position(settings->fd.orderby, NameStr(attr->attname));
 			TypeCacheEntry *type = lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR);
 
@@ -285,6 +287,7 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 		}
 		else if (bms_is_member(attr->attnum, btree_columns))
 		{
+			should_add_metadata = true;
 			TypeCacheEntry *type = lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR);
 
 			if (OidIsValid(type->lt_opr))
@@ -316,6 +319,21 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 										  attr->atttypmod,
 										  attr->attcollation));
 			}
+		}
+
+		if (should_add_metadata && attr->atttypid == TEXTOID)
+		{
+			/*
+			 * Add bloom filter metadata for text columns that have other
+			 * kind of metadata.
+			 */
+			compressed_column_defs =
+				lappend(compressed_column_defs,
+						makeColumnDef(compressed_column_metadata_name_v2("bloom1",
+																		 NameStr(attr->attname)),
+									  BYTEAOID,
+									  /* typmod = */ -1,
+									  /* collation = */ 0));
 		}
 
 		compressed_column_defs = lappend(compressed_column_defs,
