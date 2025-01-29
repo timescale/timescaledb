@@ -24,7 +24,6 @@
 #include "compression/compression.h"
 #include "compression/create.h"
 #include "compression/recompress.h"
-#include "compression/segment_meta.h"
 #include "config.h"
 #include "continuous_aggs/create.h"
 #include "continuous_aggs/insert.h"
@@ -191,6 +190,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.get_compressed_chunk_index_for_recompression =
 		tsl_get_compressed_chunk_index_for_recompression,
 	.preprocess_query_tsl = tsl_preprocess_query,
+	.merge_chunks = chunk_merge_chunks,
 };
 
 static void

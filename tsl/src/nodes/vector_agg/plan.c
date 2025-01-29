@@ -507,8 +507,6 @@ get_vectorized_grouping_type(Agg *agg, CustomScan *custom, List *resolved_target
 	 * compressed column.
 	 * We can use our hash table for GroupAggregate as well, because it preserves
 	 * the input order of the keys.
-	 * FIXME write a test for that.
-	 * FIXME rewrite to use num_grouping_columns
 	 */
 	if (num_grouping_columns == 1)
 	{

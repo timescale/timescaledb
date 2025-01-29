@@ -6,8 +6,16 @@
 
 /*
  * This file contains source code that was copied and/or modified from
- * the UMASH hash implementation at https://github.com/backtrace-labs/umash,
- * which is licensed under the MIT License:
+ * the UMASH hash implementation at https://github.com/backtrace-labs/umash.
+ *
+ * This is a copy of umash.h, git commit sha
+ * fc4c5b6ca1f06c308e96c43aa080bd766238e092.
+ */
+
+/*
+ * UMASH is distributed under the MIT license.
+ *
+ * SPDX-License-Identifier: MIT
  *
  * Copyright 2020-2022 Backtrace I/O, Inc.
  * Copyright 2022 Paul Khuong
@@ -31,9 +39,6 @@
  * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
  * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * This is a copy of umash.h, git commit sha
- * fc4c5b6ca1f06c308e96c43aa080bd766238e092.
  */
 
 #ifndef UMASH_H
@@ -41,6 +46,10 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#ifndef TS_USE_UMASH
+#error "UMASH usage is disabled, but the header is included"
+#endif
 
 /**
  * # UMASH: a non-cryptographic hash function with collision bounds
@@ -280,7 +289,7 @@ void umash_sink_update(struct umash_sink *, const void *data, size_t n_bytes);
  *   for the second.
  */
 uint64_t umash_full(const struct umash_params *params, uint64_t seed, int which,
-    const void *data, size_t n_bytes);
+	const void *data, size_t n_bytes);
 
 /**
  * Computes the UMASH fingerprint of `data[0 ... n_bytes)`.
@@ -290,14 +299,14 @@ uint64_t umash_full(const struct umash_params *params, uint64_t seed, int which,
  * with no guarantee.
  */
 struct umash_fp umash_fprint(
-    const struct umash_params *params, uint64_t seed, const void *data, size_t n_bytes);
+	const struct umash_params *params, uint64_t seed, const void *data, size_t n_bytes);
 
 /**
  * Prepares a `umash_state` for computing the `which`th UMASH function in
  * `params`.
  */
 void umash_init(
-    struct umash_state *, const struct umash_params *params, uint64_t seed, int which);
+	struct umash_state *, const struct umash_params *params, uint64_t seed, int which);
 
 /**
  * Returns the UMASH value for the bytes that have been
@@ -310,7 +319,7 @@ uint64_t umash_digest(const struct umash_state *);
  * `params`.
  */
 void umash_fp_init(
-    struct umash_fp_state *, const struct umash_params *params, uint64_t seed);
+	struct umash_fp_state *, const struct umash_params *params, uint64_t seed);
 
 /**
  * Returns the UMASH fingerprint for the bytes that have been

@@ -27,12 +27,14 @@ set(TEST_FILES
     compression_defaults.sql
     compression_fks.sql
     compression_insert.sql
+    compression_indexcreate.sql
     compression_policy.sql
     compression_qualpushdown.sql
     compression_sequence_num_removal.sql
     compression_settings.sql
     compression_sorted_merge_columns.sql
     compression_sorted_merge_distinct.sql
+    compression_trigger.sql
     decompress_index.sql
     foreign_keys.sql
     move.sql
@@ -43,6 +45,7 @@ set(TEST_FILES
     skip_scan.sql
     transparent_decompression_join_index.sql
     vector_agg_functions.sql
+    vector_agg_groupagg.sql
     vector_agg_param.sql
     vectorized_aggregation.sql)
 
@@ -73,6 +76,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     bgw_job_stat_history_errors.sql
     bgw_job_stat_history_errors_permissions.sql
     bgw_db_scheduler_fixed.sql
+    bgw_scheduler_restart.sql
     bgw_reorder_drop_chunks.sql
     scheduler_fixed.sql
     compress_bgw_reorder_drop_chunks.sql
@@ -117,6 +121,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     vector_agg_default.sql
     vector_agg_filter.sql
     vector_agg_grouping.sql
+    vector_agg_text.sql
     vector_agg_memory.sql
     vector_agg_segmentby.sql)
 
@@ -144,7 +149,9 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
   list(
     APPEND
     TEST_FILES
+    merge_chunks.sql
     cagg_refresh_using_merge.sql
+    compress_sort_transform.sql
     hypercore_columnar.sql
     hypercore_constraints.sql
     hypercore_copy.sql
@@ -186,6 +193,7 @@ set(SOLO_TESTS
     # log level.
     bgw_custom
     bgw_scheduler_control
+    bgw_scheduler_restart
     bgw_db_scheduler
     bgw_job_stat_history_errors_permissions
     bgw_job_stat_history_errors

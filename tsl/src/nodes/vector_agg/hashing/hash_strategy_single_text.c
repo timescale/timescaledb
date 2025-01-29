@@ -12,7 +12,6 @@
 
 #include <common/hashfn.h>
 
-#include "bytes_view.h"
 #include "compression/arrow_c_data_interface.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
@@ -32,6 +31,12 @@ single_text_key_hashing_init(HashingStrategy *hashing)
 {
 	hashing->umash_params = umash_key_hashing_init();
 }
+
+typedef struct BytesView
+{
+	const uint8 *data;
+	uint32 len;
+} BytesView;
 
 static BytesView
 get_bytes_view(CompressedColumnValues *column_values, int arrow_row)
@@ -54,9 +59,18 @@ single_text_key_hashing_get_key(BatchHashingParams params, int row, void *restri
 
 	if (unlikely(params.single_grouping_column.decompression_type == DT_Scalar))
 	{
-		output_key->len = VARSIZE_ANY_EXHDR(*params.single_grouping_column.output_value);
-		output_key->data = (const uint8 *) VARDATA_ANY(*params.single_grouping_column.output_value);
 		*valid = !*params.single_grouping_column.output_isnull;
+		if (*valid)
+		{
+			output_key->len = VARSIZE_ANY_EXHDR(*params.single_grouping_column.output_value);
+			output_key->data =
+				(const uint8 *) VARDATA_ANY(*params.single_grouping_column.output_value);
+		}
+		else
+		{
+			output_key->len = 0;
+			output_key->data = NULL;
+		}
 	}
 	else if (params.single_grouping_column.decompression_type == DT_ArrowText)
 	{
@@ -86,7 +100,7 @@ single_text_key_hashing_get_key(BatchHashingParams params, int row, void *restri
 	DEBUG_PRINT("\n");
 
 	const struct umash_fp fp = umash_fprint(params.policy->hashing.umash_params,
-											/* seed = */ -1ull,
+											/* seed = */ ~0ULL,
 											output_key->data,
 											output_key->len);
 	*hash_table_key = umash_fingerprint_get_key(fp);

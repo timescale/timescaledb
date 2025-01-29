@@ -165,6 +165,18 @@ jobs:
         make -j $(nproc) -C build
         make -C build install
 
+    - name: Upload CMake Logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: CMake Logs ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        path: |
+            build/CMakeCache.txt
+            build/CMakeFiles/CMakeConfigureLog.yaml
+            build/CMakeFiles/CMakeError.log
+            build/CMakeFiles/CMakeOutput.log
+            build/compile_commands.json
+
     - name: Check exported symbols
       run: ./build/scripts/export_prefix_check.sh
 

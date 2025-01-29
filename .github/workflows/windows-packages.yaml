@@ -12,6 +12,7 @@ name: Windows Packages
     branches:
     - release_test
     - trigger/windows_packages
+  workflow_dispatch:
 
 jobs:
   config:
@@ -24,6 +25,7 @@ jobs:
       pg14_latest: ${{ steps.config.outputs.pg14_latest }}
       pg15_latest: ${{ steps.config.outputs.pg15_latest }}
       pg16_latest: ${{ steps.config.outputs.pg16_latest }}
+      pg17_latest: ${{ steps.config.outputs.pg17_latest }}
 
     steps:
     - name: Checkout source code
@@ -40,7 +42,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ windows-2019 ]
-        test: [ "14min", "14max", "15min", "15max", "16min", "16max", "17min" ]
+        test: [ "14min", "14max", "15min", "15max", "16min", "16max", "17min", "17max" ]
         include:
           - test: 14min
             pg: 14
@@ -63,6 +65,9 @@ jobs:
           - test: 17min
             pg: 17
             pkg_version: ${{ fromJson(needs.config.outputs.pg17_earliest) }}.0
+          - test: 17max
+            pg: 17
+            pkg_version: ${{ fromJson(needs.config.outputs.pg17_latest) }}.0
     env:
       # PostgreSQL configuration
       PGPORT: 6543

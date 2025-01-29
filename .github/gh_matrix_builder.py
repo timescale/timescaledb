@@ -54,6 +54,16 @@ default_ignored_tests = {
     "memoize",
 }
 
+# Tests that we do not run as part of a Flake tests
+flaky_exclude_tests = {
+    # Not executed as a flake test since it easily exhausts available
+    # background worker slots.
+    "bgw_launcher",
+    # Not executed as a flake test since it takes a very long time and
+    # easily interferes with other tests.
+    "bgw_scheduler_restart",
+}
+
 
 # helper functions to generate matrix entries
 # the release and apache config inherit from the
@@ -306,13 +316,14 @@ elif len(sys.argv) > 2:
             sys.exit(1)
 
     if tests:
-        to_run = list(tests) * 20
+        to_run = [t for t in list(tests) if t not in flaky_exclude_tests] * 20
         random.shuffle(to_run)
+        installcheck_args = f'TESTS="{" ".join(to_run)}"'
         m["include"].append(
             build_debug_config(
                 {
                     "coverage": False,
-                    "installcheck_args": f'TESTS="{" ".join(to_run)}"',
+                    "installcheck_args": installcheck_args,
                     "name": "Flaky Check Debug",
                     "pg": PG16_LATEST,
                     "pginstallcheck": False,
@@ -323,7 +334,7 @@ elif len(sys.argv) > 2:
             build_debug_config(
                 {
                     "coverage": False,
-                    "installcheck_args": f'TESTS="{" ".join(to_run)}"',
+                    "installcheck_args": installcheck_args,
                     "name": "Flaky Check Debug",
                     "pg": PG17_LATEST,
                     "pginstallcheck": False,

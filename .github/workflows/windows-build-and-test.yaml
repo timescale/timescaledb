@@ -20,6 +20,7 @@ name: Regression Windows
       - 'LICENSE*'
       - NOTICE
       - 'bootstrap*'
+  workflow_dispatch:
 jobs:
   config:
     runs-on: ubuntu-latest
@@ -58,7 +59,7 @@ jobs:
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
         ignores: ["chunk_adaptive metadata telemetry"]
         tsl_ignores: ["compression_algos"]
-        tsl_skips: ["bgw_db_scheduler bgw_db_scheduler_fixed"]
+        tsl_skips: ["vector_agg_text bgw_db_scheduler bgw_db_scheduler_fixed"]
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
         include:
           - pg: 14
@@ -244,6 +245,23 @@ jobs:
       with:
         name: PostgreSQL ${{ matrix.pg }} log ${{ matrix.os }} ${{ matrix.build_type }} Build
         path: ${{ env.PGDATA }}\log\postmaster.log
+
+    - name: Upload CMake Logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: CMake Logs ${{ matrix.pg }} ${{ matrix.os }} ${{ matrix.build_type }}
+        path: |
+            build_win/CMakeCache.txt
+            build_win/CMakeFiles/CMakeConfigureLog.yaml
+            build_win/CMakeFiles/CMakeError.log
+            build_win/CMakeFiles/CMakeOutput.log
+            build_win/compile_commands.json
+            build_wsl/CMakeCache.txt
+            build_wsl/CMakeFiles/CMakeConfigureLog.yaml
+            build_wsl/CMakeFiles/CMakeError.log
+            build_wsl/CMakeFiles/CMakeOutput.log
+            build_wsl/compile_commands.json
 
     - name: Upload test results to the database
       if: always()

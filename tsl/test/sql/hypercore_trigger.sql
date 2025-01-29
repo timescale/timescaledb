@@ -4,6 +4,10 @@
 
 \ir include/setup_hypercore.sql
 
+-- Set the hypercore access method on the hypertable for transition
+-- tables to work properly.
+alter table :hypertable set access method hypercore;
+
 create table saved_rows (like :chunk1, new_row bool not null, kind text);
 create table count_stmt (inserts int, updates int, deletes int);
 
@@ -203,41 +207,50 @@ insert into readings(created_at, location_id, device_id, owner_id, temp, humidit
 select created_at, location_id, device_id, owner_id, temp, humidity from sample
 order by created_at limit 2;
 
-select * from saved_rows;
+select * from saved_rows order by metric_id;
 
 truncate saved_rows;
+
+-- Compress the data again to make sure that it is fully compressed.
+select compress_chunk(show_chunks(:'hypertable'), hypercore_use_access_method => true);
 
 copy readings(created_at, location_id, device_id, owner_id, temp, humidity) from stdin with (format csv);
 "2022-06-01 00:01:35",999,666,111,3.14,3.14
 \.
 
-select * from saved_rows;
+select * from saved_rows order by metric_id;
 
 truncate saved_rows;
+
+-- Compress the data again to make sure that it is fully compressed.
+select compress_chunk(show_chunks(:'hypertable'), hypercore_use_access_method => true);
 
 create trigger save_update_transition_table_trg
        after update on readings
        referencing new table as new_table old table as old_table
        for each statement execute function save_transition_table();
 
-select * from readings where location_id = 999;
+select * from readings where location_id = 999 order by metric_id;
 
 update readings set humidity = 99.99 where location_id = 999;
 
-select * from saved_rows;
+select * from saved_rows order by metric_id;
 
 truncate saved_rows;
+
+-- Compress the data again to make sure that it is fully compressed.
+select compress_chunk(show_chunks(:'hypertable'), hypercore_use_access_method => true);
 
 create trigger save_delete_transition_table_trg
        after delete on readings
        referencing old table as old_table
        for each statement execute function save_transition_table();
 
-select * from readings where location_id = 999;
+select * from readings where location_id = 999 order by metric_id;
 
 delete from readings where location_id = 999;
 
-select * from saved_rows;
+select * from saved_rows order by metric_id;
 
 truncate saved_rows;
 

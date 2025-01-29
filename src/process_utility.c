@@ -93,6 +93,7 @@ void _process_utility_fini(void);
 static ProcessUtility_hook_type prev_ProcessUtility_hook;
 
 static bool expect_chunk_modification = false;
+static ProcessUtilityContext last_process_utility_context = PROCESS_UTILITY_TOPLEVEL;
 static DDLResult process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht);
 static DDLResult process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht);
 
@@ -111,6 +112,13 @@ prev_ProcessUtility(ProcessUtilityArgs *args)
 		 args->queryEnv,
 		 args->dest,
 		 args->completion_tag);
+
+	/*
+	 * Reset the last_process_utility_context value that is saved at the
+	 * entrance of the TS ProcessUtility hook and can be used for transaction
+	 * checks inside refresh_cagg and other procedures.
+	 */
+	ts_process_utility_context_reset();
 }
 
 static void
@@ -4482,6 +4490,23 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 				 errmsg("ROW triggers with transition tables are not supported on hypertables")));
 	}
 
+	/*
+	 * We currently cannot support delete triggers with transition tables on
+	 * compressed tables that are not using hypercore table access method
+	 * since deleting a complete segment will not build a transition table for
+	 * the delete.
+	 */
+	if (stmt->transitionRels && TRIGGER_FOR_DELETE(tgtype) &&
+		TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht) && !ts_is_hypercore_am(ht->amoid))
+	{
+		ts_cache_release(hcache);
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("DELETE triggers with transition tables not supported"),
+				 errdetail("Compressed hypertables not using \"hypercore\" access method are not "
+						   "supported if the trigger use transition tables.")));
+	}
+
 	add_hypertable_to_process_args(args, ht);
 
 	/*
@@ -5031,6 +5056,8 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string, bool
 							  QueryEnvironment *queryEnv, DestReceiver *dest,
 							  QueryCompletion *completion_tag)
 {
+	last_process_utility_context = context;
+
 	ProcessUtilityArgs args = { .query_string = query_string,
 								.context = context,
 								.params = params,
@@ -5154,6 +5181,19 @@ extern void
 ts_process_utility_set_expect_chunk_modification(bool expect)
 {
 	expect_chunk_modification = expect;
+}
+
+bool
+ts_process_utility_is_context_nonatomic(void)
+{
+	ProcessUtilityContext context = last_process_utility_context;
+	return context == PROCESS_UTILITY_TOPLEVEL || context == PROCESS_UTILITY_QUERY_NONATOMIC;
+}
+
+void
+ts_process_utility_context_reset(void)
+{
+	last_process_utility_context = PROCESS_UTILITY_TOPLEVEL;
 }
 
 static void
