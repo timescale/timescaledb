@@ -59,9 +59,17 @@ single_text_key_hashing_get_key(BatchHashingParams params, int row, void *restri
 
 	if (unlikely(params.single_grouping_column.decompression_type == DT_Scalar))
 	{
-		output_key->len = VARSIZE_ANY_EXHDR(*params.single_grouping_column.output_value);
-		output_key->data = (const uint8 *) VARDATA_ANY(*params.single_grouping_column.output_value);
 		*valid = !*params.single_grouping_column.output_isnull;
+		if (*valid)
+		{
+			output_key->len = VARSIZE_ANY_EXHDR(*params.single_grouping_column.output_value);
+			output_key->data = (const uint8 *) VARDATA_ANY(*params.single_grouping_column.output_value);
+		}
+		else
+		{
+			output_key->len = 0;
+			output_key->data = NULL;
+		}
 	}
 	else if (params.single_grouping_column.decompression_type == DT_ArrowText)
 	{
