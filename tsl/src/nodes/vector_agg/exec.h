@@ -8,6 +8,7 @@
 
 #include <postgres.h>
 
+#include "nodes/decompress_chunk/compressed_batch.h"
 #include <nodes/execnodes.h>
 
 #include "function/functions.h"
@@ -29,7 +30,7 @@ typedef struct GroupingColumn
 	int value_bytes;
 } GroupingColumn;
 
-typedef struct
+typedef struct VectorAggState
 {
 	CustomScanState custom;
 
@@ -47,6 +48,23 @@ typedef struct
 	bool input_ended;
 
 	GroupingPolicy *grouping;
+
+	/*
+	 * State to compute vector quals for FILTER clauses.
+	 */
+	CompressedBatchVectorQualState vqual_state;
+
+	/*
+	 * Initialization function for vectorized quals depending on slot type.
+	 */
+	VectorQualState *(*init_vector_quals)(struct VectorAggState *agg_state, VectorAggDef *agg_def,
+										  TupleTableSlot *slot);
+
+	/*
+	 * Function for getting the next slot from the child node depending on
+	 * child node type.
+	 */
+	TupleTableSlot *(*get_next_slot)(struct VectorAggState *vector_agg_state);
 } VectorAggState;
 
 extern Node *vector_agg_state_create(CustomScan *cscan);
