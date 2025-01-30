@@ -188,7 +188,8 @@ extern bool ts_chunk_exists_relid(Oid relid);
 extern TSDLLEXPORT bool ts_chunk_exists_with_compression(int32 hypertable_id);
 extern void ts_chunk_recreate_all_constraints_for_dimension(Hypertable *ht, int32 dimension_id);
 extern int ts_chunk_delete_by_hypertable_id(int32 hypertable_id);
-extern int ts_chunk_delete_by_name(const char *schema, const char *table, DropBehavior behavior);
+extern TSDLLEXPORT int ts_chunk_delete_by_name(const char *schema, const char *table,
+											   DropBehavior behavior);
 extern bool ts_chunk_set_name(Chunk *chunk, const char *newname);
 extern bool ts_chunk_set_schema(Chunk *chunk, const char *newschema);
 extern TSDLLEXPORT List *ts_chunk_get_window(int32 dimension_id, int64 point, int count,

@@ -19,6 +19,7 @@
 #define POL_REFRESH_CONF_KEY_MAT_HYPERTABLE_ID "mat_hypertable_id"
 #define POL_REFRESH_CONF_KEY_START_OFFSET "start_offset"
 #define POL_REFRESH_CONF_KEY_END_OFFSET "end_offset"
+#define POL_REFRESH_CONF_KEY_INCLUDE_TIERED_DATA "include_tiered_data"
 
 #define POLICY_COMPRESSION_PROC_NAME "policy_compression"
 #define POLICY_COMPRESSION_CHECK_NAME "policy_compression_check"

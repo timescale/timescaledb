@@ -1,0 +1,490 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE ACCESS METHOD testam TYPE TABLE HANDLER heap_tableam_handler;
+set role :ROLE_DEFAULT_PERM_USER;
+------------------
+-- Helper views --
+-------------------
+create view partitions as
+select c.table_name, d.column_name, ds.range_start, ds.range_end
+from _timescaledb_catalog.hypertable h
+join _timescaledb_catalog.chunk c on (c.hypertable_id = h.id)
+join _timescaledb_catalog.dimension d on (d.hypertable_id = h.id)
+join _timescaledb_catalog.dimension_slice ds on (d.id = ds.dimension_id)
+join _timescaledb_catalog.chunk_constraint cc on (cc.chunk_id = c.id and cc.dimension_slice_id = ds.id)
+where h.table_name = 'mergeme'
+order by d.id, ds.range_start, ds.range_end;
+create view orphaned_slices as
+select ds.id, cc.constraint_name from _timescaledb_catalog.dimension_slice ds
+left join _timescaledb_catalog.chunk_constraint cc on (ds.id = cc.dimension_slice_id)
+where cc.constraint_name is null;
+-----------------
+-- Setup table --
+-----------------
+create table mergeme (time timestamptz not null, device int, temp float);
+select create_hypertable('mergeme', 'time', 'device', 3, chunk_time_interval => interval '1 day');
+  create_hypertable   
+----------------------
+ (1,public,mergeme,t)
+(1 row)
+
+--
+-- Insert data to create two chunks with same time ranges like this:
+-- _______
+-- |     |
+-- |  1  |
+-- |_____|
+-- |     |
+-- |  2  |
+-- |_____|
+---
+insert into mergeme values ('2024-01-01', 1, 1.0), ('2024-01-01', 2, 2.0);
+select "Constraint", "Columns", "Expr" from test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
+  Constraint  | Columns  |                                                                      Expr                                                                      
+--------------+----------+------------------------------------------------------------------------------------------------------------------------------------------------
+ constraint_1 | {time}   | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
+ constraint_2 | {device} | (_timescaledb_functions.get_partition_hash(device) < 715827882)
+(2 rows)
+
+-- Show partition layout
+select * from partitions;
+    table_name    | column_name |     range_start      |    range_end     
+------------------+-------------+----------------------+------------------
+ _hyper_1_1_chunk | time        |     1704067200000000 | 1704153600000000
+ _hyper_1_2_chunk | time        |     1704067200000000 | 1704153600000000
+ _hyper_1_1_chunk | device      | -9223372036854775808 |        715827882
+ _hyper_1_2_chunk | device      |            715827882 |       1431655764
+(4 rows)
+
+-- Now merge chunk 1 and 2:
+begin;
+call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_2_chunk');
+select * from _timescaledb_internal._hyper_1_1_chunk;
+             time             | device | temp 
+------------------------------+--------+------
+ Mon Jan 01 00:00:00 2024 PST |      1 |    1
+ Mon Jan 01 00:00:00 2024 PST |      2 |    2
+(2 rows)
+
+select reltuples from pg_class where oid='_timescaledb_internal._hyper_1_1_chunk'::regclass;
+ reltuples 
+-----------
+         2
+(1 row)
+
+select * from partitions;
+    table_name    | column_name |     range_start      |    range_end     
+------------------+-------------+----------------------+------------------
+ _hyper_1_1_chunk | time        |     1704067200000000 | 1704153600000000
+ _hyper_1_1_chunk | device      | -9223372036854775808 |       1431655764
+(2 rows)
+
+select "Constraint", "Columns", "Expr" from test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
+  Constraint  | Columns  |                                                                      Expr                                                                      
+--------------+----------+------------------------------------------------------------------------------------------------------------------------------------------------
+ constraint_1 | {time}   | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
+ constraint_2 | {device} | (_timescaledb_functions.get_partition_hash(device) < 1431655764)
+(2 rows)
+
+select count(*) as num_orphaned_slices from orphaned_slices;
+ num_orphaned_slices 
+---------------------
+                   0
+(1 row)
+
+select * from show_chunks('mergeme');
+              show_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+select * from mergeme;
+             time             | device | temp 
+------------------------------+--------+------
+ Mon Jan 01 00:00:00 2024 PST |      1 |    1
+ Mon Jan 01 00:00:00 2024 PST |      2 |    2
+(2 rows)
+
+rollback;
+-- create a new chunk as a third space partition
+-- _______
+-- |     |
+-- |  1  |
+-- |_____|
+-- |     |
+-- |  2  |
+-- |_____|
+-- |     |
+-- |  3  |
+-- |_____|
+---
+insert into mergeme values ('2024-01-01', 3, 3.0);
+-- Test some basic error cases
+\set ON_ERROR_STOP 0
+-- Can't merge chunk 1 and 3
+call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_3_chunk');
+ERROR:  cannot create new chunk partition boundaries
+call merge_chunks(NULL);
+ERROR:  no chunks to merge specified
+call merge_chunks(NULL, NULL);
+ERROR:  invalid relation
+call merge_chunks(999999,999991);
+ERROR:  relation does not exist
+call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_1_chunk']);
+ERROR:  must specify at least two chunks to merge
+call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', NULL);
+ERROR:  invalid relation
+call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_1_chunk', NULL]);
+ERROR:  invalid relation
+call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_1_chunk');
+ERROR:  duplicate relation "_hyper_1_1_chunk" in merge
+-- Check permissions
+reset role;
+set role :ROLE_1;
+call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_2_chunk');
+ERROR:  must be owner of table _hyper_1_1_chunk
+reset role;
+set role :ROLE_DEFAULT_PERM_USER;
+\set ON_ERROR_STOP 1
+-- Show new partition
+select * from partitions;
+    table_name    | column_name |     range_start      |      range_end      
+------------------+-------------+----------------------+---------------------
+ _hyper_1_1_chunk | time        |     1704067200000000 |    1704153600000000
+ _hyper_1_2_chunk | time        |     1704067200000000 |    1704153600000000
+ _hyper_1_3_chunk | time        |     1704067200000000 |    1704153600000000
+ _hyper_1_1_chunk | device      | -9223372036854775808 |           715827882
+ _hyper_1_2_chunk | device      |            715827882 |          1431655764
+ _hyper_1_3_chunk | device      |           1431655764 | 9223372036854775807
+(6 rows)
+
+begin;
+-- Should be able to merge all three chunks
+call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_2_chunk']);
+select * from partitions;
+    table_name    | column_name |     range_start      |      range_end      
+------------------+-------------+----------------------+---------------------
+ _hyper_1_1_chunk | time        |     1704067200000000 |    1704153600000000
+ _hyper_1_1_chunk | device      | -9223372036854775808 | 9223372036854775807
+(2 rows)
+
+-- Note that no space partition CHECK constraint is added because it
+-- now covers the entire range from -inf to +inf.
+select "Constraint", "Columns", "Expr" from test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
+  Constraint  | Columns |                                                                      Expr                                                                      
+--------------+---------+------------------------------------------------------------------------------------------------------------------------------------------------
+ constraint_1 | {time}  | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
+(1 row)
+
+select count(*) as num_orphaned_slices from orphaned_slices;
+ num_orphaned_slices 
+---------------------
+                   0
+(1 row)
+
+select * from show_chunks('mergeme');
+              show_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+select * from mergeme;
+             time             | device | temp 
+------------------------------+--------+------
+ Mon Jan 01 00:00:00 2024 PST |      1 |    1
+ Mon Jan 01 00:00:00 2024 PST |      2 |    2
+ Mon Jan 01 00:00:00 2024 PST |      3 |    3
+(3 rows)
+
+rollback;
+-- create two new chunks, 4 and 5, as follows:
+-- _____________      _______
+-- |     |     |      |     |
+-- |  1  |  4  |      |  5  |
+-- |_____|_____|      |_____|
+-- |     |
+-- |  2  |
+-- |_____|
+-- |     |
+-- |  3  |
+-- |_____|
+---
+insert into mergeme values ('2024-01-02', 1, 4.0), ('2024-01-04', 1, 5.0);
+-- Show new partitions
+select * from partitions;
+    table_name    | column_name |     range_start      |      range_end      
+------------------+-------------+----------------------+---------------------
+ _hyper_1_1_chunk | time        |     1704067200000000 |    1704153600000000
+ _hyper_1_3_chunk | time        |     1704067200000000 |    1704153600000000
+ _hyper_1_2_chunk | time        |     1704067200000000 |    1704153600000000
+ _hyper_1_4_chunk | time        |     1704153600000000 |    1704240000000000
+ _hyper_1_5_chunk | time        |     1704326400000000 |    1704412800000000
+ _hyper_1_5_chunk | device      | -9223372036854775808 |           715827882
+ _hyper_1_4_chunk | device      | -9223372036854775808 |           715827882
+ _hyper_1_1_chunk | device      | -9223372036854775808 |           715827882
+ _hyper_1_2_chunk | device      |            715827882 |          1431655764
+ _hyper_1_3_chunk | device      |           1431655764 | 9223372036854775807
+(10 rows)
+
+\set ON_ERROR_STOP 0
+-- can't merge 3 and 4
+call merge_chunks('_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_4_chunk');
+ERROR:  cannot create new chunk partition boundaries
+-- can't merge 1 and 5
+call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_5_chunk');
+ERROR:  cannot create new chunk partition boundaries
+-- can't merge 2 and 4
+call merge_chunks('_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_4_chunk');
+ERROR:  cannot create new chunk partition boundaries
+-- can't merge 4 and 5
+call merge_chunks('_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_4_chunk');
+ERROR:  cannot create new chunk partition boundaries
+-- currently can't merge 1,2,3,4 due to limitation in how we validate the merge
+call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_4_chunk', '_timescaledb_internal._hyper_1_1_chunk']);
+ERROR:  cannot create new chunk partition boundaries
+begin;
+-- Should be able to merge all three chunks 1,2,3
+call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_3_chunk']);
+-- But merging the merged 1,2,3 chunk with 4 is currently not
+-- possible, although we chould do it in theory
+call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk');
+ERROR:  cannot create new chunk partition boundaries
+rollback;
+\set ON_ERROR_STOP 1
+alter table mergeme set (timescaledb.compress_orderby='time', timescaledb.compress_segmentby='device');
+select compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+select compress_chunk('_timescaledb_internal._hyper_1_3_chunk');
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_3_chunk
+(1 row)
+
+\set ON_ERROR_STOP 0
+-- Currently cannot merge compressed chunks
+call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_2_chunk');
+ERROR:  merging compressed chunks is not yet supported
+call merge_chunks('_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_3_chunk');
+ERROR:  merging compressed chunks is not yet supported
+\set ON_ERROR_STOP 1
+-- Currently cannot merge chunks using Hypercore TAM
+alter table _timescaledb_internal._hyper_1_1_chunk set access method hypercore;
+alter table _timescaledb_internal._hyper_1_3_chunk set access method hypercore;
+select relname, amname from pg_class cl
+join pg_am am on (cl.relam = am.oid)
+where cl.oid in ('_timescaledb_internal._hyper_1_1_chunk'::regclass, '_timescaledb_internal._hyper_1_3_chunk'::regclass);
+     relname      |  amname   
+------------------+-----------
+ _hyper_1_1_chunk | hypercore
+ _hyper_1_3_chunk | hypercore
+(2 rows)
+
+\set ON_ERROR_STOP 0
+call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_2_chunk');
+ERROR:  merging compressed chunks is not yet supported
+call merge_chunks('_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_3_chunk');
+ERROR:  merging compressed chunks is not yet supported
+\set ON_ERROR_STOP 1
+---
+-- Test some error cases when merging chunks with non-chunks or chunks
+-- from other hypertables
+---
+-- Decompress all chunks to ensure we only have non-compressed chunks
+select decompress_chunk(ch) from show_chunks('mergeme') ch;
+NOTICE:  chunk "_hyper_1_2_chunk" is not compressed
+NOTICE:  chunk "_hyper_1_4_chunk" is not compressed
+NOTICE:  chunk "_hyper_1_5_chunk" is not compressed
+            decompress_chunk            
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ 
+ _timescaledb_internal._hyper_1_3_chunk
+ 
+ 
+(5 rows)
+
+-- Create a non-chunk table
+create table mergeme_too(time timestamptz not null, device int, temp float);
+select create_hypertable('mergeme_too', 'time', 'device', 3, chunk_time_interval => interval '1 day');
+    create_hypertable     
+--------------------------
+ (3,public,mergeme_too,t)
+(1 row)
+
+create table mergeme_regular(time timestamptz not null, device int, temp float);
+insert into mergeme_too values ('2024-01-01', 1, 1.0);
+insert into mergeme_regular select * from mergeme_too;
+create materialized view mergeme_mat as
+select * from mergeme_too where device=1;
+select * from show_chunks('mergeme_too');
+              show_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_3_8_chunk
+(1 row)
+
+\set ON_ERROR_STOP 0
+-- Merge chunk and regular table
+call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', 'mergeme_regular');
+ERROR:  can only merge hypertable chunks
+call merge_chunks('mergeme_regular', '_timescaledb_internal._hyper_1_1_chunk');
+ERROR:  can only merge hypertable chunks
+call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', 'mergeme_mat');
+ERROR:  cannot merge non-table relations
+-- Merge chunks from different hypertables
+call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_3_8_chunk');
+ERROR:  cannot merge chunks across different hypertables
+-- Merge with unsupported access method
+alter table _timescaledb_internal._hyper_1_1_chunk set access method testam;
+call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_2_chunk');
+ERROR:  access method "testam" is not supported for merge
+alter table _timescaledb_internal._hyper_1_1_chunk set access method heap;
+-- Merge OSM chunks
+reset role;
+update _timescaledb_catalog.chunk ch set osm_chunk = true where table_name = '_hyper_1_1_chunk';
+set role :ROLE_DEFAULT_PERM_USER;
+call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_2_chunk');
+ERROR:  cannot merge OSM chunks
+reset role;
+update _timescaledb_catalog.chunk ch set osm_chunk = false where table_name = '_hyper_1_1_chunk';
+set role :ROLE_DEFAULT_PERM_USER;
+\set ON_ERROR_STOP 1
+-- Set seed to consistently generate same data and same set of chunks
+select setseed(0.2);
+ setseed 
+---------
+ 
+(1 row)
+
+-- Test merge with bigger data set and chunks with more blocks
+insert into mergeme (time, device, temp)
+select t, ceil(random()*10), random()*40
+from generate_series('2024-01-01'::timestamptz, '2024-01-04', '0.5s') t;
+-- Show partitions before merge
+select * from partitions;
+    table_name     | column_name |     range_start      |      range_end      
+-------------------+-------------+----------------------+---------------------
+ _hyper_1_1_chunk  | time        |     1704067200000000 |    1704153600000000
+ _hyper_1_3_chunk  | time        |     1704067200000000 |    1704153600000000
+ _hyper_1_2_chunk  | time        |     1704067200000000 |    1704153600000000
+ _hyper_1_10_chunk | time        |     1704153600000000 |    1704240000000000
+ _hyper_1_9_chunk  | time        |     1704153600000000 |    1704240000000000
+ _hyper_1_4_chunk  | time        |     1704153600000000 |    1704240000000000
+ _hyper_1_11_chunk | time        |     1704240000000000 |    1704326400000000
+ _hyper_1_13_chunk | time        |     1704240000000000 |    1704326400000000
+ _hyper_1_12_chunk | time        |     1704240000000000 |    1704326400000000
+ _hyper_1_15_chunk | time        |     1704326400000000 |    1704412800000000
+ _hyper_1_5_chunk  | time        |     1704326400000000 |    1704412800000000
+ _hyper_1_14_chunk | time        |     1704326400000000 |    1704412800000000
+ _hyper_1_4_chunk  | device      | -9223372036854775808 |           715827882
+ _hyper_1_1_chunk  | device      | -9223372036854775808 |           715827882
+ _hyper_1_5_chunk  | device      | -9223372036854775808 |           715827882
+ _hyper_1_11_chunk | device      | -9223372036854775808 |           715827882
+ _hyper_1_9_chunk  | device      |            715827882 |          1431655764
+ _hyper_1_2_chunk  | device      |            715827882 |          1431655764
+ _hyper_1_14_chunk | device      |            715827882 |          1431655764
+ _hyper_1_12_chunk | device      |            715827882 |          1431655764
+ _hyper_1_15_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_10_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_3_chunk  | device      |           1431655764 | 9223372036854775807
+ _hyper_1_13_chunk | device      |           1431655764 | 9223372036854775807
+(24 rows)
+
+-- Merge all chunks until only 1 remains
+select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
+ count  |   sum   |     round     
+--------+---------+---------------
+ 518406 | 2854401 | 10373952.7510
+(1 row)
+
+call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_11_chunk']);
+select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
+ count  |   sum   |     round     
+--------+---------+---------------
+ 518406 | 2854401 | 10373952.7510
+(1 row)
+
+select * from partitions;
+    table_name     | column_name |     range_start      |      range_end      
+-------------------+-------------+----------------------+---------------------
+ _hyper_1_2_chunk  | time        |     1704067200000000 |    1704153600000000
+ _hyper_1_3_chunk  | time        |     1704067200000000 |    1704153600000000
+ _hyper_1_1_chunk  | time        |     1704067200000000 |    1704412800000000
+ _hyper_1_10_chunk | time        |     1704153600000000 |    1704240000000000
+ _hyper_1_9_chunk  | time        |     1704153600000000 |    1704240000000000
+ _hyper_1_12_chunk | time        |     1704240000000000 |    1704326400000000
+ _hyper_1_13_chunk | time        |     1704240000000000 |    1704326400000000
+ _hyper_1_15_chunk | time        |     1704326400000000 |    1704412800000000
+ _hyper_1_14_chunk | time        |     1704326400000000 |    1704412800000000
+ _hyper_1_1_chunk  | device      | -9223372036854775808 |           715827882
+ _hyper_1_12_chunk | device      |            715827882 |          1431655764
+ _hyper_1_14_chunk | device      |            715827882 |          1431655764
+ _hyper_1_9_chunk  | device      |            715827882 |          1431655764
+ _hyper_1_2_chunk  | device      |            715827882 |          1431655764
+ _hyper_1_3_chunk  | device      |           1431655764 | 9223372036854775807
+ _hyper_1_15_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_10_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_13_chunk | device      |           1431655764 | 9223372036854775807
+(18 rows)
+
+call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_9_chunk','_timescaledb_internal._hyper_1_12_chunk', '_timescaledb_internal._hyper_1_14_chunk']);
+select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
+ count  |   sum   |     round     
+--------+---------+---------------
+ 518406 | 2854401 | 10373952.7510
+(1 row)
+
+select * from partitions;
+    table_name     | column_name |     range_start      |      range_end      
+-------------------+-------------+----------------------+---------------------
+ _hyper_1_3_chunk  | time        |     1704067200000000 |    1704153600000000
+ _hyper_1_1_chunk  | time        |     1704067200000000 |    1704412800000000
+ _hyper_1_2_chunk  | time        |     1704067200000000 |    1704412800000000
+ _hyper_1_10_chunk | time        |     1704153600000000 |    1704240000000000
+ _hyper_1_13_chunk | time        |     1704240000000000 |    1704326400000000
+ _hyper_1_15_chunk | time        |     1704326400000000 |    1704412800000000
+ _hyper_1_1_chunk  | device      | -9223372036854775808 |           715827882
+ _hyper_1_2_chunk  | device      |            715827882 |          1431655764
+ _hyper_1_15_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_13_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_10_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_3_chunk  | device      |           1431655764 | 9223372036854775807
+(12 rows)
+
+call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_10_chunk','_timescaledb_internal._hyper_1_13_chunk', '_timescaledb_internal._hyper_1_15_chunk']);
+select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
+ count  |   sum   |     round     
+--------+---------+---------------
+ 518406 | 2854401 | 10373952.7510
+(1 row)
+
+select * from partitions;
+    table_name    | column_name |     range_start      |      range_end      
+------------------+-------------+----------------------+---------------------
+ _hyper_1_1_chunk | time        |     1704067200000000 |    1704412800000000
+ _hyper_1_2_chunk | time        |     1704067200000000 |    1704412800000000
+ _hyper_1_3_chunk | time        |     1704067200000000 |    1704412800000000
+ _hyper_1_1_chunk | device      | -9223372036854775808 |           715827882
+ _hyper_1_2_chunk | device      |            715827882 |          1431655764
+ _hyper_1_3_chunk | device      |           1431655764 | 9223372036854775807
+(6 rows)
+
+call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_2_chunk']);
+select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
+ count  |   sum   |     round     
+--------+---------+---------------
+ 518406 | 2854401 | 10373952.7510
+(1 row)
+
+select * from partitions;
+    table_name    | column_name |     range_start      |      range_end      
+------------------+-------------+----------------------+---------------------
+ _hyper_1_1_chunk | time        |     1704067200000000 |    1704412800000000
+ _hyper_1_1_chunk | device      | -9223372036854775808 | 9223372036854775807
+(2 rows)
+

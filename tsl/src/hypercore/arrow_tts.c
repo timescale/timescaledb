@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 #include <access/attnum.h>
+#include <access/htup_details.h>
 #include <access/tupdesc.h>
 #include <catalog/pg_attribute.h>
 #include <executor/execdebug.h>
@@ -92,6 +93,7 @@ tts_arrow_init(TupleTableSlot *slot)
 	aslot->tuple_index = InvalidTupleIndex;
 	aslot->total_row_count = 0;
 	aslot->referenced_attrs = NULL;
+	aslot->arrow_qual_result = NULL;
 
 	/*
 	 * Set up child slots, one for the non-compressed relation and one for the
@@ -119,6 +121,11 @@ tts_arrow_init(TupleTableSlot *slot)
 
 	Assert(TTS_EMPTY(slot));
 	Assert(TTS_EMPTY(aslot->noncompressed_slot));
+
+	/* Memory context reset every new segment. Used to store, e.g., vectorized
+	 * filters */
+	aslot->per_segment_mcxt =
+		GenerationContextCreateCompat(slot->tts_mcxt, "Per-segment memory context", 64 * 1024);
 }
 
 /*
@@ -261,6 +268,8 @@ tts_arrow_clear(TupleTableSlot *slot)
 	/* Clear arrow slot fields */
 	memset(aslot->valid_attrs, 0, sizeof(bool) * slot->tts_tupleDescriptor->natts);
 	aslot->arrow_cache_entry = NULL;
+	aslot->arrow_qual_result = NULL;
+	MemoryContextReset(aslot->per_segment_mcxt);
 }
 
 static inline void
@@ -332,6 +341,7 @@ tts_arrow_store_tuple(TupleTableSlot *slot, TupleTableSlot *child_slot, uint16 t
 	aslot->arrow_cache_entry = NULL;
 	/* Clear valid attributes */
 	memset(aslot->valid_attrs, 0, sizeof(bool) * slot->tts_tupleDescriptor->natts);
+	MemoryContextReset(aslot->per_segment_mcxt);
 }
 
 /*
@@ -719,9 +729,19 @@ tts_arrow_copy_heap_tuple(TupleTableSlot *slot)
 	tuple = ExecCopySlotHeapTuple(aslot->noncompressed_slot);
 	ItemPointerCopy(&slot->tts_tid, &tuple->t_self);
 
-	/* Clean up if the non-compressed slot was "borrowed" */
 	if (aslot->child_slot == aslot->compressed_slot)
+	{
+		BufferHeapTupleTableSlot *hslot = (BufferHeapTupleTableSlot *) aslot->compressed_slot;
+		Assert(TTS_IS_BUFFERTUPLE(aslot->compressed_slot));
+
+		/* Copy visibility information from the compressed relation tuple */
+		memcpy(&tuple->t_data->t_choice,
+			   &hslot->base.tuple->t_data->t_choice,
+			   sizeof(tuple->t_data->t_choice));
+
+		/* Clean up the "borrowed" non-compressed slot */
 		ExecClearTuple(aslot->noncompressed_slot);
+	}
 
 	return tuple;
 }
