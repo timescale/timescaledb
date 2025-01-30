@@ -769,7 +769,8 @@ build_column_map(CompressionSettings *settings, Relation uncompressed_table,
 			if (AttributeNumberIsValid(bloom_attr_number))
 			{
 				const int bloom_attr_offset = AttrNumberGetAttrOffset(bloom_attr_number);
-				(void) bloom_attr_offset;
+				batch_minmax_builder =
+					batch_metadata_builder_bloom_create(attr->atttypid, bloom_attr_offset);
 			}
 
 			*column = (PerColumn){

@@ -255,11 +255,9 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 		 * respective compressed column, because they are accessed before
 		 * decompression.
 		 */
-		bool should_add_metadata = false;
 		const bool is_orderby = ts_array_is_member(settings->fd.orderby, NameStr(attr->attname));
 		if (is_orderby)
 		{
-			should_add_metadata = true;
 			int index = ts_array_position(settings->fd.orderby, NameStr(attr->attname));
 			TypeCacheEntry *type = lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR);
 
@@ -287,10 +285,24 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 		}
 		else if (bms_is_member(attr->attnum, btree_columns))
 		{
-			should_add_metadata = true;
 			TypeCacheEntry *type = lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR);
 
-			if (OidIsValid(type->lt_opr))
+			if (attr->atttypid == TEXTOID)
+			{
+				/*
+				 * Add bloom filter metadata for text columns that have other
+				 * kind of metadata.
+				 */
+				compressed_column_defs =
+					lappend(compressed_column_defs,
+							makeColumnDef(compressed_column_metadata_name_v2("bloom1",
+																			 NameStr(
+																				 attr->attname)),
+										  BYTEAOID,
+										  /* typmod = */ -1,
+										  /* collation = */ 0));
+			}
+			else if (OidIsValid(type->lt_opr))
 			{
 				/*
 				 * Here we create minmax metadata for the columns for which
@@ -319,21 +331,6 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 										  attr->atttypmod,
 										  attr->attcollation));
 			}
-		}
-
-		if (should_add_metadata && attr->atttypid == TEXTOID)
-		{
-			/*
-			 * Add bloom filter metadata for text columns that have other
-			 * kind of metadata.
-			 */
-			compressed_column_defs =
-				lappend(compressed_column_defs,
-						makeColumnDef(compressed_column_metadata_name_v2("bloom1",
-																		 NameStr(attr->attname)),
-									  BYTEAOID,
-									  /* typmod = */ -1,
-									  /* collation = */ 0));
 		}
 
 		compressed_column_defs = lappend(compressed_column_defs,
