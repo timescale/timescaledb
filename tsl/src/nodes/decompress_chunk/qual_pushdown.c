@@ -419,7 +419,7 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args
 	Var *bloom_var =
 		makeVar(context->compressed_rel->relid, bloom1_attno, BYTEAOID, -1, InvalidOid, 0);
 
-	Oid func = LookupFuncName(list_make2(makeString("_timescaledb_internal"),
+	Oid func = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
 										 makeString("ts_bloom1_matches")),
 							  /* nargs = */ -1,
 							  /* argtypes = */ (void *) -1,
