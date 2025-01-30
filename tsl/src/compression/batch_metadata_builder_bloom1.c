@@ -76,7 +76,7 @@ batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
 		.nbits_set = 0,
 	};
 
-	Assert(builder->nbits % 8 == 0);
+	Assert(builder->nbits % 64 == 0);
 	const int bytea_size = VARHDRSZ + builder->nbits / 8;
 	builder->bloom_bytea = palloc0(bytea_size);
 	SET_VARSIZE(builder->bloom_bytea, bytea_size);
@@ -89,30 +89,22 @@ bloom1_update_val(void *builder_, Datum val)
 {
 	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
 
-	const int nbits = builder->nbits;
 	const Oid hash_proc_oid = builder->hash_proc_oid;
 
 	/* compute the hashes, used for the bloom filter */
-	uint32 datum_hash =
-		DatumGetUInt32(OidFunctionCall1Coll(hash_proc_oid, /* collation = */ C_COLLATION_OID, val));
-	uint32 h1 = hash_bytes_uint32_extended(datum_hash, BLOOM1_SEED_1) % nbits;
-	uint32 h2 = hash_bytes_uint32_extended(datum_hash, BLOOM1_SEED_2) % nbits;
+	const uint32 datum_hash =
+		DatumGetUInt32(OidFunctionCall1Coll(hash_proc_oid, C_COLLATION_OID, val));
 
 	/* compute the requested number of hashes */
-	char *restrict words = VARDATA(builder->bloom_bytea);
+	const int nbits = builder->nbits;
+	uint64 *restrict words = (uint64 *restrict) VARDATA(builder->bloom_bytea);
+	const int word_bits = sizeof(*words) * 8;
 	for (int i = 0; i < BLOOM1_HASHES; i++)
 	{
-		/* h1 + h2 + f(i) */
-		uint32 h = (h1 + i * h2) % builder->nbits;
-		uint32 byte = (h / 8);
-		uint32 bit = (h % 8);
-
-		/* if the bit is not set, set it and remember we did that */
-		if (!(words[byte] & (0x01 << bit)))
-		{
-			words[byte] |= (0x01 << bit);
-			builder->nbits_set++;
-		}
+		const uint32 h = bloom1_get_one_hash(datum_hash, i) % nbits;
+		const uint32 byte = (h / word_bits);
+		const uint32 bit = (h % word_bits);
+		words[byte] |= (0x01 << bit);
 	}
 }
 

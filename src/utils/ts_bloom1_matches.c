@@ -20,11 +20,6 @@ TS_FUNCTION_INFO_V1(ts_bloom1_matches);
 Datum
 ts_bloom1_matches(PG_FUNCTION_ARGS)
 {
-	bytea *bloom = PG_GETARG_VARLENA_PP(0);
-	Datum val = PG_GETARG_DATUM(1);
-
-	const int nbits = VARSIZE_ANY_EXHDR(bloom) * 8;
-
 	Oid val_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
 	Ensure(OidIsValid(val_type), "cannot determine argument type");
 	TypeCacheEntry *val_entry = lookup_type_cache(val_type, TYPECACHE_HASH_PROC);
@@ -32,22 +27,21 @@ ts_bloom1_matches(PG_FUNCTION_ARGS)
 	const Oid hash_proc_oid = val_entry->hash_proc;
 
 	/* compute the hashes, used for the bloom filter */
-	uint32 datum_hash = DatumGetUInt32(OidFunctionCall1Coll(hash_proc_oid, C_COLLATION_OID, val));
-	uint32 h1 = hash_bytes_uint32_extended(datum_hash, BLOOM1_SEED_1) % nbits;
-	uint32 h2 = hash_bytes_uint32_extended(datum_hash, BLOOM1_SEED_2) % nbits;
+	Datum val = PG_GETARG_DATUM(1);
+	const uint32 datum_hash =
+		DatumGetUInt32(OidFunctionCall1Coll(hash_proc_oid, C_COLLATION_OID, val));
 
 	/* compute the requested number of hashes */
-	const char *words = VARDATA_ANY(bloom);
+	bytea *bloom = PG_GETARG_VARLENA_PP(0);
+	const int nbits = VARSIZE_ANY_EXHDR(bloom) * 8;
+	const uint64 *words = (const uint64 *) VARDATA_ANY(bloom);
 	const int word_bits = sizeof(*words) * 8;
 	bool match = true;
 	for (int i = 0; i < BLOOM1_HASHES; i++)
 	{
-		/* h1 + h2 + f(i) */
-		uint32 h = (h1 + i * h2) % nbits;
-		uint32 word_index = (h / word_bits);
-		uint32 bit = (h % word_bits);
-
-		/* if the bit is not set, set it and remember we did that */
+		const uint32 h = bloom1_get_one_hash(datum_hash, i) % nbits;
+		const uint32 word_index = (h / word_bits);
+		const uint32 bit = (h % word_bits);
 		match = (words[word_index] & (0x01 << bit)) && match;
 	}
 
