@@ -128,19 +128,9 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 {
 	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
 
-	/*
-	compressor->compressed_is_null[builder->bloom_attr_offset] = true;
-	compressor->compressed_values[builder->bloom_attr_offset] = 0;
-	/*/
 	compressor->compressed_is_null[builder->bloom_attr_offset] = !builder->empty;
 	compressor->compressed_values[builder->bloom_attr_offset] =
 		PointerGetDatum(builder->bloom_bytea);
-
-	fprintf(stderr,
-			"set to attoffset %d, varsize %d\n",
-			builder->bloom_attr_offset,
-			VARSIZE(compressor->compressed_values[builder->bloom_attr_offset]));
-	//*/
 }
 
 static void
