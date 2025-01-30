@@ -1,2 +1,2 @@
-CREATE FUNCTION _timescaledb_functions.ts_bloom1_matches(anyelement, bytea);
+DROP FUNCTION _timescaledb_functions.ts_bloom1_matches(bytea, anyelement);
 

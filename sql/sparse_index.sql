@@ -1,4 +1,4 @@
-CREATE FUNCTION _timescaledb_functions.ts_bloom1_matches(anyelement, bytea)
+CREATE FUNCTION _timescaledb_functions.ts_bloom1_matches(bytea, anyelement)
 RETURNS bool
 AS '@MODULE_PATHNAME@', 'ts_bloom1_matches'
 LANGUAGE C IMMUTABLE STRICT;
