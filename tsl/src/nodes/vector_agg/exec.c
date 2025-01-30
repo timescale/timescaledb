@@ -368,7 +368,7 @@ vector_agg_exec(CustomScanState *node)
 		/*
 		 * Finally, pass the compressed batch to the grouping policy.
 		 */
-		grouping->gp_add_batch(grouping, batch_state);
+		grouping->gp_add_batch(grouping, &batch_state->decompressed_scan_slot_data.base);
 	}
 
 	/*

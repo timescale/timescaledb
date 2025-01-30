@@ -5,7 +5,8 @@
  */
 #pragma once
 
-typedef struct DecompressBatchState DecompressBatchState;
+#include <postgres.h>
+#include <executor/tuptable.h>
 
 typedef struct GroupingPolicy GroupingPolicy;
 
@@ -31,7 +32,7 @@ typedef struct GroupingPolicy
 	/*
 	 * Aggregate a single compressed batch.
 	 */
-	void (*gp_add_batch)(GroupingPolicy *gp, DecompressBatchState *batch_state);
+	void (*gp_add_batch)(GroupingPolicy *gp, TupleTableSlot *vector_slot);
 
 	/*
 	 * Is a partial aggregation result ready?
