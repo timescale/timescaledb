@@ -1,0 +1,1 @@
+DROP FUNCTION _timescaledb_internal.ts_bloom1_matches;
