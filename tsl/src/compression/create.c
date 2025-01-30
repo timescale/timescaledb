@@ -285,13 +285,13 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 		}
 		else if (bms_is_member(attr->attnum, btree_columns))
 		{
-			TypeCacheEntry *type = lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR);
+			TypeCacheEntry *type = lookup_type_cache(attr->atttypid, TYPECACHE_HASH_PROC);
 
-			if (attr->atttypid == TEXTOID)
+			if (OidIsValid(type->hash_proc))
 			{
 				/*
-				 * Add bloom filter metadata for text columns that have other
-				 * kind of metadata.
+				 * Add bloom filter metadata for columns that are not a part of
+				 * orderby, but a part of some other btree index.
 				 */
 				compressed_column_defs =
 					lappend(compressed_column_defs,
@@ -301,35 +301,6 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 										  BYTEAOID,
 										  /* typmod = */ -1,
 										  /* collation = */ 0));
-			}
-			else if (OidIsValid(type->lt_opr))
-			{
-				/*
-				 * Here we create minmax metadata for the columns for which
-				 * we have btree indexes. Not sure it is technically possible
-				 * to have a btree index for a column and at the same time
-				 * not have a "less" operator for it. Still, we can have
-				 * various unusual user-defined types, and the minmax metadata
-				 * for the rest of the columns are not required for correctness,
-				 * so play it safe and just don't create the metadata if we don't
-				 * have an operator.
-				 */
-				compressed_column_defs =
-					lappend(compressed_column_defs,
-							makeColumnDef(compressed_column_metadata_name_v2("min",
-																			 NameStr(
-																				 attr->attname)),
-										  attr->atttypid,
-										  attr->atttypmod,
-										  attr->attcollation));
-				compressed_column_defs =
-					lappend(compressed_column_defs,
-							makeColumnDef(compressed_column_metadata_name_v2("max",
-																			 NameStr(
-																				 attr->attname)),
-										  attr->atttypid,
-										  attr->atttypmod,
-										  attr->attcollation));
 			}
 		}
 

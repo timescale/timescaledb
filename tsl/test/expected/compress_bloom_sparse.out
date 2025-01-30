@@ -1,6 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
 create table bloom(ts int, value text);
 select create_hypertable('bloom', 'ts');
 NOTICE:  adding not-null constraint to column "ts"
@@ -20,19 +21,50 @@ select count(compress_chunk(x)) from show_chunks('bloom') x;
      1
 (1 row)
 
+select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
+    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
+        where hypertable_id = (select id from _timescaledb_catalog.hypertable
+            where table_name = 'bloom') limit 1)
+\gset
+\d+ :chunk
+                                          Table "_timescaledb_internal.compress_hyper_2_2_chunk"
+          Column          |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
+--------------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
+ _ts_meta_count           | integer                               |           |          |         | plain    | 1000         | 
+ _ts_meta_min_1           | integer                               |           |          |         | plain    | 1000         | 
+ _ts_meta_max_1           | integer                               |           |          |         | plain    | 1000         | 
+ ts                       | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
+ _ts_meta_v2_bloom1_value | bytea                                 |           |          |         | extended | 1000         | 
+ value                    | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
+Indexes:
+    "compress_hyper_2_2_chunk__ts_meta_min_1__ts_meta_max_1_idx" btree (_ts_meta_min_1, _ts_meta_max_1)
+Options: toast_tuple_target=128
+
+--\set VERBOSITY verbose
+--select * from :chunk;
+--CREATE OR REPLACE FUNCTION ts_bloom1_matches(anyelement, bytea) RETURNS bloom
+--AS :TSL_MODULE_PATHNAME, 'ts_bloom1_matches'
+--LANGUAGE C IMMUTABLE STRICT;
 explain (analyze, verbose, costs off, timing off, summary off)
 select count(*) from bloom where value = md5(7248::text);
-                                                                                                                                                                           QUERY PLAN                                                                                                                                                                            
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                           QUERY PLAN                                                                                                                            
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    Output: count(*)
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=1 loops=1)
          Vectorized Filter: (_hyper_1_1_chunk.value = '1f4183315762e30ea441d3caef5e64ad'::text)
-         Rows Removed by Filter: 9999
-         Batches Removed by Filter: 9
+         Rows Removed by Filter: 1999
+         Batches Removed by Filter: 1
          Bulk Decompression: true
-         ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=10 loops=1)
-               Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk._ts_meta_v2_min_value, compress_hyper_2_2_chunk._ts_meta_v2_max_value, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, compress_hyper_2_2_chunk.value
-               Filter: ((compress_hyper_2_2_chunk._ts_meta_v2_min_value <= '1f4183315762e30ea441d3caef5e64ad'::text) AND (compress_hyper_2_2_chunk._ts_meta_v2_max_value >= '1f4183315762e30ea441d3caef5e64ad'::text))
-(10 rows)
+         ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=2 loops=1)
+               Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, compress_hyper_2_2_chunk.value
+               Filter: _timescaledb_internal.ts_bloom1_matches(compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, '1f4183315762e30ea441d3caef5e64ad'::text)
+               Rows Removed by Filter: 8
+(11 rows)
+
+select count(*) from bloom where value = md5(7248::text);
+ count 
+-------
+     1
+(1 row)
 
