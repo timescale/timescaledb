@@ -16,7 +16,6 @@ NEW_PATCH_VERSION="0"
 NEW_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
 RELEASE_BRANCH="${NEW_VERSION/%.$NEW_PATCH_VERSION/.x}"
 CURRENT_VERSION=$(tail -1 version.config | cut -d ' ' -f 3)
-CURRENT_MINOR_VERSION=$(echo $NEW_VERSION | cut -d '.' -f 2)
 
 cd sql/updates
 
