@@ -210,9 +210,8 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 			 * queries. Create it when we have uncompressed index types that can
 			 * also satisfy equality.
 			 */
-			if (index_info->ii_Am != BTREE_AM_OID
-				&& index_info->ii_Am != HASH_AM_OID
-				&& index_info->ii_Am != BRIN_AM_OID)
+			if (index_info->ii_Am != BTREE_AM_OID && index_info->ii_Am != HASH_AM_OID &&
+				index_info->ii_Am != BRIN_AM_OID)
 			{
 				continue;
 			}

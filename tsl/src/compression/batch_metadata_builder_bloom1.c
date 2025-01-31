@@ -26,6 +26,7 @@ typedef struct Bloom1MetadataBuilder
 
 	int16 bloom_attr_offset;
 
+	int allocated_bytea_bytes;
 	bytea *bloom_bytea;
 
 	FmgrInfo hash_function;
@@ -43,15 +44,22 @@ bloom1_update_null(void *builder_)
 static uint64 *
 bloom1_words(bytea *bloom)
 {
+	Assert(VARATT_IS_4B_U(bloom));
+
 	uint64 *ptr = (uint64 *) TYPEALIGN(sizeof(ptr), VARDATA(bloom));
+	Assert((void *) ptr > (void *) bloom);
 	return ptr;
 }
 
 static int
 bloom1_num_bits(const bytea *bloom)
 {
+	Assert(VARATT_IS_4B_U(bloom));
+
 	const uint64 *words = bloom1_words((bytea *) bloom);
-	return 8 * (VARSIZE_ANY(bloom) + (char *) bloom - (char *) words);
+	const uint64 bytes = (char *) bloom + VARSIZE(bloom) - (char *) words;
+	Assert(bytes > 0);
+	return 8 * bytes;
 }
 
 static void
@@ -59,14 +67,16 @@ bloom1_reset(void *builder_, RowCompressor *compressor)
 {
 	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
 
-	memset(bloom1_words(builder->bloom_bytea), 0, bloom1_num_bits(builder->bloom_bytea) / 8);
+	bytea *bloom = builder->bloom_bytea;
+	memset(bloom, 0, builder->allocated_bytea_bytes);
+	SET_VARSIZE(bloom, builder->allocated_bytea_bytes);
 
 	compressor->compressed_is_null[builder->bloom_attr_offset] = true;
 	compressor->compressed_values[builder->bloom_attr_offset] = 0;
 }
 
-PG_USED_FOR_ASSERTS_ONLY static int
-bloom1_estimate_ndistinct(bytea *bloom)
+static int
+pg_attribute_unused() bloom1_estimate_ndistinct(bytea *bloom)
 {
 	const double m = bloom1_num_bits(bloom);
 	const double t = arrow_num_valid(bloom1_words(bloom), m);
@@ -78,11 +88,55 @@ static void
 bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 {
 	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
+	bytea *bloom = builder->bloom_bytea;
+	uint64 *restrict words_buf = bloom1_words(bloom);
 
-	const int bits_set =
-		arrow_num_valid(bloom1_words(builder->bloom_bytea), bloom1_num_bits(builder->bloom_bytea));
+	const int orig_num_bits = bloom1_num_bits(bloom);
+	const int orig_bits_set = arrow_num_valid(words_buf, orig_num_bits);
 
-	if (bits_set == 0)
+	/*
+	 * Our filters are sized for the maximum expected number of the unique
+	 * elements, so in practice they can be very sparse if the actual number of
+	 * the unique elements is less. The TOAST compression doesn't handle even
+	 * the sparse filters very well. Apply a simple compression technique: split
+	 * the filter in half and bitwise OR the halves. Repeat this until we reach
+	 * the occupancy that gives the desired false positive ratio of 1%. In our
+	 * case with 4 hashes the occupancy is 1% ^ 1/4 ~ 30%.
+	 */
+	for (;;)
+	{
+		const int num_bits = bloom1_num_bits(bloom);
+		if (arrow_num_valid(words_buf, num_bits) * 3 >= num_bits)
+		{
+			/*
+			 * The occupancy is already higher than desired.
+			 */
+			break;
+		}
+
+		if (num_bits % (sizeof(*words_buf) * 8 * 2) != 0)
+		{
+			/*
+			 * Doesn't split in half anymore.
+			 */
+			break;
+		}
+
+		const int half_words = num_bits / (sizeof(*words_buf) * 8 * 2);
+		Assert(half_words > 0);
+		const uint64 *words_tail = &words_buf[half_words];
+		for (int i = 0; i < half_words; i++)
+		{
+			words_buf[i] |= words_tail[i];
+		}
+
+		const int new_bytes = VARSIZE(bloom) - half_words * sizeof(*words_buf);
+		Assert(new_bytes > VARHDRSZ);
+		SET_VARSIZE(bloom, new_bytes);
+	}
+
+	Assert(bloom1_num_bits(bloom) % (sizeof(*words_buf) * 8) == 0);
+	if (unlikely(arrow_num_valid(bloom1_words(bloom), bloom1_num_bits(bloom))) == 0)
 	{
 		/*
 		 * All elements turned out to be null, don't save the empty filter in
@@ -93,24 +147,17 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 	}
 	else
 	{
-		/*
-		 * There is a simple compression technique for filters that turn out
-		 * very sparse: you split the filter in half and bitwise OR the halves.
-		 * Repeat this until you reach the occupancy that gives the desired
-		 * false positive ratio, e.g. our case with 4 hashes the 1/3 occupancy
-		 * would give 1% false positives. We don't apply it at the moment, the
-		 * TOAST compression should help somewhat for sparse filters.
-		 */
 		compressor->compressed_is_null[builder->bloom_attr_offset] = false;
-		compressor->compressed_values[builder->bloom_attr_offset] =
-			PointerGetDatum(builder->bloom_bytea);
+		compressor->compressed_values[builder->bloom_attr_offset] = PointerGetDatum(bloom);
 	}
 
 	fprintf(stderr,
-			"bloom filter %d bits %d set %d estimate\n",
-			bloom1_num_bits(builder->bloom_bytea),
-			bits_set,
-			bloom1_estimate_ndistinct(builder->bloom_bytea));
+			"bloom filter %d -> %d bits %d -> %d set %d estimate\n",
+			orig_num_bits,
+			bloom1_num_bits(bloom),
+			orig_bits_set,
+			arrow_num_valid(words_buf, bloom1_num_bits(bloom)),
+			bloom1_estimate_ndistinct(bloom));
 }
 
 static inline uint32
@@ -133,18 +180,18 @@ bloom1_update_val(void *builder_, Datum val)
 	//		DatumGetUInt64(FunctionCall2Coll(&builder->hash_function, C_COLLATION_OID, val,
 	//		BLOOM1_SEED_2));
 
-	const int nbits = bloom1_num_bits(builder->bloom_bytea);
-	uint64 *restrict words = bloom1_words(builder->bloom_bytea);
-	const int word_bits = sizeof(*words) * 8;
-	Assert(nbits % word_bits == 0);
+	const int num_bits = bloom1_num_bits(builder->bloom_bytea);
+	uint64 *restrict words_buf = bloom1_words(builder->bloom_bytea);
+	const int num_word_bits = sizeof(*words_buf) * 8;
+	Assert(num_bits % num_word_bits == 0);
 	for (int i = 0; i < BLOOM1_HASHES; i++)
 	{
 		// const uint32 h = bloom1_get_one_hash(datum_hash_1, i) % nbits;
 		// const uint32 h = (datum_hash_1 + i * datum_hash_2) % nbits;
-		const uint32 h = bloom1_get_one_hash(datum_hash_1, i) % nbits;
-		const uint32 byte = (h / word_bits);
-		const uint32 bit = (h % word_bits);
-		words[byte] |= (0x01 << bit);
+		const uint32 h = bloom1_get_one_hash(datum_hash_1, i) % num_bits;
+		const uint32 word_index = h / num_word_bits;
+		const uint32 bit = h % num_word_bits;
+		words_buf[word_index] |= 1ULL << bit;
 	}
 }
 
@@ -178,18 +225,22 @@ tsl_bloom1_matches(PG_FUNCTION_ARGS)
 	const uint64 datum_hash = DatumGetUInt64(
 		OidFunctionCall2Coll(type->hash_extended_proc, C_COLLATION_OID, PG_GETARG_DATUM(1), ~0ULL));
 
-	bytea *bloom = PG_GETARG_VARLENA_PP(0);
-	const int nbits = bloom1_num_bits(bloom);
-	const uint64 *words = bloom1_words(bloom);
-	const int word_bits = sizeof(*words) * 8;
-	Assert(nbits % word_bits == 0);
+	bytea *bloom = PG_GETARG_VARLENA_P(0);
+	const int num_bits = bloom1_num_bits(bloom);
+	const uint64 *words_buf = bloom1_words(bloom);
+	const int num_word_bits = sizeof(*words_buf) * 8;
+	Assert(num_bits % num_word_bits == 0);
+	/*
+	 * FIXME check compressed data that it's a power of two. Use mask instead
+	 * of division.
+	 */
 	bool match = true;
 	for (int i = 0; i < BLOOM1_HASHES; i++)
 	{
-		const uint32 h = bloom1_get_one_hash(datum_hash, i) % nbits;
-		const uint32 word_index = (h / word_bits);
-		const uint32 bit = (h % word_bits);
-		match = (words[word_index] & (0x01 << bit)) && match;
+		const uint32 h = bloom1_get_one_hash(datum_hash, i) % num_bits;
+		const uint32 word_index = h / num_word_bits;
+		const uint32 bit = h % num_word_bits;
+		match = (words_buf[word_index] & (1ULL << bit)) && match;
 	}
 
 	PG_RETURN_BOOL(match);
@@ -206,8 +257,19 @@ bloom1_bytea_alloc_size(int num_bits)
 BatchMetadataBuilder *
 batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
 {
-	Bloom1MetadataBuilder *builder = palloc(sizeof(*builder));
+	/*
+	 * Better make the bloom filter size a power of two, because we pack the
+	 * sparse filters using division in half.
+	 * The calculation for the lowest enclosing power of two is
+	 * pow(2, floor(log2(x * 2 - 1))).
+	 */
+	const int expected_elements = TARGET_COMPRESSED_BATCH_SIZE * 8;
+	const int lowest_power = pg_leftmost_one_pos32(expected_elements * 2 - 1);
+	Assert(lowest_power <= 16);
+	const int desired_bits = 1ULL << lowest_power;
+	const int bytea_bytes = bloom1_bytea_alloc_size(desired_bits);
 
+	Bloom1MetadataBuilder *builder = palloc(sizeof(*builder));
 	*builder = (Bloom1MetadataBuilder){
 		.functions =
 			(BatchMetadataBuilder){
@@ -217,6 +279,7 @@ batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
 				.reset = bloom1_reset,
 			},
 		.bloom_attr_offset = bloom_attr_offset,
+		.allocated_bytea_bytes = bytea_bytes,
 	};
 
 	TypeCacheEntry *type = lookup_type_cache(type_oid, TYPECACHE_HASH_EXTENDED_PROC);
@@ -226,10 +289,8 @@ batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
 	/*
 	 * Initialize the bloom filter.
 	 */
-	const int desired_bits = TARGET_COMPRESSED_BATCH_SIZE * 8;
-	const int bytea_size = bloom1_bytea_alloc_size(desired_bits);
-	builder->bloom_bytea = palloc0(bytea_size);
-	SET_VARSIZE(builder->bloom_bytea, bytea_size);
+	builder->bloom_bytea = palloc0(bytea_bytes);
+	SET_VARSIZE(builder->bloom_bytea, bytea_bytes);
 
 	return &builder->functions;
 }
