@@ -313,6 +313,16 @@ vector_agg_exec(CustomScanState *node)
 		if (batch_state->next_batch_row >= batch_state->total_batch_rows)
 		{
 			/* This batch was fully filtered out. */
+			if (dcontext->ps->instrument)
+			{
+				/*
+				 * This value is normally updated by InstrStopNode(), and is
+				 * required so that the calculations in InstrEndLoop() run properly.
+				 * We have to call it manually because we run the underlying
+				 * DecompressChunk manually and not as a normal Postgres node.
+				 */
+				dcontext->ps->instrument->running = true;
+			}
 			continue;
 		}
 
@@ -332,6 +342,8 @@ vector_agg_exec(CustomScanState *node)
 			/*
 			 * These values are normally updated by InstrStopNode(), and are
 			 * required so that the calculations in InstrEndLoop() run properly.
+			 * We have to call it manually because we run the underlying
+			 * DecompressChunk manually and not as a normal Postgres node.
 			 */
 			dcontext->ps->instrument->running = true;
 			dcontext->ps->instrument->tuplecount += not_filtered_rows;

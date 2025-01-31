@@ -91,6 +91,7 @@ execute p(md5('2345'));
 
 deallocate p;
 
+
 -- Function of parameter on bloom index
 prepare p as
 select count(*) from bloom where value = md5($1);

@@ -150,9 +150,7 @@ typedef struct CrossModuleFunctions
 	PGFunction dictionary_compressor_finish;
 	PGFunction array_compressor_append;
 	PGFunction array_compressor_finish;
-	PGFunction hypercore_handler;
-	PGFunction hypercore_proxy_handler;
-	PGFunction is_compressed_tid;
+	PGFunction bloom1_matches;
 
 	PGFunction create_chunk;
 	PGFunction show_chunk;
@@ -162,6 +160,11 @@ typedef struct CrossModuleFunctions
 	PGFunction chunk_unfreeze_chunk;
 	PGFunction recompress_chunk_segmentwise;
 	PGFunction get_compressed_chunk_index_for_recompression;
+
+	PGFunction hypercore_handler;
+	PGFunction hypercore_proxy_handler;
+	PGFunction is_compressed_tid;
+
 	void (*preprocess_query_tsl)(Query *parse, int *cursor_opts);
 	PGFunction merge_chunks;
 } CrossModuleFunctions;

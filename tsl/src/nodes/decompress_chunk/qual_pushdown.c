@@ -445,10 +445,10 @@ modify_expression(Node *node, QualPushdownContext *context)
 			OpExpr *opexpr = (OpExpr *) node;
 			if (opexpr->opresulttype == BOOLOID)
 			{
-				Expr *pd = pushdown_op_to_segment_meta_min_max(context,
-															   opexpr->args,
-															   opexpr->opno,
-															   opexpr->inputcollid);
+				Expr *pd = pushdown_op_to_segment_meta_bloom1(context,
+															  opexpr->args,
+															  opexpr->opno,
+															  opexpr->inputcollid);
 				if (pd != NULL)
 				{
 					context->needs_recheck = true;
@@ -456,10 +456,10 @@ modify_expression(Node *node, QualPushdownContext *context)
 					return (Node *) pd;
 				}
 
-				pd = pushdown_op_to_segment_meta_bloom1(context,
-														opexpr->args,
-														opexpr->opno,
-														opexpr->inputcollid);
+				pd = pushdown_op_to_segment_meta_min_max(context,
+														 opexpr->args,
+														 opexpr->opno,
+														 opexpr->inputcollid);
 				if (pd != NULL)
 				{
 					context->needs_recheck = true;
