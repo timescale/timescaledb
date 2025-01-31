@@ -183,7 +183,7 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 
 	Relation rel = table_open(src_relid, AccessShareLock);
 
-	Bitmapset *btree_columns = NULL;
+	Bitmapset *index_columns = NULL;
 	if (ts_guc_auto_sparse_indexes)
 	{
 		/*
@@ -204,23 +204,28 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 			 * kinds of queries as the uncompressed index. The simplest case is btree
 			 * which can satisfy equality and comparison tests, same as sparse minmax.
 			 *
-			 * We can be smarter here, e.g. for 'BRIN', sparse minmax can be similar
-			 * to 'BRIN' with range opclass, but not for bloom filter opclass. For GIN,
-			 * sparse minmax is useless because it doesn't help satisfy text search
-			 * queries, and so on. Currently we check only the simplest btree case.
+			 * If an uncompressed column has an index, we want to create a
+			 * sparse index for it as well. A sparse index can't satisfy ordering
+			 * queries, but at least we can use a bloom index to satisfy equality
+			 * queries. Create it when we have uncompressed index types that can
+			 * also satisfy equality.
 			 */
-			if (index_info->ii_Am != BTREE_AM_OID)
+			if (index_info->ii_Am != BTREE_AM_OID
+				&& index_info->ii_Am != HASH_AM_OID
+				&& index_info->ii_Am != BRIN_AM_OID)
 			{
 				continue;
 			}
 
 			for (int i = 0; i < index_info->ii_NumIndexKeyAttrs; i++)
 			{
-				AttrNumber attno = index_info->ii_IndexAttrNumbers[i];
-				if (attno != InvalidAttrNumber)
+				const AttrNumber attno = index_info->ii_IndexAttrNumbers[i];
+				if (attno == InvalidAttrNumber)
 				{
-					btree_columns = bms_add_member(btree_columns, attno);
+					continue;
 				}
+
+				index_columns = bms_add_member(index_columns, attno);
 			}
 		}
 	}
@@ -284,12 +289,12 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 														   attr->atttypmod,
 														   attr->attcollation));
 		}
-		else if (bms_is_member(attr->attnum, btree_columns))
+		else if (bms_is_member(attr->attnum, index_columns))
 		{
 			TypeCacheEntry *type =
 				lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR | TYPECACHE_HASH_EXTENDED_PROC);
 
-			if (bloom1_get_hash_function(attr->atttypid))
+			if (OidIsValid(type->hash_extended_proc))
 			{
 				/*
 				 * Add bloom filter metadata for columns that are not a part of

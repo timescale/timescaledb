@@ -7,7 +7,7 @@
 create table bloom(ts int, value text);
 select create_hypertable('bloom', 'ts');
 insert into bloom select x, md5(x::text) from generate_series(1, 10000) x;
-create index on bloom(value);
+create index on bloom using brin(value text_bloom_ops);
 alter table bloom set (timescaledb.compress,
     timescaledb.compress_segmentby = '',
     timescaledb.compress_orderby = 'ts');
@@ -102,3 +102,11 @@ execute p('2345');
 deallocate p;
 
 reset plan_cache_mode;
+
+
+-- Scalar array operations are not yet supported
+explain (analyze, verbose, costs off, timing off, summary off)
+select count(*) from bloom where ts < any(array[1000, 2000]::int[]);
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select count(*) from bloom where value = any(array[md5('1000'), md5('2000')]);
