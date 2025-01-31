@@ -95,11 +95,13 @@ sed -i.bak "s/FILE reverse-dev.sql)/FILE ${DOWNGRADE_FILE})/g" CMakeLists.txt
 rm CMakeLists.txt.bak
 
 
+
+cd ~/"$SOURCES_DIR"/"$FORK_DIR"
+
 echo "---- Creating CHANGELOG_$NEW_VERSION.md file ----"
 
 rm -f ~/CHANGELOG_"$NEW_VERSION".md
 
-cd ~/"$SOURCES_DIR"/"$FORK_DIR"
 ./scripts/merge_changelogs.sh > ~/CHANGELOG_"$NEW_VERSION".md
 
 echo "---- Editing the CHANGELOG.md file with the contents of CHANGELOG_$NEW_VERSION.md file. ----"
@@ -133,21 +135,12 @@ done
 cd ..
 
 
-if [[ "$BASE_BRANCH" = "main" ]]; then
-  echo "---- Modifying version.config to the new versions , if current PR is for main----"
-  sed -i.bak "s/${NEW_VERSION}/${NEW_VERSION}-dev/g" version.config
-  sed -i.bak "s/${CURRENT_MINOR_VERSION}/${NEW_MINOR_VERSION}/g" version.config
-  sed -i.bak "s/${CURRENT_VERSION}/${NEW_VERSION}/g" version.config
-  rm version.config.bak
-fi
-
 git diff HEAD --name-only
 
 
 echo "---- Committing the Release PR to fork ----"
 
 #Remove date from the intermediate CHANGELOG file.
-
 cut -d '(' -f1 < ~/CHANGELOG_"$NEW_VERSION".md > ~/CHANGELOG_"$NEW_VERSION".md.tmp
 mv ~/CHANGELOG_"$NEW_VERSION".md.tmp ~/CHANGELOG_"$NEW_VERSION".md
 
