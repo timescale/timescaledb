@@ -44,16 +44,21 @@ jobs:
       - name: Test env var NEW_MINOR_VERSION
         run: echo $NEW_MINOR_VERSION
 
+      - name: Set env var NEW_MINOR_VERSION_FULL
+        run: echo "NEW_MINOR_VERSION_FULL="$(echo ${{ env.NEW_VERSION }} | sed -e "s/${{ env.CURRENT_MINOR_VERSION }}/${{ env.NEW_MINOR_VERSION }}/g")"" >> $GITHUB_ENV
+      - name: Test env var NEW_MINOR_VERSION_FULL
+        run: echo $NEW_MINOR_VERSION_FULL
+
       - name: Create PR to bump version in the main branch
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           git remote --verbose
-          git checkout -b release/bump-version-in-main-to-${{ env.NEW_VERSION }}-dev origin/main
+          git checkout -b release/bump-version-in-main-to-${{ env.NEW_MINOR_VERSION_FULL }}-dev origin/main
           sed -i.bak "s/${{ env.CURRENT_MINOR_VERSION }}/${{ env.NEW_MINOR_VERSION }}/g" version.config
           rm version.config.bak
-          git commit --no-verify -a -m "Bump version to ${{ env.NEW_MINOR_VERSION }}-dev"
-          git push origin release/bump-version-in-main-to-${{ env.NEW_VERSION }}-dev
+          git commit --no-verify -a -m "Bump version to ${{ env.NEW_MINOR_VERSION_FULL }}-dev"
+          git push origin release/bump-version-in-main-to-${{ env.NEW_MINOR_VERSION_FULL }}-dev
 
       - name: Checkout TimescaleDB
         uses: actions/checkout@v4
