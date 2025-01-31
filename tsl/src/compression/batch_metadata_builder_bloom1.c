@@ -100,39 +100,35 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 	 * the unique elements is less. The TOAST compression doesn't handle even
 	 * the sparse filters very well. Apply a simple compression technique: split
 	 * the filter in half and bitwise OR the halves. Repeat this until we reach
-	 * the occupancy that gives the desired false positive ratio of 1%. In our
-	 * case with 4 hashes the occupancy is 1% ^ 1/4 ~ 30%.
+	 * the filter size that gives the desired false positive ratio of 1%.
 	 */
-	for (;;)
+	const double m0 = bloom1_num_bits(bloom);
+	//	const double n = bloom1_estimate_ndistinct(bloom);
+	const double k = BLOOM1_HASHES;
+	const double p = 0.01;
+	const double t = arrow_num_valid(bloom1_words(bloom), m0);
+	const double m1 = -log(1 - t / m0) / (log(1 - 1 / m0) * log(1 - pow(p, 1 / k)));
+	const int starting_pow2 = ceil(log2(m0));
+	Assert(pow(2, starting_pow2) == m0);
+	/* We don't want to go under 64 bytes. */
+	const int final_pow2 = MAX(6, ceil(log2(m1)));
+
+	for (int current_pow2 = starting_pow2; current_pow2 > final_pow2; current_pow2--)
 	{
-		const int num_bits = bloom1_num_bits(bloom);
-		if (arrow_num_valid(words_buf, num_bits) * 3 >= num_bits)
-		{
-			/*
-			 * The occupancy is already higher than desired.
-			 */
-			break;
-		}
-
-		if (num_bits % (sizeof(*words_buf) * 8 * 2) != 0)
-		{
-			/*
-			 * Doesn't split in half anymore.
-			 */
-			break;
-		}
-
-		const int half_words = num_bits / (sizeof(*words_buf) * 8 * 2);
+		const int half_words = 1 << (current_pow2 - 6 /* 64-bit word */ - 1 /* half */);
 		Assert(half_words > 0);
 		const uint64 *words_tail = &words_buf[half_words];
 		for (int i = 0; i < half_words; i++)
 		{
 			words_buf[i] |= words_tail[i];
 		}
+	}
 
-		const int new_bytes = VARSIZE(bloom) - half_words * sizeof(*words_buf);
-		Assert(new_bytes > VARHDRSZ);
-		SET_VARSIZE(bloom, new_bytes);
+	if (final_pow2 < starting_pow2)
+	{
+		SET_VARSIZE(bloom,
+					(char *) bloom1_words(bloom) + (1 << (final_pow2 - 3 /* 8-bit byte */)) -
+						(char *) bloom);
 	}
 
 	Assert(bloom1_num_bits(bloom) % (sizeof(*words_buf) * 8) == 0);
@@ -152,9 +148,10 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 	}
 
 	fprintf(stderr,
-			"bloom filter %d -> %d bits %d -> %d set %d estimate\n",
+			"bloom filter %d -> %d (%d) bits %d -> %d set %d estimate\n",
 			orig_num_bits,
 			bloom1_num_bits(bloom),
+			(int) pow(2, ceil(log2(m1))),
 			orig_bits_set,
 			arrow_num_valid(words_buf, bloom1_num_bits(bloom)),
 			bloom1_estimate_ndistinct(bloom));
