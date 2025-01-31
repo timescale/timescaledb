@@ -192,7 +192,7 @@ dictionary_compressor_append(DictionaryCompressor *compressor, Datum val)
 		// per_val->bitmap = roaring_dictionary_create();
 		dict_item->index = compressor->next_index;
 		dict_item->key = datumCopy(val, compressor->typbyval, compressor->typlen);
-		Assert(compressor->next_index < INT16_MAX - 1);
+		Assert(compressor->next_index <= INT16_MAX - 1);
 		compressor->next_index += 1;
 	}
 
