@@ -14,6 +14,8 @@
 
 #include "batch_metadata_builder.h"
 
+#include "arrow_c_data_interface.h"
+
 #include "utils/bloom1_sparse_index_params.h"
 
 typedef struct Bloom1MetadataBuilder
@@ -22,7 +24,6 @@ typedef struct Bloom1MetadataBuilder
 
 	Oid type_oid;
 	bool empty;
-	bool has_null;
 
 	bool type_by_val;
 	int16 type_len;
@@ -65,7 +66,6 @@ batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
 			},
 		.type_oid = type_oid,
 		.empty = true,
-		.has_null = false,
 		.type_by_val = type->typbyval,
 		.type_len = type->typlen,
 		.bloom_attr_offset = bloom_attr_offset,
@@ -77,7 +77,7 @@ batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
 	};
 
 	Assert(builder->nbits % 64 == 0);
-	const int bytea_size = VARHDRSZ + builder->nbits / 8;
+	const int bytea_size = bloom1_bytea_alloc_size(builder->nbits);
 	builder->bloom_bytea = palloc0(bytea_size);
 	SET_VARSIZE(builder->bloom_bytea, bytea_size);
 
@@ -96,8 +96,8 @@ bloom1_update_val(void *builder_, Datum val)
 		DatumGetUInt32(OidFunctionCall1Coll(hash_proc_oid, C_COLLATION_OID, val));
 
 	/* compute the requested number of hashes */
-	const int nbits = builder->nbits;
-	uint64 *restrict words = (uint64 *restrict) VARDATA(builder->bloom_bytea);
+	const int nbits = bloom1_num_bits(builder->bloom_bytea);
+	uint64 *restrict words = bloom1_words(builder->bloom_bytea);
 	const int word_bits = sizeof(*words) * 8;
 	for (int i = 0; i < BLOOM1_HASHES; i++)
 	{
@@ -111,8 +111,19 @@ bloom1_update_val(void *builder_, Datum val)
 void
 bloom1_update_null(void *builder_)
 {
-	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
-	builder->has_null = true;
+	/*
+	 * A null value cannot match an equality condition that we're optimizing
+	 * with bloom filters, so we don't need to consider them here.
+	 */
+}
+
+PG_USED_FOR_ASSERTS_ONLY static int
+bloom1_estimate_ndistinct(bytea *bloom)
+{
+	const int nbits = bloom1_num_bits(bloom);
+	const uint64 *words = bloom1_words(bloom);
+	const int nset = arrow_num_valid(words, nbits);
+	return -(nbits / BLOOM1_HASHES) * log(1 - nset / (double) nbits);
 }
 
 static void
@@ -120,9 +131,38 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 {
 	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
 
-	compressor->compressed_is_null[builder->bloom_attr_offset] = !builder->empty;
-	compressor->compressed_values[builder->bloom_attr_offset] =
-		PointerGetDatum(builder->bloom_bytea);
+	const int bits_set =
+		arrow_num_valid(bloom1_words(builder->bloom_bytea), bloom1_num_bits(builder->bloom_bytea));
+
+	if (bits_set == 0)
+	{
+		/*
+		 * All elements turned out to be null, don't save the empty filter in
+		 * that case.
+		 */
+		compressor->compressed_is_null[builder->bloom_attr_offset] = true;
+		compressor->compressed_values[builder->bloom_attr_offset] = NULL;
+	}
+	else
+	{
+		/*
+		 * There is a simple compression technique for filters that turn out
+		 * very sparse: you split the filter in half and bitwise OR the halves.
+		 * Repeat this until you reach the occupancy that gives the desired
+		 * false positive ratio, e.g. our case with 4 hashes the 1/3 occupancy
+		 * would give 1% false positives. We don't apply it at the moment, the
+		 * TOAST compression should help somewhat for sparse filters.
+		 */
+		compressor->compressed_is_null[builder->bloom_attr_offset] = false;
+		compressor->compressed_values[builder->bloom_attr_offset] =
+			PointerGetDatum(builder->bloom_bytea);
+	}
+
+	fprintf(stderr,
+			"bloom filter %d bits %d set %d estimate\n",
+			builder->nbits,
+			bits_set,
+			bloom1_estimate_ndistinct(builder->bloom_bytea));
 }
 
 static void
@@ -131,7 +171,6 @@ bloom1_reset(void *builder_, RowCompressor *compressor)
 	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
 
 	builder->empty = true;
-	builder->has_null = false;
 
 	builder->nbits_set = 0;
 	memset(VARDATA(builder->bloom_bytea), 0, VARSIZE_ANY_EXHDR(builder->bloom_bytea));
