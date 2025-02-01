@@ -7,6 +7,7 @@
 
 #include <catalog/pg_collation_d.h>
 #include <common/hashfn.h>
+#include <funcapi.h>
 #include <utils/builtins.h>
 #include <utils/typcache.h>
 
@@ -231,16 +232,18 @@ tsl_bloom1_matches(PG_FUNCTION_ARGS)
 	 * FIXME check compressed data that it's a power of two. Use mask instead
 	 * of division.
 	 */
-	bool match = true;
 	for (int i = 0; i < BLOOM1_HASHES; i++)
 	{
 		const uint32 h = bloom1_get_one_hash(datum_hash, i) % num_bits;
 		const uint32 word_index = h / num_word_bits;
 		const uint32 bit = h % num_word_bits;
-		match = (words_buf[word_index] & (1ULL << bit)) && match;
+		if (words_buf[word_index] & (1ULL << bit) == 0)
+		{
+			PG_RETURN_BOOL(false);
+		}
 	}
 
-	PG_RETURN_BOOL(match);
+	PG_RETURN_BOOL(true);
 }
 
 static int
@@ -290,4 +293,51 @@ batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
 	SET_VARSIZE(builder->bloom_bytea, bytea_bytes);
 
 	return &builder->functions;
+}
+
+TS_FUNCTION_INFO_V1(tsl_bloom1_debug);
+
+/* _timescaledb_functions.ts_bloom1_matches(bytea, anyelement) */
+Datum
+tsl_bloom1_debug(PG_FUNCTION_ARGS)
+{
+	/* Build a tuple descriptor for our result type */
+	TupleDesc tuple_desc;
+	if (get_call_result_type(fcinfo, NULL, &tuple_desc) != TYPEFUNC_COMPOSITE)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("function returning record called in context "
+						"that cannot accept type record")));
+
+	/* Output columns of this function. */
+	enum
+	{
+		out_toast_header = 0,
+		out_toasted_bytes,
+		out_detoasted_bytes,
+		out_bits_total,
+		out_bits_set,
+		out_estimated_elements,
+		_out_columns
+	};
+	Datum values[_out_columns] = { 0 };
+	bool nulls[_out_columns] = { 0 };
+
+	Datum toasted = PG_GETARG_DATUM(0);
+	values[out_toast_header] = Int32GetDatum(((varattrib_1b *) toasted)->va_header);
+	values[out_toasted_bytes] = Int32GetDatum(VARSIZE_ANY_EXHDR(toasted));
+
+	bytea *detoasted = PG_DETOAST_DATUM(toasted);
+	values[out_detoasted_bytes] = Int32GetDatum(VARSIZE_ANY_EXHDR(detoasted));
+
+	const int bits_total = bloom1_num_bits(detoasted);
+	values[out_bits_total] = Int32GetDatum(bits_total);
+
+	const uint64 *words = bloom1_words(detoasted);
+
+	values[out_bits_set] = Int32GetDatum(arrow_num_valid(words, bits_total));
+
+	values[out_estimated_elements] = Int32GetDatum(bloom1_estimate_ndistinct(detoasted));
+
+	PG_RETURN_DATUM(HeapTupleGetDatum(heap_form_tuple(tuple_desc, values, nulls)));
 }
