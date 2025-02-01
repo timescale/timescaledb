@@ -19,7 +19,18 @@
 
 #include "sparse_index_bloom1.h"
 
-#define BLOOM1_HASHES 4
+/*
+ * Rationale: when the column has low cardinality in the batch (e.g. highly
+ * correlated with orderby, like the street with postcode2 in the uk_price_paid),
+ * the bloom filter can be packed into just one 64-bit word. However, the
+ * cardinality of the column inside the entire set can be pretty large, and this
+ * will lead to the false positives. The bit patterns for one element in a
+ * 64-bit bloom filter shouldn't collide under the birthday paradox for
+ * relatively large cardinalities, e.g.:
+ * 6 hashes: sqrt(64 * 63 * 62 * 61 * 60 * 59) = 232k elements to reach a collision
+ * 5 hashes: sqrt(64 * 63 * 62 * 61 * 60) = 30k -- probably not acceptable already.
+ */
+#define BLOOM1_HASHES 6
 
 typedef struct Bloom1MetadataBuilder
 {
@@ -114,23 +125,23 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 	/* We don't want to go under 64 bytes. */
 	const int final_pow2 = MAX(6, ceil(log2(m1)));
 
-	for (int current_pow2 = starting_pow2; current_pow2 > final_pow2; current_pow2--)
-	{
-		const int half_words = 1 << (current_pow2 - 6 /* 64-bit word */ - 1 /* half */);
-		Assert(half_words > 0);
-		const uint64 *words_tail = &words_buf[half_words];
-		for (int i = 0; i < half_words; i++)
-		{
-			words_buf[i] |= words_tail[i];
-		}
-	}
+	//	for (int current_pow2 = starting_pow2; current_pow2 > final_pow2; current_pow2--)
+	//	{
+	//		const int half_words = 1 << (current_pow2 - 6 /* 64-bit word */ - 1 /* half */);
+	//		Assert(half_words > 0);
+	//		const uint64 *words_tail = &words_buf[half_words];
+	//		for (int i = 0; i < half_words; i++)
+	//		{
+	//			words_buf[i] |= words_tail[i];
+	//		}
+	//	}
 
-	if (final_pow2 < starting_pow2)
-	{
-		SET_VARSIZE(bloom,
-					(char *) bloom1_words(bloom) + (1 << (final_pow2 - 3 /* 8-bit byte */)) -
-						(char *) bloom);
-	}
+	//	if (final_pow2 < starting_pow2)
+	//	{
+	//		SET_VARSIZE(bloom,
+	//					(char *) bloom1_words(bloom) + (1 << (final_pow2 - 3 /* 8-bit byte */)) -
+	//						(char *) bloom);
+	//	}
 
 	Assert(bloom1_num_bits(bloom) % (sizeof(*words_buf) * 8) == 0);
 	if (unlikely(arrow_num_valid(bloom1_words(bloom), bloom1_num_bits(bloom))) == 0)
@@ -166,27 +177,29 @@ bloom1_get_one_hash(uint64 value_hash, uint32 index)
 	return low + index * high;
 }
 
+#define BLOOM_SEED_1 0x71d924af
+#define BLOOM_SEED_2 0xba48b314
+
 static void
 bloom1_update_val(void *builder_, Datum val)
 {
 	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
 
 	// const uint64 datum_hash_1 = builder->hash_function(val);
-	const uint64 datum_hash_1 =
-		DatumGetUInt64(FunctionCall2Coll(&builder->hash_function, C_COLLATION_OID, val, ~0ULL));
-	//	const uint64 datum_hash_2 =
-	//		DatumGetUInt64(FunctionCall2Coll(&builder->hash_function, C_COLLATION_OID, val,
-	//		BLOOM1_SEED_2));
+	const uint64 datum_hash_1 = DatumGetUInt64(
+		FunctionCall2Coll(&builder->hash_function, C_COLLATION_OID, val, BLOOM_SEED_1));
+	const uint64 datum_hash_2 = DatumGetUInt64(
+		FunctionCall2Coll(&builder->hash_function, C_COLLATION_OID, val, BLOOM_SEED_2));
 
-	const int num_bits = bloom1_num_bits(builder->bloom_bytea);
 	uint64 *restrict words_buf = bloom1_words(builder->bloom_bytea);
-	const int num_word_bits = sizeof(*words_buf) * 8;
+	const uint32 num_bits = bloom1_num_bits(builder->bloom_bytea);
+	const uint32 num_word_bits = sizeof(*words_buf) * 8;
 	Assert(num_bits % num_word_bits == 0);
 	for (int i = 0; i < BLOOM1_HASHES; i++)
 	{
 		// const uint32 h = bloom1_get_one_hash(datum_hash_1, i) % nbits;
-		// const uint32 h = (datum_hash_1 + i * datum_hash_2) % nbits;
-		const uint32 h = bloom1_get_one_hash(datum_hash_1, i) % num_bits;
+		const uint32 h = (datum_hash_1 + i * datum_hash_2) % num_bits;
+		//		const uint32 h = bloom1_get_one_hash(datum_hash_1, i) % num_bits;
 		const uint32 word_index = h / num_word_bits;
 		const uint32 bit = h % num_word_bits;
 		words_buf[word_index] |= 1ULL << bit;
@@ -217,16 +230,31 @@ tsl_bloom1_matches(PG_FUNCTION_ARGS)
 		PG_RETURN_BOOL(false);
 	}
 
-	Oid val_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
-	TypeCacheEntry *type = lookup_type_cache(val_type, TYPECACHE_HASH_EXTENDED_PROC);
-	Ensure(OidIsValid(type->hash_extended_proc), "cannot find the hash function");
-	const uint64 datum_hash = DatumGetUInt64(
-		OidFunctionCall2Coll(type->hash_extended_proc, C_COLLATION_OID, PG_GETARG_DATUM(1), ~0ULL));
+	Oid type_oid = get_fn_expr_argtype(fcinfo->flinfo, 1);
+	TypeCacheEntry *type_entry = lookup_type_cache(type_oid, TYPECACHE_HASH_EXTENDED_PROC);
+	Ensure(OidIsValid(type_entry->hash_extended_proc), "cannot find the hash function");
+	Datum needle = PG_GETARG_DATUM(1);
+	if (type_entry->typlen == -1)
+	{
+		/*
+		 * Have to detoast the varlena type here, because we might be calculating
+		 * many hashes and don't want it detoasted many times.
+		 */
+		needle = PointerGetDatum(PG_DETOAST_DATUM_PACKED(needle));
+	}
+	const uint64 datum_hash_1 = DatumGetUInt64(OidFunctionCall2Coll(type_entry->hash_extended_proc,
+																	C_COLLATION_OID,
+																	needle,
+																	BLOOM_SEED_1));
+	const uint64 datum_hash_2 = DatumGetUInt64(OidFunctionCall2Coll(type_entry->hash_extended_proc,
+																	C_COLLATION_OID,
+																	needle,
+																	BLOOM_SEED_2));
 
 	bytea *bloom = PG_GETARG_VARLENA_P(0);
-	const int num_bits = bloom1_num_bits(bloom);
 	const uint64 *words_buf = bloom1_words(bloom);
-	const int num_word_bits = sizeof(*words_buf) * 8;
+	const uint32 num_bits = bloom1_num_bits(bloom);
+	const uint32 num_word_bits = sizeof(*words_buf) * 8;
 	Assert(num_bits % num_word_bits == 0);
 	/*
 	 * FIXME check compressed data that it's a power of two. Use mask instead
@@ -234,10 +262,12 @@ tsl_bloom1_matches(PG_FUNCTION_ARGS)
 	 */
 	for (int i = 0; i < BLOOM1_HASHES; i++)
 	{
-		const uint32 h = bloom1_get_one_hash(datum_hash, i) % num_bits;
+		(void) bloom1_get_one_hash;
+		// const uint32 h = bloom1_get_one_hash(datum_hash, i) % num_bits;
+		const uint32 h = (datum_hash_1 + i * datum_hash_2) % num_bits;
 		const uint32 word_index = h / num_word_bits;
 		const uint32 bit = h % num_word_bits;
-		if (words_buf[word_index] & (1ULL << bit) == 0)
+		if ((words_buf[word_index] & (1ULL << bit)) == 0)
 		{
 			PG_RETURN_BOOL(false);
 		}
