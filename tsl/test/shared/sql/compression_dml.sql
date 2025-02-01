@@ -205,9 +205,11 @@ INSERT INTO direct_delete VALUES
 ('2021-01-01', 'd1', 'r1', 1.0),
 ('2021-01-01', 'd1', 'r2', 1.0),
 ('2021-01-01', 'd1', 'r3', 1.0),
+('2021-01-01', 'd1', NULL, 1.0),
 ('2021-01-01', 'd2', 'r1', 1.0),
 ('2021-01-01', 'd2', 'r2', 1.0),
-('2021-01-01', 'd2', 'r3', 1.0);
+('2021-01-01', 'd2', 'r3', 1.0),
+('2021-01-01', 'd2', NULL, 1.0);
 
 SELECT count(compress_chunk(c)) FROM show_chunks('direct_delete') c;
 
@@ -223,6 +225,42 @@ BEGIN;
 :ANALYZE DELETE FROM direct_delete WHERE reading='r2';
 -- double check its actually deleted
 SELECT count(*) FROM direct_delete WHERE reading='r2';
+ROLLBACK;
+
+-- issue #7644
+-- make sure non-btree operators don't delete unrelated batches
+BEGIN;
+:ANALYZE DELETE FROM direct_delete WHERE reading <> 'r2';
+-- 4 tuples should still be there
+SELECT count(*) FROM direct_delete;
+ROLLBACK;
+
+-- test IS NULL
+BEGIN;
+:ANALYZE DELETE FROM direct_delete WHERE reading IS NULL;
+-- 6 tuples should still be there
+SELECT count(*) FROM direct_delete;
+ROLLBACK;
+
+-- test IS NOT NULL
+BEGIN;
+:ANALYZE DELETE FROM direct_delete WHERE reading IS NOT NULL;
+-- 2 tuples should still be there
+SELECT count(*) FROM direct_delete;
+ROLLBACK;
+
+-- test IN
+BEGIN;
+:ANALYZE DELETE FROM direct_delete WHERE reading IN ('r1','r2');
+-- 4 tuples should still be there
+SELECT count(*) FROM direct_delete;
+ROLLBACK;
+
+-- test IN
+BEGIN;
+:ANALYZE DELETE FROM direct_delete WHERE reading NOT IN ('r1');
+-- 4 tuples should still be there
+SELECT count(*) FROM direct_delete;
 ROLLBACK;
 
 -- combining constraints on segmentby columns should work

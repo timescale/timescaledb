@@ -16,11 +16,11 @@
 #include "ts_catalog/array_utils.h"
 
 static Oid deduce_filter_subtype(BatchFilter *filter, Oid att_typoid);
-static int create_segment_filter_scankey(Relation in_rel, char *segment_filter_col_name,
-										 StrategyNumber strategy, Oid subtype,
-										 ScanKeyData *scankeys, int num_scankeys,
-										 Bitmapset **null_columns, Datum value, bool is_null_check,
-										 bool is_array_op);
+static bool create_segment_filter_scankey(Relation in_rel, char *segment_filter_col_name,
+										  StrategyNumber strategy, Oid subtype,
+										  ScanKeyData *scankeys, int *num_scankeys,
+										  Bitmapset **null_columns, Datum value, bool is_null_check,
+										  bool is_array_op);
 
 /*
  * Test ScanKey against a slot.
@@ -187,16 +187,16 @@ build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 			 */
 			if (ts_array_is_member(settings->fd.segmentby, attname))
 			{
-				key_index = create_segment_filter_scankey(in_rel,
-														  attname,
-														  BTEqualStrategyNumber,
-														  InvalidOid,
-														  scankeys,
-														  key_index,
-														  null_columns,
-														  value,
-														  isnull,
-														  false);
+				create_segment_filter_scankey(in_rel,
+											  attname,
+											  BTEqualStrategyNumber,
+											  InvalidOid,
+											  scankeys,
+											  &key_index,
+											  null_columns,
+											  value,
+											  isnull,
+											  false);
 			}
 			if (ts_array_is_member(settings->fd.orderby, attname))
 			{
@@ -208,26 +208,28 @@ build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 
 				int16 index = ts_array_position(settings->fd.orderby, attname);
 
-				key_index = create_segment_filter_scankey(in_rel,
-														  column_segment_min_name(index),
-														  BTLessEqualStrategyNumber,
-														  InvalidOid,
-														  scankeys,
-														  key_index,
-														  null_columns,
-														  value,
-														  false,
-														  false); /* is_null_check */
-				key_index = create_segment_filter_scankey(in_rel,
-														  column_segment_max_name(index),
-														  BTGreaterEqualStrategyNumber,
-														  InvalidOid,
-														  scankeys,
-														  key_index,
-														  null_columns,
-														  value,
-														  false,
-														  false); /* is_null_check */
+				create_segment_filter_scankey(in_rel,
+											  column_segment_min_name(index),
+											  BTLessEqualStrategyNumber,
+											  InvalidOid,
+											  scankeys,
+											  &key_index,
+											  null_columns,
+											  value,
+											  false,
+											  false /* is_null_check */
+				);
+				create_segment_filter_scankey(in_rel,
+											  column_segment_max_name(index),
+											  BTGreaterEqualStrategyNumber,
+											  InvalidOid,
+											  scankeys,
+											  &key_index,
+											  null_columns,
+											  value,
+											  false,
+											  false /* is_null_check */
+				);
 			}
 		}
 	}
@@ -435,7 +437,7 @@ build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel, Relation 
  */
 ScanKeyData *
 build_update_delete_scankeys(Relation in_rel, List *heap_filters, int *num_scankeys,
-							 Bitmapset **null_columns)
+							 Bitmapset **null_columns, bool *delete_only)
 {
 	ListCell *lc;
 	BatchFilter *filter;
@@ -455,25 +457,33 @@ build_update_delete_scankeys(Relation in_rel, List *heap_filters, int *num_scank
 							NameStr(filter->column_name),
 							RelationGetRelationName(in_rel))));
 
-		key_index = create_segment_filter_scankey(in_rel,
-												  NameStr(filter->column_name),
-												  filter->strategy,
-												  deduce_filter_subtype(filter, typoid),
-												  scankeys,
-												  key_index,
-												  null_columns,
-												  filter->value ? filter->value->constvalue : 0,
-												  filter->is_null_check,
-												  filter->is_array_op);
+		bool added = create_segment_filter_scankey(in_rel,
+												   NameStr(filter->column_name),
+												   filter->strategy,
+												   deduce_filter_subtype(filter, typoid),
+												   scankeys,
+												   &key_index,
+												   null_columns,
+												   filter->value ? filter->value->constvalue : 0,
+												   filter->is_null_check,
+												   filter->is_array_op);
+		/*
+		 * When we plan to DELETE directly on compressed chunks we
+		 * need to ensure all query constraints could be applied
+		 * to the compressed scan and disable direct DELETE when
+		 * we are skipping filters.
+		 */
+		if (*delete_only && !added)
+			*delete_only = false;
 	}
 	*num_scankeys = key_index;
 	return scankeys;
 }
 
-static int
+static bool
 create_segment_filter_scankey(Relation in_rel, char *segment_filter_col_name,
 							  StrategyNumber strategy, Oid subtype, ScanKeyData *scankeys,
-							  int num_scankeys, Bitmapset **null_columns, Datum value,
+							  int *num_scankeys, Bitmapset **null_columns, Datum value,
 							  bool is_null_check, bool is_array_op)
 {
 	AttrNumber cmp_attno = get_attnum(in_rel->rd_id, segment_filter_col_name);
@@ -481,7 +491,7 @@ create_segment_filter_scankey(Relation in_rel, char *segment_filter_col_name,
 	/* This should never happen but if it does happen, we can't generate a scan key for
 	 * the filter column so just skip it */
 	if (cmp_attno == InvalidAttrNumber)
-		return num_scankeys;
+		return false;
 
 	int flags = is_array_op ? SK_SEARCHARRAY : 0;
 
@@ -497,7 +507,7 @@ create_segment_filter_scankey(Relation in_rel, char *segment_filter_col_name,
 	if (is_null_check)
 	{
 		*null_columns = bms_add_member(*null_columns, cmp_attno);
-		return num_scankeys;
+		return false;
 	}
 
 	Oid atttypid = in_rel->rd_att->attrs[AttrNumberGetAttrOffset(cmp_attno)].atttypid;
@@ -520,15 +530,15 @@ create_segment_filter_scankey(Relation in_rel, char *segment_filter_col_name,
 
 	/* No operator could be found so we can't create the scankey. */
 	if (!OidIsValid(opr))
-		return num_scankeys;
+		return false;
 
 	opr = get_opcode(opr);
 	Assert(OidIsValid(opr));
 	/* We should never end up here but: no opcode, no optimization */
 	if (!OidIsValid(opr))
-		return num_scankeys;
+		return false;
 
-	ScanKeyEntryInitialize(&scankeys[num_scankeys++],
+	ScanKeyEntryInitialize(&scankeys[(*num_scankeys)++],
 						   flags,
 						   cmp_attno,
 						   strategy,
@@ -537,7 +547,7 @@ create_segment_filter_scankey(Relation in_rel, char *segment_filter_col_name,
 						   opr,
 						   value);
 
-	return num_scankeys;
+	return true;
 }
 
 /*
