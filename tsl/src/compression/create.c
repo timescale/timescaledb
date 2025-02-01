@@ -299,14 +299,19 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 				 * Add bloom filter metadata for columns that are not a part of
 				 * orderby, but a part of some other btree index.
 				 */
-				compressed_column_defs =
-					lappend(compressed_column_defs,
-							makeColumnDef(compressed_column_metadata_name_v2("bloom1",
-																			 NameStr(
-																				 attr->attname)),
-										  BYTEAOID,
-										  /* typmod = */ -1,
-										  /* collation = */ 0));
+				ColumnDef *bloom_column_def =
+					makeColumnDef(compressed_column_metadata_name_v2("bloom1",
+																	 NameStr(attr->attname)),
+								  BYTEAOID,
+								  /* typmod = */ -1,
+								  /* collation = */ 0);
+				/*
+				 * We have our internal compression for bloom filters, and the
+				 * result is almost uncompressible with lz4 (~2%), so disable it.
+				 */
+				bloom_column_def->storage = TYPSTORAGE_EXTERNAL;
+
+				compressed_column_defs = lappend(compressed_column_defs, bloom_column_def);
 			}
 
 			if (false && OidIsValid(type->lt_opr))

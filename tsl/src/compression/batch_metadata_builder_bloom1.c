@@ -27,6 +27,7 @@
  * this value.
  */
 #define BLOOM1_HASHES 6
+#define BLOOM1_BLOCK_BITS 64
 
 typedef uint64 (*HashFunction)(Datum datum);
 
@@ -152,25 +153,16 @@ bloom1_update_null(void *builder_)
 	 */
 }
 
-static uint64 *
+static char *
 bloom1_words(bytea *bloom)
 {
-	Assert(VARATT_IS_4B_U(bloom));
-
-	uint64 *ptr = (uint64 *) TYPEALIGN(sizeof(ptr), VARDATA(bloom));
-	Assert((void *) ptr > (void *) bloom);
-	return ptr;
+	return VARDATA_ANY(bloom);
 }
 
 static int
 bloom1_num_bits(const bytea *bloom)
 {
-	Assert(VARATT_IS_4B_U(bloom));
-
-	const uint64 *words = bloom1_words((bytea *) bloom);
-	const uint64 bytes = (char *) bloom + VARSIZE(bloom) - (char *) words;
-	Assert(bytes > 0);
-	return 8 * bytes;
+	return 8 * VARSIZE_ANY_EXHDR(bloom);
 }
 
 static void
@@ -190,7 +182,7 @@ static int
 pg_attribute_unused() bloom1_estimate_ndistinct(bytea *bloom)
 {
 	const double m = bloom1_num_bits(bloom);
-	const double t = arrow_num_valid(bloom1_words(bloom), m);
+	const double t = pg_popcount(bloom1_words(bloom), m / 8);
 	const double k = BLOOM1_HASHES;
 	return log(1 - t / m) / (k * log(1 - 1 / m));
 }
@@ -200,10 +192,25 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 {
 	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
 	bytea *bloom = builder->bloom_bytea;
-	uint64 *restrict words_buf = bloom1_words(bloom);
+	char *restrict words_buf = bloom1_words(bloom);
 
 	const int orig_num_bits = bloom1_num_bits(bloom);
-	const int orig_bits_set = arrow_num_valid(words_buf, orig_num_bits);
+	Assert(orig_num_bits % 8 == 0);
+	Assert(orig_num_bits % 64 == 0);
+	const int orig_bits_set = pg_popcount(words_buf, orig_num_bits / 8);
+
+	if (unlikely(orig_num_bits == 0 || orig_num_bits == orig_bits_set))
+	{
+		/*
+		 * 1) All elements turned out to be null, don't save the empty filter in
+		 * that case.
+		 * 2) All bits are set, this filter is useless. Shouldn't really happen,
+		 * but technically possible, and the following calculations will
+		 * segfault in this case.
+		 */
+		compressor->compressed_is_null[builder->bloom_attr_offset] = true;
+		compressor->compressed_values[builder->bloom_attr_offset] = PointerGetDatum(NULL);
+	}
 
 	/*
 	 * Our filters are sized for the maximum expected number of the unique
@@ -216,19 +223,23 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 	const double m0 = bloom1_num_bits(bloom);
 	//	const double n = bloom1_estimate_ndistinct(bloom);
 	const double k = BLOOM1_HASHES;
-	const double p = 0.01;
-	const double t = arrow_num_valid(bloom1_words(bloom), m0);
+	const double p = 0.001;
+	const double t = orig_bits_set;
 	const double m1 = -log(1 - t / m0) / (log(1 - 1 / m0) * log(1 - pow(p, 1 / k)));
+	//	fprintf(stderr, "m0 %.2lf t %.2lf m1 %.2lf\n", m0, t, m1);
 	const int starting_pow2 = ceil(log2(m0));
 	Assert(pow(2, starting_pow2) == m0);
 	/* We don't want to go under 64 bytes. */
 	const int final_pow2 = MAX(6, ceil(log2(m1)));
+	Assert(final_pow2 >= 6);
 
 	for (int current_pow2 = starting_pow2; current_pow2 > final_pow2; current_pow2--)
 	{
-		const int half_words = 1 << (current_pow2 - 6 /* 64-bit word */ - 1 /* half */);
+		const int half_words = 1 << (current_pow2 - 3 /* 8-bit byte */ - 1 /* half */);
 		Assert(half_words > 0);
-		const uint64 *words_tail = &words_buf[half_words];
+		//		fprintf(stderr, "%d -> %d -> %d, half %d\n", starting_pow2, current_pow2,
+		// final_pow2, half_words);
+		const char *words_tail = &words_buf[half_words];
 		for (int i = 0; i < half_words; i++)
 		{
 			words_buf[i] |= words_tail[i];
@@ -243,20 +254,10 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 	}
 
 	Assert(bloom1_num_bits(bloom) % (sizeof(*words_buf) * 8) == 0);
-	if (unlikely(arrow_num_valid(bloom1_words(bloom), bloom1_num_bits(bloom))) == 0)
-	{
-		/*
-		 * All elements turned out to be null, don't save the empty filter in
-		 * that case.
-		 */
-		compressor->compressed_is_null[builder->bloom_attr_offset] = true;
-		compressor->compressed_values[builder->bloom_attr_offset] = PointerGetDatum(NULL);
-	}
-	else
-	{
-		compressor->compressed_is_null[builder->bloom_attr_offset] = false;
-		compressor->compressed_values[builder->bloom_attr_offset] = PointerGetDatum(bloom);
-	}
+	Assert(bloom1_num_bits(bloom) % 64 == 0);
+
+	compressor->compressed_is_null[builder->bloom_attr_offset] = false;
+	compressor->compressed_values[builder->bloom_attr_offset] = PointerGetDatum(bloom);
 
 	fprintf(stderr,
 			"bloom filter %d -> %d (%d) bits %d -> %d set %d estimate\n",
@@ -264,7 +265,7 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 			bloom1_num_bits(bloom),
 			(int) pow(2, ceil(log2(m1))),
 			orig_bits_set,
-			arrow_num_valid(words_buf, bloom1_num_bits(bloom)),
+			(int) pg_popcount(words_buf, bloom1_num_bits(bloom) / 8),
 			bloom1_estimate_ndistinct(bloom));
 }
 
@@ -277,7 +278,8 @@ bloom1_get_one_hash(uint64 value_hash, uint32 index)
 	//	{
 	//		fprintf(stderr, "low 0x%.8x, high 0x%.8x\n", low, high);
 	//	}
-	return low + index * high + index * index;
+	//	return low + index * high + index * index;
+	return low + (index * high) % BLOOM1_BLOCK_BITS;
 }
 
 static inline uint32
@@ -285,12 +287,14 @@ bloom1_get_one_word_mask(uint64 value_hash, uint32 num_bits, uint64 *word_mask)
 {
 	const uint32 low = value_hash & ~(uint32) 0;
 	const uint32 high = (value_hash >> 32) & ~(uint32) 0;
+
 	uint64 mask = 0;
 	for (int i = 0; i < BLOOM1_HASHES; i++)
 	{
 		const uint32 bit_offset = (low + high * i) % 64;
 		mask |= 1ULL << bit_offset;
 	}
+
 	*word_mask = mask;
 	return high % (num_bits / (sizeof(mask) * 8));
 }
@@ -310,28 +314,31 @@ bloom1_update_val(void *builder_, Datum needle)
 	//		FunctionCall2Coll(&builder->hash_function, C_COLLATION_OID, val, BLOOM_SEED_2));
 	const uint64 datum_hash_1 = builder->hash_function(needle);
 
-	uint64 *restrict words_buf = bloom1_words(builder->bloom_bytea);
+	char *restrict words_buf = bloom1_words(builder->bloom_bytea);
 	const uint32 num_bits = bloom1_num_bits(builder->bloom_bytea);
-	//	const uint32 num_word_bits = sizeof(*words_buf) * 8;
-	//	Assert(num_bits % num_word_bits == 0);
-	//	for (int i = 0; i < BLOOM1_HASHES; i++)
-	//	{
-	//		const uint32 h = bloom1_get_one_hash(datum_hash_1, i) % num_bits;
-	//		// const uint32 h = (datum_hash_1 + i * datum_hash_2) % num_bits;
-	//		//		const uint32 h = bloom1_get_one_hash(datum_hash_1, i) % num_bits;
-	//		const uint32 word_index = h / num_word_bits;
-	//		const uint32 bit = h % num_word_bits;
-	//		words_buf[word_index] |= 1ULL << bit;
-	//	}
 
-	uint64 word_mask;
-	uint32 word_index = bloom1_get_one_word_mask(datum_hash_1, num_bits, &word_mask);
+	const uint32 num_word_bits = sizeof(*words_buf) * 8;
+	Assert(num_bits % num_word_bits == 0);
+	for (int i = 0; i < BLOOM1_HASHES; i++)
+	{
+		const uint32 h = bloom1_get_one_hash(datum_hash_1, i) % num_bits;
+		// const uint32 h = (datum_hash_1 + i * datum_hash_2) % num_bits;
+		//		const uint32 h = bloom1_get_one_hash(datum_hash_1, i) % num_bits;
+		const uint32 word_index = h / num_word_bits;
+		const uint32 bit = h % num_word_bits;
+		words_buf[word_index] |= 1ULL << bit;
+	}
 
-	/* This might be an unaligned read. */
-	uint64 tmp;
-	memcpy(&tmp, &words_buf[word_index], sizeof(tmp));
-	tmp |= word_mask;
-	memcpy(&words_buf[word_index], &tmp, sizeof(tmp));
+	//  /* 64-bit blocked */
+	//	uint64 word_mask;
+	//	uint32 word_index = bloom1_get_one_word_mask(datum_hash_1, num_bits, &word_mask);
+
+	//	/* This might be an unaligned read. */
+	//	char *restrict dest = words_buf + 8 * word_index;
+	//	uint64 tmp;
+	//	memcpy(&tmp, dest, sizeof(tmp));
+	//	tmp |= word_mask;
+	//	memcpy(dest, &tmp, sizeof(tmp));
 }
 
 TS_FUNCTION_INFO_V1(tsl_bloom1_matches);
@@ -371,54 +378,57 @@ tsl_bloom1_matches(PG_FUNCTION_ARGS)
 		needle = PointerGetDatum(PG_DETOAST_DATUM_PACKED(needle));
 	}
 	//	const uint64 datum_hash_1 =
-	//DatumGetUInt64(OidFunctionCall2Coll(type_entry->hash_extended_proc, 																	C_COLLATION_OID, 																	needle,
+	// DatumGetUInt64(OidFunctionCall2Coll(type_entry->hash_extended_proc,
+	// C_COLLATION_OID, 																	needle,
 	//																	BLOOM_SEED_1));
 	//	const uint64 datum_hash_2 =
-	//DatumGetUInt64(OidFunctionCall2Coll(type_entry->hash_extended_proc, 																	C_COLLATION_OID, 																	needle,
+	// DatumGetUInt64(OidFunctionCall2Coll(type_entry->hash_extended_proc,
+	// C_COLLATION_OID, 																	needle,
 	//																	BLOOM_SEED_2));
 	HashFunction fn = bloom1_get_hash_function(type_oid);
 	const uint64 datum_hash_1 = fn(needle);
 
 	bytea *bloom = PG_GETARG_VARLENA_P(0);
-	const uint64 *words_buf = bloom1_words(bloom);
+	const char *words_buf = bloom1_words(bloom);
 	const uint32 num_bits = bloom1_num_bits(bloom);
-	//	const uint32 num_word_bits = sizeof(*words_buf) * 8;
-	//	Assert(num_bits % num_word_bits == 0);
-	//	/*
-	//	 * FIXME check compressed data that it's a power of two. Use mask instead
-	//	 * of division.
-	//	 */
-	//	for (int i = 0; i < BLOOM1_HASHES; i++)
-	//	{
-	//		const uint32 h = bloom1_get_one_hash(datum_hash_1, i) % num_bits;
-	//		// fprintf(stderr, "bit %d at 0x%.4x\n", i, h);
-	//		// const uint32 h = (datum_hash_1 + i * datum_hash_2) % num_bits;
-	//		const uint32 word_index = h / num_word_bits;
-	//		const uint32 bit = h % num_word_bits;
-	//		if ((words_buf[word_index] & (1ULL << bit)) == 0)
-	//		{
-	//			PG_RETURN_BOOL(false);
-	//		}
-	//	}
 
-	//	PG_RETURN_BOOL(true);
+	const uint32 num_word_bits = sizeof(*words_buf) * 8;
+	Assert(num_bits % num_word_bits == 0);
+	/*
+	 * FIXME check compressed data that it's a power of two. Use mask instead
+	 * of division.
+	 */
+	for (int i = 0; i < BLOOM1_HASHES; i++)
+	{
+		const uint32 h = bloom1_get_one_hash(datum_hash_1, i) % num_bits;
+		// fprintf(stderr, "bit %d at 0x%.4x\n", i, h);
+		// const uint32 h = (datum_hash_1 + i * datum_hash_2) % num_bits;
+		const uint32 word_index = h / num_word_bits;
+		const uint32 bit = h % num_word_bits;
+		if ((words_buf[word_index] & (1ULL << bit)) == 0)
+		{
+			PG_RETURN_BOOL(false);
+		}
+	}
+	PG_RETURN_BOOL(true);
 
-	uint64 word_mask;
-	uint32 word_index = bloom1_get_one_word_mask(datum_hash_1, num_bits, &word_mask);
-	/* This might be an unaligned read. */
-	uint64 tmp;
-	memcpy(&tmp, &words_buf[word_index], sizeof(tmp));
-	PG_RETURN_BOOL((tmp & word_mask) == word_mask);
+	//	uint64 word_mask;
+	//	uint32 word_index = bloom1_get_one_word_mask(datum_hash_1, num_bits, &word_mask);
+	//	/* This might be an unaligned read. */
+	//	uint64 tmp;
+	//	memcpy(&tmp, words_buf + 8 * word_index, sizeof(tmp));
+	//	PG_RETURN_BOOL((tmp & word_mask) == word_mask);
 
 	(void) bloom1_get_one_hash;
+	(void) bloom1_get_one_word_mask;
 }
 
 static int
 bloom1_bytea_alloc_size(int num_bits)
 {
-	const int words = (num_bits + 63) / 64;
-	const int header = TYPEALIGN(8, VARHDRSZ);
-	return header + words * 8;
+	Assert(num_bits % 8 == 0);
+	Assert(num_bits % 64 == 0);
+	return VARHDRSZ + num_bits / 8;
 }
 
 BatchMetadataBuilder *
@@ -502,9 +512,9 @@ tsl_bloom1_debug(PG_FUNCTION_ARGS)
 	const int bits_total = bloom1_num_bits(detoasted);
 	values[out_bits_total] = Int32GetDatum(bits_total);
 
-	const uint64 *words = bloom1_words(detoasted);
+	const char *words = bloom1_words(detoasted);
 
-	values[out_bits_set] = Int32GetDatum(arrow_num_valid(words, bits_total));
+	values[out_bits_set] = Int32GetDatum(pg_popcount(words, bits_total / 8));
 
 	values[out_estimated_elements] = Int32GetDatum(bloom1_estimate_ndistinct(detoasted));
 
