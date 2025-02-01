@@ -23,11 +23,11 @@
 #include "import/umash.h"
 
 /*
- * Our filters go down to 64 bits and we want to have 1% false positives, hence
+ * Our filters go down to 64 bits and we want to have 0.1% false positives, hence
  * this value.
  */
-#define BLOOM1_HASHES 6
-#define BLOOM1_BLOCK_BITS 64
+#define BLOOM1_HASHES 8
+#define BLOOM1_BLOCK_BITS 128
 
 typedef uint64 (*HashFunction)(Datum datum);
 
@@ -220,7 +220,7 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 	 * the filter in half and bitwise OR the halves. Repeat this until we reach
 	 * the filter size that gives the desired false positive ratio of 1%.
 	 */
-	const double m0 = bloom1_num_bits(bloom);
+	const double m0 = orig_num_bits;
 	//	const double n = bloom1_estimate_ndistinct(bloom);
 	const double k = BLOOM1_HASHES;
 	const double p = 0.001;
@@ -317,16 +317,30 @@ bloom1_update_val(void *builder_, Datum needle)
 	char *restrict words_buf = bloom1_words(builder->bloom_bytea);
 	const uint32 num_bits = bloom1_num_bits(builder->bloom_bytea);
 
+	/*
+	 * This is a little clunky but I had to switch to another buffer type already,
+	 * so it's worth keeping for now.
+	 */
 	const uint32 num_word_bits = sizeof(*words_buf) * 8;
 	Assert(num_bits % num_word_bits == 0);
+	const uint32 log2_word_bits = pg_leftmost_one_pos32(num_word_bits);
+	Assert(num_word_bits == (1ULL << log2_word_bits));
+
+	const uint32 word_mask = num_word_bits - 1;
+	Assert((word_mask >> num_word_bits) == 0);
+
+	const uint32 absolute_mask = num_bits - 1;
+	// Assert((absolute_mask >> log2_words) == 0);
+
 	for (int i = 0; i < BLOOM1_HASHES; i++)
 	{
-		const uint32 h = bloom1_get_one_hash(datum_hash_1, i) % num_bits;
-		// const uint32 h = (datum_hash_1 + i * datum_hash_2) % num_bits;
+		const uint32 absolute_bit_index = bloom1_get_one_hash(datum_hash_1, i) & absolute_mask;
+		// Assert(absolute_bit_index == bloom1_get_one_hash(datum_hash_1, i) % num_bits);
+		//  const uint32 h = (datum_hash_1 + i * datum_hash_2) % num_bits;
 		//		const uint32 h = bloom1_get_one_hash(datum_hash_1, i) % num_bits;
-		const uint32 word_index = h / num_word_bits;
-		const uint32 bit = h % num_word_bits;
-		words_buf[word_index] |= 1ULL << bit;
+		const uint32 word_index = absolute_bit_index >> log2_word_bits;
+		const uint32 word_bit_index = absolute_bit_index & word_mask;
+		words_buf[word_index] |= 1ULL << word_bit_index;
 	}
 
 	//  /* 64-bit blocked */
@@ -392,20 +406,34 @@ tsl_bloom1_matches(PG_FUNCTION_ARGS)
 	const char *words_buf = bloom1_words(bloom);
 	const uint32 num_bits = bloom1_num_bits(bloom);
 
+	/* Must be a power of two. */
+	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
+
+	/* Must be >= 64 bits. */
+	CheckCompressedData(num_bits >= 64);
+
 	const uint32 num_word_bits = sizeof(*words_buf) * 8;
 	Assert(num_bits % num_word_bits == 0);
+	const uint32 log2_word_bits = pg_leftmost_one_pos32(num_word_bits);
+	Assert(num_word_bits == (1ULL << log2_word_bits));
+
+	const uint32 word_mask = num_word_bits - 1;
+	Assert((word_mask >> num_word_bits) == 0);
+
+	const uint32 absolute_mask = num_bits - 1;
 	/*
 	 * FIXME check compressed data that it's a power of two. Use mask instead
 	 * of division.
 	 */
 	for (int i = 0; i < BLOOM1_HASHES; i++)
 	{
-		const uint32 h = bloom1_get_one_hash(datum_hash_1, i) % num_bits;
-		// fprintf(stderr, "bit %d at 0x%.4x\n", i, h);
-		// const uint32 h = (datum_hash_1 + i * datum_hash_2) % num_bits;
-		const uint32 word_index = h / num_word_bits;
-		const uint32 bit = h % num_word_bits;
-		if ((words_buf[word_index] & (1ULL << bit)) == 0)
+		const uint32 absolute_bit_index = bloom1_get_one_hash(datum_hash_1, i) & absolute_mask;
+		// Assert(absolute_bit_index == bloom1_get_one_hash(datum_hash_1, i) % num_bits);
+		//  const uint32 h = (datum_hash_1 + i * datum_hash_2) % num_bits;
+		//		const uint32 h = bloom1_get_one_hash(datum_hash_1, i) % num_bits;
+		const uint32 word_index = absolute_bit_index >> log2_word_bits;
+		const uint32 word_bit_index = absolute_bit_index & word_mask;
+		if ((words_buf[word_index] & (1ULL << word_bit_index)) == 0)
 		{
 			PG_RETURN_BOOL(false);
 		}
