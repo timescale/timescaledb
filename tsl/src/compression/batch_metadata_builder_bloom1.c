@@ -27,6 +27,11 @@
  * this value.
  */
 #define BLOOM1_HASHES 8
+
+/*
+ * Limit the bits belonging to the particular elements to a small contiguous
+ * region. This improves memory locality when building the bloom filter.
+ */
 #define BLOOM1_BLOCK_BITS 128
 
 typedef uint64 (*HashFunction)(Datum datum);
@@ -274,12 +279,18 @@ bloom1_get_one_hash(uint64 value_hash, uint32 index)
 {
 	const uint32 low = value_hash & ~(uint32) 0;
 	const uint32 high = (value_hash >> 32) & ~(uint32) 0;
-	//	if (index == 0)
-	//	{
-	//		fprintf(stderr, "low 0x%.8x, high 0x%.8x\n", low, high);
-	//	}
+	//		if (index == 0)
+	//		{
+	//			fprintf(stderr, "low 0x%.8x, high 0x%.8x\n", low, high);
+	//		}
+
 	//	return low + index * high + index * index;
-	return low + (index * high) % BLOOM1_BLOCK_BITS;
+
+	/*
+	 * Add a quadratic component to lessen degradation in the unlikely case when
+	 * 'high' is a multiple of block bits.
+	 */
+	return low + (index * high + index * index) % BLOOM1_BLOCK_BITS;
 }
 
 static inline uint32
@@ -580,6 +591,7 @@ tsl_bloom1_hash(PG_FUNCTION_ARGS)
 	Oid type_oid = get_fn_expr_argtype(fcinfo->flinfo, 0);
 	TypeCacheEntry *type_entry = lookup_type_cache(type_oid, TYPECACHE_HASH_EXTENDED_PROC);
 	Ensure(OidIsValid(type_entry->hash_extended_proc), "cannot find postgres hash function");
+	Assert(!PG_ARGISNULL(0));
 	Datum needle = PG_GETARG_DATUM(0);
 	if (type_entry->typlen == -1)
 	{
