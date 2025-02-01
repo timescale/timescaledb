@@ -5,6 +5,7 @@
  */
 #include "postgres.h"
 
+#include <access/detoast.h>
 #include <catalog/pg_collation_d.h>
 #include <common/hashfn.h>
 #include <funcapi.h>
@@ -19,18 +20,15 @@
 
 #include "sparse_index_bloom1.h"
 
+#include "import/umash.h"
+
 /*
- * Rationale: when the column has low cardinality in the batch (e.g. highly
- * correlated with orderby, like the street with postcode2 in the uk_price_paid),
- * the bloom filter can be packed into just one 64-bit word. However, the
- * cardinality of the column inside the entire set can be pretty large, and this
- * will lead to the false positives. The bit patterns for one element in a
- * 64-bit bloom filter shouldn't collide under the birthday paradox for
- * relatively large cardinalities, e.g.:
- * 6 hashes: sqrt(64 * 63 * 62 * 61 * 60 * 59) = 232k elements to reach a collision
- * 5 hashes: sqrt(64 * 63 * 62 * 61 * 60) = 30k -- probably not acceptable already.
+ * Our filters go down to 64 bits and we want to have 1% false positives, hence
+ * this value.
  */
 #define BLOOM1_HASHES 6
+
+typedef uint64 (*HashFunction)(Datum datum);
 
 typedef struct Bloom1MetadataBuilder
 {
@@ -41,8 +39,109 @@ typedef struct Bloom1MetadataBuilder
 	int allocated_bytea_bytes;
 	bytea *bloom_bytea;
 
-	FmgrInfo hash_function;
+	HashFunction hash_function;
 } Bloom1MetadataBuilder;
+
+static inline uint64
+bloom1_hash64(uint64 x)
+{
+	x ^= x >> 32;
+	x *= 0xd6e8feb86659fd93U;
+	x ^= x >> 32;
+	x *= 0xd6e8feb86659fd93U;
+	x ^= x >> 32;
+	return x;
+}
+
+static uint64
+bloom1_hash_2(Datum datum)
+{
+	uint64 tmp = DatumGetUInt16(datum);
+	return bloom1_hash64(tmp);
+}
+
+static uint64
+bloom1_hash_4(Datum datum)
+{
+	uint64 tmp = DatumGetUInt32(datum);
+	return bloom1_hash64(tmp);
+}
+
+static uint64
+bloom1_hash_8(Datum datum)
+{
+	uint64 tmp = DatumGetUInt64(datum);
+	return bloom1_hash64(tmp);
+}
+
+#ifdef TS_USE_UMASH
+static struct umash_params *
+hashing_params()
+{
+	static struct umash_params params = { 0 };
+	if (params.poly[0][0] == 0)
+	{
+		umash_params_derive(&params, 0x12345abcdef67890ull, NULL);
+		Assert(params.poly[0][0] != 0);
+	}
+
+	return &params;
+}
+
+static uint64
+bloom1_hash_varlena(Datum datum)
+{
+	const int length = VARSIZE_ANY_EXHDR(datum);
+	const char *data = VARDATA_ANY(datum);
+	return umash_full(hashing_params(),
+					  /* seed = */ ~0ULL,
+					  /* which = */ 0,
+					  data,
+					  length);
+}
+
+static uint64
+bloom1_hash_16(Datum datum)
+{
+	return umash_full(hashing_params(),
+					  /* seed = */ ~0ULL,
+					  /* which = */ 0,
+					  DatumGetPointer(datum),
+					  16);
+}
+#endif
+
+static HashFunction
+bloom1_get_hash_function(Oid type)
+{
+#ifdef TS_USE_UMASH
+	if (type == TEXTOID)
+	{
+		return bloom1_hash_varlena;
+	}
+#endif
+
+	int16 typlen;
+	bool typbyval;
+	get_typlenbyval(type, &typlen, &typbyval);
+
+	switch (typlen)
+	{
+		case 2:
+			return bloom1_hash_2;
+		case 4:
+			return bloom1_hash_4;
+		case 8:
+			return bloom1_hash_8;
+#ifdef TS_USE_UMASH
+		case 16:
+			/* For UUID. */
+			return bloom1_hash_16;
+#endif
+		default:
+			return NULL;
+	}
+}
 
 static void
 bloom1_update_null(void *builder_)
@@ -125,23 +224,23 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 	/* We don't want to go under 64 bytes. */
 	const int final_pow2 = MAX(6, ceil(log2(m1)));
 
-	//	for (int current_pow2 = starting_pow2; current_pow2 > final_pow2; current_pow2--)
-	//	{
-	//		const int half_words = 1 << (current_pow2 - 6 /* 64-bit word */ - 1 /* half */);
-	//		Assert(half_words > 0);
-	//		const uint64 *words_tail = &words_buf[half_words];
-	//		for (int i = 0; i < half_words; i++)
-	//		{
-	//			words_buf[i] |= words_tail[i];
-	//		}
-	//	}
+	for (int current_pow2 = starting_pow2; current_pow2 > final_pow2; current_pow2--)
+	{
+		const int half_words = 1 << (current_pow2 - 6 /* 64-bit word */ - 1 /* half */);
+		Assert(half_words > 0);
+		const uint64 *words_tail = &words_buf[half_words];
+		for (int i = 0; i < half_words; i++)
+		{
+			words_buf[i] |= words_tail[i];
+		}
+	}
 
-	//	if (final_pow2 < starting_pow2)
-	//	{
-	//		SET_VARSIZE(bloom,
-	//					(char *) bloom1_words(bloom) + (1 << (final_pow2 - 3 /* 8-bit byte */)) -
-	//						(char *) bloom);
-	//	}
+	if (final_pow2 < starting_pow2)
+	{
+		SET_VARSIZE(bloom,
+					(char *) bloom1_words(bloom) + (1 << (final_pow2 - 3 /* 8-bit byte */)) -
+						(char *) bloom);
+	}
 
 	Assert(bloom1_num_bits(bloom) % (sizeof(*words_buf) * 8) == 0);
 	if (unlikely(arrow_num_valid(bloom1_words(bloom), bloom1_num_bits(bloom))) == 0)
@@ -174,36 +273,65 @@ bloom1_get_one_hash(uint64 value_hash, uint32 index)
 {
 	const uint32 low = value_hash & ~(uint32) 0;
 	const uint32 high = (value_hash >> 32) & ~(uint32) 0;
-	return low + index * high;
+	//	if (index == 0)
+	//	{
+	//		fprintf(stderr, "low 0x%.8x, high 0x%.8x\n", low, high);
+	//	}
+	return low + index * high + index * index;
+}
+
+static inline uint32
+bloom1_get_one_word_mask(uint64 value_hash, uint32 num_bits, uint64 *word_mask)
+{
+	const uint32 low = value_hash & ~(uint32) 0;
+	const uint32 high = (value_hash >> 32) & ~(uint32) 0;
+	uint64 mask = 0;
+	for (int i = 0; i < BLOOM1_HASHES; i++)
+	{
+		const uint32 bit_offset = (low + high * i) % 64;
+		mask |= 1ULL << bit_offset;
+	}
+	*word_mask = mask;
+	return high % (num_bits / (sizeof(mask) * 8));
 }
 
 #define BLOOM_SEED_1 0x71d924af
 #define BLOOM_SEED_2 0xba48b314
 
 static void
-bloom1_update_val(void *builder_, Datum val)
+bloom1_update_val(void *builder_, Datum needle)
 {
 	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
 
 	// const uint64 datum_hash_1 = builder->hash_function(val);
-	const uint64 datum_hash_1 = DatumGetUInt64(
-		FunctionCall2Coll(&builder->hash_function, C_COLLATION_OID, val, BLOOM_SEED_1));
-	const uint64 datum_hash_2 = DatumGetUInt64(
-		FunctionCall2Coll(&builder->hash_function, C_COLLATION_OID, val, BLOOM_SEED_2));
+	//	const uint64 datum_hash_1 = DatumGetUInt64(
+	//		FunctionCall2Coll(&builder->hash_function, C_COLLATION_OID, val, BLOOM_SEED_1));
+	//	const uint64 datum_hash_2 = DatumGetUInt64(
+	//		FunctionCall2Coll(&builder->hash_function, C_COLLATION_OID, val, BLOOM_SEED_2));
+	const uint64 datum_hash_1 = builder->hash_function(needle);
 
 	uint64 *restrict words_buf = bloom1_words(builder->bloom_bytea);
 	const uint32 num_bits = bloom1_num_bits(builder->bloom_bytea);
-	const uint32 num_word_bits = sizeof(*words_buf) * 8;
-	Assert(num_bits % num_word_bits == 0);
-	for (int i = 0; i < BLOOM1_HASHES; i++)
-	{
-		// const uint32 h = bloom1_get_one_hash(datum_hash_1, i) % nbits;
-		const uint32 h = (datum_hash_1 + i * datum_hash_2) % num_bits;
-		//		const uint32 h = bloom1_get_one_hash(datum_hash_1, i) % num_bits;
-		const uint32 word_index = h / num_word_bits;
-		const uint32 bit = h % num_word_bits;
-		words_buf[word_index] |= 1ULL << bit;
-	}
+	//	const uint32 num_word_bits = sizeof(*words_buf) * 8;
+	//	Assert(num_bits % num_word_bits == 0);
+	//	for (int i = 0; i < BLOOM1_HASHES; i++)
+	//	{
+	//		const uint32 h = bloom1_get_one_hash(datum_hash_1, i) % num_bits;
+	//		// const uint32 h = (datum_hash_1 + i * datum_hash_2) % num_bits;
+	//		//		const uint32 h = bloom1_get_one_hash(datum_hash_1, i) % num_bits;
+	//		const uint32 word_index = h / num_word_bits;
+	//		const uint32 bit = h % num_word_bits;
+	//		words_buf[word_index] |= 1ULL << bit;
+	//	}
+
+	uint64 word_mask;
+	uint32 word_index = bloom1_get_one_word_mask(datum_hash_1, num_bits, &word_mask);
+
+	/* This might be an unaligned read. */
+	uint64 tmp;
+	memcpy(&tmp, &words_buf[word_index], sizeof(tmp));
+	tmp |= word_mask;
+	memcpy(&words_buf[word_index], &tmp, sizeof(tmp));
 }
 
 TS_FUNCTION_INFO_V1(tsl_bloom1_matches);
@@ -242,38 +370,47 @@ tsl_bloom1_matches(PG_FUNCTION_ARGS)
 		 */
 		needle = PointerGetDatum(PG_DETOAST_DATUM_PACKED(needle));
 	}
-	const uint64 datum_hash_1 = DatumGetUInt64(OidFunctionCall2Coll(type_entry->hash_extended_proc,
-																	C_COLLATION_OID,
-																	needle,
-																	BLOOM_SEED_1));
-	const uint64 datum_hash_2 = DatumGetUInt64(OidFunctionCall2Coll(type_entry->hash_extended_proc,
-																	C_COLLATION_OID,
-																	needle,
-																	BLOOM_SEED_2));
+	//	const uint64 datum_hash_1 =
+	//DatumGetUInt64(OidFunctionCall2Coll(type_entry->hash_extended_proc, 																	C_COLLATION_OID, 																	needle,
+	//																	BLOOM_SEED_1));
+	//	const uint64 datum_hash_2 =
+	//DatumGetUInt64(OidFunctionCall2Coll(type_entry->hash_extended_proc, 																	C_COLLATION_OID, 																	needle,
+	//																	BLOOM_SEED_2));
+	HashFunction fn = bloom1_get_hash_function(type_oid);
+	const uint64 datum_hash_1 = fn(needle);
 
 	bytea *bloom = PG_GETARG_VARLENA_P(0);
 	const uint64 *words_buf = bloom1_words(bloom);
 	const uint32 num_bits = bloom1_num_bits(bloom);
-	const uint32 num_word_bits = sizeof(*words_buf) * 8;
-	Assert(num_bits % num_word_bits == 0);
-	/*
-	 * FIXME check compressed data that it's a power of two. Use mask instead
-	 * of division.
-	 */
-	for (int i = 0; i < BLOOM1_HASHES; i++)
-	{
-		(void) bloom1_get_one_hash;
-		// const uint32 h = bloom1_get_one_hash(datum_hash, i) % num_bits;
-		const uint32 h = (datum_hash_1 + i * datum_hash_2) % num_bits;
-		const uint32 word_index = h / num_word_bits;
-		const uint32 bit = h % num_word_bits;
-		if ((words_buf[word_index] & (1ULL << bit)) == 0)
-		{
-			PG_RETURN_BOOL(false);
-		}
-	}
+	//	const uint32 num_word_bits = sizeof(*words_buf) * 8;
+	//	Assert(num_bits % num_word_bits == 0);
+	//	/*
+	//	 * FIXME check compressed data that it's a power of two. Use mask instead
+	//	 * of division.
+	//	 */
+	//	for (int i = 0; i < BLOOM1_HASHES; i++)
+	//	{
+	//		const uint32 h = bloom1_get_one_hash(datum_hash_1, i) % num_bits;
+	//		// fprintf(stderr, "bit %d at 0x%.4x\n", i, h);
+	//		// const uint32 h = (datum_hash_1 + i * datum_hash_2) % num_bits;
+	//		const uint32 word_index = h / num_word_bits;
+	//		const uint32 bit = h % num_word_bits;
+	//		if ((words_buf[word_index] & (1ULL << bit)) == 0)
+	//		{
+	//			PG_RETURN_BOOL(false);
+	//		}
+	//	}
 
-	PG_RETURN_BOOL(true);
+	//	PG_RETURN_BOOL(true);
+
+	uint64 word_mask;
+	uint32 word_index = bloom1_get_one_word_mask(datum_hash_1, num_bits, &word_mask);
+	/* This might be an unaligned read. */
+	uint64 tmp;
+	memcpy(&tmp, &words_buf[word_index], sizeof(tmp));
+	PG_RETURN_BOOL((tmp & word_mask) == word_mask);
+
+	(void) bloom1_get_one_hash;
 }
 
 static int
@@ -293,7 +430,7 @@ batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
 	 * The calculation for the lowest enclosing power of two is
 	 * pow(2, floor(log2(x * 2 - 1))).
 	 */
-	const int expected_elements = TARGET_COMPRESSED_BATCH_SIZE * 8;
+	const int expected_elements = TARGET_COMPRESSED_BATCH_SIZE * 16;
 	const int lowest_power = pg_leftmost_one_pos32(expected_elements * 2 - 1);
 	Assert(lowest_power <= 16);
 	const int desired_bits = 1ULL << lowest_power;
@@ -312,9 +449,10 @@ batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
 		.allocated_bytea_bytes = bytea_bytes,
 	};
 
-	TypeCacheEntry *type = lookup_type_cache(type_oid, TYPECACHE_HASH_EXTENDED_PROC);
-	Ensure(OidIsValid(type->hash_extended_proc), "cannot find the hash function");
-	fmgr_info(type->hash_extended_proc, &builder->hash_function);
+	//	TypeCacheEntry *type = lookup_type_cache(type_oid, TYPECACHE_HASH_EXTENDED_PROC);
+	//	Ensure(OidIsValid(type->hash_extended_proc), "cannot find the hash function");
+	//	fmgr_info(type->hash_extended_proc, &builder->hash_function);
+	builder->hash_function = bloom1_get_hash_function(type_oid);
 
 	/*
 	 * Initialize the bloom filter.
@@ -344,6 +482,7 @@ tsl_bloom1_debug(PG_FUNCTION_ARGS)
 	{
 		out_toast_header = 0,
 		out_toasted_bytes,
+		out_compressed_bytes,
 		out_detoasted_bytes,
 		out_bits_total,
 		out_bits_set,
@@ -369,5 +508,47 @@ tsl_bloom1_debug(PG_FUNCTION_ARGS)
 
 	values[out_estimated_elements] = Int32GetDatum(bloom1_estimate_ndistinct(detoasted));
 
+	if (VARATT_IS_EXTERNAL_ONDISK(toasted))
+	{
+		struct varatt_external toast_pointer;
+		VARATT_EXTERNAL_GET_POINTER(toast_pointer, toasted);
+
+		if (VARATT_EXTERNAL_IS_COMPRESSED(toast_pointer))
+		{
+			values[out_compressed_bytes] = VARATT_EXTERNAL_GET_EXTSIZE(toast_pointer);
+		}
+		else
+		{
+			nulls[out_compressed_bytes] = true;
+		}
+	}
+	else if (VARATT_IS_COMPRESSED(toasted))
+	{
+		values[out_compressed_bytes] = VARDATA_COMPRESSED_GET_EXTSIZE(toasted);
+	}
+	else
+	{
+		nulls[out_compressed_bytes] = true;
+	}
+
 	PG_RETURN_DATUM(HeapTupleGetDatum(heap_form_tuple(tuple_desc, values, nulls)));
+}
+
+TS_FUNCTION_INFO_V1(tsl_bloom1_hash);
+
+Datum
+tsl_bloom1_hash(PG_FUNCTION_ARGS)
+{
+	Oid type_oid = get_fn_expr_argtype(fcinfo->flinfo, 0);
+	TypeCacheEntry *type_entry = lookup_type_cache(type_oid, TYPECACHE_HASH_EXTENDED_PROC);
+	Ensure(OidIsValid(type_entry->hash_extended_proc), "cannot find postgres hash function");
+	Datum needle = PG_GETARG_DATUM(0);
+	if (type_entry->typlen == -1)
+	{
+		needle = PointerGetDatum(PG_DETOAST_DATUM_PACKED(needle));
+	}
+
+	HashFunction fn = bloom1_get_hash_function(type_oid);
+	Ensure(fn != NULL, "cannot find our hash function");
+	PG_RETURN_UINT64(fn(needle));
 }
