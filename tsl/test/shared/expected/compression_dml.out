@@ -489,14 +489,12 @@ BEGIN;
 :ANALYZE DELETE FROM direct_delete WHERE reading <> 'r2';
 QUERY PLAN
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
-   Batches decompressed: 8
-   Tuples decompressed: 8
+   Batches deleted: 4
    ->  Delete on direct_delete (actual rows=0 loops=1)
          Delete on _hyper_X_X_chunk direct_delete_1
-         ->  Seq Scan on _hyper_X_X_chunk direct_delete_1 (actual rows=4 loops=1)
+         ->  Seq Scan on _hyper_X_X_chunk direct_delete_1 (actual rows=0 loops=1)
                Filter: (reading <> 'r2'::text)
-               Rows Removed by Filter: 4
-(8 rows)
+(6 rows)
 
 -- 4 tuples should still be there
 SELECT count(*) FROM direct_delete;
@@ -569,14 +567,12 @@ BEGIN;
 :ANALYZE DELETE FROM direct_delete WHERE reading NOT IN ('r1');
 QUERY PLAN
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
-   Batches decompressed: 8
-   Tuples decompressed: 8
+   Batches deleted: 4
    ->  Delete on direct_delete (actual rows=0 loops=1)
          Delete on _hyper_X_X_chunk direct_delete_1
-         ->  Seq Scan on _hyper_X_X_chunk direct_delete_1 (actual rows=4 loops=1)
+         ->  Seq Scan on _hyper_X_X_chunk direct_delete_1 (actual rows=0 loops=1)
                Filter: (reading <> 'r1'::text)
-               Rows Removed by Filter: 4
-(8 rows)
+(6 rows)
 
 -- 4 tuples should still be there
 SELECT count(*) FROM direct_delete;
@@ -688,3 +684,235 @@ QUERY PLAN
 
 DROP TRIGGER direct_delete_trigger ON direct_delete;
 DROP TABLE direct_delete;
+-- test DML on metadata columns
+CREATE TABLE compress_dml(time timestamptz NOT NULL, device text, reading text, value float);
+SELECT table_name FROM create_hypertable('compress_dml', 'time');
+  table_name  
+ compress_dml
+(1 row)
+
+ALTER TABLE compress_dml SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby='time DESC, reading');
+INSERT INTO compress_dml VALUES
+('2025-01-01','d1','r1',0.01),
+('2025-01-01','d2','r2',0.01),
+('2025-01-01','d3','r1',0.01),
+('2025-01-01','d3','r2',0.01),
+('2025-01-01','d4','r1',0.01),
+('2025-01-01','d4',NULL,0.01),
+('2025-01-01','d5','r2',0.01),
+('2025-01-01','d5',NULL,0.01),
+('2025-01-01','d6','r1',0.01),
+('2025-01-01','d6','r2',0.01),
+('2025-01-01','d6',NULL,0.01);
+SELECT compress_chunk(show_chunks('compress_dml'));
+              compress_chunk               
+ _timescaledb_internal._hyper_X_X_chunk
+(1 row)
+
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading = 'r1';
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 4
+   Tuples decompressed: 8
+   ->  Delete on compress_dml (actual rows=0 loops=1)
+         Delete on _hyper_X_X_chunk compress_dml_1
+         ->  Seq Scan on _hyper_X_X_chunk compress_dml_1 (actual rows=4 loops=1)
+               Filter: (reading = 'r1'::text)
+               Rows Removed by Filter: 4
+(8 rows)
+
+SELECT * FROM compress_dml t ORDER BY t;
+             time             | device | reading | value 
+------------------------------+--------+---------+-------
+ Wed Jan 01 00:00:00 2025 PST | d2     | r2      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d3     | r2      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d4     |         |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d5     | r2      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d5     |         |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d6     | r2      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d6     |         |  0.01
+(7 rows)
+
+ROLLBACK;
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading <> 'r1';
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches filtered: 2
+   Batches decompressed: 4
+   Tuples decompressed: 8
+   ->  Delete on compress_dml (actual rows=0 loops=1)
+         Delete on _hyper_X_X_chunk compress_dml_1
+         ->  Seq Scan on _hyper_X_X_chunk compress_dml_1 (actual rows=4 loops=1)
+               Filter: (reading <> 'r1'::text)
+               Rows Removed by Filter: 4
+(9 rows)
+
+SELECT * FROM compress_dml t ORDER BY t;
+             time             | device | reading | value 
+------------------------------+--------+---------+-------
+ Wed Jan 01 00:00:00 2025 PST | d1     | r1      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d3     | r1      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d4     | r1      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d4     |         |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d5     |         |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d6     | r1      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d6     |         |  0.01
+(7 rows)
+
+ROLLBACK;
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading IS NULL;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 6
+   Tuples decompressed: 11
+   ->  Delete on compress_dml (actual rows=0 loops=1)
+         Delete on _hyper_X_X_chunk compress_dml_1
+         ->  Seq Scan on _hyper_X_X_chunk compress_dml_1 (actual rows=3 loops=1)
+               Filter: (reading IS NULL)
+               Rows Removed by Filter: 8
+(8 rows)
+
+SELECT * FROM compress_dml t ORDER BY t;
+             time             | device | reading | value 
+------------------------------+--------+---------+-------
+ Wed Jan 01 00:00:00 2025 PST | d1     | r1      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d2     | r2      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d3     | r1      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d3     | r2      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d4     | r1      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d5     | r2      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d6     | r1      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d6     | r2      |  0.01
+(8 rows)
+
+ROLLBACK;
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading IS NOT NULL;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 6
+   Tuples decompressed: 11
+   ->  Delete on compress_dml (actual rows=0 loops=1)
+         Delete on _hyper_X_X_chunk compress_dml_1
+         ->  Seq Scan on _hyper_X_X_chunk compress_dml_1 (actual rows=8 loops=1)
+               Filter: (reading IS NOT NULL)
+               Rows Removed by Filter: 3
+(8 rows)
+
+SELECT * FROM compress_dml t ORDER BY t;
+             time             | device | reading | value 
+------------------------------+--------+---------+-------
+ Wed Jan 01 00:00:00 2025 PST | d4     |         |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d5     |         |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d6     |         |  0.01
+(3 rows)
+
+ROLLBACK;
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading IN ('r2','r3');
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 6
+   Tuples decompressed: 11
+   ->  Delete on compress_dml (actual rows=0 loops=1)
+         Delete on _hyper_X_X_chunk compress_dml_1
+         ->  Seq Scan on _hyper_X_X_chunk compress_dml_1 (actual rows=4 loops=1)
+               Filter: (reading = ANY ('{r2,r3}'::text[]))
+               Rows Removed by Filter: 7
+(8 rows)
+
+SELECT * FROM compress_dml t ORDER BY t;
+             time             | device | reading | value 
+------------------------------+--------+---------+-------
+ Wed Jan 01 00:00:00 2025 PST | d1     | r1      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d3     | r1      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d4     | r1      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d4     |         |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d5     |         |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d6     | r1      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d6     |         |  0.01
+(7 rows)
+
+ROLLBACK;
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading = ANY('{r2,r3}');
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 6
+   Tuples decompressed: 11
+   ->  Delete on compress_dml (actual rows=0 loops=1)
+         Delete on _hyper_X_X_chunk compress_dml_1
+         ->  Seq Scan on _hyper_X_X_chunk compress_dml_1 (actual rows=4 loops=1)
+               Filter: (reading = ANY ('{r2,r3}'::text[]))
+               Rows Removed by Filter: 7
+(8 rows)
+
+SELECT * FROM compress_dml t ORDER BY t;
+             time             | device | reading | value 
+------------------------------+--------+---------+-------
+ Wed Jan 01 00:00:00 2025 PST | d1     | r1      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d3     | r1      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d4     | r1      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d4     |         |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d5     |         |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d6     | r1      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d6     |         |  0.01
+(7 rows)
+
+ROLLBACK;
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading NOT IN ('r2','r3');
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 6
+   Tuples decompressed: 11
+   ->  Delete on compress_dml (actual rows=0 loops=1)
+         Delete on _hyper_X_X_chunk compress_dml_1
+         ->  Seq Scan on _hyper_X_X_chunk compress_dml_1 (actual rows=4 loops=1)
+               Filter: (reading <> ALL ('{r2,r3}'::text[]))
+               Rows Removed by Filter: 7
+(8 rows)
+
+SELECT * FROM compress_dml t ORDER BY t;
+             time             | device | reading | value 
+------------------------------+--------+---------+-------
+ Wed Jan 01 00:00:00 2025 PST | d2     | r2      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d3     | r2      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d4     |         |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d5     | r2      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d5     |         |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d6     | r2      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d6     |         |  0.01
+(7 rows)
+
+ROLLBACK;
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading <> ALL('{r2,r3}');
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 6
+   Tuples decompressed: 11
+   ->  Delete on compress_dml (actual rows=0 loops=1)
+         Delete on _hyper_X_X_chunk compress_dml_1
+         ->  Seq Scan on _hyper_X_X_chunk compress_dml_1 (actual rows=4 loops=1)
+               Filter: (reading <> ALL ('{r2,r3}'::text[]))
+               Rows Removed by Filter: 7
+(8 rows)
+
+SELECT * FROM compress_dml t ORDER BY t;
+             time             | device | reading | value 
+------------------------------+--------+---------+-------
+ Wed Jan 01 00:00:00 2025 PST | d2     | r2      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d3     | r2      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d4     |         |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d5     | r2      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d5     |         |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d6     | r2      |  0.01
+ Wed Jan 01 00:00:00 2025 PST | d6     |         |  0.01
+(7 rows)
+
+ROLLBACK;
+DROP TABLE compress_dml;
