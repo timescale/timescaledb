@@ -22,7 +22,9 @@
 
 #include "sparse_index_bloom1.h"
 
+#ifdef TS_USE_UMASH
 #include "import/umash.h"
+#endif
 
 /*
  * Our filters go down to 64 bits and we want to have 0.1% false positives, hence
@@ -521,6 +523,14 @@ batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
 
 TS_FUNCTION_INFO_V1(ts_bloom1_debug);
 
+/*
+ * We're slightly modifying thi Postgres macro to avoid a warning about signed
+ * vs unsigned comparison.
+ */
+#define TS_VARATT_EXTERNAL_IS_COMPRESSED(toast_pointer) \
+	((int) VARATT_EXTERNAL_GET_EXTSIZE(toast_pointer) < \
+	 (int) ((toast_pointer).va_rawsize - VARHDRSZ))
+
 /* _timescaledb_functions.ts_bloom1_matches(bytea, anyelement) */
 Datum
 ts_bloom1_debug(PG_FUNCTION_ARGS)
@@ -569,7 +579,7 @@ ts_bloom1_debug(PG_FUNCTION_ARGS)
 		struct varatt_external toast_pointer;
 		VARATT_EXTERNAL_GET_POINTER(toast_pointer, toasted);
 
-		if (VARATT_EXTERNAL_IS_COMPRESSED(toast_pointer))
+		if (TS_VARATT_EXTERNAL_IS_COMPRESSED(toast_pointer))
 		{
 			values[out_compressed_bytes] = VARATT_EXTERNAL_GET_EXTSIZE(toast_pointer);
 		}
