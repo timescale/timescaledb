@@ -326,7 +326,7 @@ gp_hash_add_batch(GroupingPolicy *gp, TupleTableSlot *vector_slot)
 			*vector_slot_get_compressed_column_values(vector_slot,
 													  AttrOffsetGetAttrNumber(def->input_offset));
 	}
-  
+
 	/*
 	 * Call the per-batch initialization function of the hashing strategy.
 	 */
