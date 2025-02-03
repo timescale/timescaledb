@@ -34,8 +34,6 @@
  */
 #define BLOOM1_BLOCK_BITS 128
 
-typedef uint64 (*HashFunction)(Datum datum);
-
 typedef struct Bloom1MetadataBuilder
 {
 	BatchMetadataBuilder functions;
@@ -117,7 +115,7 @@ bloom1_hash_16(Datum datum)
 }
 #endif
 
-static HashFunction
+HashFunction
 bloom1_get_hash_function(Oid type)
 {
 #ifdef TS_USE_UMASH
@@ -329,8 +327,9 @@ bloom1_update_val(void *builder_, Datum needle)
 	const uint32 num_bits = bloom1_num_bits(builder->bloom_bytea);
 
 	/*
-	 * This is a little clunky but I had to switch to another buffer type already,
-	 * so it's worth keeping for now.
+	 * This is a little clunky but I had to switch to another buffer type
+	 * already, so it's worth keeping it generic with respect to the word size
+	 * for now.
 	 */
 	const uint32 num_word_bits = sizeof(*words_buf) * 8;
 	Assert(num_bits % num_word_bits == 0);
@@ -368,7 +367,11 @@ bloom1_update_val(void *builder_, Datum needle)
 
 TS_FUNCTION_INFO_V1(tsl_bloom1_matches);
 
-/* _timescaledb_functions.ts_bloom1_matches(bytea, anyelement) */
+/*
+ * Checks whether the given element can be present in the given bloom filter.
+ * This is what we use in predicate pushdown. The SQL signature is:
+ * _timescaledb_functions.ts_bloom1_matches(bytea, anyelement)
+ */
 Datum
 tsl_bloom1_matches(PG_FUNCTION_ARGS)
 {
@@ -402,6 +405,9 @@ tsl_bloom1_matches(PG_FUNCTION_ARGS)
 		 */
 		needle = PointerGetDatum(PG_DETOAST_DATUM_PACKED(needle));
 	}
+
+	//// The old alternative construction with two PG filters similar to the
+	//// BRIN opclass.
 	//	const uint64 datum_hash_1 =
 	// DatumGetUInt64(OidFunctionCall2Coll(type_entry->hash_extended_proc,
 	// C_COLLATION_OID, 																	needle,
@@ -410,6 +416,7 @@ tsl_bloom1_matches(PG_FUNCTION_ARGS)
 	// DatumGetUInt64(OidFunctionCall2Coll(type_entry->hash_extended_proc,
 	// C_COLLATION_OID, 																	needle,
 	//																	BLOOM_SEED_2));
+
 	HashFunction fn = bloom1_get_hash_function(type_oid);
 	const uint64 datum_hash_1 = fn(needle);
 

@@ -8,3 +8,7 @@
 #include "postgres.h"
 
 Datum tsl_bloom1_matches(PG_FUNCTION_ARGS);
+
+typedef uint64 (*HashFunction)(Datum datum);
+
+HashFunction bloom1_get_hash_function(Oid type);

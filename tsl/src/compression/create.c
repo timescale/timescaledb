@@ -293,8 +293,19 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 			TypeCacheEntry *type =
 				lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR | TYPECACHE_HASH_EXTENDED_PROC);
 
-			bool can_use_bloom = OidIsValid(type->hash_extended_proc);
+			/*
+			 * We can have various unusual user-defined types which do not
+			 * support comparison or hashing. The sparse indexes for the
+			 * non-orderby columns are not required for correctness, so just
+			 * don't create the sparse index if we lack the suitable operators.
+			 */
 			bool can_use_minmax = OidIsValid(type->lt_opr);
+
+			/*
+			 * For bloom1 indexes we currently use our custom hash functions
+			 * which have better characteristics.
+			 */
+			bool can_use_bloom1 = bloom1_get_hash_function(attr->atttypid) != NULL;
 
 			if (attr->atttypid == TIMESTAMPTZOID || attr->atttypid == TIMESTAMPOID ||
 				attr->atttypid == TIMEOID || attr->atttypid == TIMETZOID ||
@@ -307,10 +318,10 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 				 *    correlates with the update time that is used as orderby.
 				 * So bloom filters probably don't make sense.
 				 */
-				can_use_bloom = false;
+				can_use_bloom1 = false;
 			}
 
-			if (can_use_bloom)
+			if (can_use_bloom1)
 			{
 				/*
 				 * Add bloom filter metadata for columns that are not a part of
@@ -335,7 +346,8 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 			{
 				/*
 				 * Here we create minmax metadata for the columns for which
-				 * we have btree indexes. Not sure it is technically possible
+				 * we have btree indexes and the bloom sparse index is not
+				 * suitable.
 				 * to have a btree index for a column and at the same time
 				 * not have a "less" operator for it. Still, we can have
 				 * various unusual user-defined types, and the minmax metadata
