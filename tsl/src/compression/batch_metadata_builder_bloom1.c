@@ -12,6 +12,8 @@
 #include <utils/builtins.h>
 #include <utils/typcache.h>
 
+#include <math.h>
+
 #include "compression.h"
 
 #include "batch_metadata_builder.h"
