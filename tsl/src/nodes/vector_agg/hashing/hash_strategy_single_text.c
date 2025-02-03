@@ -129,8 +129,7 @@ single_text_emit_key(GroupingPolicyHash *policy, uint32 current_key,
 }
 
 static void
-single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy,
-										  DecompressBatchState *batch_state)
+single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTableSlot *vector_slot)
 {
 }
 
