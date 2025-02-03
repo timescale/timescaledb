@@ -524,11 +524,11 @@ batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
 TS_FUNCTION_INFO_V1(ts_bloom1_debug);
 
 /*
- * We're slightly modifying thi Postgres macro to avoid a warning about signed
+ * We're slightly modifying this Postgres macro to avoid a warning about signed
  * vs unsigned comparison.
  */
-#define TS_VARATT_EXTERNAL_IS_COMPRESSED(toast_pointer) \
-	((int) VARATT_EXTERNAL_GET_EXTSIZE(toast_pointer) < \
+#define TS_VARATT_EXTERNAL_IS_COMPRESSED(toast_pointer)                                            \
+	((int) VARATT_EXTERNAL_GET_EXTSIZE(toast_pointer) <                                            \
 	 (int) ((toast_pointer).va_rawsize - VARHDRSZ))
 
 /* _timescaledb_functions.ts_bloom1_matches(bytea, anyelement) */
