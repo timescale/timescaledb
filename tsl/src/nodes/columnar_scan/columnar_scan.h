@@ -20,6 +20,7 @@ typedef struct ColumnarScanPath
 extern ColumnarScanPath *columnar_scan_path_create(PlannerInfo *root, RelOptInfo *rel,
 												   Relids required_outer, int parallel_workers);
 extern void columnar_scan_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht);
+extern bool is_columnar_scan(const CustomScan *scan);
 extern void _columnar_scan_init(void);
 
 #endif /* TIMESCALEDB_COLUMNAR_SCAN_H */

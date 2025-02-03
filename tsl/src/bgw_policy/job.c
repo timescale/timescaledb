@@ -19,6 +19,7 @@
 #include <parser/parser.h>
 #include <tcop/pquery.h>
 #include <utils/builtins.h>
+#include <utils/guc.h>
 #include <utils/lsyscache.h>
 #include <utils/portal.h>
 #include <utils/snapmgr.h>
@@ -51,6 +52,7 @@
 #include "dimension_slice.h"
 #include "dimension_vector.h"
 #include "errors.h"
+#include "guc.h"
 #include "job.h"
 #include "reorder.h"
 #include "utils.h"
@@ -372,12 +374,35 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 {
 	PolicyContinuousAggData policy_data;
 
+	StringInfo str = makeStringInfo();
+	JsonbToCStringIndent(str, &config->root, VARSIZE(config));
+
 	policy_refresh_cagg_read_and_validate_config(config, &policy_data);
+
+	bool enable_osm_reads_old = ts_guc_enable_osm_reads;
+
+	if (!policy_data.include_tiered_data_isnull)
+	{
+		SetConfigOption("timescaledb.enable_tiered_reads",
+						policy_data.include_tiered_data ? "on" : "off",
+						PGC_USERSET,
+						PGC_S_SESSION);
+	}
+
 	continuous_agg_refresh_internal(policy_data.cagg,
 									&policy_data.refresh_window,
 									CAGG_REFRESH_POLICY,
 									policy_data.start_is_null,
-									policy_data.end_is_null);
+									policy_data.end_is_null,
+									false);
+
+	if (!policy_data.include_tiered_data_isnull)
+	{
+		SetConfigOption("timescaledb.enable_tiered_reads",
+						enable_osm_reads_old ? "on" : "off",
+						PGC_USERSET,
+						PGC_S_SESSION);
+	}
 
 	return true;
 }
@@ -391,6 +416,7 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 	Oid dim_type;
 	int64 refresh_start, refresh_end;
 	bool start_isnull, end_isnull;
+	bool include_tiered_data, include_tiered_data_isnull;
 
 	materialization_id = policy_continuous_aggregate_get_mat_hypertable_id(config);
 	mat_ht = ts_hypertable_get_by_id(materialization_id);
@@ -417,6 +443,9 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 						   ts_internal_to_time_string(refresh_end, dim_type)),
 				 errhint("The start of the window must be before the end.")));
 
+	include_tiered_data =
+		policy_refresh_cagg_get_include_tiered_data(config, &include_tiered_data_isnull);
+
 	if (policy_data)
 	{
 		policy_data->refresh_window.type = dim_type;
@@ -425,6 +454,8 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 		policy_data->cagg = cagg;
 		policy_data->start_is_null = start_isnull;
 		policy_data->end_is_null = end_isnull;
+		policy_data->include_tiered_data = include_tiered_data;
+		policy_data->include_tiered_data_isnull = include_tiered_data_isnull;
 	}
 }
 

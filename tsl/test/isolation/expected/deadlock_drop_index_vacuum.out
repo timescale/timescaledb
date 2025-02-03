@@ -1,0 +1,24 @@
+Parsed test spec with 4 sessions
+
+starting permutation: S1_lock S3_vacuum S2_lock S1_commit S4_drop_index S2_commit
+step S1_lock: 
+    LOCK TABLE _timescaledb_internal.metrics_chunk_2 IN ACCESS EXCLUSIVE MODE;
+
+step S3_vacuum: 
+    VACUUM ANALYZE _timescaledb_internal.metrics_chunk_2;
+ <waiting ...>
+step S2_lock: 
+    LOCK TABLE _timescaledb_internal.metrics_chunk_2 IN ACCESS EXCLUSIVE MODE;
+ <waiting ...>
+step S1_commit: 
+    COMMIT;
+
+step S2_lock: <... completed>
+step S4_drop_index: 
+    DROP INDEX metrics_device_time_idx;
+ <waiting ...>
+step S2_commit: 
+    COMMIT;
+
+step S3_vacuum: <... completed>
+step S4_drop_index: <... completed>

@@ -27,12 +27,14 @@ set(TEST_FILES
     compression_defaults.sql
     compression_fks.sql
     compression_insert.sql
+    compression_indexcreate.sql
     compression_policy.sql
     compression_qualpushdown.sql
     compression_sequence_num_removal.sql
     compression_settings.sql
     compression_sorted_merge_columns.sql
     compression_sorted_merge_distinct.sql
+    compression_trigger.sql
     decompress_index.sql
     foreign_keys.sql
     move.sql
@@ -144,6 +146,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
   list(
     APPEND
     TEST_FILES
+    merge_chunks.sql
     cagg_refresh_using_merge.sql
     compress_sort_transform.sql
     hypercore_columnar.sql

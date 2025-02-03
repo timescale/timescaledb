@@ -860,7 +860,6 @@ validate_hypertable_for_compression(Hypertable *ht)
 				 "cannot compress tables with reserved column prefix '%s'",
 				 COMPRESSION_COLUMN_METADATA_PREFIX);
 	}
-	table_close(rel, AccessShareLock);
 
 	if (row_size > MaxHeapTupleSize)
 	{
@@ -871,6 +870,47 @@ validate_hypertable_for_compression(Hypertable *ht)
 						   row_size,
 						   MaxHeapTupleSize)));
 	}
+
+	/*
+	 * Check that all triggers are ok for compressed tables.
+	 */
+	Relation pg_trigger = table_open(TriggerRelationId, AccessShareLock);
+	HeapTuple tuple;
+
+	ScanKeyData key;
+	ScanKeyInit(&key,
+				Anum_pg_trigger_tgrelid,
+				BTEqualStrategyNumber,
+				F_OIDEQ,
+				ObjectIdGetDatum(ht->main_table_relid));
+
+	SysScanDesc scan = systable_beginscan(pg_trigger, TriggerRelidNameIndexId, true, NULL, 1, &key);
+
+	while (HeapTupleIsValid(tuple = systable_getnext(scan)))
+	{
+		bool oldtable_isnull;
+		Form_pg_trigger trigrec = (Form_pg_trigger) GETSTRUCT(tuple);
+
+		/*
+		 * We currently cannot support transition tables for DELETE triggers
+		 * on compressed tables that are not using hypercore table access
+		 * method since deleting a complete segment will not build a
+		 * transition table for the delete.
+		 */
+		fastgetattr(tuple, Anum_pg_trigger_tgoldtable, pg_trigger->rd_att, &oldtable_isnull);
+		if (!oldtable_isnull && !TRIGGER_FOR_ROW(trigrec->tgtype) &&
+			TRIGGER_FOR_DELETE(trigrec->tgtype) && !ts_is_hypercore_am(ht->amoid))
+			ereport(ERROR,
+					errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					errmsg("DELETE triggers with transition tables not supported"),
+					errdetail(
+						"Compressed hypertables not using \"hypercore\" access method are not "
+						"supported if the trigger use transition tables."));
+	}
+
+	systable_endscan(scan);
+	table_close(pg_trigger, AccessShareLock);
+	table_close(rel, AccessShareLock);
 }
 
 /*

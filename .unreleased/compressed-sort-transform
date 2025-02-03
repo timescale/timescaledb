@@ -1,1 +1,0 @@
-Implements: #7528 Transform sorting on `time_bucket` to sorting on time for compressed chunks in some cases.
