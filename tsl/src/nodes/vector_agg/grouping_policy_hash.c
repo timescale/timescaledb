@@ -398,7 +398,8 @@ gp_hash_add_batch(GroupingPolicy *gp, TupleTableSlot *vector_slot)
 
 			add_one_range(policy, vector_slot, start_row, end_row);
 		}
-		policy->stat_bulk_filtered_rows += batch_state->total_batch_rows - statistics_range_row;
+
+		policy->stat_bulk_filtered_rows += n - statistics_range_row;
 	}
 
 	policy->stat_input_total_rows += n;
