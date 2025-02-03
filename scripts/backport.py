@@ -409,6 +409,7 @@ def report_backport_not_done(original_pr, reason, details=None):
 # Set git name and email corresponding to the token user.
 token_user = github.get_user()
 os.environ["GIT_COMMITTER_NAME"] = token_user.name
+os.environ["GIT_AUTHOR_NAME"] = token_user.name
 
 # This is an email that is used by Github when you opt to hide your real email
 # address. It is required so that the commits are recognized by Github as made
@@ -417,6 +418,8 @@ os.environ["GIT_COMMITTER_NAME"] = token_user.name
 os.environ["GIT_COMMITTER_EMAIL"] = (
     f"{token_user.id}+{token_user.login}@users.noreply.github.com"
 )
+os.environ["GIT_AUTHOR_EMAIL"] = os.environ["GIT_COMMITTER_EMAIL"]
+
 print(
     f"Will commit as {os.environ['GIT_COMMITTER_NAME']} <{os.environ['GIT_COMMITTER_EMAIL']}>"
 )
