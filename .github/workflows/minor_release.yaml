@@ -1,4 +1,4 @@
-name: Minor release
+name: Minor Release - Feature Freeze
 on:
   workflow_dispatch:
 
@@ -7,8 +7,8 @@ permissions:
   contents: write
 
 jobs:
-  minor-release:
-    name: Minor release
+  minor-release-feature-freeze:
+    name: Minor Release - Feature Freeze
     runs-on: ubuntu-latest
 
     steps:
