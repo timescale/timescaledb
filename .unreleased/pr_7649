@@ -1,0 +1,1 @@
+Fixes: #7649 Allow non-btree operator pushdown in UPDATE/DELETE queries on compressed chunks
