@@ -89,7 +89,7 @@ hashing_params()
 	static struct umash_params params = { 0 };
 	if (params.poly[0][0] == 0)
 	{
-		umash_params_derive(&params, 0x12345abcdef67890ull, NULL);
+		umash_params_derive(&params, 0x12345abcdef67890ULL, NULL);
 		Assert(params.poly[0][0] != 0);
 	}
 
