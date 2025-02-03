@@ -104,6 +104,7 @@ gp_hash_reset(GroupingPolicy *obj)
 
 	policy->stat_input_valid_rows = 0;
 	policy->stat_input_total_rows = 0;
+	policy->stat_bulk_filtered_rows = 0;
 	policy->stat_consecutive_keys = 0;
 }
 
@@ -325,16 +326,81 @@ gp_hash_add_batch(GroupingPolicy *gp, TupleTableSlot *vector_slot)
 			*vector_slot_get_compressed_column_values(vector_slot,
 													  AttrOffsetGetAttrNumber(def->input_offset));
 	}
+
 	/*
 	 * Call the per-batch initialization function of the hashing strategy.
 	 */
-
 	policy->hashing.prepare_for_batch(policy, vector_slot);
 
 	/*
 	 * Add the batch rows to aggregate function states.
 	 */
-	add_one_range(policy, vector_slot, 0, n);
+	if (filter == NULL)
+	{
+		/*
+		 * We don't have a filter on this batch, so aggregate it entirely in one
+		 * go.
+		 */
+		add_one_range(policy, vector_slot, 0, n);
+	}
+	else
+	{
+		/*
+		 * If we have a filter, skip the rows for which the entire words of the
+		 * filter bitmap are zero. This improves performance for highly
+		 * selective filters.
+		 */
+		int statistics_range_row = 0;
+		int start_word = 0;
+		int end_word = 0;
+		int past_the_end_word = (n - 1) / 64 + 1;
+		for (;;)
+		{
+			/*
+			 * Skip the bitmap words which are zero.
+			 */
+			for (start_word = end_word; start_word < past_the_end_word && filter[start_word] == 0;
+				 start_word++)
+				;
+
+			if (start_word >= past_the_end_word)
+			{
+				break;
+			}
+
+			/*
+			 * Collect the consecutive bitmap words which are nonzero.
+			 */
+			for (end_word = start_word + 1; end_word < past_the_end_word && filter[end_word] != 0;
+				 end_word++)
+				;
+
+			/*
+			 * Now we have the [start, end] range of bitmap words that are
+			 * nonzero.
+			 *
+			 * Determine starting and ending rows, also skipping the starting
+			 * and trailing zero bits at the ends of the range.
+			 */
+			const int start_row = start_word * 64 + pg_rightmost_one_pos64(filter[start_word]);
+			Assert(start_row <= n);
+
+			/*
+			 * The bits for past-the-end rows must be set to zero, so this
+			 * calculation should yield no more than n.
+			 */
+			Assert(end_word > start_word);
+			const int end_row =
+				(end_word - 1) * 64 + pg_leftmost_one_pos64(filter[end_word - 1]) + 1;
+			Assert(end_row <= n);
+
+			statistics_range_row += end_row - start_row;
+
+			add_one_range(policy, vector_slot, start_row, end_row);
+		}
+
+		policy->stat_bulk_filtered_rows += n - statistics_range_row;
+	}
 
 	policy->stat_input_total_rows += n;
 	policy->stat_input_valid_rows += arrow_num_valid(filter, n);
@@ -381,7 +447,7 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 					  "%f ratio, %ld curctx bytes, %ld aggstate bytes",
 					  policy->stat_input_total_rows,
 					  policy->stat_input_valid_rows,
-					  0UL,
+					  policy->stat_bulk_filtered_rows,
 					  policy->stat_consecutive_keys,
 					  keys,
 					  policy->stat_input_valid_rows / keys,
