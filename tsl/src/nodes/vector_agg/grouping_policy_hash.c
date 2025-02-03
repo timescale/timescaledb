@@ -11,13 +11,15 @@
 
 #include <postgres.h>
 
+#include <access/attnum.h>
+#include <access/tupdesc.h>
 #include <executor/tuptable.h>
 #include <nodes/pg_list.h>
 
 #include "grouping_policy.h"
 
-#include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
+#include "nodes/vector_agg/vector_slot.h"
 
 #include "grouping_policy_hash.h"
 
@@ -116,16 +118,17 @@ gp_hash_reset(GroupingPolicy *obj)
 }
 
 static void
-compute_single_aggregate(GroupingPolicyHash *policy, const DecompressBatchState *batch_state,
-						 int start_row, int end_row, const VectorAggDef *agg_def, void *agg_states)
+compute_single_aggregate(GroupingPolicyHash *policy, TupleTableSlot *vector_slot, int start_row,
+						 int end_row, const VectorAggDef *agg_def, void *agg_states)
 {
 	const ArrowArray *arg_arrow = NULL;
 	const uint64 *arg_validity_bitmap = NULL;
 	Datum arg_datum = 0;
 	bool arg_isnull = true;
-
+	uint16 total_batch_rows = 0;
 	const uint32 *offsets = policy->key_index_for_row;
 	MemoryContext agg_extra_mctx = policy->agg_extra_mctx;
+	const uint64 *vector_qual_result = vector_slot_get_qual_result(vector_slot, &total_batch_rows);
 
 	/*
 	 * We have functions with one argument, and one function with no arguments
@@ -133,8 +136,10 @@ compute_single_aggregate(GroupingPolicyHash *policy, const DecompressBatchState 
 	 */
 	if (agg_def->input_offset >= 0)
 	{
+		const AttrNumber attnum = AttrOffsetGetAttrNumber(agg_def->input_offset);
 		const CompressedColumnValues *values =
-			&batch_state->compressed_columns[agg_def->input_offset];
+			vector_slot_get_compressed_column_values(vector_slot, attnum);
+
 		Assert(values->decompression_type != DT_Invalid);
 		Assert(values->decompression_type != DT_Iterator);
 
@@ -154,11 +159,11 @@ compute_single_aggregate(GroupingPolicyHash *policy, const DecompressBatchState 
 	/*
 	 * Compute the unified validity bitmap.
 	 */
-	const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
+	const size_t num_words = (total_batch_rows + 63) / 64;
 	const uint64 *filter = arrow_combine_validity(num_words,
 												  policy->tmp_filter,
 												  agg_def->filter_result,
-												  batch_state->vector_qual_result,
+												  vector_qual_result,
 												  arg_validity_bitmap);
 
 	/*
@@ -209,13 +214,11 @@ compute_single_aggregate(GroupingPolicyHash *policy, const DecompressBatchState 
 }
 
 static void
-add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, const int start_row,
+add_one_range(GroupingPolicyHash *policy, TupleTableSlot *vector_slot, const int start_row,
 			  const int end_row)
 {
 	const int num_fns = policy->num_agg_defs;
-
 	Assert(start_row < end_row);
-	Assert(end_row <= batch_state->total_batch_rows);
 
 	/*
 	 * Remember which aggregation states have already existed, and which we
@@ -228,7 +231,7 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 	 * Match rows to aggregation states using a hash table.
 	 */
 	Assert((size_t) end_row <= policy->num_key_index_for_row);
-	policy->hashing.fill_offsets(policy, batch_state, start_row, end_row);
+	policy->hashing.fill_offsets(policy, vector_slot, start_row, end_row);
 
 	/*
 	 * Process the aggregate function states. We are processing single aggregate
@@ -266,7 +269,7 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 		 * Add this batch to the states of this aggregate function.
 		 */
 		compute_single_aggregate(policy,
-								 batch_state,
+								 vector_slot,
 								 start_row,
 								 end_row,
 								 agg_def,
@@ -285,13 +288,13 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 }
 
 static void
-gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
+gp_hash_add_batch(GroupingPolicy *gp, TupleTableSlot *vector_slot)
 {
 	GroupingPolicyHash *policy = (GroupingPolicyHash *) gp;
+	uint16 n;
+	const uint64 *restrict filter = vector_slot_get_qual_result(vector_slot, &n);
 
 	Assert(!policy->returning_results);
-
-	const int n = batch_state->total_batch_rows;
 
 	/*
 	 * Initialize the array for storing the aggregate state offsets corresponding
@@ -327,24 +330,24 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 	for (int i = 0; i < policy->num_grouping_columns; i++)
 	{
 		const GroupingColumn *def = &policy->grouping_columns[i];
-		const CompressedColumnValues *values = &batch_state->compressed_columns[def->input_offset];
-		policy->current_batch_grouping_column_values[i] = *values;
-	}
 
+		policy->current_batch_grouping_column_values[i] =
+			*vector_slot_get_compressed_column_values(vector_slot,
+													  AttrOffsetGetAttrNumber(def->input_offset));
+	}
 	/*
 	 * Call the per-batch initialization function of the hashing strategy.
 	 */
 
-	policy->hashing.prepare_for_batch(policy, batch_state);
+	policy->hashing.prepare_for_batch(policy, vector_slot);
 
 	/*
 	 * Add the batch rows to aggregate function states.
 	 */
-	const uint64 *restrict filter = batch_state->vector_qual_result;
-	add_one_range(policy, batch_state, 0, n);
+	add_one_range(policy, vector_slot, 0, n);
 
-	policy->stat_input_total_rows += batch_state->total_batch_rows;
-	policy->stat_input_valid_rows += arrow_num_valid(filter, batch_state->total_batch_rows);
+	policy->stat_input_total_rows += n;
+	policy->stat_input_valid_rows += arrow_num_valid(filter, n);
 }
 
 static bool

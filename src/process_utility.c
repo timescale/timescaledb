@@ -4859,6 +4859,7 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 			handler = preprocess_execute;
 			break;
 		case T_ExplainStmt:
+			check_read_only = false;
 			handler = process_explain_start;
 			break;
 

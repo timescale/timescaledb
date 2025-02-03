@@ -28,6 +28,13 @@ class SQLVisitor(Visitor):
         ]
         super().__init__()
 
+    def error(self, msg, hint=None):
+        self.errors += 1
+        print(msg)
+        if hint:
+            print(hint)
+        print()
+
     # ALTER TABLE _timescaledb_catalog.<tablename> ADD/DROP COLUMN
     def visit_AlterTableStmt(self, ancestors, node):  # pylint: disable=unused-argument
         if (
@@ -41,17 +48,17 @@ class SQLVisitor(Visitor):
                     enums.AlterTableType.AT_AddColumn,
                     enums.AlterTableType.AT_DropColumn,
                 ):
-                    self.errors += 1
                     if cmd.subtype == enums.AlterTableType.AT_AddColumn:
+                        subcmd = "ADD"
                         column = cmd.def_.colname
-                        print(
-                            f"ERROR: Attempting to ADD COLUMN {column} to catalog table {schema}.{table}"
-                        )
                     else:
+                        subcmd = "DROP"
                         column = cmd.name
-                        print(
-                            f"ERROR: Attempting to DROP COLUMN {column} from catalog table {schema}.{table}"
-                        )
+
+                    self.error(
+                        f"Attempting to {subcmd} COLUMN {column} to catalog table {schema}.{table}",
+                        "Tables need to be rebuilt in update script to ensure consistent attribute numbers",
+                    )
 
     # ALTER TABLE _timescaledb_catalog.<tablename> RENAME TO
     def visit_RenameStmt(self, ancestors, node):  # pylint: disable=unused-argument
@@ -59,28 +66,27 @@ class SQLVisitor(Visitor):
             node.renameType == enums.ObjectType.OBJECT_TABLE
             and node.relation.schemaname in self.catalog_schemata
         ):
-            self.errors += 1
-            print(
-                f"ERROR: Attempting to RENAME catalog table {node.relation.schemaname}.{node.relation.relname}"
+            self.error(
+                f"Attempting to RENAME catalog table {node.relation.schemaname}.{node.relation.relname}",
+                "Catalog tables should be rebuilt in update scripts to ensure consistent naming for dependent objects",
             )
 
     # CREATE TEMP | TEMPORARY TABLE ..
     # CREATE TABLE IF NOT EXISTS ..
     def visit_CreateStmt(self, ancestors, node):  # pylint: disable=unused-argument
         if node.relation.relpersistence == "t":
-            self.errors += 1
             schema = (
                 node.relation.schemaname + "."
                 if node.relation.schemaname is not None
                 else ""
             )
-            print(
-                f"ERROR: Attempting to CREATE TEMPORARY TABLE {schema}{node.relation.relname}"
+            self.error(
+                f"Attempting to CREATE TEMPORARY TABLE {schema}{node.relation.relname}"
+                "Creating temporary tables is blocked in pg_extwlist context"
             )
         if node.if_not_exists:
-            self.errors += 1
-            print(
-                f"ERROR: Attempting to CREATE TABLE IF NOT EXISTS {node.relation.relname}"
+            self.error(
+                f"Attempting to CREATE TABLE IF NOT EXISTS {node.relation.relname}"
             )
 
         # We have to be careful with the column types we use in our catalog to only allow types
@@ -94,9 +100,8 @@ class SQLVisitor(Visitor):
                             "bool",
                             "text",
                         ]:
-                            self.errors += 1
-                            print(
-                                f"ERROR: Attempting to CREATE TABLE {node.relation.relname} with blocked array type {coldef.typeName.names[-1].sval}"
+                            self.error(
+                                f"Attempting to CREATE TABLE {node.relation.relname} with blocked array type {coldef.typeName.names[-1].sval}"
                             )
                     else:
                         if coldef.typeName.names[-1].sval not in [
@@ -114,9 +119,8 @@ class SQLVisitor(Visitor):
                             "text",
                             "timestamptz",
                         ]:
-                            self.errors += 1
-                            print(
-                                f"ERROR: Attempting to CREATE TABLE {node.relation.relname} with blocked type {coldef.typeName.names[-1].sval}"
+                            self.error(
+                                f"Attempting to CREATE TABLE {node.relation.relname} with blocked type {coldef.typeName.names[-1].sval}"
                             )
 
     # CREATE SCHEMA IF NOT EXISTS ..
@@ -124,17 +128,15 @@ class SQLVisitor(Visitor):
         self, ancestors, node
     ):  # pylint: disable=unused-argument
         if node.if_not_exists:
-            self.errors += 1
-            print(f"ERROR: Attempting to CREATE SCHEMA IF NOT EXISTS {node.schemaname}")
+            self.error(f"Attempting to CREATE SCHEMA IF NOT EXISTS {node.schemaname}")
 
     # CREATE MATERIALIZED VIEW IF NOT EXISTS ..
     def visit_CreateTableAsStmt(
         self, ancestors, node
     ):  # pylint: disable=unused-argument
         if node.if_not_exists:
-            self.errors += 1
-            print(
-                f"ERROR: Attempting to CREATE MATERIALIZED VIEW IF NOT EXISTS {node.into.rel.relname}"
+            self.error(
+                f"Attempting to CREATE MATERIALIZED VIEW IF NOT EXISTS {node.into.rel.relname}"
             )
 
     # CREATE FOREIGN TABLE IF NOT EXISTS ..
@@ -142,16 +144,14 @@ class SQLVisitor(Visitor):
         self, ancestors, node
     ):  # pylint: disable=unused-argument
         if node.base.if_not_exists:
-            self.errors += 1
-            print(
-                f"ERROR: Attempting to CREATE FOREIGN TABLE IF NOT EXISTS {node.base.relation.relname}"
+            self.error(
+                f"Attempting to CREATE FOREIGN TABLE IF NOT EXISTS {node.base.relation.relname}"
             )
 
     # CREATE INDEX IF NOT EXISTS ..
     def visit_IndexStmt(self, ancestors, node):  # pylint: disable=unused-argument
         if node.if_not_exists:
-            self.errors += 1
-            print(f"ERROR: Attempting to CREATE INDEX IF NOT EXISTS {node.idxname}")
+            self.error(f"Attempting to CREATE INDEX IF NOT EXISTS {node.idxname}")
 
     # CREATE FUNCTION / PROCEDURE _timescaledb_internal...
     def visit_CreateFunctionStmt(
@@ -170,17 +170,17 @@ class SQLVisitor(Visitor):
                 and node.returnType.names[0].sval
                 not in ["table_am_handler", "index_am_handler"]
             ):
-                self.errors += 1
                 functype = "procedure" if node.is_procedure else "function"
-                print(
-                    f"ERROR: Attempting to create {functype} {node.funcname[1].sval} with language 'c'"
+                self.error(
+                    f"Attempting to create {functype} {node.funcname[-1].sval} with language 'c'",
+                    "latest-dev should link C functions to ts_update_placeholder",
                 )
 
         if len(node.funcname) == 2 and node.funcname[0].sval == "_timescaledb_internal":
-            self.errors += 1
             functype = "procedure" if node.is_procedure else "function"
-            print(
-                f"ERROR: Attempting to create {functype} {node.funcname[1].sval} in the internal schema"
+            self.error(
+                f"Attempting to create {functype} {node.funcname[1].sval} in the internal schema",
+                "_timescaledb_functions should be used as schema for internal functions",
             )
 
 

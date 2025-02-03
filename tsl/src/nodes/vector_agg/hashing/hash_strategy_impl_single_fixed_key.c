@@ -17,7 +17,7 @@ FUNCTION_NAME(key_hashing_init)(HashingStrategy *hashing)
 
 static void
 FUNCTION_NAME(key_hashing_prepare_for_batch)(GroupingPolicyHash *policy,
-											 DecompressBatchState *batch_state)
+											 TupleTableSlot *vector_slot)
 {
 }
 
