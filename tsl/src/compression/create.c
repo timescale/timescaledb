@@ -322,9 +322,10 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 								  BYTEAOID,
 								  /* typmod = */ -1,
 								  /* collation = */ 0);
+
 				/*
 				 * We have our internal compression for bloom filters, and the
-				 * result is almost uncompressible with lz4 (~2%), so disable it.
+				 * result is almost incompressible with lz4 (~2%), so disable it.
 				 */
 				bloom_column_def->storage = TYPSTORAGE_EXTERNAL;
 
