@@ -5,6 +5,8 @@
 -- Test that the compressed batch sorted merge plan is chosen based on the
 -- cardinality of the segmentby columns.
 
+set max_parallel_workers_per_gather = 0;
+
 -- helper function: float -> pseudorandom float [0..1].
 create or replace function mix(x float4) returns float4 as $$ select ((hashfloat4(x) / (pow(2., 31) - 1) + 1) / 2)::float4 $$ language sql;
 
@@ -52,3 +54,5 @@ select least(4194304, max_val::bigint) large_work_mem from pg_settings where nam
 set work_mem to :large_work_mem;
 explain (costs off) select * from t where high_card < 10 order by ts;
 reset work_mem;
+
+reset max_parallel_workers_per_gather;
