@@ -367,8 +367,6 @@ bloom1_update_val(void *builder_, Datum needle)
 	//	memcpy(dest, &tmp, sizeof(tmp));
 }
 
-TS_FUNCTION_INFO_V1(tsl_bloom1_matches);
-
 /*
  * Checks whether the given element can be present in the given bloom filter.
  * This is what we use in predicate pushdown. The SQL signature is:
@@ -521,11 +519,11 @@ batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
 	return &builder->functions;
 }
 
-TS_FUNCTION_INFO_V1(tsl_bloom1_debug);
+TS_FUNCTION_INFO_V1(ts_bloom1_debug);
 
 /* _timescaledb_functions.ts_bloom1_matches(bytea, anyelement) */
 Datum
-tsl_bloom1_debug(PG_FUNCTION_ARGS)
+ts_bloom1_debug(PG_FUNCTION_ARGS)
 {
 	/* Build a tuple descriptor for our result type */
 	TupleDesc tuple_desc;
@@ -592,10 +590,10 @@ tsl_bloom1_debug(PG_FUNCTION_ARGS)
 	PG_RETURN_DATUM(HeapTupleGetDatum(heap_form_tuple(tuple_desc, values, nulls)));
 }
 
-TS_FUNCTION_INFO_V1(tsl_bloom1_hash);
+TS_FUNCTION_INFO_V1(ts_bloom1_hash);
 
 Datum
-tsl_bloom1_hash(PG_FUNCTION_ARGS)
+ts_bloom1_hash(PG_FUNCTION_ARGS)
 {
 	Oid type_oid = get_fn_expr_argtype(fcinfo->flinfo, 0);
 	TypeCacheEntry *type_entry = lookup_type_cache(type_oid, TYPECACHE_HASH_EXTENDED_PROC);
