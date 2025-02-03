@@ -4,13 +4,23 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
-create table bloom(ts int, value text);
-select create_hypertable('bloom', 'ts');
-insert into bloom select x, md5(x::text) from generate_series(1, 10000) x;
+create table bloom(x int, value text, u uuid, ts timestamp);
+select create_hypertable('bloom', 'x');
+
+insert into bloom
+select x, md5(x::text),
+    case when x = 7134 then '90ec9e8e-4501-4232-9d03-6d7cf6132815'
+        else '6c1d0998-05f3-452c-abd3-45afe72bbcab'::uuid end,
+    '2021-01-01'::timestamp + (interval '1 hour') * x
+from generate_series(1, 10000) x;
+
 create index on bloom using brin(value text_bloom_ops);
+create index on bloom using brin(u uuid_bloom_ops);
+create index on bloom using brin(ts timestamp_minmax_ops);
+
 alter table bloom set (timescaledb.compress,
     timescaledb.compress_segmentby = '',
-    timescaledb.compress_orderby = 'ts');
+    timescaledb.compress_orderby = 'x');
 select count(compress_chunk(x)) from show_chunks('bloom') x;
 
 select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
@@ -66,7 +76,7 @@ select count(*) from bloom where value =
 
 -- Stable expression on minmax index
 explain (analyze, verbose, costs off, timing off, summary off)
-select count(*) from bloom where ts <
+select count(*) from bloom where x <
     case when now() < '1970-01-01' then 1 else 1000 end
 ;
 
@@ -74,7 +84,7 @@ select count(*) from bloom where ts <
 -- Parameter on minmax index
 set plan_cache_mode to 'force_generic_plan';
 prepare p as
-select count(*) from bloom where ts < $1;
+select count(*) from bloom where x < $1;
 
 explain (analyze, verbose, costs off, timing off, summary off)
 execute p(1000);
@@ -106,7 +116,20 @@ reset plan_cache_mode;
 
 -- Scalar array operations are not yet supported
 explain (analyze, verbose, costs off, timing off, summary off)
-select count(*) from bloom where ts < any(array[1000, 2000]::int[]);
+select count(*) from bloom where x < any(array[1000, 2000]::int[]);
 
 explain (analyze, verbose, costs off, timing off, summary off)
 select count(*) from bloom where value = any(array[md5('1000'), md5('2000')]);
+
+
+-- UUID uses bloom
+explain (analyze, verbose, costs off, timing off, summary off)
+select count(*) from bloom where u = '90ec9e8e-4501-4232-9d03-6d7cf6132815';
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select count(*) from bloom where u = '6c1d0998-05f3-452c-abd3-45afe72bbcab';
+
+
+-- Timestamp uses minmax
+explain (analyze, verbose, costs off, timing off, summary off)
+select count(*) from bloom where ts between '2021-01-07' and '2021-01-14';

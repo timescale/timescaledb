@@ -293,7 +293,24 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 			TypeCacheEntry *type =
 				lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR | TYPECACHE_HASH_EXTENDED_PROC);
 
-			if (OidIsValid(type->hash_extended_proc))
+			bool can_use_bloom = OidIsValid(type->hash_extended_proc);
+			bool can_use_minmax = OidIsValid(type->lt_opr);
+
+			if (attr->atttypid == TIMESTAMPTZOID || attr->atttypid == TIMESTAMPOID ||
+				attr->atttypid == TIMEOID || attr->atttypid == TIMETZOID ||
+				attr->atttypid == DATEOID)
+			{
+				/*
+				 * For time types, we expect:
+				 * 1) range queries, not equality,
+				 * 2) correlation with the orderby columns, e.g. creation time
+				 *    correlates with the update time that is used as orderby.
+				 * So bloom filters probably don't make sense.
+				 */
+				can_use_bloom = false;
+			}
+
+			if (can_use_bloom)
 			{
 				/*
 				 * Add bloom filter metadata for columns that are not a part of
@@ -313,8 +330,7 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 
 				compressed_column_defs = lappend(compressed_column_defs, bloom_column_def);
 			}
-
-			if (false && OidIsValid(type->lt_opr))
+			else if (can_use_minmax)
 			{
 				/*
 				 * Here we create minmax metadata for the columns for which
