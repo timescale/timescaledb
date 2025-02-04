@@ -505,11 +505,13 @@ SELECT * FROM mat_bigint WHERE a>100 ORDER BY 1;
 
 ALTER MATERIALIZED VIEW mat_bigint SET (timescaledb.compress);
 ALTER MATERIALIZED VIEW mat_smallint SET (timescaledb.compress);
-\set ON_ERROR_STOP 0
-SELECT add_compression_policy('mat_smallint', 0::smallint);
+-- With immutable compressed chunks, these policies would fail by overlapping the refresh window
 SELECT add_compression_policy('mat_smallint', -4::smallint);
+SELECT remove_compression_policy('mat_smallint');
 SELECT add_compression_policy('mat_bigint', 0::bigint);
-\set ON_ERROR_STOP 1
+SELECT remove_compression_policy('mat_bigint');
+-- End previous limitation tests
+
 SELECT add_compression_policy('mat_smallint', 5::smallint);
 SELECT add_compression_policy('mat_bigint', 20::bigint);
 
