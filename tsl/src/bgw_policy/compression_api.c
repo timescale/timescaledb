@@ -338,21 +338,6 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 							POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 							format_type_be(compress_after_type))));
 	}
-	/*
-	 * If this is a compression policy for a cagg, verify that
-	 * compress_after > refresh_start of cagg policy. We do not want
-	 * to compress regions that can be refreshed by the cagg policy.
-	 */
-	if (is_cagg && !policy_refresh_cagg_refresh_start_lt(hypertable->fd.id,
-														 compress_after_type,
-														 compress_after_datum))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("compress_after value for compression policy should be greater than the "
-						"start of the refresh window of continuous aggregate policy for %s",
-						get_rel_name(user_rel_oid))));
-	}
 
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	Jsonb *config = JsonbValueToJsonb(result);
