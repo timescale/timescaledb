@@ -86,36 +86,6 @@ get_column_storage_properties(const CustomScanState *state, int input_offset,
 	result->typid = desc->typid;
 	result->value_bytes = desc->value_bytes;
 	result->by_value = desc->by_value;
-
-	if (result->value_bytes == -1)
-	{
-		/*
-		 * long varlena requires 4 byte alignment, not sure why text has 'i'
-		 * typalign in pg catalog.
-		 */
-		result->alignment_bytes = 4;
-	}
-	else
-	{
-		switch (desc->typalign)
-		{
-			case TYPALIGN_CHAR:
-				result->alignment_bytes = 1;
-				break;
-			case TYPALIGN_SHORT:
-				result->alignment_bytes = ALIGNOF_SHORT;
-				break;
-			case TYPALIGN_INT:
-				result->alignment_bytes = ALIGNOF_INT;
-				break;
-			case TYPALIGN_DOUBLE:
-				result->alignment_bytes = ALIGNOF_DOUBLE;
-				break;
-			default:
-				Assert(false);
-				result->alignment_bytes = 1;
-		}
-	}
 }
 
 static void
