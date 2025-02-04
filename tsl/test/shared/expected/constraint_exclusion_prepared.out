@@ -399,13 +399,13 @@ QUERY PLAN
    ->  Sort (actual rows=100 loops=1)
          Sort Key: metrics.device_id, metrics."time"
          Sort Method: top-N heapsort 
-         ->  Custom Scan (ConstraintAwareAppend) (actual rows=33590 loops=1)
+         ->  Custom Scan (ConstraintAwareAppend) (actual rows=6720 loops=1)
                Hypertable: metrics
                Chunks excluded during startup: 1
-               ->  Append (actual rows=33590 loops=1)
-                     ->  Seq Scan on _hyper_X_X_chunk (actual rows=17990 loops=1)
+               ->  Append (actual rows=6720 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk (actual rows=3600 loops=1)
                            Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=15600 loops=1)
+                     ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=3120 loops=1)
                            Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
 (12 rows)
 
@@ -415,13 +415,13 @@ QUERY PLAN
    ->  Sort (actual rows=100 loops=1)
          Sort Key: metrics.device_id, metrics."time"
          Sort Method: top-N heapsort 
-         ->  Custom Scan (ConstraintAwareAppend) (actual rows=33590 loops=1)
+         ->  Custom Scan (ConstraintAwareAppend) (actual rows=6720 loops=1)
                Hypertable: metrics
                Chunks excluded during startup: 1
-               ->  Append (actual rows=33590 loops=1)
-                     ->  Seq Scan on _hyper_X_X_chunk (actual rows=17990 loops=1)
+               ->  Append (actual rows=6720 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk (actual rows=3600 loops=1)
                            Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=15600 loops=1)
+                     ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=3120 loops=1)
                            Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
 (12 rows)
 
@@ -431,13 +431,13 @@ QUERY PLAN
    ->  Sort (actual rows=100 loops=1)
          Sort Key: metrics.device_id, metrics."time"
          Sort Method: top-N heapsort 
-         ->  Custom Scan (ConstraintAwareAppend) (actual rows=33590 loops=1)
+         ->  Custom Scan (ConstraintAwareAppend) (actual rows=6720 loops=1)
                Hypertable: metrics
                Chunks excluded during startup: 1
-               ->  Append (actual rows=33590 loops=1)
-                     ->  Seq Scan on _hyper_X_X_chunk (actual rows=17990 loops=1)
+               ->  Append (actual rows=6720 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk (actual rows=3600 loops=1)
                            Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=15600 loops=1)
+                     ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=3120 loops=1)
                            Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
 (12 rows)
 
@@ -447,13 +447,13 @@ QUERY PLAN
    ->  Sort (actual rows=100 loops=1)
          Sort Key: metrics.device_id, metrics."time"
          Sort Method: top-N heapsort 
-         ->  Custom Scan (ConstraintAwareAppend) (actual rows=33590 loops=1)
+         ->  Custom Scan (ConstraintAwareAppend) (actual rows=6720 loops=1)
                Hypertable: metrics
                Chunks excluded during startup: 1
-               ->  Append (actual rows=33590 loops=1)
-                     ->  Seq Scan on _hyper_X_X_chunk (actual rows=17990 loops=1)
+               ->  Append (actual rows=6720 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk (actual rows=3600 loops=1)
                            Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=15600 loops=1)
+                     ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=3120 loops=1)
                            Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
 (12 rows)
 
@@ -463,13 +463,13 @@ QUERY PLAN
    ->  Sort (actual rows=100 loops=1)
          Sort Key: metrics.device_id, metrics."time"
          Sort Method: top-N heapsort 
-         ->  Custom Scan (ConstraintAwareAppend) (actual rows=33590 loops=1)
+         ->  Custom Scan (ConstraintAwareAppend) (actual rows=6720 loops=1)
                Hypertable: metrics
                Chunks excluded during startup: 1
-               ->  Append (actual rows=33590 loops=1)
-                     ->  Seq Scan on _hyper_X_X_chunk (actual rows=17990 loops=1)
+               ->  Append (actual rows=6720 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk (actual rows=3600 loops=1)
                            Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=15600 loops=1)
+                     ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=3120 loops=1)
                            Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
 (12 rows)
 
@@ -478,7 +478,7 @@ RESET timescaledb.enable_chunk_append;
 -- test prepared statement with params and generic plan
 SET plan_cache_mode TO force_generic_plan;
 PREPARE prep(timestamptz) AS SELECT device_id, time FROM :TEST_TABLE WHERE time = $1;
-:PREFIX EXECUTE prep('2000-01-01 23:42');
+:PREFIX EXECUTE prep('2000-01-01 23:40');
 QUERY PLAN
  Custom Scan (ChunkAppend) on metrics (actual rows=5 loops=1)
    Chunks excluded during startup: 2
@@ -486,7 +486,7 @@ QUERY PLAN
          Index Cond: ("time" = $1)
 (4 rows)
 
-:PREFIX EXECUTE prep('2000-01-10 23:42');
+:PREFIX EXECUTE prep('2000-01-10 23:40');
 QUERY PLAN
  Custom Scan (ChunkAppend) on metrics (actual rows=5 loops=1)
    Chunks excluded during startup: 2
@@ -1165,7 +1165,7 @@ RESET timescaledb.enable_chunk_append;
 -- test prepared statement with params and generic plan
 SET plan_cache_mode TO force_generic_plan;
 PREPARE prep(timestamptz) AS SELECT device_id, time FROM :TEST_TABLE WHERE time = $1;
-:PREFIX EXECUTE prep('2000-01-01 23:42');
+:PREFIX EXECUTE prep('2000-01-01 23:40');
 QUERY PLAN
  Custom Scan (ChunkAppend) on metrics_space (actual rows=5 loops=1)
    Chunks excluded during startup: 6
@@ -1177,7 +1177,7 @@ QUERY PLAN
          Index Cond: ("time" = $1)
 (8 rows)
 
-:PREFIX EXECUTE prep('2000-01-10 23:42');
+:PREFIX EXECUTE prep('2000-01-10 23:40');
 QUERY PLAN
  Custom Scan (ChunkAppend) on metrics_space (actual rows=5 loops=1)
    Chunks excluded during startup: 6
@@ -1435,7 +1435,7 @@ QUERY PLAN
                      Chunks excluded during runtime: 2
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2_1 (actual rows=1 loops=100)
                            Filter: (m1."time" = "time")
-                           Rows Removed by Filter: 548
+                           Rows Removed by Filter: 670
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=1 loops=100)
                                  Index Cond: ((_ts_meta_min_1 <= m1."time") AND (_ts_meta_max_1 >= m1."time"))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2_2 (never executed)
@@ -1468,7 +1468,7 @@ QUERY PLAN
                      Chunks excluded during runtime: 2
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2_1 (actual rows=1 loops=100)
                            Filter: (m1."time" = "time")
-                           Rows Removed by Filter: 548
+                           Rows Removed by Filter: 670
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=1 loops=100)
                                  Index Cond: ((_ts_meta_min_1 <= m1."time") AND (_ts_meta_max_1 >= m1."time"))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2_2 (never executed)
@@ -1501,7 +1501,7 @@ QUERY PLAN
                      Chunks excluded during runtime: 2
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2_1 (actual rows=1 loops=100)
                            Filter: (m1."time" = "time")
-                           Rows Removed by Filter: 548
+                           Rows Removed by Filter: 670
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=1 loops=100)
                                  Index Cond: ((_ts_meta_min_1 <= m1."time") AND (_ts_meta_max_1 >= m1."time"))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2_2 (never executed)
@@ -1534,7 +1534,7 @@ QUERY PLAN
                      Chunks excluded during runtime: 2
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2_1 (actual rows=1 loops=100)
                            Filter: (m1."time" = "time")
-                           Rows Removed by Filter: 548
+                           Rows Removed by Filter: 670
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=1 loops=100)
                                  Index Cond: ((_ts_meta_min_1 <= m1."time") AND (_ts_meta_max_1 >= m1."time"))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2_2 (never executed)
@@ -1567,7 +1567,7 @@ QUERY PLAN
                      Chunks excluded during runtime: 2
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2_1 (actual rows=1 loops=100)
                            Filter: (m1."time" = "time")
-                           Rows Removed by Filter: 548
+                           Rows Removed by Filter: 670
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=1 loops=100)
                                  Index Cond: ((_ts_meta_min_1 <= m1."time") AND (_ts_meta_max_1 >= m1."time"))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2_2 (never executed)
@@ -1600,9 +1600,9 @@ QUERY PLAN
          ->  Sort (actual rows=100 loops=1)
                Sort Key: _hyper_X_X_chunk."time"
                Sort Method: top-N heapsort 
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3600 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=1)
                            Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Sort (never executed)
                Sort Key: _hyper_X_X_chunk."time"
@@ -1621,9 +1621,9 @@ QUERY PLAN
          ->  Sort (actual rows=100 loops=1)
                Sort Key: _hyper_X_X_chunk."time"
                Sort Method: top-N heapsort 
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3600 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=1)
                            Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Sort (never executed)
                Sort Key: _hyper_X_X_chunk."time"
@@ -1642,9 +1642,9 @@ QUERY PLAN
          ->  Sort (actual rows=100 loops=1)
                Sort Key: _hyper_X_X_chunk."time"
                Sort Method: top-N heapsort 
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3600 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=1)
                            Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Sort (never executed)
                Sort Key: _hyper_X_X_chunk."time"
@@ -1663,9 +1663,9 @@ QUERY PLAN
          ->  Sort (actual rows=100 loops=1)
                Sort Key: _hyper_X_X_chunk."time"
                Sort Method: top-N heapsort 
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3600 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=1)
                            Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Sort (never executed)
                Sort Key: _hyper_X_X_chunk."time"
@@ -1684,9 +1684,9 @@ QUERY PLAN
          ->  Sort (actual rows=100 loops=1)
                Sort Key: _hyper_X_X_chunk."time"
                Sort Method: top-N heapsort 
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3600 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=1)
                            Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Sort (never executed)
                Sort Key: _hyper_X_X_chunk."time"
@@ -1723,14 +1723,14 @@ QUERY PLAN
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=5 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=25 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=10 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
 (20 rows)
 
@@ -1747,14 +1747,14 @@ QUERY PLAN
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=5 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=25 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=10 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
 (20 rows)
 
@@ -1771,14 +1771,14 @@ QUERY PLAN
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=5 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=25 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=10 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
 (20 rows)
 
@@ -1795,14 +1795,14 @@ QUERY PLAN
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=5 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=25 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=10 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
 (20 rows)
 
@@ -1819,14 +1819,14 @@ QUERY PLAN
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=5 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=25 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=10 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
 (20 rows)
 
@@ -1835,19 +1835,18 @@ RESET timescaledb.enable_chunk_append;
 -- test prepared statement with params and generic plan
 SET plan_cache_mode TO force_generic_plan;
 PREPARE prep(timestamptz) AS SELECT device_id, time FROM :TEST_TABLE WHERE time = $1;
-:PREFIX EXECUTE prep('2000-01-01 23:42');
+:PREFIX EXECUTE prep('2000-01-01 23:40');
 QUERY PLAN
  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=5 loops=1)
    Chunks excluded during startup: 2
    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5 loops=1)
          Vectorized Filter: ("time" = $1)
-         Rows Removed by Filter: 4995
+         Rows Removed by Filter: 3595
          ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=1)
                Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
-               Rows Removed by Filter: 15
-(8 rows)
+(7 rows)
 
-:PREFIX EXECUTE prep('2000-01-10 23:42');
+:PREFIX EXECUTE prep('2000-01-10 23:40');
 QUERY PLAN
  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=5 loops=1)
    Chunks excluded during startup: 2
@@ -1856,7 +1855,7 @@ QUERY PLAN
          Rows Removed by Filter: 4995
          ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=1)
                Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
-               Rows Removed by Filter: 25
+               Rows Removed by Filter: 5
 (8 rows)
 
 :PREFIX EXECUTE prep(now());
@@ -2105,7 +2104,7 @@ QUERY PLAN
                      Chunks excluded during runtime: 6
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2_1 (actual rows=1 loops=100)
                            Filter: (m1."time" = "time")
-                           Rows Removed by Filter: 548
+                           Rows Removed by Filter: 670
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=100)
                                  Index Cond: ((_ts_meta_min_1 <= m1."time") AND (_ts_meta_max_1 >= m1."time"))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2_2 (never executed)
@@ -2162,7 +2161,7 @@ QUERY PLAN
                      Chunks excluded during runtime: 6
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2_1 (actual rows=1 loops=100)
                            Filter: (m1."time" = "time")
-                           Rows Removed by Filter: 548
+                           Rows Removed by Filter: 670
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=100)
                                  Index Cond: ((_ts_meta_min_1 <= m1."time") AND (_ts_meta_max_1 >= m1."time"))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2_2 (never executed)
@@ -2219,7 +2218,7 @@ QUERY PLAN
                      Chunks excluded during runtime: 6
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2_1 (actual rows=1 loops=100)
                            Filter: (m1."time" = "time")
-                           Rows Removed by Filter: 548
+                           Rows Removed by Filter: 670
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=100)
                                  Index Cond: ((_ts_meta_min_1 <= m1."time") AND (_ts_meta_max_1 >= m1."time"))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2_2 (never executed)
@@ -2276,7 +2275,7 @@ QUERY PLAN
                      Chunks excluded during runtime: 6
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2_1 (actual rows=1 loops=100)
                            Filter: (m1."time" = "time")
-                           Rows Removed by Filter: 548
+                           Rows Removed by Filter: 670
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=100)
                                  Index Cond: ((_ts_meta_min_1 <= m1."time") AND (_ts_meta_max_1 >= m1."time"))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2_2 (never executed)
@@ -2333,7 +2332,7 @@ QUERY PLAN
                      Chunks excluded during runtime: 6
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2_1 (actual rows=1 loops=100)
                            Filter: (m1."time" = "time")
-                           Rows Removed by Filter: 548
+                           Rows Removed by Filter: 670
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=100)
                                  Index Cond: ((_ts_meta_min_1 <= m1."time") AND (_ts_meta_max_1 >= m1."time"))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2_2 (never executed)
@@ -2391,23 +2390,23 @@ QUERY PLAN
                ->  Sort (actual rows=21 loops=1)
                      Sort Key: _hyper_X_X_chunk."time"
                      Sort Method: top-N heapsort 
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=720 loops=1)
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Sort (actual rows=60 loops=1)
                      Sort Key: _hyper_X_X_chunk."time"
                      Sort Method: top-N heapsort 
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=2160 loops=1)
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=3 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Sort (actual rows=21 loops=1)
                      Sort Key: _hyper_X_X_chunk."time"
                      Sort Method: top-N heapsort 
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=720 loops=1)
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
                Sort Key: _hyper_X_X_chunk."time"
@@ -2461,23 +2460,23 @@ QUERY PLAN
                ->  Sort (actual rows=21 loops=1)
                      Sort Key: _hyper_X_X_chunk."time"
                      Sort Method: top-N heapsort 
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=720 loops=1)
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Sort (actual rows=60 loops=1)
                      Sort Key: _hyper_X_X_chunk."time"
                      Sort Method: top-N heapsort 
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=2160 loops=1)
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=3 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Sort (actual rows=21 loops=1)
                      Sort Key: _hyper_X_X_chunk."time"
                      Sort Method: top-N heapsort 
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=720 loops=1)
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
                Sort Key: _hyper_X_X_chunk."time"
@@ -2531,23 +2530,23 @@ QUERY PLAN
                ->  Sort (actual rows=21 loops=1)
                      Sort Key: _hyper_X_X_chunk."time"
                      Sort Method: top-N heapsort 
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=720 loops=1)
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Sort (actual rows=60 loops=1)
                      Sort Key: _hyper_X_X_chunk."time"
                      Sort Method: top-N heapsort 
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=2160 loops=1)
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=3 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Sort (actual rows=21 loops=1)
                      Sort Key: _hyper_X_X_chunk."time"
                      Sort Method: top-N heapsort 
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=720 loops=1)
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
                Sort Key: _hyper_X_X_chunk."time"
@@ -2601,23 +2600,23 @@ QUERY PLAN
                ->  Sort (actual rows=21 loops=1)
                      Sort Key: _hyper_X_X_chunk."time"
                      Sort Method: top-N heapsort 
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=720 loops=1)
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Sort (actual rows=60 loops=1)
                      Sort Key: _hyper_X_X_chunk."time"
                      Sort Method: top-N heapsort 
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=2160 loops=1)
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=3 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Sort (actual rows=21 loops=1)
                      Sort Key: _hyper_X_X_chunk."time"
                      Sort Method: top-N heapsort 
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=720 loops=1)
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
                Sort Key: _hyper_X_X_chunk."time"
@@ -2671,23 +2670,23 @@ QUERY PLAN
                ->  Sort (actual rows=21 loops=1)
                      Sort Key: _hyper_X_X_chunk."time"
                      Sort Method: top-N heapsort 
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=720 loops=1)
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Sort (actual rows=60 loops=1)
                      Sort Key: _hyper_X_X_chunk."time"
                      Sort Method: top-N heapsort 
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=2160 loops=1)
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=3 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Sort (actual rows=21 loops=1)
                      Sort Key: _hyper_X_X_chunk."time"
                      Sort Method: top-N heapsort 
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=720 loops=1)
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
                Sort Key: _hyper_X_X_chunk."time"
@@ -2758,42 +2757,42 @@ QUERY PLAN
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=3 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=2 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=15 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=2 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
 (48 rows)
 
@@ -2810,42 +2809,42 @@ QUERY PLAN
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=3 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=2 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=15 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=2 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
 (48 rows)
 
@@ -2862,42 +2861,42 @@ QUERY PLAN
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=3 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=2 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=15 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=2 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
 (48 rows)
 
@@ -2914,42 +2913,42 @@ QUERY PLAN
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=3 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=2 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=15 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=2 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
 (48 rows)
 
@@ -2966,42 +2965,42 @@ QUERY PLAN
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=3 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=2 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=15 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=2 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
 (48 rows)
 
@@ -3010,31 +3009,28 @@ RESET timescaledb.enable_chunk_append;
 -- test prepared statement with params and generic plan
 SET plan_cache_mode TO force_generic_plan;
 PREPARE prep(timestamptz) AS SELECT device_id, time FROM :TEST_TABLE WHERE time = $1;
-:PREFIX EXECUTE prep('2000-01-01 23:42');
+:PREFIX EXECUTE prep('2000-01-01 23:40');
 QUERY PLAN
  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=5 loops=1)
    Chunks excluded during startup: 6
    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
          Vectorized Filter: ("time" = $1)
-         Rows Removed by Filter: 999
+         Rows Removed by Filter: 719
          ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
-               Rows Removed by Filter: 3
    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3 loops=1)
          Vectorized Filter: ("time" = $1)
-         Rows Removed by Filter: 2997
+         Rows Removed by Filter: 2157
          ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=3 loops=1)
                Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
-               Rows Removed by Filter: 9
    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
          Vectorized Filter: ("time" = $1)
-         Rows Removed by Filter: 999
+         Rows Removed by Filter: 719
          ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
-               Rows Removed by Filter: 3
-(20 rows)
+(17 rows)
 
-:PREFIX EXECUTE prep('2000-01-10 23:42');
+:PREFIX EXECUTE prep('2000-01-10 23:40');
 QUERY PLAN
  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=5 loops=1)
    Chunks excluded during startup: 6
@@ -3043,19 +3039,19 @@ QUERY PLAN
          Rows Removed by Filter: 999
          ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
-               Rows Removed by Filter: 5
+               Rows Removed by Filter: 1
    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3 loops=1)
          Vectorized Filter: ("time" = $1)
          Rows Removed by Filter: 2997
          ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=3 loops=1)
                Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
-               Rows Removed by Filter: 15
+               Rows Removed by Filter: 3
    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
          Vectorized Filter: ("time" = $1)
          Rows Removed by Filter: 999
          ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
-               Rows Removed by Filter: 5
+               Rows Removed by Filter: 1
 (20 rows)
 
 :PREFIX EXECUTE prep(now());
