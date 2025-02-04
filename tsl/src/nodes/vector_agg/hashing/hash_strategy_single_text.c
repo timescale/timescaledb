@@ -145,15 +145,17 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 	 */
 	policy->use_key_index_for_dict = false;
 
-	BatchHashingParams params = build_batch_hashing_params(policy, batch_state);
+	BatchHashingParams params = build_batch_hashing_params(policy, vector_slot);
 	if (params.single_grouping_column.decompression_type != DT_ArrowTextDict)
 	{
 		return;
 	}
 
+	uint16 batch_rows;
+	const uint64 *row_filter = vector_slot_get_qual_result(vector_slot, &batch_rows);
+
 	const int dict_rows = params.single_grouping_column.arrow->dictionary->length;
-	if ((size_t) dict_rows >
-		arrow_num_valid(batch_state->vector_qual_result, batch_state->total_batch_rows))
+	if ((size_t) dict_rows > arrow_num_valid(row_filter, batch_rows))
 	{
 		return;
 	}
@@ -185,9 +187,7 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 	 * We shouldn't add the dictionary entries that are not used by any matching
 	 * rows. Translate the batch filter bitmap to dictionary rows.
 	 */
-	const int batch_rows = batch_state->total_batch_rows;
-	const uint64 *row_filter = batch_state->vector_qual_result;
-	if (batch_state->vector_qual_result != NULL)
+	if (row_filter != NULL)
 	{
 		uint64 *restrict dict_filter = policy->tmp_filter;
 		const size_t dict_words = (dict_rows + 63) / 64;
@@ -249,7 +249,7 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 	 * batch filter.
 	 */
 	bool have_null_key = false;
-	if (batch_state->vector_qual_result != NULL)
+	if (row_filter != NULL)
 	{
 		if (params.single_grouping_column.arrow->null_count > 0)
 		{

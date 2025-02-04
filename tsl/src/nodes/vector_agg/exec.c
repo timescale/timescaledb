@@ -78,7 +78,7 @@ grouping_column_comparator(const void *a_ptr, const void *b_ptr)
 
 static void
 get_column_storage_properties(const CustomScanState *state, int input_offset,
-	GroupingColum *result)
+							  GroupingColumn *result)
 {
 	const DecompressChunkState *decompress_state = (DecompressChunkState *) state;
 	const DecompressContext *dcontext = &decompress_state->decompress_context;

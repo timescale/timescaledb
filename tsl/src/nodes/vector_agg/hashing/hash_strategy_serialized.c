@@ -34,8 +34,7 @@ serialized_key_hashing_init(HashingStrategy *hashing)
 }
 
 static void
-serialized_key_hashing_prepare_for_batch(GroupingPolicyHash *policy,
-										 DecompressBatchState *batch_state)
+serialized_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTableSlot *vector_slot)
 {
 }
 
