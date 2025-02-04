@@ -76,13 +76,46 @@ grouping_column_comparator(const void *a_ptr, const void *b_ptr)
 	return 1;
 }
 
-static int
-get_value_bytes(const CustomScanState *state, int input_offset)
+static void
+get_column_storage_properties(const CustomScanState *state, int input_offset,
+	GroupingColum *result)
 {
 	const DecompressChunkState *decompress_state = (DecompressChunkState *) state;
 	const DecompressContext *dcontext = &decompress_state->decompress_context;
 	const CompressionColumnDescription *desc = &dcontext->compressed_chunk_columns[input_offset];
-	return desc->value_bytes;
+	result->typid = desc->typid;
+	result->value_bytes = desc->value_bytes;
+	result->by_value = desc->by_value;
+
+	if (result->value_bytes == -1)
+	{
+		/*
+		 * long varlena requires 4 byte alignment, not sure why text has 'i'
+		 * typalign in pg catalog.
+		 */
+		result->alignment_bytes = 4;
+	}
+	else
+	{
+		switch (desc->typalign)
+		{
+			case TYPALIGN_CHAR:
+				result->alignment_bytes = 1;
+				break;
+			case TYPALIGN_SHORT:
+				result->alignment_bytes = ALIGNOF_SHORT;
+				break;
+			case TYPALIGN_INT:
+				result->alignment_bytes = ALIGNOF_INT;
+				break;
+			case TYPALIGN_DOUBLE:
+				result->alignment_bytes = ALIGNOF_DOUBLE;
+				break;
+			default:
+				Assert(false);
+				result->alignment_bytes = 1;
+		}
+	}
 }
 
 static void
@@ -205,44 +238,8 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 			col->output_offset = i;
 
 			Var *var = castNode(Var, tlentry->expr);
-			col->input_offset = get_input_offset(decompress_state, var);
-
-			DecompressContext *dcontext = &decompress_state->decompress_context;
-			CompressionColumnDescription *desc =
-				&dcontext->compressed_chunk_columns[col->input_offset];
-
-			col->typid = desc->typid;
-			col->value_bytes = get_value_bytes(childstate, col->input_offset);
-			col->by_value = desc->by_value;
-			if (col->value_bytes == -1)
-			{
-				/*
-				 * long varlena requires 4 byte alignment, not sure why text has 'i'
-				 * typalign in pg catalog.
-				 */
-				col->alignment_bytes = 4;
-			}
-			else
-			{
-				switch (desc->typalign)
-				{
-					case TYPALIGN_CHAR:
-						col->alignment_bytes = 1;
-						break;
-					case TYPALIGN_SHORT:
-						col->alignment_bytes = ALIGNOF_SHORT;
-						break;
-					case TYPALIGN_INT:
-						col->alignment_bytes = ALIGNOF_INT;
-						break;
-					case TYPALIGN_DOUBLE:
-						col->alignment_bytes = ALIGNOF_DOUBLE;
-						break;
-					default:
-						Assert(false);
-						col->alignment_bytes = 1;
-				}
-			}
+			col->input_offset = get_input_offset(childstate, var);
+			get_column_storage_properties(childstate, col->input_offset, col);
 		}
 	}
 
