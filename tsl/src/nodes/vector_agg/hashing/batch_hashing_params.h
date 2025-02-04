@@ -6,6 +6,9 @@
 
 #pragma once
 
+#include "nodes/vector_agg/grouping_policy_hash.h"
+#include "nodes/vector_agg/vector_slot.h"
+
 /*
  * The data required to map the rows of the given compressed batch to the unique
  * indexes of grouping keys, using a hash table.
@@ -21,11 +24,12 @@ typedef struct BatchHashingParams
 } BatchHashingParams;
 
 static pg_attribute_always_inline BatchHashingParams
-build_batch_hashing_params(GroupingPolicyHash *policy, DecompressBatchState *batch_state)
+build_batch_hashing_params(GroupingPolicyHash *policy, TupleTableSlot *vector_slot)
 {
+	uint16 nrows;
 	BatchHashingParams params = {
 		.policy = policy,
-		.batch_filter = batch_state->vector_qual_result,
+		.batch_filter = vector_slot_get_qual_result(vector_slot, &nrows),
 		.result_key_indexes = policy->key_index_for_row,
 	};
 

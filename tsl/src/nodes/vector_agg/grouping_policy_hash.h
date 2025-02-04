@@ -129,6 +129,7 @@ typedef struct GroupingPolicyHash
 	 */
 	uint64 stat_input_total_rows;
 	uint64 stat_input_valid_rows;
+	uint64 stat_bulk_filtered_rows;
 	uint64 stat_consecutive_keys;
 } GroupingPolicyHash;
 

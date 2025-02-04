@@ -1,0 +1,82 @@
+name: Minor Release - Feature Freeze
+on:
+  workflow_dispatch:
+
+# The workflow needs the permission to push branches
+permissions:
+  contents: write
+
+jobs:
+  minor-release-feature-freeze:
+    name: Minor Release - Feature Freeze
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install Linux Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install pip
+
+      - name: Install Python Dependencies
+        run: |
+          pip install PyGithub requests
+
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@v4
+
+      - name: Set env var NEW_VERSION
+        run: echo "NEW_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)" >> $GITHUB_ENV
+      - name: Test env var NEW_VERSION
+        run: echo $NEW_VERSION
+
+      - name: Set env var RELEASE_BRANCH
+        run: echo "RELEASE_BRANCH="${${{ env.NEW_VERSION }}/%.0/.x}"" >> $GITHUB_ENV
+      - name: Test env var RELEASE_BRANCH
+        run: echo $RELEASE_BRANCH
+
+      - name: Set env var CURRENT_MINOR_VERSION
+        run: echo "CURRENT_MINOR_VERSION="$(echo ${{ env.NEW_VERSION }} | cut -d '.' -f 2)"" >> $GITHUB_ENV
+      - name: Test env var CURRENT_MINOR_VERSION
+        run: echo $CURRENT_MINOR_VERSION
+
+      - name: Set env var NEW_MINOR_VERSION
+        run: echo "NEW_MINOR_VERSION="$((${{ env.CURRENT_MINOR_VERSION }} + 1))"" >> $GITHUB_ENV
+      - name: Test env var NEW_MINOR_VERSION
+        run: echo $NEW_MINOR_VERSION
+
+      - name: Set env var NEW_MINOR_VERSION_FULL
+        run: echo "NEW_MINOR_VERSION_FULL="$(echo ${{ env.NEW_VERSION }} | sed -e "s/${{ env.CURRENT_MINOR_VERSION }}/${{ env.NEW_MINOR_VERSION }}/g")"" >> $GITHUB_ENV
+      - name: Test env var NEW_MINOR_VERSION_FULL
+        run: echo $NEW_MINOR_VERSION_FULL
+
+      - name: Create PR to bump version in the main branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        run: |
+          git remote --verbose
+          git checkout -b release/bump-version-in-main-to-${{ env.NEW_MINOR_VERSION_FULL }}-dev origin/main
+          sed -i.bak "s/${{ env.CURRENT_MINOR_VERSION }}/${{ env.NEW_MINOR_VERSION }}/g" version.config
+          rm version.config.bak
+          git commit --no-verify -a -m "Bump version to ${{ env.NEW_MINOR_VERSION_FULL }}-dev"
+          git push origin release/bump-version-in-main-to-${{ env.NEW_MINOR_VERSION_FULL }}-dev
+
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@v4
+
+      - name: Create release branch for minor release
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        run: |
+          git remote --verbose
+          git checkout -b ${{ env.RELEASE_BRANCH }} origin/main
+          git push origin ${{ env.RELEASE_BRANCH }}:${{ env.RELEASE_BRANCH }}
+
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@v4
+
+      - name: Create PR to release branch for minor release
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        run: |
+          git remote --verbose
+          scripts/release/create_minor_release_PR_commit.sh ${{ env.RELEASE_BRANCH }}
