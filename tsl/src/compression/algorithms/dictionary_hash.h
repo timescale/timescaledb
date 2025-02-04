@@ -28,8 +28,9 @@ typedef struct DictionaryHashItem
 {
 	Datum key;
 	/* hash entry status */
-	char status;
-	uint32 index;
+	uint32 hash;
+	uint16 status;
+	uint16 index;
 } DictionaryHashItem;
 
 typedef struct dictionary_hash dictionary_hash;
@@ -42,6 +43,8 @@ static bool datum_eq(dictionary_hash *tb, Datum a, Datum b);
 #define SH_KEY key
 #define SH_HASH_KEY(tb, key) datum_hash(tb, key)
 #define SH_EQUAL(tb, a, b) datum_eq(tb, a, b)
+#define SH_STORE_HASH
+#define SH_GET_HASH(tb, entry) entry->hash
 #define SH_SCOPE static inline
 #define SH_DEFINE
 #define SH_DECLARE
