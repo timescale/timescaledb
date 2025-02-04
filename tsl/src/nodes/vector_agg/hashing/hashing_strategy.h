@@ -25,9 +25,9 @@ typedef struct HashingStrategy
 	void (*init)(HashingStrategy *hashing, GroupingPolicyHash *policy);
 	void (*reset)(HashingStrategy *hashing);
 	uint64 (*get_size_bytes)(HashingStrategy *hashing);
-	void (*prepare_for_batch)(GroupingPolicyHash *policy, DecompressBatchState *batch_state);
-	void (*fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
-						 int start_row, int end_row);
+	void (*prepare_for_batch)(GroupingPolicyHash *policy, TupleTableSlot *vector_slot);
+	void (*fill_offsets)(GroupingPolicyHash *policy, TupleTableSlot *vector_slot, int start_row,
+						 int end_row);
 	void (*emit_key)(GroupingPolicyHash *policy, uint32 current_key,
 					 TupleTableSlot *aggregated_slot);
 
@@ -65,6 +65,6 @@ typedef struct HashingStrategy
 #endif
 } HashingStrategy;
 
-void hash_strategy_output_key_alloc(GroupingPolicyHash *policy, DecompressBatchState *batch_state);
+void hash_strategy_output_key_alloc(GroupingPolicyHash *policy, uint16 nrows);
 void hash_strategy_output_key_single_emit(GroupingPolicyHash *policy, uint32 current_key,
 										  TupleTableSlot *aggregated_slot);

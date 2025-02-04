@@ -268,7 +268,8 @@ decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chu
 		scankeys = build_update_delete_scankeys(comp_chunk_rel,
 												heap_filters,
 												&num_scankeys,
-												&null_columns);
+												&null_columns,
+												&delete_only);
 	}
 
 	if (matching_index_rel)
@@ -957,7 +958,16 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 							break;
 						}
 						default:
-							/* Do nothing for unknown operator strategies. */
+							*heap_filters = lappend(*heap_filters,
+													make_batchfilter(column_name,
+																	 op_strategy,
+																	 collation,
+																	 opcode,
+																	 arg_value,
+																	 false, /* is_null_check */
+																	 false, /* is_null */
+																	 false	/* is_array_op */
+																	 ));
 							break;
 					}
 					continue;
@@ -1109,7 +1119,16 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 							break;
 						}
 						default:
-							/* Do nothing on unknown operator strategies. */
+							*heap_filters = lappend(*heap_filters,
+													make_batchfilter(column_name,
+																	 op_strategy,
+																	 collation,
+																	 opcode,
+																	 arg_value,
+																	 false, /* is_null_check */
+																	 false, /* is_null */
+																	 true	/* is_array_op */
+																	 ));
 							break;
 					}
 					continue;

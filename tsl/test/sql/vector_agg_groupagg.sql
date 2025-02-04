@@ -2,6 +2,9 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+-- Check that the vectorized aggregation works properly in the GroupAggregate
+-- mode.
+
 create table groupagg(t int, s text, value int);
 select create_hypertable('groupagg', 't', chunk_time_interval => 10000);
 

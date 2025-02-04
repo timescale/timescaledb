@@ -5,6 +5,7 @@
  */
 
 #include "batch_hashing_params.h"
+#include "nodes/vector_agg/vector_slot.h"
 
 /*
  * The hash table maps the value of the grouping key to its unique index.
@@ -60,10 +61,12 @@ FUNCTION_NAME(hash_strategy_reset)(HashingStrategy *hashing)
 
 static void
 FUNCTION_NAME(hash_strategy_prepare_for_batch)(GroupingPolicyHash *policy,
-											   DecompressBatchState *batch_state)
+											   TupleTableSlot *vector_slot)
 {
-	hash_strategy_output_key_alloc(policy, batch_state);
-	FUNCTION_NAME(key_hashing_prepare_for_batch)(policy, batch_state);
+	uint16 nrows = 0;
+	vector_slot_get_qual_result(vector_slot, &nrows);
+	hash_strategy_output_key_alloc(policy, nrows);
+	FUNCTION_NAME(key_hashing_prepare_for_batch)(policy, vector_slot);
 }
 
 /*
@@ -252,12 +255,12 @@ FUNCTION_NAME(dispatch_for_params)(BatchHashingParams params, int start_row, int
  * function.
  */
 static void
-FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, DecompressBatchState *batch_state,
-							int start_row, int end_row)
+FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, TupleTableSlot *vector_slot, int start_row,
+							int end_row)
 {
 	Assert((size_t) end_row <= policy->num_key_index_for_row);
 
-	BatchHashingParams params = build_batch_hashing_params(policy, batch_state);
+	BatchHashingParams params = build_batch_hashing_params(policy, vector_slot);
 
 #ifdef USE_DICT_HASHING
 	if (policy->use_key_index_for_dict)

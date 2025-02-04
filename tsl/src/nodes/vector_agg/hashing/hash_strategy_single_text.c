@@ -114,7 +114,6 @@ single_text_key_hashing_store_new(GroupingPolicyHash *restrict policy, uint32 ne
 	text *restrict stored = (text *) MemoryContextAlloc(policy->hashing.key_body_mctx, total_bytes);
 	SET_VARSIZE(stored, total_bytes);
 	memcpy(VARDATA(stored), output_key.data, output_key.len);
-	output_key.data = (uint8 *) VARDATA(stored);
 	policy->hashing.output_keys[new_key_index] = PointerGetDatum(stored);
 }
 
@@ -139,8 +138,7 @@ static pg_attribute_always_inline void single_text_dispatch_for_params(BatchHash
 																	   int start_row, int end_row);
 
 static void
-single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy,
-										  DecompressBatchState *batch_state)
+single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTableSlot *vector_slot)
 {
 	/*
 	 * Determine whether we're going to use the dictionary for hashing.
