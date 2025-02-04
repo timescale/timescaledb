@@ -114,7 +114,6 @@ single_text_key_hashing_store_new(GroupingPolicyHash *restrict policy, uint32 ne
 	text *restrict stored = (text *) MemoryContextAlloc(policy->hashing.key_body_mctx, total_bytes);
 	SET_VARSIZE(stored, total_bytes);
 	memcpy(VARDATA(stored), output_key.data, output_key.len);
-	output_key.data = (uint8 *) VARDATA(stored);
 	policy->hashing.output_keys[new_key_index] = PointerGetDatum(stored);
 }
 
