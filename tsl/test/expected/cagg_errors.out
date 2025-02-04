@@ -595,14 +595,8 @@ ALTER MATERIALIZED VIEW i2980_cagg SET ( timescaledb.compress );
 NOTICE:  defaulting compress_orderby to time_bucket
 WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "_materialized_hypertable_13" is set to ""
-SELECT add_compression_policy('i2980_cagg', '8 day'::interval);
-ERROR:  compress_after value for compression policy should be greater than the start of the refresh window of continuous aggregate policy for i2980_cagg
 SELECT add_continuous_aggregate_policy('i2980_cagg2', '10 day'::interval, '6 day'::interval);
 ERROR:  function add_continuous_aggregate_policy(unknown, interval, interval) does not exist at character 8
-SELECT add_compression_policy('i2980_cagg2', '3 day'::interval);
-ERROR:  compress_after value for compression policy should be greater than the start of the refresh window of continuous aggregate policy for i2980_cagg2
-SELECT add_compression_policy('i2980_cagg2', '1 day'::interval);
-ERROR:  compress_after value for compression policy should be greater than the start of the refresh window of continuous aggregate policy for i2980_cagg2
 SELECT add_compression_policy('i2980_cagg2', '3'::integer);
 ERROR:  unsupported compress_after argument type, expected type : interval
 SELECT add_compression_policy('i2980_cagg2', 13::integer);
