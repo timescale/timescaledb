@@ -1444,19 +1444,22 @@ EXPLAIN (costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
- Finalize GroupAggregate
-   Group Key: _hyper_31_110_chunk.device_id
-   ->  Merge Append
-         Sort Key: _hyper_31_110_chunk.device_id
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
-                     ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
-         ->  Partial GroupAggregate
-               Group Key: _hyper_31_110_chunk.device_id
-               ->  Index Only Scan using _hyper_31_110_chunk_compression_insert_device_id_time_idx on _hyper_31_110_chunk
-(10 rows)
+                                                                          QUERY PLAN                                                                          
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: _hyper_31_110_chunk.device_id
+   ->  Finalize HashAggregate
+         Group Key: _hyper_31_110_chunk.device_id
+         ->  Gather
+               Workers Planned: 1
+               ->  Parallel Append
+                     ->  Partial HashAggregate
+                           Group Key: _hyper_31_110_chunk.device_id
+                           ->  Parallel Index Only Scan using _hyper_31_110_chunk_compression_insert_device_id_time_idx on _hyper_31_110_chunk
+                     ->  Custom Scan (VectorAgg)
+                           ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
+                                 ->  Parallel Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
+(13 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
@@ -1527,22 +1530,25 @@ EXPLAIN (costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
- Finalize GroupAggregate
-   Group Key: _hyper_31_110_chunk.device_id
-   ->  Merge Append
-         Sort Key: _hyper_31_110_chunk.device_id
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
-                     ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
-                     ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
-         ->  Partial GroupAggregate
-               Group Key: _hyper_31_112_chunk.device_id
-               ->  Index Only Scan using _hyper_31_112_chunk_compression_insert_device_id_time_idx on _hyper_31_112_chunk
-(13 rows)
+                                                                          QUERY PLAN                                                                          
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: _hyper_31_112_chunk.device_id
+   ->  Finalize HashAggregate
+         Group Key: _hyper_31_112_chunk.device_id
+         ->  Gather
+               Workers Planned: 2
+               ->  Parallel Append
+                     ->  Partial HashAggregate
+                           Group Key: _hyper_31_112_chunk.device_id
+                           ->  Parallel Index Only Scan using _hyper_31_112_chunk_compression_insert_device_id_time_idx on _hyper_31_112_chunk
+                     ->  Custom Scan (VectorAgg)
+                           ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
+                                 ->  Parallel Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
+                     ->  Custom Scan (VectorAgg)
+                           ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
+                                 ->  Parallel Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
+(16 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
@@ -1613,25 +1619,28 @@ EXPLAIN (costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
- Finalize GroupAggregate
-   Group Key: _hyper_31_110_chunk.device_id
-   ->  Merge Append
-         Sort Key: _hyper_31_110_chunk.device_id
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
-                     ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
-                     ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_114_chunk
-                     ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_115_chunk
-         ->  Partial GroupAggregate
-               Group Key: _hyper_31_114_chunk.device_id
-               ->  Index Only Scan using _hyper_31_114_chunk_compression_insert_device_id_time_idx on _hyper_31_114_chunk
-(16 rows)
+                                                                          QUERY PLAN                                                                          
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: _hyper_31_114_chunk.device_id
+   ->  Finalize HashAggregate
+         Group Key: _hyper_31_114_chunk.device_id
+         ->  Gather
+               Workers Planned: 2
+               ->  Parallel Append
+                     ->  Partial HashAggregate
+                           Group Key: _hyper_31_114_chunk.device_id
+                           ->  Parallel Index Only Scan using _hyper_31_114_chunk_compression_insert_device_id_time_idx on _hyper_31_114_chunk
+                     ->  Custom Scan (VectorAgg)
+                           ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
+                                 ->  Parallel Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
+                     ->  Custom Scan (VectorAgg)
+                           ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
+                                 ->  Parallel Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
+                     ->  Custom Scan (VectorAgg)
+                           ->  Custom Scan (DecompressChunk) on _hyper_31_114_chunk
+                                 ->  Parallel Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_115_chunk
+(19 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
@@ -1702,28 +1711,31 @@ EXPLAIN (costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
- Finalize GroupAggregate
-   Group Key: _hyper_31_110_chunk.device_id
-   ->  Merge Append
-         Sort Key: _hyper_31_110_chunk.device_id
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
-                     ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
-                     ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_114_chunk
-                     ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_115_chunk
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_116_chunk
-                     ->  Index Scan using compress_hyper_32_117_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_117_chunk
-         ->  Partial GroupAggregate
-               Group Key: _hyper_31_116_chunk.device_id
-               ->  Index Only Scan using _hyper_31_116_chunk_compression_insert_device_id_time_idx on _hyper_31_116_chunk
-(19 rows)
+                                                                          QUERY PLAN                                                                          
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: _hyper_31_116_chunk.device_id
+   ->  Finalize HashAggregate
+         Group Key: _hyper_31_116_chunk.device_id
+         ->  Gather
+               Workers Planned: 2
+               ->  Parallel Append
+                     ->  Partial HashAggregate
+                           Group Key: _hyper_31_116_chunk.device_id
+                           ->  Parallel Index Only Scan using _hyper_31_116_chunk_compression_insert_device_id_time_idx on _hyper_31_116_chunk
+                     ->  Custom Scan (VectorAgg)
+                           ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
+                                 ->  Parallel Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
+                     ->  Custom Scan (VectorAgg)
+                           ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
+                                 ->  Parallel Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
+                     ->  Custom Scan (VectorAgg)
+                           ->  Custom Scan (DecompressChunk) on _hyper_31_114_chunk
+                                 ->  Parallel Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_115_chunk
+                     ->  Custom Scan (VectorAgg)
+                           ->  Custom Scan (DecompressChunk) on _hyper_31_116_chunk
+                                 ->  Parallel Index Scan using compress_hyper_32_117_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_117_chunk
+(22 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
@@ -1794,31 +1806,34 @@ EXPLAIN (costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
- Finalize GroupAggregate
-   Group Key: _hyper_31_110_chunk.device_id
-   ->  Merge Append
-         Sort Key: _hyper_31_110_chunk.device_id
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
-                     ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
-                     ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_114_chunk
-                     ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_115_chunk
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_116_chunk
-                     ->  Index Scan using compress_hyper_32_117_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_117_chunk
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_118_chunk
-                     ->  Index Scan using compress_hyper_32_119_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_119_chunk
-         ->  Partial GroupAggregate
-               Group Key: _hyper_31_118_chunk.device_id
-               ->  Index Only Scan using _hyper_31_118_chunk_compression_insert_device_id_time_idx on _hyper_31_118_chunk
-(22 rows)
+                                                                          QUERY PLAN                                                                          
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: _hyper_31_118_chunk.device_id
+   ->  Finalize HashAggregate
+         Group Key: _hyper_31_118_chunk.device_id
+         ->  Gather
+               Workers Planned: 2
+               ->  Parallel Append
+                     ->  Partial HashAggregate
+                           Group Key: _hyper_31_118_chunk.device_id
+                           ->  Parallel Index Only Scan using _hyper_31_118_chunk_compression_insert_device_id_time_idx on _hyper_31_118_chunk
+                     ->  Custom Scan (VectorAgg)
+                           ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
+                                 ->  Parallel Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
+                     ->  Custom Scan (VectorAgg)
+                           ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
+                                 ->  Parallel Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
+                     ->  Custom Scan (VectorAgg)
+                           ->  Custom Scan (DecompressChunk) on _hyper_31_114_chunk
+                                 ->  Parallel Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_115_chunk
+                     ->  Custom Scan (VectorAgg)
+                           ->  Custom Scan (DecompressChunk) on _hyper_31_116_chunk
+                                 ->  Parallel Index Scan using compress_hyper_32_117_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_117_chunk
+                     ->  Custom Scan (VectorAgg)
+                           ->  Custom Scan (DecompressChunk) on _hyper_31_118_chunk
+                                 ->  Parallel Index Scan using compress_hyper_32_119_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_119_chunk
+(25 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
