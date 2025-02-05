@@ -32,7 +32,7 @@ jobs:
     env:
       PG_SRC_DIR: pgbuild
       PG_INSTALL_DIR: postgresql
-      JOB_NAME: SQLsmith PG${{ matrix.pg }}
+      JOB_NAME: SQLsmith PG${{ matrix.pg }} timescaledb${{ github.event.inputs.branch }}
 
     steps:
     - name: Install Dependencies

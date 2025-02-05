@@ -48,10 +48,10 @@ jobs:
 
     # checkout code to get version information
     - uses: actions/checkout@v4
-       with:
-         ref: ${{ github.event.inputs.branch }}
+      with:
+       ref: ${{ github.event.inputs.branch }}
 
-    - name: Test Installation
+    - name: Test Installation for timescaledb${{ github.event.inputs.branch }}
       run: |
         psql -X -c "CREATE EXTENSION timescaledb;" postgres
         psql -X -c "SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb';" postgres

@@ -47,7 +47,7 @@ jobs:
       run: python .github/gh_config_reader.py
 
   abi_test:
-    name: ABI Test ${{ matrix.dir }} PG${{ matrix.pg }}
+    name: ABI Test ${{ matrix.dir }} PG${{ matrix.pg }} timescaledb${{ github.event.inputs.branch }}
     runs-on: ubuntu-latest
     needs: config
     strategy:
@@ -72,6 +72,8 @@ jobs:
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.branch }}
 
     - name: Build extension with ${{ matrix.builder }}
       run: |

@@ -44,7 +44,7 @@ jobs:
         run: echo $OLD_MINOR_VERSION_BRANCH
 
   coverity:
-    name: Coverity ${{ matrix.pg }}
+    name: Coverity ${{ matrix.pg }} ${{ matrix.timescaledb_branch }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

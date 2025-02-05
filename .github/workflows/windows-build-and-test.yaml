@@ -56,7 +56,7 @@ jobs:
 
   build:
     # Change the JOB_NAME variable below when changing the name.
-    name: PG${{ matrix.pg }} ${{ matrix.build_type }} ${{ matrix.os }}
+    name: PG${{ matrix.pg }} ${{ matrix.build_type }} ${{ matrix.os }} timescaledb${{ github.event.inputs.branch }}
     runs-on: ${{ matrix.os }}
     needs: config
     strategy:

@@ -43,7 +43,7 @@ jobs:
       run: python .github/gh_config_reader.py
 
   build:
-    name: Windows package PG${{ matrix.test }}
+    name: Windows package PG${{ matrix.test }} timescaledb${{ github.event.inputs.branch }}
     runs-on: ${{ matrix.os }}
     needs: config
     strategy:

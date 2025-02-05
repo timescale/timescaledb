@@ -24,7 +24,7 @@ name: Test Docker images
         default: 'main'
 jobs:
   docker_tests:
-    name: ${{ matrix.image }}
+    name: ${{ matrix.image }} timescaledb${{ github.event.inputs.branch }}
     runs-on: ubuntu-latest
     services:
       ts:

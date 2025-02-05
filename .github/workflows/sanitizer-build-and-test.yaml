@@ -75,7 +75,7 @@ jobs:
   sanitizer:
     # Change the JOB_NAME variable below when changing the name.
     # Don't use the env variable here because the env context is not accessible.
-    name: PG${{ matrix.pg }} Sanitizer ${{ matrix.os }}
+    name: PG${{ matrix.pg }} Sanitizer ${{ matrix.os }} timescaledb${{ github.event.inputs.branch }}
     runs-on: ${{ matrix.os }}
     needs: config
     strategy:
@@ -93,6 +93,8 @@ jobs:
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.branch }}
 
     # We are going to rebuild Postgres daily, so that it doesn't suddenly break
     # ages after the original problem.

@@ -21,7 +21,7 @@ name: APT ARM64 packages
         default: 'main'
 jobs:
   apt_tests:
-    name: APT ARM64 ${{ matrix.image }} PG${{ matrix.pg }}
+    name: APT ARM64 ${{ matrix.image }} PG${{ matrix.pg }} timescaledb${{ github.event.inputs.branch }}
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false

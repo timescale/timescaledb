@@ -21,7 +21,7 @@ name: APT packages
         default: 'main'
 jobs:
   apt_tests:
-    name: APT ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }}
+    name: APT ${{ matrix.image }} PG${{ matrix.pg }} timescaledb${{ github.event.inputs.branch }} ${{ matrix.license }}
     runs-on: ubuntu-latest
     container:
       image: ${{ matrix.image }}

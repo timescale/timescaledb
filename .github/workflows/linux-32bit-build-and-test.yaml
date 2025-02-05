@@ -37,12 +37,12 @@ jobs:
       with:
         ref: ${{ github.event.inputs.branch }}
 
-- name: Read configuration
+    - name: Read configuration
       id: setter
       run: python .github/gh_config_reader.py
 
   regress_linux_32bit:
-    name: PG${{ matrix.pg }} ${{ matrix.build_type }} linux-i386
+    name: PG${{ matrix.pg }} ${{ matrix.build_type }} linux-i386  timescaledb${{ github.event.inputs.branch }}
     runs-on: ubuntu-latest
     needs: config
     container:

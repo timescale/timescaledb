@@ -21,7 +21,7 @@ name: RPM packages
         default: 'main'
 jobs:
   rpm_tests:
-    name: RPM ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }}
+    name: RPM ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }} timescaledb${{ github.event.inputs.branch }}
     runs-on: ubuntu-latest
     container:
       image: ${{ matrix.image }}
