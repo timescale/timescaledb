@@ -800,6 +800,152 @@ where time = '2022-06-01' and 4 < device;
 
 set timescaledb.enable_hypercore_scankey_pushdown=true;
 --
+-- Test non-btree operator on segmentby column and compare with btree
+-- operators.
+--
+explain (costs off)
+select sum(humidity) from readings
+where time <= '2022-06-02' and device <> 1;
+                                              QUERY PLAN                                               
+-------------------------------------------------------------------------------------------------------
+ Aggregate
+   ->  Append
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               Filter: (device <> 1)
+               Scankey: ("time" <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone)
+               Vectorized Filter: ("time" <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+               Filter: (device <> 1)
+               Scankey: ("time" <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone)
+               Vectorized Filter: ("time" <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone)
+(10 rows)
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and device <> 1;
+       sum        
+------------------
+ 29162.2138479675
+(1 row)
+
+explain (costs off)
+select sum(humidity) from readings
+where time <= '2022-06-02' and device != 1;
+                                              QUERY PLAN                                               
+-------------------------------------------------------------------------------------------------------
+ Aggregate
+   ->  Append
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               Filter: (device <> 1)
+               Scankey: ("time" <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone)
+               Vectorized Filter: ("time" <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+               Filter: (device <> 1)
+               Scankey: ("time" <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone)
+               Vectorized Filter: ("time" <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone)
+(10 rows)
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and device != 1;
+       sum        
+------------------
+ 29162.2138479675
+(1 row)
+
+set timescaledb.enable_hypercore_scankey_pushdown=false;
+explain (costs off)
+select sum(humidity) from readings
+where time <= '2022-06-02' and device <> 1;
+                                              QUERY PLAN                                               
+-------------------------------------------------------------------------------------------------------
+ Aggregate
+   ->  Append
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               Filter: (device <> 1)
+               Vectorized Filter: ("time" <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+               Filter: (device <> 1)
+               Vectorized Filter: ("time" <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone)
+(8 rows)
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and device <> 1;
+       sum        
+------------------
+ 29162.2138479675
+(1 row)
+
+set timescaledb.enable_hypercore_scankey_pushdown=true;
+--
+-- Test non-btree operator on non-segmentby column and compare with
+-- btree operators.
+--
+explain (costs off)
+select sum(humidity) from readings
+where time <= '2022-06-02' and temp <> 1;
+                                                                 QUERY PLAN                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate
+   ->  Append
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               Scankey: ("time" <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone)
+               Vectorized Filter: (("time" <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone) AND (temp <> '1'::double precision))
+         ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+               Scankey: ("time" <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone)
+               Vectorized Filter: (("time" <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone) AND (temp <> '1'::double precision))
+(8 rows)
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and temp <> 1;
+       sum        
+------------------
+ 30543.8523547207
+(1 row)
+
+explain (costs off)
+select sum(humidity) from readings
+where time <= '2022-06-02' and temp != 1;
+                                                                 QUERY PLAN                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate
+   ->  Append
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               Scankey: ("time" <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone)
+               Vectorized Filter: (("time" <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone) AND (temp <> '1'::double precision))
+         ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+               Scankey: ("time" <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone)
+               Vectorized Filter: (("time" <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone) AND (temp <> '1'::double precision))
+(8 rows)
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and temp != 1;
+       sum        
+------------------
+ 30543.8523547207
+(1 row)
+
+set timescaledb.enable_hypercore_scankey_pushdown=false;
+explain (costs off)
+select sum(humidity) from readings
+where time <= '2022-06-02' and temp <> 1;
+                                                                 QUERY PLAN                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate
+   ->  Append
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               Vectorized Filter: (("time" <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone) AND (temp <> '1'::double precision))
+         ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+               Vectorized Filter: (("time" <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone) AND (temp <> '1'::double precision))
+(6 rows)
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and temp <> 1;
+       sum        
+------------------
+ 30543.8523547207
+(1 row)
+
+set timescaledb.enable_hypercore_scankey_pushdown=true;
+--
 -- Test "foo IN (1, 2)" (ScalarArrayOpExpr)
 --
 -- This is currently not transformed to scan keys because only index

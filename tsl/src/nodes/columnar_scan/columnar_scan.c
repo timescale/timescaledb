@@ -8,9 +8,9 @@
 #include <access/sdir.h>
 #include <access/skey.h>
 #include <access/tableam.h>
-#include <c.h>
 #include <catalog/pg_attribute.h>
 #include <executor/tuptable.h>
+#include <miscadmin.h>
 #include <nodes/execnodes.h>
 #include <nodes/extensible.h>
 #include <nodes/nodeFuncs.h>
@@ -26,6 +26,7 @@
 #include <planner.h>
 #include <planner/planner.h>
 #include <utils/palloc.h>
+#include <utils/rel.h>
 #include <utils/snapmgr.h>
 #include <utils/typcache.h>
 
@@ -50,11 +51,13 @@ typedef struct ColumnarScanState
 {
 	CustomScanState css;
 	VectorQualState vqstate;
+	ExprState *segmentby_qual;
 	ScanKey scankeys;
 	int nscankeys;
 	List *scankey_quals;
 	List *quals_orig;
 	List *vectorized_quals_orig;
+	List *segmentby_quals;
 	SimpleProjInfo sprojinfo;
 } ColumnarScanState;
 
@@ -83,11 +86,67 @@ typedef struct QualProcessState
 	List *vectorized_quals;
 	List *nonvectorized_quals;
 
+	/*
+	 * Further split nonvectorized quals into quals on segmentby columns and
+	 * non-segmentby columns.
+	 */
+	List *segmentby_quals;
+	List *nonsegmentby_quals;
+
 	/* Scankeys created from scankey_quals */
 	ScanKey scankeys;
 	unsigned int scankeys_capacity;
 	unsigned int nscankeys;
+
+	/* Scratch area for processing */
+	bool relvar_found;
 } QualProcessState;
+
+static bool
+segmentby_qual_walker(Node *qual, QualProcessState *qpc)
+{
+	if (qual == NULL)
+		return false;
+
+	if (IsA(qual, Var) && (Index) castNode(Var, qual)->varno == qpc->relid)
+	{
+		const Var *v = castNode(Var, qual);
+
+		if (AttrNumberIsForUserDefinedAttr(v->varattno))
+		{
+			const ColumnCompressionSettings *ccs =
+				&qpc->hcinfo->columns[AttrNumberGetAttrOffset(v->varattno)];
+			qpc->relvar_found = true;
+
+			if (!ccs->is_segmentby)
+				return true;
+		}
+	}
+
+	return expression_tree_walker(qual, segmentby_qual_walker, qpc);
+}
+
+/*
+ * Split "quals" into those that apply on segmentby columns and those that do
+ * not.
+ */
+static void
+process_segmentby_quals(QualProcessState *qpc, List *quals)
+{
+	ListCell *lc;
+
+	qpc->relvar_found = false;
+
+	foreach (lc, quals)
+	{
+		Expr *qual = lfirst(lc);
+
+		if (!segmentby_qual_walker((Node *) qual, qpc) && qpc->relvar_found)
+			qpc->segmentby_quals = lappend(qpc->segmentby_quals, qual);
+		else
+			qpc->nonsegmentby_quals = lappend(qpc->nonsegmentby_quals, qual);
+	}
+}
 
 /*
  * Process OP-like expression.
@@ -320,6 +379,8 @@ classify_quals(QualProcessState *qpi, const VectorQualInfo *vqinfo, List *quals)
 			qpi->nonvectorized_quals = lappend(qpi->nonvectorized_quals, source_qual);
 		}
 	}
+
+	process_segmentby_quals(qpi, qpi->nonvectorized_quals);
 }
 
 static ScanKey
@@ -400,6 +461,42 @@ should_project(const CustomScanState *state)
 #endif
 }
 
+static inline bool
+should_check_segmentby_qual(ScanDirection direction, const TupleTableSlot *slot)
+{
+	if (likely(direction == ForwardScanDirection))
+		return arrow_slot_is_first(slot);
+
+	Assert(direction == BackwardScanDirection);
+	return arrow_slot_is_last(slot);
+}
+
+/*
+ * Filter tuple by segmentby quals.
+ *
+ * Quals on segmentby columns require no decompression and can filter all
+ * values in the arrow slot in one go since the value of a segmentby column is
+ * the same for the entire arrow array.
+ *
+ * Similarly, if the arrow slot passes the filter, the segmentby quals don't
+ * need to be checked again until the next array is processed.
+ */
+static inline bool
+ExecSegmentbyQual(ExprState *qual, ExprContext *econtext)
+{
+	TupleTableSlot *slot = econtext->ecxt_scantuple;
+	ScanDirection direction = econtext->ecxt_estate->es_direction;
+
+	Assert(TTS_IS_ARROWTUPLE(slot));
+
+	if (qual == NULL || !should_check_segmentby_qual(direction, slot))
+		return true;
+
+	Assert(!arrow_slot_is_consumed(slot));
+
+	return ExecQual(qual, econtext);
+}
+
 static TupleTableSlot *
 columnar_scan_exec(CustomScanState *state)
 {
@@ -443,7 +540,7 @@ columnar_scan_exec(CustomScanState *state)
 	 * If no quals to check, do the fast path and just return the raw scan
 	 * tuple or a projected one.
 	 */
-	if (!qual && !has_vecquals)
+	if (!qual && !has_vecquals && !cstate->segmentby_qual)
 	{
 		bool gottuple = getnextslot(scandesc, direction, slot);
 
@@ -492,13 +589,28 @@ columnar_scan_exec(CustomScanState *state)
 
 		if (likely(TTS_IS_ARROWTUPLE(slot)))
 		{
+			/*
+			 * Filter on segmentby quals first. This is important for performance
+			 * since segmentby quals don't need decompression and can filter all
+			 * values in an arrow slot in one go.
+			 */
+			if (!ExecSegmentbyQual(cstate->segmentby_qual, econtext))
+			{
+				/* The slot didn't pass filters so read the next slot */
+				const uint16 nrows = arrow_slot_total_row_count(slot);
+				arrow_slot_mark_consumed(slot);
+				InstrCountFiltered1(state, nrows);
+				ResetExprContext(econtext);
+				continue;
+			}
+
 			const uint16 nfiltered = ExecVectorQual(&cstate->vqstate, econtext);
 
 			if (nfiltered > 0)
 			{
 				const uint16 total_nrows = arrow_slot_total_row_count(slot);
 
-				TS_DEBUG_LOG("vectorized filtering of %d rows", nfiltered);
+				TS_DEBUG_LOG("vectorized filtering of %u rows", nfiltered);
 
 				/* Skip ahead with the amount filtered */
 				ExecIncrArrowTuple(slot, nfiltered);
@@ -526,10 +638,10 @@ columnar_scan_exec(CustomScanState *state)
 
 			return slot;
 		}
+		else
+			InstrCountFiltered1(state, 1);
 
-		/* Row was filtered by non-vectorized qual */
 		ResetExprContext(econtext);
-		InstrCountFiltered1(state, 1);
 	}
 }
 
@@ -674,6 +786,16 @@ columnar_scan_begin(CustomScanState *state, EState *estate, int eflags)
 	 * projection. */
 	if (cstate->css.ss.ps.ps_ProjInfo)
 		create_simple_projection_state_if_possible(cstate);
+
+	cstate->segmentby_qual = ExecInitQual(cstate->segmentby_quals, (PlanState *) state);
+
+	/*
+	 * After having initialized ExprState for processing regular and segmentby
+	 * quals separately, add the segmentby quals list to the original quals in
+	 * order for them to show up together in EXPLAINs.
+	 */
+	if (cstate->segmentby_quals != NIL)
+		state->ss.ps.plan->qual = list_concat(state->ss.ps.plan->qual, cstate->segmentby_quals);
 }
 
 static void
@@ -850,6 +972,7 @@ columnar_scan_state_create(CustomScan *cscan)
 	cstate->css.methods = &columnar_scan_state_methods;
 	cstate->vectorized_quals_orig = linitial(cscan->custom_exprs);
 	cstate->scankey_quals = lsecond(cscan->custom_exprs);
+	cstate->segmentby_quals = lthird(cscan->custom_exprs);
 	cstate->nscankeys = list_length(cstate->scankey_quals);
 	cstate->scankeys = NULL;
 #if PG16_GE
@@ -927,8 +1050,9 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_p
 	scan_clauses = extract_actual_clauses(scan_clauses, false);
 	classify_quals(&qpi, &vqih.vqinfo, scan_clauses);
 
-	columnar_scan_plan->scan.plan.qual = qpi.nonvectorized_quals;
-	columnar_scan_plan->custom_exprs = list_make2(qpi.vectorized_quals, qpi.scankey_quals);
+	columnar_scan_plan->scan.plan.qual = qpi.nonsegmentby_quals;
+	columnar_scan_plan->custom_exprs =
+		list_make3(qpi.vectorized_quals, qpi.scankey_quals, qpi.segmentby_quals);
 
 	RelationClose(relation);
 
