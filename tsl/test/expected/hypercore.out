@@ -761,7 +761,7 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as rescan_chunk
 select compress_chunk(:'rescan_chunk', hypercore_use_access_method => true);
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_5_40_chunk
+ _timescaledb_internal._hyper_5_37_chunk
 (1 row)
 
 select relname, amname
@@ -770,7 +770,7 @@ select relname, amname
   join pg_am on (relam = pg_am.oid);
       relname      |  amname   
 -------------------+-----------
- _hyper_5_40_chunk | hypercore
+ _hyper_5_37_chunk | hypercore
 (1 row)
 
 insert into rescan values ('2024-11-02 01:00', 2, 1.0), ('2024-11-02 02:00', 2, 2.0), ('2024-11-02 03:00', 1, 3.0), ('2024-11-02 05:00', 2, 4.0);
