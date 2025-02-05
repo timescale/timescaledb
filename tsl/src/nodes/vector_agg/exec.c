@@ -57,13 +57,15 @@ get_input_offset(const CustomScanState *state, const Var *var)
 	return index;
 }
 
-static int
-get_value_bytes(const CustomScanState *state, int input_offset)
+static void
+get_column_storage_properties(const CustomScanState *state, int input_offset,
+							  GroupingColumn *result)
 {
 	const DecompressChunkState *decompress_state = (DecompressChunkState *) state;
 	const DecompressContext *dcontext = &decompress_state->decompress_context;
 	const CompressionColumnDescription *desc = &dcontext->compressed_chunk_columns[input_offset];
-	return desc->value_bytes;
+	result->value_bytes = desc->value_bytes;
+	result->by_value = desc->by_value;
 }
 
 static void
@@ -187,7 +189,7 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 
 			Var *var = castNode(Var, tlentry->expr);
 			col->input_offset = get_input_offset(childstate, var);
-			col->value_bytes = get_value_bytes(childstate, col->input_offset);
+			get_column_storage_properties(childstate, col->input_offset, col);
 		}
 	}
 
