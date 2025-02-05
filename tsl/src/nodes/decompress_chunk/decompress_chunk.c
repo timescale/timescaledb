@@ -981,6 +981,34 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	List *decompressed_paths = list_make1(chunk_path_no_sort);
 
 	/*
+	 * Create a path for the batch sorted merge optimization. This optimization
+	 * performs a sorted merge of the involved batches by using a binary heap
+	 * and preserving the compression order. This optimization is only
+	 * considered if we can't push down the sort to the compressed chunk. If we
+	 * can push down the sort, the batches can be directly consumed in this
+	 * order and we don't need to use this optimization.
+	 */
+	if (sort_info->use_batch_sorted_merge && ts_guc_enable_decompression_sorted_merge)
+	{
+		Assert(!sort_info->use_compressed_sort);
+
+		DecompressChunkPath *path_copy =
+			copy_decompress_chunk_path((DecompressChunkPath *) chunk_path_no_sort);
+
+		path_copy->reverse = sort_info->reverse;
+		path_copy->batch_sorted_merge = true;
+
+		/* The segment by optimization is only enabled if it can deliver the tuples in the
+		 * same order as the query requested it. So, we can just copy the pathkeys of the
+		 * query here.
+		 */
+		path_copy->custom_path.path.pathkeys = root->query_pathkeys;
+		cost_batch_sorted_merge(root, compression_info, path_copy, compressed_path);
+
+		decompressed_paths = lappend(decompressed_paths, path_copy);
+	}
+
+	/*
 	 * If we can push down the sort below the DecompressChunk node, we set the pathkeys of
 	 * the decompress node to the query pathkeys, while remembering the compressed_pathkeys
 	 * corresponding to those query_pathkeys. We will determine whether to put a sort
@@ -1037,34 +1065,6 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 
 			decompressed_paths = lappend(decompressed_paths, path_copy);
 		}
-	}
-
-	/*
-	 * Create a path for the batch sorted merge optimization. This optimization
-	 * performs a sorted merge of the involved batches by using a binary heap
-	 * and preserving the compression order. This optimization is only
-	 * considered if we can't push down the sort to the compressed chunk. If we
-	 * can push down the sort, the batches can be directly consumed in this
-	 * order and we don't need to use this optimization.
-	 */
-	if (sort_info->use_batch_sorted_merge && ts_guc_enable_decompression_sorted_merge)
-	{
-		Assert(!sort_info->use_compressed_sort);
-
-		DecompressChunkPath *path_copy =
-			copy_decompress_chunk_path((DecompressChunkPath *) chunk_path_no_sort);
-
-		path_copy->reverse = sort_info->reverse;
-		path_copy->batch_sorted_merge = true;
-
-		/* The segment by optimization is only enabled if it can deliver the tuples in the
-		 * same order as the query requested it. So, we can just copy the pathkeys of the
-		 * query here.
-		 */
-		path_copy->custom_path.path.pathkeys = root->query_pathkeys;
-		cost_batch_sorted_merge(root, compression_info, path_copy, compressed_path);
-
-		decompressed_paths = lappend(decompressed_paths, path_copy);
 	}
 
 	/*
