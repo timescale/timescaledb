@@ -1,5 +1,6 @@
 set(TEST_FILES_SHARED
     cagg_compression.sql
+    chunkwise_agg_gather_sort.sql
     classify_relation.sql
     compat.sql
     constify_timestamptz_op_interval.sql

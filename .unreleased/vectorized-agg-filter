@@ -1,1 +1,0 @@
-Implements: #7458 Support vecorized aggregation with aggregate FILTER clauses that are also vectorizable

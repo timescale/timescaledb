@@ -44,7 +44,7 @@ extern bool ts_guc_enable_cagg_reorder_groupby;
 extern TSDLLEXPORT int ts_guc_cagg_max_individual_materializations;
 extern bool ts_guc_enable_now_constify;
 extern bool ts_guc_enable_foreign_key_propagation;
-extern bool ts_guc_enable_osm_reads;
+extern TSDLLEXPORT bool ts_guc_enable_osm_reads;
 #if PG16_GE
 extern TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown;
 #endif
@@ -92,6 +92,12 @@ extern TSDLLEXPORT bool ts_guc_auto_sparse_indexes;
 extern TSDLLEXPORT bool ts_guc_enable_columnarscan;
 extern TSDLLEXPORT int ts_guc_bgw_log_level;
 
+/*
+ * Exit code to use when scheduler exits.
+ *
+ * Used for debugging.
+ */
+extern TSDLLEXPORT int ts_debug_bgw_scheduler_exit_status;
 #ifdef TS_DEBUG
 extern bool ts_shutdown_bgw;
 extern char *ts_current_timestamp_mock;

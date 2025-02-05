@@ -1121,3 +1121,19 @@ SELECT * FROM show_chunks('test') ch, LATERAL test.show_indexes(ch) ORDER BY 1, 
  _timescaledb_internal._hyper_25_24_chunk | _timescaledb_internal._hyper_25_24_chunk_test_val_idx | {val}   |      | f      | f       | f         | 
 (1 row)
 
+-- test creating a hypertable with a primary key where the partitioning column is not part of the primary key
+CREATE TABLE test_schema.partition_not_pk (id INT NOT NULL, device_id INT NOT NULL, time TIMESTAMPTZ NOT NULL, a TEXT NOT NULL, PRIMARY KEY (id));
+\set ON_ERROR_STOP 0
+select create_hypertable ('test_schema.partition_not_pk', 'time');
+ERROR:  cannot create a unique index without the column "time" (used in partitioning)
+HINT:  If you're creating a hypertable on a table with a primary key, ensure the partitioning column is part of the primary or composite key.
+\set ON_ERROR_STOP 1
+DROP TABLE test_schema.partition_not_pk;
+-- test creating a hypertable with a composite key where the partitioning column is not part of the composite key
+CREATE TABLE test_schema.partition_not_pk (id INT NOT NULL, device_id INT NOT NULL, time TIMESTAMPTZ NOT NULL, a TEXT NOT NULL, PRIMARY KEY (id, device_id));
+\set ON_ERROR_STOP 0
+select create_hypertable ('test_schema.partition_not_pk', 'time');
+ERROR:  cannot create a unique index without the column "time" (used in partitioning)
+HINT:  If you're creating a hypertable on a table with a primary key, ensure the partitioning column is part of the primary or composite key.
+\set ON_ERROR_STOP 1
+DROP TABLE test_schema.partition_not_pk;

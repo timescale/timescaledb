@@ -633,6 +633,7 @@ create_materialization_plan(MaterializationContext *context, MaterializationPlan
 		char *query = materialization->create_statement(context);
 		Oid types[] = { context->materialization_range.type, context->materialization_range.type };
 
+		elog(DEBUG2, "%s: %s", __func__, query);
 		materialization->plan = SPI_prepare(query, 2, types);
 		if (materialization->plan == NULL)
 			elog(ERROR, "%s: SPI_prepare failed: %s", __func__, query);

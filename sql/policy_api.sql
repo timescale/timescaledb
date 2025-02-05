@@ -85,7 +85,8 @@ CREATE OR REPLACE FUNCTION @extschema@.add_continuous_aggregate_policy(
     end_offset "any", schedule_interval INTERVAL,
     if_not_exists BOOL = false,
     initial_start TIMESTAMPTZ = NULL,
-    timezone TEXT = NULL
+    timezone TEXT = NULL,
+    include_tiered_data BOOL = NULL
 )
 RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_add'

@@ -662,45 +662,49 @@ VALUES
 (2, '2023-01-15'::timestamptz, 13, 4),
 (5, '2023-01-20'::timestamptz, 13, 1);
 -- four chunks, all of them should be excluded at plantime
-SELECT COUNT(*) FROM show_chunks('logged_data');
- count 
-     4
-(1 row)
+SELECT row_number() OVER (), range_start, range_end FROM timescaledb_information.chunks WHERE hypertable_schema = 'public' AND hypertable_name = 'logged_data' ORDER BY 2,3;
+ row_number |         range_start          |          range_end           
+------------+------------------------------+------------------------------
+          1 | Thu Dec 29 01:00:00 2022 UTC | Thu Jan 05 01:00:00 2023 UTC
+          2 | Thu Jan 05 01:00:00 2023 UTC | Thu Jan 12 01:00:00 2023 UTC
+          3 | Thu Jan 12 01:00:00 2023 UTC | Thu Jan 19 01:00:00 2023 UTC
+          4 | Thu Jan 19 01:00:00 2023 UTC | Thu Jan 26 01:00:00 2023 UTC
+(4 rows)
 
 SET timescaledb.current_timestamp_mock TO '2024-01-01 0:30:00+00';
 SET timescaledb.enable_chunk_append TO true;
 SET timescaledb.enable_constraint_aware_append TO true;
 -- for all the queries below, exclusion should be happening at plantime
-EXPLAIN (ANALYZE, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
 timestamp BETWEEN now() - interval '1 day' AND now()
 AND rawtag_id = 1 ORDER BY "timestamp" ASC;
 QUERY PLAN
- Sort  (cost=0.01..0.02 rows=0 width=20) (actual rows=0 loops=1)
+ Sort (actual rows=0 loops=1)
    Sort Key: "timestamp"
    Sort Method: quicksort 
-   ->  Result  (cost=0.00..0.00 rows=0 width=0) (actual rows=0 loops=1)
+   ->  Result (actual rows=0 loops=1)
          One-Time Filter: false
 (5 rows)
 
-EXPLAIN (ANALYZE, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
 timestamp <= now() AND timestamp >= now() - interval '1 day'
 AND rawtag_id = 1 ORDER BY "timestamp" ASC;
 QUERY PLAN
- Sort  (cost=0.01..0.02 rows=0 width=20) (actual rows=0 loops=1)
+ Sort (actual rows=0 loops=1)
    Sort Key: "timestamp"
    Sort Method: quicksort 
-   ->  Result  (cost=0.00..0.00 rows=0 width=0) (actual rows=0 loops=1)
+   ->  Result (actual rows=0 loops=1)
          One-Time Filter: false
 (5 rows)
 
-EXPLAIN (ANALYZE, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
+EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
 timestamp <= now() AND timestamp >= now() - interval '1 day'
 ORDER BY "timestamp" ASC;
 QUERY PLAN
- Sort  (cost=0.01..0.02 rows=0 width=20) (actual rows=0 loops=1)
+ Sort (actual rows=0 loops=1)
    Sort Key: "timestamp"
    Sort Method: quicksort 
-   ->  Result  (cost=0.00..0.00 rows=0 width=0) (actual rows=0 loops=1)
+   ->  Result (actual rows=0 loops=1)
          One-Time Filter: false
 (5 rows)
 
@@ -709,12 +713,12 @@ SET timescaledb.current_timestamp_mock TO '2023-01-11';
 PREPARE pbtw AS SELECT * FROM logged_data WHERE
 timestamp BETWEEN now() - interval '5 day' AND now() AND rawtag_id = 1
 ORDER BY "timestamp" ASC;
-EXPLAIN (SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 QUERY PLAN
- Custom Scan (ChunkAppend) on logged_data  (cost=0.16..22.08 rows=3 width=20)
+ Custom Scan (ChunkAppend) on logged_data
    Order: logged_data."timestamp"
    Chunks excluded during startup: 2
-   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk
          Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
          Filter: (rawtag_id = 1)
 (6 rows)
@@ -728,15 +732,15 @@ EXECUTE pbtw;
 
 -- now move mock_now() to the future
 SET timescaledb.current_timestamp_mock TO '2023-01-21 0:30:00+00';
-EXPLAIN (SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 QUERY PLAN
- Custom Scan (ChunkAppend) on logged_data  (cost=0.16..22.08 rows=3 width=20)
+ Custom Scan (ChunkAppend) on logged_data
    Order: logged_data."timestamp"
    Chunks excluded during startup: 1
-   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk
          Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
          Filter: (rawtag_id = 1)
-   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk
          Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
          Filter: (rawtag_id = 1)
 (9 rows)
@@ -749,9 +753,9 @@ EXECUTE pbtw;
 
 -- much further into the future, no rows should be returned
 SET timescaledb.current_timestamp_mock TO '2024-01-21 0:30:00+00';
-EXPLAIN (SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 QUERY PLAN
- Custom Scan (ChunkAppend) on logged_data  (cost=0.16..22.08 rows=3 width=20)
+ Custom Scan (ChunkAppend) on logged_data
    Order: logged_data."timestamp"
    Chunks excluded during startup: 3
 (3 rows)
@@ -769,17 +773,17 @@ SET timescaledb.current_timestamp_mock TO '2023-01-11';
 PREPARE pbtw AS SELECT * FROM logged_data WHERE
 timestamp BETWEEN now() - interval '5 day' AND now() AND rawtag_id = 1
 ORDER BY "timestamp" ASC;
-EXPLAIN (SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 QUERY PLAN
- Merge Append  (cost=0.50..22.14 rows=3 width=20)
+ Merge Append
    Sort Key: _hyper_X_X_chunk."timestamp"
-   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk
          Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
          Filter: (rawtag_id = 1)
-   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk
          Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
          Filter: (rawtag_id = 1)
-   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk
          Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
          Filter: (rawtag_id = 1)
 (11 rows)
@@ -793,17 +797,17 @@ EXECUTE pbtw;
 
 -- now move mock_now() to the future
 SET timescaledb.current_timestamp_mock TO '2023-01-21 0:30:00+00';
-EXPLAIN (SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 QUERY PLAN
- Merge Append  (cost=0.50..22.14 rows=3 width=20)
+ Merge Append
    Sort Key: _hyper_X_X_chunk."timestamp"
-   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk
          Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
          Filter: (rawtag_id = 1)
-   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk
          Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
          Filter: (rawtag_id = 1)
-   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk
          Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
          Filter: (rawtag_id = 1)
 (11 rows)
@@ -816,17 +820,17 @@ EXECUTE pbtw;
 
 -- much further into the future, no rows should be returned
 SET timescaledb.current_timestamp_mock TO '2024-01-21 0:30:00+00';
-EXPLAIN (SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 QUERY PLAN
- Merge Append  (cost=0.50..22.14 rows=3 width=20)
+ Merge Append
    Sort Key: _hyper_X_X_chunk."timestamp"
-   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk
          Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
          Filter: (rawtag_id = 1)
-   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk
          Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
          Filter: (rawtag_id = 1)
-   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk
          Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
          Filter: (rawtag_id = 1)
 (11 rows)

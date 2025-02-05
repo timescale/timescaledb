@@ -2,11 +2,10 @@
 set -eu
 
 # Folder, where we have cloned repositories' sources
-SOURCES_DIR="sources"
+SOURCES_DIR="timescaledb"
 
-GH_USERNAME=$(gh auth status | grep 'Logged in to' |cut -d ' ' -f 9)
-
-FORK_DIR="$GH_USERNAME-timescaledb"
+#folder-name
+FORK_DIR="timescaledb"
 
 echo "---- Deriving the release related versions from main ----"
 
@@ -17,6 +16,7 @@ NEW_PATCH_VERSION="0"
 NEW_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
 RELEASE_BRANCH="${NEW_VERSION/%.$NEW_PATCH_VERSION/.x}"
 CURRENT_VERSION=$(tail -1 version.config | cut -d ' ' -f 3)
+
 cd sql/updates
 
 for f in ./*
@@ -29,7 +29,6 @@ done
 LAST_VERSION=$(echo "$LAST_UPDATE_FILE" |cut -d '-' -f 1 |cut -d '/' -f 2)
 
 echo "CURRENT_VERSION is $CURRENT_VERSION"
-#echo "LAST_UPDATE_FILE is $LAST_UPDATE_FILE"
 echo "LAST_VERSION is $LAST_VERSION"
 echo "RELEASE_BRANCH is $RELEASE_BRANCH"
 echo "NEW_VERSION is $NEW_VERSION"
@@ -37,18 +36,21 @@ cd ~/"$SOURCES_DIR"/"$FORK_DIR"
 
 
 # Derived Variables
-#RELEASE_PR_BRANCH="release-$NEW_VERSION-$RELEASE_BRANCH"
-RELEASE_PR_BRANCH="release-$NEW_VERSION"
+RELEASE_PR_BRANCH="release/$NEW_VERSION"
 UPDATE_FILE="$CURRENT_VERSION--$NEW_VERSION.sql"
 DOWNGRADE_FILE="$NEW_VERSION--$CURRENT_VERSION.sql"
 LAST_UPDATE_FILE="$LAST_VERSION--$CURRENT_VERSION.sql"
 LAST_DOWNGRADE_FILE="$CURRENT_VERSION--$LAST_VERSION.sql"
 
+BASE_BRANCH="$1"
+RELEASE_PR_BRANCH="$RELEASE_PR_BRANCH-to-$BASE_BRANCH"
 
-echo "---- Creating release branch $RELEASE_PR_BRANCH from $RELEASE_BRANCH, on the fork ----"
+echo "final BASE_BRANCH is $BASE_BRANCH"
+echo "RELEASE_PR_BRANCH is $RELEASE_PR_BRANCH"
 
-git checkout -b "$RELEASE_PR_BRANCH" upstream/"$RELEASE_BRANCH"
-#git checkout -b "$RELEASE_PR_BRANCH" upstream/main
+echo "---- Creating release branch $RELEASE_PR_BRANCH from $BASE_BRANCH, on the fork ----"
+
+git checkout -b "$RELEASE_PR_BRANCH" origin/"$BASE_BRANCH"
 git branch
 git pull && git diff HEAD
 
@@ -92,11 +94,13 @@ sed -i.bak "s/FILE reverse-dev.sql)/FILE ${DOWNGRADE_FILE})/g" CMakeLists.txt
 rm CMakeLists.txt.bak
 
 
+
+cd ~/"$SOURCES_DIR"/"$FORK_DIR"
+
 echo "---- Creating CHANGELOG_$NEW_VERSION.md file ----"
 
 rm -f ~/CHANGELOG_"$NEW_VERSION".md
 
-cd ~/"$SOURCES_DIR"/"$FORK_DIR"
 ./scripts/merge_changelogs.sh > ~/CHANGELOG_"$NEW_VERSION".md
 
 echo "---- Editing the CHANGELOG.md file with the contents of CHANGELOG_$NEW_VERSION.md file. ----"
@@ -129,13 +133,13 @@ done
 
 cd ..
 
+
 git diff HEAD --name-only
 
 
 echo "---- Committing the Release PR to fork ----"
 
 #Remove date from the intermediate CHANGELOG file.
-
 cut -d '(' -f1 < ~/CHANGELOG_"$NEW_VERSION".md > ~/CHANGELOG_"$NEW_VERSION".md.tmp
 mv ~/CHANGELOG_"$NEW_VERSION".md.tmp ~/CHANGELOG_"$NEW_VERSION".md
 

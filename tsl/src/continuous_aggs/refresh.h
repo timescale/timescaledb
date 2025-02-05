@@ -20,4 +20,5 @@ extern void continuous_agg_calculate_merged_refresh_window(
 extern void continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 											const InternalTimeRange *refresh_window,
 											const CaggRefreshCallContext callctx,
-											const bool start_isnull, const bool end_isnull);
+											const bool start_isnull, const bool end_isnull,
+											bool force);

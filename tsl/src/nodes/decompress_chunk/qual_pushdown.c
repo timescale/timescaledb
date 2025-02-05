@@ -14,7 +14,6 @@
 #include <utils/typcache.h>
 
 #include "compression/create.h"
-#include "compression/segment_meta.h"
 #include "custom_type_cache.h"
 #include "decompress_chunk.h"
 #include "qual_pushdown.h"
