@@ -352,6 +352,34 @@ for commit_sha, commit_title in main_commits:
     prs_to_backport[pull.number].pygithub_commits.insert(0, pygithub_commit)
 
 
+def branch_has_open_pr(repo, branch):
+    """Check whether the given branch has an open PR."""
+
+    template = """query {
+      repository(name: "$repo_name", owner: "$repo_owner") {
+        ref(qualifiedName: "$branch") {
+          associatedPullRequests(first: 1) {
+            nodes { closed }}}}}"""
+
+    params = {
+        "branch": branch,
+        "repo_name": repo.name,
+        "repo_owner": repo.owner.login,
+    }
+
+    result = run_query(string.Template(template).substitute(params))
+
+    # This returns:
+    # {'data': {'repository': {'ref': {'associatedPullRequests': {'nodes': [{'closed': True}]}}}}}
+
+    prs = result["data"]["repository"]["ref"]["associatedPullRequests"]["nodes"]
+
+    if not prs or len(prs) != 1 or not prs[0]:
+        return None
+
+    return not prs[0]["closed"]
+
+
 def report_backport_not_done(original_pr, reason, details=None):
     """If something prevents us from backporting the PR automatically,
     report it in a comment to original PR, and add a label preventing
@@ -381,6 +409,7 @@ def report_backport_not_done(original_pr, reason, details=None):
 # Set git name and email corresponding to the token user.
 token_user = github.get_user()
 os.environ["GIT_COMMITTER_NAME"] = token_user.name
+os.environ["GIT_AUTHOR_NAME"] = token_user.name
 
 # This is an email that is used by Github when you opt to hide your real email
 # address. It is required so that the commits are recognized by Github as made
@@ -389,6 +418,8 @@ os.environ["GIT_COMMITTER_NAME"] = token_user.name
 os.environ["GIT_COMMITTER_EMAIL"] = (
     f"{token_user.id}+{token_user.login}@users.noreply.github.com"
 )
+os.environ["GIT_AUTHOR_EMAIL"] = os.environ["GIT_COMMITTER_EMAIL"]
+
 print(
     f"Will commit as {os.environ['GIT_COMMITTER_NAME']} <{os.environ['GIT_COMMITTER_EMAIL']}>"
 )
@@ -411,19 +442,41 @@ for index, pr_info in enumerate(prs_to_backport.values()):
     backport_branch = f"backport/{backport_target}/{original_pr.number}"
 
     # If there is already a backport branch for this PR, this probably means
-    # that we already created the backport PR. Skip it.
+    # that we already created the backport PR. Update it, because the PR might
+    # not auto-merge when the branch is not up to date with the target branch,
+    # depending on the branch protection settings. We want to update to the
+    # recent target automatically to minimize the amount of manual work.
     if (
         git_returncode(f"rev-parse {target_remote}/{backport_branch} > /dev/null 2>&1")
         == 0
     ):
         print(
-            f'Backport branch {backport_branch} for PR #{original_pr.number}: "{original_pr.title}" already exists. Skipping.'
+            f'Backport branch {backport_branch} for PR #{original_pr.number}: "{original_pr.title}" already exists.'
         )
+
+        if not branch_has_open_pr(target_repo, backport_branch):
+            # The PR can be closed manually when the backport is not needed, or
+            # can not exist when there was some error. We are only interested in
+            # the most certain case when there is an open backport PR.
+            continue
+
+        print(f"Updating the branch {backport_branch} because it has an open PR.")
+        git_check("reset --hard")
+        git_check("clean -xfd")
+        git_check(
+            f"checkout --quiet --force --detach {target_remote}/{backport_branch} > /dev/null"
+        )
+        # Use merge and no force-push, so that the simultaneous changes made by
+        # other users are not accidentally overwritten.
+        git_check(f"merge --quiet {target_remote}/{backport_target}")
+        git_check(f"push --quiet {target_remote} @:{backport_branch}")
         continue
 
     # Try to cherry-pick the commits.
+    git_check("reset --hard")
+    git_check("clean -xfd")
     git_check(
-        f"checkout --quiet --detach {target_remote}/{backport_target} > /dev/null"
+        f"checkout --quiet --force --detach {target_remote}/{backport_target} > /dev/null"
     )
 
     commit_shas = [commit.sha for commit in pr_info.pygithub_commits]
