@@ -303,6 +303,64 @@ where time = '2022-06-01' and 4 < device;
 set timescaledb.enable_hypercore_scankey_pushdown=true;
 
 --
+-- Test non-btree operator on segmentby column and compare with btree
+-- operators.
+--
+explain (costs off)
+select sum(humidity) from readings
+where time <= '2022-06-02' and device <> 1;
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and device <> 1;
+
+explain (costs off)
+select sum(humidity) from readings
+where time <= '2022-06-02' and device != 1;
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and device != 1;
+
+set timescaledb.enable_hypercore_scankey_pushdown=false;
+
+explain (costs off)
+select sum(humidity) from readings
+where time <= '2022-06-02' and device <> 1;
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and device <> 1;
+
+set timescaledb.enable_hypercore_scankey_pushdown=true;
+
+--
+-- Test non-btree operator on non-segmentby column and compare with
+-- btree operators.
+--
+explain (costs off)
+select sum(humidity) from readings
+where time <= '2022-06-02' and temp <> 1;
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and temp <> 1;
+
+explain (costs off)
+select sum(humidity) from readings
+where time <= '2022-06-02' and temp != 1;
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and temp != 1;
+
+set timescaledb.enable_hypercore_scankey_pushdown=false;
+
+explain (costs off)
+select sum(humidity) from readings
+where time <= '2022-06-02' and temp <> 1;
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and temp <> 1;
+
+set timescaledb.enable_hypercore_scankey_pushdown=true;
+
+--
 -- Test "foo IN (1, 2)" (ScalarArrayOpExpr)
 --
 -- This is currently not transformed to scan keys because only index

@@ -271,6 +271,16 @@ arrow_slot_is_consumed(const TupleTableSlot *slot)
 }
 
 static inline bool
+arrow_slot_is_first(const TupleTableSlot *slot)
+{
+	const ArrowTupleTableSlot *aslot = (const ArrowTupleTableSlot *) slot;
+
+	Assert(TTS_IS_ARROWTUPLE(slot));
+
+	return aslot->tuple_index == InvalidTupleIndex || aslot->tuple_index == 1;
+}
+
+static inline bool
 arrow_slot_is_last(const TupleTableSlot *slot)
 {
 	const ArrowTupleTableSlot *aslot = (const ArrowTupleTableSlot *) slot;
