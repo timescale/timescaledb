@@ -1,15 +1,19 @@
-name: "Run nightly tests on release branch"
+name: "Run nightly tests on minor version branch"
 
 "on":
   schedule:
-    # run daily at 12:00 on the release branch
-    - cron: '0 12 * * *'
+    # run daily at 00:00 on the old minor version branch
+    - cron: '0 0 * * *'
 
 jobs:
   run-tests:
     runs-on: ubuntu-latest
 
     steps:
+
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@v4
+
       - name: Set env var CURRENT_MAIN_VERSION
         run: echo "CURRENT_MAIN_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)" >> $GITHUB_ENV
       - name: Test env var CURRENT_MAIN_VERSION
@@ -46,3 +50,10 @@ jobs:
           gh workflow run windows-build-and-test.yaml -R timescale/timescaledb -f branch="$OLD_MINOR_VERSION_BRANCH"
           gh workflow run snapshot-abi.yaml -R timescale/timescaledb -f branch="$OLD_MINOR_VERSION_BRANCH"
           gh workflow run abi.yaml -R timescale/timescaledb -f branch="$OLD_MINOR_VERSION_BRANCH"
+          gh workflow run apt-arm-packages.yaml -R timescale/timescaledb -f branch="$OLD_MINOR_VERSION_BRANCH"
+          gh workflow run apt-packages.yaml -R timescale/timescaledb -f branch="$OLD_MINOR_VERSION_BRANCH"
+          gh workflow run docker-images.yaml -R timescale/timescaledb -f branch="$OLD_MINOR_VERSION_BRANCH"
+          gh workflow run windows-packages.yaml -R timescale/timescaledb -f branch="$OLD_MINOR_VERSION_BRANCH"
+          gh workflow run homebrew.yaml -R timescale/timescaledb -f branch="$OLD_MINOR_VERSION_BRANCH"
+          gh workflow run libfuzzer.yaml -R timescale/timescaledb -f branch="$OLD_MINOR_VERSION_BRANCH"
+          gh workflow run sqlsmith.yaml -R timescale/timescaledb -f branch="$OLD_MINOR_VERSION_BRANCH"

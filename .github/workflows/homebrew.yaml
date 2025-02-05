@@ -48,6 +48,8 @@ jobs:
 
     # checkout code to get version information
     - uses: actions/checkout@v4
+       with:
+         ref: ${{ github.event.inputs.branch }}
 
     - name: Test Installation
       run: |
