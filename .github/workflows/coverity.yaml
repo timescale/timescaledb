@@ -7,44 +7,17 @@ name: Coverity
     branches:
       - coverity_scan
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      branch:
+        description: 'Branch to checkout'
+        type: string
+        default: 'main'
 
 jobs:
 
-  set-old-minor-version-branch:
-    runs-on: ubuntu-latest
-
-    steps:
-
-      - name: Checkout TimescaleDB
-        uses: actions/checkout@v4
-
-      - name: Set env var CURRENT_MAIN_VERSION
-        run: echo "CURRENT_MAIN_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)" >> $GITHUB_ENV
-      - name: Test env var CURRENT_MAIN_VERSION
-        run: echo $CURRENT_MAIN_VERSION
-
-      - name: Set env var CURRENT_MINOR_VERSION
-        run: echo "CURRENT_MINOR_VERSION=$(echo ${{ env.CURRENT_MAIN_VERSION }} | cut -d '.' -f 2)" >> $GITHUB_ENV
-      - name: Test env var CURRENT_MINOR_VERSION
-        run: echo $CURRENT_MINOR_VERSION
-
-      - name: Set env var OLD_MINOR_VERSION
-        run: echo "OLD_MINOR_VERSION=$((${{ env.CURRENT_MINOR_VERSION }} - 1))" >> $GITHUB_ENV
-      - name: Test env var OLD_MINOR_VERSION
-        run: echo $OLD_MINOR_VERSION
-
-      - name: Set env var OLD_MINOR_VERSION_FULL
-        run: echo "OLD_MINOR_VERSION_FULL=$(echo ${{ env.CURRENT_MAIN_VERSION }} | sed -e "s/${{ env.CURRENT_MINOR_VERSION }}/${{ env.OLD_MINOR_VERSION }}/g")" >> $GITHUB_ENV
-      - name: Test env var OLD_MINOR_VERSION_FULL
-        run: echo $OLD_MINOR_VERSION_FULL
-
-      - name: Set env var OLD_MINOR_VERSION_BRANCH
-        run: echo "OLD_MINOR_VERSION_BRANCH="${${{ env.OLD_MINOR_VERSION_FULL }}/%.0/.x}"" >> $GITHUB_ENV
-      - name: Test env var OLD_MINOR_VERSION_BRANCH
-        run: echo $OLD_MINOR_VERSION_BRANCH
-
   coverity:
-    name: Coverity ${{ matrix.pg }} ${{ matrix.timescaledb_branch }}
+    name: Coverity ${{ matrix.pg }} timescaledb${{ github.event.inputs.branch }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -52,8 +25,8 @@ jobs:
         # run only on the 3 latest PG versions as we have rate limit on coverity
         pg: [15, 16, 17]
         os: [ubuntu-20.04]
-        timescaledb_branch: [main, ${{ env.OLD_MINOR_VERSION_BRANCH }}]
-    steps:
+
+  steps:
     - name: Install Dependencies
       run: |
         sudo apt-get update
@@ -65,7 +38,7 @@ jobs:
     - name: Checkout TimescaleDB
       uses: actions/checkout@v4
       with:
-        ref: ${{ matrix.timescaledb_branch }}
+        ref: ${{ github.event.inputs.branch }}
 
     - name: Coverity tools
       run: |

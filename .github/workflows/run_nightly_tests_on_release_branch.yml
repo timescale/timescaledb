@@ -4,6 +4,7 @@ name: "Run nightly tests on minor version branch"
   schedule:
     # run daily at 00:00 on the old minor version branch
     - cron: '0 0 * * *'
+    - cron: '0 22 * * SAT'
 
 jobs:
   run-tests:
@@ -40,6 +41,7 @@ jobs:
         run: echo $OLD_MINOR_VERSION_BRANCH
 
       - name: Run nightly tests
+        if: github.event.schedule != '0 22 * * SAT'
         env:
           GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
@@ -57,3 +59,10 @@ jobs:
           gh workflow run homebrew.yaml -R timescale/timescaledb -f branch="$OLD_MINOR_VERSION_BRANCH"
           gh workflow run libfuzzer.yaml -R timescale/timescaledb -f branch="$OLD_MINOR_VERSION_BRANCH"
           gh workflow run sqlsmith.yaml -R timescale/timescaledb -f branch="$OLD_MINOR_VERSION_BRANCH"
+
+      - name: Run weekly coverity tests
+        if: github.event.schedule != '0 0 * * *'
+        env:
+          GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        run: |
+          gh workflow run coverity.yaml -R timescale/timescaledb -f branch="$OLD_MINOR_VERSION_BRANCH"
