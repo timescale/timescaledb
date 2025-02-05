@@ -724,13 +724,40 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *path, Pat
 	 */
 	path_copy->custom_path.path.startup_cost += sort_info->decompressed_sort_pathkeys_cost.startup;
 	path_copy->custom_path.path.total_cost +=
-		path_copy->custom_path.path.rows * sort_info->decompressed_sort_pathkeys_cost.per_tuple;
+		path_copy->custom_path.path.rows *
+		(cpu_tuple_cost + sort_info->decompressed_sort_pathkeys_cost.per_tuple);
 
+	/*
+	 * Create the Sort path.
+	 */
 	Path *sorted_path = (Path *) create_sort_path(root,
 												  chunk_rel,
 												  (Path *) path_copy,
 												  sort_info->decompressed_sort_pathkeys,
 												  root->limit_tuples);
+
+	/*
+	 * Now, we need another dumb workaround for Postgres problems. When creating
+	 * a sort plan, it performs a linear search of equivalence member of a
+	 * pathkey's equivalence class, that matches the sorted relation (see
+	 * prepare_sort_from_pathkeys()). This is effectively quadratic in the
+	 * number of chunks, and becomes a real CPU sink after we pass 1k chunks.
+	 * Try to reflect this in the costs, because in some cases a chunk-wise sort
+	 * might be avoided, e.g. Limit 1 over MergeAppend over chunk-wise Sort can
+	 * be just as well replaced with a Limit 1 over Sort over Append of chunks,
+	 * that is just marginally costlier.
+	 *
+	 * We can't easily know the number of chunks in the query here, so add some
+	 * startup cost that is quadratic in the current chunk index, which
+	 * hopefully should be a good enough replacement.
+	 */
+	const int parent_relindex = bms_next_member(chunk_rel->top_parent_relids, -1);
+	if (parent_relindex)
+	{
+		const int chunk_index = chunk_rel->relid - parent_relindex;
+		sorted_path->startup_cost += cpu_operator_cost * chunk_index * chunk_index;
+		sorted_path->total_cost += cpu_operator_cost * chunk_index * chunk_index;
+	}
 
 	return sorted_path;
 }

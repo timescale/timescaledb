@@ -1531,10 +1531,10 @@ ORDER BY device_id;
 --------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize GroupAggregate
    Group Key: _hyper_31_112_chunk.device_id
-   ->  Sort
-         Sort Key: _hyper_31_112_chunk.device_id
-         ->  Gather
-               Workers Planned: 2
+   ->  Gather Merge
+         Workers Planned: 2
+         ->  Sort
+               Sort Key: _hyper_31_112_chunk.device_id
                ->  Parallel Append
                      ->  Partial GroupAggregate
                            Group Key: _hyper_31_112_chunk.device_id
@@ -1620,10 +1620,10 @@ ORDER BY device_id;
 --------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize GroupAggregate
    Group Key: _hyper_31_114_chunk.device_id
-   ->  Sort
-         Sort Key: _hyper_31_114_chunk.device_id
-         ->  Gather
-               Workers Planned: 2
+   ->  Gather Merge
+         Workers Planned: 2
+         ->  Sort
+               Sort Key: _hyper_31_114_chunk.device_id
                ->  Parallel Append
                      ->  Partial GroupAggregate
                            Group Key: _hyper_31_114_chunk.device_id
@@ -1712,10 +1712,10 @@ ORDER BY device_id;
 --------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize GroupAggregate
    Group Key: _hyper_31_116_chunk.device_id
-   ->  Sort
-         Sort Key: _hyper_31_116_chunk.device_id
-         ->  Gather
-               Workers Planned: 2
+   ->  Gather Merge
+         Workers Planned: 2
+         ->  Sort
+               Sort Key: _hyper_31_116_chunk.device_id
                ->  Parallel Append
                      ->  Partial GroupAggregate
                            Group Key: _hyper_31_116_chunk.device_id
@@ -1807,10 +1807,10 @@ ORDER BY device_id;
 --------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize GroupAggregate
    Group Key: _hyper_31_118_chunk.device_id
-   ->  Sort
-         Sort Key: _hyper_31_118_chunk.device_id
-         ->  Gather
-               Workers Planned: 2
+   ->  Gather Merge
+         Workers Planned: 2
+         ->  Sort
+               Sort Key: _hyper_31_118_chunk.device_id
                ->  Parallel Append
                      ->  Partial GroupAggregate
                            Group Key: _hyper_31_118_chunk.device_id

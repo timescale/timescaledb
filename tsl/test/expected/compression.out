@@ -1951,34 +1951,25 @@ SELECT * FROM ht_metrics_partially_compressed ORDER BY time DESC, device LIMIT 1
                                                                                                                                    QUERY PLAN                                                                                                                                    
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
-   Output: ht_metrics_partially_compressed."time", ht_metrics_partially_compressed.device, ht_metrics_partially_compressed.value
-   ->  Custom Scan (ChunkAppend) on public.ht_metrics_partially_compressed
-         Output: ht_metrics_partially_compressed."time", ht_metrics_partially_compressed.device, ht_metrics_partially_compressed.value
-         Order: ht_metrics_partially_compressed."time" DESC, ht_metrics_partially_compressed.device
-         Startup Exclusion: false
-         Runtime Exclusion: false
+   Output: _hyper_41_78_chunk."time", _hyper_41_78_chunk.device, _hyper_41_78_chunk.value
+   ->  Gather Merge
+         Output: _hyper_41_78_chunk."time", _hyper_41_78_chunk.device, _hyper_41_78_chunk.value
+         Workers Planned: 2
          ->  Sort
                Output: _hyper_41_78_chunk."time", _hyper_41_78_chunk.device, _hyper_41_78_chunk.value
                Sort Key: _hyper_41_78_chunk."time" DESC, _hyper_41_78_chunk.device
-               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_41_78_chunk
-                     Output: _hyper_41_78_chunk."time", _hyper_41_78_chunk.device, _hyper_41_78_chunk.value
-                     ->  Seq Scan on _timescaledb_internal.compress_hyper_42_80_chunk
-                           Output: compress_hyper_42_80_chunk._ts_meta_count, compress_hyper_42_80_chunk.device, compress_hyper_42_80_chunk._ts_meta_min_1, compress_hyper_42_80_chunk._ts_meta_max_1, compress_hyper_42_80_chunk."time", compress_hyper_42_80_chunk.value
-         ->  Merge Append
-               Sort Key: _hyper_41_77_chunk."time" DESC, _hyper_41_77_chunk.device
-               ->  Sort
-                     Output: _hyper_41_77_chunk."time", _hyper_41_77_chunk.device, _hyper_41_77_chunk.value
-                     Sort Key: _hyper_41_77_chunk."time" DESC, _hyper_41_77_chunk.device
+               ->  Parallel Append
+                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_41_78_chunk
+                           Output: _hyper_41_78_chunk."time", _hyper_41_78_chunk.device, _hyper_41_78_chunk.value
+                           ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_42_80_chunk
+                                 Output: compress_hyper_42_80_chunk._ts_meta_count, compress_hyper_42_80_chunk.device, compress_hyper_42_80_chunk._ts_meta_min_1, compress_hyper_42_80_chunk._ts_meta_max_1, compress_hyper_42_80_chunk."time", compress_hyper_42_80_chunk.value
                      ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_41_77_chunk
                            Output: _hyper_41_77_chunk."time", _hyper_41_77_chunk.device, _hyper_41_77_chunk.value
-                           ->  Seq Scan on _timescaledb_internal.compress_hyper_42_79_chunk
+                           ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_42_79_chunk
                                  Output: compress_hyper_42_79_chunk._ts_meta_count, compress_hyper_42_79_chunk.device, compress_hyper_42_79_chunk._ts_meta_min_1, compress_hyper_42_79_chunk._ts_meta_max_1, compress_hyper_42_79_chunk."time", compress_hyper_42_79_chunk.value
-               ->  Sort
-                     Output: _hyper_41_77_chunk."time", _hyper_41_77_chunk.device, _hyper_41_77_chunk.value
-                     Sort Key: _hyper_41_77_chunk."time" DESC, _hyper_41_77_chunk.device
-                     ->  Seq Scan on _timescaledb_internal._hyper_41_77_chunk
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_41_77_chunk
                            Output: _hyper_41_77_chunk."time", _hyper_41_77_chunk.device, _hyper_41_77_chunk.value
-(28 rows)
+(19 rows)
 
 -- Test parameter change on rescan
 -- issue 6069
