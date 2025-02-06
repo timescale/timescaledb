@@ -449,3 +449,29 @@ where time <= '2022-06-02' and device = '1'::oid;
 
 select sum(humidity) from readings
 where time <= '2022-06-02' and device = '1'::oid;
+
+--
+-- Test backwards scan with segmentby and vector quals
+--
+select count(*)-4 as myoffset from readings
+where time <= '2022-06-02' and device in (1, 2)
+\gset
+
+-- Get the last four values to compare with cursor fetch backward from
+-- the end
+select * from readings
+where time <= '2022-06-02' and device in (1, 2)
+offset :myoffset;
+
+begin;
+declare cur1 scroll cursor for
+select * from readings
+where time <= '2022-06-02' and device in (1, 2);
+move last cur1;
+-- move one step beyond last
+fetch forward 1 from cur1;
+-- fetch the last 4 values with two fetches
+fetch backward 2 from cur1;
+fetch backward 2 from cur1;
+close cur1;
+commit;

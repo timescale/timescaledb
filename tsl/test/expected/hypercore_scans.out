@@ -1159,3 +1159,50 @@ where time <= '2022-06-02' and device = '1'::oid;
  1381.63850675326
 (1 row)
 
+--
+-- Test backwards scan with segmentby and vector quals
+--
+select count(*)-4 as myoffset from readings
+where time <= '2022-06-02' and device in (1, 2)
+\gset
+-- Get the last four values to compare with cursor fetch backward from
+-- the end
+select * from readings
+where time <= '2022-06-02' and device in (1, 2)
+offset :myoffset;
+             time             | location | device |       temp       |     humidity     
+------------------------------+----------+--------+------------------+------------------
+ Wed Jun 01 19:10:00 2022 PDT | 3        |      2 | 25.6339083021175 | 85.7531443688847
+ Wed Jun 01 20:30:00 2022 PDT | 2        |      2 | 6.02098537951642 | 56.3153986241908
+ Wed Jun 01 23:15:00 2022 PDT | 2        |      2 | 35.7529756426646 | 86.0243391529811
+ Wed Jun 01 23:40:00 2022 PDT | 3        |      2 | 3.94232546784524 |  55.454709690509
+(4 rows)
+
+begin;
+declare cur1 scroll cursor for
+select * from readings
+where time <= '2022-06-02' and device in (1, 2);
+move last cur1;
+-- move one step beyond last
+fetch forward 1 from cur1;
+ time | location | device | temp | humidity 
+------+----------+--------+------+----------
+(0 rows)
+
+-- fetch the last 4 values with two fetches
+fetch backward 2 from cur1;
+             time             | location | device |       temp       |     humidity     
+------------------------------+----------+--------+------------------+------------------
+ Wed Jun 01 23:40:00 2022 PDT | 3        |      2 | 3.94232546784524 |  55.454709690509
+ Wed Jun 01 23:15:00 2022 PDT | 2        |      2 | 35.7529756426646 | 86.0243391529811
+(2 rows)
+
+fetch backward 2 from cur1;
+             time             | location | device |       temp       |     humidity     
+------------------------------+----------+--------+------------------+------------------
+ Wed Jun 01 20:30:00 2022 PDT | 2        |      2 | 6.02098537951642 | 56.3153986241908
+ Wed Jun 01 19:10:00 2022 PDT | 3        |      2 | 25.6339083021175 | 85.7531443688847
+(2 rows)
+
+close cur1;
+commit;
