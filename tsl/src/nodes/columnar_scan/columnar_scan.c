@@ -51,7 +51,7 @@ typedef struct ColumnarScanState
 {
 	CustomScanState css;
 	VectorQualState vqstate;
-	ExprState *segmentby_qual;
+	ExprState *segmentby_exprstate;
 	ScanKey scankeys;
 	int nscankeys;
 	List *scankey_quals;
@@ -487,13 +487,13 @@ ExecSegmentbyQual(ExprState *qual, ExprContext *econtext)
 	TupleTableSlot *slot = econtext->ecxt_scantuple;
 	ScanDirection direction = econtext->ecxt_estate->es_direction;
 
+	Assert(direction == ForwardScanDirection || direction == BackwardScanDirection);
 	Assert(TTS_IS_ARROWTUPLE(slot));
 
 	if (qual == NULL || !should_check_segmentby_qual(direction, slot))
 		return true;
 
 	Assert(!arrow_slot_is_consumed(slot));
-
 	return ExecQual(qual, econtext);
 }
 
@@ -540,7 +540,7 @@ columnar_scan_exec(CustomScanState *state)
 	 * If no quals to check, do the fast path and just return the raw scan
 	 * tuple or a projected one.
 	 */
-	if (!qual && !has_vecquals && !cstate->segmentby_qual)
+	if (!qual && !has_vecquals && !cstate->segmentby_exprstate)
 	{
 		bool gottuple = getnextslot(scandesc, direction, slot);
 
@@ -594,7 +594,7 @@ columnar_scan_exec(CustomScanState *state)
 			 * since segmentby quals don't need decompression and can filter all
 			 * values in an arrow slot in one go.
 			 */
-			if (!ExecSegmentbyQual(cstate->segmentby_qual, econtext))
+			if (!ExecSegmentbyQual(cstate->segmentby_exprstate, econtext))
 			{
 				/* The slot didn't pass filters so read the next slot */
 				const uint16 nrows = arrow_slot_total_row_count(slot);
@@ -613,7 +613,14 @@ columnar_scan_exec(CustomScanState *state)
 				TS_DEBUG_LOG("vectorized filtering of %u rows", nfiltered);
 
 				/* Skip ahead with the amount filtered */
-				ExecIncrArrowTuple(slot, nfiltered);
+				if (direction == ForwardScanDirection)
+					ExecIncrArrowTuple(slot, nfiltered);
+				else
+				{
+					Assert(direction == BackwardScanDirection);
+					ExecDecrArrowTuple(slot, nfiltered);
+				}
+
 				InstrCountFiltered1(state, nfiltered);
 
 				if (nfiltered == total_nrows && total_nrows > 1)
@@ -787,7 +794,7 @@ columnar_scan_begin(CustomScanState *state, EState *estate, int eflags)
 	if (cstate->css.ss.ps.ps_ProjInfo)
 		create_simple_projection_state_if_possible(cstate);
 
-	cstate->segmentby_qual = ExecInitQual(cstate->segmentby_quals, (PlanState *) state);
+	cstate->segmentby_exprstate = ExecInitQual(cstate->segmentby_quals, (PlanState *) state);
 
 	/*
 	 * After having initialized ExprState for processing regular and segmentby
