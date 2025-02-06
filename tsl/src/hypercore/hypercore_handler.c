@@ -873,7 +873,7 @@ hypercore_getnextslot_noncompressed(HypercoreScanDesc scan, ScanDirection direct
 	return result;
 }
 
-static bool
+static inline bool
 should_read_new_compressed_slot(TupleTableSlot *slot, ScanDirection direction)
 {
 	/* Scans are never invoked with NoMovementScanDirection */
@@ -881,18 +881,18 @@ should_read_new_compressed_slot(TupleTableSlot *slot, ScanDirection direction)
 
 	/* A slot can be empty if just started the scan or (or moved back to the
 	 * start due to backward scan) */
-	if (TTS_EMPTY(slot))
+	if (TTS_EMPTY(slot) || arrow_slot_is_consumed(slot))
 		return true;
 
-	if (direction == ForwardScanDirection)
+	if (likely(direction == ForwardScanDirection))
 	{
-		if (arrow_slot_is_last(slot) || arrow_slot_is_consumed(slot))
+		if (arrow_slot_is_last(slot))
 			return true;
 	}
 	else if (direction == BackwardScanDirection)
 	{
 		/* Check if backward scan reached the start or the slot values */
-		if (arrow_slot_row_index(slot) <= 1)
+		if (arrow_slot_is_first(slot))
 			return true;
 	}
 
@@ -914,7 +914,7 @@ hypercore_getnextslot_compressed(HypercoreScanDesc scan, ScanDirection direction
 		{
 			ExecClearTuple(slot);
 
-			if (direction == ForwardScanDirection)
+			if (likely(direction == ForwardScanDirection))
 			{
 				scan->hs_scan_state = HYPERCORE_SCAN_NON_COMPRESSED;
 				return hypercore_getnextslot(&scan->rs_base, direction, slot);
