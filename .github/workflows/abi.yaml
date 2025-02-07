@@ -72,19 +72,11 @@ jobs:
       run: |
         if [[ "${{ matrix.env }}" == "staging" ]] ;
         then
-          CURRENT_MAIN_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
-          CURRENT_MINOR_VERSION=$(echo $CURRENT_MAIN_VERSION | cut -d '.' -f 2)
-          OLD_MINOR_VERSION=$(echo $CURRENT_MAIN_VERSION | sed -e "s/$CURRENT_MINOR_VERSION/$(($CURRENT_MINOR_VERSION - 1))/g")
-          echo "BRANCH="${OLD_MINOR_VERSION/%.0/.x}"" >> $GITHUB_ENV
+          OLD_MINOR_VERSION=$(tail -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
+          echo "BRANCH="$(echo ${OLD_MINOR_VERSION%?}x)" >> $GITHUB_ENV
         else
           echo "BRANCH="${{ matrix.env.BRANCH }}"" >> $GITHUB_ENV
         fi
-
-      - name: Set BRANCH for development environment
-      if: matrix.env == 'development'
-      shell: bash
-      run: |
-        echo "BRANCH="${OLD_MINOR_VERSION/%.0/.x}"" >> $GITHUB_ENV
 
       - name: Checkout TimescaleDB
       uses: actions/checkout@v4
