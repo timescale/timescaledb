@@ -3406,7 +3406,7 @@ ts_chunk_unset_frozen(Chunk *chunk)
 }
 
 bool
-ts_chunk_is_frozen(Chunk *chunk)
+ts_chunk_is_frozen(const Chunk *chunk)
 {
 	return ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FROZEN);
 }
