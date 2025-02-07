@@ -18,12 +18,7 @@ name: ABI Test
   pull_request:
     paths: .github/workflows/abi.yaml
   workflow_dispatch:
-  workflow_call:
-    inputs:
-      branch:
-        description: 'Branch to checkout'
-        type: string
-        default: 'main'
+
 jobs:
   config:
     runs-on: ubuntu-latest
@@ -67,13 +62,37 @@ jobs:
           - pg: 17
             builder: ${{ fromJson(needs.config.outputs.pg17_abi_min) }}-alpine
             tester: ${{ fromJson(needs.config.outputs.pg17_latest) }}-alpine3.19
+        env:
+          - development
+          - staging
 
     steps:
 
-    - name: Checkout TimescaleDB
+      - name: Checkout TimescaleDB
+      uses: actions/checkout@v4
+
+      - name: Set BRANCH as per environment
+      run: |
+        if [[ "${{ matrix.env }}" == "staging" ]] ;
+        then
+          CURRENT_MAIN_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
+          CURRENT_MINOR_VERSION=$(echo $CURRENT_MAIN_VERSION | cut -d '.' -f 2)
+          OLD_MINOR_VERSION=$(echo $CURRENT_MAIN_VERSION | sed -e "s/$CURRENT_MINOR_VERSION/$(($CURRENT_MINOR_VERSION - 1))/g")
+          echo "BRANCH="${OLD_MINOR_VERSION/%.0/.x}"" >> $GITHUB_ENV
+        else
+          echo "BRANCH="${{ matrix.env.BRANCH }}"" >> $GITHUB_ENV
+        fi
+
+      - name: Set BRANCH for development environment
+      if: matrix.env == 'development'
+      shell: bash
+      run: |
+        echo "BRANCH="${OLD_MINOR_VERSION/%.0/.x}"" >> $GITHUB_ENV
+
+      - name: Checkout TimescaleDB
       uses: actions/checkout@v4
       with:
-        ref: ${{ github.event.inputs.branch }}
+        ref: ${{ env.BRANCH }}
 
     - name: Build extension with ${{ matrix.builder }}
       run: |
