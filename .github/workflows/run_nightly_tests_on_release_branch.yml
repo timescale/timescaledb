@@ -15,30 +15,13 @@ jobs:
       - name: Checkout TimescaleDB
         uses: actions/checkout@v4
 
-      - name: Set env var CURRENT_MAIN_VERSION
-        run: echo "CURRENT_MAIN_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)" >> $GITHUB_ENV
-      - name: Test env var CURRENT_MAIN_VERSION
-        run: echo $CURRENT_MAIN_VERSION
-
-      - name: Set env var CURRENT_MINOR_VERSION
-        run: echo "CURRENT_MINOR_VERSION=$(echo ${{ env.CURRENT_MAIN_VERSION }} | cut -d '.' -f 2)" >> $GITHUB_ENV
-      - name: Test env var CURRENT_MINOR_VERSION
-        run: echo $CURRENT_MINOR_VERSION
-
-      - name: Set env var OLD_MINOR_VERSION
-        run: echo "OLD_MINOR_VERSION=$((${{ env.CURRENT_MINOR_VERSION }} - 1))" >> $GITHUB_ENV
-      - name: Test env var OLD_MINOR_VERSION
-        run: echo $OLD_MINOR_VERSION
-
-      - name: Set env var OLD_MINOR_VERSION_FULL
-        run: echo "OLD_MINOR_VERSION_FULL=$(echo ${{ env.CURRENT_MAIN_VERSION }} | sed -e "s/${{ env.CURRENT_MINOR_VERSION }}/${{ env.OLD_MINOR_VERSION }}/g")" >> $GITHUB_ENV
-      - name: Test env var OLD_MINOR_VERSION_FULL
-        run: echo $OLD_MINOR_VERSION_FULL
-
       - name: Set env var OLD_MINOR_VERSION_BRANCH
-        run: echo "OLD_MINOR_VERSION_BRANCH="${${{ env.OLD_MINOR_VERSION_FULL }}/%.0/.x}"" >> $GITHUB_ENV
-      - name: Test env var OLD_MINOR_VERSION_BRANCH
-        run: echo $OLD_MINOR_VERSION_BRANCH
+      shell: bash
+      run: |
+        CURRENT_MAIN_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
+        CURRENT_MINOR_VERSION=$(echo $CURRENT_MAIN_VERSION | cut -d '.' -f 2)
+        OLD_MINOR_VERSION=$(echo $CURRENT_MAIN_VERSION | sed -e "s/$CURRENT_MINOR_VERSION/$(($CURRENT_MINOR_VERSION - 1))/g")
+        echo "OLD_MINOR_VERSION_BRANCH="${OLD_MINOR_VERSION/%.0/.x}"" >> $GITHUB_ENV
 
       - name: Run nightly tests
         if: github.event.schedule != '0 22 * * SAT'
