@@ -59,6 +59,7 @@ SHOW timescaledb.bgw_scheduler_restart_time;
 ALTER SYSTEM SET timescaledb.bgw_scheduler_restart_time TO '10s';
 ALTER SYSTEM SET timescaledb.debug_bgw_scheduler_exit_status TO 1;
 SELECT pg_reload_conf();
+\c
 SHOW timescaledb.bgw_scheduler_restart_time;
 
 -- Launcher is running, so we need to restart it for the scheduler
