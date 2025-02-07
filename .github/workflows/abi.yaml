@@ -65,10 +65,10 @@ jobs:
 
     steps:
 
-      - name: Checkout TimescaleDB
+    - name: Checkout TimescaleDB
       uses: actions/checkout@v4
 
-      - name: Set BRANCH as per environment
+    - name: Set BRANCH as per environment
       run: |
         if [[ "${{ matrix.env }}" == "staging" ]] ;
         then
@@ -78,7 +78,7 @@ jobs:
           echo "BRANCH="${{ matrix.env.BRANCH }}"" >> $GITHUB_ENV
         fi
 
-      - name: Checkout TimescaleDB
+    - name: Checkout TimescaleDB
       uses: actions/checkout@v4
       with:
         ref: ${{ env.BRANCH }}
