@@ -176,10 +176,12 @@ select * from hyperdump where time < '2022-06-03';
 ------------------------------------------------------------------------------------------------
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+         Scankey: ("time" < 'Fri Jun 03 00:00:00 2022 PDT'::timestamp with time zone)
          Vectorized Filter: ("time" < 'Fri Jun 03 00:00:00 2022 PDT'::timestamp with time zone)
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+         Scankey: ("time" < 'Fri Jun 03 00:00:00 2022 PDT'::timestamp with time zone)
          Vectorized Filter: ("time" < 'Fri Jun 03 00:00:00 2022 PDT'::timestamp with time zone)
-(5 rows)
+(7 rows)
 
 reindex table hyperdump;
 explain (costs off)
@@ -188,10 +190,12 @@ select * from hyperdump where time < '2022-06-03';
 ------------------------------------------------------------------------------------------------
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+         Scankey: ("time" < 'Fri Jun 03 00:00:00 2022 PDT'::timestamp with time zone)
          Vectorized Filter: ("time" < 'Fri Jun 03 00:00:00 2022 PDT'::timestamp with time zone)
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+         Scankey: ("time" < 'Fri Jun 03 00:00:00 2022 PDT'::timestamp with time zone)
          Vectorized Filter: ("time" < 'Fri Jun 03 00:00:00 2022 PDT'::timestamp with time zone)
-(5 rows)
+(7 rows)
 
 select format('\! diff -u --label "hypercore original" --label "hypercore restored" %s %s', :'TEST_RESULTS_ORIGINAL', :'TEST_RESULTS_RESTORED') as "DIFF_CMD" \gset
 -- Original output and restored output should be the same, i.e., no

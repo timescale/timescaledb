@@ -218,6 +218,12 @@ reset role;
 update _timescaledb_catalog.chunk ch set osm_chunk = false where table_name = '_hyper_1_1_chunk';
 set role :ROLE_DEFAULT_PERM_USER;
 
+-- Merge frozen chunks
+select _timescaledb_functions.freeze_chunk('_timescaledb_internal._hyper_1_1_chunk');
+call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_2_chunk');
+call merge_chunks('_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_1_chunk');
+select _timescaledb_functions.unfreeze_chunk('_timescaledb_internal._hyper_1_1_chunk');
+
 \set ON_ERROR_STOP 1
 
 

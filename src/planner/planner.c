@@ -1068,11 +1068,8 @@ static inline bool
 should_constraint_aware_append(PlannerInfo *root, Hypertable *ht, Path *path)
 {
 	/* Constraint-aware append currently expects children that scans a real
-	 * "relation" (e.g., not an "upper" relation). So, we do not run it on a
-	 * distributed hypertable because the append children are typically
-	 * per-server relations without a corresponding "real" table in the
-	 * system. Further, per-server appends shouldn't need runtime pruning in any
-	 * case. */
+	 * "relation" (e.g., not an "upper" relation).
+	 */
 	if (root->parse->commandType != CMD_SELECT)
 		return false;
 
@@ -1333,9 +1330,6 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	if (prev_set_rel_pathlist_hook != NULL)
 		(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
 
-	if (ts_cm_functions->set_rel_pathlist != NULL)
-		ts_cm_functions->set_rel_pathlist(root, rel, rti, rte);
-
 	switch (reltype)
 	{
 		case TS_REL_HYPERTABLE_CHILD:
@@ -1477,9 +1471,6 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			 * relevant for code paths that use the postgres inheritance code
 			 * as we don't include the hypertable as child when expanding the
 			 * hypertable ourself.
-			 * We do exclude distributed hypertables for now to not alter
-			 * the trigger behaviour on access nodes, which would otherwise
-			 * no longer fire.
 			 */
 			if (IS_UPDL_CMD(root->parse))
 				mark_dummy_rel(rel);

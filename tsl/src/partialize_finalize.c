@@ -29,11 +29,6 @@
  * For instance: `SELECT sum(a) FROM foo;` can be transformed into `SELECT
  * finalize(partial_sum_a) FROM (SELECT partialize(sum(a)) FROM foo);`
  *
- * This is especially useful in continuous aggs, where partials are stored and
- * finalized at query time to give accurate aggregates and in the distributed
- * database in which partials are calculated by individual data nodes and
- * then passed back to the access node for finalization.
- *
  * The partialize function is implemented as a regular function, the function
  * call itself does very little except ensure that the type returned is what the
  * node is expecting, most of the work is done in plan_partialize.c, where calls

@@ -204,24 +204,6 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 }
 
 /*
- * The fdw needs to expand a distributed hypertable inside the `GetForeignPath`
- * callback. But, since the hypertable base table is not a foreign table, that
- * callback would not normally be called. Thus, we call it manually in this hook.
- */
-void
-tsl_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
-{
-	if (is_dummy_rel(rel))
-	{
-		/*
-		 * Don't have to create any other path if the relation is already proven
-		 * to be empty.
-		 */
-		return;
-	}
-}
-
-/*
  * Run preprocess query optimizations
  */
 void
