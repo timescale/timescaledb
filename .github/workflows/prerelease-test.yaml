@@ -2,7 +2,7 @@
 #
 # Commits on this branch will be tested by more tests than our usual PRs.
 
-name: Prerelease test
+name: Prerelease Tests on Release branch
 on:
   workflow_dispatch:
 
