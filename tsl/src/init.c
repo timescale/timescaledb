@@ -184,7 +184,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.create_chunk = chunk_create,
 	.chunk_freeze_chunk = chunk_freeze_chunk,
 	.chunk_unfreeze_chunk = chunk_unfreeze_chunk,
-	.set_rel_pathlist = tsl_set_rel_pathlist,
 	.chunk_create_empty_table = chunk_create_empty_table,
 	.recompress_chunk_segmentwise = tsl_recompress_chunk_segmentwise,
 	.get_compressed_chunk_index_for_recompression =

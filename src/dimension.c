@@ -421,17 +421,13 @@ ts_dimension_get_open_slice_ordinal(const Dimension *dim, const DimensionSlice *
 
 	if (i >= 0)
 		return i;
-	else
-	{
-		/*
-		 * Returns the number of slices if the slice not found, i.e., i = -1.
-		 * Dimension slice might not exist if a chunk table is created without
-		 * modifying metadata. It happens only during copy/move chunk for distributed
-		 * hypertable, thus this code, which is used when no space dimension exists,
-		 * is unlikely to be used.
-		 */
-		return vec->num_slices;
-	}
+
+	/*
+	 * Returns the number of slices if the slice not found, i.e., i = -1.
+	 * Dimension slice might not exist if a chunk table is created without
+	 * modifying metadata.
+	 */
+	return vec->num_slices;
 }
 
 /*
