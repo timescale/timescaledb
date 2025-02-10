@@ -193,6 +193,7 @@ typedef enum CompressionAlgorithm
 	COMPRESSION_ALGORITHM_DICTIONARY,
 	COMPRESSION_ALGORITHM_GORILLA,
 	COMPRESSION_ALGORITHM_DELTADELTA,
+	COMPRESSION_ALGORITHM_BOOL,
 
 	/* When adding an algorithm also add a static assert statement below */
 	/* end of real values */
@@ -315,13 +316,14 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 	StaticAssertStmt(COMPRESSION_ALGORITHM_DICTIONARY == 2, "algorithm index has changed");
 	StaticAssertStmt(COMPRESSION_ALGORITHM_GORILLA == 3, "algorithm index has changed");
 	StaticAssertStmt(COMPRESSION_ALGORITHM_DELTADELTA == 4, "algorithm index has changed");
+	StaticAssertStmt(COMPRESSION_ALGORITHM_BOOL == 5, "algorithm index has changed");
 
 	/*
 	 * This should change when adding a new algorithm after adding the new
 	 * algorithm to the assert list above. This statement prevents adding a
 	 * new algorithm without updating the asserts above
 	 */
-	StaticAssertStmt(_END_COMPRESSION_ALGORITHMS == 5,
+	StaticAssertStmt(_END_COMPRESSION_ALGORITHMS == 6,
 					 "number of algorithms have changed, the asserts should be updated");
 }
 

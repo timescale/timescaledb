@@ -86,6 +86,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     chunk_utils_internal.sql
     compression_algos.sql
     compression_bgw.sql
+    compression_bools.sql
     compression_ddl.sql
     compression_hypertable.sql
     compression_merge.sql
