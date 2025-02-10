@@ -77,7 +77,13 @@ set timescaledb.debug_require_vector_agg to 'require';
 select a, count(*) from text_table group by a order by a nulls first limit 10;
 reset timescaledb.debug_require_vector_agg;
 
-
 reset enable_hashagg;
+
+
+-- TODO verify that this works with the serialized hash grouping strategy
+set timescaledb.debug_require_vector_agg to 'forbid';
+select ts, a, count(*) from text_table group by ts, a order by ts, a limit 10;
+select a, ts, count(*) from text_table group by a, ts order by a desc, ts desc limit 10;
 reset timescaledb.debug_require_vector_agg;
+
 reset max_parallel_workers_per_gather;
