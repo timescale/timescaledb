@@ -1,10 +1,20 @@
-# Push the release branch to upstream/prerelease_test branch
+# Push the release branch to upstream/prerelease_test branch in the TimescaleDB repository.
 #
 # Commits on this branch will be tested by more tests than our usual PRs.
+# You can see the pre-release test progress under the actions
+# (https://github.com/timescale/timescaledb/actions?query=branch%3Aprerelease_test)
+# or under the pull request you created for the release.
+#
+# Note: Because the upgrade script does not get executed at this stage, some test might fail.
+# These test failures can be ignored at this point. Your branch will be re-tested as soon as
+# the proper downgrade script is created and the versioning is adjusted.
 
 name: Prerelease Tests on Release branch
 on:
   workflow_dispatch:
+  schedule:
+    # run daily at 5 am UTC
+    - cron: '0 5 * * *'
 
 # The workflow needs the permission to push branches
 permissions:
