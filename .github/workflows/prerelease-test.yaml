@@ -17,15 +17,6 @@ jobs:
 
     steps:
 
-      - name: Install Linux Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install pip
-
-      - name: Install Python Dependencies
-        run: |
-          pip install PyGithub requests
-
       - name: Checkout TimescaleDB
         uses: actions/checkout@v4
 
