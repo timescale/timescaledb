@@ -1,0 +1,1 @@
+Implements: #7701 Implement a custom compression algorithm for bool columns. It is experimental and can undergo backwards-incompatible changes. For testing, enable it using timescaledb.enable_bool_compression = on.
