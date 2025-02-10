@@ -132,15 +132,15 @@ select a, count(*) from text_table group by a order by a desc limit 10;
             a            | count 
 -------------------------+-------
  ¤                       |  1000
+ same-with-nulls         |   500
  same                    |  1000
- different-with-nulls1   |     1
- different-with-nulls101 |     1
- different-with-nulls103 |     1
- different-with-nulls105 |     1
- different-with-nulls107 |     1
- different-with-nulls109 |     1
- different-with-nulls11  |     1
- different-with-nulls111 |     1
+ different-with-nulls999 |     1
+ different-with-nulls997 |     1
+ different-with-nulls995 |     1
+ different-with-nulls993 |     1
+ different-with-nulls991 |     1
+ different-with-nulls99  |     1
+ different-with-nulls989 |     1
 (10 rows)
 
 reset timescaledb.debug_require_vector_agg;
