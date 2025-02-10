@@ -407,10 +407,6 @@ set_arbiter_indexes(ChunkInsertState *state, const ChunkDispatch *dispatch)
 
 		if (ts_chunk_index_get_by_hypertable_indexrelid(chunk, hypertable_index, &cim) < 1)
 		{
-			/*
-			 * In case of distributed hypertables, we don't have information about the
-			 * arbiter index on the remote side, so error out with a helpful hint
-			 */
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("could not find arbiter index for hypertable index \"%s\" on chunk "

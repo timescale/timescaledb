@@ -1060,7 +1060,6 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 			Assert(!isvarlena);
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("distributed hypertable member cannot create chunk on its own"),
 					 errmsg("Cannot insert into tiered chunk range of %s.%s - attempt to create "
 							"new chunk "
 							"with range  [%s %s] failed",
@@ -1360,7 +1359,6 @@ ts_chunk_create_for_point(const Hypertable *ht, const Point *p, bool *found, con
 		/*
 		 * If we managed to find some metadata for the chunk (chunk_id != INVALID_CHUNK_ID),
 		 * but it is marked as dropped, try to resurrect it.
-		 * Not sure if this ever worked for distributed hypertables.
 		 */
 		chunk = chunk_resurrect(ht, chunk_id);
 		if (chunk != NULL)

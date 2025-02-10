@@ -68,7 +68,6 @@ typedef struct HyperStats
 typedef struct CaggStats
 {
 	HyperStats hyp; /* "hyper" as field name leads to name conflict on Windows compiler */
-	int64 on_distributed_hypertable_count;
 	int64 uses_real_time_aggregation_count;
 	int64 finalized;
 	int64 nested;
@@ -77,8 +76,6 @@ typedef struct CaggStats
 typedef struct TelemetryStats
 {
 	HyperStats hypertables;
-	HyperStats distributed_hypertables;
-	HyperStats distributed_hypertable_members;
 	HyperStats partitioned_tables;
 	StorageStats tables;
 	StorageStats materialized_views;
