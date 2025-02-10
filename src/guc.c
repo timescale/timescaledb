@@ -149,6 +149,7 @@ TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
 TSDLLEXPORT bool ts_guc_default_hypercore_use_access_method = false;
 bool ts_guc_enable_chunk_skipping = false;
 TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
+TSDLLEXPORT bool ts_guc_enable_bool_compression = true;
 
 /* Enable of disable columnar scans for columnar-oriented storage engines. If
  * disabled, regular sequence scans will be used instead. */
@@ -738,6 +739,17 @@ _guc_init(void)
 							 "Enable segmentwise recompression functionality",
 							 "Enable segmentwise recompression",
 							 &ts_guc_enable_segmentwise_recompression,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_bool_compression"),
+							 "Enable bool compression functionality",
+							 "Enable bool compression",
+							 &ts_guc_enable_bool_compression,
 							 true,
 							 PGC_USERSET,
 							 0,

@@ -149,6 +149,8 @@ typedef struct CrossModuleFunctions
 	PGFunction dictionary_compressor_finish;
 	PGFunction array_compressor_append;
 	PGFunction array_compressor_finish;
+	PGFunction bool_compressor_append;
+	PGFunction bool_compressor_finish;
 	PGFunction hypercore_handler;
 	PGFunction hypercore_proxy_handler;
 	PGFunction is_compressed_tid;
