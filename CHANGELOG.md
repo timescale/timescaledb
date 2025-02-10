@@ -4,6 +4,31 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.18.1 (2025-02-10)
+
+This release contains performance improvements and bug fixes since
+the 2.18.0 release. We recommend that you upgrade at the next
+available opportunity.
+
+**Features**
+* [#7656](https://github.com/timescale/timescaledb/pull/7656) Remove limitation of compression policy for continuous aggregates
+
+**Bugfixes**
+* [#7600](https://github.com/timescale/timescaledb/pull/7600) Fix lock order when dropping index
+* [#7637](https://github.com/timescale/timescaledb/pull/7637) Allow EXPLAIN in read-only mode
+* [#7645](https://github.com/timescale/timescaledb/pull/7645) Fix DELETE on compressed chunk with non-btree operators
+* [#7649](https://github.com/timescale/timescaledb/pull/7649) Allow non-btree operator pushdown in UPDATE/DELETE queries on compressed chunks
+* [#7653](https://github.com/timescale/timescaledb/pull/7653) Push down orderby scankeys to Hypercore TAM
+* [#7665](https://github.com/timescale/timescaledb/pull/7665) Block merging of frozen chunks
+* [#7673](https://github.com/timescale/timescaledb/pull/7673) Don't abort additional INSERTs when hitting first conflict
+
+**GUCs**
+* `enable_hypercore_scankey_pushdown`: Push down qualifiers as scankeys when using Hypercore TAM introduced with [#7653](https://github.com/timescale/timescaledb/pull/7653)
+
+**Thanks**
+* @bjornuppeke for reporting a problem with INSERT INTO ... ON CONFLICT DO NOTHING on compressed chunks
+* @ikalafat for reporting a problem with EXPLAIN in read-only mode
+* Timescale community members Jacob and pantonis for reporting issues with slow queries.
 
 ## 2.18.0 (2025-01-23)
 
@@ -81,9 +106,9 @@ We are deprecating the following parameters, functions, procedures and views. Th
 * @bharrisau for reporting the segfault when creating chunks.
 * @jakehedlund for reporting the incompatible NaN behavior in WHERE clause over compressed tables.
 * @k-rus for suggesting that we add a hint when hypertable creation fails.
+* @pgloader for reporting the issue in an internal background job.
 * @staticlibs for sending the pull request that improves the transaction check in CAGG refresh.
 * @uasiddiqi for reporting the `aggregated compressed column not found` error.
-
 
 ## 2.17.2 (2024-11-06)
 

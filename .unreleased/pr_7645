@@ -1,1 +1,0 @@
-Fixes: #7645 Fix DELETE on compressed chunk with non-btree operators

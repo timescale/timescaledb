@@ -1,1 +1,0 @@
-Fixes: #7600 Fix lock order when dropping index
