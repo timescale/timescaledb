@@ -271,6 +271,16 @@ arrow_slot_is_consumed(const TupleTableSlot *slot)
 }
 
 static inline bool
+arrow_slot_is_first(const TupleTableSlot *slot)
+{
+	const ArrowTupleTableSlot *aslot = (const ArrowTupleTableSlot *) slot;
+
+	Assert(TTS_IS_ARROWTUPLE(slot));
+
+	return aslot->tuple_index == InvalidTupleIndex || aslot->tuple_index == 1;
+}
+
+static inline bool
 arrow_slot_is_last(const TupleTableSlot *slot)
 {
 	const ArrowTupleTableSlot *aslot = (const ArrowTupleTableSlot *) slot;
@@ -373,18 +383,19 @@ arrow_slot_try_getnext(TupleTableSlot *slot, ScanDirection direction)
 	Assert(direction == ForwardScanDirection || direction == BackwardScanDirection);
 
 	/* If empty or not containing a compressed tuple, there is nothing to do */
-	if (unlikely(TTS_EMPTY(slot)) || aslot->tuple_index == InvalidTupleIndex)
+	if (unlikely(TTS_EMPTY(slot)) || aslot->tuple_index == InvalidTupleIndex ||
+		arrow_slot_is_consumed(slot))
 		return false;
 
-	if (direction == ForwardScanDirection)
+	if (likely(direction == ForwardScanDirection))
 	{
-		if (aslot->tuple_index < aslot->total_row_count)
+		if (!arrow_slot_is_last(slot))
 		{
 			ExecStoreNextArrowTuple(slot);
 			return true;
 		}
 	}
-	else if (aslot->tuple_index > 1)
+	else if (!arrow_slot_is_first(slot))
 	{
 		Assert(direction == BackwardScanDirection);
 		ExecStorePreviousArrowTuple(slot);

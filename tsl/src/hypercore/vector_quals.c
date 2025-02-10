@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 #include "nodes/decompress_chunk/vector_quals.h"
+#include <access/sdir.h>
 #include <utils/memutils.h>
 
 #include "arrow_tts.h"
@@ -88,12 +89,13 @@ uint16
 ExecVectorQual(VectorQualState *vqstate, ExprContext *econtext)
 {
 	TupleTableSlot *slot = econtext->ecxt_scantuple;
-	const uint16 rowindex = arrow_slot_row_index(slot);
+	ScanDirection direction = econtext->ecxt_estate->es_direction;
 
 	/* Compute the vector quals over both compressed and non-compressed
 	 * tuples. In case a non-compressed tuple is filtered, return SomeRowsPass
 	 * although only one row will pass. */
-	if (rowindex <= 1)
+	if ((direction == ForwardScanDirection && arrow_slot_is_first(slot)) ||
+		(direction == BackwardScanDirection && arrow_slot_is_last(slot)))
 	{
 		vector_qual_state_reset(vqstate);
 		VectorQualSummary vector_qual_summary = vqstate->vectorized_quals_constified != NIL ?
@@ -114,6 +116,8 @@ ExecVectorQual(VectorQualState *vqstate, ExprContext *econtext)
 			case SomeRowsPass:
 				break;
 		}
+
+		arrow_slot_set_qual_result(slot, vqstate->vector_qual_result);
 	}
 
 	/* Fast path when all rows have passed (i.e., no rows filtered). No need
@@ -123,16 +127,27 @@ ExecVectorQual(VectorQualState *vqstate, ExprContext *econtext)
 
 	const uint16 nrows = arrow_slot_total_row_count(slot);
 	const uint16 off = arrow_slot_arrow_offset(slot);
+	const uint64 *qual_result = arrow_slot_get_qual_result(slot);
 	uint16 nfiltered = 0;
 
-	for (uint16 i = off; i < nrows; i++)
+	if (direction == ForwardScanDirection)
 	{
-		if (arrow_row_is_valid(vqstate->vector_qual_result, i))
-			break;
-		nfiltered++;
+		for (uint16 i = off; i < nrows; i++)
+		{
+			if (arrow_row_is_valid(qual_result, i))
+				break;
+			nfiltered++;
+		}
 	}
-
-	arrow_slot_set_qual_result(slot, vqstate->vector_qual_result);
+	else
+	{
+		for (uint16 i = off; i > 0; i--)
+		{
+			if (arrow_row_is_valid(qual_result, i))
+				break;
+			nfiltered++;
+		}
+	}
 
 	return nfiltered;
 }

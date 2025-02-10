@@ -167,10 +167,7 @@ CREATE OR REPLACE FUNCTION @extschema@.hypertable_size(
 RETURNS BIGINT
 LANGUAGE SQL VOLATILE STRICT AS
 $BODY$
-   -- One row per data node is returned (in case of a distributed
-   -- hypertable), so sum them up:
-   SELECT sum(total_bytes)::bigint
-   FROM @extschema@.hypertable_detailed_size(hypertable);
+   SELECT total_bytes::bigint FROM @extschema@.hypertable_detailed_size(hypertable);
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -- Get approximate relation size of hypertable

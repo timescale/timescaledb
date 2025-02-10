@@ -1545,14 +1545,6 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
 		/* Release previously pinned cache */
 		ts_cache_release(hcache);
 
-		/*
-		 * Validate create_hypertable arguments and use defaults according to the
-		 * hypertable_distributed_default guc.
-		 *
-		 * Validate data nodes and check permissions on them if this is a
-		 * distributed hypertable.
-		 */
-
 		if (closed_dim_info && !closed_dim_info->num_slices_is_set)
 		{
 			/* If the number of partitions isn't specified, default to setting it
@@ -1607,8 +1599,8 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
  * chunk_sizing_func       OID = NULL
  * time_partitioning_func  REGPROC = NULL
  */
-static Datum
-ts_hypertable_create_time_prev(PG_FUNCTION_ARGS, bool is_dist_call)
+Datum
+ts_hypertable_create(PG_FUNCTION_ARGS)
 {
 	Oid table_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	Name open_dim_name = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1);
@@ -1667,12 +1659,6 @@ ts_hypertable_create_time_prev(PG_FUNCTION_ARGS, bool is_dist_call)
 										 false);
 }
 
-Datum
-ts_hypertable_create(PG_FUNCTION_ARGS)
-{
-	return ts_hypertable_create_time_prev(fcinfo, false);
-}
-
 static Oid
 get_sizing_func_oid()
 {
@@ -1709,7 +1695,7 @@ ts_hypertable_create_general(PG_FUNCTION_ARGS)
 	/*
 	 * We do not support closed (hash) dimensions for the main partitioning
 	 * column. Check that first. The behavior then becomes consistent with the
-	 * earlier "ts_hypertable_create_time_prev" implementation.
+	 * earlier "ts_hypertable_create" implementation.
 	 */
 	if (IS_CLOSED_DIMENSION(dim_info))
 		ereport(ERROR,

@@ -1,2 +1,2 @@
 Fixes: #7637 Allow EXPLAIN in read-only mode
-Thanks: @ikalafat for reporting the error
+Thanks: @ikalafat for reporting a problem with EXPLAIN in read-only mode

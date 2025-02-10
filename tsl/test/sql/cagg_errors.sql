@@ -490,11 +490,8 @@ ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress, timescaledb.comp
 select add_continuous_aggregate_policy('i2980_cagg2', interval '10 day', interval '2 day' ,'4h') AS job_id ;
 SELECT add_compression_policy('i2980_cagg', '8 day'::interval);
 ALTER MATERIALIZED VIEW i2980_cagg SET ( timescaledb.compress );
-SELECT add_compression_policy('i2980_cagg', '8 day'::interval);
 
 SELECT add_continuous_aggregate_policy('i2980_cagg2', '10 day'::interval, '6 day'::interval);
-SELECT add_compression_policy('i2980_cagg2', '3 day'::interval);
-SELECT add_compression_policy('i2980_cagg2', '1 day'::interval);
 SELECT add_compression_policy('i2980_cagg2', '3'::integer);
 SELECT add_compression_policy('i2980_cagg2', 13::integer);
 

@@ -208,3 +208,270 @@ select compress_chunk(ch, hypercore_use_access_method=>true) from show_chunks('r
 -- table.
 create temp table test_bump as
 select * from readings order by time, device;
+
+----------------------------------------------------------------------
+--
+-- Test scankey push-downs on orderby column. Vectorized filters (or
+-- normal qual filters) should remain on all orderby columns, but not
+-- segmentby columns.
+--
+----------------------------------------------------------------------
+
+
+--
+-- Test BETWEEN on time and equality on segmentby
+--
+explain (costs off)
+select * from readings
+where time between '2022-06-03' and '2022-06-05' and device = 1;
+
+select sum(humidity) from readings
+where time between '2022-06-03' and '2022-06-05' and device = 1;
+
+set timescaledb.enable_hypercore_scankey_pushdown=false;
+
+explain (costs off)
+select * from readings
+where time between '2022-06-03' and '2022-06-05' and device = 1;
+
+select sum(humidity) from readings
+where time between '2022-06-03' and '2022-06-05' and device = 1;
+
+set timescaledb.enable_hypercore_scankey_pushdown=true;
+
+--
+-- Test < (LT) on time and > (GT) on segmentby
+--
+explain (costs off)
+select * from readings
+where time < '2022-06-05' and device > 5;
+
+select sum(humidity) from readings
+where time < '2022-06-05' and device > 5;
+
+set timescaledb.enable_hypercore_scankey_pushdown=false;
+
+explain (costs off)
+select * from readings
+where time < '2022-06-05' and device > 5;
+
+select sum(humidity) from readings
+where time < '2022-06-05' and device > 5;
+
+set timescaledb.enable_hypercore_scankey_pushdown=true;
+
+--
+-- Test >= (GE) on time
+--
+explain (costs off)
+select * from readings
+where time >= '2022-06-05' and device > 5;
+
+select sum(humidity) from readings
+where time >= '2022-06-05' and device > 5;
+
+set timescaledb.enable_hypercore_scankey_pushdown=false;
+
+explain (costs off)
+select * from readings
+where time >= '2022-06-05' and device > 5;
+
+select sum(humidity) from readings
+where time >= '2022-06-05' and device > 5;
+
+set timescaledb.enable_hypercore_scankey_pushdown=true;
+
+--
+-- Test = (equality) on time
+--
+explain (costs off)
+select * from readings
+where time = '2022-06-01' and 5 < device;
+
+select sum(humidity) from readings
+where time = '2022-06-01' and 5 < device;
+
+set timescaledb.enable_hypercore_scankey_pushdown=false;
+
+explain (costs off)
+select * from readings
+where time = '2022-06-01' and 5 < device;
+
+select sum(humidity) from readings
+where time = '2022-06-01' and 4 < device;
+
+set timescaledb.enable_hypercore_scankey_pushdown=true;
+
+--
+-- Test non-btree operator on segmentby column and compare with btree
+-- operators.
+--
+explain (costs off)
+select sum(humidity) from readings
+where time <= '2022-06-02' and device <> 1;
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and device <> 1;
+
+explain (costs off)
+select sum(humidity) from readings
+where time <= '2022-06-02' and device != 1;
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and device != 1;
+
+set timescaledb.enable_hypercore_scankey_pushdown=false;
+
+explain (costs off)
+select sum(humidity) from readings
+where time <= '2022-06-02' and device <> 1;
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and device <> 1;
+
+set timescaledb.enable_hypercore_scankey_pushdown=true;
+
+--
+-- Test non-btree operator on non-segmentby column and compare with
+-- btree operators.
+--
+explain (costs off)
+select sum(humidity) from readings
+where time <= '2022-06-02' and temp <> 1;
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and temp <> 1;
+
+explain (costs off)
+select sum(humidity) from readings
+where time <= '2022-06-02' and temp != 1;
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and temp != 1;
+
+set timescaledb.enable_hypercore_scankey_pushdown=false;
+
+explain (costs off)
+select sum(humidity) from readings
+where time <= '2022-06-02' and temp <> 1;
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and temp <> 1;
+
+set timescaledb.enable_hypercore_scankey_pushdown=true;
+
+--
+-- Test "foo IN (1, 2)" (ScalarArrayOpExpr)
+--
+-- This is currently not transformed to scan keys because only index
+-- scans support such keys.
+--
+explain (costs off)
+select * from readings
+where time <= '2022-06-02' and device in (1, 4);
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and device in (1, 4);
+
+set timescaledb.enable_hypercore_scankey_pushdown=false;
+
+explain (costs off)
+select * from readings
+where time <= '2022-06-02' and device in (1, 4);
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and device in (1, 4);
+
+set timescaledb.enable_hypercore_scankey_pushdown=true;
+
+-- ScalarArrayOpExpr "foo IN (1, 2)" are pushed down to compressed
+-- chunk with transparent decompression. As noted above, with TAM,
+-- such expressions are not pushed down as scan keys because only
+-- index scans support such keys.
+set timescaledb.enable_transparent_decompression='hypercore';
+
+explain (costs off)
+select * from readings
+where time <= '2022-06-02' and device in (1, 4);
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and device in (1, 4);
+
+set timescaledb.enable_transparent_decompression=true;
+
+--
+-- Test filter that doesn't reference a column.
+--
+select setseed(0.1);
+explain (costs off)
+select * from readings
+where time <= '2022-06-02' and ceil(random()*6)::int = 2;
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and ceil(random()*6)::int = 2;
+
+
+--
+-- Test filter that doesn't have a Const on left or right side.
+--
+explain (costs off)
+select * from readings
+where time <= '2022-06-02' and location::int = device;
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and location::int = device;
+
+--
+-- Test filter that does coercing (CoerceViaIO) type. Not pushed down
+-- as scankey.
+--
+explain (costs off)
+select * from readings
+where time <= '2022-06-02' and '1' = device::text;
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and '1' = device::text;
+
+--
+-- Test filter that does relabeling (RelabelType) for binary
+-- compatible types, both left and right side of expression.
+--
+explain (costs off)
+select * from readings
+where time <= '2022-06-02' and '1'::oid = device;
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and '1'::oid = device;
+
+explain (costs off)
+select sum(humidity) from readings
+where time <= '2022-06-02' and device = '1'::oid;
+
+select sum(humidity) from readings
+where time <= '2022-06-02' and device = '1'::oid;
+
+--
+-- Test backwards scan with segmentby and vector quals
+--
+select count(*)-4 as myoffset from readings
+where time <= '2022-06-02' and device in (1, 2)
+\gset
+
+-- Get the last four values to compare with cursor fetch backward from
+-- the end
+select * from readings
+where time <= '2022-06-02' and device in (1, 2)
+offset :myoffset;
+
+begin;
+declare cur1 scroll cursor for
+select * from readings
+where time <= '2022-06-02' and device in (1, 2);
+move last cur1;
+-- move one step beyond last
+fetch forward 1 from cur1;
+-- fetch the last 4 values with two fetches
+fetch backward 2 from cur1;
+fetch backward 2 from cur1;
+close cur1;
+commit;

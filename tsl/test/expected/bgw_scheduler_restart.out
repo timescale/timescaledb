@@ -64,10 +64,11 @@ SELECT pg_reload_conf();
  t
 (1 row)
 
+\c
 SHOW timescaledb.bgw_scheduler_restart_time;
  timescaledb.bgw_scheduler_restart_time 
 ----------------------------------------
- 1min
+ 10s
 (1 row)
 
 -- Launcher is running, so we need to restart it for the scheduler
