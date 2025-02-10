@@ -1,0 +1,46 @@
+# Push the release branch to upstream/prerelease_test branch
+#
+# Commits on this branch will be tested by more tests than our usual PRs.
+
+name: Prerelease test
+on:
+  workflow_dispatch:
+
+# The workflow needs the permission to push branches
+permissions:
+  contents: write
+
+jobs:
+  prerelease_test:
+    name: Prerelease test
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Install Linux Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install pip
+
+      - name: Install Python Dependencies
+        run: |
+          pip install PyGithub requests
+
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@v4
+
+      - name: Set RELEASE_BRANCH as per environment
+        run: |
+          OLD_MINOR_VERSION=$(tail -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
+          echo "RELEASE_BRANCH="$(echo ${OLD_MINOR_VERSION%?}x)" >> $GITHUB_ENV
+
+      - name: Checkout TimescaleDB release branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_BRANCH }}
+
+      - name: Push the release branch to prerelease_test branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        run: |
+          git push upstream HEAD:prerelease_test --force
