@@ -30,6 +30,7 @@ alter table groupagg set (timescaledb.compress, timescaledb.compress_segmentby =
 select count(compress_chunk(x)) from show_chunks('groupagg') x;
 vacuum analyze groupagg;
 
+
 select s, sum(value) from groupagg group by s order by s limit 10;
 
 -- The hash grouping policies do not support the GroupAggregate mode in the
@@ -67,6 +68,27 @@ insert into text_table select 5, case when x % 2 = 0 then null else 'different-w
 
 select count(compress_chunk(x)) from show_chunks('text_table') x;
 vacuum analyze text_table;
+
+
+select table_schema,
+       table_name,
+       column_name,
+       collation_name
+from information_schema.columns
+where table_name = 'text_table'
+order by table_schema,
+         table_name,
+         ordinal_position;
+
+select datname,
+       datcollate
+from pg_database
+where datname = current_database();
+
+select 'different-with-nulls999' > 'different999';
+
+select count(distinct a) from text_table;
+
 
 explain (verbose, costs off, analyze, timing off, summary off)
 select a, count(*) from text_table group by a order by a limit 10;

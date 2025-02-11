@@ -130,6 +130,42 @@ select count(compress_chunk(x)) from show_chunks('text_table') x;
 (1 row)
 
 vacuum analyze text_table;
+select table_schema,
+       table_name,
+       column_name,
+       collation_name
+from information_schema.columns
+where table_name = 'text_table'
+order by table_schema,
+         table_name,
+         ordinal_position;
+ table_schema | table_name | column_name | collation_name 
+--------------+------------+-------------+----------------
+ public       | text_table | ts          | ¤
+ public       | text_table | a           | ¤
+(2 rows)
+
+select datname,
+       datcollate
+from pg_database
+where datname = current_database();
+        datname         | datcollate  
+------------------------+-------------
+ db_vector_agg_groupagg | en_IE.UTF-8
+(1 row)
+
+select 'different-with-nulls999' > 'different999';
+ ?column? 
+----------
+ t
+(1 row)
+
+select count(distinct a) from text_table;
+ count 
+-------
+  1504
+(1 row)
+
 explain (verbose, costs off, analyze, timing off, summary off)
 select a, count(*) from text_table group by a order by a limit 10;
                                                                                                                                                      QUERY PLAN                                                                                                                                                      
