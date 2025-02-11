@@ -5,6 +5,7 @@
 -- mode.
 \pset null ¤
 set max_parallel_workers_per_gather = 0;
+set enable_hashagg to off;
 create table groupagg(t int, s text, value int);
 select create_hypertable('groupagg', 't', chunk_time_interval => 10000);
 NOTICE:  adding not-null constraint to column "t"
@@ -29,7 +30,7 @@ select count(compress_chunk(x)) from show_chunks('groupagg') x;
      2
 (1 row)
 
-set enable_hashagg to off;
+vacuum analyze groupagg;
 set timescaledb.debug_require_vector_agg to 'require';
 select s, sum(value) from groupagg group by s order by s limit 10;
  s  |   sum   
@@ -44,6 +45,24 @@ select s, sum(value) from groupagg group by s order by s limit 10;
  18 | 1627500
  19 | 1634500
  20 | 1641500
+(10 rows)
+
+-- The hash grouping policies do not support the GroupAggregate mode in the
+-- reverse order.
+set timescaledb.debug_require_vector_agg to 'forbid';
+select s, sum(value) from groupagg group by s order by s desc limit 10;
+ s  |   sum   
+----+---------
+ ¤  | 1592500
+ 99 | 2194500
+ 98 | 2187500
+ 97 | 2180500
+ 96 | 2173500
+ 95 | 2166500
+ 94 | 2159500
+ 93 | 2152500
+ 92 | 2145500
+ 91 | 2138500
 (10 rows)
 
 reset timescaledb.debug_require_vector_agg;
@@ -61,6 +80,7 @@ select count(compress_chunk(x)) from show_chunks('groupagg') x;
      2
 (1 row)
 
+vacuum analyze groupagg;
 set timescaledb.debug_require_vector_agg to 'require';
 select s , sum(value) from groupagg group by s  order by s  nulls first limit 10;
  s  |   sum   
@@ -128,6 +148,9 @@ select a, count(*) from text_table group by a order by a limit 10;
  different104  |     1
 (10 rows)
 
+-- The hash grouping policies do not support the GroupAggregate mode in the
+-- reverse order.
+set timescaledb.debug_require_vector_agg to 'forbid';
 select a, count(*) from text_table group by a order by a desc limit 10;
             a            | count 
 -------------------------+-------

@@ -8,6 +8,7 @@
 \pset null ¤
 
 set max_parallel_workers_per_gather = 0;
+set enable_hashagg to off;
 
 create table groupagg(t int, s text, value int);
 select create_hypertable('groupagg', 't', chunk_time_interval => 10000);
@@ -24,17 +25,24 @@ from generate_series(10, 99) xfast,
 alter table groupagg set (timescaledb.compress, timescaledb.compress_segmentby = '',
     timescaledb.compress_orderby = 's');
 select count(compress_chunk(x)) from show_chunks('groupagg') x;
+vacuum analyze groupagg;
 
-set enable_hashagg to off;
 set timescaledb.debug_require_vector_agg to 'require';
 select s, sum(value) from groupagg group by s order by s limit 10;
 
+-- The hash grouping policies do not support the GroupAggregate mode in the
+-- reverse order.
+set timescaledb.debug_require_vector_agg to 'forbid';
+select s, sum(value) from groupagg group by s order by s desc limit 10;
 
 reset timescaledb.debug_require_vector_agg;
+
+
 select count(decompress_chunk(x)) from show_chunks('groupagg') x;
 alter table groupagg set (timescaledb.compress, timescaledb.compress_segmentby = '',
     timescaledb.compress_orderby = 's nulls first');
 select count(compress_chunk(x)) from show_chunks('groupagg') x;
+vacuum analyze groupagg;
 
 set timescaledb.debug_require_vector_agg to 'require';
 select s , sum(value) from groupagg group by s  order by s  nulls first limit 10;
@@ -63,7 +71,12 @@ select count(compress_chunk(x)) from show_chunks('text_table') x;
 
 set timescaledb.debug_require_vector_agg to 'require';
 select a, count(*) from text_table group by a order by a limit 10;
+
+-- The hash grouping policies do not support the GroupAggregate mode in the
+-- reverse order.
+set timescaledb.debug_require_vector_agg to 'forbid';
 select a, count(*) from text_table group by a order by a desc limit 10;
+
 reset timescaledb.debug_require_vector_agg;
 
 
