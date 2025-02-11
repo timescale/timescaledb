@@ -6,9 +6,9 @@
 \pset null ¤
 set max_parallel_workers_per_gather = 0;
 set enable_hashagg to off;
-set timescaledb.enable_vectorized_aggregation to off;
-set timescaledb.debug_require_vector_agg to 'forbid';
-create table groupagg(t int, s text, value int);
+--set timescaledb.enable_vectorized_aggregation to off;
+--set timescaledb.debug_require_vector_agg to 'forbid';
+create table groupagg(t int, s int, value int);
 select create_hypertable('groupagg', 't', chunk_time_interval => 10000);
 NOTICE:  adding not-null constraint to column "t"
    create_hypertable   
@@ -18,11 +18,11 @@ NOTICE:  adding not-null constraint to column "t"
 
 insert into groupagg
 select
-    xfast * 100 + xslow,
+    xslow * 10,
     case when xfast = 13 then null else xfast end,
     xfast * 7 + xslow * 3
 from generate_series(10, 99) xfast,
-    generate_series(1, 1000) xslow
+    generate_series(1, 1487) xslow
 ;
 alter table groupagg set (timescaledb.compress, timescaledb.compress_segmentby = '',
     timescaledb.compress_orderby = 's');
@@ -33,38 +33,42 @@ select count(compress_chunk(x)) from show_chunks('groupagg') x;
 (1 row)
 
 vacuum analyze groupagg;
+set timescaledb.debug_require_vector_agg to 'require';
 select s, sum(value) from groupagg group by s order by s limit 10;
  s  |   sum   
 ----+---------
- 10 | 1571500
- 11 | 1578500
- 12 | 1585500
- 14 | 1599500
- 15 | 1606500
- 16 | 1613500
- 17 | 1620500
- 18 | 1627500
- 19 | 1634500
- 20 | 1641500
+ 10 | 3423074
+ 11 | 3433483
+ 12 | 3443892
+ 14 | 3464710
+ 15 | 3475119
+ 16 | 3485528
+ 17 | 3495937
+ 18 | 3506346
+ 19 | 3516755
+ 20 | 3527164
 (10 rows)
 
 -- The hash grouping policies do not support the GroupAggregate mode in the
 -- reverse order.
+set timescaledb.debug_require_vector_agg to 'forbid';
 select s, sum(value) from groupagg group by s order by s desc limit 10;
  s  |   sum   
 ----+---------
- ¤  | 1592500
- 99 | 2194500
- 98 | 2187500
- 97 | 2180500
- 96 | 2173500
- 95 | 2166500
- 94 | 2159500
- 93 | 2152500
- 92 | 2145500
- 91 | 2138500
+ ¤ | 3454301
+ 99 | 4349475
+ 98 | 4339066
+ 97 | 4328657
+ 96 | 4318248
+ 95 | 4307839
+ 94 | 4297430
+ 93 | 4287021
+ 92 | 4276612
+ 91 | 4266203
 (10 rows)
 
+reset timescaledb.debug_require_vector_agg;
+-- Also test the NULLS FIRST order.
 select count(decompress_chunk(x)) from show_chunks('groupagg') x;
  count 
 -------
@@ -80,22 +84,25 @@ select count(compress_chunk(x)) from show_chunks('groupagg') x;
 (1 row)
 
 vacuum analyze groupagg;
-select s , sum(value) from groupagg group by s  order by s  nulls first limit 10;
+set timescaledb.debug_require_vector_agg to 'require';
+select s, sum(value) from groupagg group by s order by s nulls first limit 10;
  s  |   sum   
 ----+---------
- ¤  | 1592500
- 10 | 1571500
- 11 | 1578500
- 12 | 1585500
- 14 | 1599500
- 15 | 1606500
- 16 | 1613500
- 17 | 1620500
- 18 | 1627500
- 19 | 1634500
+ ¤ | 3454301
+ 10 | 3423074
+ 11 | 3433483
+ 12 | 3443892
+ 14 | 3464710
+ 15 | 3475119
+ 16 | 3485528
+ 17 | 3495937
+ 18 | 3506346
+ 19 | 3516755
 (10 rows)
 
--- More tests for dictionary encoding.
+reset timescaledb.debug_require_vector_agg;
+-- More tests for dictionary encoding. This is not vectorized at the moment.
+set timescaledb.debug_require_vector_agg to 'forbid';
 create table text_table(ts int);
 select create_hypertable('text_table', 'ts', chunk_time_interval => 3);
 NOTICE:  adding not-null constraint to column "ts"
@@ -130,6 +137,7 @@ select count(compress_chunk(x)) from show_chunks('text_table') x;
 (1 row)
 
 vacuum analyze text_table;
+-- The following tests are collation-sensitive, so verify it all matches.
 select table_schema,
        table_name,
        column_name,
@@ -145,19 +153,16 @@ order by table_schema,
  public       | text_table | a           | ¤
 (2 rows)
 
-select datname,
-       datcollate
-from pg_database
-where datname = current_database();
-        datname         | datcollate  
-------------------------+-------------
- db_vector_agg_groupagg | en_IE.UTF-8
+select datcollate from pg_database where datname = current_database();
+ datcollate 
+------------
+ C
 (1 row)
 
 select 'different-with-nulls999' > 'different999';
  ?column? 
 ----------
- t
+ f
 (1 row)
 
 select count(distinct a) from text_table;
@@ -166,96 +171,37 @@ select count(distinct a) from text_table;
   1504
 (1 row)
 
-explain (verbose, costs off, analyze, timing off, summary off)
+-- Test the GroupAggregate by a text column. Not vectorized for now.
 select a, count(*) from text_table group by a order by a limit 10;
-                                                                                                                                                     QUERY PLAN                                                                                                                                                      
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=10 loops=1)
-   Output: _hyper_3_7_chunk.a, (count(*))
-   ->  Finalize GroupAggregate (actual rows=10 loops=1)
-         Output: _hyper_3_7_chunk.a, count(*)
-         Group Key: _hyper_3_7_chunk.a
-         ->  Merge Append (actual rows=11 loops=1)
-               Sort Key: _hyper_3_7_chunk.a
-               ->  Partial GroupAggregate (actual rows=3 loops=1)
-                     Output: _hyper_3_7_chunk.a, PARTIAL count(*)
-                     Group Key: _hyper_3_7_chunk.a
-                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_7_chunk (actual rows=3000 loops=1)
-                           Output: _hyper_3_7_chunk.a
-                           Bulk Decompression: true
-                           ->  Index Scan using compress_hyper_4_10_chunk__ts_meta_min_1__ts_meta_max_1__ts_idx on _timescaledb_internal.compress_hyper_4_10_chunk (actual rows=3 loops=1)
-                                 Output: compress_hyper_4_10_chunk._ts_meta_count, compress_hyper_4_10_chunk._ts_meta_min_2, compress_hyper_4_10_chunk._ts_meta_max_2, compress_hyper_4_10_chunk.ts, compress_hyper_4_10_chunk._ts_meta_min_1, compress_hyper_4_10_chunk._ts_meta_max_1, compress_hyper_4_10_chunk.a
-               ->  Partial GroupAggregate (actual rows=9 loops=1)
-                     Output: _hyper_3_9_chunk.a, PARTIAL count(*)
-                     Group Key: _hyper_3_9_chunk.a
-                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_9_chunk (actual rows=10 loops=1)
-                           Output: _hyper_3_9_chunk.a
-                           Bulk Decompression: true
-                           ->  Index Scan using compress_hyper_4_11_chunk__ts_meta_min_1__ts_meta_max_1__ts_idx on _timescaledb_internal.compress_hyper_4_11_chunk (actual rows=1 loops=1)
-                                 Output: compress_hyper_4_11_chunk._ts_meta_count, compress_hyper_4_11_chunk._ts_meta_min_2, compress_hyper_4_11_chunk._ts_meta_max_2, compress_hyper_4_11_chunk.ts, compress_hyper_4_11_chunk._ts_meta_min_1, compress_hyper_4_11_chunk._ts_meta_max_1, compress_hyper_4_11_chunk.a
-(23 rows)
-
-select a, count(*) from text_table group by a order by a limit 10;
-       a       | count 
----------------+-------
-               |  1000
- default       |  1000
- different1    |     1
- different10   |     1
- different100  |     1
- different1000 |     1
- different101  |     1
- different102  |     1
- different103  |     1
- different104  |     1
+            a            | count 
+-------------------------+-------
+                         |  1000
+ default                 |  1000
+ different-with-nulls1   |     1
+ different-with-nulls101 |     1
+ different-with-nulls103 |     1
+ different-with-nulls105 |     1
+ different-with-nulls107 |     1
+ different-with-nulls109 |     1
+ different-with-nulls11  |     1
+ different-with-nulls111 |     1
 (10 rows)
 
 -- The hash grouping policies do not support the GroupAggregate mode in the
 -- reverse order.
-explain (verbose, costs off, analyze, timing off, summary off)
 select a, count(*) from text_table group by a order by a desc limit 10;
-                                                                                                                                                     QUERY PLAN                                                                                                                                                      
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=10 loops=1)
-   Output: _hyper_3_7_chunk.a, (count(*))
-   ->  Finalize GroupAggregate (actual rows=10 loops=1)
-         Output: _hyper_3_7_chunk.a, count(*)
-         Group Key: _hyper_3_7_chunk.a
-         ->  Merge Append (actual rows=11 loops=1)
-               Sort Key: _hyper_3_7_chunk.a DESC
-               ->  Partial GroupAggregate (actual rows=2 loops=1)
-                     Output: _hyper_3_7_chunk.a, PARTIAL count(*)
-                     Group Key: _hyper_3_7_chunk.a
-                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_7_chunk (actual rows=2001 loops=1)
-                           Output: _hyper_3_7_chunk.a
-                           Reverse: true
-                           Bulk Decompression: true
-                           ->  Index Scan Backward using compress_hyper_4_10_chunk__ts_meta_min_1__ts_meta_max_1__ts_idx on _timescaledb_internal.compress_hyper_4_10_chunk (actual rows=3 loops=1)
-                                 Output: compress_hyper_4_10_chunk._ts_meta_count, compress_hyper_4_10_chunk._ts_meta_min_2, compress_hyper_4_10_chunk._ts_meta_max_2, compress_hyper_4_10_chunk.ts, compress_hyper_4_10_chunk._ts_meta_min_1, compress_hyper_4_10_chunk._ts_meta_max_1, compress_hyper_4_10_chunk.a
-               ->  Partial GroupAggregate (actual rows=10 loops=1)
-                     Output: _hyper_3_9_chunk.a, PARTIAL count(*)
-                     Group Key: _hyper_3_9_chunk.a
-                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_9_chunk (actual rows=1509 loops=1)
-                           Output: _hyper_3_9_chunk.a
-                           Reverse: true
-                           Bulk Decompression: true
-                           ->  Index Scan Backward using compress_hyper_4_11_chunk__ts_meta_min_1__ts_meta_max_1__ts_idx on _timescaledb_internal.compress_hyper_4_11_chunk (actual rows=2 loops=1)
-                                 Output: compress_hyper_4_11_chunk._ts_meta_count, compress_hyper_4_11_chunk._ts_meta_min_2, compress_hyper_4_11_chunk._ts_meta_max_2, compress_hyper_4_11_chunk.ts, compress_hyper_4_11_chunk._ts_meta_min_1, compress_hyper_4_11_chunk._ts_meta_max_1, compress_hyper_4_11_chunk.a
-(25 rows)
-
-select a, count(*) from text_table group by a order by a desc limit 10;
-            a            | count 
--------------------------+-------
- ¤                       |  1000
- same-with-nulls         |   500
- same                    |  1000
- different-with-nulls999 |     1
- different-with-nulls997 |     1
- different-with-nulls995 |     1
- different-with-nulls993 |     1
- different-with-nulls991 |     1
- different-with-nulls99  |     1
- different-with-nulls989 |     1
+        a        | count 
+-----------------+-------
+ ¤              |  1000
+ same-with-nulls |   500
+ same            |  1000
+ different999    |     1
+ different998    |     1
+ different997    |     1
+ different996    |     1
+ different995    |     1
+ different994    |     1
+ different993    |     1
 (10 rows)
 
 -- with NULLS FIRST
@@ -274,18 +220,18 @@ select count(compress_chunk(x)) from show_chunks('text_table') x;
 (1 row)
 
 select a, count(*) from text_table group by a order by a nulls first limit 10;
-       a       | count 
----------------+-------
- ¤             |  1000
-               |  1000
- default       |  1000
- different1    |     1
- different10   |     1
- different100  |     1
- different1000 |     1
- different101  |     1
- different102  |     1
- different103  |     1
+            a            | count 
+-------------------------+-------
+ ¤                      |  1000
+                         |  1000
+ default                 |  1000
+ different-with-nulls1   |     1
+ different-with-nulls101 |     1
+ different-with-nulls103 |     1
+ different-with-nulls105 |     1
+ different-with-nulls107 |     1
+ different-with-nulls109 |     1
+ different-with-nulls11  |     1
 (10 rows)
 
 -- TODO verify that this works with the serialized hash grouping strategy
@@ -305,18 +251,18 @@ select ts, a, count(*) from text_table group by ts, a order by ts, a limit 10;
 (10 rows)
 
 select a, ts, count(*) from text_table group by a, ts order by a desc, ts desc limit 10;
-            a            | ts | count 
--------------------------+----+-------
- ¤                       |  5 |   500
- ¤                       |  4 |   500
- same-with-nulls         |  4 |   500
- same                    |  2 |  1000
- different-with-nulls999 |  5 |     1
- different-with-nulls997 |  5 |     1
- different-with-nulls995 |  5 |     1
- different-with-nulls993 |  5 |     1
- different-with-nulls991 |  5 |     1
- different-with-nulls99  |  5 |     1
+        a        | ts | count 
+-----------------+----+-------
+ ¤              |  5 |   500
+ ¤              |  4 |   500
+ same-with-nulls |  4 |   500
+ same            |  2 |  1000
+ different999    |  3 |     1
+ different998    |  3 |     1
+ different997    |  3 |     1
+ different996    |  3 |     1
+ different995    |  3 |     1
+ different994    |  3 |     1
 (10 rows)
 
 reset max_parallel_workers_per_gather;
