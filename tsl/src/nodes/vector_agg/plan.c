@@ -505,6 +505,8 @@ get_vectorized_grouping_type(Agg *agg, CustomScan *custom, List *resolved_target
 	/*
 	 * We support hashed vectorized grouping by one fixed-size by-value
 	 * compressed column.
+	 * We can use our hash table for GroupAggregate as well, because it preserves
+	 * the input order of the keys.
 	 */
 	if (num_grouping_columns == 1)
 	{
@@ -727,6 +729,21 @@ try_insert_vector_agg_node(Plan *plan)
 	{
 		/* The grouping is not vectorizable. */
 		return plan;
+	}
+
+	/*
+	 * The hash grouping strategies do not preserve the input key order when the
+	 * reverse ordering is requested, so in this case they cannot work in
+	 * GroupAggregate mode.
+	 */
+	if (grouping_type != VAGT_Batch && agg->aggstrategy != AGG_HASHED)
+	{
+		List *settings = linitial(custom->custom_private);
+		const bool reverse = list_nth_int(settings, DCS_Reverse);
+		if (reverse)
+		{
+			return plan;
+		}
 	}
 
 	/*
