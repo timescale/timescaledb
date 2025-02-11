@@ -5,7 +5,7 @@
 -- Check that the vectorized aggregation works properly in the GroupAggregate
 -- mode.
 
-\pset null ¤
+\pset null $
 
 set max_parallel_workers_per_gather = 0;
 set enable_hashagg to off;

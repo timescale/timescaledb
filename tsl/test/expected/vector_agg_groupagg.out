@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Check that the vectorized aggregation works properly in the GroupAggregate
 -- mode.
-\pset null ¤
+\pset null $
 set max_parallel_workers_per_gather = 0;
 set enable_hashagg to off;
 --set timescaledb.enable_vectorized_aggregation to off;
@@ -55,7 +55,7 @@ set timescaledb.debug_require_vector_agg to 'forbid';
 select s, sum(value) from groupagg group by s order by s desc limit 10;
  s  |   sum   
 ----+---------
- ¤ | 3454301
+  $ | 3454301
  99 | 4349475
  98 | 4339066
  97 | 4328657
@@ -88,7 +88,7 @@ set timescaledb.debug_require_vector_agg to 'require';
 select s, sum(value) from groupagg group by s order by s nulls first limit 10;
  s  |   sum   
 ----+---------
- ¤ | 3454301
+  $ | 3454301
  10 | 3423074
  11 | 3433483
  12 | 3443892
@@ -149,14 +149,14 @@ order by table_schema,
          ordinal_position;
  table_schema | table_name | column_name | collation_name 
 --------------+------------+-------------+----------------
- public       | text_table | ts          | ¤
- public       | text_table | a           | ¤
+ public       | text_table | ts          | $
+ public       | text_table | a           | $
 (2 rows)
 
 select datcollate from pg_database where datname = current_database();
  datcollate 
 ------------
- C
+ C.UTF-8
 (1 row)
 
 select 'different-with-nulls999' > 'different999';
@@ -192,7 +192,7 @@ select a, count(*) from text_table group by a order by a limit 10;
 select a, count(*) from text_table group by a order by a desc limit 10;
         a        | count 
 -----------------+-------
- ¤              |  1000
+ $               |  1000
  same-with-nulls |   500
  same            |  1000
  different999    |     1
@@ -222,7 +222,7 @@ select count(compress_chunk(x)) from show_chunks('text_table') x;
 select a, count(*) from text_table group by a order by a nulls first limit 10;
             a            | count 
 -------------------------+-------
- ¤                      |  1000
+ $                       |  1000
                          |  1000
  default                 |  1000
  different-with-nulls1   |     1
@@ -253,8 +253,8 @@ select ts, a, count(*) from text_table group by ts, a order by ts, a limit 10;
 select a, ts, count(*) from text_table group by a, ts order by a desc, ts desc limit 10;
         a        | ts | count 
 -----------------+----+-------
- ¤              |  5 |   500
- ¤              |  4 |   500
+ $               |  5 |   500
+ $               |  4 |   500
  same-with-nulls |  4 |   500
  same            |  2 |  1000
  different999    |  3 |     1
