@@ -236,6 +236,11 @@ tsl_postprocess_plan(PlannedStmt *stmt)
 	{
 		stmt->planTree = try_insert_vector_agg_node(stmt->planTree);
 	}
+	else
+	{
+		/* FIXME */
+		return;
+	}
 
 #ifdef TS_DEBUG
 	if (ts_guc_debug_require_vector_agg != DRO_Allow)

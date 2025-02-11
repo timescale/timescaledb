@@ -10,6 +10,8 @@
 set max_parallel_workers_per_gather = 0;
 set enable_hashagg to off;
 
+set timescaledb.enable_vectorized_aggregation to off;
+
 create table groupagg(t int, s text, value int);
 select create_hypertable('groupagg', 't', chunk_time_interval => 10000);
 
@@ -68,13 +70,18 @@ insert into text_table select 4, case when x % 2 = 0 then null else 'same-with-n
 insert into text_table select 5, case when x % 2 = 0 then null else 'different-with-nulls' || x end from generate_series(1, 1000) x;
 
 select count(compress_chunk(x)) from show_chunks('text_table') x;
+vacuum analyze text_table;
 
 set timescaledb.debug_require_vector_agg to 'require';
+explain (verbose, costs off)
+select a, count(*) from text_table group by a order by a limit 10;
 select a, count(*) from text_table group by a order by a limit 10;
 
 -- The hash grouping policies do not support the GroupAggregate mode in the
 -- reverse order.
 set timescaledb.debug_require_vector_agg to 'forbid';
+explain (verbose, costs off)
+select a, count(*) from text_table group by a order by a desc limit 10;
 select a, count(*) from text_table group by a order by a desc limit 10;
 
 reset timescaledb.debug_require_vector_agg;

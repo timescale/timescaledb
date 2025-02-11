@@ -6,6 +6,7 @@
 \pset null ¤
 set max_parallel_workers_per_gather = 0;
 set enable_hashagg to off;
+set timescaledb.enable_vectorized_aggregation to off;
 create table groupagg(t int, s text, value int);
 select create_hypertable('groupagg', 't', chunk_time_interval => 10000);
 NOTICE:  adding not-null constraint to column "t"
@@ -132,7 +133,35 @@ select count(compress_chunk(x)) from show_chunks('text_table') x;
      2
 (1 row)
 
+vacuum analyze text_table;
 set timescaledb.debug_require_vector_agg to 'require';
+explain (verbose, costs off)
+select a, count(*) from text_table group by a order by a limit 10;
+                                                                                                                                                     QUERY PLAN                                                                                                                                                      
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit
+   Output: _hyper_3_7_chunk.a, (count(*))
+   ->  Finalize GroupAggregate
+         Output: _hyper_3_7_chunk.a, count(*)
+         Group Key: _hyper_3_7_chunk.a
+         ->  Merge Append
+               Sort Key: _hyper_3_7_chunk.a
+               ->  Partial GroupAggregate
+                     Output: _hyper_3_7_chunk.a, PARTIAL count(*)
+                     Group Key: _hyper_3_7_chunk.a
+                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_7_chunk
+                           Output: _hyper_3_7_chunk.a
+                           ->  Index Scan using compress_hyper_4_10_chunk__ts_meta_min_1__ts_meta_max_1__ts_idx on _timescaledb_internal.compress_hyper_4_10_chunk
+                                 Output: compress_hyper_4_10_chunk._ts_meta_count, compress_hyper_4_10_chunk._ts_meta_min_2, compress_hyper_4_10_chunk._ts_meta_max_2, compress_hyper_4_10_chunk.ts, compress_hyper_4_10_chunk._ts_meta_min_1, compress_hyper_4_10_chunk._ts_meta_max_1, compress_hyper_4_10_chunk.a
+               ->  Partial GroupAggregate
+                     Output: _hyper_3_9_chunk.a, PARTIAL count(*)
+                     Group Key: _hyper_3_9_chunk.a
+                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_9_chunk
+                           Output: _hyper_3_9_chunk.a
+                           ->  Index Scan using compress_hyper_4_11_chunk__ts_meta_min_1__ts_meta_max_1__ts_idx on _timescaledb_internal.compress_hyper_4_11_chunk
+                                 Output: compress_hyper_4_11_chunk._ts_meta_count, compress_hyper_4_11_chunk._ts_meta_min_2, compress_hyper_4_11_chunk._ts_meta_max_2, compress_hyper_4_11_chunk.ts, compress_hyper_4_11_chunk._ts_meta_min_1, compress_hyper_4_11_chunk._ts_meta_max_1, compress_hyper_4_11_chunk.a
+(21 rows)
+
 select a, count(*) from text_table group by a order by a limit 10;
        a       | count 
 ---------------+-------
@@ -151,6 +180,33 @@ select a, count(*) from text_table group by a order by a limit 10;
 -- The hash grouping policies do not support the GroupAggregate mode in the
 -- reverse order.
 set timescaledb.debug_require_vector_agg to 'forbid';
+explain (verbose, costs off)
+select a, count(*) from text_table group by a order by a desc limit 10;
+                                                                                                                                                     QUERY PLAN                                                                                                                                                      
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit
+   Output: _hyper_3_7_chunk.a, (count(*))
+   ->  Finalize GroupAggregate
+         Output: _hyper_3_7_chunk.a, count(*)
+         Group Key: _hyper_3_7_chunk.a
+         ->  Merge Append
+               Sort Key: _hyper_3_7_chunk.a DESC
+               ->  Partial GroupAggregate
+                     Output: _hyper_3_7_chunk.a, PARTIAL count(*)
+                     Group Key: _hyper_3_7_chunk.a
+                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_7_chunk
+                           Output: _hyper_3_7_chunk.a
+                           ->  Index Scan Backward using compress_hyper_4_10_chunk__ts_meta_min_1__ts_meta_max_1__ts_idx on _timescaledb_internal.compress_hyper_4_10_chunk
+                                 Output: compress_hyper_4_10_chunk._ts_meta_count, compress_hyper_4_10_chunk._ts_meta_min_2, compress_hyper_4_10_chunk._ts_meta_max_2, compress_hyper_4_10_chunk.ts, compress_hyper_4_10_chunk._ts_meta_min_1, compress_hyper_4_10_chunk._ts_meta_max_1, compress_hyper_4_10_chunk.a
+               ->  Partial GroupAggregate
+                     Output: _hyper_3_9_chunk.a, PARTIAL count(*)
+                     Group Key: _hyper_3_9_chunk.a
+                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_9_chunk
+                           Output: _hyper_3_9_chunk.a
+                           ->  Index Scan Backward using compress_hyper_4_11_chunk__ts_meta_min_1__ts_meta_max_1__ts_idx on _timescaledb_internal.compress_hyper_4_11_chunk
+                                 Output: compress_hyper_4_11_chunk._ts_meta_count, compress_hyper_4_11_chunk._ts_meta_min_2, compress_hyper_4_11_chunk._ts_meta_max_2, compress_hyper_4_11_chunk.ts, compress_hyper_4_11_chunk._ts_meta_min_1, compress_hyper_4_11_chunk._ts_meta_max_1, compress_hyper_4_11_chunk.a
+(21 rows)
+
 select a, count(*) from text_table group by a order by a desc limit 10;
             a            | count 
 -------------------------+-------
