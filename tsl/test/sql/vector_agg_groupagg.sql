@@ -73,14 +73,14 @@ select count(compress_chunk(x)) from show_chunks('text_table') x;
 vacuum analyze text_table;
 
 set timescaledb.debug_require_vector_agg to 'require';
-explain (verbose, costs off)
+explain (verbose, costs off, analyze, timing off, summary off)
 select a, count(*) from text_table group by a order by a limit 10;
 select a, count(*) from text_table group by a order by a limit 10;
 
 -- The hash grouping policies do not support the GroupAggregate mode in the
 -- reverse order.
 set timescaledb.debug_require_vector_agg to 'forbid';
-explain (verbose, costs off)
+explain (verbose, costs off, analyze, timing off, summary off)
 select a, count(*) from text_table group by a order by a desc limit 10;
 select a, count(*) from text_table group by a order by a desc limit 10;
 

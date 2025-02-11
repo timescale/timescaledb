@@ -135,32 +135,34 @@ select count(compress_chunk(x)) from show_chunks('text_table') x;
 
 vacuum analyze text_table;
 set timescaledb.debug_require_vector_agg to 'require';
-explain (verbose, costs off)
+explain (verbose, costs off, analyze, timing off, summary off)
 select a, count(*) from text_table group by a order by a limit 10;
                                                                                                                                                      QUERY PLAN                                                                                                                                                      
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit
+ Limit (actual rows=10 loops=1)
    Output: _hyper_3_7_chunk.a, (count(*))
-   ->  Finalize GroupAggregate
+   ->  Finalize GroupAggregate (actual rows=10 loops=1)
          Output: _hyper_3_7_chunk.a, count(*)
          Group Key: _hyper_3_7_chunk.a
-         ->  Merge Append
+         ->  Merge Append (actual rows=11 loops=1)
                Sort Key: _hyper_3_7_chunk.a
-               ->  Partial GroupAggregate
+               ->  Partial GroupAggregate (actual rows=3 loops=1)
                      Output: _hyper_3_7_chunk.a, PARTIAL count(*)
                      Group Key: _hyper_3_7_chunk.a
-                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_7_chunk
+                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_7_chunk (actual rows=3000 loops=1)
                            Output: _hyper_3_7_chunk.a
-                           ->  Index Scan using compress_hyper_4_10_chunk__ts_meta_min_1__ts_meta_max_1__ts_idx on _timescaledb_internal.compress_hyper_4_10_chunk
+                           Bulk Decompression: true
+                           ->  Index Scan using compress_hyper_4_10_chunk__ts_meta_min_1__ts_meta_max_1__ts_idx on _timescaledb_internal.compress_hyper_4_10_chunk (actual rows=3 loops=1)
                                  Output: compress_hyper_4_10_chunk._ts_meta_count, compress_hyper_4_10_chunk._ts_meta_min_2, compress_hyper_4_10_chunk._ts_meta_max_2, compress_hyper_4_10_chunk.ts, compress_hyper_4_10_chunk._ts_meta_min_1, compress_hyper_4_10_chunk._ts_meta_max_1, compress_hyper_4_10_chunk.a
-               ->  Partial GroupAggregate
+               ->  Partial GroupAggregate (actual rows=9 loops=1)
                      Output: _hyper_3_9_chunk.a, PARTIAL count(*)
                      Group Key: _hyper_3_9_chunk.a
-                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_9_chunk
+                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_9_chunk (actual rows=10 loops=1)
                            Output: _hyper_3_9_chunk.a
-                           ->  Index Scan using compress_hyper_4_11_chunk__ts_meta_min_1__ts_meta_max_1__ts_idx on _timescaledb_internal.compress_hyper_4_11_chunk
+                           Bulk Decompression: true
+                           ->  Index Scan using compress_hyper_4_11_chunk__ts_meta_min_1__ts_meta_max_1__ts_idx on _timescaledb_internal.compress_hyper_4_11_chunk (actual rows=1 loops=1)
                                  Output: compress_hyper_4_11_chunk._ts_meta_count, compress_hyper_4_11_chunk._ts_meta_min_2, compress_hyper_4_11_chunk._ts_meta_max_2, compress_hyper_4_11_chunk.ts, compress_hyper_4_11_chunk._ts_meta_min_1, compress_hyper_4_11_chunk._ts_meta_max_1, compress_hyper_4_11_chunk.a
-(21 rows)
+(23 rows)
 
 select a, count(*) from text_table group by a order by a limit 10;
        a       | count 
@@ -180,32 +182,36 @@ select a, count(*) from text_table group by a order by a limit 10;
 -- The hash grouping policies do not support the GroupAggregate mode in the
 -- reverse order.
 set timescaledb.debug_require_vector_agg to 'forbid';
-explain (verbose, costs off)
+explain (verbose, costs off, analyze, timing off, summary off)
 select a, count(*) from text_table group by a order by a desc limit 10;
                                                                                                                                                      QUERY PLAN                                                                                                                                                      
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit
+ Limit (actual rows=10 loops=1)
    Output: _hyper_3_7_chunk.a, (count(*))
-   ->  Finalize GroupAggregate
+   ->  Finalize GroupAggregate (actual rows=10 loops=1)
          Output: _hyper_3_7_chunk.a, count(*)
          Group Key: _hyper_3_7_chunk.a
-         ->  Merge Append
+         ->  Merge Append (actual rows=11 loops=1)
                Sort Key: _hyper_3_7_chunk.a DESC
-               ->  Partial GroupAggregate
+               ->  Partial GroupAggregate (actual rows=2 loops=1)
                      Output: _hyper_3_7_chunk.a, PARTIAL count(*)
                      Group Key: _hyper_3_7_chunk.a
-                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_7_chunk
+                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_7_chunk (actual rows=2001 loops=1)
                            Output: _hyper_3_7_chunk.a
-                           ->  Index Scan Backward using compress_hyper_4_10_chunk__ts_meta_min_1__ts_meta_max_1__ts_idx on _timescaledb_internal.compress_hyper_4_10_chunk
+                           Reverse: true
+                           Bulk Decompression: true
+                           ->  Index Scan Backward using compress_hyper_4_10_chunk__ts_meta_min_1__ts_meta_max_1__ts_idx on _timescaledb_internal.compress_hyper_4_10_chunk (actual rows=3 loops=1)
                                  Output: compress_hyper_4_10_chunk._ts_meta_count, compress_hyper_4_10_chunk._ts_meta_min_2, compress_hyper_4_10_chunk._ts_meta_max_2, compress_hyper_4_10_chunk.ts, compress_hyper_4_10_chunk._ts_meta_min_1, compress_hyper_4_10_chunk._ts_meta_max_1, compress_hyper_4_10_chunk.a
-               ->  Partial GroupAggregate
+               ->  Partial GroupAggregate (actual rows=10 loops=1)
                      Output: _hyper_3_9_chunk.a, PARTIAL count(*)
                      Group Key: _hyper_3_9_chunk.a
-                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_9_chunk
+                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_9_chunk (actual rows=1509 loops=1)
                            Output: _hyper_3_9_chunk.a
-                           ->  Index Scan Backward using compress_hyper_4_11_chunk__ts_meta_min_1__ts_meta_max_1__ts_idx on _timescaledb_internal.compress_hyper_4_11_chunk
+                           Reverse: true
+                           Bulk Decompression: true
+                           ->  Index Scan Backward using compress_hyper_4_11_chunk__ts_meta_min_1__ts_meta_max_1__ts_idx on _timescaledb_internal.compress_hyper_4_11_chunk (actual rows=2 loops=1)
                                  Output: compress_hyper_4_11_chunk._ts_meta_count, compress_hyper_4_11_chunk._ts_meta_min_2, compress_hyper_4_11_chunk._ts_meta_max_2, compress_hyper_4_11_chunk.ts, compress_hyper_4_11_chunk._ts_meta_min_1, compress_hyper_4_11_chunk._ts_meta_max_1, compress_hyper_4_11_chunk.a
-(21 rows)
+(25 rows)
 
 select a, count(*) from text_table group by a order by a desc limit 10;
             a            | count 
