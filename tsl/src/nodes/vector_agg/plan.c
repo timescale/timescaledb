@@ -506,7 +506,7 @@ get_vectorized_grouping_type(Agg *agg, CustomScan *custom, List *resolved_target
 	 * We support hashed vectorized grouping by one fixed-size by-value
 	 * compressed column.
 	 * We can use our hash table for GroupAggregate as well, because it preserves
-	 * the input order of the keys.
+	 * the input order of the keys, but only for the direct order, not reverse.
 	 */
 	if (num_grouping_columns == 1)
 	{
