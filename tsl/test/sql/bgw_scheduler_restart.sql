@@ -54,22 +54,34 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Show the default scheduler restart time
+CREATE PROCEDURE ts_terminate_launcher() AS $$
+SELECT pg_terminate_backend(pid) FROM tsdb_bgw
+ WHERE backend_type LIKE '%Launcher%';
+$$ LANGUAGE SQL;
+
+-- Show the default scheduler restart time and set it to a lower
+-- value.
 SHOW timescaledb.bgw_scheduler_restart_time;
 ALTER SYSTEM SET timescaledb.bgw_scheduler_restart_time TO '10s';
 ALTER SYSTEM SET timescaledb.debug_bgw_scheduler_exit_status TO 1;
 SELECT pg_reload_conf();
-\c
+
+-- Reconnect and check the restart time to make sure that it is
+-- correct.
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SHOW timescaledb.bgw_scheduler_restart_time;
 
 -- Launcher is running, so we need to restart it for the scheduler
 -- restart time to take effect.
 SELECT datname, application_name FROM tsdb_bgw;
-SELECT pg_terminate_backend(pid) FROM tsdb_bgw
- WHERE backend_type LIKE '%Launcher%';
+CALL ts_terminate_launcher();
 
 -- It will restart automatically, but we wait for it to start.
 CALL wait_for_some_started(1, 50, '%Launcher%');
+
+-- Make sure that the new value of the scheduler restart time is
+-- correct or the rest of the tests will fail.
+SHOW timescaledb.bgw_scheduler_restart_time;
 
 -- Verify that launcher is running. If it is not, the rest of the test
 -- will fail.
@@ -113,8 +125,7 @@ SELECT pid AS orig_pid FROM tsdb_bgw WHERE backend_type LIKE '%Launcher%' \gset
 -- Kill the launcher. Since there are new restarted schedulers, the
 -- handle could not be used to terminate them, and they would be left
 -- running.
-SELECT pg_terminate_backend(pid) FROM tsdb_bgw
- WHERE backend_type LIKE '%Launcher%';
+CALL ts_terminate_launcher();
 
 -- Launcher will restart immediately, but we wait one second to give
 -- it a chance to start.
@@ -132,5 +143,8 @@ SELECT (pid != :orig_pid) AS different_pid,
 ALTER SYSTEM RESET timescaledb.bgw_scheduler_restart_time;
 ALTER SYSTEM RESET timescaledb.debug_bgw_scheduler_exit_status;
 SELECT pg_reload_conf();
-
 SELECT _timescaledb_functions.stop_background_workers();
+
+-- We need to restart the launcher as well to read the reset
+-- configuration or it will affect other tests.
+CALL ts_terminate_launcher();
