@@ -760,6 +760,19 @@ build_column_map(CompressionSettings *settings, Relation uncompressed_table,
 			Ensure(!is_orderby || batch_minmax_builder != NULL,
 				   "orderby columns must have minmax metadata");
 
+			const AttrNumber bloom_attr_number =
+				compressed_column_metadata_attno(settings,
+												 uncompressed_table->rd_id,
+												 attr->attnum,
+												 compressed_table->rd_id,
+												 "bloom1");
+			if (AttributeNumberIsValid(bloom_attr_number))
+			{
+				const int bloom_attr_offset = AttrNumberGetAttrOffset(bloom_attr_number);
+				batch_minmax_builder =
+					batch_metadata_builder_bloom1_create(attr->atttypid, bloom_attr_offset);
+			}
+
 			*column = (PerColumn){
 				.compressor = compressor_for_type(attr->atttypid),
 				.metadata_builder = batch_minmax_builder,

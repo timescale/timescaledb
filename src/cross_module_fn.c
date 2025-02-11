@@ -79,8 +79,7 @@ CROSSMODULE_WRAPPER(array_compressor_finish);
 CROSSMODULE_WRAPPER(create_compressed_chunk);
 CROSSMODULE_WRAPPER(compress_chunk);
 CROSSMODULE_WRAPPER(decompress_chunk);
-CROSSMODULE_WRAPPER(hypercore_handler);
-CROSSMODULE_WRAPPER(hypercore_proxy_handler);
+CROSSMODULE_WRAPPER(bloom1_matches);
 
 /* continuous aggregate */
 CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
@@ -101,6 +100,8 @@ CROSSMODULE_WRAPPER(get_compressed_chunk_index_for_recompression);
 CROSSMODULE_WRAPPER(merge_chunks);
 
 /* hypercore */
+CROSSMODULE_WRAPPER(hypercore_handler);
+CROSSMODULE_WRAPPER(hypercore_proxy_handler);
 CROSSMODULE_WRAPPER(is_compressed_tid);
 
 /*
@@ -395,9 +396,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.dictionary_compressor_finish = error_no_default_fn_pg_community,
 	.array_compressor_append = error_no_default_fn_pg_community,
 	.array_compressor_finish = error_no_default_fn_pg_community,
-	.hypercore_handler = error_no_default_fn_pg_community,
-	.hypercore_proxy_handler = error_pg_community_hypercore_proxy_handler,
-	.is_compressed_tid = error_no_default_fn_pg_community,
+	.bloom1_matches = error_no_default_fn_pg_community,
 
 	.show_chunk = error_no_default_fn_pg_community,
 	.create_chunk = error_no_default_fn_pg_community,
@@ -406,6 +405,11 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.chunk_create_empty_table = error_no_default_fn_pg_community,
 	.recompress_chunk_segmentwise = error_no_default_fn_pg_community,
 	.get_compressed_chunk_index_for_recompression = error_no_default_fn_pg_community,
+
+	.hypercore_handler = error_no_default_fn_pg_community,
+	.hypercore_proxy_handler = error_pg_community_hypercore_proxy_handler,
+	.is_compressed_tid = error_no_default_fn_pg_community,
+
 	.preprocess_query_tsl = preprocess_query_tsl_default_fn_community,
 	.merge_chunks = error_no_default_fn_pg_community,
 };
