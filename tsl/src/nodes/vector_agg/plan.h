@@ -3,10 +3,11 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-
 #include <postgres.h>
-
 #include <nodes/plannodes.h>
+#include <utils/relcache.h>
+
+#include "nodes/decompress_chunk/vector_quals.h"
 
 typedef struct VectorAggPlan
 {
@@ -23,6 +24,7 @@ typedef enum
 } VectorAggSettingsIndex;
 
 extern void _vector_agg_init(void);
+extern bool vectoragg_plan_decompress_chunk(Plan *childplan, VectorQualInfo *vqi);
 
-Plan *try_insert_vector_agg_node(Plan *plan);
+Plan *try_insert_vector_agg_node(Plan *plan, List *rtable);
 bool has_vector_agg_node(Plan *plan, bool *has_normal_agg);
