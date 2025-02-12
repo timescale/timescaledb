@@ -1,2 +1,0 @@
-Fixes: #7653 Push down orderby scankeys to Hypercore TAM
-Thanks: Timescale community members Jacob and pantonis for reporting issues with slow queries.
