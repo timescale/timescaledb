@@ -17,6 +17,7 @@
 bool decompress_cache_print = false;
 struct DecompressCacheStats decompress_cache_stats;
 static ExplainOneQuery_hook_type prev_ExplainOneQuery_hook = NULL;
+static bool ExplainOneQuery_hook_initialized = false;
 
 #if PG17_LT
 /*
@@ -72,7 +73,11 @@ static void
 explain_decompression(Query *query, int cursorOptions, IntoClause *into, ExplainState *es,
 					  const char *queryString, ParamListInfo params, QueryEnvironment *queryEnv)
 {
-	standard_ExplainOneQuery(query, cursorOptions, into, es, queryString, params, queryEnv);
+	if (prev_ExplainOneQuery_hook)
+		prev_ExplainOneQuery_hook(query, cursorOptions, into, es, queryString, params, queryEnv);
+	else
+		standard_ExplainOneQuery(query, cursorOptions, into, es, queryString, params, queryEnv);
+
 	if (decompress_cache_print)
 	{
 		const bool has_decompress_data = decompress_cache_stats.decompressions > 0 ||
@@ -130,6 +135,14 @@ tsl_process_explain_def(DefElem *opt)
 void
 _arrow_cache_explain_init(void)
 {
-	prev_ExplainOneQuery_hook = ExplainOneQuery_hook;
-	ExplainOneQuery_hook = explain_decompression;
+	/*
+	 * TSL init might be reexecuted so we need to make
+	 * sure to not initialize hook multiple times
+	 */
+	if (!ExplainOneQuery_hook_initialized)
+	{
+		ExplainOneQuery_hook_initialized = true;
+		prev_ExplainOneQuery_hook = ExplainOneQuery_hook;
+		ExplainOneQuery_hook = explain_decompression;
+	}
 }
