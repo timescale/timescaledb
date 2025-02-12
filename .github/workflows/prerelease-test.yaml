@@ -1,20 +1,13 @@
-# Push the release branch to upstream/prerelease_test branch in the TimescaleDB repository.
-#
-# Commits on this branch will be tested by more tests than our usual PRs.
-# You can see the pre-release test progress under the actions
-# (https://github.com/timescale/timescaledb/actions?query=branch%3Aprerelease_test)
-# or under the pull request you created for the release.
-#
-# Note: Because the upgrade script does not get executed at this stage, some test might fail.
-# These test failures can be ignored at this point. Your branch will be re-tested as soon as
-# the proper downgrade script is created and the versioning is adjusted.
+# Prerelease Tests
 
 name: Prerelease Tests on Release branch
 on:
   workflow_dispatch:
   schedule:
-    # run daily at 5 am UTC
+    # run prerelease tests daily at 5 am UTC
     - cron: '0 5 * * *'
+    # run coverity tests at 22:00 on every sunday
+    - cron: '0 22 * * SUN'
 
 # The workflow needs the permission to push branches
 permissions:
@@ -40,8 +33,45 @@ jobs:
         with:
           ref: ${{ env.RELEASE_BRANCH }}
 
+# Prerelease Testing
+#
+# Push the release branch to upstream/prerelease_test branch in the TimescaleDB repository.
+#
+# Commits on this branch will be tested by more tests than our usual PRs.
+# You can see the pre-release test progress under the actions
+# (https://github.com/timescale/timescaledb/actions?query=branch%3Aprerelease_test)
+# or under the pull request you created for the release.
+#
+# Note: Because the upgrade script does not get executed at this stage, some test might fail.
+# These test failures can be ignored at this point. Your branch will be re-tested as soon as
+# the proper downgrade script is created and the versioning is adjusted.
+
       - name: Push the release branch to prerelease_test branch
+        if: github.event.schedule == '0 5 * * *'
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           git push upstream HEAD:prerelease_test --force
+
+
+# Coverity Testing
+#
+# Coverity (https://scan.coverity.com) is a static code analysis software that analyzes sourcecode
+# and spots problems like null pointer dereferences or incorrect expressions. To execute Coverity on
+# your release, the release needs to be pushed to the branch coverity_scan. After pushing the release
+# to the branch, a GitHub action (https://github.com/timescale/timescaledb/blob/main/.github/workflows/coverity.yaml)
+# is triggered that starts the code analysis.
+
+# You can see the result of the Coverity scan under the URL (https://scan.coverity.com/projects/timescale-timescaledb?tab=overview).
+# A few minutes after you have pushed your changes to the coverity_scan branch, you should see that the
+# check of commit has been started. When the check is done, there should be no new errors reported (0 Newly detected).
+#
+# Note: Some rate limits (https://scan.coverity.com/faq#frequency) apply to the Coverity service. So,
+# don't push your branch too often to this service.
+
+      - name: Push the release branch to coverity_scan branch
+        if: github.event.schedule == '0 22 * * SUN'
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        run: |
+          git push upstream HEAD:coverity_scan --force
