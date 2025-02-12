@@ -1,0 +1,1 @@
+Fixes: #7694 Fix ExplainHook breaking call chain
