@@ -226,6 +226,7 @@ WHERE uncomp_hyper.table_name like 'test1' ORDER BY chunk.id LIMIT 1
 
 \set ON_ERROR_STOP 0
 DROP TABLE :COMPRESSED_CHUNK_NAME;
+SELECT _timescaledb_functions.drop_chunk(:'COMPRESSED_CHUNK_NAME');
 \set ON_ERROR_STOP 1
 
 SELECT
