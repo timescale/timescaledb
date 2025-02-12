@@ -12,7 +12,7 @@ show timescaledb.hypercore_indexam_whitelist;
 -- user.
 grant all on schema _timescaledb_internal to :ROLE_DEFAULT_PERM_USER;
 set role :ROLE_DEFAULT_PERM_USER;
-SET timescaledb.arrow_cache_maxsize = 4;
+SET timescaledb.hypercore_arrow_cache_max_entries = 4;
 CREATE TABLE readings(
        time timestamptz UNIQUE,
        location int,

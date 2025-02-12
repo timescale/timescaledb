@@ -53,7 +53,7 @@ typedef struct ArrowColumnCache
 	size_t arrow_column_cache_lru_count; /* Arrow column cache LRU list count */
 	dlist_head arrow_column_cache_lru;	 /* Arrow column cache LRU list */
 	HTAB *htab;							 /* Arrow column cache */
-	uint16 maxsize;
+	size_t maxsize;
 } ArrowColumnCache;
 
 typedef struct ArrowTupleTableSlot ArrowTupleTableSlot;
