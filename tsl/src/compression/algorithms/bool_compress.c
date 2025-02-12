@@ -400,12 +400,6 @@ decompression_iterator_init(BoolDecompressionIterator *iter, void *compressed, O
 	}
 }
 
-static inline bool
-iterator_has_nulls(BoolDecompressionIterator *iter)
-{
-	return iter->nulls.num_elements > 0;
-}
-
 static DecompressResultInternal
 bool_decompression_iterator_try_next_forward_internal(BoolDecompressionIterator *iter)
 {
