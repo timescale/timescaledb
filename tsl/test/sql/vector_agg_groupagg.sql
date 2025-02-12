@@ -60,7 +60,7 @@ alter table text_table set (timescaledb.compress);
 insert into text_table select 0 /*, default */ from generate_series(1, 1000) x;
 select count(compress_chunk(x)) from show_chunks('text_table') x;
 
-alter table text_table add column a text default 'default';
+alter table text_table add column a text collate "POSIX" default 'default';
 alter table text_table set (timescaledb.compress,
     timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'a');
 
