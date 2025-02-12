@@ -149,6 +149,7 @@ typedef enum HypercoreCopyToBehavior
 
 extern TSDLLEXPORT HypercoreCopyToBehavior ts_guc_hypercore_copy_to_behavior;
 extern TSDLLEXPORT bool ts_guc_enable_hypercore_scankey_pushdown;
+extern TSDLLEXPORT int ts_guc_hypercore_arrow_cache_max_entries;
 
 void _guc_init(void);
 
