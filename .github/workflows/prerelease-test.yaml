@@ -6,8 +6,8 @@ on:
   schedule:
     # run prerelease tests daily at 5 am UTC
     - cron: '0 5 * * *'
-    # run coverity tests at 22:00 on every saturday
-    - cron: '0 22 * * SAT'
+    # run coverity tests at 22:00 on every sunday
+    - cron: '0 22 * * SUN'
 
 # The workflow needs the permission to push branches
 permissions:
@@ -70,7 +70,7 @@ jobs:
 # don't push your branch too often to this service.
 
       - name: Push the release branch to coverity_scan branch
-        if: github.event.schedule == '0 22 * * SAT'
+        if: github.event.schedule == '0 22 * * SUN'
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
