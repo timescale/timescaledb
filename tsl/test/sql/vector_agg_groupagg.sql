@@ -73,23 +73,6 @@ insert into text_table select 5, case when x % 2 = 0 then null else 'different-w
 select count(compress_chunk(x)) from show_chunks('text_table') x;
 vacuum analyze text_table;
 
--- The following tests are collation-sensitive, so verify it all matches.
-select table_schema,
-       table_name,
-       column_name,
-       collation_name
-from information_schema.columns
-where table_name = 'text_table'
-order by table_schema,
-         table_name,
-         ordinal_position;
-
-select datcollate from pg_database where datname = current_database();
-
-select 'different-with-nulls999' > 'different999';
-
-select count(distinct a) from text_table;
-
 
 set timescaledb.debug_require_vector_agg to 'require';
 select a, count(*) from text_table group by a order by a limit 10;
