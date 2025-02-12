@@ -18,8 +18,9 @@
 
 typedef struct BgwJobStatHistoryContext
 {
-	BgwJob *job;
 	JobResult result;
+	BgwJobStatHistoryUpdateType update_type;
+	BgwJob *job;
 	Jsonb *edata;
 } BgwJobStatHistoryContext;
 
@@ -90,7 +91,7 @@ ts_bgw_job_stat_history_build_data_info(BgwJobStatHistoryContext *context)
 }
 
 static void
-ts_bgw_job_stat_history_insert(BgwJobStatHistoryContext *context)
+bgw_job_stat_history_insert(BgwJobStatHistoryContext *context, bool track_only_errors)
 {
 	Assert(context != NULL);
 
@@ -101,16 +102,29 @@ ts_bgw_job_stat_history_insert(BgwJobStatHistoryContext *context)
 	CatalogSecurityContext sec_ctx;
 
 	ts_datum_set_int32(Anum_bgw_job_stat_history_job_id, values, context->job->fd.id, false);
-	ts_datum_set_int32(Anum_bgw_job_stat_history_pid, values, MyProcPid, false);
 	ts_datum_set_timestamptz(Anum_bgw_job_stat_history_execution_start,
 							 values,
 							 context->job->job_history.execution_start,
 							 false);
-	ts_datum_set_timestamptz(Anum_bgw_job_stat_history_execution_finish, values, 0, true);
-	ts_datum_set_timestamptz(Anum_bgw_job_stat_history_execution_finish,
-							 values,
-							 ts_timer_get_current_timestamp(),
-							 false);
+	if (track_only_errors)
+	{
+		/* In case of logging only ERRORs */
+		ts_datum_set_int32(Anum_bgw_job_stat_history_pid, values, MyProcPid, false);
+		ts_datum_set_timestamptz(Anum_bgw_job_stat_history_execution_finish,
+								 values,
+								 ts_timer_get_current_timestamp(),
+								 false);
+		ts_datum_set_bool(Anum_bgw_job_stat_history_succeeded, values, false, false);
+	}
+	else
+	{
+		/* When tracking history first we INSERT the job without the FINISH execution timestamp,
+		 * PID and SUCCEED flag because it will be marked once the job finishes */
+		ts_datum_set_int32(Anum_bgw_job_stat_history_pid, values, 0, true);
+		ts_datum_set_timestamptz(Anum_bgw_job_stat_history_execution_finish, values, 0, true);
+		ts_datum_set_bool(Anum_bgw_job_stat_history_succeeded, values, false, true);
+	}
+
 	ts_datum_set_jsonb(Anum_bgw_job_stat_history_data,
 					   values,
 					   ts_bgw_job_stat_history_build_data_info(context));
@@ -131,18 +145,14 @@ ts_bgw_job_stat_history_insert(BgwJobStatHistoryContext *context)
 	table_close(rel, NoLock);
 }
 
-void
-ts_bgw_job_stat_history_mark_start(BgwJob *job)
+static void
+bgw_job_stat_history_mark_start(BgwJobStatHistoryContext *context)
 {
 	/* Don't mark the start in case of the GUC be disabled */
 	if (!ts_guc_enable_job_execution_logging)
 		return;
 
-	BgwJobStatHistoryContext context = {
-		.job = job,
-	};
-
-	ts_bgw_job_stat_history_insert(&context);
+	bgw_job_stat_history_insert(context, false);
 }
 
 static bool
@@ -192,34 +202,51 @@ bgw_job_stat_history_scan_id(int64 bgw_job_history_id, tuple_found_func tuple_fo
 }
 
 static ScanTupleResult
-bgw_job_stat_history_tuple_mark_end(TupleInfo *ti, void *const data)
+bgw_job_stat_history_tuple_update(TupleInfo *ti, void *const data)
 {
 	bool should_free;
 	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 	BgwJobStatHistoryContext *context = (BgwJobStatHistoryContext *) data;
+	Jsonb *job_history_data = NULL;
 
 	Datum values[Natts_bgw_job_stat_history] = { 0 };
 	bool nulls[Natts_bgw_job_stat_history] = { 0 };
 	bool doReplace[Natts_bgw_job_stat_history] = { 0 };
 
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_history_pid)] = Int32GetDatum(MyProcPid);
-	doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_stat_history_pid)] = true;
-
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_history_execution_finish)] =
-		TimestampTzGetDatum(ts_timer_get_current_timestamp());
-	doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_stat_history_execution_finish)] = true;
-
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_history_succeeded)] =
-		BoolGetDatum((context->result == JOB_SUCCESS));
-	doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_stat_history_succeeded)] = true;
-
-	Jsonb *job_history_data = ts_bgw_job_stat_history_build_data_info(context);
-
-	if (job_history_data != NULL)
+	switch (context->update_type)
 	{
-		values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_history_data)] =
-			JsonbPGetDatum(job_history_data);
-		doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_stat_history_data)] = true;
+		case JOB_STAT_HISTORY_UPDATE_PID:
+		{
+			values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_history_pid)] =
+				Int32GetDatum(MyProcPid);
+			doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_stat_history_pid)] = true;
+			break;
+		}
+
+		case JOB_STAT_HISTORY_UPDATE_END:
+		{
+			values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_history_execution_finish)] =
+				TimestampTzGetDatum(ts_timer_get_current_timestamp());
+			doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_stat_history_execution_finish)] = true;
+
+			values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_history_succeeded)] =
+				BoolGetDatum((context->result == JOB_SUCCESS));
+			doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_stat_history_succeeded)] = true;
+
+			job_history_data = ts_bgw_job_stat_history_build_data_info(context);
+
+			if (job_history_data != NULL)
+			{
+				values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_history_data)] =
+					JsonbPGetDatum(job_history_data);
+				doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_stat_history_data)] = true;
+			}
+			break;
+		}
+
+		case JOB_STAT_HISTORY_UPDATE_START:
+			pg_unreachable();
+			break;
 	}
 
 	HeapTuple new_tuple =
@@ -235,44 +262,65 @@ bgw_job_stat_history_tuple_mark_end(TupleInfo *ti, void *const data)
 	return SCAN_DONE;
 }
 
-void
-ts_bgw_job_stat_history_mark_end(BgwJob *job, JobResult result, Jsonb *edata)
+static void
+bgw_job_stat_history_update(BgwJobStatHistoryContext *context)
 {
 	/* Don't execute in case of the GUC is false and the job succeeded, because failures are always
 	 * logged
 	 */
-	if (!ts_guc_enable_job_execution_logging && result == JOB_SUCCESS)
+	if (!ts_guc_enable_job_execution_logging && context->result == JOB_SUCCESS)
 		return;
 
 	/* Re-read the job information because it can change during the execution by using the
 	 * `alter_job` API inside the function/procedure (i.e. job config) */
-	BgwJob *new_job = ts_bgw_job_find(job->fd.id, CurrentMemoryContext, true);
+	BgwJob *new_job = ts_bgw_job_find(context->job->fd.id, CurrentMemoryContext, true);
 
-	/* Set the job history information  */
-	new_job->job_history = job->job_history;
+	/* Set the job history information */
+	new_job->job_history = context->job->job_history;
 
-	BgwJobStatHistoryContext context = {
-		.job = new_job,
-		.result = result,
-		.edata = edata,
-	};
+	/* Use the newly loaded job in the current context to use this information to register the
+	 * execution history */
+	context->job = new_job;
 
 	/* Failures are always logged so in case of the GUC is false and a failure happens then we need
 	 * to insert all the information in the job error history table */
-	if (!ts_guc_enable_job_execution_logging && result != JOB_SUCCESS)
+	if (!ts_guc_enable_job_execution_logging && context->result != JOB_SUCCESS)
 	{
-		ts_bgw_job_stat_history_insert(&context);
+		bgw_job_stat_history_insert(context, true);
 	}
 	else
 	{
 		/* Mark the end of the previous inserted start execution */
 		if (!bgw_job_stat_history_scan_id(new_job->job_history.id,
-										  bgw_job_stat_history_tuple_mark_end,
+										  bgw_job_stat_history_tuple_update,
 										  NULL,
-										  &context,
+										  context,
 										  RowExclusiveLock))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("unable to find job history " INT64_FORMAT, new_job->job_history.id)));
+	}
+}
+
+void
+ts_bgw_job_stat_history_update(BgwJobStatHistoryUpdateType update_type, BgwJob *job,
+							   JobResult result, Jsonb *edata)
+{
+	BgwJobStatHistoryContext context = {
+		.result = result,
+		.update_type = update_type,
+		.job = job,
+		.edata = edata,
+	};
+
+	switch (update_type)
+	{
+		case JOB_STAT_HISTORY_UPDATE_START:
+			bgw_job_stat_history_mark_start(&context);
+			break;
+		case JOB_STAT_HISTORY_UPDATE_END:
+		case JOB_STAT_HISTORY_UPDATE_PID:
+			bgw_job_stat_history_update(&context);
+			break;
 	}
 }

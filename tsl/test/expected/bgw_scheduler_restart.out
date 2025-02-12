@@ -49,7 +49,12 @@ BEGIN
     RAISE EXCEPTION 'backend matching % did not start before timeout', pattern;
 END;
 $$ LANGUAGE plpgsql;
--- Show the default scheduler restart time
+CREATE PROCEDURE ts_terminate_launcher() AS $$
+SELECT pg_terminate_backend(pid) FROM tsdb_bgw
+ WHERE backend_type LIKE '%Launcher%';
+$$ LANGUAGE SQL;
+-- Show the default scheduler restart time and set it to a lower
+-- value.
 SHOW timescaledb.bgw_scheduler_restart_time;
  timescaledb.bgw_scheduler_restart_time 
 ----------------------------------------
@@ -64,10 +69,13 @@ SELECT pg_reload_conf();
  t
 (1 row)
 
+-- Reconnect and check the restart time to make sure that it is
+-- correct.
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SHOW timescaledb.bgw_scheduler_restart_time;
  timescaledb.bgw_scheduler_restart_time 
 ----------------------------------------
- 1min
+ 10s
 (1 row)
 
 -- Launcher is running, so we need to restart it for the scheduler
@@ -78,15 +86,17 @@ SELECT datname, application_name FROM tsdb_bgw;
          | TimescaleDB Background Worker Launcher
 (1 row)
 
-SELECT pg_terminate_backend(pid) FROM tsdb_bgw
- WHERE backend_type LIKE '%Launcher%';
- pg_terminate_backend 
-----------------------
- t
-(1 row)
-
+CALL ts_terminate_launcher();
 -- It will restart automatically, but we wait for it to start.
 CALL wait_for_some_started(1, 50, '%Launcher%');
+-- Make sure that the new value of the scheduler restart time is
+-- correct or the rest of the tests will fail.
+SHOW timescaledb.bgw_scheduler_restart_time;
+ timescaledb.bgw_scheduler_restart_time 
+----------------------------------------
+ 10s
+(1 row)
+
 -- Verify that launcher is running. If it is not, the rest of the test
 -- will fail.
 SELECT datname, application_name FROM tsdb_bgw;
@@ -151,13 +161,7 @@ SELECT pid AS orig_pid FROM tsdb_bgw WHERE backend_type LIKE '%Launcher%' \gset
 -- Kill the launcher. Since there are new restarted schedulers, the
 -- handle could not be used to terminate them, and they would be left
 -- running.
-SELECT pg_terminate_backend(pid) FROM tsdb_bgw
- WHERE backend_type LIKE '%Launcher%';
- pg_terminate_backend 
-----------------------
- t
-(1 row)
-
+CALL ts_terminate_launcher();
 -- Launcher will restart immediately, but we wait one second to give
 -- it a chance to start.
 CALL wait_for_some_started(1, 50, '%Launcher%');
@@ -189,3 +193,6 @@ SELECT _timescaledb_functions.stop_background_workers();
  t
 (1 row)
 
+-- We need to restart the launcher as well to read the reset
+-- configuration or it will affect other tests.
+CALL ts_terminate_launcher();

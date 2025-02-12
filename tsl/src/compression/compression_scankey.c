@@ -17,7 +17,7 @@
 
 static Oid deduce_filter_subtype(BatchFilter *filter, Oid att_typoid);
 static bool create_segment_filter_scankey(Relation in_rel, char *segment_filter_col_name,
-										  StrategyNumber strategy, Oid subtype,
+										  StrategyNumber strategy, Oid subtype, Oid opcode,
 										  ScanKeyData *scankeys, int *num_scankeys,
 										  Bitmapset **null_columns, Datum value, bool is_null_check,
 										  bool is_array_op);
@@ -191,6 +191,7 @@ build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 											  attname,
 											  BTEqualStrategyNumber,
 											  InvalidOid,
+											  InvalidOid,
 											  scankeys,
 											  &key_index,
 											  null_columns,
@@ -212,6 +213,7 @@ build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 											  column_segment_min_name(index),
 											  BTLessEqualStrategyNumber,
 											  InvalidOid,
+											  InvalidOid,
 											  scankeys,
 											  &key_index,
 											  null_columns,
@@ -222,6 +224,7 @@ build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 				create_segment_filter_scankey(in_rel,
 											  column_segment_max_name(index),
 											  BTGreaterEqualStrategyNumber,
+											  InvalidOid,
 											  InvalidOid,
 											  scankeys,
 											  &key_index,
@@ -461,6 +464,7 @@ build_update_delete_scankeys(Relation in_rel, List *heap_filters, int *num_scank
 												   NameStr(filter->column_name),
 												   filter->strategy,
 												   deduce_filter_subtype(filter, typoid),
+												   filter->opcode,
 												   scankeys,
 												   &key_index,
 												   null_columns,
@@ -482,9 +486,9 @@ build_update_delete_scankeys(Relation in_rel, List *heap_filters, int *num_scank
 
 static bool
 create_segment_filter_scankey(Relation in_rel, char *segment_filter_col_name,
-							  StrategyNumber strategy, Oid subtype, ScanKeyData *scankeys,
-							  int *num_scankeys, Bitmapset **null_columns, Datum value,
-							  bool is_null_check, bool is_array_op)
+							  StrategyNumber strategy, Oid subtype, Oid opcode,
+							  ScanKeyData *scankeys, int *num_scankeys, Bitmapset **null_columns,
+							  Datum value, bool is_null_check, bool is_array_op)
 {
 	AttrNumber cmp_attno = get_attnum(in_rel->rd_id, segment_filter_col_name);
 	Assert(cmp_attno != InvalidAttrNumber);
@@ -510,30 +514,48 @@ create_segment_filter_scankey(Relation in_rel, char *segment_filter_col_name,
 		return false;
 	}
 
-	Oid atttypid = in_rel->rd_att->attrs[AttrNumberGetAttrOffset(cmp_attno)].atttypid;
-
-	TypeCacheEntry *tce = lookup_type_cache(atttypid, TYPECACHE_BTREE_OPFAMILY);
-	if (!OidIsValid(tce->btree_opf))
-		elog(ERROR, "no btree opfamily for type \"%s\"", format_type_be(atttypid));
-
-	Oid opr = get_opfamily_member(tce->btree_opf, atttypid, atttypid, strategy);
-
+	Oid opr;
 	/*
-	 * Fall back to btree operator input type when it is binary compatible with
-	 * the column type and no operator for column type could be found.
+	 * All btree operators will have a valid strategy here. For
+	 * non-btree operators e.g. <> we directly take the opcode
+	 * here. We could do the same for btree in certain cases
+	 * but some filters get transformed to min/max filters and
+	 * won't keep the initial opcode so we would need to disambiguate
+	 * between them.
 	 */
-	if (!OidIsValid(opr) && IsBinaryCoercible(atttypid, tce->btree_opintype))
+	if (strategy == InvalidStrategy)
 	{
-		opr =
-			get_opfamily_member(tce->btree_opf, tce->btree_opintype, tce->btree_opintype, strategy);
+		opr = opcode;
+	}
+	else
+	{
+		Oid atttypid = in_rel->rd_att->attrs[AttrNumberGetAttrOffset(cmp_attno)].atttypid;
+
+		TypeCacheEntry *tce = lookup_type_cache(atttypid, TYPECACHE_BTREE_OPFAMILY);
+		if (!OidIsValid(tce->btree_opf))
+			elog(ERROR, "no btree opfamily for type \"%s\"", format_type_be(atttypid));
+
+		opr = get_opfamily_member(tce->btree_opf, atttypid, atttypid, strategy);
+
+		/*
+		 * Fall back to btree operator input type when it is binary compatible with
+		 * the column type and no operator for column type could be found.
+		 */
+		if (!OidIsValid(opr) && IsBinaryCoercible(atttypid, tce->btree_opintype))
+		{
+			opr = get_opfamily_member(tce->btree_opf,
+									  tce->btree_opintype,
+									  tce->btree_opintype,
+									  strategy);
+		}
+
+		/* No operator could be found so we can't create the scankey. */
+		if (!OidIsValid(opr))
+			return false;
+
+		opr = get_opcode(opr);
 	}
 
-	/* No operator could be found so we can't create the scankey. */
-	if (!OidIsValid(opr))
-		return false;
-
-	opr = get_opcode(opr);
-	Assert(OidIsValid(opr));
 	/* We should never end up here but: no opcode, no optimization */
 	if (!OidIsValid(opr))
 		return false;

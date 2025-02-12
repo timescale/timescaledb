@@ -12,7 +12,6 @@
 #include <access/tableam.h>
 #include <access/transam.h>
 #include <access/xact.h>
-#include <c.h>
 #include <catalog/catalog.h>
 #include <catalog/dependency.h>
 #include <catalog/heap.h>
@@ -106,7 +105,7 @@ chunk_unfreeze_chunk(PG_FUNCTION_ARGS)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("operation not supported on distributed chunk or foreign table \"%s\"",
+				 errmsg("operation not supported on foreign table \"%s\"",
 						get_rel_name(chunk_relid))));
 	}
 	if (!ts_chunk_is_frozen(chunk))
@@ -892,6 +891,14 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("merging compressed chunks is not yet supported"),
 					 errhint("Decompress the chunks before merging.")));
+
+		if (ts_chunk_is_frozen(chunk))
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot merge frozen chunk \"%s.%s\" scheduled for tiering",
+							NameStr(chunk->fd.schema_name),
+							NameStr(chunk->fd.table_name)),
+					 errhint("Untier the chunk before merging.")));
 
 		if (hypertable_id == INVALID_HYPERTABLE_ID)
 			hypertable_id = chunk->fd.hypertable_id;

@@ -3,7 +3,12 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Check that the vectorized aggregation works properly in the GroupAggregate
 -- mode.
-create table groupagg(t int, s text, value int);
+\pset null $
+set max_parallel_workers_per_gather = 0;
+set enable_hashagg to off;
+--set timescaledb.enable_vectorized_aggregation to off;
+--set timescaledb.debug_require_vector_agg to 'forbid';
+create table groupagg(t int, s int, value int);
 select create_hypertable('groupagg', 't', chunk_time_interval => 10000);
 NOTICE:  adding not-null constraint to column "t"
    create_hypertable   
@@ -13,11 +18,11 @@ NOTICE:  adding not-null constraint to column "t"
 
 insert into groupagg
 select
-    xfast * 100 + xslow,
+    xslow * 10,
     case when xfast = 13 then null else xfast end,
     xfast * 7 + xslow * 3
 from generate_series(10, 99) xfast,
-    generate_series(1, 10000) xslow
+    generate_series(1, 1487) xslow
 ;
 alter table groupagg set (timescaledb.compress, timescaledb.compress_segmentby = '',
     timescaledb.compress_orderby = 's');
@@ -27,24 +32,43 @@ select count(compress_chunk(x)) from show_chunks('groupagg') x;
      2
 (1 row)
 
-set enable_hashagg to off;
-set timescaledb.debug_require_vector_agg to 'allow';
+vacuum analyze groupagg;
+set timescaledb.debug_require_vector_agg to 'require';
 select s, sum(value) from groupagg group by s order by s limit 10;
- s  |    sum    
-----+-----------
- 10 | 150715000
- 11 | 150785000
- 12 | 150855000
- 14 | 150995000
- 15 | 151065000
- 16 | 151135000
- 17 | 151205000
- 18 | 151275000
- 19 | 151345000
- 20 | 151415000
+ s  |   sum   
+----+---------
+ 10 | 3423074
+ 11 | 3433483
+ 12 | 3443892
+ 14 | 3464710
+ 15 | 3475119
+ 16 | 3485528
+ 17 | 3495937
+ 18 | 3506346
+ 19 | 3516755
+ 20 | 3527164
+(10 rows)
+
+-- The hash grouping policies do not support the GroupAggregate mode in the
+-- reverse order.
+set timescaledb.debug_require_vector_agg to 'forbid';
+select s, sum(value) from groupagg group by s order by s desc limit 10;
+ s  |   sum   
+----+---------
+  $ | 3454301
+ 99 | 4349475
+ 98 | 4339066
+ 97 | 4328657
+ 96 | 4318248
+ 95 | 4307839
+ 94 | 4297430
+ 93 | 4287021
+ 92 | 4276612
+ 91 | 4266203
 (10 rows)
 
 reset timescaledb.debug_require_vector_agg;
+-- Also test the NULLS FIRST order.
 select count(decompress_chunk(x)) from show_chunks('groupagg') x;
  count 
 -------
@@ -59,21 +83,154 @@ select count(compress_chunk(x)) from show_chunks('groupagg') x;
      2
 (1 row)
 
+vacuum analyze groupagg;
 set timescaledb.debug_require_vector_agg to 'require';
-select s , sum(value) from groupagg group by s  order by s  nulls first limit 10;
- s  |    sum    
-----+-----------
-    | 150925000
- 10 | 150715000
- 11 | 150785000
- 12 | 150855000
- 14 | 150995000
- 15 | 151065000
- 16 | 151135000
- 17 | 151205000
- 18 | 151275000
- 19 | 151345000
+select s, sum(value) from groupagg group by s order by s nulls first limit 10;
+ s  |   sum   
+----+---------
+  $ | 3454301
+ 10 | 3423074
+ 11 | 3433483
+ 12 | 3443892
+ 14 | 3464710
+ 15 | 3475119
+ 16 | 3485528
+ 17 | 3495937
+ 18 | 3506346
+ 19 | 3516755
 (10 rows)
 
-reset enable_hashagg;
 reset timescaledb.debug_require_vector_agg;
+-- More tests for dictionary encoding. This is not vectorized at the moment.
+set timescaledb.debug_require_vector_agg to 'forbid';
+create table text_table(ts int);
+select create_hypertable('text_table', 'ts', chunk_time_interval => 3);
+NOTICE:  adding not-null constraint to column "ts"
+    create_hypertable    
+-------------------------
+ (3,public,text_table,t)
+(1 row)
+
+alter table text_table set (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "text_table" is set to ""
+NOTICE:  default order by for hypertable "text_table" is set to "ts DESC"
+insert into text_table select 0 /*, default */ from generate_series(1, 1000) x;
+select count(compress_chunk(x)) from show_chunks('text_table') x;
+ count 
+-------
+     1
+(1 row)
+
+alter table text_table add column a text collate "POSIX" default 'default';
+alter table text_table set (timescaledb.compress,
+    timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'a');
+insert into text_table select 1, '' from generate_series(1, 1000) x;
+insert into text_table select 2, 'same' from generate_series(1, 1000) x;
+insert into text_table select 3, 'different' || x from generate_series(1, 1000) x;
+insert into text_table select 4, case when x % 2 = 0 then null else 'same-with-nulls' end from generate_series(1, 1000) x;
+insert into text_table select 5, case when x % 2 = 0 then null else 'different-with-nulls' || x end from generate_series(1, 1000) x;
+select count(compress_chunk(x)) from show_chunks('text_table') x;
+ count 
+-------
+     2
+(1 row)
+
+vacuum analyze text_table;
+-- Test the GroupAggregate by a text column. Not vectorized for now.
+select a, count(*) from text_table group by a order by a limit 10;
+            a            | count 
+-------------------------+-------
+                         |  1000
+ default                 |  1000
+ different-with-nulls1   |     1
+ different-with-nulls101 |     1
+ different-with-nulls103 |     1
+ different-with-nulls105 |     1
+ different-with-nulls107 |     1
+ different-with-nulls109 |     1
+ different-with-nulls11  |     1
+ different-with-nulls111 |     1
+(10 rows)
+
+-- The hash grouping policies do not support the GroupAggregate mode in the
+-- reverse order.
+select a, count(*) from text_table group by a order by a desc limit 10;
+        a        | count 
+-----------------+-------
+ $               |  1000
+ same-with-nulls |   500
+ same            |  1000
+ different999    |     1
+ different998    |     1
+ different997    |     1
+ different996    |     1
+ different995    |     1
+ different994    |     1
+ different993    |     1
+(10 rows)
+
+-- with NULLS FIRST
+select count(decompress_chunk(x)) from show_chunks('text_table') x;
+ count 
+-------
+     2
+(1 row)
+
+alter table text_table set (timescaledb.compress,
+    timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'a nulls first');
+select count(compress_chunk(x)) from show_chunks('text_table') x;
+ count 
+-------
+     2
+(1 row)
+
+select a, count(*) from text_table group by a order by a nulls first limit 10;
+            a            | count 
+-------------------------+-------
+ $                       |  1000
+                         |  1000
+ default                 |  1000
+ different-with-nulls1   |     1
+ different-with-nulls101 |     1
+ different-with-nulls103 |     1
+ different-with-nulls105 |     1
+ different-with-nulls107 |     1
+ different-with-nulls109 |     1
+ different-with-nulls11  |     1
+(10 rows)
+
+-- TODO verify that this works with the serialized hash grouping strategy
+select ts, a, count(*) from text_table group by ts, a order by ts, a limit 10;
+ ts |       a       | count 
+----+---------------+-------
+  0 | default       |  1000
+  1 |               |  1000
+  2 | same          |  1000
+  3 | different1    |     1
+  3 | different10   |     1
+  3 | different100  |     1
+  3 | different1000 |     1
+  3 | different101  |     1
+  3 | different102  |     1
+  3 | different103  |     1
+(10 rows)
+
+select a, ts, count(*) from text_table group by a, ts order by a desc, ts desc limit 10;
+        a        | ts | count 
+-----------------+----+-------
+ $               |  5 |   500
+ $               |  4 |   500
+ same-with-nulls |  4 |   500
+ same            |  2 |  1000
+ different999    |  3 |     1
+ different998    |  3 |     1
+ different997    |  3 |     1
+ different996    |  3 |     1
+ different995    |  3 |     1
+ different994    |  3 |     1
+(10 rows)
+
+reset max_parallel_workers_per_gather;
+reset timescaledb.debug_require_vector_agg;
+reset enable_hashagg;

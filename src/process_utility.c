@@ -1100,7 +1100,7 @@ process_vacuum(ProcessUtilityArgs *args)
 	stmt->rels = list_concat(ctx.chunk_rels, vacuum_rels);
 
 	/* The list of rels to vacuum could be empty if we are only vacuuming a
-	 * distributed hypertable. In that case, we don't want to vacuum locally. */
+	 * tiered hypertable with no local chunks. In that case, we don't want to vacuum locally. */
 	if (list_length(stmt->rels) > 0)
 	{
 		PreventCommandDuringRecovery(is_vacuumcmd ? "VACUUM" : "ANALYZE");
@@ -1165,7 +1165,6 @@ process_truncate(ProcessUtilityArgs *args)
 	/* For all hypertables, we drop the now empty chunks. We also propagate the
 	 * TRUNCATE call to the compressed version of the hypertable, if it exists.
 	 */
-	/* Preprocess and filter out distributed hypertables */
 	foreach (cell, stmt->relations)
 	{
 		RangeVar *rv = lfirst(cell);
@@ -1348,8 +1347,8 @@ process_truncate(ProcessUtilityArgs *args)
 	}
 
 	/* Update relations list just when changed to include only tables
-	 * that hold data. On an access node, distributed hypertables hold
-	 * no data and chunks are foreign tables, so those tables are excluded. */
+	 * that hold data.
+	 */
 	if (list_changed)
 		stmt->relations = relations;
 
@@ -1842,8 +1841,6 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 
 				ts_cache_release(hcache);
 
-				/* Execute command right away, to check any permission errors before propagating
-				 * it to the distributed DDL */
 				result = DDL_DONE;
 				if (stmt->objects != NIL)
 					prev_ProcessUtility(args);
@@ -2000,7 +1997,7 @@ process_drop_start(ProcessUtilityArgs *args)
 			process_drop_hypertable(args, stmt);
 			TS_FALLTHROUGH;
 		case OBJECT_FOREIGN_TABLE:
-			/* Chunks can be either normal tables, or foreign tables in the case of a distributed
+			/* Chunks can be either normal tables, or foreign tables in the case of a tiered
 			 * hypertable */
 			process_drop_chunk(args, stmt);
 			break;
@@ -2089,7 +2086,6 @@ process_reindex(ProcessUtilityArgs *args)
 					ereport(ERROR,
 							(errmsg("concurrent index creation on hypertables is not supported")));
 
-				/* Do not process remote chunks in case of distributed hypertable */
 				if (foreach_chunk(ht, reindex_chunk, args) >= 0)
 					result = DDL_DONE;
 
@@ -4246,9 +4242,6 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_ResetOptions:
 		case AT_ReAddStatistics:
 		case AT_SetCompression:
-			/* Avoid running this command for distributed hypertable chunks
-			 * since PostgreSQL currently does not allow to alter
-			 * storage options for a foreign table. */
 			foreach_chunk(ht, process_altertable_chunk, cmd);
 			break;
 		case AT_SetTableSpace:

@@ -286,6 +286,67 @@ CREATE TRIGGER direct_delete_trigger AFTER DELETE ON direct_delete FOR EACH ROW 
 BEGIN; :ANALYZE DELETE FROM direct_delete WHERE device = 'd1'; ROLLBACK;
 DROP TRIGGER direct_delete_trigger ON direct_delete;
 
-
 DROP TABLE direct_delete;
+
+-- test DML on metadata columns
+CREATE TABLE compress_dml(time timestamptz NOT NULL, device text, reading text, value float);
+SELECT table_name FROM create_hypertable('compress_dml', 'time');
+ALTER TABLE compress_dml SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby='time DESC, reading');
+
+INSERT INTO compress_dml VALUES
+('2025-01-01','d1','r1',0.01),
+('2025-01-01','d2','r2',0.01),
+('2025-01-01','d3','r1',0.01),
+('2025-01-01','d3','r2',0.01),
+('2025-01-01','d4','r1',0.01),
+('2025-01-01','d4',NULL,0.01),
+('2025-01-01','d5','r2',0.01),
+('2025-01-01','d5',NULL,0.01),
+('2025-01-01','d6','r1',0.01),
+('2025-01-01','d6','r2',0.01),
+('2025-01-01','d6',NULL,0.01);
+
+SELECT compress_chunk(show_chunks('compress_dml'));
+
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading = 'r1';
+SELECT * FROM compress_dml t ORDER BY t;
+ROLLBACK;
+
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading <> 'r1';
+SELECT * FROM compress_dml t ORDER BY t;
+ROLLBACK;
+
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading IS NULL;
+SELECT * FROM compress_dml t ORDER BY t;
+ROLLBACK;
+
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading IS NOT NULL;
+SELECT * FROM compress_dml t ORDER BY t;
+ROLLBACK;
+
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading IN ('r2','r3');
+SELECT * FROM compress_dml t ORDER BY t;
+ROLLBACK;
+
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading = ANY('{r2,r3}');
+SELECT * FROM compress_dml t ORDER BY t;
+ROLLBACK;
+
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading NOT IN ('r2','r3');
+SELECT * FROM compress_dml t ORDER BY t;
+ROLLBACK;
+
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading <> ALL('{r2,r3}');
+SELECT * FROM compress_dml t ORDER BY t;
+ROLLBACK;
+
+DROP TABLE compress_dml;
 

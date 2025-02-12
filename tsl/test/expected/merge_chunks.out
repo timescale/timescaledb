@@ -353,6 +353,23 @@ ERROR:  cannot merge OSM chunks
 reset role;
 update _timescaledb_catalog.chunk ch set osm_chunk = false where table_name = '_hyper_1_1_chunk';
 set role :ROLE_DEFAULT_PERM_USER;
+-- Merge frozen chunks
+select _timescaledb_functions.freeze_chunk('_timescaledb_internal._hyper_1_1_chunk');
+ freeze_chunk 
+--------------
+ t
+(1 row)
+
+call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_2_chunk');
+ERROR:  cannot merge frozen chunk "_timescaledb_internal._hyper_1_1_chunk" scheduled for tiering
+call merge_chunks('_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_1_chunk');
+ERROR:  cannot merge frozen chunk "_timescaledb_internal._hyper_1_1_chunk" scheduled for tiering
+select _timescaledb_functions.unfreeze_chunk('_timescaledb_internal._hyper_1_1_chunk');
+ unfreeze_chunk 
+----------------
+ t
+(1 row)
+
 \set ON_ERROR_STOP 1
 -- Set seed to consistently generate same data and same set of chunks
 select setseed(0.2);

@@ -1076,8 +1076,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 
 	/*
 	 * the simple_*_array structures have already been set, we need to add the
-	 * children to them. We include potential data node rels we might need to
-	 * create in case of a distributed hypertable.
+	 * children to them.
 	 */
 	expand_planner_arrays(root, num_chunks);
 

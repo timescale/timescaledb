@@ -1,0 +1,1 @@
+Fixes: #7686 Potential wrong aggregation result when using vectorized aggregation with hash grouping in reverse order

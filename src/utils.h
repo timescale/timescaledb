@@ -330,17 +330,20 @@ ts_datum_set_text_from_cstring(const AttrNumber attno, NullableDatum *datums, co
 }
 
 static inline void
-ts_datum_set_bool(const AttrNumber attno, NullableDatum *datums, const bool value)
+ts_datum_set_bool(const AttrNumber attno, NullableDatum *datums, const bool value,
+				  const bool isnull)
 {
-	datums[AttrNumberGetAttrOffset(attno)].value = BoolGetDatum(value);
-	datums[AttrNumberGetAttrOffset(attno)].isnull = false;
+	if (!isnull)
+		datums[AttrNumberGetAttrOffset(attno)].value = BoolGetDatum(value);
+	datums[AttrNumberGetAttrOffset(attno)].isnull = isnull;
 }
 
 static inline void
 ts_datum_set_int32(const AttrNumber attno, NullableDatum *datums, const int32 value,
 				   const bool isnull)
 {
-	datums[AttrNumberGetAttrOffset(attno)].value = Int32GetDatum(value);
+	if (!isnull)
+		datums[AttrNumberGetAttrOffset(attno)].value = Int32GetDatum(value);
 	datums[AttrNumberGetAttrOffset(attno)].isnull = isnull;
 }
 
@@ -348,7 +351,8 @@ static inline void
 ts_datum_set_int64(const AttrNumber attno, NullableDatum *datums, const int64 value,
 				   const bool isnull)
 {
-	datums[AttrNumberGetAttrOffset(attno)].value = Int64GetDatum(value);
+	if (!isnull)
+		datums[AttrNumberGetAttrOffset(attno)].value = Int64GetDatum(value);
 	datums[AttrNumberGetAttrOffset(attno)].isnull = isnull;
 }
 
@@ -356,7 +360,8 @@ static inline void
 ts_datum_set_timestamptz(const AttrNumber attno, NullableDatum *datums, const TimestampTz value,
 						 const bool isnull)
 {
-	datums[AttrNumberGetAttrOffset(attno)].value = TimestampTzGetDatum(value);
+	if (!isnull)
+		datums[AttrNumberGetAttrOffset(attno)].value = TimestampTzGetDatum(value);
 	datums[AttrNumberGetAttrOffset(attno)].isnull = isnull;
 }
 

@@ -43,7 +43,9 @@ typedef struct GroupingPolicyHash GroupingPolicyHash;
  * results are emitted into the output slot. This is done in the order of unique
  * grouping key indexes, thereby preserving the incoming key order. This
  * guarantees that this policy works correctly even in a Partial GroupAggregate
- * node, even though it's not optimal performance-wise.
+ * node, even though it's not optimal performance-wise. We only support the
+ * direct order of records in batch though, not reverse. This is checked at
+ * planning time.
  */
 typedef struct GroupingPolicyHash
 {
