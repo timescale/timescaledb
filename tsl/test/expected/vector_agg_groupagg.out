@@ -101,8 +101,7 @@ select s, sum(value) from groupagg group by s order by s nulls first limit 10;
 (10 rows)
 
 reset timescaledb.debug_require_vector_agg;
--- More tests for dictionary encoding. This is not vectorized at the moment.
-set timescaledb.debug_require_vector_agg to 'forbid';
+-- More tests for dictionary encoding.
 create table text_table(ts int);
 select create_hypertable('text_table', 'ts', chunk_time_interval => 3);
 NOTICE:  adding not-null constraint to column "ts"
@@ -137,7 +136,7 @@ select count(compress_chunk(x)) from show_chunks('text_table') x;
 (1 row)
 
 vacuum analyze text_table;
--- Test the GroupAggregate by a text column. Not vectorized for now.
+set timescaledb.debug_require_vector_agg to 'require';
 select a, count(*) from text_table group by a order by a limit 10;
             a            | count 
 -------------------------+-------
@@ -155,6 +154,7 @@ select a, count(*) from text_table group by a order by a limit 10;
 
 -- The hash grouping policies do not support the GroupAggregate mode in the
 -- reverse order.
+set timescaledb.debug_require_vector_agg to 'forbid';
 select a, count(*) from text_table group by a order by a desc limit 10;
         a        | count 
 -----------------+-------
@@ -170,6 +170,7 @@ select a, count(*) from text_table group by a order by a desc limit 10;
  different993    |     1
 (10 rows)
 
+reset timescaledb.debug_require_vector_agg;
 -- with NULLS FIRST
 select count(decompress_chunk(x)) from show_chunks('text_table') x;
  count 
@@ -185,6 +186,7 @@ select count(compress_chunk(x)) from show_chunks('text_table') x;
      2
 (1 row)
 
+set timescaledb.debug_require_vector_agg to 'require';
 select a, count(*) from text_table group by a order by a nulls first limit 10;
             a            | count 
 -------------------------+-------
@@ -200,7 +202,9 @@ select a, count(*) from text_table group by a order by a nulls first limit 10;
  different-with-nulls11  |     1
 (10 rows)
 
+reset timescaledb.debug_require_vector_agg;
 -- TODO verify that this works with the serialized hash grouping strategy
+set timescaledb.debug_require_vector_agg to 'forbid';
 select ts, a, count(*) from text_table group by ts, a order by ts, a limit 10;
  ts |       a       | count 
 ----+---------------+-------
@@ -231,6 +235,7 @@ select a, ts, count(*) from text_table group by a, ts order by a desc, ts desc l
  different994    |  3 |     1
 (10 rows)
 
+reset timescaledb.debug_require_vector_agg;
 reset max_parallel_workers_per_gather;
 reset timescaledb.debug_require_vector_agg;
 reset enable_hashagg;
