@@ -24,11 +24,13 @@ typedef struct VectorQualInfo
 	 */
 	Index rti;
 
+	bool reverse;
 	/*
-	 * Array indexed by uncompressed attno indicating whether an
-	 * attribute/column is a vectorizable type.
+	 * Arrays indexed by uncompressed attno indicating whether an
+	 * attribute/column is a vectorizable type and/or a segmentby attribute.
 	 */
 	bool *vector_attrs;
+	bool *segmentby_attrs;
 } VectorQualInfo;
 
 /*

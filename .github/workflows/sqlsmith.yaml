@@ -8,6 +8,7 @@ name: SQLsmith
     branches:
       - sqlsmith
       - main
+      - prerelease_test
   pull_request:
     paths: .github/workflows/sqlsmith.yaml
 
