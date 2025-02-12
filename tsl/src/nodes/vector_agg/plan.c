@@ -601,20 +601,6 @@ try_insert_vector_agg_node(Plan *plan, List *rtable)
 	 */
 	if (grouping_type != VAGT_Batch && agg->aggstrategy != AGG_HASHED)
 	{
-		List *settings = linitial(custom->custom_private);
-		const bool reverse = list_nth_int(settings, DCS_Reverse);
-		if (reverse)
-		{
-			return plan;
-		}
-	}
-
-	/*
-	 * Build supplementary info to determine whether we can vectorize the
-	 * aggregate FILTER clauses.
-	 */
-	if (grouping_type != VAGT_Batch && agg->aggstrategy != AGG_HASHED)
-	{
 		if (vqi.reverse)
 		{
 			return plan;
