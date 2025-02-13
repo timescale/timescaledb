@@ -122,6 +122,7 @@ typedef struct CrossModuleFunctions
 	PGFunction compressed_data_in;
 	PGFunction compressed_data_out;
 	PGFunction compressed_data_info;
+	PGFunction compressed_data_has_nulls;
 	bool (*process_compress_table)(AlterTableCmd *cmd, Hypertable *ht,
 								   WithClauseResult *with_clause_options);
 	void (*process_altertable_cmd)(Hypertable *ht, const AlterTableCmd *cmd);

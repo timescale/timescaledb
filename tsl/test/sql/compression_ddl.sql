@@ -1078,3 +1078,77 @@ DELETE FROM test2 WHERE i IS NULL;
 SELECT count(*) FROM test2 WHERE i IS NULL;
 ALTER TABLE test2 ALTER COLUMN i SET NOT NULL;
 \set ON_ERROR_STOP 1
+
+-- test set not null
+CREATE TABLE test_notnull(time timestamptz, device text, value float);
+SELECT create_hypertable('test_notnull','time');
+ALTER TABLE test_notnull SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+
+INSERT INTO test_notnull VALUES ('2025-01-01','d1',NULL);
+INSERT INTO test_notnull VALUES ('2025-01-01',NULL,NULL);
+
+-- should fail since we have NULL value
+\set ON_ERROR_STOP 0
+ALTER TABLE test_notnull ALTER COLUMN value SET NOT NULL;
+ALTER TABLE test_notnull ALTER COLUMN device SET NOT NULL;
+\set ON_ERROR_STOP 1
+
+SELECT compress_chunk(show_chunks('test_notnull'));
+-- should fail since we have NULL value
+\set ON_ERROR_STOP 0
+ALTER TABLE test_notnull ALTER COLUMN value SET NOT NULL;
+ALTER TABLE test_notnull ALTER COLUMN device SET NOT NULL;
+\set ON_ERROR_STOP 1
+
+UPDATE test_notnull SET value = 1;
+ALTER TABLE test_notnull ALTER COLUMN value SET NOT NULL;
+ALTER TABLE test_notnull ALTER COLUMN value DROP NOT NULL;
+SELECT compress_chunk(show_chunks('test_notnull'));
+
+ALTER TABLE test_notnull ALTER COLUMN value SET NOT NULL;
+ALTER TABLE test_notnull ALTER COLUMN value DROP NOT NULL;
+-- device still has NULL
+\set ON_ERROR_STOP 0
+ALTER TABLE test_notnull ALTER COLUMN device SET NOT NULL;
+\set ON_ERROR_STOP 1
+
+UPDATE test_notnull SET device = 'd1';
+ALTER TABLE test_notnull ALTER COLUMN device SET NOT NULL;
+ALTER TABLE test_notnull ALTER COLUMN device DROP NOT NULL;
+SELECT compress_chunk(show_chunks('test_notnull'));
+ALTER TABLE test_notnull ALTER COLUMN device SET NOT NULL;
+ALTER TABLE test_notnull ALTER COLUMN device DROP NOT NULL;
+
+-- test partial compressed chunks
+-- NULL in uncompressed part only
+INSERT INTO test_notnull VALUES ('2025-01-01',NULL,NULL);
+\set ON_ERROR_STOP 0
+ALTER TABLE test_notnull ALTER COLUMN device SET NOT NULL;
+\set ON_ERROR_STOP 1
+
+-- NULL in compressed part only
+SELECT compress_chunk(show_chunks('test_notnull'));
+INSERT INTO test_notnull VALUES ('2025-01-01','d1',2);
+\set ON_ERROR_STOP 0
+ALTER TABLE test_notnull ALTER COLUMN device SET NOT NULL;
+\set ON_ERROR_STOP 1
+
+-- test added columns and defaults
+ALTER TABLE test_notnull ADD COLUMN c1 int;
+\set ON_ERROR_STOP 0
+ALTER TABLE test_notnull ALTER COLUMN c1 SET NOT NULL;
+\set ON_ERROR_STOP 1
+
+ALTER TABLE test_notnull ADD COLUMN c2 int DEFAULT 42;
+ALTER TABLE test_notnull ALTER COLUMN c2 SET NOT NULL;
+ALTER TABLE test_notnull ALTER COLUMN c2 DROP NOT NULL;
+
+-- test column with default and explicit NULL
+UPDATE test_notnull SET c2 = NULL;
+\set ON_ERROR_STOP 0
+ALTER TABLE test_notnull ALTER COLUMN c2 SET NOT NULL;
+\set ON_ERROR_STOP 1
+SELECT compress_chunk(show_chunks('test_notnull'));
+-- broken atm due to bug in default handling in compression
+ALTER TABLE test_notnull ALTER COLUMN c2 SET NOT NULL;
+

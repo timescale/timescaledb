@@ -1820,6 +1820,34 @@ tsl_compressed_data_info(PG_FUNCTION_ARGS)
 	return HeapTupleGetDatum(tuple);
 }
 
+extern Datum
+tsl_compressed_data_has_nulls(PG_FUNCTION_ARGS)
+{
+	const CompressedDataHeader *header = get_compressed_data_header(PG_GETARG_DATUM(0));
+	bool has_nulls = false;
+
+	switch (header->compression_algorithm)
+	{
+		case COMPRESSION_ALGORITHM_GORILLA:
+			has_nulls = gorilla_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_DICTIONARY:
+			has_nulls = dictionary_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_DELTADELTA:
+			has_nulls = deltadelta_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_ARRAY:
+			has_nulls = array_compressed_has_nulls(header);
+			break;
+		default:
+			elog(ERROR, "unknown compression algorithm %d", header->compression_algorithm);
+			break;
+	}
+
+	return BoolGetDatum(has_nulls);
+}
+
 extern CompressionStorage
 compression_get_toast_storage(CompressionAlgorithm algorithm)
 {
