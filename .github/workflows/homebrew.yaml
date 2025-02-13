@@ -11,6 +11,7 @@ name: Homebrew
     - release_test
     - trigger/package_test
     - trigger/homebrew_test
+    - prerelease_test
   workflow_dispatch:
 
 jobs:
