@@ -21,8 +21,7 @@ jobs:
         run: |
           pip install PyGithub requests
 
-      - name: Checkout TimescaleDB
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set environment variables
         run: |
