@@ -20,7 +20,8 @@ jobs:
 
     steps:
 
-      - uses: actions/checkout@v4
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@v4
 
       - name: Set RELEASE_BRANCH as per environment
         run: |
