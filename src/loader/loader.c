@@ -37,7 +37,9 @@
 #include "loader/bgw_interface.h"
 #include "loader/bgw_launcher.h"
 #include "loader/bgw_message_queue.h"
+#ifdef USE_TELEMETRY
 #include "loader/function_telemetry.h"
+#endif
 #include "loader/loader.h"
 #include "loader/lwlocks.h"
 
@@ -546,7 +548,9 @@ timescaledb_shmem_startup_hook(void)
 	ts_bgw_counter_shmem_startup();
 	ts_bgw_message_queue_shmem_startup();
 	ts_lwlocks_shmem_startup();
+#ifdef USE_TELEMETRY
 	ts_function_telemetry_shmem_startup();
+#endif
 }
 
 /*
@@ -565,7 +569,9 @@ timescaledb_shmem_request_hook(void)
 	ts_bgw_counter_shmem_alloc();
 	ts_bgw_message_queue_alloc();
 	ts_lwlocks_shmem_alloc();
+#ifdef USE_TELEMETRY
 	ts_function_telemetry_shmem_alloc();
+#endif
 }
 
 static void
