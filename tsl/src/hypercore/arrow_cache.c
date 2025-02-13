@@ -149,13 +149,7 @@ arrow_cache_clear_entry(ArrowColumnCacheEntry *restrict entry)
 		if (entry->arrow_arrays[i])
 		{
 			ArrowArray *array = entry->arrow_arrays[i];
-
-			if (array->release)
-			{
-				array->release(array);
-				array->release = NULL;
-			}
-			pfree(array);
+			arrow_release(array);
 			entry->arrow_arrays[i] = NULL;
 		}
 	}

@@ -1280,12 +1280,13 @@ _guc_init(void)
 							/* short_desc= */ "max number of entries in arrow data cache",
 							/* long_desc= */
 							"The max number of decompressed arrow segments that can be "
-							"cached before entries are evicted. This mainly affects the "
-							"performance of index scans on the Hypercore TAM "
-							"when segments are accessed in non-sequential order.",
+							"cached before entries are evicted. This only affects the "
+							"performance of index scans when using Hypercore TAM "
+							"and segments are accessed in non-sequential order. "
+							"Set to 0 to disable the use of the cache.",
 							/* valueAddr= */ &ts_guc_hypercore_arrow_cache_max_entries,
 							/* bootValue= */ 25000,
-							/* minValue= */ 1,
+							/* minValue= */ 0,
 							/* maxValue= */ INT_MAX,
 							/* context= */ PGC_USERSET,
 							/* flags= */ 0,

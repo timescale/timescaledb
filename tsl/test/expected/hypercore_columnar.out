@@ -107,8 +107,7 @@ $$, :'chunk'));
          Scankey: (device < 4)
          Vectorized Filter: (location = 2)
          Rows Removed by Filter: 16
- Array: cache misses=N, decompress count=N calls=N
-(6 rows)
+(5 rows)
 
 -- Save away all data from the chunk so that we can compare.
 create table saved as select * from :chunk;
@@ -139,8 +138,7 @@ $$, :'chunk'));
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Vectorized Filter: (humidity > '110'::double precision)
          Rows Removed by Filter: 204
- Array: cache misses=N, decompress count=N calls=N
-(5 rows)
+(4 rows)
 
 select count(*) from :chunk where humidity > 110;
  count 
@@ -159,8 +157,7 @@ $$, :'chunk'));
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Vectorized Filter: (humidity > '50'::double precision)
          Rows Removed by Filter: 87
- Array: cache misses=N, decompress count=N calls=N
-(5 rows)
+(4 rows)
 
 select lhs.count, rhs.count
 from (select count(*) from :chunk where humidity > 50) lhs,
@@ -191,8 +188,7 @@ $$, :'chunk'));
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Filter: (temp > '50'::numeric)
          Rows Removed by Filter: 204
- Array: cache misses=N, decompress count=N calls=N
-(5 rows)
+(4 rows)
 
 select count(*) from :chunk where temp > 50;
  count 
@@ -210,8 +206,7 @@ $$, :'chunk'));
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Filter: (temp > '20'::numeric)
          Rows Removed by Filter: 98
- Array: cache misses=N, decompress count=N calls=N
-(5 rows)
+(4 rows)
 
 select lhs.count, rhs.count
 from (select count(*) from :chunk where temp > 20) lhs,
@@ -242,8 +237,7 @@ select count(*) from :chunk where humidity > 40 and temp > 20;
          Filter: (temp > '20'::numeric)
          Rows Removed by Filter: 132
          Vectorized Filter: (humidity > '40'::double precision)
- Array: cache misses=30, decompress count=60 calls=165
-(6 rows)
+(5 rows)
 
 select count(*) from :chunk where humidity > 40 and temp > 20;
  count 
@@ -272,8 +266,7 @@ $$, :'chunk'));
          Rows Removed by Filter: 3
          Scankey: (device = 3)
          Vectorized Filter: (humidity > '40'::double precision)
- Array: cache misses=N, decompress count=N calls=N
-(7 rows)
+(6 rows)
 
 select count(*) from :chunk where humidity > 40 and temp > 20 and device = 3;
  count 
@@ -303,8 +296,7 @@ $$, :'chunk'));
          ->  Seq Scan on _hyper_I_N_chunk (actual rows=N loops=N)
                Filter: (device < 4)
                Rows Removed by Filter: 184
- Array: cache misses=N, decompress count=N calls=N
-(8 rows)
+(7 rows)
 
 drop table readings;
 drop table saved;

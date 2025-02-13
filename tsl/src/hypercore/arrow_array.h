@@ -15,3 +15,4 @@ extern NullableDatum arrow_get_datum(const ArrowArray *array, Oid typid, int16 t
 									 uint16 index);
 extern ArrowArray *arrow_from_compressed(Datum compressed, Oid typid, MemoryContext dest_mcxt,
 										 MemoryContext tmp_mcxt);
+extern void arrow_release(ArrowArray *array);
