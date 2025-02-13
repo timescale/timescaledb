@@ -27,6 +27,7 @@
 #include <commands/trigger.h>
 #include <commands/user.h>
 #include <commands/vacuum.h>
+#include <executor/spi.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodes.h>
@@ -2570,10 +2571,6 @@ process_altertable_validate_constraint_end(Hypertable *ht, AlterTableCmd *cmd)
 
 /*
  * Validate that SET NOT NULL is ok for this chunk.
- *
- * Throws an error if SET NOT NULL on this chunk is not allowed, right now,
- * SET NOT NULL is allowed on chunks that are either a fully decompressed, or
- * are using the Hypercore table access method.
  */
 static void
 validate_set_not_null(Hypertable *ht, Oid chunk_relid, void *arg)
@@ -2581,46 +2578,94 @@ validate_set_not_null(Hypertable *ht, Oid chunk_relid, void *arg)
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 	if (ts_chunk_is_compressed(chunk) && !ts_is_hypercore_am(chunk->amoid))
 	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("operation not supported on compressed chunks not using the "
-						"\"hypercore\" table access method"),
-				 errdetail("Chunk %s.%s is using the heap table access method and has compressed "
-						   "data.",
-						   NameStr(chunk->fd.schema_name),
-						   NameStr(chunk->fd.table_name)),
-				 errhint("Either decompress all chunks of the hypertable or use \"ALTER TABLE "
-						 "%s.%s SET ACCESS METHOD hypercore\" on all chunks to change access "
-						 "method.",
-						 NameStr(chunk->fd.schema_name),
-						 NameStr(chunk->fd.table_name))));
+		StringInfoData command;
+		AlterTableCmd *cmd = (AlterTableCmd *) arg;
+		Chunk *comp_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
+
+		initStringInfo(&command);
+		appendStringInfo(&command,
+						 "SELECT EXISTS(SELECT FROM %s.%s WHERE ",
+						 quote_identifier(NameStr(comp_chunk->fd.schema_name)),
+						 quote_identifier(NameStr(comp_chunk->fd.table_name)));
+
+		CompressionSettings *settings = ts_compression_settings_get(comp_chunk->table_id);
+		if (ts_array_is_member(settings->fd.segmentby, cmd->name))
+		{
+			/* For segmentby we can check directly whether NULLS are present */
+			appendStringInfo(&command, "%s IS NULL", quote_identifier(cmd->name));
+		}
+		else
+		{
+			/* For other columns we need to check whether we have a DEFAULT in which
+			 * case NULL as column value would be fine.
+			 * */
+			HeapTuple atttuple = SearchSysCacheAttName(ht->main_table_relid, cmd->name);
+			Form_pg_attribute attform = ((Form_pg_attribute) GETSTRUCT(atttuple));
+
+			if (attform->atthasdef)
+				appendStringInfo(&command,
+								 "%s IS NOT NULL AND "
+								 "_timescaledb_functions.compressed_data_has_nulls(%s)",
+								 quote_identifier(cmd->name),
+								 quote_identifier(cmd->name));
+			else
+				appendStringInfo(&command,
+								 "%s IS NULL OR "
+								 "_timescaledb_functions.compressed_data_has_nulls(%s)",
+								 quote_identifier(cmd->name),
+								 quote_identifier(cmd->name));
+		}
+		appendStringInfo(&command, ")");
+
+		if (SPI_connect() != SPI_OK_CONNECT)
+			elog(ERROR, "could not connect to SPI");
+
+		int res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
+
+		if (res < 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_INTERNAL_ERROR),
+					 (errmsg("could not verify presence of NULL values on \"%s\"",
+							 get_rel_name(chunk_relid)))));
+
+		bool isnull;
+		Datum has_nulls = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+
+		if (isnull || DatumGetBool(has_nulls))
+			ereport(ERROR,
+					(errcode(ERRCODE_NOT_NULL_VIOLATION),
+					 (errmsg("column \"%s\" of relation \"%s\" contains null values",
+							 cmd->name,
+							 get_rel_name(chunk_relid)))));
+
+		res = SPI_finish();
+		if (res != SPI_OK_FINISH)
+			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
 	}
 }
 
 /*
- * This function checks that we are not dropping NOT NULL from bad columns and
- * that all chunks support the modification.
+ * This function checks that we are not dropping NOT NULL from partitioning columns and
+ * that no NULL data is present when adding NOT NULL constraint.
  */
 static void
-process_altertable_alter_not_null_start(Hypertable *ht, AlterTableCmd *cmd)
+process_altertable_alter_not_null(Hypertable *ht, AlterTableCmd *cmd)
 {
-	int i;
-
 	if (cmd->subtype == AT_SetNotNull)
 		foreach_chunk(ht, validate_set_not_null, cmd);
 
-	if (cmd->subtype != AT_DropNotNull)
-		return;
-
-	for (i = 0; i < ht->space->num_dimensions; i++)
+	if (cmd->subtype == AT_DropNotNull)
 	{
-		Dimension *dim = &ht->space->dimensions[i];
+		for (int i = 0; i < ht->space->num_dimensions; i++)
+		{
+			Dimension *dim = &ht->space->dimensions[i];
 
-		if (IS_OPEN_DIMENSION(dim) &&
-			strncmp(NameStr(dim->fd.column_name), cmd->name, NAMEDATALEN) == 0)
-			ereport(ERROR,
-					(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
-					 errmsg("cannot drop not-null constraint from a time-partitioned column")));
+			if (IS_OPEN_DIMENSION(dim) &&
+				strncmp(NameStr(dim->fd.column_name), cmd->name, NAMEDATALEN) == 0)
+				ereport(ERROR,
+						(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+						 errmsg("cannot drop not-null constraint from a time-partitioned column")));
+		}
 	}
 }
 
@@ -3849,8 +3894,8 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 			break;
 			case AT_SetNotNull:
 			case AT_DropNotNull:
-				if (ht != NULL)
-					process_altertable_alter_not_null_start(ht, cmd);
+				if (ht)
+					process_altertable_alter_not_null(ht, cmd);
 				break;
 			case AT_AddColumn:
 #if PG16_LT

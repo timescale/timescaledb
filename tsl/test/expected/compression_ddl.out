@@ -2543,7 +2543,7 @@ SELECT count(*) FROM test2 WHERE i IS NULL;
 
 \set ON_ERROR_STOP 0
 ALTER TABLE test2 ALTER COLUMN i SET NOT NULL;
-ERROR:  operation not supported on compressed chunks not using the "hypercore" table access method
+ERROR:  column "i" of relation "_hyper_44_181_chunk" contains null values
 DELETE FROM test2 WHERE i IS NULL;
 SELECT count(*) FROM test2 WHERE i IS NULL;
  count 
@@ -2552,5 +2552,104 @@ SELECT count(*) FROM test2 WHERE i IS NULL;
 (1 row)
 
 ALTER TABLE test2 ALTER COLUMN i SET NOT NULL;
-ERROR:  operation not supported on compressed chunks not using the "hypercore" table access method
 \set ON_ERROR_STOP 1
+-- test set not null
+CREATE TABLE test_notnull(time timestamptz, device text, value float);
+SELECT create_hypertable('test_notnull','time');
+     create_hypertable      
+----------------------------
+ (46,public,test_notnull,t)
+(1 row)
+
+ALTER TABLE test_notnull SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+INSERT INTO test_notnull VALUES ('2025-01-01','d1',NULL);
+INSERT INTO test_notnull VALUES ('2025-01-01',NULL,NULL);
+-- should fail since we have NULL value
+\set ON_ERROR_STOP 0
+ALTER TABLE test_notnull ALTER COLUMN value SET NOT NULL;
+ERROR:  column "value" of relation "_hyper_46_238_chunk" contains null values
+ALTER TABLE test_notnull ALTER COLUMN device SET NOT NULL;
+ERROR:  column "device" of relation "_hyper_46_238_chunk" contains null values
+\set ON_ERROR_STOP 1
+SELECT compress_chunk(show_chunks('test_notnull'));
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_46_238_chunk
+(1 row)
+
+-- should fail since we have NULL value
+\set ON_ERROR_STOP 0
+ALTER TABLE test_notnull ALTER COLUMN value SET NOT NULL;
+ERROR:  column "value" of relation "_hyper_46_238_chunk" contains null values
+ALTER TABLE test_notnull ALTER COLUMN device SET NOT NULL;
+ERROR:  column "device" of relation "_hyper_46_238_chunk" contains null values
+\set ON_ERROR_STOP 1
+UPDATE test_notnull SET value = 1;
+ALTER TABLE test_notnull ALTER COLUMN value SET NOT NULL;
+ALTER TABLE test_notnull ALTER COLUMN value DROP NOT NULL;
+SELECT compress_chunk(show_chunks('test_notnull'));
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_46_238_chunk
+(1 row)
+
+ALTER TABLE test_notnull ALTER COLUMN value SET NOT NULL;
+ALTER TABLE test_notnull ALTER COLUMN value DROP NOT NULL;
+-- device still has NULL
+\set ON_ERROR_STOP 0
+ALTER TABLE test_notnull ALTER COLUMN device SET NOT NULL;
+ERROR:  column "device" of relation "_hyper_46_238_chunk" contains null values
+\set ON_ERROR_STOP 1
+UPDATE test_notnull SET device = 'd1';
+ALTER TABLE test_notnull ALTER COLUMN device SET NOT NULL;
+ALTER TABLE test_notnull ALTER COLUMN device DROP NOT NULL;
+SELECT compress_chunk(show_chunks('test_notnull'));
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_46_238_chunk
+(1 row)
+
+ALTER TABLE test_notnull ALTER COLUMN device SET NOT NULL;
+ALTER TABLE test_notnull ALTER COLUMN device DROP NOT NULL;
+-- test partial compressed chunks
+-- NULL in uncompressed part only
+INSERT INTO test_notnull VALUES ('2025-01-01',NULL,NULL);
+\set ON_ERROR_STOP 0
+ALTER TABLE test_notnull ALTER COLUMN device SET NOT NULL;
+ERROR:  column "device" of relation "_hyper_46_238_chunk" contains null values
+\set ON_ERROR_STOP 1
+-- NULL in compressed part only
+SELECT compress_chunk(show_chunks('test_notnull'));
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_46_238_chunk
+(1 row)
+
+INSERT INTO test_notnull VALUES ('2025-01-01','d1',2);
+\set ON_ERROR_STOP 0
+ALTER TABLE test_notnull ALTER COLUMN device SET NOT NULL;
+ERROR:  column "device" of relation "_hyper_46_238_chunk" contains null values
+\set ON_ERROR_STOP 1
+-- test added columns and defaults
+ALTER TABLE test_notnull ADD COLUMN c1 int;
+\set ON_ERROR_STOP 0
+ALTER TABLE test_notnull ALTER COLUMN c1 SET NOT NULL;
+ERROR:  column "c1" of relation "_hyper_46_238_chunk" contains null values
+\set ON_ERROR_STOP 1
+ALTER TABLE test_notnull ADD COLUMN c2 int DEFAULT 42;
+ALTER TABLE test_notnull ALTER COLUMN c2 SET NOT NULL;
+ALTER TABLE test_notnull ALTER COLUMN c2 DROP NOT NULL;
+-- test column with default and explicit NULL
+UPDATE test_notnull SET c2 = NULL;
+\set ON_ERROR_STOP 0
+ALTER TABLE test_notnull ALTER COLUMN c2 SET NOT NULL;
+ERROR:  column "c2" of relation "_hyper_46_238_chunk" contains null values
+\set ON_ERROR_STOP 1
+SELECT compress_chunk(show_chunks('test_notnull'));
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_46_238_chunk
+(1 row)
+
+-- broken atm due to bug in default handling in compression
+ALTER TABLE test_notnull ALTER COLUMN c2 SET NOT NULL;
