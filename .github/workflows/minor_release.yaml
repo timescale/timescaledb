@@ -10,6 +10,8 @@ jobs:
   minor-release-feature-freeze:
     name: Minor Release - Feature Freeze
     runs-on: ubuntu-latest
+    environment:
+      name: Release Ceremonies
 
     steps:
       - name: Install Linux Dependencies
