@@ -363,6 +363,15 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 					break;
 			}
 		}
+#ifdef TS_USE_UMASH
+		else
+		{
+			Ensure(single_grouping_var->vartype == TEXTOID,
+				   "invalid vector type %d for grouping",
+				   single_grouping_var->vartype);
+			return VAGT_HashSingleText;
+		}
+#endif
 	}
 
 	return VAGT_Invalid;
