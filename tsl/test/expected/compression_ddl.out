@@ -2227,15 +2227,15 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
  Custom Scan (ChunkAppend) on space_part
    Order: space_part."time"
    ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
-         ->  Index Scan Backward using compress_hyper_36_139_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_36_139_chunk
+         ->  Index Scan Backward using compress_hyper_36_135_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_36_135_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_35_134_chunk
          ->  Index Scan Backward using compress_hyper_36_136_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_36_136_chunk
    ->  Merge Append
          Sort Key: _hyper_35_137_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_35_137_chunk
-               ->  Index Scan Backward using compress_hyper_36_140_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_36_140_chunk
+               ->  Index Scan Backward using compress_hyper_36_139_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_36_139_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_35_138_chunk
-               ->  Index Scan Backward using compress_hyper_36_141_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_36_141_chunk
+               ->  Index Scan Backward using compress_hyper_36_140_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_36_140_chunk
 (12 rows)
 
 -- make second one of them partial
@@ -2248,15 +2248,15 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
  Custom Scan (ChunkAppend) on space_part
    Order: space_part."time"
    ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
-         ->  Index Scan Backward using compress_hyper_36_139_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_36_139_chunk
+         ->  Index Scan Backward using compress_hyper_36_135_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_36_135_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_35_134_chunk
          ->  Index Scan Backward using compress_hyper_36_136_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_36_136_chunk
    ->  Merge Append
          Sort Key: _hyper_35_137_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_35_137_chunk
-               ->  Index Scan Backward using compress_hyper_36_140_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_36_140_chunk
+               ->  Index Scan Backward using compress_hyper_36_139_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_36_139_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_35_138_chunk
-               ->  Index Scan Backward using compress_hyper_36_141_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_36_141_chunk
+               ->  Index Scan Backward using compress_hyper_36_140_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_36_140_chunk
          ->  Sort
                Sort Key: _hyper_35_138_chunk."time"
                ->  Seq Scan on _hyper_35_138_chunk
@@ -2271,18 +2271,18 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
  Custom Scan (ChunkAppend) on space_part
    Order: space_part."time"
    ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
-         ->  Index Scan Backward using compress_hyper_36_139_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_36_139_chunk
+         ->  Index Scan Backward using compress_hyper_36_135_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_36_135_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_35_134_chunk
          ->  Index Scan Backward using compress_hyper_36_136_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_36_136_chunk
    ->  Merge Append
          Sort Key: _hyper_35_137_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_35_137_chunk
-               ->  Index Scan Backward using compress_hyper_36_140_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_36_140_chunk
+               ->  Index Scan Backward using compress_hyper_36_139_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_36_139_chunk
          ->  Sort
                Sort Key: _hyper_35_137_chunk."time"
                ->  Seq Scan on _hyper_35_137_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_35_138_chunk
-               ->  Index Scan Backward using compress_hyper_36_141_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_36_141_chunk
+               ->  Index Scan Backward using compress_hyper_36_140_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_36_140_chunk
          ->  Sort
                Sort Key: _hyper_35_138_chunk."time"
                ->  Seq Scan on _hyper_35_138_chunk
@@ -2315,14 +2315,14 @@ values ('meter1', 1, 2.3, '2022-01-01'::timestamptz, '2022-01-01'::timestamptz),
 select compress_chunk(show_chunks('mytab'));
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_37_142_chunk
+ _timescaledb_internal._hyper_37_141_chunk
 (1 row)
 
 REINDEX TABLE mytab; -- should update index
 select decompress_chunk(show_chunks('mytab'));
              decompress_chunk              
 -------------------------------------------
- _timescaledb_internal._hyper_37_142_chunk
+ _timescaledb_internal._hyper_37_141_chunk
 (1 row)
 
 \set EXPLAIN 'EXPLAIN (costs off,timing off,summary off)'
@@ -2333,7 +2333,7 @@ set enable_indexscan = on;
 :EXPLAIN_ANALYZE select * from mytab where lower(col1::text) = 'meter1';
                                             QUERY PLAN                                            
 --------------------------------------------------------------------------------------------------
- Index Scan using _hyper_37_142_chunk_myidx_unique on _hyper_37_142_chunk (actual rows=3 loops=1)
+ Index Scan using _hyper_37_141_chunk_myidx_unique on _hyper_37_141_chunk (actual rows=3 loops=1)
    Index Cond: (lower((col1)::text) = 'meter1'::text)
 (2 rows)
 
@@ -2351,19 +2351,19 @@ WHERE (value > 2.4 AND value < 3);
 select compress_chunk(show_chunks('mytab'));
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_37_142_chunk
+ _timescaledb_internal._hyper_37_141_chunk
 (1 row)
 
 select decompress_chunk(show_chunks('mytab'));
              decompress_chunk              
 -------------------------------------------
- _timescaledb_internal._hyper_37_142_chunk
+ _timescaledb_internal._hyper_37_141_chunk
 (1 row)
 
 :EXPLAIN_ANALYZE SELECT * FROM mytab WHERE value BETWEEN 2.4 AND 2.8;
                                       QUERY PLAN                                       
 ---------------------------------------------------------------------------------------
- Seq Scan on _hyper_37_142_chunk (actual rows=1 loops=1)
+ Seq Scan on _hyper_37_141_chunk (actual rows=1 loops=1)
    Filter: ((value >= '2.4'::double precision) AND (value <= '2.8'::double precision))
    Rows Removed by Filter: 2
 (3 rows)
@@ -2414,28 +2414,28 @@ NOTICE:  default order by for hypertable "hyper_unique_deferred" is set to ""tim
 select compress_chunk(show_chunks('hyper_unique_deferred')); -- also worked fine before 2.11.0
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_40_146_chunk
+ _timescaledb_internal._hyper_40_145_chunk
 (1 row)
 
 select decompress_chunk(show_chunks('hyper_unique_deferred'));
              decompress_chunk              
 -------------------------------------------
- _timescaledb_internal._hyper_40_146_chunk
+ _timescaledb_internal._hyper_40_145_chunk
 (1 row)
 
 \set ON_ERROR_STOP 0
 begin; insert INTO hyper_unique_deferred values (1257987700000000000, 'dev1', 1); abort;
-ERROR:  new row for relation "_hyper_40_146_chunk" violates check constraint "hyper_unique_deferred_sensor_1_check"
+ERROR:  new row for relation "_hyper_40_145_chunk" violates check constraint "hyper_unique_deferred_sensor_1_check"
 \set ON_ERROR_STOP 1
 select compress_chunk(show_chunks('hyper_unique_deferred'));
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_40_146_chunk
+ _timescaledb_internal._hyper_40_145_chunk
 (1 row)
 
 \set ON_ERROR_STOP 0
 begin; insert INTO hyper_unique_deferred values (1257987700000000000, 'dev1', 1); abort;
-ERROR:  duplicate key value violates unique constraint "146_2_hyper_unique_deferred_time_key"
+ERROR:  duplicate key value violates unique constraint "145_2_hyper_unique_deferred_time_key"
 \set ON_ERROR_STOP 1
 -- tests chunks being compressed using different segmentby settings
 -- github issue #7102
@@ -2465,7 +2465,7 @@ FROM timescaledb_information.chunks
 WHERE hypertable_name = 'compression_drop' AND NOT is_compressed;
                 CHUNK_NAME                 
 -------------------------------------------
- _timescaledb_internal._hyper_42_151_chunk
+ _timescaledb_internal._hyper_42_150_chunk
 (1 row)
 
 -- try dropping column v0, should fail
@@ -2495,7 +2495,7 @@ ALTER TABLE test2 SET (
 );
 \set ON_ERROR_STOP 0
 INSERT INTO test2(ts,b,t) VALUES ('2024-11-18 18:04:51',99,'magic');
-ERROR:  null value in column "i" of relation "_hyper_44_180_chunk" violates not-null constraint
+ERROR:  null value in column "i" of relation "_hyper_44_179_chunk" violates not-null constraint
 \set ON_ERROR_STOP 1
 ALTER TABLE test2 ALTER COLUMN i DROP NOT NULL;
 INSERT INTO test2(ts,b,t) VALUES ('2024-11-18 18:04:51',99,'magic');
@@ -2543,7 +2543,7 @@ SELECT count(*) FROM test2 WHERE i IS NULL;
 
 \set ON_ERROR_STOP 0
 ALTER TABLE test2 ALTER COLUMN i SET NOT NULL;
-ERROR:  column "i" of relation "_hyper_44_181_chunk" contains null values
+ERROR:  column "i" of relation "_hyper_44_180_chunk" contains null values
 DELETE FROM test2 WHERE i IS NULL;
 SELECT count(*) FROM test2 WHERE i IS NULL;
  count 
@@ -2567,22 +2567,22 @@ INSERT INTO test_notnull VALUES ('2025-01-01',NULL,NULL);
 -- should fail since we have NULL value
 \set ON_ERROR_STOP 0
 ALTER TABLE test_notnull ALTER COLUMN value SET NOT NULL;
-ERROR:  column "value" of relation "_hyper_46_238_chunk" contains null values
+ERROR:  column "value" of relation "_hyper_46_237_chunk" contains null values
 ALTER TABLE test_notnull ALTER COLUMN device SET NOT NULL;
-ERROR:  column "device" of relation "_hyper_46_238_chunk" contains null values
+ERROR:  column "device" of relation "_hyper_46_237_chunk" contains null values
 \set ON_ERROR_STOP 1
 SELECT compress_chunk(show_chunks('test_notnull'));
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_46_238_chunk
+ _timescaledb_internal._hyper_46_237_chunk
 (1 row)
 
 -- should fail since we have NULL value
 \set ON_ERROR_STOP 0
 ALTER TABLE test_notnull ALTER COLUMN value SET NOT NULL;
-ERROR:  column "value" of relation "_hyper_46_238_chunk" contains null values
+ERROR:  column "value" of relation "_hyper_46_237_chunk" contains null values
 ALTER TABLE test_notnull ALTER COLUMN device SET NOT NULL;
-ERROR:  column "device" of relation "_hyper_46_238_chunk" contains null values
+ERROR:  column "device" of relation "_hyper_46_237_chunk" contains null values
 \set ON_ERROR_STOP 1
 UPDATE test_notnull SET value = 1;
 ALTER TABLE test_notnull ALTER COLUMN value SET NOT NULL;
@@ -2590,7 +2590,7 @@ ALTER TABLE test_notnull ALTER COLUMN value DROP NOT NULL;
 SELECT compress_chunk(show_chunks('test_notnull'));
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_46_238_chunk
+ _timescaledb_internal._hyper_46_237_chunk
 (1 row)
 
 ALTER TABLE test_notnull ALTER COLUMN value SET NOT NULL;
@@ -2598,7 +2598,7 @@ ALTER TABLE test_notnull ALTER COLUMN value DROP NOT NULL;
 -- device still has NULL
 \set ON_ERROR_STOP 0
 ALTER TABLE test_notnull ALTER COLUMN device SET NOT NULL;
-ERROR:  column "device" of relation "_hyper_46_238_chunk" contains null values
+ERROR:  column "device" of relation "_hyper_46_237_chunk" contains null values
 \set ON_ERROR_STOP 1
 UPDATE test_notnull SET device = 'd1';
 ALTER TABLE test_notnull ALTER COLUMN device SET NOT NULL;
@@ -2606,7 +2606,7 @@ ALTER TABLE test_notnull ALTER COLUMN device DROP NOT NULL;
 SELECT compress_chunk(show_chunks('test_notnull'));
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_46_238_chunk
+ _timescaledb_internal._hyper_46_237_chunk
 (1 row)
 
 ALTER TABLE test_notnull ALTER COLUMN device SET NOT NULL;
@@ -2616,25 +2616,25 @@ ALTER TABLE test_notnull ALTER COLUMN device DROP NOT NULL;
 INSERT INTO test_notnull VALUES ('2025-01-01',NULL,NULL);
 \set ON_ERROR_STOP 0
 ALTER TABLE test_notnull ALTER COLUMN device SET NOT NULL;
-ERROR:  column "device" of relation "_hyper_46_238_chunk" contains null values
+ERROR:  column "device" of relation "_hyper_46_237_chunk" contains null values
 \set ON_ERROR_STOP 1
 -- NULL in compressed part only
 SELECT compress_chunk(show_chunks('test_notnull'));
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_46_238_chunk
+ _timescaledb_internal._hyper_46_237_chunk
 (1 row)
 
 INSERT INTO test_notnull VALUES ('2025-01-01','d1',2);
 \set ON_ERROR_STOP 0
 ALTER TABLE test_notnull ALTER COLUMN device SET NOT NULL;
-ERROR:  column "device" of relation "_hyper_46_238_chunk" contains null values
+ERROR:  column "device" of relation "_hyper_46_237_chunk" contains null values
 \set ON_ERROR_STOP 1
 -- test added columns and defaults
 ALTER TABLE test_notnull ADD COLUMN c1 int;
 \set ON_ERROR_STOP 0
 ALTER TABLE test_notnull ALTER COLUMN c1 SET NOT NULL;
-ERROR:  column "c1" of relation "_hyper_46_238_chunk" contains null values
+ERROR:  column "c1" of relation "_hyper_46_237_chunk" contains null values
 \set ON_ERROR_STOP 1
 ALTER TABLE test_notnull ADD COLUMN c2 int DEFAULT 42;
 ALTER TABLE test_notnull ALTER COLUMN c2 SET NOT NULL;
@@ -2643,12 +2643,12 @@ ALTER TABLE test_notnull ALTER COLUMN c2 DROP NOT NULL;
 UPDATE test_notnull SET c2 = NULL;
 \set ON_ERROR_STOP 0
 ALTER TABLE test_notnull ALTER COLUMN c2 SET NOT NULL;
-ERROR:  column "c2" of relation "_hyper_46_238_chunk" contains null values
+ERROR:  column "c2" of relation "_hyper_46_237_chunk" contains null values
 \set ON_ERROR_STOP 1
 SELECT compress_chunk(show_chunks('test_notnull'));
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_46_238_chunk
+ _timescaledb_internal._hyper_46_237_chunk
 (1 row)
 
 -- broken atm due to bug in default handling in compression
