@@ -207,6 +207,7 @@ set(SOLO_TESTS
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
     cagg_invalidation
+    hypercore
     move
     reorder
     telemetry_stats)
