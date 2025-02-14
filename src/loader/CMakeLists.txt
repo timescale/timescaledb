@@ -1,10 +1,5 @@
-set(SOURCES
-    loader.c
-    bgw_message_queue.c
-    bgw_counter.c
-    bgw_launcher.c
-    bgw_interface.c
-    lwlocks.c)
+set(SOURCES loader.c bgw_message_queue.c bgw_counter.c bgw_launcher.c
+            bgw_interface.c lwlocks.c)
 
 if(USE_TELEMETRY)
   list(APPEND SOURCES function_telemetry.c)
