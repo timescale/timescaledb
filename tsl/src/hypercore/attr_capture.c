@@ -32,6 +32,7 @@ struct CaptureAttributesContext
 };
 
 static ExecutorStart_hook_type prev_ExecutorStart = NULL;
+static bool ExecutorStart_hook_initialized = false;
 
 static void
 capture_var(Var *node, struct CaptureAttributesContext *context)
@@ -216,8 +217,15 @@ capture_ExecutorStart(QueryDesc *queryDesc, int eflags)
 	ListCell *cell;
 #endif
 
-	/* Call the standard executor start function to set up plan states. */
-	standard_ExecutorStart(queryDesc, eflags);
+	if (prev_ExecutorStart)
+	{
+		prev_ExecutorStart(queryDesc, eflags);
+	}
+	else
+	{
+		/* Call the standard executor start function to set up plan states. */
+		standard_ExecutorStart(queryDesc, eflags);
+	}
 
 	struct CaptureAttributesContext context = {
 		.rtable = queryDesc->plannedstmt->rtable,
@@ -245,6 +253,14 @@ capture_ExecutorStart(QueryDesc *queryDesc, int eflags)
 void
 _attr_capture_init(void)
 {
-	prev_ExecutorStart = ExecutorStart_hook;
-	ExecutorStart_hook = capture_ExecutorStart;
+	/*
+	 * TSL init might be reexecuted so we need to make
+	 * sure to not initialize hook multiple times
+	 */
+	if (!ExecutorStart_hook_initialized)
+	{
+		ExecutorStart_hook_initialized = true;
+		prev_ExecutorStart = ExecutorStart_hook;
+		ExecutorStart_hook = capture_ExecutorStart;
+	}
 }
