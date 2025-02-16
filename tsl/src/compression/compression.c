@@ -1517,6 +1517,38 @@ decompress_batch(RowDecompressor *decompressor)
 	return n_batch_rows;
 }
 
+ArrowArray *
+decompress_single_column(RowDecompressor *decompressor, AttrNumber attno)
+{
+	int16 target_col = -1;
+	PerCompressedColumn *column_info;
+
+	for (int16 col = 0; col < decompressor->num_compressed_columns; col++)
+	{
+		column_info = &decompressor->per_compressed_cols[col];
+		if (!column_info->is_compressed)
+			continue;
+
+		if (column_info->decompressed_column_offset == AttrNumberGetAttrOffset(attno))
+		{
+			target_col = col;
+			break;
+		}
+	}
+	Assert(target_col > -1);
+
+	Datum compressed_datum = PointerGetDatum(
+		detoaster_detoast_attr_copy((struct varlena *) DatumGetPointer(
+										decompressor->compressed_datums[target_col]),
+									&decompressor->detoaster,
+									CurrentMemoryContext));
+	CompressedDataHeader *header = get_compressed_data_header(compressed_datum);
+	return definitions[header->compression_algorithm]
+		.decompress_all(compressed_datum,
+						column_info->decompressed_type,
+						decompressor->per_compressed_row_ctx);
+}
+
 int
 row_decompressor_decompress_row_to_table(RowDecompressor *decompressor)
 {

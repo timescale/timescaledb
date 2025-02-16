@@ -28,6 +28,7 @@
 #include <indexing.h>
 #include <nodes/chunk_dispatch/chunk_dispatch.h>
 #include <nodes/chunk_dispatch/chunk_insert_state.h>
+#include "nodes/decompress_chunk/vector_predicates.h"
 #include <nodes/hypertable_modify.h>
 #include <ts_catalog/array_utils.h>
 
@@ -39,7 +40,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 						tuple_filtering_constraints *constraints, bool *skip_current_tuple,
 						bool delete_only, Bitmapset *null_columns, List *is_nulls);
 
-static bool batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
+static bool batch_matches_vector(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
 						  tuple_filtering_constraints *constraints, bool *skip_current_tuple);
 static void process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 							   ScanKeyData **mem_scankeys, int *num_mem_scankeys,
@@ -505,7 +506,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 						  decompressor.compressed_datums,
 						  decompressor.compressed_is_nulls);
 
-		if (num_mem_scankeys && !batch_matches(&decompressor,
+		if (num_mem_scankeys && !batch_matches_vector(&decompressor,
 											   mem_scankeys,
 											   num_mem_scankeys,
 											   constraints,
@@ -576,52 +577,57 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 }
 
 static bool
-slot_keys_test(TupleTableSlot *slot, int nkeys, ScanKey keys)
-{
-	int cur_nkeys = nkeys;
-	ScanKey cur_key = keys;
-
-	for (; cur_nkeys--; cur_key++)
-	{
-		if (!slot_key_test(slot, cur_key))
-			return false;
-	}
-
-	return true;
-}
-
-static bool
-batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
+batch_matches_vector(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
 			  tuple_filtering_constraints *constraints, bool *skip_current_tuple)
 {
-	int num_tuples = decompress_batch(decompressor);
+	const int n_rows =
+		DatumGetInt32(decompressor->compressed_datums[decompressor->count_compressed_attindex]);
+	const int bitmap_bytes = sizeof(uint64) * ((n_rows + 63) / 64);
+	uint64 *restrict result = MemoryContextAlloc(decompressor->per_compressed_row_ctx, bitmap_bytes);
+	memset(result, 0xFF, bitmap_bytes);
 
-	bool valid = false;
 
-	for (int row = 0; row < num_tuples; row++)
+	for (int sk = 0; sk < num_scankeys; sk++)
 	{
-		TupleTableSlot *decompressed_slot = decompressor->decompressed_slots[row];
-		valid = slot_keys_test(decompressed_slot, num_scankeys, scankeys);
-		if (valid)
-		{
-			if (constraints)
-			{
-				if (constraints->on_conflict == ONCONFLICT_NONE)
-				{
-					ereport(ERROR,
-							(errcode(ERRCODE_UNIQUE_VIOLATION),
-							 errmsg("duplicate key value violates unique constraint \"%s\"",
-									get_rel_name(constraints->index_relid))
+		ArrowArray *arrow = decompress_single_column(decompressor, scankeys[sk].sk_attno);
+		VectorPredicate *predicate = get_vector_const_predicate(scankeys[sk].sk_func.fn_oid);
+		predicate(arrow, scankeys[sk].sk_argument, result);
+	}
 
-								 ));
-				}
-				if (constraints->on_conflict == ONCONFLICT_NOTHING && skip_current_tuple)
-				{
-					*skip_current_tuple = true;
-				}
+	bool any_rows_pass = false;
+	bool all_rows_pass = true;
+	for (int i = 0; i < n_rows / 64; i++)
+	{
+		any_rows_pass = any_rows_pass || (result[i] != 0);
+		all_rows_pass = all_rows_pass && (~result[i] == 0);
+	}
+
+	if (n_rows % 64 != 0)
+	{
+		const uint64 last_word_mask = ~0ULL >> (64 - n_rows % 64);
+		any_rows_pass |= (result[n_rows / 64] & last_word_mask) != 0;
+		all_rows_pass &= ((~result[n_rows / 64]) & last_word_mask) == 0;
+	}
+
+	if (any_rows_pass)
+	{
+		if (constraints)
+		{
+			if (constraints->on_conflict == ONCONFLICT_NONE)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_UNIQUE_VIOLATION),
+						 errmsg("duplicate key value violates unique constraint \"%s\"",
+								get_rel_name(constraints->index_relid))
+
+							 ));
 			}
-			return true;
+			if (constraints->on_conflict == ONCONFLICT_NOTHING && skip_current_tuple)
+			{
+				*skip_current_tuple = true;
+			}
 		}
+		return true;
 	}
 
 	return false;
