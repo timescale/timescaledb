@@ -21,8 +21,15 @@ if((NOT DEFINED USE_UMASH) OR USE_UMASH)
     endif()
   endif()
 
+  # The C compiler flags that we add using add_compile_options() are not
+  # automatically used by check_c_source_compiles() because it works in a
+  # separate project. We could query the directory property, but it's a
+  # semicolon-separated list that is suprisingly difficult to mix with the
+  # space-separated lists, so we instead update the options for try_compile()
+  # separately above. We also have to manually add the user-specified CFLAGS.
   set(CMAKE_REQUIRED_FLAGS
-      "${CMAKE_REQUIRED_FLAGS} -Werror=implicit-function-declaration")
+      "${CMAKE_REQUIRED_FLAGS} ${CMAKE_C_FLAGS} -Werror=implicit-function-declaration"
+  )
   check_c_source_compiles(
     "
 #if defined(__PCLMUL__)
