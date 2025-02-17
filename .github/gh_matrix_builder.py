@@ -184,7 +184,7 @@ m["include"].append(
             "pg": PG17_LATEST,
             "os": "Ubuntu22.04-2Core",
             # We need to enable ARM crypto extensions to build the vectorized grouping
-            # code. The actual architecutre for our ARM CI runner is reported as:
+            # code. The actual architecture for our ARM CI runner is reported as:
             # -imultiarch aarch64-linux-gnu - -mlittle-endian -mabi=lp64 -march=armv8.2-a+crypto+fp16+rcpc+dotprod
             "pg_extra_args": "--enable-debug --enable-cassert --without-llvm CFLAGS=-march=armv8.2-a+crypto",
         }
