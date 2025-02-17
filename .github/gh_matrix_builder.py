@@ -176,6 +176,10 @@ m["include"].append(build_debug_config({"pg": PG16_LATEST}))
 
 m["include"].append(build_debug_config({"pg": PG17_LATEST}))
 
+# Also test on ARM. See the available runners here:
+# https://github.com/timescale/timescaledb/actions/runners
+m["include"].append(build_debug_config({"pg": PG17_LATEST, "os": "Ubuntu22.04-2Core"}))
+
 # test timescaledb with release config on latest postgres release in MacOS
 m["include"].append(build_release_config(macos_config({"pg": PG17_LATEST})))
 
