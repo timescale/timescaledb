@@ -269,6 +269,7 @@ SELECT count(pg_terminate_backend(pg_stat_activity.pid)) AS TERMINATED
 FROM pg_stat_activity
 WHERE pg_stat_activity.datname = :'TEST_DBNAME'
 AND pg_stat_activity.pid <> pg_backend_pid() \gset
+SELECT sleep(10);
 RESET client_min_messages;
 
 -- Change tablespace
