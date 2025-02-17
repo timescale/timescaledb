@@ -161,9 +161,6 @@ jobs:
         # Show the actual architecture this CI runner has
         "$CC" -march=native -E -v - </dev/null 2>&1 | grep cc1
 
-        # FIXME Show the ARM compilation flags
-        "$CC" -dM -E -march=armv8.2-a+crypto - < /dev/null | egrep -i '(arm|aarch|neon|crc|crypto)'
-
         ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" \
           -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
           ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} \
