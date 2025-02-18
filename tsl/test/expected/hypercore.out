@@ -786,3 +786,63 @@ select test_hypercore(:'rescan_chunk');
  
 (1 row)
 
+-- Simple test that loading the hypercore handler works on a fresh
+-- backend.
+--
+-- Since TSL library is loaded late (after a query has been executed),
+-- this can generate a license error if an attempt is made to use a
+-- crossmodule function inside a query, and the hypertable handler is
+-- used through GetTableAmRoutine().
+--
+-- To test this, we create a hypercore table, start a fresh
+-- connection, and run a query on it.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+create table crossmodule_test(
+       time timestamptz unique,
+       location int
+);
+select hypertable_id
+  from create_hypertable('crossmodule_test', by_range('time', '1d'::interval)) \gset
+NOTICE:  adding not-null constraint to column "time"
+select setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+insert into crossmodule_test select t, ceil(random()*10)
+from generate_series('2022-06-01'::timestamptz, '2022-06-10'::timestamptz, '1h') t;
+alter table crossmodule_test
+      set access method hypercore,
+      set (timescaledb.compress_orderby = 'time');
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "crossmodule_test" is set to ""
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "crossmodule_test" is set to ""
+\c :TEST_DBNAME :ROLE_SUPERUSER
+select count(*) from crossmodule_test;
+ count 
+-------
+   217
+(1 row)
+
+-- Verify that vacuum with fail without the correct license.
+alter system set timescaledb.license to 'apache';
+select pg_reload_conf();
+ pg_reload_conf 
+----------------
+ t
+(1 row)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+\set ON_ERROR_STOP 0
+vacuum crossmodule_test;
+ERROR:  function "ts_hypercore_handler" is not supported under the current "apache" license
+\set ON_ERROR_STOP 1
+alter system reset timescaledb.license;
+select pg_reload_conf();
+ pg_reload_conf 
+----------------
+ t
+(1 row)
+
