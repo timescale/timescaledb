@@ -1,0 +1,3 @@
+Fixes: #7712 Respect other extensions' ExecutorStart hooks
+
+Thanks: @davidmehren and @jflambert for reporting an issue with extension hooks

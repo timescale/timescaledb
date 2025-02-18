@@ -880,9 +880,9 @@ SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timesc
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
    ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
-         ->  Index Scan Backward using compress_hyper_14_23_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_14_23_chunk
+         ->  Index Scan Backward using compress_hyper_14_21_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_14_21_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_13_22_chunk
-         ->  Index Scan Backward using compress_hyper_14_24_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_14_24_chunk
+         ->  Index Scan Backward using compress_hyper_14_23_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_14_23_chunk
 (6 rows)
 
 SET timescaledb.enable_decompression_sorted_merge = 1;
@@ -920,7 +920,7 @@ NOTICE:  default order by for hypertable "conditions" is set to "timec DESC"
 SELECT  compress_chunk(ch) FROM show_chunks('conditions') ch;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_15_25_chunk
+ _timescaledb_internal._hyper_15_24_chunk
 (1 row)
 
 SELECT chunk_name, range_start, range_end, is_compressed
@@ -928,7 +928,7 @@ FROM timescaledb_information.chunks
 WHERE hypertable_name = 'conditions';
      chunk_name     |         range_start          |          range_end           | is_compressed 
 --------------------+------------------------------+------------------------------+---------------
- _hyper_15_25_chunk | Wed Dec 30 16:00:00 2009 PST | Wed Jan 06 16:00:00 2010 PST | t
+ _hyper_15_24_chunk | Wed Dec 30 16:00:00 2009 PST | Wed Jan 06 16:00:00 2010 PST | t
 (1 row)
 
 --now insert into compressed chunk
@@ -1081,11 +1081,11 @@ SET timescaledb.max_tuples_decompressed_per_dml_transaction = 1;
 \set ON_ERROR_STOP 0
 -- Inserting in the same period should decompress tuples
 INSERT INTO test_limit SELECT t, 2 FROM generate_series(1,6000,1000) t;
-ERROR:  duplicate key value violates unique constraint "_hyper_24_54_chunk_timestamp_id_idx"
+ERROR:  duplicate key value violates unique constraint "_hyper_24_53_chunk_timestamp_id_idx"
 -- Setting to 0 should remove the limit.
 SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0;
 INSERT INTO test_limit SELECT t, 2 FROM generate_series(1,6000,1000) t;
-ERROR:  duplicate key value violates unique constraint "_hyper_24_54_chunk_timestamp_id_idx"
+ERROR:  duplicate key value violates unique constraint "_hyper_24_53_chunk_timestamp_id_idx"
 \set ON_ERROR_STOP 1
 DROP TABLE test_limit;
 RESET timescaledb.max_tuples_decompressed_per_dml_transaction;
@@ -1109,13 +1109,13 @@ SELECT count(compress_chunk(c)) FROM show_chunks('multi_unique') c;
 \set ON_ERROR_STOP 0
 -- all INSERTS should fail with constraint violation
 BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 0, 0, 1.0); ROLLBACK;
-ERROR:  duplicate key value violates unique constraint "76_1_multi_unique_time_u1_key"
+ERROR:  duplicate key value violates unique constraint "75_1_multi_unique_time_u1_key"
 DETAIL:  Key ("time", u1)=(Mon Jan 01 00:00:00 2024 PST, 0) already exists.
 BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 0, 1, 1.0); ROLLBACK;
-ERROR:  duplicate key value violates unique constraint "76_1_multi_unique_time_u1_key"
+ERROR:  duplicate key value violates unique constraint "75_1_multi_unique_time_u1_key"
 DETAIL:  Key ("time", u1)=(Mon Jan 01 00:00:00 2024 PST, 0) already exists.
 BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 1, 0, 1.0); ROLLBACK;
-ERROR:  duplicate key value violates unique constraint "76_2_multi_unique_time_u2_key"
+ERROR:  duplicate key value violates unique constraint "75_2_multi_unique_time_u2_key"
 DETAIL:  Key ("time", u2)=(Mon Jan 01 00:00:00 2024 PST, 0) already exists.
 \set ON_ERROR_STOP 1
 DROP TABLE multi_unique;
@@ -1139,7 +1139,7 @@ SELECT count(compress_chunk(c)) FROM show_chunks('unique_null') c;
 \set ON_ERROR_STOP 0
 -- all INSERTS should fail with constraint violation
 BEGIN; INSERT INTO unique_null VALUES('2024-01-01', 0, 0, 1.0); ROLLBACK;
-ERROR:  duplicate key value violates unique constraint "78_3_unique_null_time_u1_u2_key"
+ERROR:  duplicate key value violates unique constraint "77_3_unique_null_time_u1_u2_key"
 \set ON_ERROR_STOP 1
 -- neither of these should need to decompress
 :ANALYZE INSERT INTO unique_null VALUES('2024-01-01', NULL, 1, 1.0);

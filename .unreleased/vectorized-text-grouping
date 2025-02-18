@@ -1,0 +1,1 @@
+Implements: #7586 Vectorized aggregation with grouping by a single text column.

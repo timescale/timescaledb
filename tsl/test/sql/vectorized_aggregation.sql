@@ -27,6 +27,12 @@ ORDER BY time;
 -- Aggregation result without any vectorization
 SELECT sum(segment_by_value), sum(int_value), sum(float_value) FROM testtable;
 
+--
+-- Enable this GUC to run this test with Hypercore TAM. The EXPLAINs
+-- will differ, but the results should not.
+--
+--SET timescaledb.default_hypercore_use_access_method = true;
+
 ---
 -- Tests with some chunks compressed
 ---

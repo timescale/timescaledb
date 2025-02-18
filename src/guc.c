@@ -149,6 +149,7 @@ TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
 TSDLLEXPORT bool ts_guc_default_hypercore_use_access_method = false;
 bool ts_guc_enable_chunk_skipping = false;
 TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
+TSDLLEXPORT bool ts_guc_enable_bool_compression = false;
 
 /* Enable of disable columnar scans for columnar-oriented storage engines. If
  * disabled, regular sequence scans will be used instead. */
@@ -165,6 +166,7 @@ TSDLLEXPORT char *ts_guc_hypercore_indexam_whitelist;
 TSDLLEXPORT HypercoreCopyToBehavior ts_guc_hypercore_copy_to_behavior =
 	HYPERCORE_COPY_NO_COMPRESSED_DATA;
 TSDLLEXPORT bool ts_guc_enable_hypercore_scankey_pushdown = true;
+TSDLLEXPORT int ts_guc_hypercore_arrow_cache_max_entries;
 
 /* default value of ts_guc_max_open_chunks_per_insert and
  * ts_guc_max_cached_chunks_per_hypertable will be set as their respective boot-value when the
@@ -745,6 +747,17 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_bool_compression"),
+							 "Enable experimental bool compression functionality",
+							 "Enable bool compression",
+							 &ts_guc_enable_bool_compression,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	/*
 	 * Define the limit on number of invalidation-based refreshes we allow per
 	 * refresh call. If this limit is exceeded, fall back to a single refresh that
@@ -1083,6 +1096,23 @@ _guc_init(void)
 							 /* check_hook= */ NULL,
 							 /* assign_hook= */ NULL,
 							 /* show_hook= */ NULL);
+
+	DefineCustomIntVariable(/* name= */ MAKE_EXTOPTION("hypercore_arrow_cache_max_entries"),
+							/* short_desc= */ "max number of entries in arrow data cache",
+							/* long_desc= */
+							"The max number of decompressed arrow segments that can be "
+							"cached before entries are evicted. This mainly affects the "
+							"performance of index scans on the Hypercore TAM "
+							"when segments are accessed in non-sequential order.",
+							/* valueAddr= */ &ts_guc_hypercore_arrow_cache_max_entries,
+							/* bootValue= */ 25000,
+							/* minValue= */ 1,
+							/* maxValue= */ INT_MAX,
+							/* context= */ PGC_USERSET,
+							/* flags= */ 0,
+							/* check_hook= */ NULL,
+							/* assign_hook= */ NULL,
+							/* show_hook= */ NULL);
 
 	DefineCustomIntVariable(/* name= */ MAKE_EXTOPTION("debug_bgw_scheduler_exit_status"),
 							/* short_desc= */ "exit status to use when shutting down the scheduler",

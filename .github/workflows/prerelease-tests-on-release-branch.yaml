@@ -26,7 +26,7 @@ jobs:
       - name: Set RELEASE_BRANCH as per environment
         run: |
           OLD_MINOR_VERSION=$(tail -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
-          echo "RELEASE_BRANCH="$(echo ${OLD_MINOR_VERSION%?}x)" >> $GITHUB_ENV
+          echo "RELEASE_BRANCH="$(echo ${OLD_MINOR_VERSION%?}x)"" >> $GITHUB_ENV
 
       - name: Checkout TimescaleDB release branch
         uses: actions/checkout@v4
@@ -51,7 +51,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
-          git push upstream HEAD:prerelease_test --force
+          git push origin HEAD:prerelease_test --force
 
 
 # Coverity Testing
@@ -74,4 +74,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
-          git push upstream HEAD:coverity_scan --force
+          git push origin HEAD:coverity_scan --force

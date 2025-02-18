@@ -708,7 +708,7 @@ get_relmergeinfo(RelationMergeInfo *relinfos, int nrelids, int i)
 #else
 #define pg17_workaround_init(rel, relinfos, nrelids)
 #define pg17_workaround_cleanup(rel)
-#define get_relmergeinfo(relinfos, nrelids, i) &relinfos[i]
+#define get_relmergeinfo(relinfos, nrelids, i) &(relinfos)[i]
 #endif
 
 /*

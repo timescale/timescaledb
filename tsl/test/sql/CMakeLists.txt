@@ -86,6 +86,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     chunk_utils_internal.sql
     compression_algos.sql
     compression_bgw.sql
+    compression_bools.sql
     compression_ddl.sql
     compression_hypertable.sql
     compression_merge.sql
@@ -120,6 +121,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     feature_flags.sql
     vector_agg_default.sql
     vector_agg_filter.sql
+    vector_agg_text.sql
     vector_agg_memory.sql
     vector_agg_segmentby.sql)
 
@@ -179,7 +181,8 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
-  list(APPEND TEST_FILES cagg_planning.sql hypercore_parallel.sql)
+  list(APPEND TEST_FILES cagg_planning.sql hypercore_parallel.sql
+       hypercore_vectoragg.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
@@ -205,6 +208,7 @@ set(SOLO_TESTS
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
     cagg_invalidation
+    hypercore
     move
     reorder
     telemetry_stats)

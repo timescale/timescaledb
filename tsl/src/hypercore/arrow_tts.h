@@ -24,6 +24,7 @@
 #include "arrow_cache.h"
 #include "compression/arrow_c_data_interface.h"
 #include "debug_assert.h"
+#include "nodes/decompress_chunk/compressed_batch.h"
 
 #include <limits.h>
 
@@ -88,6 +89,10 @@ typedef struct ArrowTupleTableSlot
 	const uint64 *arrow_qual_result; /* Bitmap with result of qual
 									  * filtering over arrow_array. NULL if
 									  * no filtering has been applied. */
+
+	/* Struct to hold values for one column. Necessary for compatibility with
+	 * vector aggs. */
+	struct CompressedColumnValues ccvalues;
 } ArrowTupleTableSlot;
 
 extern const TupleTableSlotOps TTSOpsArrowTuple;
@@ -413,8 +418,9 @@ arrow_slot_per_segment_memory_context(const TupleTableSlot *slot)
 	return aslot->per_segment_mcxt;
 }
 
-extern bool is_compressed_col(const TupleDesc tupdesc, AttrNumber attno);
 extern const ArrowArray *arrow_slot_get_array(TupleTableSlot *slot, AttrNumber attno);
+
+extern bool is_compressed_col(const TupleDesc tupdesc, AttrNumber attno);
 extern void arrow_slot_set_referenced_attrs(TupleTableSlot *slot, Bitmapset *attrs);
 extern void arrow_slot_set_index_attrs(TupleTableSlot *slot, Bitmapset *attrs);
 

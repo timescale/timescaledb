@@ -8,6 +8,9 @@
 #include <parser/parse_coerce.h>
 #include <parser/parse_relation.h>
 #include <utils/inval.h>
+#include <utils/lsyscache.h>
+#include <utils/rel.h>
+#include <utils/relcache.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
@@ -209,6 +212,13 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 						compressed_rel_tupdesc->natts,
 						true /*need_bistate*/,
 						0 /*insert options*/);
+
+	/* For chunks with no segmentby settings, we can still do segmentwise recompression
+	 * The entire chunk is treated as a single segment
+	 */
+	elog(ts_guc_debug_compression_path_info ? INFO : DEBUG1,
+		 "Using index \"%s\" for recompression",
+		 get_rel_name(row_compressor.index_oid));
 
 	Relation index_rel = index_open(row_compressor.index_oid, ExclusiveLock);
 	ereport(DEBUG1,

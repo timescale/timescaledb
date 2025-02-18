@@ -90,7 +90,8 @@ class SQLVisitor(Visitor):
 
     def visit_CreateFunctionStmt(self, _ancestors, node):
         if not node.replace:
-            self.error(node, "Consider using CREATE OR REPLACE FUNCTION")
+            fn_str = ("FUNCTION", "PROCEDURE")[node.is_procedure is True]
+            self.error(node, f"Consider using CREATE OR REPLACE {fn_str}")
 
         return Skip
 

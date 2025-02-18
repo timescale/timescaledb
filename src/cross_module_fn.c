@@ -68,6 +68,7 @@ CROSSMODULE_WRAPPER(compressed_data_recv);
 CROSSMODULE_WRAPPER(compressed_data_in);
 CROSSMODULE_WRAPPER(compressed_data_out);
 CROSSMODULE_WRAPPER(compressed_data_info);
+CROSSMODULE_WRAPPER(compressed_data_has_nulls);
 CROSSMODULE_WRAPPER(deltadelta_compressor_append);
 CROSSMODULE_WRAPPER(deltadelta_compressor_finish);
 CROSSMODULE_WRAPPER(gorilla_compressor_append);
@@ -76,6 +77,8 @@ CROSSMODULE_WRAPPER(dictionary_compressor_append);
 CROSSMODULE_WRAPPER(dictionary_compressor_finish);
 CROSSMODULE_WRAPPER(array_compressor_append);
 CROSSMODULE_WRAPPER(array_compressor_finish);
+CROSSMODULE_WRAPPER(bool_compressor_append);
+CROSSMODULE_WRAPPER(bool_compressor_finish);
 CROSSMODULE_WRAPPER(create_compressed_chunk);
 CROSSMODULE_WRAPPER(compress_chunk);
 CROSSMODULE_WRAPPER(decompress_chunk);
@@ -134,8 +137,13 @@ error_hypercore_proxy_index_options(Datum reloptions, bool validate)
  * parsing index options instead.
  */
 static Datum
-error_pg_community_hypercore_proxy_handler(PG_FUNCTION_ARGS)
+process_hypercore_proxy_handler(PG_FUNCTION_ARGS)
 {
+	ts_license_enable_module_loading();
+
+	if (ts_cm_functions->hypercore_proxy_handler != process_hypercore_proxy_handler)
+		return ts_cm_functions->hypercore_proxy_handler(fcinfo);
+
 	IndexAmRoutine *amroutine = makeNode(IndexAmRoutine);
 
 	amroutine->amstrategies = 0;
@@ -242,6 +250,24 @@ process_cagg_try_repair(PG_FUNCTION_ARGS)
 
 	if (ts_cm_functions->cagg_try_repair != process_cagg_try_repair)
 		return ts_cm_functions->cagg_try_repair(fcinfo);
+
+	error_no_default_fn_pg_community(fcinfo);
+	pg_unreachable();
+}
+
+/*
+ * Ensure that the TSL library is loaded before trying to use the handler.
+ *
+ * As for the functions above, the TSL library might not be loaded when this
+ * function is called, so we try to load this function, but fall back on the
+ * Apache error message if not possible.
+ */
+static Datum
+process_hypercore_handler(PG_FUNCTION_ARGS)
+{
+	ts_license_enable_module_loading();
+	if (ts_cm_functions->hypercore_handler != process_hypercore_handler)
+		return ts_cm_functions->hypercore_handler(fcinfo);
 
 	error_no_default_fn_pg_community(fcinfo);
 	pg_unreachable();
@@ -395,8 +421,10 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.dictionary_compressor_finish = error_no_default_fn_pg_community,
 	.array_compressor_append = error_no_default_fn_pg_community,
 	.array_compressor_finish = error_no_default_fn_pg_community,
-	.hypercore_handler = error_no_default_fn_pg_community,
-	.hypercore_proxy_handler = error_pg_community_hypercore_proxy_handler,
+	.bool_compressor_append = error_no_default_fn_pg_community,
+	.bool_compressor_finish = error_no_default_fn_pg_community,
+	.hypercore_handler = process_hypercore_handler,
+	.hypercore_proxy_handler = process_hypercore_proxy_handler,
 	.is_compressed_tid = error_no_default_fn_pg_community,
 
 	.show_chunk = error_no_default_fn_pg_community,
