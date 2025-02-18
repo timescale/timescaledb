@@ -68,8 +68,6 @@ if((NOT DEFINED USE_UMASH) OR USE_UMASH)
       "${CMAKE_REQUIRED_FLAGS} ${CMAKE_C_FLAGS} ${DIR_COMPILE_OPTIONS} -Werror=implicit-function-declaration"
   )
 
-  # FIXME
-  message(${CMAKE_REQUIRED_FLAGS})
   check_c_source_compiles(
     "
 #if defined(__PCLMUL__)
@@ -80,13 +78,13 @@ if((NOT DEFINED USE_UMASH) OR USE_UMASH)
  * it using the standard condition of defined(__x86_64__) && !defined(__ILP32__),
  * as described at https://wiki.debian.org/X32Port .
  */
-static void test() { (void) _mm_cvtsi64_si128((uint64_t) 0); }
+int main() { (void) _mm_cvtsi64_si128((uint64_t) 0); return 0; }
 #elif defined(__ARM_FEATURE_CRYPTO)
 /* OK */
+int main() { return 0; }
 #else
 #error Unsupported platform for UMASH
 #endif
-int main(void) { test(); }
 "
     UMASH_SUPPORTED)
   unset(CMAKE_REQUIRED_FLAGS)
