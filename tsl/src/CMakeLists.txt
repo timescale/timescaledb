@@ -65,9 +65,10 @@ if((NOT DEFINED USE_UMASH) OR USE_UMASH)
   get_directory_property(DIR_COMPILE_OPTIONS_LIST COMPILE_OPTIONS)
   list(JOIN DIR_COMPILE_OPTIONS_LIST " " DIR_COMPILE_OPTIONS)
   set(CMAKE_REQUIRED_FLAGS
-      "${CMAKE_REQUIRED_FLAGS} ${DIR_COMPILE_OPTIONS} -Werror=implicit-function-declaration"
+      "${CMAKE_REQUIRED_FLAGS} ${CMAKE_C_FLAGS} ${DIR_COMPILE_OPTIONS} -Werror=implicit-function-declaration"
   )
 
+  # FIXME
   message(${CMAKE_REQUIRED_FLAGS})
   check_c_source_compiles(
     "
@@ -106,7 +107,6 @@ if(USE_UMASH)
   endif()
   add_compile_definitions(TS_USE_UMASH)
 endif()
-
 
 add_subdirectory(bgw_policy)
 add_subdirectory(compression)
