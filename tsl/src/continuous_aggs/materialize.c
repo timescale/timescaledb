@@ -64,6 +64,7 @@ typedef struct MaterializationContext
 	SchemaAndName materialization_table;
 	NameData *time_column_name;
 	TimeRange materialization_range;
+	InternalTimeRange internal_materialization_range;
 	char *chunk_condition;
 } MaterializationContext;
 
@@ -146,6 +147,7 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 		.materialization_table = materialization_table,
 		.time_column_name = (NameData *) time_column_name,
 		.materialization_range = internal_time_range_to_time_range(new_materialization_range),
+		.internal_materialization_range = new_materialization_range,
 		/*
 		 * chunk_id is valid if the materializaion update should be done only on the given chunk.
 		 * This is used currently for refresh on chunk drop only. In other cases, manual
@@ -197,15 +199,18 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 	{
 		context.materialization_range =
 			internal_time_range_to_time_range(combined_materialization_range);
+		context.internal_materialization_range = combined_materialization_range;
 		execute_materializations(&context);
 	}
 	else
 	{
 		context.materialization_range = internal_time_range_to_time_range(invalidation_range);
+		context.internal_materialization_range = invalidation_range;
 		execute_materializations(&context);
 
 		context.materialization_range =
 			internal_time_range_to_time_range(new_materialization_range);
+		context.internal_materialization_range = new_materialization_range;
 		execute_materializations(&context);
 	}
 
@@ -739,12 +744,176 @@ update_watermark(MaterializationContext *context)
 }
 
 static void
+log_refresh_window(int elevel, const ContinuousAgg *cagg, const TimeRange *refresh_window,
+				   const char *msg)
+{
+	Oid outfuncid = InvalidOid;
+	bool isvarlena;
+
+	getTypeOutputInfo(refresh_window->type, &outfuncid, &isvarlena);
+	Assert(!isvarlena);
+
+	elog(elevel,
+		 "%s \"%s\" in window [ %s, %s ]",
+		 msg,
+		 NameStr(cagg->data.user_view_name),
+		 DatumGetCString(OidFunctionCall1(outfuncid, refresh_window->start)),
+		 DatumGetCString(OidFunctionCall1(outfuncid, refresh_window->end)));
+}
+
+static List *
+split_ranges(MaterializationContext *context, int64 bucket_width, int32 range_factor)
+{
+	List *ranges = NIL;
+	int64 start = context->internal_materialization_range.start;
+	int64 end = context->internal_materialization_range.end;
+
+	// ranges = lappend(ranges, &context->internal_materialization_range);
+	// log_refresh_window(INFO, context->cagg, &context->materialization_range, "splitting");
+	// return ranges;
+
+	while (start < end)
+	{
+		InternalTimeRange *new_range = palloc(sizeof(InternalTimeRange));
+		new_range->start = start;
+		new_range->end = start + (bucket_width * range_factor) + 1;
+		new_range->type = context->materialization_range.type;
+		ranges = lappend(ranges, new_range);
+		start = new_range->end;
+
+		// while (context->internal_materialization_range.start < end)
+		// {
+		// 	context->materialization_range.start =
+		// 		internal_to_time_value_or_infinite(context->internal_materialization_range.start,
+		// 										   context->materialization_range.type,
+		// 										   NULL);
+		// 	context->internal_materialization_range.start += (bucket_width * nbuckets) + 1;
+
+		// 	context->materialization_range.end =
+		// 		internal_to_time_value_or_infinite(context->internal_materialization_range.start,
+		// 										   context->materialization_range.type,
+		// 										   NULL);
+		// 	context->internal_materialization_range.end =
+		// 		context->internal_materialization_range.start;
+
+		const TimeRange range = internal_time_range_to_time_range(*new_range);
+		log_refresh_window(LOG, context->cagg, &range, "splitting");
+	}
+
+	return ranges;
+}
+
+static void
 execute_materializations(MaterializationContext *context)
 {
 	volatile uint64 rows_processed = 0;
 
 	PG_TRY();
 	{
+		PG_USED_FOR_ASSERTS_ONLY int64 bucket_width =
+			ts_continuous_agg_bucket_width(context->cagg->bucket_function);
+		Assert(bucket_width > 0);
+
+		// int64 end = context->internal_materialization_range.end;
+		// int32 nbuckets = 1;
+
+		ListCell *lc;
+		List *ranges = split_ranges(context, bucket_width, 10);
+
+		foreach (lc, ranges)
+		{
+			InternalTimeRange *range = lfirst(lc);
+			context->materialization_range.start =
+				internal_to_time_value_or_infinite(range->start,
+												   context->materialization_range.type,
+												   NULL);
+			context->internal_materialization_range.start = range->start;
+			context->materialization_range.end =
+				internal_to_time_value_or_infinite(range->end,
+												   context->materialization_range.type,
+												   NULL);
+			context->internal_materialization_range.end = range->end;
+
+			log_refresh_window(LOG, context->cagg, &context->materialization_range, "refreshing");
+
+			/* MERGE statement is available starting on PG15 and we'll support it only in the new
+			 * format of CAggs and for non-compressed hypertables */
+			if (ts_guc_enable_merge_on_cagg_refresh && PG_VERSION_NUM >= 150000 &&
+				ContinuousAggIsFinalized(context->cagg) &&
+				!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(context->mat_ht))
+			{
+				/* Fallback to INSERT materializations if there are no rows to change on it */
+				if (execute_materialization_plan(context, PLAN_TYPE_EXISTS) == 0)
+				{
+					elog(DEBUG2,
+						 "no rows to merge on materialization table \"%s.%s\", falling back to "
+						 "INSERT",
+						 NameStr(*context->materialization_table.schema),
+						 NameStr(*context->materialization_table.name));
+					rows_processed = execute_materialization_plan(context, PLAN_TYPE_INSERT);
+				}
+				else
+				{
+					rows_processed += execute_materialization_plan(context, PLAN_TYPE_MERGE);
+					rows_processed += execute_materialization_plan(context, PLAN_TYPE_MERGE_DELETE);
+				}
+			}
+			else
+			{
+				rows_processed += execute_materialization_plan(context, PLAN_TYPE_DELETE);
+				rows_processed += execute_materialization_plan(context, PLAN_TYPE_INSERT);
+			}
+		}
+
+		// while (context->internal_materialization_range.start < end)
+		// {
+		// 	context->materialization_range.start =
+		// 		internal_to_time_value_or_infinite(context->internal_materialization_range.start,
+		// 										   context->materialization_range.type,
+		// 										   NULL);
+		// 	context->internal_materialization_range.start += (bucket_width * nbuckets) + 1;
+
+		// 	context->materialization_range.end =
+		// 		internal_to_time_value_or_infinite(context->internal_materialization_range.start,
+		// 										   context->materialization_range.type,
+		// 										   NULL);
+		// 	context->internal_materialization_range.end =
+		// 		context->internal_materialization_range.start;
+
+		// 	log_refresh_window(INFO, context->cagg, &context->materialization_range, "refreshing");
+
+		// 	/* MERGE statement is available starting on PG15 and we'll support it only in the new
+		// 	 * format of CAggs and for non-compressed hypertables */
+		// 	if (ts_guc_enable_merge_on_cagg_refresh && PG_VERSION_NUM >= 150000 &&
+		// 		ContinuousAggIsFinalized(context->cagg) &&
+		// 		!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(context->mat_ht))
+		// 	{
+		// 		/* Fallback to INSERT materializations if there are no rows to change on it */
+		// 		if (execute_materialization_plan(context, PLAN_TYPE_EXISTS) == 0)
+		// 		{
+		// 			elog(DEBUG2,
+		// 				 "no rows to merge on materialization table \"%s.%s\", falling back to "
+		// 				 "INSERT",
+		// 				 NameStr(*context->materialization_table.schema),
+		// 				 NameStr(*context->materialization_table.name));
+		// 			rows_processed = execute_materialization_plan(context, PLAN_TYPE_INSERT);
+		// 		}
+		// 		else
+		// 		{
+		// 			rows_processed += execute_materialization_plan(context, PLAN_TYPE_MERGE);
+		// 			rows_processed += execute_materialization_plan(context, PLAN_TYPE_MERGE_DELETE);
+		// 		}
+		// 	}
+		// 	else
+		// 	{
+		// 		rows_processed += execute_materialization_plan(context, PLAN_TYPE_DELETE);
+		// 		rows_processed += execute_materialization_plan(context, PLAN_TYPE_INSERT);
+		// 	}
+		// }
+
+		/* Free all cached plans */
+		free_materialization_plans(context);
+
 		/* MERGE statement is available starting on PG15 and we'll support it only in the new format
 		 * of CAggs and for non-compressed hypertables */
 		if (ts_guc_enable_merge_on_cagg_refresh && PG_VERSION_NUM >= 150000 &&
