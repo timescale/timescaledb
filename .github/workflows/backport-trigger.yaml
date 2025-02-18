@@ -1,0 +1,24 @@
+# A helper workflow to trigger the run of the backport workflow on the main
+# branch, when a release branch or the main branch were changed.
+name: Trigger the Backport Workflow
+"on":
+  push:
+    branches:
+      - main
+      - ?.*.x
+  pull_request:
+    paths: .github/workflows/backport-trigger.yaml
+
+jobs:
+  backport_trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@v4
+
+      - name: Trigger the Backport Workflow
+        env:
+          GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        run: |
+          gh workflow run backport.yaml --ref main
+
