@@ -781,21 +781,6 @@ split_ranges(MaterializationContext *context, int64 bucket_width, int32 range_fa
 		ranges = lappend(ranges, new_range);
 		start = new_range->end;
 
-		// while (context->internal_materialization_range.start < end)
-		// {
-		// 	context->materialization_range.start =
-		// 		internal_to_time_value_or_infinite(context->internal_materialization_range.start,
-		// 										   context->materialization_range.type,
-		// 										   NULL);
-		// 	context->internal_materialization_range.start += (bucket_width * nbuckets) + 1;
-
-		// 	context->materialization_range.end =
-		// 		internal_to_time_value_or_infinite(context->internal_materialization_range.start,
-		// 										   context->materialization_range.type,
-		// 										   NULL);
-		// 	context->internal_materialization_range.end =
-		// 		context->internal_materialization_range.start;
-
 		const TimeRange range = internal_time_range_to_time_range(*new_range);
 		log_refresh_window(LOG, context->cagg, &range, "splitting");
 	}
@@ -810,12 +795,8 @@ execute_materializations(MaterializationContext *context)
 
 	PG_TRY();
 	{
-		PG_USED_FOR_ASSERTS_ONLY int64 bucket_width =
-			ts_continuous_agg_bucket_width(context->cagg->bucket_function);
+		int64 bucket_width = ts_continuous_agg_bucket_width(context->cagg->bucket_function);
 		Assert(bucket_width > 0);
-
-		// int64 end = context->internal_materialization_range.end;
-		// int32 nbuckets = 1;
 
 		ListCell *lc;
 		List *ranges = split_ranges(context, bucket_width, 10);
@@ -864,52 +845,6 @@ execute_materializations(MaterializationContext *context)
 				rows_processed += execute_materialization_plan(context, PLAN_TYPE_INSERT);
 			}
 		}
-
-		// while (context->internal_materialization_range.start < end)
-		// {
-		// 	context->materialization_range.start =
-		// 		internal_to_time_value_or_infinite(context->internal_materialization_range.start,
-		// 										   context->materialization_range.type,
-		// 										   NULL);
-		// 	context->internal_materialization_range.start += (bucket_width * nbuckets) + 1;
-
-		// 	context->materialization_range.end =
-		// 		internal_to_time_value_or_infinite(context->internal_materialization_range.start,
-		// 										   context->materialization_range.type,
-		// 										   NULL);
-		// 	context->internal_materialization_range.end =
-		// 		context->internal_materialization_range.start;
-
-		// 	log_refresh_window(INFO, context->cagg, &context->materialization_range, "refreshing");
-
-		// 	/* MERGE statement is available starting on PG15 and we'll support it only in the new
-		// 	 * format of CAggs and for non-compressed hypertables */
-		// 	if (ts_guc_enable_merge_on_cagg_refresh && PG_VERSION_NUM >= 150000 &&
-		// 		ContinuousAggIsFinalized(context->cagg) &&
-		// 		!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(context->mat_ht))
-		// 	{
-		// 		/* Fallback to INSERT materializations if there are no rows to change on it */
-		// 		if (execute_materialization_plan(context, PLAN_TYPE_EXISTS) == 0)
-		// 		{
-		// 			elog(DEBUG2,
-		// 				 "no rows to merge on materialization table \"%s.%s\", falling back to "
-		// 				 "INSERT",
-		// 				 NameStr(*context->materialization_table.schema),
-		// 				 NameStr(*context->materialization_table.name));
-		// 			rows_processed = execute_materialization_plan(context, PLAN_TYPE_INSERT);
-		// 		}
-		// 		else
-		// 		{
-		// 			rows_processed += execute_materialization_plan(context, PLAN_TYPE_MERGE);
-		// 			rows_processed += execute_materialization_plan(context, PLAN_TYPE_MERGE_DELETE);
-		// 		}
-		// 	}
-		// 	else
-		// 	{
-		// 		rows_processed += execute_materialization_plan(context, PLAN_TYPE_DELETE);
-		// 		rows_processed += execute_materialization_plan(context, PLAN_TYPE_INSERT);
-		// 	}
-		// }
 
 		/* Free all cached plans */
 		free_materialization_plans(context);
