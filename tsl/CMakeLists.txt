@@ -15,21 +15,19 @@ if((NOT DEFINED USE_UMASH) OR USE_UMASH)
     check_c_compiler_flag(-mpclmul CC_PCLMUL)
     if(CC_PCLMUL)
       add_compile_options(-mpclmul)
-      # The "C source compiles" check below doesn't use the global compilation
-      # flags, so we have to modify its flags separately.
-      set(CMAKE_REQUIRED_FLAGS -mpclmul)
     endif()
   endif()
 
   # The C compiler flags that we add using add_compile_options() are not
   # automatically used by check_c_source_compiles() because it works in a
-  # separate project. We could query the directory property, but it's a
-  # semicolon-separated list that is surprisingly difficult to mix with the
-  # space-separated lists, so we instead update the options for try_compile()
-  # separately above. We also have to manually add the user-specified CFLAGS.
+  # separate project, so we have to add them manually.
+  get_directory_property(DIR_COMPILE_OPTIONS_LIST COMPILE_OPTIONS)
+  list(JOIN DIR_COMPILE_OPTIONS_LIST " " DIR_COMPILE_OPTIONS)
   set(CMAKE_REQUIRED_FLAGS
-      "${CMAKE_REQUIRED_FLAGS} ${CMAKE_C_FLAGS} -Werror=implicit-function-declaration"
+      "${CMAKE_REQUIRED_FLAGS} ${DIR_COMPILE_OPTIONS} -Werror=implicit-function-declaration"
   )
+
+  message(${CMAKE_REQUIRED_FLAGS})
   check_c_source_compiles(
     "
 #if defined(__PCLMUL__)
@@ -46,7 +44,7 @@ static void test() { (void) _mm_cvtsi64_si128((uint64_t) 0); }
 #else
 #error Unsupported platform for UMASH
 #endif
-void main(void) {};
+int main(void) { test(); }
 "
     UMASH_SUPPORTED)
   unset(CMAKE_REQUIRED_FLAGS)
