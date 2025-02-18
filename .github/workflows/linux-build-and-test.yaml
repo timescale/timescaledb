@@ -158,6 +158,9 @@ jobs:
 
     - name: Build TimescaleDB
       run: |
+        # Show the actual architecture this CI runner has
+        "$CC" -march=native -E -v - </dev/null 2>&1 | grep cc1
+
         ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" \
           -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
           ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} \
