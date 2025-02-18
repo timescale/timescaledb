@@ -1,0 +1,20 @@
+# A helper workflow to trigger the run of the backport workflow on the main
+# branch, when a release branch or the main branch were changed.
+
+"on":
+  push:
+    branches:
+      - main
+      - ?.*.x
+  pull_request:
+    paths: .github/workflows/backport-trigger.yaml
+
+jobs:
+  backport_trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        run: |
+          gh workflow run backport.yaml --ref main
+
