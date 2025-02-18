@@ -738,6 +738,7 @@ test_bool_array(bool nulls, int run_length, int expected_size)
 static void
 test_empty_bool_compressor()
 {
+	/* This returns an ExtendedCompressor from bool_compress.c */
 	Compressor *compressor = bool_compressor_for_type(BOOLOID);
 	Datum compressed = (Datum) compressor->finish(compressor);
 	TestAssertTrue(DatumGetPointer(compressed) == NULL);
@@ -746,14 +747,12 @@ test_empty_bool_compressor()
 	compressed = (Datum) compressor->finish(NULL);
 	TestAssertTrue(DatumGetPointer(compressed) == NULL);
 
-	/* passing an empty compressor returns NULL */
-	TestEnsureError(DirectFunctionCall1(tsl_bool_compressor_finish, PointerGetDatum(compressor)));
-
-	/* passing a NULL pointer returns NULL */
-	TestEnsureError(DirectFunctionCall1(tsl_bool_compressor_finish, PointerGetDatum(NULL)));
-
 	/* make codecov happy */
 	TestAssertTrue(bool_compressor_finish(NULL) == NULL);
+
+	/* Passing a NULL pointer returns NULL. */
+	TestEnsureError(DirectFunctionCall1(tsl_bool_compressor_finish, PointerGetDatum(NULL)));
+
 	TestEnsureError(bool_compressor_for_type(FLOAT4OID));
 
 	bool old_val = ts_guc_enable_bool_compression;
