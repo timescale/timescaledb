@@ -208,8 +208,6 @@ SELECT wait_worker_counts(1,0,0,1);
 COMMIT;
 -- End our transaction and it should immediately exit because it's a template database.
 SELECT wait_worker_counts(1,0,0,0);
--- Clean up the template database, removing our test utilities etc
-\ir include/bgw_launcher_utils_cleanup.sql
 
 \c :TEST_DBNAME_2
 -- Now try creating a DB from a template with the extension already installed.
@@ -280,3 +278,6 @@ SELECT * FROM pg_stat_activity WHERE datname = :'TEST_DBNAME_2';
 
 DROP DATABASE :TEST_DBNAME_2 WITH (force);
 
+-- Clean up the template database, removing our test utilities etc
+\c template1
+\ir include/bgw_launcher_utils_cleanup.sql
