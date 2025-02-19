@@ -166,6 +166,7 @@ TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour = COMPR
 
 /* Only settable in debug mode for testing */
 TSDLLEXPORT bool ts_guc_enable_null_compression = true;
+TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings = true;
 
 /* Enable of disable columnar scans for columnar-oriented storage engines. If
  * disabled, regular sequence scans will be used instead. */
@@ -842,6 +843,16 @@ _guc_init(void)
 							 NULL);
 #endif
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compression_ratio_warnings"),
+							 "Enable warnings for poor compression ratio",
+							 "Enable warnings for poor compression ratio",
+							 &ts_guc_enable_compression_ratio_warnings,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 	/*
 	 * Define the limit on number of invalidation-based refreshes we allow per
 	 * refresh call. If this limit is exceeded, fall back to a single refresh that
