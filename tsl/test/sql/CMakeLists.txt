@@ -142,7 +142,8 @@ endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
   if(CMAKE_BUILD_TYPE MATCHES Debug)
-    list(APPEND TEST_FILES bgw_scheduler_control.sql hypercore.sql)
+    list(APPEND TEST_FILES bgw_scheduler_control.sql hypercore.sql
+         hypercore_create.sql hypercore_scans.sql)
   endif()
   list(
     APPEND
@@ -153,7 +154,6 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     hypercore_columnar.sql
     hypercore_constraints.sql
     hypercore_copy.sql
-    hypercore_create.sql
     hypercore_cursor.sql
     hypercore_ddl.sql
     hypercore_delete.sql
@@ -164,7 +164,6 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     hypercore_join.sql
     hypercore_merge.sql
     hypercore_policy.sql
-    hypercore_scans.sql
     hypercore_stats.sql
     hypercore_trigger.sql
     hypercore_types.sql
