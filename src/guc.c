@@ -98,13 +98,16 @@ static const struct config_enum_entry loglevel_options[] = {
  *
  * (2) = hypercore, enabled for compressed tables and those using Hypercore
  *       TAM. This is useful mostly for debugging/testing and as a fallback.
+ *       Only available in debug builds.
  */
 static const struct config_enum_entry transparent_decompression_options[] = {
 	{ "on", 1, false },
 	{ "true", 1, false },
 	{ "off", 0, false },
 	{ "false", 0, false },
+#ifdef TS_DEBUG
 	{ TS_HYPERCORE_TAM_NAME, 2, false },
+#endif
 	{ NULL, 0, false }
 };
 
