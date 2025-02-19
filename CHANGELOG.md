@@ -4,6 +4,23 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.18.2 (2025-02-19)
+
+This release contains performance improvements and bug fixes since
+the 2.18.1 release. We recommend that you upgrade at the next
+available opportunity.
+
+**Bugfixes**
+* [#7686](https://github.com/timescale/timescaledb/pull/7686) Potential wrong aggregation result when using vectorized aggregation with hash grouping in reverse order
+* [#7694](https://github.com/timescale/timescaledb/pull/7694) Fix ExplainHook breaking call chain
+* [#7695](https://github.com/timescale/timescaledb/pull/7695) Block dropping internal compressed chunks with `drop_chunk()`
+* [#7711](https://github.com/timescale/timescaledb/pull/7711) License error when using hypercore handler
+* [#7712](https://github.com/timescale/timescaledb/pull/7712) Respect other extensions' ExecutorStart hooks
+
+**Thanks**
+* @davidmehren and @jflambert for reporting an issue with extension hooks
+* @jflambert for reporting a bug with license errors shown in autovacuum
+
 ## 2.18.1 (2025-02-10)
 
 This release contains performance improvements and bug fixes since

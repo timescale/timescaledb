@@ -1,1 +1,0 @@
-Fixes: #7695 Block dropping internal compressed chunks with `drop_chunk()`
