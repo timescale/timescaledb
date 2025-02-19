@@ -314,13 +314,11 @@ select location, count(*) from aggdata where location=1 group by location;
 --
 -- Test ordering/grouping on segmentby, orderby columns
 --
--- This grouping is currently NOT supported by VectorAgg
---
 set timescaledb.enable_vectorized_aggregation=true;
 explain (verbose, costs off)
 select time, device, sum(temp) from aggdata where device is not null group by time, device order by time, device limit 10;
-                                                       QUERY PLAN                                                       
-------------------------------------------------------------------------------------------------------------------------
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, (sum(_hyper_1_1_chunk.temp))
    ->  Sort
@@ -330,9 +328,9 @@ select time, device, sum(temp) from aggdata where device is not null group by ti
                Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, sum(_hyper_1_1_chunk.temp)
                Group Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
                ->  Append
-                     ->  Partial HashAggregate
-                           Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, PARTIAL sum(_hyper_1_1_chunk.temp)
-                           Group Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
+                     ->  Custom Scan (VectorAgg)
+                           Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, (PARTIAL sum(_hyper_1_1_chunk.temp))
+                           Grouping Policy: hashed with serialized key
                            ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                                  Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, _hyper_1_1_chunk.temp
                                  Filter: (_hyper_1_1_chunk.device IS NOT NULL)
@@ -344,7 +342,6 @@ select time, device, sum(temp) from aggdata where device is not null group by ti
                                  Filter: (_hyper_1_2_chunk.device IS NOT NULL)
 (21 rows)
 
-set timescaledb.debug_require_vector_agg to 'forbid';
 select time, device, sum(temp) from aggdata where device is not null group by time, device order by time, device limit 10;
              time             | device | sum 
 ------------------------------+--------+-----
@@ -355,11 +352,10 @@ select time, device, sum(temp) from aggdata where device is not null group by ti
 (4 rows)
 
 set timecaledb.enable_vectorized_aggregation=false;
-reset timescaledb.debug_require_vector_agg;
 explain (verbose, costs off)
 select time, device, sum(temp) from aggdata where device is not null group by time, device order by time, device limit 10;
-                                                       QUERY PLAN                                                       
-------------------------------------------------------------------------------------------------------------------------
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, (sum(_hyper_1_1_chunk.temp))
    ->  Sort
@@ -369,9 +365,9 @@ select time, device, sum(temp) from aggdata where device is not null group by ti
                Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, sum(_hyper_1_1_chunk.temp)
                Group Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
                ->  Append
-                     ->  Partial HashAggregate
-                           Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, PARTIAL sum(_hyper_1_1_chunk.temp)
-                           Group Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
+                     ->  Custom Scan (VectorAgg)
+                           Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, (PARTIAL sum(_hyper_1_1_chunk.temp))
+                           Grouping Policy: hashed with serialized key
                            ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                                  Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, _hyper_1_1_chunk.temp
                                  Filter: (_hyper_1_1_chunk.device IS NOT NULL)
@@ -395,8 +391,8 @@ select time, device, sum(temp) from aggdata where device is not null group by ti
 set timescaledb.enable_vectorized_aggregation=true;
 explain (verbose, costs off)
 select time, device, sum(temp) filter (where device is not null) from aggdata group by time, device order by time, device desc limit 10;
-                                                                                 QUERY PLAN                                                                                  
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                  QUERY PLAN                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, (sum(_hyper_1_1_chunk.temp) FILTER (WHERE (_hyper_1_1_chunk.device IS NOT NULL)))
    ->  Sort
@@ -406,9 +402,9 @@ select time, device, sum(temp) filter (where device is not null) from aggdata gr
                Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, sum(_hyper_1_1_chunk.temp) FILTER (WHERE (_hyper_1_1_chunk.device IS NOT NULL))
                Group Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
                ->  Append
-                     ->  Partial HashAggregate
-                           Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, PARTIAL sum(_hyper_1_1_chunk.temp) FILTER (WHERE (_hyper_1_1_chunk.device IS NOT NULL))
-                           Group Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
+                     ->  Custom Scan (VectorAgg)
+                           Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, (PARTIAL sum(_hyper_1_1_chunk.temp) FILTER (WHERE (_hyper_1_1_chunk.device IS NOT NULL)))
+                           Grouping Policy: hashed with serialized key
                            ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                                  Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, _hyper_1_1_chunk.temp
                      ->  Partial HashAggregate
@@ -418,7 +414,6 @@ select time, device, sum(temp) filter (where device is not null) from aggdata gr
                                  Output: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device, _hyper_1_2_chunk.temp
 (19 rows)
 
-set timescaledb.debug_require_vector_agg to 'forbid';
 select time, device, sum(temp) filter (where device is not null) from aggdata group by time, device order by time, device desc limit 10;
              time             | device | sum 
 ------------------------------+--------+-----
@@ -430,7 +425,6 @@ select time, device, sum(temp) filter (where device is not null) from aggdata gr
 (5 rows)
 
 set timescaledb.enable_vectorized_aggregation=false;
-reset timescaledb.debug_require_vector_agg;
 explain (verbose, costs off)
 select time, device, sum(temp) filter (where device is not null) from aggdata group by time, device order by time, device desc limit 10;
                                                                                  QUERY PLAN                                                                                  

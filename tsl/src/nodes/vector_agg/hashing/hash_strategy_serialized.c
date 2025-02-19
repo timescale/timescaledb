@@ -365,7 +365,7 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 	*valid = true;
 
 	const struct umash_fp fp = umash_fprint(params.policy->hashing.umash_params,
-											/* seed = */ -1ull,
+											/* seed = */ ~0ULL,
 											serialized_key_storage,
 											num_bytes);
 	*hash_table_key = umash_fingerprint_get_key(fp);
