@@ -153,6 +153,7 @@ TSDLLEXPORT bool ts_guc_default_hypercore_use_access_method = false;
 bool ts_guc_enable_chunk_skipping = false;
 TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
 TSDLLEXPORT bool ts_guc_enable_bool_compression = false;
+TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings = true;
 
 /* Enable of disable columnar scans for columnar-oriented storage engines. If
  * disabled, regular sequence scans will be used instead. */
@@ -761,6 +762,16 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compression_ratio_warnings"),
+							 "Enable warnings for poor compression ratio",
+							 "Enable warnings for poor compression ratio",
+							 &ts_guc_enable_compression_ratio_warnings,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 	/*
 	 * Define the limit on number of invalidation-based refreshes we allow per
 	 * refresh call. If this limit is exceeded, fall back to a single refresh that
