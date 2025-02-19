@@ -2794,12 +2794,12 @@ COPY compressed_table (time,a,b,c) FROM stdin;
 SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('compressed_table') i;
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_49_108_chunk
+ _timescaledb_internal._hyper_49_107_chunk
 (1 row)
 
 \set ON_ERROR_STOP 0
 COPY compressed_table (time,a,b,c) FROM stdin;
-ERROR:  duplicate key value violates unique constraint "_hyper_49_108_chunk_compressed_table_index"
+ERROR:  duplicate key value violates unique constraint "_hyper_49_107_chunk_compressed_table_index"
 \set ON_ERROR_STOP 1
 COPY compressed_table (time,a,b,c) FROM stdin;
 SELECT * FROM compressed_table;
@@ -2813,7 +2813,7 @@ SELECT * FROM compressed_table;
 SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('compressed_table') i;
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_49_108_chunk
+ _timescaledb_internal._hyper_49_107_chunk
 (1 row)
 
 -- Check DML decompression limit
@@ -2837,7 +2837,7 @@ NOTICE:  default order by for hypertable "hyper_84" is set to ""time" DESC"
 SELECT compress_chunk(ch) FROM show_chunks('hyper_84') ch;
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_51_110_chunk
+ _timescaledb_internal._hyper_51_109_chunk
 (1 row)
 
 -- indexscan for decompression: UPDATE
@@ -2845,7 +2845,7 @@ UPDATE hyper_84 SET temp = 100 where device = 1;
 SELECT compress_chunk(ch) FROM show_chunks('hyper_84') ch;
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_51_110_chunk
+ _timescaledb_internal._hyper_51_109_chunk
 (1 row)
 
 -- indexscan for decompression: DELETE

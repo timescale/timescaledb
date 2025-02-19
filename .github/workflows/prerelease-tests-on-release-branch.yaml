@@ -51,7 +51,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
-          git push upstream HEAD:prerelease_test --force
+          git push origin HEAD:prerelease_test --force
 
 
 # Coverity Testing
@@ -74,4 +74,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
-          git push upstream HEAD:coverity_scan --force
+          git push origin HEAD:coverity_scan --force

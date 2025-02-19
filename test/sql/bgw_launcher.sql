@@ -208,8 +208,6 @@ SELECT wait_worker_counts(1,0,0,1);
 COMMIT;
 -- End our transaction and it should immediately exit because it's a template database.
 SELECT wait_worker_counts(1,0,0,0);
--- Clean up the template database, removing our test utilities etc
-\ir include/bgw_launcher_utils_cleanup.sql
 
 \c :TEST_DBNAME_2
 -- Now try creating a DB from a template with the extension already installed.
@@ -263,13 +261,9 @@ SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE backend_type = 'Tim
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
 
 -- make sure nobody is using it
-SET client_min_messages TO error;
 REVOKE CONNECT ON DATABASE :TEST_DBNAME FROM public;
-SELECT count(pg_terminate_backend(pg_stat_activity.pid)) AS TERMINATED
-FROM pg_stat_activity
-WHERE pg_stat_activity.datname = :'TEST_DBNAME'
-AND pg_stat_activity.pid <> pg_backend_pid() \gset
-RESET client_min_messages;
+CALL kill_database_backends(:'TEST_DBNAME');
+SELECT * FROM pg_stat_activity WHERE datname = :'TEST_DBNAME';
 
 -- Change tablespace
 ALTER DATABASE :TEST_DBNAME SET TABLESPACE tablespace1;
@@ -278,13 +272,12 @@ ALTER DATABASE :TEST_DBNAME SET TABLESPACE tablespace1;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
 SELECT _timescaledb_functions.stop_background_workers() \gset
-SET client_min_messages TO ERROR;
 REVOKE CONNECT ON DATABASE :TEST_DBNAME_2 FROM public;
-SELECT count(pg_terminate_backend(pg_stat_activity.pid)) AS TERMINATED
-FROM pg_stat_activity
-WHERE pg_stat_activity.datname = :'TEST_DBNAME_2'
-AND pg_stat_activity.pid <> pg_backend_pid() \gset
-RESET client_min_messages;
+CALL kill_database_backends(:'TEST_DBNAME_2');
+SELECT * FROM pg_stat_activity WHERE datname = :'TEST_DBNAME_2';
 
 DROP DATABASE :TEST_DBNAME_2 WITH (force);
 
+-- Clean up the template database, removing our test utilities etc
+\c template1
+\ir include/bgw_launcher_utils_cleanup.sql

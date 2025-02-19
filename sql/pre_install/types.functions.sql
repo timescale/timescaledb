@@ -39,6 +39,11 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.compressed_data_info(_timescal
     LANGUAGE C STRICT IMMUTABLE
     AS '@MODULE_PATHNAME@', 'ts_compressed_data_info';
 
+CREATE OR REPLACE FUNCTION _timescaledb_functions.compressed_data_has_nulls(_timescaledb_internal.compressed_data)
+    RETURNS BOOL
+    LANGUAGE C STRICT IMMUTABLE
+    AS '@MODULE_PATHNAME@', 'ts_compressed_data_has_nulls';
+
 CREATE OR REPLACE FUNCTION _timescaledb_functions.dimension_info_in(cstring)
     RETURNS _timescaledb_internal.dimension_info
     LANGUAGE C STRICT IMMUTABLE

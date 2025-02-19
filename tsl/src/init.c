@@ -17,6 +17,7 @@
 #include "chunk.h"
 #include "chunk_api.h"
 #include "compression/algorithms/array.h"
+#include "compression/algorithms/bool_compress.h"
 #include "compression/algorithms/deltadelta.h"
 #include "compression/algorithms/dictionary.h"
 #include "compression/algorithms/gorilla.h"
@@ -158,6 +159,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.compressed_data_in = tsl_compressed_data_in,
 	.compressed_data_out = tsl_compressed_data_out,
 	.compressed_data_info = tsl_compressed_data_info,
+	.compressed_data_has_nulls = tsl_compressed_data_has_nulls,
 	.deltadelta_compressor_append = tsl_deltadelta_compressor_append,
 	.deltadelta_compressor_finish = tsl_deltadelta_compressor_finish,
 	.gorilla_compressor_append = tsl_gorilla_compressor_append,
@@ -166,6 +168,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.dictionary_compressor_finish = tsl_dictionary_compressor_finish,
 	.array_compressor_append = tsl_array_compressor_append,
 	.array_compressor_finish = tsl_array_compressor_finish,
+	.bool_compressor_append = tsl_bool_compressor_append,
+	.bool_compressor_finish = tsl_bool_compressor_finish,
 	.process_compress_table = tsl_process_compress_table,
 	.process_altertable_cmd = tsl_process_altertable_cmd,
 	.process_rename_cmd = tsl_process_rename_cmd,

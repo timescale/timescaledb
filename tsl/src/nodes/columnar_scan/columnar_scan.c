@@ -996,9 +996,10 @@ static CustomScanMethods columnar_scan_plan_methods = {
 };
 
 bool
-is_columnar_scan(const CustomScan *scan)
+is_columnar_scan(const Plan *plan)
 {
-	return scan->methods == &columnar_scan_plan_methods;
+	return IsA(plan, CustomScan) &&
+		   ((const CustomScan *) plan)->methods == &columnar_scan_plan_methods;
 }
 
 typedef struct VectorQualInfoHypercore

@@ -69,6 +69,7 @@ extern TSDLLEXPORT bool ts_guc_enable_delete_after_compression;
 extern TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh;
 extern bool ts_guc_enable_chunk_skipping;
 extern TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression;
+extern TSDLLEXPORT bool ts_guc_enable_bool_compression;
 
 #ifdef USE_TELEMETRY
 typedef enum TelemetryLevel
@@ -149,6 +150,7 @@ typedef enum HypercoreCopyToBehavior
 
 extern TSDLLEXPORT HypercoreCopyToBehavior ts_guc_hypercore_copy_to_behavior;
 extern TSDLLEXPORT bool ts_guc_enable_hypercore_scankey_pushdown;
+extern TSDLLEXPORT int ts_guc_hypercore_arrow_cache_max_entries;
 
 void _guc_init(void);
 

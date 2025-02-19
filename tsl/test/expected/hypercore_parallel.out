@@ -326,22 +326,22 @@ $$, :'hypertable'));
    ->  Gather
          Workers Planned: 2
          ->  Parallel Append
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Vectorized Filter: (device_id = 1)
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Vectorized Filter: (device_id = 1)
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Vectorized Filter: (device_id = 1)
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Vectorized Filter: (device_id = 1)
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Vectorized Filter: (device_id = 1)
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Vectorized Filter: (device_id = 1)
 (22 rows)
@@ -362,22 +362,22 @@ $$, :'hypertable'));
    ->  Gather
          Workers Planned: 2
          ->  Parallel Append
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Scankey: (owner_id = 1)
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Scankey: (owner_id = 1)
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Scankey: (owner_id = 1)
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Scankey: (owner_id = 1)
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Scankey: (owner_id = 1)
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Scankey: (owner_id = 1)
 (22 rows)
@@ -398,22 +398,22 @@ $$, :'hypertable'));
    ->  Gather
          Workers Planned: 2
          ->  Parallel Append
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Vectorized Filter: (device_id = 1)
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Vectorized Filter: (device_id = 1)
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Vectorized Filter: (device_id = 1)
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Vectorized Filter: (device_id = 1)
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Vectorized Filter: (device_id = 1)
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Vectorized Filter: (device_id = 1)
 (22 rows)
@@ -433,22 +433,22 @@ $$, :'hypertable'));
    ->  Gather
          Workers Planned: 2
          ->  Parallel Append
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Scankey: (owner_id = 1)
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Scankey: (owner_id = 1)
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Scankey: (owner_id = 1)
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Scankey: (owner_id = 1)
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Scankey: (owner_id = 1)
-               ->  Partial GroupAggregate
+               ->  Custom Scan (VectorAgg)
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_I_N_chunk
                            Scankey: (owner_id = 1)
 (22 rows)
