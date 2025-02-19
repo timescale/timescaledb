@@ -11,11 +11,11 @@ the 2.18.1 release. We recommend that you upgrade at the next
 available opportunity.
 
 **Bugfixes**
-* #7686 Potential wrong aggregation result when using vectorized aggregation with hash grouping in reverse order
-* #7694 Fix ExplainHook breaking call chain
-* #7695 Block dropping internal compressed chunks with `drop_chunk()`
-* #7711 License error when using hypercore handler
-* #7712 Respect other extensions' ExecutorStart hooks
+* [#7686](https://github.com/timescale/timescaledb/pull/7686) Potential wrong aggregation result when using vectorized aggregation with hash grouping in reverse order
+* [#7694](https://github.com/timescale/timescaledb/pull/7694) Fix ExplainHook breaking call chain
+* [#7695](https://github.com/timescale/timescaledb/pull/7695) Block dropping internal compressed chunks with `drop_chunk()`
+* [#7711](https://github.com/timescale/timescaledb/pull/7711) License error when using hypercore handler
+* [#7712](https://github.com/timescale/timescaledb/pull/7712) Respect other extensions' ExecutorStart hooks
 
 **Thanks**
 * @davidmehren and @jflambert for reporting an issue with extension hooks
