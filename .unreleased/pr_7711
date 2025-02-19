@@ -1,2 +1,0 @@
-Fixes: #7711 License error when using hypercore handler
-Thanks: @jflambert for reporting an bug on license error show in autovacuum
