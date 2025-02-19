@@ -512,3 +512,14 @@ select ch as chunk from show_chunks('test5') ch limit 1 \gset
 alter table test5 set (timescaledb.compress);
 select compress_chunk(:'chunk');
 select * from amrels where relparent = 'test5'::regclass;
+
+-- Check that operations that rewrite the relation are blocked with
+-- invalid setting of transparent decompression GUC
+\set ON_ERROR_STOP 0
+select count(*) from :chunk;
+set timescaledb.enable_transparent_decompression='hypercore';
+select decompress_chunk(:'chunk');
+alter table :chunk set access method heap;
+vacuum full :chunk;
+select count(*) from :chunk;
+\set ON_ERROR_STOP 1

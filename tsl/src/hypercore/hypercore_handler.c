@@ -125,6 +125,17 @@ hypercore_set_truncate_compressed(bool onoff)
 #define HYPERCORE_AM_INFO_SIZE(natts)                                                              \
 	(sizeof(HypercoreInfo) + (sizeof(ColumnCompressionSettings) * (natts)))
 
+static void
+check_guc_setting_compatible_with_scan()
+{
+	if (ts_guc_enable_transparent_decompression == 2)
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("operation not compatible with current setting of %s",
+						MAKE_EXTOPTION("enable_transparent_decompression")),
+				 errhint("Set the GUC to true or false.")));
+}
+
 static int32
 get_chunk_id_from_relid(Oid relid)
 {
@@ -2303,6 +2314,8 @@ hypercore_relation_copy_for_cluster(Relation OldHypercore, Relation NewCompressi
 	if (ts_is_hypertable(RelationGetRelid(OldHypercore)))
 		return;
 
+	check_guc_setting_compatible_with_scan();
+
 	/* Error out if this is a CLUSTER. It would be possible to CLUSTER only
 	 * the non-compressed relation, but utility of this is questionable as
 	 * most of the data should be compressed (and ordered) anyway. */
@@ -3866,6 +3879,7 @@ convert_to_hypercore_finish(Oid relid)
 static void
 convert_from_hypercore(Oid relid)
 {
+	check_guc_setting_compatible_with_scan();
 	int32 chunk_id = get_chunk_id_from_relid(relid);
 	ts_compression_chunk_size_delete(chunk_id);
 
