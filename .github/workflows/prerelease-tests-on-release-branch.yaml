@@ -70,7 +70,7 @@ jobs:
 # don't push your branch too often to this service.
 
       - name: Push the release branch to coverity_scan branch
-        if: github.event.schedule == '0 22 * * SUN' || github.event_name == 'workflow_dispatch'
+        if: github.event.schedule == '0 22 * * SUN'
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
