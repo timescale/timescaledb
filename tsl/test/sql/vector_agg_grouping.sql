@@ -88,11 +88,9 @@ from
         'cint2 is null',
         'cint2 is null and x is null']) with ordinality as condition(condition, n),
     unnest(array[
-        null,
-        'cint2',
-        'cint4',
+        'cint4, cint2',
         'cint4, cint8',
-        'cint8',
+        'cint2, cint4, cint8',
         's, cint2',
         's, ss',
         's, x',
