@@ -25,7 +25,7 @@ jobs:
 
       - name: Set RELEASE_BRANCH as per environment
         run: |
-          OLD_MINOR_VERSION=$(tail -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
+          OLD_MINOR_VERSION=$(perl -ne 'print $1 if /downgrade_to_version = (\d+\.\d+\.\d+)/' version.config)
           echo "RELEASE_BRANCH="$(echo ${OLD_MINOR_VERSION%?}x)"" >> $GITHUB_ENV
 
       - name: Checkout TimescaleDB release branch
