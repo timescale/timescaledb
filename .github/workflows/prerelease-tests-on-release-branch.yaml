@@ -24,11 +24,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set RELEASE_BRANCH as per environment
+        if: github.ref == 'refs/remotes/origin/main'
         run: |
           OLD_MINOR_VERSION=$(tail -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
           echo "RELEASE_BRANCH="$(echo ${OLD_MINOR_VERSION%?}x)"" >> $GITHUB_ENV
 
       - name: Checkout TimescaleDB release branch
+        if: github.ref == 'refs/remotes/origin/main'
         uses: actions/checkout@v4
         with:
           ref: ${{ env.RELEASE_BRANCH }}
@@ -47,7 +49,7 @@ jobs:
 # the proper downgrade script is created and the versioning is adjusted.
 
       - name: Push the release branch to prerelease_test branch
-        if: github.event.schedule == '0 5 * * *'
+        if: github.event.schedule == '0 5 * * *' && github.ref == 'refs/remotes/origin/main'
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
@@ -70,7 +72,7 @@ jobs:
 # don't push your branch too often to this service.
 
       - name: Push the release branch to coverity_scan branch
-        if: github.event.schedule == '0 22 * * SUN'
+        if: github.event.schedule == '0 22 * * SUN' && github.ref == 'refs/remotes/origin/main'
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
