@@ -47,7 +47,7 @@ jobs:
 # the proper downgrade script is created and the versioning is adjusted.
 
       - name: Push the release branch to prerelease_test branch
-        if: github.event.schedule == '0 5 * * *'
+        if: github.event.schedule == '0 5 * * *' || github.event_name == 'workflow_dispatch'
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
@@ -70,7 +70,7 @@ jobs:
 # don't push your branch too often to this service.
 
       - name: Push the release branch to coverity_scan branch
-        if: github.event.schedule == '0 22 * * SUN'
+        if: github.event.schedule == '0 22 * * SUN' || github.event_name == 'workflow_dispatch'
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
