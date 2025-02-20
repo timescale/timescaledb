@@ -111,16 +111,54 @@ order by explain, condition.n, variable, function, grouping.n
 reset timescaledb.debug_require_vector_agg;
 
 
+-- Test long text columns. Also make one of them a segmentby, so that we can
+-- test the long scalar values.
 create table long(t int, a text, b text, c text, d text);
 select create_hypertable('long', 't');
-insert into long select n, x, x, x, x from (
-    select n, repeat('1', 100 * 4 + n) x
-    from generate_series(1, 4) n) t
+insert into long select n, a, x, x, x from (
+    select n, 'short' || m a, repeat('1', 100 * 4 + n) x
+    from generate_series(1, 4) n,
+        generate_series(1, 4) m) t
 ;
 insert into long values (-1, 'a', 'b', 'c', 'd');
-alter table long set (timescaledb.compress);
+insert into long values (-2, repeat('long', 1000), 'b', 'c', 'd');
+alter table long set (timescaledb.compress, timescaledb.compress_segmentby = 'a',
+    timescaledb.compress_orderby = 't desc');
 select count(compress_chunk(x)) from show_chunks('long') x;
 
 set timescaledb.debug_require_vector_agg = 'require';
-select count(*) from long group by a, b, c, d order by 1 limit 10;
+---- Uncomment to generate reference.
+--set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
+
+-- Various placements of long scalar column
+select sum(t) from long group by a, b, c, d order by 1 limit 10;
+select sum(t) from long group by d, b, c, a order by 1 limit 10;
+select sum(t) from long group by d, b, a, c order by 1 limit 10;
+
+-- Just the scalar column
+select sum(t) from long group by a order by 1;
+
+-- No scalar columns
+select sum(t) from long group by b, c, d order by 1 limit 10;
+
+reset timescaledb.debug_require_vector_agg;
+
+
+-- Test various serialized key lengths. We want to touch the transition from short
+-- to long varlena header for the serialized key.
+create table keylength(t int, a text, b text);
+select create_hypertable('keylength', 't');
+insert into keylength select t, 'a', repeat('b', t) from generate_series(1, 1000) t;
+insert into keylength values (-1, '', ''); -- second chunk
+alter table keylength set (timescaledb.compress, timescaledb.compress_segmentby = '',
+    timescaledb.compress_orderby = 't desc');
+select count(compress_chunk(x)) from show_chunks('keylength') x;
+
+set timescaledb.debug_require_vector_agg = 'require';
+---- Uncomment to generate reference.
+--set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
+
+select sum(t) from keylength group by a, b order by 1 desc limit 10;
+select sum(t) from keylength group by b, a order by 1 desc limit 10;
+
 reset timescaledb.debug_require_vector_agg;

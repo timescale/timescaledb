@@ -29,6 +29,7 @@ typedef struct BatchHashingParams
 	bool have_scalar_or_nullable_columns;
 
 	GroupingPolicyHash *restrict policy;
+	HashingStrategy *restrict hashing;
 
 	uint32 *restrict result_key_indexes;
 } BatchHashingParams;
@@ -39,6 +40,7 @@ build_batch_hashing_params(GroupingPolicyHash *policy, TupleTableSlot *vector_sl
 	uint16 nrows;
 	BatchHashingParams params = {
 		.policy = policy,
+		.hashing = &policy->hashing,
 		.batch_filter = vector_slot_get_qual_result(vector_slot, &nrows),
 		.num_grouping_columns = policy->num_grouping_columns,
 		.grouping_column_values = policy->current_batch_grouping_column_values,

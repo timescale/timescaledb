@@ -89,9 +89,9 @@ single_text_key_hashing_get_key(BatchHashingParams params, int row, void *restri
 	}
 
 	DEBUG_PRINT("%p consider key row %d key index %d is %d bytes: ",
-				params.policy,
+				hashing,
 				row,
-				params.policy->last_used_key_index + 1,
+				hashing->last_used_key_index + 1,
 				output_key->len);
 	for (size_t i = 0; i < output_key->len; i++)
 	{
@@ -107,14 +107,14 @@ single_text_key_hashing_get_key(BatchHashingParams params, int row, void *restri
 }
 
 static pg_attribute_always_inline void
-single_text_key_hashing_store_new(GroupingPolicyHash *restrict policy, uint32 new_key_index,
+single_text_key_hashing_store_new(HashingStrategy *restrict hashing, uint32 new_key_index,
 								  BytesView output_key)
 {
 	const int total_bytes = output_key.len + VARHDRSZ;
-	text *restrict stored = (text *) MemoryContextAlloc(policy->hashing.key_body_mctx, total_bytes);
+	text *restrict stored = (text *) MemoryContextAlloc(hashing->key_body_mctx, total_bytes);
 	SET_VARSIZE(stored, total_bytes);
 	memcpy(VARDATA(stored), output_key.data, output_key.len);
-	policy->hashing.output_keys[new_key_index] = PointerGetDatum(stored);
+	hashing->output_keys[new_key_index] = PointerGetDatum(stored);
 }
 
 /*
@@ -164,7 +164,7 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 	 * Remember which aggregation states have already existed, and which we have
 	 * to initialize. State index zero is invalid.
 	 */
-	const uint32 last_initialized_key_index = policy->last_used_key_index;
+	const uint32 last_initialized_key_index = params.hashing->last_used_key_index;
 	Assert(last_initialized_key_index <= policy->num_allocated_per_key_agg_states);
 
 	/*
@@ -295,7 +295,7 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 	 */
 	if (have_null_key && policy->hashing.null_key_index == 0)
 	{
-		policy->hashing.null_key_index = ++policy->last_used_key_index;
+		policy->hashing.null_key_index = ++params.hashing->last_used_key_index;
 		policy->hashing.output_keys[policy->hashing.null_key_index] = PointerGetDatum(NULL);
 	}
 
@@ -304,14 +304,14 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 	/*
 	 * Initialize the new keys if we added any.
 	 */
-	if (policy->last_used_key_index > last_initialized_key_index)
+	if (params.hashing->last_used_key_index > last_initialized_key_index)
 	{
 		const uint64 new_aggstate_rows = policy->num_allocated_per_key_agg_states * 2 + 1;
 		const int num_fns = policy->num_agg_defs;
 		for (int i = 0; i < num_fns; i++)
 		{
 			const VectorAggDef *agg_def = &policy->agg_defs[i];
-			if (policy->last_used_key_index >= policy->num_allocated_per_key_agg_states)
+			if (params.hashing->last_used_key_index >= policy->num_allocated_per_key_agg_states)
 			{
 				policy->per_agg_per_key_states[i] =
 					repalloc(policy->per_agg_per_key_states[i],
@@ -325,13 +325,13 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 				agg_def->func.state_bytes * (last_initialized_key_index + 1) +
 				(char *) policy->per_agg_per_key_states[i];
 			agg_def->func.agg_init(first_uninitialized_state,
-								   policy->last_used_key_index - last_initialized_key_index);
+								   params.hashing->last_used_key_index - last_initialized_key_index);
 		}
 
 		/*
 		 * Record the newly allocated number of rows in case we had to reallocate.
 		 */
-		if (policy->last_used_key_index >= policy->num_allocated_per_key_agg_states)
+		if (params.hashing->last_used_key_index >= policy->num_allocated_per_key_agg_states)
 		{
 			Assert(new_aggstate_rows > policy->num_allocated_per_key_agg_states);
 			policy->num_allocated_per_key_agg_states = new_aggstate_rows;

@@ -41,11 +41,6 @@ serialized_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTableS
 static pg_attribute_always_inline bool
 byte_bitmap_row_is_valid(const uint8 *bitmap, size_t row_number)
 {
-	if (likely(bitmap == NULL))
-	{
-		return true;
-	}
-
 	const size_t byte_index = row_number / 8;
 	const size_t bit_index = row_number % 8;
 	const uint8 mask = ((uint8) 1) << bit_index;
@@ -69,7 +64,7 @@ static pg_attribute_always_inline void
 serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restrict output_key_ptr,
 							   void *restrict hash_table_key_ptr, bool *restrict valid)
 {
-	GroupingPolicyHash *policy = params.policy;
+	HashingStrategy *hashing = params.hashing;
 
 	text **restrict output_key = (text **) output_key_ptr;
 	HASH_TABLE_KEY_TYPE *restrict hash_table_key = (HASH_TABLE_KEY_TYPE *) hash_table_key_ptr;
@@ -180,16 +175,16 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 	/*
 	 * Use temporary storage for the new key, reallocate if it's too small.
 	 */
-	if (num_bytes > policy->num_tmp_key_storage_bytes)
+	if (num_bytes > hashing->num_tmp_key_storage_bytes)
 	{
-		if (policy->tmp_key_storage != NULL)
+		if (hashing->tmp_key_storage != NULL)
 		{
-			pfree(policy->tmp_key_storage);
+			pfree(hashing->tmp_key_storage);
 		}
-		policy->tmp_key_storage = MemoryContextAlloc(policy->hashing.key_body_mctx, num_bytes);
-		policy->num_tmp_key_storage_bytes = num_bytes;
+		hashing->tmp_key_storage = MemoryContextAlloc(hashing->key_body_mctx, num_bytes);
+		hashing->num_tmp_key_storage_bytes = num_bytes;
 	}
-	uint8 *restrict serialized_key_storage = policy->tmp_key_storage;
+	uint8 *restrict serialized_key_storage = hashing->tmp_key_storage;
 
 	/*
 	 * Build the actual grouping key.
@@ -364,7 +359,7 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 	 */
 	*valid = true;
 
-	const struct umash_fp fp = umash_fprint(params.policy->hashing.umash_params,
+	const struct umash_fp fp = umash_fprint(params.hashing->umash_params,
 											/* seed = */ ~0ULL,
 											serialized_key_storage,
 											num_bytes);
@@ -372,25 +367,26 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 }
 
 static pg_attribute_always_inline void
-serialized_key_hashing_store_new(GroupingPolicyHash *restrict policy, uint32 new_key_index,
+serialized_key_hashing_store_new(HashingStrategy *restrict hashing, uint32 new_key_index,
 								 text *output_key)
 {
 	/*
 	 * We will store this key so we have to consume the temporary storage that
 	 * was used for it. The subsequent keys will need to allocate new memory.
 	 */
-	Assert(policy->tmp_key_storage == (void *) output_key);
-	policy->tmp_key_storage = NULL;
-	policy->num_tmp_key_storage_bytes = 0;
+	Assert(hashing->tmp_key_storage == (void *) output_key);
+	hashing->tmp_key_storage = NULL;
+	hashing->num_tmp_key_storage_bytes = 0;
 
-	policy->hashing.output_keys[new_key_index] = PointerGetDatum(output_key);
+	hashing->output_keys[new_key_index] = PointerGetDatum(output_key);
 }
 
 static void
 serialized_emit_key(GroupingPolicyHash *policy, uint32 current_key, TupleTableSlot *aggregated_slot)
 {
+	const HashingStrategy *hashing = &policy->hashing;
 	const int num_key_columns = policy->num_grouping_columns;
-	const Datum serialized_key_datum = policy->hashing.output_keys[current_key];
+	const Datum serialized_key_datum = hashing->output_keys[current_key];
 	const uint8 *serialized_key = (const uint8 *) VARDATA_ANY(serialized_key_datum);
 	PG_USED_FOR_ASSERTS_ONLY const int key_data_bytes = VARSIZE_ANY_EXHDR(serialized_key_datum);
 	const uint8 *restrict ptr = serialized_key;

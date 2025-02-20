@@ -56,7 +56,17 @@ FUNCTION_NAME(hash_strategy_reset)(HashingStrategy *hashing)
 {
 	struct FUNCTION_NAME(hash) *table = (struct FUNCTION_NAME(hash) *) hashing->table;
 	FUNCTION_NAME(reset)(table);
+
+	hashing->last_used_key_index = 0;
+
 	hashing->null_key_index = 0;
+
+	/*
+	 * Have to reset this because it's in the key body context which is also
+	 * reset here.
+	 */
+	hashing->tmp_key_storage = NULL;
+	hashing->num_tmp_key_storage_bytes = 0;
 }
 
 static void
@@ -75,8 +85,7 @@ FUNCTION_NAME(hash_strategy_prepare_for_batch)(GroupingPolicyHash *policy,
 static pg_attribute_always_inline void
 FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int end_row)
 {
-	GroupingPolicyHash *policy = params.policy;
-	HashingStrategy *hashing = &policy->hashing;
+	HashingStrategy *restrict hashing = params.hashing;
 
 	uint32 *restrict indexes = params.result_key_indexes;
 
@@ -89,7 +98,7 @@ FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int e
 		if (!arrow_row_is_valid(params.batch_filter, row))
 		{
 			/* The row doesn't pass the filter. */
-			DEBUG_PRINT("%p: row %d doesn't pass batch filter\n", policy, row);
+			DEBUG_PRINT("%p: row %d doesn't pass batch filter\n", hashing, row);
 			continue;
 		}
 
@@ -108,10 +117,10 @@ FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int e
 			/* The key is null. */
 			if (hashing->null_key_index == 0)
 			{
-				hashing->null_key_index = ++policy->last_used_key_index;
+				hashing->null_key_index = ++hashing->last_used_key_index;
 			}
 			indexes[row] = hashing->null_key_index;
-			DEBUG_PRINT("%p: row %d null key index %d\n", policy, row, hashing->null_key_index);
+			DEBUG_PRINT("%p: row %d null key index %d\n", hashing, row, hashing->null_key_index);
 			continue;
 		}
 
@@ -127,9 +136,9 @@ FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int e
 			 */
 			indexes[row] = previous_key_index;
 #ifndef NDEBUG
-			policy->stat_consecutive_keys++;
+			params.policy->stat_consecutive_keys++;
 #endif
-			DEBUG_PRINT("%p: row %d consecutive key index %d\n", policy, row, previous_key_index);
+			DEBUG_PRINT("%p: row %d consecutive key index %d\n", hashing, row, previous_key_index);
 			continue;
 		}
 
@@ -143,14 +152,14 @@ FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int e
 			/*
 			 * New key, have to store it persistently.
 			 */
-			const uint32 index = ++policy->last_used_key_index;
+			const uint32 index = ++hashing->last_used_key_index;
 			entry->key_index = index;
-			FUNCTION_NAME(key_hashing_store_new)(policy, index, output_key);
-			DEBUG_PRINT("%p: row %d new key index %d\n", policy, row, index);
+			FUNCTION_NAME(key_hashing_store_new)(hashing, index, output_key);
+			DEBUG_PRINT("%p: row %d new key index %d\n", hashing, row, index);
 		}
 		else
 		{
-			DEBUG_PRINT("%p: row %d old key index %d\n", policy, row, entry->key_index);
+			DEBUG_PRINT("%p: row %d old key index %d\n", hashing, row, entry->key_index);
 		}
 		indexes[row] = entry->key_index;
 
