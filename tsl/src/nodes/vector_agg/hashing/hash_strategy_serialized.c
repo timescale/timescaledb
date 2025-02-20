@@ -41,11 +41,6 @@ serialized_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTableS
 static pg_attribute_always_inline bool
 byte_bitmap_row_is_valid(const uint8 *bitmap, size_t row_number)
 {
-	if (likely(bitmap == NULL))
-	{
-		return true;
-	}
-
 	const size_t byte_index = row_number / 8;
 	const size_t bit_index = row_number % 8;
 	const uint8 mask = ((uint8) 1) << bit_index;

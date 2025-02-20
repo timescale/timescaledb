@@ -1948,6 +1948,8 @@ select x, min(cint2) from agggroup where cint2 is null and x is null group by x 
 (0 rows)
 
 reset timescaledb.debug_require_vector_agg;
+-- Test long text columns. Also make one of them a segmentby, so that we can
+-- test the long scalar values.
 create table long(t int, a text, b text, c text, d text);
 select create_hypertable('long', 't');
 NOTICE:  adding not-null constraint to column "t"
@@ -1956,15 +1958,15 @@ NOTICE:  adding not-null constraint to column "t"
  (3,public,long,t)
 (1 row)
 
-insert into long select n, x, x, x, x from (
-    select n, repeat('1', 100 * 4 + n) x
-    from generate_series(1, 4) n) t
+insert into long select n, a, x, x, x from (
+    select n, 'short' || m a, repeat('1', 100 * 4 + n) x
+    from generate_series(1, 4) n,
+        generate_series(1, 4) m) t
 ;
 insert into long values (-1, 'a', 'b', 'c', 'd');
-alter table long set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "long" is set to ""
-NOTICE:  default order by for hypertable "long" is set to "t DESC"
+insert into long values (-2, repeat('long', 1000), 'b', 'c', 'd');
+alter table long set (timescaledb.compress, timescaledb.compress_segmentby = 'a',
+    timescaledb.compress_orderby = 't desc');
 select count(compress_chunk(x)) from show_chunks('long') x;
  count 
 -------
@@ -1972,14 +1974,129 @@ select count(compress_chunk(x)) from show_chunks('long') x;
 (1 row)
 
 set timescaledb.debug_require_vector_agg = 'require';
-select count(*) from long group by a, b, c, d order by 1 limit 10;
+---- Uncomment to generate reference.
+--set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
+-- Various placements of long scalar column
+select sum(t) from long group by a, b, c, d order by 1 limit 10;
+ sum 
+-----
+  -2
+  -1
+   1
+   1
+   1
+   1
+   2
+   2
+   2
+   2
+(10 rows)
+
+select sum(t) from long group by d, b, c, a order by 1 limit 10;
+ sum 
+-----
+  -2
+  -1
+   1
+   1
+   1
+   1
+   2
+   2
+   2
+   2
+(10 rows)
+
+select sum(t) from long group by d, b, a, c order by 1 limit 10;
+ sum 
+-----
+  -2
+  -1
+   1
+   1
+   1
+   1
+   2
+   2
+   2
+   2
+(10 rows)
+
+-- Just the scalar column
+select sum(t) from long group by a order by 1;
+ sum 
+-----
+  -2
+  -1
+  10
+  10
+  10
+  10
+(6 rows)
+
+-- No scalar columns
+select sum(t) from long group by b, c, d order by 1 limit 10;
+ sum 
+-----
+  -3
+   4
+   8
+  12
+  16
+(5 rows)
+
+reset timescaledb.debug_require_vector_agg;
+-- Test various serialized key lengths. We want to touch the transition from short
+-- to long varlena header for the serialized key.
+create table keylength(t int, a text, b text);
+select create_hypertable('keylength', 't');
+NOTICE:  adding not-null constraint to column "t"
+   create_hypertable    
+------------------------
+ (5,public,keylength,t)
+(1 row)
+
+insert into keylength select t, 'a', repeat('b', t) from generate_series(1, 1000) t;
+insert into keylength values (-1, '', ''); -- second chunk
+alter table keylength set (timescaledb.compress, timescaledb.compress_segmentby = '',
+    timescaledb.compress_orderby = 't desc');
+select count(compress_chunk(x)) from show_chunks('keylength') x;
  count 
 -------
-     1
-     1
-     1
-     1
-     1
-(5 rows)
+     2
+(1 row)
+
+set timescaledb.debug_require_vector_agg = 'require';
+---- Uncomment to generate reference.
+--set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
+select sum(t) from keylength group by a, b order by 1 desc limit 10;
+ sum  
+------
+ 1000
+  999
+  998
+  997
+  996
+  995
+  994
+  993
+  992
+  991
+(10 rows)
+
+select sum(t) from keylength group by b, a order by 1 desc limit 10;
+ sum  
+------
+ 1000
+  999
+  998
+  997
+  996
+  995
+  994
+  993
+  992
+  991
+(10 rows)
 
 reset timescaledb.debug_require_vector_agg;
