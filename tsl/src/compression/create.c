@@ -275,13 +275,13 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 										   attr->atttypid,
 										   attr->atttypmod,
 										   attr->attcollation);
-			def->storage = TYPSTORAGE_MAIN;
+			def->storage = TYPSTORAGE_PLAIN;
 			compressed_column_defs = lappend(compressed_column_defs, def);
 			def = makeColumnDef(column_segment_max_name(index),
 								attr->atttypid,
 								attr->atttypmod,
 								attr->attcollation);
-			def->storage = TYPSTORAGE_MAIN;
+			def->storage = TYPSTORAGE_PLAIN;
 			compressed_column_defs = lappend(compressed_column_defs, def);
 		}
 		else if (bms_is_member(attr->attnum, btree_columns))
@@ -306,13 +306,13 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 								  attr->atttypmod,
 								  attr->attcollation);
 				compressed_column_defs = lappend(compressed_column_defs, def);
-				def->storage = TYPSTORAGE_MAIN;
+				def->storage = TYPSTORAGE_PLAIN;
 				def =
 					makeColumnDef(compressed_column_metadata_name_v2("max", NameStr(attr->attname)),
 								  attr->atttypid,
 								  attr->atttypmod,
 								  attr->attcollation);
-				def->storage = TYPSTORAGE_MAIN;
+				def->storage = TYPSTORAGE_PLAIN;
 				compressed_column_defs = lappend(compressed_column_defs, def);
 			}
 		}
