@@ -171,3 +171,22 @@ $$;
 -- Repair relations that have relacl entries for users that do not
 -- exist in pg_authid
 CALL _timescaledb_functions.repair_relation_acls();
+
+-- Migrate existing CAggs using time_bucket_ng to time_bucket
+DO $$
+DECLARE
+  cagg_name regclass;
+BEGIN
+  FOR cagg_name IN
+    SELECT
+      pg_catalog.format('%I.%I', user_view_schema, user_view_name)::regclass
+    FROM
+      _timescaledb_catalog.continuous_agg
+      JOIN _timescaledb_catalog.continuous_aggs_bucket_function USING (mat_hypertable_id)
+    WHERE
+      bucket_func::text LIKE '%time_bucket_ng%'
+  LOOP
+    CALL _timescaledb_functions.cagg_migrate_to_time_bucket(cagg_name);
+  END LOOP;
+END
+$$;
