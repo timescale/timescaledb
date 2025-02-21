@@ -482,6 +482,17 @@ from compressed_rel_size_stats;
               0
 (1 row)
 
+-- Compression settings should be removed except for parent
+-- hypertables
+select cs.relid, cl.relname
+from _timescaledb_catalog.compression_settings cs
+left join pg_class cl on (cs.relid = cl.oid);
+ relid | relname 
+-------+---------
+ test2 | test2
+ test3 | test3
+(2 rows)
+
 -- Create hypercores again and check that compression size stats are
 -- updated showing compressed data
 select compress_chunk(ch, hypercore_use_access_method => true)

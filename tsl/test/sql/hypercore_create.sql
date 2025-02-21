@@ -253,6 +253,12 @@ select decompress_chunk(rel)
 select count(*) as orphaned_stats
 from compressed_rel_size_stats;
 
+-- Compression settings should be removed except for parent
+-- hypertables
+select cs.relid, cl.relname
+from _timescaledb_catalog.compression_settings cs
+left join pg_class cl on (cs.relid = cl.oid);
+
 -- Create hypercores again and check that compression size stats are
 -- updated showing compressed data
 select compress_chunk(ch, hypercore_use_access_method => true)
