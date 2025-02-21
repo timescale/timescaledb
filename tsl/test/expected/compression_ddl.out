@@ -2655,3 +2655,19 @@ SELECT compress_chunk(show_chunks('test_notnull'));
 
 -- broken atm due to bug in default handling in compression
 ALTER TABLE test_notnull ALTER COLUMN c2 SET NOT NULL;
+-- test alias in parameter name
+CREATE TABLE alias(time timestamptz NOT NULL);
+SELECT create_hypertable('alias','time');
+  create_hypertable  
+---------------------
+ (48,public,alias,t)
+(1 row)
+
+ALTER TABLE alias SET (tsdb.compress, tsdb.compress_orderby='time DESC',tsdb.compress_segmentby='');
+INSERT INTO alias SELECT '2025-01-01';
+SELECT count(compress_chunk(ch)) FROM show_chunks('alias') ch;
+ count 
+-------
+     1
+(1 row)
+
