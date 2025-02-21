@@ -141,6 +141,15 @@ arrow_release_buffers(ArrowArray *array)
 		arrow_private_release(array);
 }
 
+void
+arrow_release(ArrowArray *array)
+{
+	if (array->release != NULL)
+		array->release(array);
+
+	pfree(array);
+}
+
 /*
  * Variable-size primitive layout ArrowArray from decompression iterator.
  */
