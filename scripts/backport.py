@@ -436,8 +436,6 @@ for index, pr_info in enumerate(prs_to_backport.values()):
 
     original_pr = pr_info.pygithub_pr
     backport_branch = f"backport/{backport_target}/{original_pr.number}"
-    # We're creating the backport PR from the token user's fork.
-    backport_pr_head = f"{token_user.login}:{backport_branch}"
 
     # If there is already a backport branch for this PR, this probably means
     # that we already created the backport PR. Update it, because the PR might
@@ -474,7 +472,7 @@ for index, pr_info in enumerate(prs_to_backport.values()):
     git_check("reset --hard")
     git_check("clean -xfd")
     git_check(
-        f"checkout --quiet --force --detach {source_remote}/{backport_target} > /dev/null"
+        f"checkout --quiet --force --detach {source_remote}/{backport_target}~ > /dev/null"
     )
 
     commit_shas = [commit.sha for commit in pr_info.pygithub_commits]
@@ -572,7 +570,7 @@ for index, pr_info in enumerate(prs_to_backport.values()):
         title=f"Backport to {backport_target}: #{original_pr.number}: {original_pr.title}",
         body=backport_description,
         # We're creating PR from the token user's fork.
-        head=backport_pr_head,
+        head=backport_branch,
         base=backport_target,
     )
     backport_pr.add_to_labels("is-auto-backport")
