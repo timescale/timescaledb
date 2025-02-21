@@ -90,6 +90,7 @@ def get_referenced_issue(pr_number):
 def set_auto_merge(pr_number):
     """Enable auto-merge for the given PR"""
 
+    owner, name = target_repo_name.split("/")
     # We first have to find out the PR id, which is some base64 string, different
     # from its number.
     query = string.Template(
@@ -100,9 +101,7 @@ def set_auto_merge(pr_number):
             }
           }
         }"""
-    ).substitute(
-        pr_number=pr_number, owner=source_repo.owner.login, name=source_repo.name
-    )
+    ).substitute(pr_number=pr_number, owner=owner, name=name)
     result = run_query(query)
     pr_id = result["data"]["repository"]["pullRequest"]["id"]
 
@@ -139,16 +138,33 @@ def git_returncode(command):
 # The token has to have the "access public repositories" permission, or else creating a PR returns 404.
 github = Github(os.environ.get("GITHUB_TOKEN"))
 
-source_remote = "upstream"
-source_repo_name = os.environ.get("GITHUB_REPOSITORY")  # This is set in GitHub Actions.
+# If we are running inside Github Action, will modify the main repo.
+source_remote = "origin"
+source_repo_name = os.environ.get("GITHUB_REPOSITORY")
+target_remote = source_remote
+target_repo_name = source_repo_name
+
 if not source_repo_name:
+    # We are running manually for debugging, probably want to modify a fork.
     source_repo_name = "timescale/timescaledb"
+    target_repo_name = os.environ.get("BACKPORT_TARGET_REPO")
+    target_remote = os.environ.get("BACKPORT_TARGET_REMOTE")
+    if not target_repo_name or not target_remote:
+        print(
+            "Please specify the target repositories for debugging, using the "
+            "environment variables BACKPORT_TARGET_REPO (e.g. `timescale/timescaledb`) "
+            "and BACKPORT_TARGET_REMOTE (e.g. `origin`).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 print(
-    f"Will look at '{source_repo_name}' (git remote '{source_remote}') for bug fixes."
+    f"Will look at '{source_repo_name}' (git remote '{source_remote}') for bug fixes, "
+    f"and create the backport PRs in '{target_repo_name}' (git remote '{target_remote}')."
 )
 
 source_repo = github.get_repo(source_repo_name)
+target_repo = github.get_repo(target_repo_name)
 
 # Fetch the main branch. Apparently the local repo can be shallow in some cases
 # in Github Actions, so specify the depth. --unshallow will complain on normal
@@ -181,8 +197,13 @@ print(f"Will backport to {backport_target}.")
 # in Github Actions, so specify the depth. --unshallow will complain on normal
 # repositories, this is why we don't use it here.
 git_check(
-    f"fetch --quiet --depth={HISTORY_DEPTH} {source_remote} {backport_target}:refs/remotes/{source_remote}/{backport_target}"
+    f"fetch --quiet --depth={HISTORY_DEPTH} {target_remote} {backport_target}:refs/remotes/{target_remote}/{backport_target}"
 )
+
+# Also fetch all branches from the target repository, because we use the presence
+# of the backport branches to determine that a backport exists. It's not convenient
+# to query for branch existence through the PyGithub API.
+git_check(f"fetch {target_remote}")
 
 # Find out which commits are unique to main and target branch. Also build sets of
 # the titles of these commits. We will compare the titles to check whether a
@@ -190,7 +211,7 @@ git_check(
 main_commits = [
     line.split("\t")
     for line in git_output(
-        f'log -{HISTORY_DEPTH} --pretty="format:%h\t%s" {source_remote}/{backport_target}..{source_remote}/main'
+        f'log -{HISTORY_DEPTH} --pretty="format:%h\t%s" {target_remote}/{backport_target}..{source_remote}/main'
     ).splitlines()
     if line
 ]
@@ -200,7 +221,7 @@ print(f"Have {len(main_commits)} new commits in the main branch.")
 branch_commits = [
     line.split("\t")
     for line in git_output(
-        f'log -{HISTORY_DEPTH} --pretty="format:%h\t%s" {source_remote}/main..{source_remote}/{backport_target}'
+        f'log -{HISTORY_DEPTH} --pretty="format:%h\t%s" {source_remote}/main..{target_remote}/{backport_target}'
     ).splitlines()
     if line
 ]
@@ -330,19 +351,15 @@ for commit_sha, commit_title in main_commits:
     # commits in forward order.
     prs_to_backport[pull.number].pygithub_commits.insert(0, pygithub_commit)
 
-    # FIXME
-    break
-
 
 def branch_has_open_pr(repo, branch):
     """Check whether the given branch has an open PR."""
 
-    # There's no way to search by branch name + fork name, but in the case the
-    # branch name is probably unique. We'll bail out if we find more than one PR.
     template = """query {
       repository(name: "$repo_name", owner: "$repo_owner") {
-        pullRequests(headRefName: "$branch", first: 2) {
-          nodes { closed }}}}"""
+        ref(qualifiedName: "$branch") {
+          associatedPullRequests(first: 1) {
+            nodes { closed }}}}}"""
 
     params = {
         "branch": branch,
@@ -350,14 +367,12 @@ def branch_has_open_pr(repo, branch):
         "repo_owner": repo.owner.login,
     }
 
-    query = string.Template(template).substitute(params)
-
-    result = run_query(query)
+    result = run_query(string.Template(template).substitute(params))
 
     # This returns:
-    # {'data': {'repository': {'pullRequests': {'nodes': [{'closed': True}]}}}}
+    # {'data': {'repository': {'ref': {'associatedPullRequests': {'nodes': [{'closed': True}]}}}}}
 
-    prs = result["data"]["repository"]["pullRequests"]["nodes"]
+    prs = result["data"]["repository"]["ref"]["associatedPullRequests"]["nodes"]
 
     if not prs or len(prs) != 1 or not prs[0]:
         return None
@@ -409,20 +424,6 @@ print(
     f"Will commit as {os.environ['GIT_COMMITTER_NAME']} <{os.environ['GIT_COMMITTER_EMAIL']}>"
 )
 
-# We have to push using the personal access token of the automation user.
-# If we use the default credentials of the GitHub Actions to push, the workflows
-# in the backport PRs don't start. To keep the things more fun for us, GitHub
-# does this only for the merge commits, but not for the new PRs.
-target_remote = "origin"
-#git_returncode(f"remote remove {target_remote}")
-#git_check(
-#    f'remote add {target_remote} https://{os.environ["GITHUB_TOKEN"]}@github.com/{token_user.login}/{source_repo.name}.git'
-#)
-
-# Fetch all branches from the target repository, because we use the presence
-# of the backport branches to determine that a backport exists. It's not convenient
-# to query for branch existence through the PyGithub API.
-git_check(f"fetch {target_remote}")
 
 # Now, go over the list of PRs that we have collected, and try to backport
 # each of them.
@@ -439,8 +440,6 @@ for index, pr_info in enumerate(prs_to_backport.values()):
 
     original_pr = pr_info.pygithub_pr
     backport_branch = f"backport/{backport_target}/{original_pr.number}"
-    # We're creating the backport PR from the token user's fork.
-    backport_pr_head = f"{token_user.login}:{backport_branch}"
 
     # If there is already a backport branch for this PR, this probably means
     # that we already created the backport PR. Update it, because the PR might
@@ -455,7 +454,7 @@ for index, pr_info in enumerate(prs_to_backport.values()):
             f'Backport branch {backport_branch} for PR #{original_pr.number}: "{original_pr.title}" already exists.'
         )
 
-        if not branch_has_open_pr(source_repo, backport_branch):
+        if not branch_has_open_pr(target_repo, backport_branch):
             # The PR can be closed manually when the backport is not needed, or
             # can not exist when there was some error. We are only interested in
             # the most certain case when there is an open backport PR.
@@ -469,7 +468,7 @@ for index, pr_info in enumerate(prs_to_backport.values()):
         )
         # Use merge and no force-push, so that the simultaneous changes made by
         # other users are not accidentally overwritten.
-        git_check(f"merge --quiet --no-edit {source_remote}/{backport_target}")
+        git_check(f"merge --quiet {target_remote}/{backport_target}")
         git_check(f"push --quiet {target_remote} @:{backport_branch}")
         continue
 
@@ -477,7 +476,7 @@ for index, pr_info in enumerate(prs_to_backport.values()):
     git_check("reset --hard")
     git_check("clean -xfd")
     git_check(
-        f"checkout --quiet --force --detach {source_remote}/{backport_target} > /dev/null"
+        f"checkout --quiet --force --detach {target_remote}/{backport_target} > /dev/null"
     )
 
     commit_shas = [commit.sha for commit in pr_info.pygithub_commits]
@@ -512,7 +511,7 @@ for index, pr_info in enumerate(prs_to_backport.values()):
         )
 
     # Push the backport branch.
-    git_check(f"push {target_remote} @:refs/heads/{backport_branch}")
+    git_check(f"push --quiet {target_remote} @:refs/heads/{backport_branch}")
 
     # Prepare description for the backport PR.
     backport_description = (
@@ -571,11 +570,10 @@ for index, pr_info in enumerate(prs_to_backport.values()):
     )
 
     # Create the backport PR.
-    backport_pr = source_repo.create_pull(
+    backport_pr = target_repo.create_pull(
         title=f"Backport to {backport_target}: #{original_pr.number}: {original_pr.title}",
         body=backport_description,
-        # We're creating PR from the token user's fork.
-        head=backport_pr_head,
+        head=backport_branch,
         base=backport_target,
     )
     backport_pr.add_to_labels("is-auto-backport")
