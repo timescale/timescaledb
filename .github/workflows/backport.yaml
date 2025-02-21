@@ -69,3 +69,5 @@ jobs:
           git push pat31 @:refs/heads/backport/test9 -f
 
           scripts/backport.py 2>&1
+
+          git remote --verbose

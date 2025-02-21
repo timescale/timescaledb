@@ -413,7 +413,7 @@ print(
 target_remote = "backport-target-remote"
 git_returncode(f"remote remove {target_remote}")
 git_check(
-    f'remote add {target_remote} https://{os.environ["GITHUB_TOKEN"]}@github.com/{token_user.login}/{source_repo.name}.git'
+    f'remote add {target_remote} https://{os.environ["GITHUB_TOKEN"]}@github.com/{source_repo.owner.login}/{source_repo.name}.git'
 )
 
 # Fetch all branches from the target repository, because we use the presence
