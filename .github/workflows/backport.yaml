@@ -35,8 +35,8 @@ jobs:
 
       - name: Checkout TimescaleDB
         uses: actions/checkout@v4
-        with:
-          repository: timescale-automation/timescaledb
+          # with:
+          # repository: timescale-automation/timescaledb
 
       - name: Run the Backport Script
         env:
