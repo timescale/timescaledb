@@ -171,3 +171,13 @@ $$;
 -- Repair relations that have relacl entries for users that do not
 -- exist in pg_authid
 CALL _timescaledb_functions.repair_relation_acls();
+
+-- Cleanup orphaned compression settings
+WITH orphaned_settings AS (
+     SELECT cs.relid, cl.relname
+     FROM _timescaledb_catalog.compression_settings cs
+     LEFT JOIN pg_class cl ON (cs.relid = cl.oid)
+     WHERE cl.relname IS NULL
+)
+DELETE FROM _timescaledb_catalog.compression_settings AS cs
+USING orphaned_settings AS os WHERE cs.relid = os.relid;
