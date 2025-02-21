@@ -29,11 +29,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Install Linux Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install pip
-
       - name: Install Python Dependencies
         run: |
           pip install PyGithub requests
@@ -48,6 +43,8 @@ jobs:
           GITHUB_TOKEN_2: ${{ secrets.TIMESCALEDB_AUTOMATION_TOKEN_2 }}
           GITHUB_TOKEN_3: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
+          set -x
+          set +e
           git remote add upstream "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
           git fetch upstream
           git fetch upstream "${GITHUB_REF}"
