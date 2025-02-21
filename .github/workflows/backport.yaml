@@ -44,8 +44,10 @@ jobs:
           # GITHUB_TOKEN: ${{ secrets.TIMESCALEDB_AUTOMATION_TOKEN_2 }}
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
-          git remote add upstream https://github.com/timescale/timescaledb.git
+          git remote add upstream "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
           git fetch upstream
-          git checkout upstream/main
+          git fetch upstream "${GITHUB_REF}"
+          git checkout "${GITHUB_REF}"
+          git log -2
           git remote --verbose
           scripts/backport.py 2>&1
