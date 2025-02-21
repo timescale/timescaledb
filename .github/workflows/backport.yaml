@@ -41,7 +41,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           git remote --verbose
-          scripts/backport.py
+
           scripts/backport.py 2>&1
 
           git remote --verbose
