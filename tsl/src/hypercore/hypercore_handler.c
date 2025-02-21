@@ -136,26 +136,6 @@ check_guc_setting_compatible_with_scan()
 				 errhint("Set the GUC to true or false.")));
 }
 
-static int32
-get_chunk_id_from_relid(Oid relid)
-{
-	int32 chunk_id;
-	Oid nspid = get_rel_namespace(relid);
-	const char *schema = get_namespace_name(nspid);
-	const char *relname = get_rel_name(relid);
-	ts_chunk_get_id(schema, relname, &chunk_id, false);
-	return chunk_id;
-}
-
-static int32
-chunk_get_compressed_chunk_relid(Oid relid)
-{
-	FormData_chunk fd;
-	if (!ts_chunk_simple_scan_by_reloid(relid, &fd, true))
-		return InvalidOid;
-	return ts_chunk_get_relid(fd.compressed_chunk_id, true);
-}
-
 static const TableAmRoutine *
 switch_to_heapam(Relation rel)
 {
@@ -220,28 +200,26 @@ lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 {
 	Assert(OidIsValid(rel->rd_id) && (!ts_extension_is_loaded() || !ts_is_hypertable(rel->rd_id)));
 
+	const CompressionSettings *settings;
 	HypercoreInfo *hsinfo;
-	CompressionSettings *settings;
 	TupleDesc tupdesc = RelationGetDescr(rel);
+	Oid relid = RelationGetRelid(rel);
 
 	/* Anything put in rel->rd_amcache must be a single memory chunk
 	 * palloc'd in CacheMemoryContext since PostgreSQL expects to be able
 	 * to free it with a single pfree(). */
 	hsinfo = MemoryContextAllocZero(CacheMemoryContext, HYPERCORE_AM_INFO_SIZE(tupdesc->natts));
-	hsinfo->relation_id = get_chunk_id_from_relid(rel->rd_id);
 	hsinfo->compressed_relid = InvalidOid;
 	hsinfo->num_columns = tupdesc->natts;
-	hsinfo->hypertable_id = ts_chunk_get_hypertable_id_by_reloid(rel->rd_id);
 
-	FormData_chunk form = ts_chunk_get_formdata(hsinfo->relation_id);
-	hsinfo->compressed_relation_id = form.compressed_chunk_id;
+	settings = ts_compression_settings_get(relid);
 
 	/* Create compressed chunk and set the created flag if it does not
 	 * exist. */
 	if (compressed_relation_created)
-		*compressed_relation_created = (hsinfo->compressed_relation_id == INVALID_CHUNK_ID);
+		*compressed_relation_created = (settings == NULL);
 
-	if (hsinfo->compressed_relation_id == INVALID_CHUNK_ID)
+	if (settings == NULL)
 	{
 		/* Consider if we want to make it simpler to create the compressed
 		 * table by just considering a normal side-relation with no strong
@@ -261,7 +239,6 @@ lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 
 		Chunk *c_chunk = create_compress_chunk(ht_compressed, chunk, InvalidOid);
 
-		hsinfo->compressed_relation_id = c_chunk->fd.id;
 		ts_chunk_set_compressed_chunk(chunk, c_chunk->fd.id);
 
 		if (create_chunk_constraints)
@@ -270,28 +247,28 @@ lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 			ts_trigger_create_all_on_chunk(c_chunk);
 			create_proxy_vacuum_index(rel, c_chunk->table_id);
 			RelationSize before_size = ts_relation_size_impl(RelationGetRelid(rel));
-			create_compression_relation_size_stats(hsinfo->relation_id,
+			create_compression_relation_size_stats(chunk->fd.id,
 												   RelationGetRelid(rel),
-												   hsinfo->compressed_relation_id,
+												   c_chunk->fd.id,
 												   c_chunk->table_id,
 												   &before_size,
 												   0,
 												   0,
 												   0);
 		}
+
+		settings = ts_compression_settings_get(relid);
 	}
-
-	hsinfo->compressed_relid = ts_chunk_get_relid(hsinfo->compressed_relation_id, false);
-	hsinfo->count_cattno =
-		get_attnum(hsinfo->compressed_relid, COMPRESSION_COLUMN_METADATA_COUNT_NAME);
-
-	Assert(hsinfo->compressed_relation_id > 0 && OidIsValid(hsinfo->compressed_relid));
-	Assert(hsinfo->count_cattno != InvalidAttrNumber);
-	settings = ts_compression_settings_get(RelationGetRelid(rel));
 
 	Ensure(settings,
 		   "no compression settings for relation %s",
 		   get_rel_name(RelationGetRelid(rel)));
+
+	hsinfo->compressed_relid = settings->fd.compress_relid;
+	hsinfo->count_cattno =
+		get_attnum(hsinfo->compressed_relid, COMPRESSION_COLUMN_METADATA_COUNT_NAME);
+
+	Assert(hsinfo->count_cattno != InvalidAttrNumber);
 
 	for (int i = 0; i < hsinfo->num_columns; i++)
 	{
@@ -334,8 +311,6 @@ lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 			colsettings->cattnum_max = InvalidAttrNumber;
 		}
 	}
-
-	Ensure(hsinfo->relation_id > 0, "invalid chunk ID");
 
 	return hsinfo;
 }
@@ -2126,10 +2101,11 @@ hypercore_relation_set_new_filelocator(Relation rel, const RelFileLocator *newrl
 	/* If the chunk has a compressed chunk associated with it, then we need to
 	 * change the rel file number for it as well. This can happen if you, for
 	 * example, execute a transactional TRUNCATE. */
-	Oid compressed_relid = chunk_get_compressed_chunk_relid(RelationGetRelid(rel));
-	if (OidIsValid(compressed_relid) && hypercore_truncate_compressed)
+	const CompressionSettings *settings = ts_compression_settings_get(RelationGetRelid(rel));
+
+	if (settings && OidIsValid(settings->fd.compress_relid) && hypercore_truncate_compressed)
 	{
-		Relation compressed_rel = table_open(compressed_relid, AccessExclusiveLock);
+		Relation compressed_rel = table_open(settings->fd.compress_relid, AccessExclusiveLock);
 #if PG16_GE
 		RelationSetNewRelfilenumber(compressed_rel, compressed_rel->rd_rel->relpersistence);
 #else
@@ -2143,13 +2119,14 @@ static void
 hypercore_relation_nontransactional_truncate(Relation rel)
 {
 	const TableAmRoutine *oldtam = switch_to_heapam(rel);
+	const CompressionSettings *settings = ts_compression_settings_get(RelationGetRelid(rel));
+
 	rel->rd_tableam->relation_nontransactional_truncate(rel);
 	rel->rd_tableam = oldtam;
 
-	Oid compressed_relid = chunk_get_compressed_chunk_relid(RelationGetRelid(rel));
-	if (OidIsValid(compressed_relid) && hypercore_truncate_compressed)
+	if (settings && OidIsValid(settings->fd.compress_relid) && hypercore_truncate_compressed)
 	{
-		Relation crel = table_open(compressed_relid, AccessShareLock);
+		Relation crel = table_open(settings->fd.compress_relid, AccessShareLock);
 		crel->rd_tableam->relation_nontransactional_truncate(crel);
 		table_close(crel, NoLock);
 	}
@@ -2184,7 +2161,7 @@ compress_and_swap_heap(Relation rel, Tuplesortstate *tuplesort, TransactionId *x
 	const HypercoreInfo *hsinfo = RelationGetHypercoreInfo(rel);
 	TupleDesc tupdesc = RelationGetDescr(rel);
 	Oid old_compressed_relid = hsinfo->compressed_relid;
-	CompressionSettings *settings = ts_compression_settings_get(RelationGetRelid(rel));
+	const CompressionSettings *settings = ts_compression_settings_get(RelationGetRelid(rel));
 	Relation old_compressed_rel = table_open(old_compressed_relid, AccessExclusiveLock);
 #if PG15_GE
 	Oid accessMethod = old_compressed_rel->rd_rel->relam;
@@ -3703,36 +3680,6 @@ convert_to_hypercore(Oid relid)
 	table_close(relation, NoLock);
 }
 
-/*
- * List of relation IDs used to clean up the compressed relation when
- * converting from Hypercore to another TAM (typically heap).
- */
-static List *cleanup_relids = NIL;
-
-static void
-cleanup_compression_relations(void)
-{
-	if (cleanup_relids != NIL)
-	{
-		ListCell *lc;
-
-		foreach (lc, cleanup_relids)
-		{
-			Oid relid = lfirst_oid(lc);
-			Chunk *chunk = ts_chunk_get_by_relid(relid, true);
-			Chunk *compress_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
-
-			ts_chunk_clear_compressed_chunk(chunk);
-
-			if (compress_chunk)
-				ts_chunk_drop(compress_chunk, DROP_RESTRICT, -1);
-		}
-
-		list_free(cleanup_relids);
-		cleanup_relids = NIL;
-	}
-}
-
 void
 hypercore_xact_event(XactEvent event, void *arg)
 {
@@ -3769,16 +3716,6 @@ hypercore_xact_event(XactEvent event, void *arg)
 	{
 		list_free(partially_compressed_relids);
 		partially_compressed_relids = NIL;
-	}
-
-	/*
-	 * Cleanup in case of aborted transaction. Need not explicitly check for
-	 * abort since the states should only exist if it is an abort.
-	 */
-	if (cleanup_relids != NIL)
-	{
-		list_free(cleanup_relids);
-		cleanup_relids = NIL;
 	}
 }
 
@@ -3822,7 +3759,7 @@ convert_to_hypercore_finish(Oid relid)
 	 */
 	Chunk *c_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
 	Relation compressed_rel = table_open(c_chunk->table_id, RowExclusiveLock);
-	CompressionSettings *settings = ts_compression_settings_get(conversionstate->relid);
+	const CompressionSettings *settings = ts_compression_settings_get(conversionstate->relid);
 	RowCompressor row_compressor;
 
 	row_compressor_init(settings,
@@ -3871,27 +3808,11 @@ convert_to_hypercore_finish(Oid relid)
 	Assert(conversionstate == NULL);
 }
 
-/*
- * Convert the chunk away from Hypercore to another table access method.
- * When this happens it is necessary to cleanup metadata.
- */
-static void
-convert_from_hypercore(Oid relid)
-{
-	check_guc_setting_compatible_with_scan();
-	int32 chunk_id = get_chunk_id_from_relid(relid);
-	ts_compression_chunk_size_delete(chunk_id);
-	/* Need to truncate the compressed relation after converting from Hypercore */
-	MemoryContext oldmcxt = MemoryContextSwitchTo(CurTransactionContext);
-	cleanup_relids = lappend_oid(cleanup_relids, relid);
-	MemoryContextSwitchTo(oldmcxt);
-}
-
 void
 hypercore_alter_access_method_begin(Oid relid, bool to_other_am)
 {
 	if (to_other_am)
-		convert_from_hypercore(relid);
+		check_guc_setting_compatible_with_scan();
 	else
 		convert_to_hypercore(relid);
 }
@@ -3903,7 +3824,19 @@ void
 hypercore_alter_access_method_finish(Oid relid, bool to_other_am)
 {
 	if (to_other_am)
-		cleanup_compression_relations();
+	{
+		Chunk *chunk = ts_chunk_get_by_relid(relid, true);
+		Chunk *compress_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
+
+		ts_compression_chunk_size_delete(chunk->fd.id);
+		ts_chunk_clear_compressed_chunk(chunk);
+
+		if (compress_chunk)
+		{
+			ts_compression_settings_delete(relid);
+			ts_chunk_drop(compress_chunk, DROP_RESTRICT, -1);
+		}
+	}
 
 	/* Finishing the conversion to Hypercore is handled in the
 	 * finish_bulk_insert callback */
