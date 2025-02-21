@@ -139,7 +139,7 @@ def git_returncode(command):
 # The token has to have the "access public repositories" permission, or else creating a PR returns 404.
 github = Github(os.environ.get("GITHUB_TOKEN"))
 
-source_remote = "origin"
+source_remote = "upstream"
 source_repo_name = os.environ.get("GITHUB_REPOSITORY")  # This is set in GitHub Actions.
 if not source_repo_name:
     source_repo_name = "timescale/timescaledb"
@@ -413,11 +413,11 @@ print(
 # If we use the default credentials of the GitHub Actions to push, the workflows
 # in the backport PRs don't start. To keep the things more fun for us, GitHub
 # does this only for the merge commits, but not for the new PRs.
-target_remote = "backport-target-remote"
-git_returncode(f"remote remove {target_remote}")
-git_check(
-    f'remote add {target_remote} https://{os.environ["GITHUB_TOKEN"]}@github.com/{token_user.login}/{source_repo.name}.git'
-)
+target_remote = "origin"
+#git_returncode(f"remote remove {target_remote}")
+#git_check(
+#    f'remote add {target_remote} https://{os.environ["GITHUB_TOKEN"]}@github.com/{token_user.login}/{source_repo.name}.git'
+#)
 
 # Fetch all branches from the target repository, because we use the presence
 # of the backport branches to determine that a backport exists. It's not convenient

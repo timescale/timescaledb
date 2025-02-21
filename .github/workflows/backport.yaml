@@ -36,10 +36,16 @@ jobs:
 
       - name: Checkout TimescaleDB
         uses: actions/checkout@v4
+        with:
+          repository: timescale-automation/timescaledb
 
       - name: Run the Backport Script
         env:
-          GITHUB_TOKEN: ${{ secrets.TIMESCALEDB_AUTOMATION_TOKEN_2 }}
+          # GITHUB_TOKEN: ${{ secrets.TIMESCALEDB_AUTOMATION_TOKEN_2 }}
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
+          git remote add upstream https://github.com/timescale/timescaledb.git
+          git fetch upstream
+          git checkout upstream/main
           git remote --verbose
           scripts/backport.py 2>&1
