@@ -330,6 +330,9 @@ for commit_sha, commit_title in main_commits:
     # commits in forward order.
     prs_to_backport[pull.number].pygithub_commits.insert(0, pygithub_commit)
 
+    # FIXME
+    break
+
 
 def branch_has_open_pr(repo, branch):
     """Check whether the given branch has an open PR."""
@@ -509,7 +512,7 @@ for index, pr_info in enumerate(prs_to_backport.values()):
         )
 
     # Push the backport branch.
-    git_check(f"push --quiet {target_remote} @:refs/heads/{backport_branch}")
+    git_check(f"push {target_remote} @:refs/heads/{backport_branch}")
 
     # Prepare description for the backport PR.
     backport_description = (

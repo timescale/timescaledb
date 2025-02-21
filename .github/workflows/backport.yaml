@@ -39,7 +39,7 @@ jobs:
 
       - name: Run the Backport Script
         env:
-          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.TIMESCALEDB_AUTOMATION_TOKEN_2 }}
         run: |
           git remote --verbose
-          scripts/backport.py
+          scripts/backport.py 2>&1
