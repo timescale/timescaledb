@@ -18,7 +18,7 @@ on:
 # The workflow needs the permission to push branches
 permissions:
   contents: write
-  pull_requests: write
+  pull-requests: write
   issues: write
   actions: write
   statuses: write
