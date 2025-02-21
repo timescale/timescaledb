@@ -18,6 +18,10 @@ on:
 # The workflow needs the permission to push branches
 permissions:
   contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+  statuses: write
 
 jobs:
   backport:
@@ -25,11 +29,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Install Linux Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install pip
-
       - name: Install Python Dependencies
         run: |
           pip install PyGithub requests
@@ -42,4 +41,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           git remote --verbose
-          scripts/backport.py
+
+          scripts/backport.py 2>&1
+
+          git remote --verbose
