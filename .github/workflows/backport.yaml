@@ -47,7 +47,7 @@ jobs:
           git remote add upstream "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
           git fetch upstream
           git fetch upstream "${GITHUB_REF}"
-          git checkout "${GITHUB_REF}"
+          git checkout "${GITHUB_SHA}"
           git log -2
           git remote --verbose
           scripts/backport.py 2>&1
