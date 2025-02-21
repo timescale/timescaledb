@@ -1,0 +1,1 @@
+Implements: #7765 Allow tsdb as alias for timescaledb in WITH and SET clauses
