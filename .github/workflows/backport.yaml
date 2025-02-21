@@ -40,9 +40,9 @@ jobs:
 
       - name: Run the Backport Script
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN_2: ${{ secrets.TIMESCALEDB_AUTOMATION_TOKEN_2 }}
-          GITHUB_TOKEN_3: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          GITHUB_TOKEN_2: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN_3: ${{ secrets.TIMESCALEDB_AUTOMATION_TOKEN_2 }}
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           set -x
           set +e
