@@ -1375,6 +1375,19 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 #endif
 			TS_FALLTHROUGH;
 		default:
+			/*
+			 * Set the indexlist for a hypertable parent to NIL since we
+			 * should not try to do any index scans on hypertable parents,
+			 * similar to how it works for partitioned tables.
+			 *
+			 * This can happen when building a merge join path and computing
+			 * cost for it. See get_actual_variable_range().
+			 *
+			 * This has to be after the hypertable is expanded, since the
+			 * indexlist is used during hypertable expansion.
+			 */
+			if (reltype == TS_REL_HYPERTABLE)
+				rel->indexlist = NIL;
 			apply_optimizations(root, reltype, rel, rte, ht);
 			break;
 	}
