@@ -35,39 +35,13 @@ jobs:
 
       - name: Checkout TimescaleDB
         uses: actions/checkout@v4
-          # with:
-          # repository: timescale-automation/timescaledb
 
       - name: Run the Backport Script
         env:
-          GITHUB_TOKEN_2: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN_3: ${{ secrets.TIMESCALEDB_AUTOMATION_TOKEN_2 }}
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
-          set -x
-          set +e
-          git remote add upstream "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
-          git fetch upstream
-          git fetch upstream "${GITHUB_REF}"
-          git checkout "${GITHUB_SHA}"
-          git log -2
           git remote --verbose
-          git remote add pat1 "https://timesacle-automation:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git remote add pat11 "https://${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git remote add pat2 "https://timesacle-automation:${GITHUB_TOKEN_2}@github.com/${GITHUB_REPOSITORY}.git"
-          git remote add pat21 "https://${GITHUB_TOKEN_2}@github.com/${GITHUB_REPOSITORY}.git"
-          git remote add pat3 "https://timesacle-automation:${GITHUB_TOKEN_3}@github.com/${GITHUB_REPOSITORY}.git"
-          git remote add pat31 "https://${GITHUB_TOKEN_3}@github.com/${GITHUB_REPOSITORY}.git"
-
-          git push origin @:refs/heads/backport/test1 -f
-          git push upstream @:refs/heads/backport/test2 -f
-          git push pat1 @:refs/heads/backport/test4 -f
-          git push pat11 @:refs/heads/backport/test5 -f
-          git push pat2 @:refs/heads/backport/test6 -f
-          git push pat21 @:refs/heads/backport/test7 -f
-          git push pat3 @:refs/heads/backport/test8 -f
-          git push pat31 @:refs/heads/backport/test9 -f
-
+          scripts/backport.py
           scripts/backport.py 2>&1
 
           git remote --verbose

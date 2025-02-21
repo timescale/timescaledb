@@ -465,14 +465,14 @@ for index, pr_info in enumerate(prs_to_backport.values()):
         # Use merge and no force-push, so that the simultaneous changes made by
         # other users are not accidentally overwritten.
         git_check(f"merge --quiet --no-edit {source_remote}/{backport_target}")
-        git_check(f"push --quiet {target_remote} @:{backport_branch}")
+        git_check(f"push {target_remote} @:{backport_branch}")
         continue
 
     # Try to cherry-pick the commits.
     git_check("reset --hard")
     git_check("clean -xfd")
     git_check(
-        f"checkout --quiet --force --detach {source_remote}/{backport_target}~ > /dev/null"
+        f"checkout --quiet --force --detach {source_remote}/{backport_target} > /dev/null"
     )
 
     commit_shas = [commit.sha for commit in pr_info.pygithub_commits]
@@ -507,7 +507,7 @@ for index, pr_info in enumerate(prs_to_backport.values()):
         )
 
     # Push the backport branch.
-    git_check(f"push --quiet {target_remote} @:refs/heads/{backport_branch}")
+    git_check(f"push {target_remote} @:refs/heads/{backport_branch}")
 
     # Prepare description for the backport PR.
     backport_description = (
