@@ -522,7 +522,12 @@ decompress_chunk_explain(CustomScanState *node, List *ancestors, ExplainState *e
 			ExplainPropertyBool("Batch Sorted Merge", dcontext->batch_sorted_merge, es);
 		}
 
-		if (es->analyze && (es->verbose || es->format != EXPLAIN_FORMAT_TEXT))
+		if (dcontext->reverse)
+		{
+			ExplainPropertyBool("Reverse", dcontext->reverse, es);
+		}
+
+		if (es->analyze)
 		{
 			ExplainPropertyBool("Bulk Decompression",
 								chunk_state->decompress_context.enable_bulk_decompression,
