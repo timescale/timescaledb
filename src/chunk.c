@@ -60,6 +60,7 @@
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
+#include "loader/loader.h"
 #include "osm_callbacks.h"
 #include "partitioning.h"
 #include "process_utility.h"
@@ -3954,6 +3955,15 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 	{
 		hypertable_drop_chunks_hook_type osm_drop_chunks_hook =
 			ts_get_osm_hypertable_drop_chunks_hook();
+
+		/*
+		 * OSM library may not be loaded at the moment if `ts_chunk_do_drop_chunks`
+		 * is called from the a background worker. If this is the case try to
+		 * load it now.
+		 */
+		if (!osm_drop_chunks_hook && ts_try_load_osm())
+			osm_drop_chunks_hook = ts_get_osm_hypertable_drop_chunks_hook();
+
 		if (osm_drop_chunks_hook)
 		{
 			ListCell *lc;
