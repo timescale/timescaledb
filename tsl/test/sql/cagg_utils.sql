@@ -108,12 +108,6 @@ SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 year', bucket) AS buc
 -- Test bucket Oid recovery
 --
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE OR REPLACE FUNCTION cagg_get_bucket_function(
-    mat_hypertable_id INTEGER
-) RETURNS regprocedure AS :MODULE_PATHNAME, 'ts_continuous_agg_get_bucket_function' LANGUAGE C STRICT VOLATILE;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-
 SET timezone TO PST8PDT;
 
 CREATE TABLE timestamp_ht (
@@ -189,8 +183,8 @@ CREATE MATERIALIZED VIEW integer_ht_cagg_offset
      GROUP BY bucket, a;
 
 -- Get the bucket Oids
-SELECT user_view_name, cagg_get_bucket_function(mat_hypertable_id)
-FROM _timescaledb_catalog.continuous_agg
+SELECT user_view_name, bf.bucket_func
+FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id) AS bf
 WHERE user_view_name IN
   ('temperature_4h', 'temperature_tz_4h', 'temperature_tz_4h_ts', 'temperature_tz_4h_ts_origin', 'temperature_tz_4h_ts_offset', 'integer_ht_cagg', 'integer_ht_cagg_offset')
 ORDER BY user_view_name;
@@ -249,5 +243,3 @@ SELECT user_view_name, bf.bucket_func
 FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id) AS bf
 WHERE user_view_name = 'temperature_tz_4h_3'
 ORDER BY user_view_name;
-
-DROP FUNCTION IF EXISTS cagg_get_bucket_function(INTEGER);
