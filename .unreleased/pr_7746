@@ -1,0 +1,1 @@
+Fixes: #7747 Block TAM rewrites with incompatible GUC setting
