@@ -797,18 +797,14 @@ CALL reindex_compressed_hypertable('f_sensor_data');
 VACUUM ANALYZE f_sensor_data;
 
 -- Encourage use of parallel plans
+SET max_parallel_workers_per_gather = 4;
+SET min_parallel_index_scan_size = 0;
+SET min_parallel_table_scan_size = 0;
 SET parallel_setup_cost = 0;
 SET parallel_tuple_cost = 0;
-SET min_parallel_table_scan_size TO '0';
+SHOW max_parallel_workers;
 
 \set explain 'EXPLAIN (VERBOSE, COSTS OFF)'
-
-SHOW min_parallel_table_scan_size;
-SHOW max_parallel_workers;
-SHOW max_parallel_workers_per_gather;
-
-SET max_parallel_workers_per_gather = 4;
-SHOW max_parallel_workers_per_gather;
 
 -- We disable enable_parallel_append here to ensure
 -- that we create the same query plan in all PG 14.X versions
@@ -817,16 +813,10 @@ SET enable_parallel_append = false;
 :explain
 SELECT sum(cpu) FROM f_sensor_data;
 
--- Encourage use of Index Scan
-
-SET enable_seqscan = false;
-SET enable_indexscan = true;
-SET min_parallel_index_scan_size = 0;
-SET min_parallel_table_scan_size = 0;
-
 CREATE INDEX ON f_sensor_data (time, sensor_id);
+
 :explain
-SELECT * FROM f_sensor_data WHERE sensor_id > 100;
+SELECT * FROM f_sensor_data WHERE sensor_id > 1000;
 
 RESET enable_parallel_append;
 
@@ -844,11 +834,13 @@ FROM
 ORDER BY
     time;
 
+VACUUM ANALYZE f_sensor_data;
+
 :explain
 SELECT sum(cpu) FROM f_sensor_data;
 
 :explain
-SELECT * FROM f_sensor_data WHERE sensor_id > 100;
+SELECT * FROM f_sensor_data WHERE sensor_id > 1000;
 
 
 -- Test non-partial paths below append are not executed multiple times
