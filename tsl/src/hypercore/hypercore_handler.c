@@ -287,7 +287,7 @@ lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 
 	Assert(hsinfo->compressed_relation_id > 0 && OidIsValid(hsinfo->compressed_relid));
 	Assert(hsinfo->count_cattno != InvalidAttrNumber);
-	settings = ts_compression_settings_get(hsinfo->compressed_relid);
+	settings = ts_compression_settings_get(RelationGetRelid(rel));
 
 	Ensure(settings,
 		   "no compression settings for relation %s",
@@ -2184,7 +2184,7 @@ compress_and_swap_heap(Relation rel, Tuplesortstate *tuplesort, TransactionId *x
 	const HypercoreInfo *hsinfo = RelationGetHypercoreInfo(rel);
 	TupleDesc tupdesc = RelationGetDescr(rel);
 	Oid old_compressed_relid = hsinfo->compressed_relid;
-	CompressionSettings *settings = ts_compression_settings_get(old_compressed_relid);
+	CompressionSettings *settings = ts_compression_settings_get(RelationGetRelid(rel));
 	Relation old_compressed_rel = table_open(old_compressed_relid, AccessExclusiveLock);
 #if PG15_GE
 	Oid accessMethod = old_compressed_rel->rd_rel->relam;
@@ -2298,7 +2298,6 @@ hypercore_relation_copy_for_cluster(Relation OldHypercore, Relation NewCompressi
 									double *num_tuples, double *tups_vacuumed,
 									double *tups_recently_dead)
 {
-	const HypercoreInfo *hsinfo = RelationGetHypercoreInfo(OldHypercore);
 	HypercoreScanDesc cscan;
 	HeapScanDesc chscan;
 	HeapScanDesc uhscan;
@@ -2325,7 +2324,7 @@ hypercore_relation_copy_for_cluster(Relation OldHypercore, Relation NewCompressi
 				 errmsg("cannot cluster a hypercore table"),
 				 errdetail("A hypercore table is already ordered by compression.")));
 
-	CompressionSettings *settings = ts_compression_settings_get(hsinfo->compressed_relid);
+	CompressionSettings *settings = ts_compression_settings_get(RelationGetRelid(OldHypercore));
 	tuplesort = compression_create_tuplesort_state(settings, OldHypercore);
 
 	/* In scan-and-sort mode and also VACUUM FULL, set phase */
@@ -3637,7 +3636,7 @@ conversionstate_cleanup(void *arg)
 static ConversionState *
 conversionstate_create(const HypercoreInfo *hcinfo, const Relation rel)
 {
-	CompressionSettings *settings = ts_compression_settings_get(hcinfo->compressed_relid);
+	CompressionSettings *settings = ts_compression_settings_get(RelationGetRelid(rel));
 	Tuplesortstate *tuplesortstate;
 	MemoryContext mcxt;
 	MemoryContext oldmcxt;
@@ -3823,7 +3822,7 @@ convert_to_hypercore_finish(Oid relid)
 	 */
 	Chunk *c_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
 	Relation compressed_rel = table_open(c_chunk->table_id, RowExclusiveLock);
-	CompressionSettings *settings = ts_compression_settings_get(RelationGetRelid(compressed_rel));
+	CompressionSettings *settings = ts_compression_settings_get(conversionstate->relid);
 	RowCompressor row_compressor;
 
 	row_compressor_init(settings,
@@ -3882,7 +3881,6 @@ convert_from_hypercore(Oid relid)
 	check_guc_setting_compatible_with_scan();
 	int32 chunk_id = get_chunk_id_from_relid(relid);
 	ts_compression_chunk_size_delete(chunk_id);
-
 	/* Need to truncate the compressed relation after converting from Hypercore */
 	MemoryContext oldmcxt = MemoryContextSwitchTo(CurTransactionContext);
 	cleanup_relids = lappend_oid(cleanup_relids, relid);

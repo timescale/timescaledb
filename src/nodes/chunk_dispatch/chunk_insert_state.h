@@ -49,7 +49,6 @@ typedef struct ChunkInsertState
 	EState *estate;
 	Oid hypertable_relid;
 	int32 chunk_id;
-	int32 compressed_chunk_id;
 	Oid user_id;
 
 	/* for tracking compressed chunks */
@@ -58,8 +57,6 @@ typedef struct ChunkInsertState
 
 	/* Chunk uses our own table access method */
 	bool use_tam;
-
-	Oid compressed_chunk_table_id;
 } ChunkInsertState;
 
 typedef struct ChunkDispatch ChunkDispatch;

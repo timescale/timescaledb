@@ -456,8 +456,8 @@ UPDATE pg_class SET oid = :CHUNK_NEW_OID
 WHERE oid = :CHUNK_OID;
 UPDATE pg_attribute SET attrelid = :CHUNK_NEW_OID
 WHERE attrelid = :CHUNK_OID;
-UPDATE _timescaledb_catalog.compression_settings SET relid = :CHUNK_NEW_OID
-WHERE relid = :CHUNK_OID;
+UPDATE _timescaledb_catalog.compression_settings SET compress_relid = :CHUNK_NEW_OID
+WHERE compress_relid = :CHUNK_OID;
 :EXPLAIN SELECT * FROM hyper
 WHERE device_id = 1 ORDER BY time;
                                                                                                                         QUERY PLAN                                                                                                                        

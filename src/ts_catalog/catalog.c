@@ -248,6 +248,7 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.length =  _MAX_COMPRESSION_SETTINGS_INDEX,
 		.names = (char *[]) {
 			[COMPRESSION_SETTINGS_PKEY] = "compression_settings_pkey",
+			[COMPRESSION_SETTINGS_COMPRESS_RELID_IDX] = "compression_settings_compress_relid_idx",
 		},
 	},
 	[COMPRESSION_CHUNK_SIZE] = {
