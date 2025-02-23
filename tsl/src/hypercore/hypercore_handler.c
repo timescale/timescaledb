@@ -147,7 +147,7 @@ get_chunk_id_from_relid(Oid relid)
 	return chunk_id;
 }
 
-static int32
+static Oid
 chunk_get_compressed_chunk_relid(Oid relid)
 {
 	FormData_chunk fd;
@@ -3704,36 +3704,6 @@ convert_to_hypercore(Oid relid)
 	table_close(relation, NoLock);
 }
 
-/*
- * List of relation IDs used to clean up the compressed relation when
- * converting from Hypercore to another TAM (typically heap).
- */
-static List *cleanup_relids = NIL;
-
-static void
-cleanup_compression_relations(void)
-{
-	if (cleanup_relids != NIL)
-	{
-		ListCell *lc;
-
-		foreach (lc, cleanup_relids)
-		{
-			Oid relid = lfirst_oid(lc);
-			Chunk *chunk = ts_chunk_get_by_relid(relid, true);
-			Chunk *compress_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
-
-			ts_chunk_clear_compressed_chunk(chunk);
-
-			if (compress_chunk)
-				ts_chunk_drop(compress_chunk, DROP_RESTRICT, -1);
-		}
-
-		list_free(cleanup_relids);
-		cleanup_relids = NIL;
-	}
-}
-
 void
 hypercore_xact_event(XactEvent event, void *arg)
 {
@@ -3770,16 +3740,6 @@ hypercore_xact_event(XactEvent event, void *arg)
 	{
 		list_free(partially_compressed_relids);
 		partially_compressed_relids = NIL;
-	}
-
-	/*
-	 * Cleanup in case of aborted transaction. Need not explicitly check for
-	 * abort since the states should only exist if it is an abort.
-	 */
-	if (cleanup_relids != NIL)
-	{
-		list_free(cleanup_relids);
-		cleanup_relids = NIL;
 	}
 }
 
@@ -3872,28 +3832,11 @@ convert_to_hypercore_finish(Oid relid)
 	Assert(conversionstate == NULL);
 }
 
-/*
- * Convert the chunk away from Hypercore to another table access method.
- * When this happens it is necessary to cleanup metadata.
- */
-static void
-convert_from_hypercore(Oid relid)
-{
-	check_guc_setting_compatible_with_scan();
-	int32 chunk_id = get_chunk_id_from_relid(relid);
-	ts_compression_chunk_size_delete(chunk_id);
-
-	/* Need to truncate the compressed relation after converting from Hypercore */
-	MemoryContext oldmcxt = MemoryContextSwitchTo(CurTransactionContext);
-	cleanup_relids = lappend_oid(cleanup_relids, relid);
-	MemoryContextSwitchTo(oldmcxt);
-}
-
 void
 hypercore_alter_access_method_begin(Oid relid, bool to_other_am)
 {
 	if (to_other_am)
-		convert_from_hypercore(relid);
+		check_guc_setting_compatible_with_scan();
 	else
 		convert_to_hypercore(relid);
 }
@@ -3905,7 +3848,19 @@ void
 hypercore_alter_access_method_finish(Oid relid, bool to_other_am)
 {
 	if (to_other_am)
-		cleanup_compression_relations();
+	{
+		Chunk *chunk = ts_chunk_get_by_relid(relid, true);
+		Chunk *compress_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
+
+		ts_compression_chunk_size_delete(chunk->fd.id);
+		ts_chunk_clear_compressed_chunk(chunk);
+
+		if (compress_chunk)
+		{
+			ts_compression_settings_delete(compress_chunk->table_id);
+			ts_chunk_drop(compress_chunk, DROP_RESTRICT, -1);
+		}
+	}
 
 	/* Finishing the conversion to Hypercore is handled in the
 	 * finish_bulk_insert callback */
