@@ -19,24 +19,6 @@ typedef struct SchemaAndName
 	Name name;
 } SchemaAndName;
 
-/***********************
- * Time ranges
- ***********************/
-
-typedef struct TimeRange
-{
-	Oid type;
-	Datum start;
-	Datum end;
-} TimeRange;
-
-typedef struct InternalTimeRange
-{
-	Oid type;
-	int64 start; /* inclusive */
-	int64 end;	 /* exclusive */
-} InternalTimeRange;
-
 void continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *cagg,
 										   SchemaAndName partial_view,
 										   SchemaAndName materialization_table,

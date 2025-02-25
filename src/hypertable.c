@@ -2329,6 +2329,70 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 }
 
 /*
+ * Get the min value of an open dimension.
+ */
+int64
+ts_hypertable_get_open_dim_min_value(const Hypertable *ht, int dimension_index, bool *isnull)
+{
+	StringInfo command;
+	const Dimension *dim;
+	int res;
+	bool min_isnull;
+	Datum mindat;
+	Oid timetype;
+
+	dim = hyperspace_get_open_dimension(ht->space, dimension_index);
+
+	if (NULL == dim)
+		elog(ERROR, "invalid open dimension index %d", dimension_index);
+
+	timetype = ts_dimension_get_partition_type(dim);
+
+	/*
+	 * Query for the first bucket in the materialized hypertable.
+	 * Since this might be run as part of a parallel operation
+	 * we cannot use SET search_path here to lock down the
+	 * search_path and instead have to fully schema-qualify
+	 * everything.
+	 */
+	command = makeStringInfo();
+	appendStringInfo(command,
+					 "SELECT pg_catalog.min(%s) FROM %s.%s",
+					 quote_identifier(NameStr(dim->fd.column_name)),
+					 quote_identifier(NameStr(ht->fd.schema_name)),
+					 quote_identifier(NameStr(ht->fd.table_name)));
+
+	if (SPI_connect() != SPI_OK_CONNECT)
+		elog(ERROR, "could not connect to SPI");
+
+	res = SPI_execute(command->data, true /* read_only */, 0 /*count*/);
+
+	if (res < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 (errmsg("could not find the minimum time value for hypertable \"%s\"",
+						 get_rel_name(ht->main_table_relid)))));
+
+	Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == timetype,
+		   "partition types for result (%d) and dimension (%d) do not match",
+		   SPI_gettypeid(SPI_tuptable->tupdesc, 1),
+		   ts_dimension_get_partition_type(dim));
+	mindat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &min_isnull);
+
+	if (isnull)
+		*isnull = min_isnull;
+
+	int64 min_value =
+		min_isnull ? ts_time_get_min(timetype) : ts_time_value_to_internal(mindat, timetype);
+
+	res = SPI_finish();
+	if (res != SPI_OK_FINISH)
+		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+
+	return min_value;
+}
+
+/*
  * Get the max value of an open dimension.
  */
 int64

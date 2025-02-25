@@ -20,9 +20,11 @@
 #include <utils/timestamp.h>
 
 #include "compat/compat.h"
+#include "bucket.h"
 #include "debug_assert.h"
 #include "guc.h"
 #include "materialize.h"
+#include "time_utils.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
 
@@ -743,13 +745,36 @@ update_watermark(MaterializationContext *context)
 	}
 }
 
+// static void
+// log_refresh_window(int elevel, const ContinuousAgg *cagg, const TimeRange *refresh_window,
+// 				   const char *msg)
+// {
+// 	Oid outfuncid = InvalidOid;
+// 	bool isvarlena;
+
+// 	getTypeOutputInfo(refresh_window->type, &outfuncid, &isvarlena);
+// 	Assert(!isvarlena);
+
+// 	elog(elevel,
+// 		 "%s \"%s\" in window [ %s, %s ]",
+// 		 msg,
+// 		 NameStr(cagg->data.user_view_name),
+// 		 DatumGetCString(OidFunctionCall1(outfuncid, refresh_window->start)),
+// 		 DatumGetCString(OidFunctionCall1(outfuncid, refresh_window->end)));
+// }
+
 static void
-log_refresh_window(int elevel, const ContinuousAgg *cagg, const TimeRange *refresh_window,
+log_refresh_window(int elevel, const ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
 				   const char *msg)
 {
+	return;
+	Datum start_ts;
+	Datum end_ts;
 	Oid outfuncid = InvalidOid;
 	bool isvarlena;
 
+	start_ts = ts_internal_to_time_value(refresh_window->start, refresh_window->type);
+	end_ts = ts_internal_to_time_value(refresh_window->end, refresh_window->type);
 	getTypeOutputInfo(refresh_window->type, &outfuncid, &isvarlena);
 	Assert(!isvarlena);
 
@@ -757,33 +782,61 @@ log_refresh_window(int elevel, const ContinuousAgg *cagg, const TimeRange *refre
 		 "%s \"%s\" in window [ %s, %s ]",
 		 msg,
 		 NameStr(cagg->data.user_view_name),
-		 DatumGetCString(OidFunctionCall1(outfuncid, refresh_window->start)),
-		 DatumGetCString(OidFunctionCall1(outfuncid, refresh_window->end)));
+		 DatumGetCString(OidFunctionCall1(outfuncid, start_ts)),
+		 DatumGetCString(OidFunctionCall1(outfuncid, end_ts)));
 }
 
 static List *
 split_ranges(MaterializationContext *context, int64 bucket_width, int32 range_factor)
 {
 	List *ranges = NIL;
-	int64 start = context->internal_materialization_range.start;
-	int64 end = context->internal_materialization_range.end;
+	InternalTimeRange range = context->internal_materialization_range;
 
-	// ranges = lappend(ranges, &context->internal_materialization_range);
-	// log_refresh_window(INFO, context->cagg, &context->materialization_range, "splitting");
-	// return ranges;
-
-	while (start < end)
+	if (TS_TIME_IS_MIN(range.start, range.type))
 	{
-		InternalTimeRange *new_range = palloc(sizeof(InternalTimeRange));
-		new_range->start = start;
-		new_range->end = start + (bucket_width * range_factor) + 1;
-		new_range->type = context->materialization_range.type;
-		ranges = lappend(ranges, new_range);
-		start = new_range->end;
+		// elog(INFO, "IS NULL");
+		log_refresh_window(INFO, context->cagg, &range, "before NULL");
+		bool isnull;
+		Hypertable *ht = ts_hypertable_get_by_id(context->cagg->data.raw_hypertable_id);
+		range.start = ts_hypertable_get_open_dim_min_value(ht, 0, &isnull);
 
-		const TimeRange range = internal_time_range_to_time_range(*new_range);
-		log_refresh_window(LOG, context->cagg, &range, "splitting");
+		if (range.start > range.end)
+			range.end = range.start;
+
+		log_refresh_window(INFO, context->cagg, &range, "min");
+
+		if (!isnull)
+		{
+			// range = ts_compute_inscribed_refresh_window(context->cagg, &range);
+			range =
+				cagg_compute_circumscribed_bucketed_refresh_window(context->cagg,
+																   &range,
+																   context->cagg->bucket_function);
+			log_refresh_window(INFO, context->cagg, &range, "bucket");
+		}
 	}
+
+	// elog(DEBUG1,
+	// 	 "TIME_IS_MIN %d, TIME_IS_MAX %d",
+	// 	 TS_TIME_IS_MIN(start, context->cagg->partition_type),
+	// 	 TS_TIME_IS_MAX(end, context->cagg->partition_type));
+
+	ranges = lappend(ranges, &range);
+	// log_refresh_window(DEBUG1, context->cagg, &context->materialization_range, "splitting");
+	return ranges;
+
+	// while (start < end)
+	// {
+	// 	InternalTimeRange *new_range = palloc(sizeof(InternalTimeRange));
+	// 	new_range->start = start;
+	// 	new_range->end = start + (bucket_width * range_factor) + 1;
+	// 	new_range->type = context->materialization_range.type;
+	// 	ranges = lappend(ranges, new_range);
+	// 	start = new_range->end;
+
+	// 	const TimeRange range = internal_time_range_to_time_range(*new_range);
+	// 	log_refresh_window(LOG, context->cagg, &range, "splitting");
+	// }
 
 	return ranges;
 }
@@ -815,7 +868,8 @@ execute_materializations(MaterializationContext *context)
 												   NULL);
 			context->internal_materialization_range.end = range->end;
 
-			log_refresh_window(LOG, context->cagg, &context->materialization_range, "refreshing");
+			// log_refresh_window(LOG, context->cagg, &context->materialization_range,
+			// "refreshing");
 
 			/* MERGE statement is available starting on PG15 and we'll support it only in the new
 			 * format of CAggs and for non-compressed hypertables */
@@ -844,36 +898,6 @@ execute_materializations(MaterializationContext *context)
 				rows_processed += execute_materialization_plan(context, PLAN_TYPE_DELETE);
 				rows_processed += execute_materialization_plan(context, PLAN_TYPE_INSERT);
 			}
-		}
-
-		/* Free all cached plans */
-		free_materialization_plans(context);
-
-		/* MERGE statement is available starting on PG15 and we'll support it only in the new format
-		 * of CAggs and for non-compressed hypertables */
-		if (ts_guc_enable_merge_on_cagg_refresh && PG_VERSION_NUM >= 150000 &&
-			ContinuousAggIsFinalized(context->cagg) &&
-			!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(context->mat_ht))
-		{
-			/* Fallback to INSERT materializations if there are no rows to change on it */
-			if (execute_materialization_plan(context, PLAN_TYPE_EXISTS) == 0)
-			{
-				elog(DEBUG2,
-					 "no rows to merge on materialization table \"%s.%s\", falling back to INSERT",
-					 NameStr(*context->materialization_table.schema),
-					 NameStr(*context->materialization_table.name));
-				rows_processed = execute_materialization_plan(context, PLAN_TYPE_INSERT);
-			}
-			else
-			{
-				rows_processed += execute_materialization_plan(context, PLAN_TYPE_MERGE);
-				rows_processed += execute_materialization_plan(context, PLAN_TYPE_MERGE_DELETE);
-			}
-		}
-		else
-		{
-			rows_processed += execute_materialization_plan(context, PLAN_TYPE_DELETE);
-			rows_processed += execute_materialization_plan(context, PLAN_TYPE_INSERT);
 		}
 
 		/* Free all cached plans */

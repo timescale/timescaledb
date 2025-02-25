@@ -10,6 +10,7 @@
 #include <utils/timestamp.h>
 
 #include "guc.h"
+#include "time_bucket.h"
 
 static Const *check_time_bucket_argument(Node *arg, char *position, bool process_checks);
 static void caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id,
