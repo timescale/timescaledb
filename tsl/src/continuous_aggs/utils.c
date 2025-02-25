@@ -135,6 +135,10 @@ continuous_agg_validate_query(PG_FUNCTION_ARGS)
 			}
 			else
 			{
+				/* Explicitly reset is_valid_query to false to ensure the compiler
+				 * does not optimize away the variable.
+				 */
+				is_valid_query = false;
 				pstate->p_sourcetext = sql;
 				query = transformTopLevelStmt(pstate, rawstmt);
 				free_parsestate(pstate);
