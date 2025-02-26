@@ -502,6 +502,9 @@ endif()
 
 # Linter support via clang-tidy. Enabled when using clang as compiler
 option(LINTER "Enable linter support using clang-tidy" OFF)
+set(CLANG_TIDY_EXTRA_OPTS
+    ""
+    CACHE STRING "Additional options for clang-tidy")
 
 if(LINTER)
   find_program(
@@ -537,8 +540,7 @@ if(LINTER)
         ",-readability-isolate-declaration"
         ",-readability-magic-numbers"
         ",-readability-non-const-parameter"
-        # ";--fix-errors"
-    )
+        "${CLANG_TIDY_EXTRA_OPTS}")
     if(WARNINGS_AS_ERRORS)
       set(CMAKE_C_CLANG_TIDY "${CMAKE_C_CLANG_TIDY};--warnings-as-errors=*")
     else()
