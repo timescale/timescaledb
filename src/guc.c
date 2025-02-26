@@ -154,6 +154,9 @@ bool ts_guc_enable_chunk_skipping = false;
 TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
 TSDLLEXPORT bool ts_guc_enable_bool_compression = false;
 
+/* Only settable in debug mode for testing */
+TSDLLEXPORT bool ts_guc_enable_null_compression = true;
+
 /* Enable of disable columnar scans for columnar-oriented storage engines. If
  * disabled, regular sequence scans will be used instead. */
 TSDLLEXPORT bool ts_guc_enable_columnarscan = true;
@@ -760,6 +763,19 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
+#ifdef TS_DEBUG
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_null_compression"),
+							 "Debug only flag to enable NULL compression",
+							 "Enable null compression",
+							 &ts_guc_enable_null_compression,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+#endif
 
 	/*
 	 * Define the limit on number of invalidation-based refreshes we allow per

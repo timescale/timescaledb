@@ -1150,8 +1150,10 @@ UPDATE test_notnull SET c2 = NULL;
 ALTER TABLE test_notnull ALTER COLUMN c2 SET NOT NULL;
 \set ON_ERROR_STOP 1
 SELECT compress_chunk(show_chunks('test_notnull'));
--- broken atm due to bug in default handling in compression
+
+\set ON_ERROR_STOP 0
 ALTER TABLE test_notnull ALTER COLUMN c2 SET NOT NULL;
+\set ON_ERROR_STOP 1
 
 -- test alias in parameter name
 CREATE TABLE alias(time timestamptz NOT NULL);
