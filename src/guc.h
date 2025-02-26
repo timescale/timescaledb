@@ -71,6 +71,9 @@ extern bool ts_guc_enable_chunk_skipping;
 extern TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression;
 extern TSDLLEXPORT bool ts_guc_enable_bool_compression;
 
+/* Only settable in debug mode for testing */
+extern TSDLLEXPORT bool ts_guc_enable_null_compression;
+
 #ifdef USE_TELEMETRY
 typedef enum TelemetryLevel
 {
