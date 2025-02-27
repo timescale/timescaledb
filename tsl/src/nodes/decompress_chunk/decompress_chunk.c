@@ -5,6 +5,8 @@
  */
 
 #include <postgres.h>
+#include "chunk.h"
+#include "hypertable_cache.h"
 #include <catalog/pg_operator.h>
 #include <math.h>
 #include <miscadmin.h>
@@ -377,15 +379,7 @@ build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chun
 
 	info->chunk_rel = chunk_rel;
 	info->chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
-
-	FormData_chunk compressed_fd = ts_chunk_get_formdata(chunk->fd.compressed_chunk_id);
-	info->compressed_reloid = ts_get_relation_relid(NameStr(compressed_fd.schema_name),
-													NameStr(compressed_fd.table_name),
-													/* return_invalid = */ false);
-	info->compression_hypertable_reloid =
-		ts_hypertable_id_to_relid(compressed_fd.hypertable_id, /* return_invalid = */ false);
-
-	info->settings = ts_compression_settings_get(info->compressed_reloid);
+	info->settings = ts_compression_settings_get(chunk->table_id);
 
 	if (chunk_rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
 	{
@@ -421,8 +415,8 @@ build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chun
 	}
 
 	info->has_seq_num =
-		get_attnum(info->settings->fd.relid, COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME) !=
-		InvalidAttrNumber;
+		get_attnum(info->settings->fd.compress_relid,
+				   COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME) != InvalidAttrNumber;
 
 	info->chunk_const_segmentby = find_const_segmentby(chunk_rel, info);
 
@@ -1782,12 +1776,14 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const
 	 * Add the compressed chunk to the baserel cache. Note that it belongs to
 	 * a different hypertable, the internal compression table.
 	 */
-	ts_add_baserel_cache_entry_for_chunk(
-		info->compressed_reloid,
-		ts_planner_get_hypertable(info->compression_hypertable_reloid, CACHE_FLAG_NONE));
+	const Chunk *compressed_chunk = ts_chunk_get_by_relid(info->settings->fd.compress_relid, true);
+	ts_add_baserel_cache_entry_for_chunk(info->settings->fd.compress_relid,
+										 ts_planner_get_hypertable(compressed_chunk
+																	   ->hypertable_relid,
+																   CACHE_FLAG_NONE));
 
 	expand_planner_arrays(root, 1);
-	info->compressed_rte = decompress_chunk_make_rte(info->compressed_reloid,
+	info->compressed_rte = decompress_chunk_make_rte(info->settings->fd.compress_relid,
 													 info->chunk_rte->rellockmode,
 													 root->parse);
 	root->simple_rte_array[compressed_index] = info->compressed_rte;

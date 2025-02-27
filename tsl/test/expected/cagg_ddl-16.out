@@ -2117,7 +2117,15 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('cagg1') ch;
 DROP MATERIALIZED VIEW cagg1;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_56_70_chunk
 SELECT * FROM _timescaledb_catalog.compression_settings;
- relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
--------+-----------+---------+--------------+--------------------
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+----------------+-----------+---------+--------------+--------------------
 (0 rows)
 
+-- test WITH namespace alias
+CREATE TABLE with_alias(time timestamptz not null);
+CREATE MATERIALIZED VIEW cagg_alias
+WITH (tsdb.continuous, tsdb.materialized_only=false) AS
+SELECT time_bucket(INTERVAL '1 day', time) FROM conditions GROUP BY 1 WITH NO DATA;
+ALTER MATERIALIZED VIEW cagg_alias SET (timescaledb.materialized_only=false);
+ALTER MATERIALIZED VIEW cagg_alias SET (tsdb.materialized_only=false);
+DROP MATERIALIZED VIEW cagg_alias;

@@ -388,9 +388,8 @@ CREATE OR REPLACE VIEW timescaledb_information.chunk_compression_settings AS
 		array_to_string(segmentby,',') AS segmentby,
 		un.orderby
 	FROM _timescaledb_catalog.hypertable ht
-	INNER JOIN _timescaledb_catalog.chunk ch ON ch.hypertable_id = ht.id
-  INNER JOIN _timescaledb_catalog.chunk ch2 ON ch2.id = ch.compressed_chunk_id
-  LEFT JOIN _timescaledb_catalog.compression_settings s ON format('%I.%I',ch2.schema_name,ch2.table_name)::regclass = s.relid
+    INNER JOIN _timescaledb_catalog.chunk ch ON ch.hypertable_id = ht.id
+    INNER JOIN _timescaledb_catalog.compression_settings s ON (format('%I.%I',ch.schema_name,ch.table_name)::regclass = s.relid)
 	LEFT JOIN LATERAL (
 		SELECT
 			string_agg(

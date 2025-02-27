@@ -15,9 +15,9 @@ SELECT table_name FROM create_hypertable('metrics','time');
 ALTER TABLE metrics SET (timescaledb.compress, timescaledb.compress_segmentby='device');
 NOTICE:  default order by for hypertable "metrics" is set to ""time" DESC"
 SELECT * FROM settings;
-  relid  | segmentby | orderby | orderby_desc | orderby_nullsfirst 
----------+-----------+---------+--------------+--------------------
- metrics | {device}  | {time}  | {t}          | {t}
+  relid  | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+---------+----------------+-----------+---------+--------------+--------------------
+ metrics |                | {device}  | {time}  | {t}          | {t}
 (1 row)
 
 SELECT * FROM ht_settings;
@@ -35,9 +35,9 @@ SELECT * FROM chunk_settings;
 INSERT INTO metrics VALUES ('2000-01-01'), ('2001-01-01');
 -- no change to settings
 SELECT * FROM settings;
-  relid  | segmentby | orderby | orderby_desc | orderby_nullsfirst 
----------+-----------+---------+--------------+--------------------
- metrics | {device}  | {time}  | {t}          | {t}
+  relid  | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+---------+----------------+-----------+---------+--------------+--------------------
+ metrics |                | {device}  | {time}  | {t}          | {t}
 (1 row)
 
 --Enable compression path info
@@ -51,10 +51,10 @@ INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
 
 RESET timescaledb.debug_compression_path_info;
 SELECT * FROM settings;
-                     relid                      | segmentby | orderby | orderby_desc | orderby_nullsfirst 
-------------------------------------------------+-----------+---------+--------------+--------------------
- metrics                                        | {device}  | {time}  | {t}          | {t}
- _timescaledb_internal.compress_hyper_2_3_chunk | {device}  | {time}  | {t}          | {t}
+                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------
+ metrics                                |                                                | {device}  | {time}  | {t}          | {t}
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal.compress_hyper_2_3_chunk | {device}  | {time}  | {t}          | {t}
 (2 rows)
 
 SELECT * FROM chunk_settings;
@@ -70,11 +70,11 @@ SELECT compress_chunk('_timescaledb_internal._hyper_1_2_chunk');
 (1 row)
 
 SELECT * FROM settings;
-                     relid                      | segmentby | orderby | orderby_desc | orderby_nullsfirst 
-------------------------------------------------+-----------+---------+--------------+--------------------
- metrics                                        | {device}  | {time}  | {t}          | {t}
- _timescaledb_internal.compress_hyper_2_3_chunk | {device}  | {time}  | {t}          | {t}
- _timescaledb_internal.compress_hyper_2_4_chunk | {device}  | {time}  | {t}          | {t}
+                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------
+ metrics                                |                                                | {device}  | {time}  | {t}          | {t}
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal.compress_hyper_2_3_chunk | {device}  | {time}  | {t}          | {t}
+ _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal.compress_hyper_2_4_chunk | {device}  | {time}  | {t}          | {t}
 (3 rows)
 
 SELECT * FROM chunk_settings;
@@ -87,10 +87,10 @@ SELECT * FROM chunk_settings;
 -- dropping chunk should remove that chunks compression settings
 DROP TABLE _timescaledb_internal._hyper_1_1_chunk;
 SELECT * FROM settings;
-                     relid                      | segmentby | orderby | orderby_desc | orderby_nullsfirst 
-------------------------------------------------+-----------+---------+--------------+--------------------
- metrics                                        | {device}  | {time}  | {t}          | {t}
- _timescaledb_internal.compress_hyper_2_4_chunk | {device}  | {time}  | {t}          | {t}
+                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------
+ metrics                                |                                                | {device}  | {time}  | {t}          | {t}
+ _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal.compress_hyper_2_4_chunk | {device}  | {time}  | {t}          | {t}
 (2 rows)
 
 SELECT * FROM chunk_settings;
@@ -107,9 +107,9 @@ SELECT decompress_chunk('_timescaledb_internal._hyper_1_2_chunk');
 (1 row)
 
 SELECT * FROM settings;
-  relid  | segmentby | orderby | orderby_desc | orderby_nullsfirst 
----------+-----------+---------+--------------+--------------------
- metrics | {device}  | {time}  | {t}          | {t}
+  relid  | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+---------+----------------+-----------+---------+--------------+--------------------
+ metrics |                | {device}  | {time}  | {t}          | {t}
 (1 row)
 
 SELECT * FROM chunk_settings;
@@ -125,10 +125,10 @@ SELECT compress_chunk('_timescaledb_internal._hyper_1_2_chunk');
 (1 row)
 
 SELECT * FROM settings;
-                     relid                      | segmentby | orderby | orderby_desc | orderby_nullsfirst 
-------------------------------------------------+-----------+---------+--------------+--------------------
- metrics                                        | {device}  | {time}  | {t}          | {t}
- _timescaledb_internal.compress_hyper_2_5_chunk | {device}  | {time}  | {t}          | {t}
+                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------
+ metrics                                |                                                | {device}  | {time}  | {t}          | {t}
+ _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal.compress_hyper_2_5_chunk | {device}  | {time}  | {t}          | {t}
 (2 rows)
 
 SELECT * FROM chunk_settings;
@@ -140,8 +140,8 @@ SELECT * FROM chunk_settings;
 -- dropping hypertable should remove all settings
 DROP TABLE metrics;
 SELECT * FROM settings;
- relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
--------+-----------+---------+--------------+--------------------
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+----------------+-----------+---------+--------------+--------------------
 (0 rows)
 
 SELECT * FROM ht_settings;
@@ -167,9 +167,9 @@ NOTICE:  default segment by for hypertable "metrics" is set to ""
 NOTICE:  default order by for hypertable "metrics" is set to ""time" DESC"
 -- hypertable should have default settings now
 SELECT * FROM settings;
-  relid  | segmentby | orderby | orderby_desc | orderby_nullsfirst 
----------+-----------+---------+--------------+--------------------
- metrics |           | {time}  | {t}          | {t}
+  relid  | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+---------+----------------+-----------+---------+--------------+--------------------
+ metrics |                |           | {time}  | {t}          | {t}
 (1 row)
 
 SELECT * FROM ht_settings;
@@ -183,9 +183,9 @@ INSERT INTO metrics VALUES ('2000-01-01');
 ALTER TABLE metrics SET (timescaledb.compress_segmentby='d1');
 -- settings should be updated
 SELECT * FROM settings;
-  relid  | segmentby | orderby | orderby_desc | orderby_nullsfirst 
----------+-----------+---------+--------------+--------------------
- metrics | {d1}      | {time}  | {t}          | {t}
+  relid  | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+---------+----------------+-----------+---------+--------------+--------------------
+ metrics |                | {d1}      | {time}  | {t}          | {t}
 (1 row)
 
 SELECT * FROM ht_settings;
@@ -202,10 +202,10 @@ SELECT compress_chunk(show_chunks('metrics'));
 
 -- settings for compressed chunk should be present
 SELECT * FROM settings;
-                     relid                      | segmentby | orderby | orderby_desc | orderby_nullsfirst 
-------------------------------------------------+-----------+---------+--------------+--------------------
- metrics                                        | {d1}      | {time}  | {t}          | {t}
- _timescaledb_internal.compress_hyper_4_7_chunk | {d1}      | {time}  | {t}          | {t}
+                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------
+ metrics                                |                                                | {d1}      | {time}  | {t}          | {t}
+ _timescaledb_internal._hyper_3_6_chunk | _timescaledb_internal.compress_hyper_4_7_chunk | {d1}      | {time}  | {t}          | {t}
 (2 rows)
 
 SELECT * FROM chunk_settings;
@@ -217,10 +217,10 @@ SELECT * FROM chunk_settings;
 -- changing settings should update settings for hypertable but not existing compressed chunks
 ALTER TABLE metrics SET (timescaledb.compress_segmentby='d2');
 SELECT * FROM settings;
-                     relid                      | segmentby | orderby | orderby_desc | orderby_nullsfirst 
-------------------------------------------------+-----------+---------+--------------+--------------------
- metrics                                        | {d2}      | {time}  | {t}          | {t}
- _timescaledb_internal.compress_hyper_4_7_chunk | {d1}      | {time}  | {t}          | {t}
+                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------
+ metrics                                |                                                | {d2}      | {time}  | {t}          | {t}
+ _timescaledb_internal._hyper_3_6_chunk | _timescaledb_internal.compress_hyper_4_7_chunk | {d1}      | {time}  | {t}          | {t}
 (2 rows)
 
 SELECT * FROM ht_settings;
@@ -238,10 +238,10 @@ SELECT * FROM chunk_settings;
 -- changing settings should update settings for hypertable but not existing compressed chunks
 ALTER TABLE metrics SET (timescaledb.compress_segmentby='');
 SELECT * FROM settings;
-                     relid                      | segmentby | orderby | orderby_desc | orderby_nullsfirst 
-------------------------------------------------+-----------+---------+--------------+--------------------
- metrics                                        |           | {time}  | {t}          | {t}
- _timescaledb_internal.compress_hyper_4_7_chunk | {d1}      | {time}  | {t}          | {t}
+                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------
+ metrics                                |                                                |           | {time}  | {t}          | {t}
+ _timescaledb_internal._hyper_3_6_chunk | _timescaledb_internal.compress_hyper_4_7_chunk | {d1}      | {time}  | {t}          | {t}
 (2 rows)
 
 SELECT * FROM ht_settings;
@@ -267,11 +267,11 @@ NOTICE:  chunk "_hyper_3_6_chunk" is already compressed
 (2 rows)
 
 SELECT * FROM settings;
-                     relid                      | segmentby | orderby | orderby_desc | orderby_nullsfirst 
-------------------------------------------------+-----------+---------+--------------+--------------------
- metrics                                        |           | {time}  | {t}          | {t}
- _timescaledb_internal.compress_hyper_4_7_chunk | {d1}      | {time}  | {t}          | {t}
- _timescaledb_internal.compress_hyper_4_9_chunk |           | {time}  | {t}          | {t}
+                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------
+ metrics                                |                                                |           | {time}  | {t}          | {t}
+ _timescaledb_internal._hyper_3_6_chunk | _timescaledb_internal.compress_hyper_4_7_chunk | {d1}      | {time}  | {t}          | {t}
+ _timescaledb_internal._hyper_3_8_chunk | _timescaledb_internal.compress_hyper_4_9_chunk |           | {time}  | {t}          | {t}
 (3 rows)
 
 SELECT * FROM ht_settings;
@@ -297,11 +297,11 @@ SELECT compress_chunk(:'CHUNK', recompress:=true);
 (1 row)
 
 SELECT * FROM settings;
-                      relid                      | segmentby | orderby | orderby_desc | orderby_nullsfirst 
--------------------------------------------------+-----------+---------+--------------+--------------------
- metrics                                         | {d2}      | {time}  | {t}          | {t}
- _timescaledb_internal.compress_hyper_4_10_chunk | {d2}      | {time}  | {t}          | {t}
- _timescaledb_internal.compress_hyper_4_7_chunk  | {d1}      | {time}  | {t}          | {t}
+                 relid                  |                 compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+----------------------------------------+-------------------------------------------------+-----------+---------+--------------+--------------------
+ metrics                                |                                                 | {d2}      | {time}  | {t}          | {t}
+ _timescaledb_internal._hyper_3_6_chunk | _timescaledb_internal.compress_hyper_4_7_chunk  | {d1}      | {time}  | {t}          | {t}
+ _timescaledb_internal._hyper_3_8_chunk | _timescaledb_internal.compress_hyper_4_10_chunk | {d2}      | {time}  | {t}          | {t}
 (3 rows)
 
 SELECT * FROM ht_settings;
