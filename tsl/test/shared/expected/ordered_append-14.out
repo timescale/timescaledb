@@ -13,6 +13,7 @@ SELECT format('\! diff -u --label "Uncompressed results" --label "Compressed res
 \set PREFIX_VERBOSE 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
 set work_mem to '64MB';
 set max_parallel_workers_per_gather to 0;
+set enable_nestloop to off;
 \set TEST_TABLE 'metrics'
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Timescale License.
