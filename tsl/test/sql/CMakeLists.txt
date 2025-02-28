@@ -121,6 +121,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     feature_flags.sql
     vector_agg_default.sql
     vector_agg_filter.sql
+    vector_agg_grouping.sql
     vector_agg_text.sql
     vector_agg_memory.sql
     vector_agg_segmentby.sql)
