@@ -15,19 +15,21 @@ typedef struct ArrowArray ArrowArray;
 /* How to obtain the decompressed datum for individual row. */
 typedef enum
 {
-	DT_ArrowTextDict = -4,
+	DT_ArrowTextDict = -5,
 
-	DT_ArrowText = -3,
+	DT_ArrowText = -4,
 
 	/*
 	 * The decompressed value is already in the decompressed slot. This is used
 	 * for segmentby and compressed columns with default value in batch.
 	 */
-	DT_Scalar = -2,
+	DT_Scalar = -3,
 
-	DT_Iterator = -1,
+	DT_Iterator = -2,
 
-	DT_Invalid = 0,
+	DT_Pending = -1,
+
+	DT_NoData = 0,
 
 	/*
 	 * Any positive number is also valid for the decompression type. It means
@@ -48,6 +50,7 @@ typedef struct CompressedColumnValues
 	/*
 	 * The flattened source buffers for getting the decompressed datum.
 	 * Depending on decompression type, they are as follows:
+	 * invalid:         compressed data (this is used for lazier decompression).
 	 * iterator:        iterator
 	 * arrow fixed:     validity, value
 	 * arrow text:      validity, uint32* offsets, void* bodies
@@ -125,6 +128,7 @@ extern void compressed_batch_save_first_tuple(DecompressContext *dcontext,
 											  DecompressBatchState *batch_state,
 											  TupleTableSlot *first_tuple_slot);
 
+extern void compressed_batch_decompress_column(CompressedColumnValues *column_values);
 /*
  * Initialize the batch memory context and bulk decompression context.
  *

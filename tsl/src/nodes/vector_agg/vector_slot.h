@@ -92,7 +92,11 @@ vector_slot_get_compressed_column_values(TupleTableSlot *slot, const AttrNumber 
 		return values;
 	}
 
-	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
-	const CompressedColumnValues *values = &batch_state->compressed_columns[offset];
+	DecompressBatchState *batch_state = (DecompressBatchState *) slot;
+	CompressedColumnValues *values = &batch_state->compressed_columns[offset];
+	if (values->decompression_type == DT_Pending)
+	{
+		compressed_batch_decompress_column(values);
+	}
 	return values;
 }

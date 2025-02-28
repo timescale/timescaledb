@@ -134,7 +134,8 @@ compute_single_aggregate(GroupingPolicyBatch *policy, TupleTableSlot *vector_slo
 		const CompressedColumnValues *values =
 			vector_slot_get_compressed_column_values(vector_slot, attnum);
 
-		Assert(values->decompression_type != DT_Invalid);
+		Assert(values->decompression_type != DT_NoData);
+		Assert(values->decompression_type != DT_Pending);
 		Assert(values->decompression_type != DT_Iterator);
 
 		if (values->arrow != NULL)
