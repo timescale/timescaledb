@@ -350,6 +350,9 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
  * after the existing data according to the compression order. This is true if the data being merged
  * in has timestamps greater than the existing data and the first column in the order by is time
  * ASC.
+ *
+ * The CompressChunkCxt references the chunk we are merging and mergable_chunk is the chunk we
+ * are merging into.
  */
 static bool
 check_is_chunk_order_violated_by_merge(CompressChunkCxt *cxt, const Dimension *time_dim,
@@ -363,13 +366,12 @@ check_is_chunk_order_violated_by_merge(CompressChunkCxt *cxt, const Dimension *t
 		ts_hypercube_get_slice_by_dimension_id(cxt->srcht_chunk->cube, time_dim->fd.id);
 	if (!compressed_slice)
 		elog(ERROR, "compressed chunk has no time dimension slice");
-
-	if (mergable_slice->fd.range_start > compressed_slice->fd.range_start &&
-		mergable_slice->fd.range_end > compressed_slice->fd.range_start)
-	{
-		return true;
-	}
-
+	/*
+	 * Ensure the compressed chunk is AFTER the chunk that
+	 * it is being merged into. This is already guaranteed by previous checks.
+	 */
+	Ensure(mergable_slice->fd.range_end == compressed_slice->fd.range_start,
+		   "chunk being merged is not after the chunk that is being merged into");
 	CompressionSettings *ht_settings =
 		ts_compression_settings_get(mergable_chunk->hypertable_relid);
 
