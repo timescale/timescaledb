@@ -28,7 +28,7 @@
 #include "materialize.h"
 #include "process_utility.h"
 #include "refresh.h"
-#include "time_bucket.h"
+// #include "time_bucket.h"
 #include "time_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
@@ -44,7 +44,6 @@ typedef struct CaggRefreshState
 	SchemaAndName partial_view;
 } CaggRefreshState;
 
-static Hypertable *cagg_get_hypertable_or_fail(int32 hypertable_id);
 static void continuous_agg_refresh_init(CaggRefreshState *refresh, const ContinuousAgg *cagg,
 										const InternalTimeRange *refresh_window);
 static void continuous_agg_refresh_execute(const CaggRefreshState *refresh,
@@ -70,20 +69,6 @@ static bool process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 												   const InternalTimeRange *refresh_window,
 												   const CaggRefreshCallContext callctx,
 												   int32 chunk_id, bool force);
-
-static Hypertable *
-cagg_get_hypertable_or_fail(int32 hypertable_id)
-{
-	Hypertable *ht = ts_hypertable_get_by_id(hypertable_id);
-
-	if (NULL == ht)
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("invalid continuous aggregate state"),
-				 errdetail("A continuous aggregate references a hypertable that does not exist.")));
-
-	return ht;
-}
 
 /*
  * Initialize the refresh state for a continuous aggregate.

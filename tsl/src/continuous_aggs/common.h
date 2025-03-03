@@ -158,3 +158,4 @@ cagg_get_time_min(const ContinuousAgg *cagg)
 }
 
 ContinuousAggsBucketFunction *ts_cagg_get_bucket_function_info(Oid view_oid);
+Hypertable *cagg_get_hypertable_or_fail(int32 hypertable_id);

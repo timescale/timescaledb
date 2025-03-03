@@ -1612,3 +1612,17 @@ cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
 	}
 	return retlist;
 }
+
+Hypertable *
+cagg_get_hypertable_or_fail(int32 hypertable_id)
+{
+	Hypertable *ht = ts_hypertable_get_by_id(hypertable_id);
+
+	if (NULL == ht)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("invalid continuous aggregate state"),
+				 errdetail("A continuous aggregate references a hypertable that does not exist.")));
+
+	return ht;
+}

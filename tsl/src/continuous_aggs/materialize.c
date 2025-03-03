@@ -779,41 +779,127 @@ log_refresh_window(int elevel, const ContinuousAgg *cagg, const InternalTimeRang
 	Assert(!isvarlena);
 
 	elog(elevel,
-		 "%s \"%s\" in window [ %s, %s ]",
+		 "%s \"%s\" in window [ %s, %s ] internal [ %ld, %ld ] minimum [ %s ]",
 		 msg,
 		 NameStr(cagg->data.user_view_name),
 		 DatumGetCString(OidFunctionCall1(outfuncid, start_ts)),
-		 DatumGetCString(OidFunctionCall1(outfuncid, end_ts)));
+		 DatumGetCString(OidFunctionCall1(outfuncid, end_ts)),
+
+		 refresh_window->start,
+		 refresh_window->end,
+		 DatumGetCString(
+			 OidFunctionCall1(outfuncid, Int64GetDatum(ts_time_get_min(refresh_window->type)))));
 }
 
 static List *
-split_ranges(MaterializationContext *context, int64 bucket_width, int32 range_factor)
+make_refresh_window_list(MaterializationContext *context, int64 bucket_width, int32 range_factor)
 {
-	List *ranges = NIL;
-	InternalTimeRange range = context->internal_materialization_range;
+	List *refresh_window_list = NIL;
+	InternalTimeRange refresh_window = context->internal_materialization_range;
+	Oid bucket_function = context->cagg->bucket_function->bucket_function;
+	FuncInfo *func_info = ts_func_cache_get_bucketing_func(bucket_function);
+	Ensure(func_info != NULL, "unable to get bucket function for Oid %d", bucket_function);
 
-	if (TS_TIME_IS_MIN(range.start, range.type))
+	/* Do not produce batches for CAggs using deprecated time_bucket_ng function */
+	if (func_info->origin == ORIGIN_TIMESCALE_EXPERIMENTAL || range_factor == 0)
 	{
-		// elog(INFO, "IS NULL");
-		log_refresh_window(INFO, context->cagg, &range, "before NULL");
+		refresh_window_list = lappend(refresh_window_list, &refresh_window);
+		return refresh_window_list;
+	}
+
+	log_refresh_window(INFO, context->cagg, &refresh_window, "begin");
+
+	Hypertable *ht = cagg_get_hypertable_or_fail(context->cagg->data.raw_hypertable_id);
+
+	/* Get the minimum bucket start for the time dimension type */
+	int64 min_bucket_start = ts_time_get_min(refresh_window.type);
+	if (!IS_TIMESTAMP_TYPE(refresh_window.type))
+	{
+		min_bucket_start =
+			ts_time_saturating_add(min_bucket_start, bucket_width - 1, refresh_window.type);
+		min_bucket_start =
+			ts_time_bucket_by_type(bucket_width, min_bucket_start, refresh_window.type);
+	}
+	// else
+	// {
+	// 	min_bucket_start = ts_time_get_nobegin(refresh_window.type);
+	// }
+		
+
+	/* If refresh window range start is NULL then get the first bucket from the original hypertable
+	 */
+	//	if (TS_TIME_IS_MIN(refresh_window.start, refresh_window.type))
+	if (refresh_window.start == min_bucket_start ||
+		TS_TIME_IS_NOBEGIN(refresh_window.start, refresh_window.type))
+	{
+		log_refresh_window(INFO, context->cagg, &refresh_window, "IS NULL");
 		bool isnull;
-		Hypertable *ht = ts_hypertable_get_by_id(context->cagg->data.raw_hypertable_id);
-		range.start = ts_hypertable_get_open_dim_min_value(ht, 0, &isnull);
+		refresh_window.start = ts_hypertable_get_open_dim_min_value(ht, 0, &isnull);
 
-		if (range.start > range.end)
-			range.end = range.start;
+		/* If there's no MIN data then produce only one range */
+		if (TS_TIME_IS_MIN(refresh_window.start, refresh_window.type) || isnull)
+		{
+			refresh_window_list =
+				lappend(refresh_window_list, &context->internal_materialization_range);
+			return refresh_window_list;
+		}
 
-		log_refresh_window(INFO, context->cagg, &range, "min");
+		// refresh_window.start = int64_min(refresh_window.start,
+		// context->internal_materialization_range.start);
+		log_refresh_window(INFO, context->cagg, &refresh_window, "min");
 
 		if (!isnull)
 		{
+			if (refresh_window.start >= refresh_window.end)
+				refresh_window.end = refresh_window.start + 1;
+
 			// range = ts_compute_inscribed_refresh_window(context->cagg, &range);
-			range =
+			refresh_window =
 				cagg_compute_circumscribed_bucketed_refresh_window(context->cagg,
-																   &range,
+																   &refresh_window,
 																   context->cagg->bucket_function);
-			log_refresh_window(INFO, context->cagg, &range, "bucket");
+
+			// if (context->cagg->bucket_function->bucket_fixed_interval == false)
+			// {
+			// 	ts_compute_inscribed_bucketed_refresh_window_variable(&refresh_window.start,
+			// 														  &refresh_window.end,
+			// 														  context->cagg->bucket_function);
+			// }
+			// else
+			// {
+			// 	refresh_window = cagg_compute_inscribed_bucketed_refresh_window(context->cagg,
+			// 																	&refresh_window,
+			// 																	bucket_width);
+			// }
+
+			// Datum start_old, start_new;
+
+			// start_old = ts_internal_to_time_value(refresh_window.start, refresh_window.type);
+			// start_new = generic_time_bucket(context->cagg->bucket_function, start_old);
+			// refresh_window.start = ts_time_value_to_internal(start_new, refresh_window.type);
+
+			// /* If there's no MIN data then produre only one range */
+			// if (TS_TIME_IS_MIN(refresh_window.start, refresh_window.type) || isnull)
+			// {
+			// 	refresh_window_list = lappend(refresh_window_list,
+			// &context->internal_materialization_range); 	return refresh_window_list;
+			// }
+
+			refresh_window.end = context->internal_materialization_range.end;
+			log_refresh_window(INFO, context->cagg, &refresh_window, "bucket");
 		}
+
+		// refresh_window.start = int64_max(refresh_window.start,
+		// context->internal_materialization_range.start); refresh_window.end =
+		// int64_max(refresh_window.end, context->internal_materialization_range.end); if
+		// (refresh_window.start > refresh_window.end) 	refresh_window.end = refresh_window.start;
+
+		// /* If there's no MIN data then produre only one range */
+		// if (TS_TIME_IS_MIN(refresh_window.start, refresh_window.type) || isnull)
+		// {
+		// 	refresh_window_list = lappend(refresh_window_list,
+		// &context->internal_materialization_range); 	return refresh_window_list;
+		// }
 	}
 
 	// elog(DEBUG1,
@@ -821,10 +907,82 @@ split_ranges(MaterializationContext *context, int64 bucket_width, int32 range_fa
 	// 	 TS_TIME_IS_MIN(start, context->cagg->partition_type),
 	// 	 TS_TIME_IS_MAX(end, context->cagg->partition_type));
 
-	ranges = lappend(ranges, &range);
+	// refresh_window_list = lappend(refresh_window_list, &refresh_window);
 	// log_refresh_window(DEBUG1, context->cagg, &context->materialization_range, "splitting");
-	return ranges;
+	// return refresh_window_list;
 
+	const Dimension *time_dim;
+	// Hypertable *ht = cagg_get_hypertable_or_fail(context->cagg->data.raw_hypertable_id);
+	time_dim = hyperspace_get_open_dimension(ht->space, 0);
+
+	const char *query_str = " \
+		WITH chunk_ranges AS ( \
+			SELECT \
+				range_start AS start, \
+				range_end AS end \
+			FROM \
+				_timescaledb_catalog.dimension_slice \
+				JOIN _timescaledb_catalog.dimension ON dimension.id = dimension_slice.dimension_id \
+			WHERE \
+				hypertable_id = $1 \
+				AND dimension_id = $2 \
+			ORDER BY \
+				range_start \
+		) \
+		SELECT \
+			refresh_start AS start, \
+			LEAST($5, refresh_start + $3) AS end \
+		FROM \
+			pg_catalog.generate_series($4, $5, $3) AS refresh_start \
+		WHERE \
+			EXISTS ( \
+			    SELECT FROM chunk_ranges \
+				WHERE \
+					pg_catalog.int8range(refresh_start, refresh_start + $3) \
+					OPERATOR(pg_catalog.&&) \
+					pg_catalog.int8range(chunk_ranges.start, chunk_ranges.end) \
+				);";
+	/*
+
+
+
+				JOIN chunk_ranges ON \
+					pg_catalog.int8range(refresh_start, refresh_start + $7) \
+						OPERATOR(pg_catalog.&&) \
+					pg_catalog.int8range(chunk_ranges.start, chunk_ranges.end);"; */
+
+	int res;
+	Oid types[] = { INT4OID, INT4OID, INT8OID, INT8OID, INT8OID };
+	Datum values[] = { Int32GetDatum(ht->fd.id),
+					   Int32GetDatum(time_dim->fd.id),
+					   Int64GetDatum(bucket_width * range_factor),
+					   Int64GetDatum(refresh_window.start),
+					   Int64GetDatum(refresh_window.end) };
+	char nulls[] = { false, false, false, false, false };
+
+	// elog(INFO, "%s: %s", __func__, query_str);
+	res = SPI_execute_with_args(query_str,
+								5,
+								types,
+								values,
+								nulls,
+								false /* read_only */,
+								0 /* count */);
+
+	if (res < 0)
+		elog(ERROR, "%s: could not get the last bucket of the materialized data", __func__);
+
+	for (uint64 i = 0; i < SPI_processed; i++)
+	{
+		bool isnull;
+		InternalTimeRange *range = palloc(sizeof(InternalTimeRange));
+		range->start = SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 1, &isnull);
+		range->end = SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 2, &isnull);
+		range->type = refresh_window.type;
+		refresh_window_list = lappend(refresh_window_list, range);
+
+		log_refresh_window(INFO, context->cagg, range, "range refresh");
+	}
 	// while (start < end)
 	// {
 	// 	InternalTimeRange *new_range = palloc(sizeof(InternalTimeRange));
@@ -838,7 +996,7 @@ split_ranges(MaterializationContext *context, int64 bucket_width, int32 range_fa
 	// 	log_refresh_window(LOG, context->cagg, &range, "splitting");
 	// }
 
-	return ranges;
+	return refresh_window_list;
 }
 
 static void
@@ -852,7 +1010,7 @@ execute_materializations(MaterializationContext *context)
 		Assert(bucket_width > 0);
 
 		ListCell *lc;
-		List *ranges = split_ranges(context, bucket_width, 10);
+		List *ranges = make_refresh_window_list(context, bucket_width, 2000);
 
 		foreach (lc, ranges)
 		{
