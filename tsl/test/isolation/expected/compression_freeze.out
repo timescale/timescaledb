@@ -226,7 +226,7 @@ Uncompressed      |    2
 (1 row)
 
 step s1_compress_delete: 
-   SET timescaledb.enable_delete_after_compression TO on;
+   SET timescaledb.compress_truncate_behaviour TO truncate_disabled;
    SELECT count(*) FROM (SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('sensor_data') i) i;
  <waiting ...>
 step s2_select_count_and_stats: 
