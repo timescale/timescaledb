@@ -824,7 +824,6 @@ make_refresh_window_list(MaterializationContext *context, int64 bucket_width, in
 	// {
 	// 	min_bucket_start = ts_time_get_nobegin(refresh_window.type);
 	// }
-		
 
 	/* If refresh window range start is NULL then get the first bucket from the original hypertable
 	 */
@@ -911,6 +910,18 @@ make_refresh_window_list(MaterializationContext *context, int64 bucket_width, in
 	// log_refresh_window(DEBUG1, context->cagg, &context->materialization_range, "splitting");
 	// return refresh_window_list;
 
+	int64 estimated_batches =
+		(refresh_window.end - refresh_window.start) / (bucket_width * range_factor);
+	if (estimated_batches > ts_guc_cagg_max_individual_materializations)
+	{
+		// elog(INFO, "Fallback to single refresh window: %ld", estimated_batches);
+		refresh_window_list =
+			lappend(refresh_window_list, &context->internal_materialization_range);
+		return refresh_window_list;
+	}
+
+	log_refresh_window(INFO, context->cagg, &refresh_window, "before produce ranges");
+
 	const Dimension *time_dim;
 	// Hypertable *ht = cagg_get_hypertable_or_fail(context->cagg->data.raw_hypertable_id);
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
@@ -931,14 +942,14 @@ make_refresh_window_list(MaterializationContext *context, int64 bucket_width, in
 		) \
 		SELECT \
 			refresh_start AS start, \
-			LEAST($5, refresh_start + $3) AS end \
+			LEAST($5::numeric, refresh_start::numeric + $3::numeric)::bigint AS end \
 		FROM \
 			pg_catalog.generate_series($4, $5, $3) AS refresh_start \
 		WHERE \
 			EXISTS ( \
 			    SELECT FROM chunk_ranges \
 				WHERE \
-					pg_catalog.int8range(refresh_start, refresh_start + $3) \
+					pg_catalog.int8range(refresh_start, LEAST($5::numeric, refresh_start::numeric + $3::numeric)::bigint) \
 					OPERATOR(pg_catalog.&&) \
 					pg_catalog.int8range(chunk_ranges.start, chunk_ranges.end) \
 				);";
