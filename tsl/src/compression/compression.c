@@ -12,6 +12,7 @@
 #include <libpq/pqformat.h>
 #include <storage/predicate.h>
 #include <utils/datum.h>
+#include <utils/elog.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
@@ -38,6 +39,14 @@
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/compression_settings.h"
+
+/*
+ * Timing parameters for truncate locking heuristics.
+ * These are the same as used by Postgres for truncate locking during lazy vacuum.
+ *
+ */
+#define COMPRESS_TRUNCATE_LOCK_WAIT_INTERVAL 50 /* ms */
+#define COMPRESS_TRUNCATE_LOCK_TIMEOUT 5000		/* ms */
 
 StaticAssertDecl(GLOBAL_MAX_ROWS_PER_COMPRESSION >= TARGET_COMPRESSED_BATCH_SIZE,
 				 "max row numbers must be harmonized");
@@ -505,16 +514,61 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	}
 
 	row_compressor_close(&row_compressor);
-	if (!ts_guc_enable_delete_after_compression)
-	{
-		DEBUG_WAITPOINT("compression_done_before_truncate_uncompressed");
-		truncate_relation(in_table);
-		DEBUG_WAITPOINT("compression_done_after_truncate_uncompressed");
-	}
-	else
-	{
+
+	if (ts_guc_enable_delete_after_compression) {
+		ereport(NOTICE, (errcode(ERRCODE_WARNING_DEPRECATED_FEATURE), errmsg("timescaledb.enable_delete_after_compression is deprecated and will be removed in a future version. Please use timescaledb.compress_truncate_behaviour instead.")));
 		delete_relation_rows(in_table);
 		DEBUG_WAITPOINT("compression_done_after_delete_uncompressed");
+	}
+	else {
+		int lock_retry = 0;
+		switch(ts_guc_compress_truncate_behaviour)
+		{
+			case COMPRESS_TRUNCATE_ONLY:
+				DEBUG_WAITPOINT("compression_done_before_truncate_uncompressed");
+				truncate_relation(in_table);
+				DEBUG_WAITPOINT("compression_done_after_truncate_uncompressed");
+				break;
+			case COMPRESS_TRUNCATE_OR_DELETE:
+				DEBUG_WAITPOINT("compression_done_before_truncate_or_delete_uncompressed");
+				while (true)
+				{
+					if (ConditionalLockRelation(in_rel, AccessExclusiveLock))
+					{
+						truncate_relation(in_table);
+						break;
+					}
+
+					/*
+					 * Check for interrupts while trying to (re-)acquire the exclusive
+					 * lock.
+					 */
+					CHECK_FOR_INTERRUPTS();
+
+					if (++lock_retry >
+						(COMPRESS_TRUNCATE_LOCK_TIMEOUT / COMPRESS_TRUNCATE_LOCK_WAIT_INTERVAL))
+					{
+						/*
+						 * We failed to establish the lock in the specified number of
+						 * retries. This means we give up truncating and fallback to delete
+						 */
+						delete_relation_rows(in_table);
+						break;
+					}
+
+					(void) WaitLatch(MyLatch,
+									 WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
+									 COMPRESS_TRUNCATE_LOCK_WAIT_INTERVAL,
+									 WAIT_EVENT_VACUUM_TRUNCATE);
+					ResetLatch(MyLatch);
+				}
+				DEBUG_WAITPOINT("compression_done_after_truncate_or_delete_uncompressed");
+				break;
+			case COMPRESS_TRUNCATE_DISABLED:
+				delete_relation_rows(in_table);
+				DEBUG_WAITPOINT("compression_done_after_delete_uncompressed");
+				break;
+		}
 	}
 
 	table_close(out_rel, NoLock);
@@ -770,7 +824,7 @@ build_column_map(const CompressionSettings *settings, Relation uncompressed_tabl
 			Ensure(!is_orderby || batch_minmax_builder != NULL,
 				   "orderby columns must have minmax metadata");
 
-			*column = (PerColumn){
+			*column = (PerColumn) {
 				.compressor = compressor_for_type(attr->atttypid),
 				.metadata_builder = batch_minmax_builder,
 				.segmentby_column_index = -1,
@@ -783,7 +837,7 @@ build_column_map(const CompressionSettings *settings, Relation uncompressed_tabl
 					 "expected segment by column \"%s\" to be same type as uncompressed column",
 					 NameStr(attr->attname));
 			int16 index = ts_array_position(settings->fd.segmentby, NameStr(attr->attname));
-			*column = (PerColumn){
+			*column = (PerColumn) {
 				.segment_info = segment_info_new(attr),
 				.segmentby_column_index = index,
 			};
@@ -810,7 +864,7 @@ row_compressor_init(const CompressionSettings *settings, RowCompressor *row_comp
 			 "missing metadata column '%s' in columnstore table",
 			 COMPRESSION_COLUMN_METADATA_COUNT_NAME);
 
-	*row_compressor = (RowCompressor){
+	*row_compressor = (RowCompressor) {
 		.per_row_ctx = AllocSetContextCreate(CurrentMemoryContext,
 											 "compress chunk per-row",
 											 ALLOCSET_DEFAULT_SIZES),
@@ -1142,7 +1196,7 @@ segment_info_new(Form_pg_attribute column_attr)
 
 	SegmentInfo *segment_info = palloc(sizeof(*segment_info));
 
-	*segment_info = (SegmentInfo){
+	*segment_info = (SegmentInfo) {
 		.typlen = column_attr->attlen,
 		.typ_by_val = column_attr->attbyval,
 	};
@@ -1363,7 +1417,7 @@ create_per_compressed_column(RowDecompressor *decompressor)
 		AttrNumber decompressed_colnum = get_attnum(decompressor->out_rel->rd_id, col_name);
 		if (!AttributeNumberIsValid(decompressed_colnum))
 		{
-			*per_compressed_col = (PerCompressedColumn){
+			*per_compressed_col = (PerCompressedColumn) {
 				.decompressed_column_offset = -1,
 			};
 			continue;
@@ -1384,7 +1438,7 @@ create_per_compressed_column(RowDecompressor *decompressor)
 				 format_type_be(decompressed_type),
 				 col_name);
 
-		*per_compressed_col = (PerCompressedColumn){
+		*per_compressed_col = (PerCompressedColumn) {
 			.decompressed_column_offset = decompressed_column_offset,
 			.is_compressed = is_compressed,
 			.decompressed_type = decompressed_type,
@@ -1861,7 +1915,7 @@ tsl_compressed_data_in(PG_FUNCTION_ARGS)
 		elog(ERROR, "could not decode base64-encoded compressed data");
 
 	decoded[decoded_len] = '\0';
-	data = (StringInfoData){
+	data = (StringInfoData) {
 		.data = decoded,
 		.len = decoded_len,
 		.maxlen = decoded_len,

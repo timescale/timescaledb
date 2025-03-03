@@ -2883,6 +2883,7 @@ ALTER TABLE hyper_delete SET (timescaledb.compress, timescaledb.compress_segment
 NOTICE:  default order by for hypertable "hyper_delete" is set to ""time" DESC"
 SET timescaledb.enable_delete_after_compression TO true;
 SELECT FROM compress_chunk(:'CHUNK');
+NOTICE:  timescaledb.enable_delete_after_compression is deprecated and will be removed in a future version. Please use timescaledb.compress_truncate_behaviour instead.
 --
 (1 row)
 
