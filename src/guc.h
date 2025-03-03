@@ -80,6 +80,14 @@ extern TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates;
 /* Only settable in debug mode for testing */
 extern TSDLLEXPORT bool ts_guc_enable_null_compression;
 
+typedef enum CompressTruncateBehaviour
+{
+	COMPRESS_TRUNCATE_ONLY,
+	COMPRESS_TRUNCATE_OR_DELETE,
+	COMPRESS_TRUNCATE_DISABLED,
+} CompressTruncateBehaviour;
+extern TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour;
+
 #ifdef USE_TELEMETRY
 typedef enum TelemetryLevel
 {
