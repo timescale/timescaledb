@@ -490,15 +490,11 @@ invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
 	int64 bucket_width = ts_continuous_agg_fixed_bucket_width(bucket_function);
 	Assert(bucket_width > 0);
 
-	// if (IS_TIMESTAMP_TYPE(time_type_oid))
 	/* Compute the start of the "first" bucket for the type. The min value
 	 * must be at the start of the "first" bucket or somewhere in the
 	 * bucket. If the min value falls on the exact start of the bucket we are
 	 * good. Otherwise, we need to move to the next full bucket. */
 	min_bucket_start = ts_time_saturating_add(time_dimension_min, bucket_width - 1, time_type_oid);
-	// else
-	// min_bucket_start = time_dimension_min;
-
 	min_bucket_start = ts_time_bucket_by_type(bucket_width, min_bucket_start, time_type_oid);
 
 	/* Compute the end of the "last" bucket for the time type. Remember that

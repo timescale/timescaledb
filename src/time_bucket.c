@@ -58,38 +58,7 @@ ts_int16_bucket(PG_FUNCTION_ARGS)
 	int16 timestamp = PG_GETARG_INT16(1);
 	int16 offset = PG_NARGS() > 2 ? PG_GETARG_INT16(2) : 0;
 
-	// TIME_BUCKET(period, timestamp, offset, min, max, result)
-
-	// TIME_BUCKET(period, timestamp, offset, PG_INT16_MIN, PG_INT16_MAX, result);
-	if (period <= 0)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("period must be greater than 0")));
-	if (offset != 0)
-	{
-		/* We need to ensure that the timestamp is in range _after_ the */
-		/* offset is applied: when the offset is positive we need to make */
-		/* sure the resultant time is at least min, and when negative that */
-		/* it is less than the max. */
-		(offset) = (offset) % (period);
-		if (((offset) > 0 && (timestamp) < (PG_INT16_MIN) + (offset)) ||
-			((offset) < 0 && (timestamp) > (PG_INT16_MAX) + (offset)))
-			ereport(ERROR,
-					(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
-					 errmsg("timestamp out of range")));
-		(timestamp) -= (offset);
-	}
-	(result) = ((timestamp) / (period)) * (period);
-	if ((timestamp) < 0 && (timestamp) % (period))
-	{
-		if ((result) < (PG_INT16_MIN) + (period))
-			ereport(ERROR,
-					(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
-					 errmsg("timestamp out of range")));
-		else
-			(result) = (result) - (period);
-	}
-	(result) += (offset);
+	TIME_BUCKET(period, timestamp, offset, PG_INT16_MIN, PG_INT16_MAX, result);
 
 	PG_RETURN_INT16(result);
 }

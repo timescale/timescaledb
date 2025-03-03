@@ -28,7 +28,6 @@
 #include "materialize.h"
 #include "process_utility.h"
 #include "refresh.h"
-// #include "time_bucket.h"
 #include "time_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
