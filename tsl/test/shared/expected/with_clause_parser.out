@@ -14,15 +14,19 @@ SELECT * FROM test_with_clause_filter(
             {"baz", "bar", "foo"},
             {"timescaledb", "bar", "baz"},
             {"bar", "timescaledb", "baz"},
-            {"timescaledb", "baz", "bar"}
+            {"timescaledb", "baz", "bar"},
+            {"tsdb", "qux", "bar"},
+            {"tsdb", "quux", "bar"}
         }');
   namespace  |    name     | value | filtered 
 -------------+-------------+-------+----------
  timescaledb | bar         | baz   | t
  timescaledb | baz         | bar   | t
+ tsdb        | qux         | bar   | t
+ tsdb        | quux        | bar   | t
  baz         | bar         | foo   | f
  bar         | timescaledb | baz   | f
-(4 rows)
+(6 rows)
 
 SELECT * FROM test_with_clause_filter(
         '{

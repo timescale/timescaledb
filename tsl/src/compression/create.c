@@ -146,7 +146,7 @@ compressed_column_metadata_name_v2(const char *metadata_type, const char *column
 }
 
 int
-compressed_column_metadata_attno(CompressionSettings *settings, Oid chunk_reloid,
+compressed_column_metadata_attno(const CompressionSettings *settings, Oid chunk_reloid,
 								 AttrNumber chunk_attno, Oid compressed_reloid, char *metadata_type)
 {
 	Assert(is_sparse_index_type(metadata_type));
@@ -497,12 +497,12 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 	 * for now.
 	 */
 	tablespace_oid = get_rel_tablespace(src_chunk->table_id);
+	CompressionSettings *settings = ts_compression_settings_get(src_chunk->hypertable_relid);
 
 	if (OidIsValid(table_id))
 		compress_chunk->table_id = table_id;
 	else
 	{
-		CompressionSettings *settings = ts_compression_settings_get(src_chunk->hypertable_relid);
 		List *column_defs = build_columndefs(settings, src_chunk->table_id);
 		compress_chunk->table_id =
 			compression_chunk_create(src_chunk, compress_chunk, column_defs, tablespace_oid);
@@ -512,7 +512,7 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 		elog(ERROR, "could not create compressed chunk table");
 
 	/* Materialize current compression settings for this chunk */
-	ts_compression_settings_materialize(src_chunk->hypertable_relid, compress_chunk->table_id);
+	ts_compression_settings_materialize(settings, src_chunk->table_id, compress_chunk->table_id);
 
 	/* if the src chunk is not in the default tablespace, the compressed indexes
 	 * should also be in a non-default tablespace. IN the usual case, this is inferred
@@ -573,6 +573,7 @@ validate_existing_constraints(Hypertable *ht, CompressionSettings *settings)
 
 	ArrayType *arr;
 
+	Assert(ht->main_table_relid == settings->fd.relid);
 	pg_constr = table_open(ConstraintRelationId, AccessShareLock);
 
 	ScanKeyInit(&scankey,
@@ -845,7 +846,12 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	settings = ts_compression_settings_get(ht->main_table_relid);
 	if (!settings)
 	{
-		settings = ts_compression_settings_create(ht->main_table_relid, NULL, NULL, NULL, NULL);
+		settings = ts_compression_settings_create(ht->main_table_relid,
+												  InvalidOid,
+												  NULL,
+												  NULL,
+												  NULL,
+												  NULL);
 	}
 
 	compression_settings_update(ht, settings, with_clause_options);
@@ -1257,7 +1263,8 @@ tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def)
 			return;
 		}
 		ColumnDef *coldef = build_columndef_singlecolumn(orig_def->colname, coloid);
-		CompressionSettings *settings = ts_compression_settings_get(chunk->table_id);
+		CompressionSettings *settings =
+			ts_compression_settings_get_by_compress_relid(chunk->table_id);
 		add_column_to_compression_table(chunk->table_id, settings, coldef);
 	}
 }
@@ -1288,7 +1295,8 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 	foreach (lc, chunks)
 	{
 		Chunk *chunk = lfirst(lc);
-		CompressionSettings *settings = ts_compression_settings_get(chunk->table_id);
+		CompressionSettings *settings =
+			ts_compression_settings_get_by_compress_relid(chunk->table_id);
 		if (ts_array_is_member(settings->fd.segmentby, name) ||
 			ts_array_is_member(settings->fd.orderby, name))
 			ereport(ERROR,

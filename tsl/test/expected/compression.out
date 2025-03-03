@@ -68,9 +68,9 @@ SELECT id, schema_name, table_name, compression_state as compressed, compressed_
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::regclass;
- relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
--------+-----------+---------+--------------+--------------------
- foo   | {a,b}     | {c,d}   | {t,f}        | {t,f}
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+----------------+-----------+---------+--------------+--------------------
+ foo   |                | {a,b}     | {c,d}   | {t,f}        | {t,f}
 (1 row)
 
 SELECT * FROM timescaledb_information.compression_settings ORDER BY hypertable_name;
@@ -290,9 +290,9 @@ SELECT id, schema_name, table_name, compression_state as compressed, compressed_
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'conditions'::regclass;
-   relid    | segmentby  | orderby | orderby_desc | orderby_nullsfirst 
-------------+------------+---------+--------------+--------------------
- conditions | {location} | {time}  | {f}          | {f}
+   relid    | compress_relid | segmentby  | orderby | orderby_desc | orderby_nullsfirst 
+------------+----------------+------------+---------+--------------+--------------------
+ conditions |                | {location} | {time}  | {f}          | {f}
 (1 row)
 
 select attname, attstorage, typname from pg_attribute at, pg_class cl , pg_type ty
@@ -918,9 +918,9 @@ select id, schema_name, table_name, compression_state as compressed, compressed_
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='datatype_test'::regclass;
-     relid     | segmentby | orderby | orderby_desc | orderby_nullsfirst 
----------------+-----------+---------+--------------+--------------------
- datatype_test |           | {time}  | {t}          | {t}
+     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+---------------+----------------+-----------+---------+--------------+--------------------
+ datatype_test |                |           | {time}  | {t}          | {t}
 (1 row)
 
 --TEST try to compress a hypertable that has a continuous aggregate

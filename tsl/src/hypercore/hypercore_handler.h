@@ -62,10 +62,7 @@ typedef struct ColumnCompressionSettings
  */
 typedef struct HypercoreInfo
 {
-	int32 hypertable_id;		  /* TimescaleDB ID of parent hypertable */
-	int32 relation_id;			  /* TimescaleDB ID of relation (chunk ID) */
-	int32 compressed_relation_id; /* TimescaleDB ID of compressed relation (chunk ID) */
-	Oid compressed_relid;		  /* Relid of compressed relation */
+	Oid compressed_relid; /* Relid of compressed relation */
 	int num_columns;
 	AttrNumber count_cattno; /* Attribute number of count column in
 							  * compressed rel */

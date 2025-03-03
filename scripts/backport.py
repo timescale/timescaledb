@@ -413,7 +413,7 @@ print(
 target_remote = "backport-target-remote"
 git_returncode(f"remote remove {target_remote}")
 git_check(
-    f'remote add {target_remote} https://{os.environ["GITHUB_TOKEN"]}@github.com/{token_user.login}/{source_repo.name}.git'
+    f'remote add {target_remote} https://{os.environ["GITHUB_TOKEN"]}@github.com/{source_repo.owner.login}/{source_repo.name}.git'
 )
 
 # Fetch all branches from the target repository, because we use the presence
@@ -436,8 +436,6 @@ for index, pr_info in enumerate(prs_to_backport.values()):
 
     original_pr = pr_info.pygithub_pr
     backport_branch = f"backport/{backport_target}/{original_pr.number}"
-    # We're creating the backport PR from the token user's fork.
-    backport_pr_head = f"{token_user.login}:{backport_branch}"
 
     # If there is already a backport branch for this PR, this probably means
     # that we already created the backport PR. Update it, because the PR might
@@ -467,7 +465,7 @@ for index, pr_info in enumerate(prs_to_backport.values()):
         # Use merge and no force-push, so that the simultaneous changes made by
         # other users are not accidentally overwritten.
         git_check(f"merge --quiet --no-edit {source_remote}/{backport_target}")
-        git_check(f"push --quiet {target_remote} @:{backport_branch}")
+        git_check(f"push {target_remote} @:{backport_branch}")
         continue
 
     # Try to cherry-pick the commits.
@@ -509,7 +507,7 @@ for index, pr_info in enumerate(prs_to_backport.values()):
         )
 
     # Push the backport branch.
-    git_check(f"push --quiet {target_remote} @:refs/heads/{backport_branch}")
+    git_check(f"push {target_remote} @:refs/heads/{backport_branch}")
 
     # Prepare description for the backport PR.
     backport_description = (
@@ -572,7 +570,7 @@ for index, pr_info in enumerate(prs_to_backport.values()):
         title=f"Backport to {backport_target}: #{original_pr.number}: {original_pr.title}",
         body=backport_description,
         # We're creating PR from the token user's fork.
-        head=backport_pr_head,
+        head=backport_branch,
         base=backport_target,
     )
     backport_pr.add_to_labels("is-auto-backport")

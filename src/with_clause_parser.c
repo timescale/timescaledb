@@ -40,7 +40,9 @@ ts_with_clause_filter(const List *def_elems, List **within_namespace, List **not
 	{
 		DefElem *def = (DefElem *) lfirst(cell);
 
-		if (def->defnamespace != NULL && pg_strcasecmp(def->defnamespace, EXTENSION_NAMESPACE) == 0)
+		if (def->defnamespace != NULL &&
+			(pg_strcasecmp(def->defnamespace, EXTENSION_NAMESPACE) == 0 ||
+			 pg_strcasecmp(def->defnamespace, EXTENSION_NAMESPACE_ALIAS) == 0))
 		{
 			if (within_namespace != NULL)
 				*within_namespace = lappend(*within_namespace, def);
