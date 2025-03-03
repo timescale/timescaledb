@@ -434,8 +434,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.recompress_chunk_segmentwise = error_no_default_fn_pg_community,
 	.get_compressed_chunk_index_for_recompression = error_no_default_fn_pg_community,
 
-	.hypercore_handler = error_no_default_fn_pg_community,
-	.hypercore_proxy_handler = error_pg_community_hypercore_proxy_handler,
+	.hypercore_handler = process_hypercore_handler,
+	.hypercore_proxy_handler = process_hypercore_proxy_handler,
 	.is_compressed_tid = error_no_default_fn_pg_community,
 
 	.preprocess_query_tsl = preprocess_query_tsl_default_fn_community,
