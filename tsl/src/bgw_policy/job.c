@@ -389,6 +389,7 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 						PGC_S_SESSION);
 	}
 
+	/* TODO: split it into ranges */
 	continuous_agg_refresh_internal(policy_data.cagg,
 									&policy_data.refresh_window,
 									CAGG_REFRESH_POLICY,
