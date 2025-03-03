@@ -72,3 +72,14 @@ CREATE INDEX compression_settings_compress_relid_idx ON _timescaledb_catalog.com
 DROP TABLE _timescaledb_catalog.tempsettings CASCADE;
 GRANT SELECT ON _timescaledb_catalog.compression_settings TO PUBLIC;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_settings', '');
+
+
+-- Type for bloom filters used by the sparse indexes on compressed hypertables.
+CREATE TYPE _timescaledb_internal.bloom1;
+CREATE FUNCTION _timescaledb_functions.bloom1in(cstring) RETURNS _timescaledb_internal.bloom1 AS 'byteain' LANGUAGE INTERNAL IMMUTABLE PARALLEL SAFE;
+CREATE FUNCTION _timescaledb_functions.bloom1out(_timescaledb_internal.bloom1) RETURNS cstring AS 'byteaout' LANGUAGE INTERNAL IMMUTABLE PARALLEL SAFE;
+CREATE TYPE _timescaledb_internal.bloom1 (
+    INPUT = _timescaledb_functions.bloom1in,
+    OUTPUT = _timescaledb_functions.bloom1out,
+    LIKE = bytea
+);
