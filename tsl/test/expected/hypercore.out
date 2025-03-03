@@ -12,7 +12,7 @@ show timescaledb.hypercore_indexam_whitelist;
 -- user.
 grant all on schema _timescaledb_internal to :ROLE_DEFAULT_PERM_USER;
 set role :ROLE_DEFAULT_PERM_USER;
-SET timescaledb.arrow_cache_maxsize = 4;
+SET timescaledb.hypercore_arrow_cache_max_entries = 4;
 CREATE TABLE readings(
        time timestamptz UNIQUE,
        location int,
@@ -245,17 +245,15 @@ SET enable_indexscan = false;
 SET timescaledb.enable_transparent_decompression TO 'hypercore';
 EXPLAIN (costs off, timing off, summary off)
 SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
-                                QUERY PLAN                                
---------------------------------------------------------------------------
+                             QUERY PLAN                             
+--------------------------------------------------------------------
  Limit
-   ->  Gather Merge
-         Workers Planned: 1
-         ->  Sort
-               Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
-               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-                     ->  Parallel Seq Scan on compress_hyper_2_32_chunk
-                           Filter: (device < 4)
-(8 rows)
+   ->  Sort
+         Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
+         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+               ->  Seq Scan on compress_hyper_2_32_chunk
+                     Filter: (device < 4)
+(6 rows)
 
 SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
              time             | location | device | temp |     humidity     |      jdata       
@@ -763,7 +761,7 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as rescan_chunk
 select compress_chunk(:'rescan_chunk', hypercore_use_access_method => true);
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_5_40_chunk
+ _timescaledb_internal._hyper_5_37_chunk
 (1 row)
 
 select relname, amname
@@ -772,7 +770,7 @@ select relname, amname
   join pg_am on (relam = pg_am.oid);
       relname      |  amname   
 -------------------+-----------
- _hyper_5_40_chunk | hypercore
+ _hyper_5_37_chunk | hypercore
 (1 row)
 
 insert into rescan values ('2024-11-02 01:00', 2, 1.0), ('2024-11-02 02:00', 2, 2.0), ('2024-11-02 03:00', 1, 3.0), ('2024-11-02 05:00', 2, 4.0);
@@ -784,5 +782,65 @@ select test_hypercore(:'rescan_chunk');
  test_hypercore 
 ----------------
  
+(1 row)
+
+-- Simple test that loading the hypercore handler works on a fresh
+-- backend.
+--
+-- Since TSL library is loaded late (after a query has been executed),
+-- this can generate a license error if an attempt is made to use a
+-- crossmodule function inside a query, and the hypertable handler is
+-- used through GetTableAmRoutine().
+--
+-- To test this, we create a hypercore table, start a fresh
+-- connection, and run a query on it.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+create table crossmodule_test(
+       time timestamptz unique,
+       location int
+);
+select hypertable_id
+  from create_hypertable('crossmodule_test', by_range('time', '1d'::interval)) \gset
+NOTICE:  adding not-null constraint to column "time"
+select setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+insert into crossmodule_test select t, ceil(random()*10)
+from generate_series('2022-06-01'::timestamptz, '2022-06-10'::timestamptz, '1h') t;
+alter table crossmodule_test
+      set access method hypercore,
+      set (timescaledb.compress_orderby = 'time');
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "crossmodule_test" is set to ""
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "crossmodule_test" is set to ""
+\c :TEST_DBNAME :ROLE_SUPERUSER
+select count(*) from crossmodule_test;
+ count 
+-------
+   217
+(1 row)
+
+-- Verify that vacuum with fail without the correct license.
+alter system set timescaledb.license to 'apache';
+select pg_reload_conf();
+ pg_reload_conf 
+----------------
+ t
+(1 row)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+\set ON_ERROR_STOP 0
+vacuum crossmodule_test;
+ERROR:  function "ts_hypercore_handler" is not supported under the current "apache" license
+\set ON_ERROR_STOP 1
+alter system reset timescaledb.license;
+select pg_reload_conf();
+ pg_reload_conf 
+----------------
+ t
 (1 row)
 

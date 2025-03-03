@@ -19,6 +19,7 @@
 #include "compat/compat.h"
 
 #include "algorithms/array.h"
+#include "algorithms/bool_compress.h"
 #include "algorithms/deltadelta.h"
 #include "algorithms/dictionary.h"
 #include "algorithms/gorilla.h"
@@ -47,6 +48,7 @@ static const CompressionAlgorithmDefinition definitions[_END_COMPRESSION_ALGORIT
 	[COMPRESSION_ALGORITHM_DICTIONARY] = DICTIONARY_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_GORILLA] = GORILLA_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_DELTADELTA] = DELTA_DELTA_ALGORITHM_DEFINITION,
+	[COMPRESSION_ALGORITHM_BOOL] = BOOL_COMPRESS_ALGORITHM_DEFINITION,
 };
 
 static NameData compression_algorithm_name[] = {
@@ -55,6 +57,7 @@ static NameData compression_algorithm_name[] = {
 	[COMPRESSION_ALGORITHM_DICTIONARY] = { "DICTIONARY" },
 	[COMPRESSION_ALGORITHM_GORILLA] = { "GORILLA" },
 	[COMPRESSION_ALGORITHM_DELTADELTA] = { "DELTADELTA" },
+	[COMPRESSION_ALGORITHM_BOOL] = { "BOOL" },
 };
 
 Name
@@ -1815,6 +1818,9 @@ tsl_compressed_data_info(PG_FUNCTION_ARGS)
 		case COMPRESSION_ALGORITHM_ARRAY:
 			has_nulls = array_compressed_has_nulls(header);
 			break;
+		case COMPRESSION_ALGORITHM_BOOL:
+			has_nulls = bool_compressed_has_nulls(header);
+			break;
 		default:
 			elog(ERROR, "unknown compression algorithm %d", header->compression_algorithm);
 			break;
@@ -1831,6 +1837,37 @@ tsl_compressed_data_info(PG_FUNCTION_ARGS)
 	tuple = heap_form_tuple(tupdesc, values, nulls);
 
 	return HeapTupleGetDatum(tuple);
+}
+
+extern Datum
+tsl_compressed_data_has_nulls(PG_FUNCTION_ARGS)
+{
+	const CompressedDataHeader *header = get_compressed_data_header(PG_GETARG_DATUM(0));
+	bool has_nulls = false;
+
+	switch (header->compression_algorithm)
+	{
+		case COMPRESSION_ALGORITHM_GORILLA:
+			has_nulls = gorilla_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_DICTIONARY:
+			has_nulls = dictionary_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_DELTADELTA:
+			has_nulls = deltadelta_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_ARRAY:
+			has_nulls = array_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_BOOL:
+			has_nulls = bool_compressed_has_nulls(header);
+			break;
+		default:
+			elog(ERROR, "unknown compression algorithm %d", header->compression_algorithm);
+			break;
+	}
+
+	return BoolGetDatum(has_nulls);
 }
 
 extern CompressionStorage
@@ -1868,6 +1905,12 @@ compression_get_default_algorithm(Oid typeoid)
 
 		case NUMERICOID:
 			return COMPRESSION_ALGORITHM_ARRAY;
+
+		case BOOLOID:
+			if (ts_guc_enable_bool_compression)
+				return COMPRESSION_ALGORITHM_BOOL;
+			else
+				return COMPRESSION_ALGORITHM_ARRAY;
 
 		default:
 		{

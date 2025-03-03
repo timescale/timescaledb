@@ -46,6 +46,7 @@ set(TEST_FILES
     skip_scan.sql
     transparent_decompression_join_index.sql
     vector_agg_functions.sql
+    vector_agg_groupagg.sql
     vector_agg_param.sql
     vectorized_aggregation.sql)
 
@@ -86,6 +87,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     chunk_utils_internal.sql
     compression_algos.sql
     compression_bgw.sql
+    compression_bools.sql
     compression_ddl.sql
     compression_hypertable.sql
     compression_merge.sql
@@ -120,6 +122,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     feature_flags.sql
     vector_agg_default.sql
     vector_agg_filter.sql
+    vector_agg_text.sql
     vector_agg_memory.sql
     vector_agg_segmentby.sql)
 
@@ -142,7 +145,8 @@ endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
   if(CMAKE_BUILD_TYPE MATCHES Debug)
-    list(APPEND TEST_FILES bgw_scheduler_control.sql hypercore.sql)
+    list(APPEND TEST_FILES bgw_scheduler_control.sql hypercore.sql
+         hypercore_create.sql hypercore_scans.sql)
   endif()
   list(
     APPEND
@@ -153,7 +157,6 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     hypercore_columnar.sql
     hypercore_constraints.sql
     hypercore_copy.sql
-    hypercore_create.sql
     hypercore_cursor.sql
     hypercore_ddl.sql
     hypercore_delete.sql
@@ -164,7 +167,6 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     hypercore_join.sql
     hypercore_merge.sql
     hypercore_policy.sql
-    hypercore_scans.sql
     hypercore_stats.sql
     hypercore_trigger.sql
     hypercore_types.sql
@@ -179,7 +181,8 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
-  list(APPEND TEST_FILES cagg_planning.sql hypercore_parallel.sql)
+  list(APPEND TEST_FILES cagg_planning.sql hypercore_parallel.sql
+       hypercore_vectoragg.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
@@ -205,6 +208,7 @@ set(SOLO_TESTS
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
     cagg_invalidation
+    hypercore
     move
     reorder
     telemetry_stats)

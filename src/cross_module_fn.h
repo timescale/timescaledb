@@ -74,7 +74,6 @@ typedef struct CrossModuleFunctions
 	void (*set_rel_pathlist_dml)(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *, Hypertable *);
 	void (*set_rel_pathlist_query)(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *,
 								   Hypertable *);
-	void (*set_rel_pathlist)(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
 	bool (*process_explain_def)(DefElem *def);
 
 	/* gapfill */
@@ -123,6 +122,7 @@ typedef struct CrossModuleFunctions
 	PGFunction compressed_data_in;
 	PGFunction compressed_data_out;
 	PGFunction compressed_data_info;
+	PGFunction compressed_data_has_nulls;
 	bool (*process_compress_table)(AlterTableCmd *cmd, Hypertable *ht,
 								   WithClauseResult *with_clause_options);
 	void (*process_altertable_cmd)(Hypertable *ht, const AlterTableCmd *cmd);
@@ -150,6 +150,8 @@ typedef struct CrossModuleFunctions
 	PGFunction dictionary_compressor_finish;
 	PGFunction array_compressor_append;
 	PGFunction array_compressor_finish;
+	PGFunction bool_compressor_append;
+	PGFunction bool_compressor_finish;
 	PGFunction bloom1_matches;
 
 	PGFunction create_chunk;

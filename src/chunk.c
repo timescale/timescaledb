@@ -1060,7 +1060,6 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 			Assert(!isvarlena);
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("distributed hypertable member cannot create chunk on its own"),
 					 errmsg("Cannot insert into tiered chunk range of %s.%s - attempt to create "
 							"new chunk "
 							"with range  [%s %s] failed",
@@ -1360,7 +1359,6 @@ ts_chunk_create_for_point(const Hypertable *ht, const Point *p, bool *found, con
 		/*
 		 * If we managed to find some metadata for the chunk (chunk_id != INVALID_CHUNK_ID),
 		 * but it is marked as dropped, try to resurrect it.
-		 * Not sure if this ever worked for distributed hypertables.
 		 */
 		chunk = chunk_resurrect(ht, chunk_id);
 		if (chunk != NULL)
@@ -3406,7 +3404,7 @@ ts_chunk_unset_frozen(Chunk *chunk)
 }
 
 bool
-ts_chunk_is_frozen(Chunk *chunk)
+ts_chunk_is_frozen(const Chunk *chunk)
 {
 	return ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FROZEN);
 }
@@ -4046,6 +4044,14 @@ ts_chunk_drop_single_chunk(PG_FUNCTION_ARGS)
 															   true);
 	Assert(ch != NULL);
 	ts_chunk_validate_chunk_status_for_operation(ch, CHUNK_DROP, true /*throw_error */);
+
+	if (ts_chunk_contains_compressed_data(ch))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("dropping compressed chunks not supported"),
+				 errhint("Please drop the corresponding chunk on the uncompressed hypertable "
+						 "instead.")));
+
 	/* do not drop any chunk dependencies */
 	ts_chunk_drop(ch, DROP_RESTRICT, LOG);
 	PG_RETURN_BOOL(true);

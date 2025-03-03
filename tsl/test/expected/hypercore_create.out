@@ -1063,3 +1063,26 @@ select * from amrels where relparent = 'test5'::regclass;
  _timescaledb_internal._hyper_10_47_chunk | heap      | test5
 (2 rows)
 
+-- Check that operations that rewrite the relation are blocked with
+-- invalid setting of transparent decompression GUC
+\set ON_ERROR_STOP 0
+select count(*) from :chunk;
+ count 
+-------
+     1
+(1 row)
+
+set timescaledb.enable_transparent_decompression='hypercore';
+select decompress_chunk(:'chunk');
+ERROR:  operation not compatible with current setting of timescaledb.enable_transparent_decompression
+alter table :chunk set access method heap;
+ERROR:  operation not compatible with current setting of timescaledb.enable_transparent_decompression
+vacuum full :chunk;
+ERROR:  operation not compatible with current setting of timescaledb.enable_transparent_decompression
+select count(*) from :chunk;
+ count 
+-------
+     1
+(1 row)
+
+\set ON_ERROR_STOP 1

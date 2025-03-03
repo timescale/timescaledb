@@ -728,7 +728,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 			cds->skip_current_tuple = false;
 			if (node->ps.instrument)
 				node->ps.instrument->ntuples2++;
-			return NULL;
+			continue;
 		}
 
 		/* No more tuples to process? */

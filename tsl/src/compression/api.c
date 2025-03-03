@@ -1066,22 +1066,9 @@ get_compressed_chunk_index_for_recompression(Chunk *uncompressed_chunk)
 
 	CompressionSettings *settings = ts_compression_settings_get(compressed_chunk->table_id);
 
-	// For chunks with no segmentby, we don't want to do segmentwise recompression as it is less
-	// performant than a full recompression. This is temporary; once we optimize recompression
-	// code for chunks with no segments we should remove this check.
-	int num_segmentby = ts_array_length(settings->fd.segmentby);
-
-	if (num_segmentby == 0)
-	{
-		table_close(compressed_chunk_rel, NoLock);
-		table_close(uncompressed_chunk_rel, NoLock);
-		return InvalidOid;
-	}
-
 	CatalogIndexState indstate = CatalogOpenIndexes(compressed_chunk_rel);
 	Oid index_oid = get_compressed_chunk_index(indstate, settings);
 	CatalogCloseIndexes(indstate);
-
 	table_close(compressed_chunk_rel, NoLock);
 	table_close(uncompressed_chunk_rel, NoLock);
 

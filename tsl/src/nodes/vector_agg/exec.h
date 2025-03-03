@@ -27,7 +27,9 @@ typedef struct GroupingColumn
 {
 	int input_offset;
 	int output_offset;
-	int value_bytes;
+
+	int16 value_bytes;
+	bool by_value;
 } GroupingColumn;
 
 typedef struct VectorAggState

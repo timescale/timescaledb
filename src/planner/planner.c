@@ -288,6 +288,8 @@ typedef struct
 	PlannerInfo *root;
 } PreprocessQueryContext;
 
+static void preprocess_fk_checks(Query *query, Cache *hcache, PreprocessQueryContext *context);
+
 void
 replace_now_mock_walker(PlannerInfo *root, Node *clause, Oid funcid)
 {
@@ -399,119 +401,9 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 		Index rti = 1;
 		bool ret;
 
-		/*
-		 * Detect FOREIGN KEY lookup queries and mark the RTE for expansion.
-		 * Unfortunately postgres will create lookup queries for foreign keys
-		 * with `ONLY` preventing hypertable expansion. Only for declarative
-		 * partitioned tables the queries will be created without `ONLY`.
-		 * We try to detect these queries here and undo the `ONLY` flag for
-		 * these specific queries.
-		 *
-		 * The implementation of this on the postgres side can be found in
-		 * src/backend/utils/adt/ri_triggers.c
-		 */
-
 		if (ts_guc_enable_foreign_key_propagation)
 		{
-			/*
-			 * RI_FKey_cascade_del
-			 *
-			 * DELETE FROM [ONLY] <fktable> WHERE $1 = fkatt1 [AND ...]
-			 */
-			if (query->commandType == CMD_DELETE && list_length(query->rtable) == 1 &&
-				context->root->glob->boundParams && query->jointree->quals &&
-				IsA(query->jointree->quals, OpExpr))
-			{
-				RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
-				if (!rte->inh && rte->rtekind == RTE_RELATION)
-				{
-					Hypertable *ht =
-						ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
-					if (ht)
-					{
-						rte->inh = true;
-					}
-				}
-			}
-
-			/*
-			 * RI_FKey_cascade_upd
-			 *
-			 *  UPDATE [ONLY] <fktable> SET fkatt1 = $1 [, ...]
-			 *      WHERE $n = fkatt1 [AND ...]
-			 */
-			if (query->commandType == CMD_UPDATE && list_length(query->rtable) == 1 &&
-				context->root->glob->boundParams && query->jointree->quals &&
-				IsA(query->jointree->quals, OpExpr))
-			{
-				RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
-				if (!rte->inh && rte->rtekind == RTE_RELATION)
-				{
-					Hypertable *ht =
-						ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
-					if (ht)
-					{
-						rte->inh = true;
-					}
-				}
-			}
-
-			/*
-			 * RI_FKey_check
-			 *
-			 * The RI_FKey_check query string built is
-			 *  SELECT 1 FROM [ONLY] <pktable> x WHERE pkatt1 = $1 [AND ...]
-			 *       FOR KEY SHARE OF x
-			 */
-			if (query->commandType == CMD_SELECT && query->hasForUpdate &&
-				list_length(query->rtable) == 1 && context->root->glob->boundParams)
-			{
-				RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
-				if (!rte->inh && rte->rtekind == RTE_RELATION && rte->rellockmode == RowShareLock &&
-					list_length(query->jointree->fromlist) == 1 && query->jointree->quals &&
-					strcmp(rte->eref->aliasname, "x") == 0)
-				{
-					Hypertable *ht =
-						ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
-					if (ht)
-					{
-						rte_mark_for_fk_expansion(rte);
-						if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
-							query->rowMarks = NIL;
-					}
-				}
-			}
-			/*
-			 * RI_Initial_Check query
-			 *
-			 * The RI_Initial_Check query string built is:
-			 *  SELECT fk.keycols FROM [ONLY] relname fk
-			 *   LEFT OUTER JOIN [ONLY] pkrelname pk
-			 *   ON (pk.pkkeycol1=fk.keycol1 [AND ...])
-			 *   WHERE pk.pkkeycol1 IS NULL AND
-			 * For MATCH SIMPLE:
-			 *   (fk.keycol1 IS NOT NULL [AND ...])
-			 * For MATCH FULL:
-			 *   (fk.keycol1 IS NOT NULL [OR ...])
-			 */
-			if (query->commandType == CMD_SELECT && list_length(query->rtable) == 3)
-			{
-				RangeTblEntry *rte1 = linitial_node(RangeTblEntry, query->rtable);
-				RangeTblEntry *rte2 = lsecond_node(RangeTblEntry, query->rtable);
-				if (!rte1->inh && !rte2->inh && rte1->rtekind == RTE_RELATION &&
-					rte2->rtekind == RTE_RELATION && strcmp(rte1->eref->aliasname, "fk") == 0 &&
-					strcmp(rte2->eref->aliasname, "pk") == 0)
-				{
-					if (ts_hypertable_cache_get_entry(hcache, rte1->relid, CACHE_FLAG_MISSING_OK))
-					{
-						rte_mark_for_fk_expansion(rte1);
-					}
-					if (ts_hypertable_cache_get_entry(hcache, rte2->relid, CACHE_FLAG_MISSING_OK))
-					{
-						rte_mark_for_fk_expansion(rte2);
-					}
-				}
-			}
+			preprocess_fk_checks(query, hcache, context);
 		}
 
 		foreach (lc, query->rtable)
@@ -582,6 +474,121 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 	}
 
 	return expression_tree_walker(node, preprocess_query, context);
+}
+
+/*
+ * Detect FOREIGN KEY lookup queries and mark the RTE for expansion.
+ * Unfortunately postgres will create lookup queries for foreign keys
+ * with `ONLY` preventing hypertable expansion. Only for declarative
+ * partitioned tables the queries will be created without `ONLY`.
+ * We try to detect these queries here and undo the `ONLY` flag for
+ * these specific queries.
+ *
+ * The implementation of this on the postgres side can be found in
+ * src/backend/utils/adt/ri_triggers.c
+ */
+static void
+preprocess_fk_checks(Query *query, Cache *hcache, PreprocessQueryContext *context)
+{
+	/*
+	 * RI_FKey_cascade_del
+	 *
+	 * DELETE FROM [ONLY] <fktable> WHERE $1 = fkatt1 [AND ...]
+	 */
+	if (query->commandType == CMD_DELETE && list_length(query->rtable) == 1 &&
+		context->root->glob->boundParams && query->jointree->quals &&
+		IsA(query->jointree->quals, OpExpr))
+	{
+		RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
+		if (!rte->inh && rte->rtekind == RTE_RELATION)
+		{
+			Hypertable *ht =
+				ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
+			if (ht)
+			{
+				rte->inh = true;
+			}
+		}
+	}
+
+	/*
+	 * RI_FKey_cascade_upd
+	 *
+	 *  UPDATE [ONLY] <fktable> SET fkatt1 = $1 [, ...]
+	 *      WHERE $n = fkatt1 [AND ...]
+	 */
+	if (query->commandType == CMD_UPDATE && list_length(query->rtable) == 1 &&
+		context->root->glob->boundParams && query->jointree->quals &&
+		IsA(query->jointree->quals, OpExpr))
+	{
+		RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
+		if (!rte->inh && rte->rtekind == RTE_RELATION)
+		{
+			Hypertable *ht =
+				ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
+			if (ht)
+			{
+				rte->inh = true;
+			}
+		}
+	}
+
+	/*
+	 * RI_FKey_check
+	 *
+	 * The RI_FKey_check query string built is
+	 *  SELECT 1 FROM [ONLY] <pktable> x WHERE pkatt1 = $1 [AND ...]
+	 *       FOR KEY SHARE OF x
+	 */
+	if (query->commandType == CMD_SELECT && query->hasForUpdate &&
+		list_length(query->rtable) == 1 && context->root->glob->boundParams)
+	{
+		RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
+		if (!rte->inh && rte->rtekind == RTE_RELATION && rte->rellockmode == RowShareLock &&
+			list_length(query->jointree->fromlist) == 1 && query->jointree->quals &&
+			strcmp(rte->eref->aliasname, "x") == 0)
+		{
+			Hypertable *ht =
+				ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
+			if (ht)
+			{
+				rte_mark_for_fk_expansion(rte);
+				if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+					query->rowMarks = NIL;
+			}
+		}
+	}
+	/*
+	 * RI_Initial_Check query
+	 *
+	 * The RI_Initial_Check query string built is:
+	 *  SELECT fk.keycols FROM [ONLY] relname fk
+	 *   LEFT OUTER JOIN [ONLY] pkrelname pk
+	 *   ON (pk.pkkeycol1=fk.keycol1 [AND ...])
+	 *   WHERE pk.pkkeycol1 IS NULL AND
+	 * For MATCH SIMPLE:
+	 *   (fk.keycol1 IS NOT NULL [AND ...])
+	 * For MATCH FULL:
+	 *   (fk.keycol1 IS NOT NULL [OR ...])
+	 */
+	if (query->commandType == CMD_SELECT && list_length(query->rtable) == 3)
+	{
+		RangeTblEntry *rte1 = linitial_node(RangeTblEntry, query->rtable);
+		RangeTblEntry *rte2 = lsecond_node(RangeTblEntry, query->rtable);
+		if (!rte1->inh && !rte2->inh && rte1->rtekind == RTE_RELATION &&
+			rte2->rtekind == RTE_RELATION && strcmp(rte1->eref->aliasname, "fk") == 0 &&
+			strcmp(rte2->eref->aliasname, "pk") == 0)
+		{
+			if (ts_hypertable_cache_get_entry(hcache, rte1->relid, CACHE_FLAG_MISSING_OK))
+			{
+				rte_mark_for_fk_expansion(rte1);
+			}
+			if (ts_hypertable_cache_get_entry(hcache, rte2->relid, CACHE_FLAG_MISSING_OK))
+			{
+				rte_mark_for_fk_expansion(rte2);
+			}
+		}
+	}
 }
 
 static PlannedStmt *
@@ -1068,11 +1075,8 @@ static inline bool
 should_constraint_aware_append(PlannerInfo *root, Hypertable *ht, Path *path)
 {
 	/* Constraint-aware append currently expects children that scans a real
-	 * "relation" (e.g., not an "upper" relation). So, we do not run it on a
-	 * distributed hypertable because the append children are typically
-	 * per-server relations without a corresponding "real" table in the
-	 * system. Further, per-server appends shouldn't need runtime pruning in any
-	 * case. */
+	 * "relation" (e.g., not an "upper" relation).
+	 */
 	if (root->parse->commandType != CMD_SELECT)
 		return false;
 
@@ -1333,9 +1337,6 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	if (prev_set_rel_pathlist_hook != NULL)
 		(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
 
-	if (ts_cm_functions->set_rel_pathlist != NULL)
-		ts_cm_functions->set_rel_pathlist(root, rel, rti, rte);
-
 	switch (reltype)
 	{
 		case TS_REL_HYPERTABLE_CHILD:
@@ -1477,9 +1478,6 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			 * relevant for code paths that use the postgres inheritance code
 			 * as we don't include the hypertable as child when expanding the
 			 * hypertable ourself.
-			 * We do exclude distributed hypertables for now to not alter
-			 * the trigger behaviour on access nodes, which would otherwise
-			 * no longer fire.
 			 */
 			if (IS_UPDL_CMD(root->parse))
 				mark_dummy_rel(rel);
