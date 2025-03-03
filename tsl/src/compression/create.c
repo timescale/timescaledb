@@ -815,6 +815,25 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 		ts_hypertable_set_compressed(ht, compress_htid);
 	}
 
+	/*
+	 * Check for suboptimal compressed chunk merging configuration
+	 *
+	 * When compress_chunk_time_interval is configured to merge chunks during compression the
+	 * primary dimension should be the first compress_orderby column otherwise chunk merging will
+	 * require decompression.
+	 */
+	Dimension *dim = ts_hyperspace_get_mutable_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
+	if (dim && dim->fd.compress_interval_length &&
+		ts_array_position(settings->fd.orderby, NameStr(dim->fd.column_name)) != 1)
+	{
+		ereport(WARNING,
+				(errcode(ERRCODE_WARNING),
+				 errmsg("compress_chunk_time_interval configured and primary dimension not "
+						"first column in compress_orderby"),
+				 errhint("consider setting \"%s\" as first compress_orderby column",
+						 NameStr(dim->fd.column_name))));
+	}
+
 	/* do not release any locks, will get released by xact end */
 	return true;
 }
