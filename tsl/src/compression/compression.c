@@ -505,7 +505,15 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	if (!ts_guc_enable_delete_after_compression)
 	{
 		DEBUG_WAITPOINT("compression_done_before_truncate_uncompressed");
-		truncate_relation(in_table);
+		if (ConditionalLockRelation(in_rel, AccessExclusiveLock))
+		{
+			truncate_relation(in_table);
+		}
+		else
+		{
+			/* Instead of waiting, delete rows one-by-one */
+			delete_relation_rows(in_table);
+		}
 		DEBUG_WAITPOINT("compression_done_after_truncate_uncompressed");
 	}
 	else
