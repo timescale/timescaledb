@@ -389,12 +389,32 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 						PGC_S_SESSION);
 	}
 
-	continuous_agg_refresh_internal(policy_data.cagg,
-									&policy_data.refresh_window,
-									CAGG_REFRESH_POLICY,
-									policy_data.start_is_null,
-									policy_data.end_is_null,
-									false);
+	/* Try to split window range into a list of ranges */
+	List *refresh_window_list = continuous_agg_split_refresh_window(policy_data.cagg,
+																	&policy_data.refresh_window,
+																	policy_data.nbuckets_per_batch);
+	if (refresh_window_list == NIL)
+	{
+		refresh_window_list = lappend(refresh_window_list, &policy_data.refresh_window);
+	}
+
+	ListCell *lc;
+	foreach (lc, refresh_window_list)
+	{
+		InternalTimeRange *refresh_window = (InternalTimeRange *) lfirst(lc);
+		elog(DEBUG1,
+			 "refreshing continuous aggregate \"%s\" from %s to %s",
+			 NameStr(policy_data.cagg->data.user_view_name),
+			 ts_internal_to_time_string(refresh_window->start, refresh_window->type),
+			 ts_internal_to_time_string(refresh_window->end, refresh_window->type));
+
+		(void) continuous_agg_refresh_internal(policy_data.cagg,
+											   refresh_window,
+											   CAGG_REFRESH_POLICY,
+											   refresh_window->start_isnull,
+											   refresh_window->end_isnull,
+											   false);
+	}
 
 	if (!policy_data.include_tiered_data_isnull)
 	{
@@ -415,8 +435,10 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 	const Dimension *open_dim;
 	Oid dim_type;
 	int64 refresh_start, refresh_end;
+	int32 nbuckets_per_batch, max_batches_per_job_execution;
 	bool start_isnull, end_isnull;
 	bool include_tiered_data, include_tiered_data_isnull;
+	bool nbuckets_per_batch_isnull, max_batches_per_job_execution_isnull;
 
 	materialization_id = policy_continuous_aggregate_get_mat_hypertable_id(config);
 	mat_ht = ts_hypertable_get_by_id(materialization_id);
@@ -446,16 +468,24 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 	include_tiered_data =
 		policy_refresh_cagg_get_include_tiered_data(config, &include_tiered_data_isnull);
 
+	nbuckets_per_batch =
+		policy_refresh_cagg_get_nbuckets_per_batch(config, &nbuckets_per_batch_isnull);
+
+	max_batches_per_job_execution = policy_refresh_cagg_get_max_batches_per_job_execution(
+		config, &max_batches_per_job_execution_isnull);
+
 	if (policy_data)
 	{
 		policy_data->refresh_window.type = dim_type;
 		policy_data->refresh_window.start = refresh_start;
+		policy_data->refresh_window.start_isnull = start_isnull;
 		policy_data->refresh_window.end = refresh_end;
+		policy_data->refresh_window.end_isnull = end_isnull;
 		policy_data->cagg = cagg;
-		policy_data->start_is_null = start_isnull;
-		policy_data->end_is_null = end_isnull;
 		policy_data->include_tiered_data = include_tiered_data;
 		policy_data->include_tiered_data_isnull = include_tiered_data_isnull;
+		policy_data->nbuckets_per_batch = nbuckets_per_batch;
+		policy_data->max_batches_per_job_execution = max_batches_per_job_execution;
 	}
 }
 
