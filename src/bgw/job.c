@@ -1168,6 +1168,12 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		callbacks->toggle_allocation_blocking && !callbacks->enabled)
 		callbacks->toggle_allocation_blocking(/*enable=*/true);
 
+	TS_PLUGIN_CALLBACK(*timescaledb_plugin_ptr,
+					   bgw_job_starting,
+					   db_oid,
+					   params.job_id,
+					   params.user_oid);
+
 	BackgroundWorkerInitializeConnectionByOid(db_oid, params.user_oid, 0);
 
 	log_min_messages = ts_guc_bgw_log_level;
@@ -1285,6 +1291,11 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 		CommitTransactionCommand();
 		FlushErrorState();
+		TS_PLUGIN_CALLBACK(*timescaledb_plugin_ptr,
+						   bgw_job_exiting,
+						   db_oid,
+						   params.job_id,
+						   JOB_FAILURE_IN_EXECUTION);
 		ReThrowError(edata);
 	}
 	PG_END_TRY();
@@ -1309,6 +1320,8 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	INSTR_TIME_SET_CURRENT(duration);
 	INSTR_TIME_SUBTRACT(duration, start);
+
+	TS_PLUGIN_CALLBACK(*timescaledb_plugin_ptr, bgw_job_exiting, db_oid, params.job_id, res);
 
 	elog(DEBUG1,
 		 "job %d (%s) exiting with %s: execution time %.2f ms",

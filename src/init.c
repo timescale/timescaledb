@@ -19,12 +19,15 @@
 #include "guc.h"
 #include "license_guc.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
+#include "timescaledb.h"
 #include "ts_catalog/catalog.h"
 #include "version.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
 #endif
+
+TimescaleDBPlugin **timescaledb_plugin_ptr = NULL;
 
 extern void _hypertable_cache_init(void);
 extern void _hypertable_cache_fini(void);
@@ -92,6 +95,12 @@ void
 _PG_init(void)
 {
 	static bool init_done = false;
+	static TimescaleDBPlugin timescaledb_plugin_var = {
+		.size = sizeof(TimescaleDBPlugin),
+		.magic = PG_MODULE_MAGIC_DATA,
+		.pg_version = PG_VERSION_NUM,
+		.ts_version = TS_VERSION_NUM,
+	};
 
 	/*
 	 * Check extension_is loaded to catch certain errors such as calls to
@@ -106,6 +115,12 @@ _PG_init(void)
 
 	if (init_done)
 		return;
+
+	timescaledb_plugin_ptr =
+		(TimescaleDBPlugin **) find_rendezvous_variable(TIMESCALEDB_PLUGIN_NAME);
+	/* We're the first, so set up the structure */
+	if (*timescaledb_plugin_ptr == NULL)
+		*timescaledb_plugin_ptr = &timescaledb_plugin_var;
 
 	_cache_init();
 	_hypertable_cache_init();

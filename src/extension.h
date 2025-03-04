@@ -10,6 +10,7 @@
 
 #include "export.h"
 #include "extension_constants.h"
+#include "timescaledb.h"
 
 extern void ts_extension_invalidate(void);
 extern TSDLLEXPORT bool ts_extension_is_loaded(void);
@@ -21,3 +22,5 @@ extern TSDLLEXPORT char *ts_extension_schema_name(void);
 extern const char *ts_experimental_schema_name(void);
 extern const char *ts_extension_get_so_name(void);
 extern bool ts_extension_is_proxy_table_relid(Oid relid);
+
+extern TimescaleDBPlugin **timescaledb_plugin_ptr;
