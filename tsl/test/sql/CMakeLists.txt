@@ -16,6 +16,7 @@ set(TEST_FILES
     cagg_watermark.sql
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
+    compress_bloom_sparse.sql
     compress_default.sql
     compress_dml_copy.sql
     compress_float8_corrupt.sql

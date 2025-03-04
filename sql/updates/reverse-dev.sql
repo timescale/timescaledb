@@ -1,3 +1,6 @@
+DROP FUNCTION _timescaledb_functions.ts_bloom1_matches(bytea, anyelement);
+
+
 DROP FUNCTION IF EXISTS _timescaledb_functions.compressed_data_has_nulls(_timescaledb_internal.compressed_data);
 
 DELETE FROM _timescaledb_catalog.compression_algorithm WHERE id = 5 AND version = 1 AND name = 'COMPRESSION_ALGORITHM_BOOL';
@@ -39,3 +42,9 @@ FROM
 DROP TABLE _timescaledb_catalog.tempsettings CASCADE;
 GRANT SELECT ON _timescaledb_catalog.compression_settings TO PUBLIC;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_settings', '');
+
+
+-- Drop the type used by the bloom sparse indexes on compressed hypertables.
+DROP FUNCTION _timescaledb_functions.bloom1in(cstring) RETURNS bytea AS 'byteain' LANGUAGE INTERNAL;
+DROP FUNCTION _timescaledb_functions.bloom1out(bytea) RETURNS cstring AS 'byteaout' LANGUAGE INTERNAL;
+DROP TYPE _timescaledb_internal.bloom1;
