@@ -1,0 +1,2 @@
+Implements: #7789 Do not recompress segmentwise when default order by is empty
+Fixes: #7748 Crash in the segmentwise recompression
