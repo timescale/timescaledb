@@ -6,7 +6,6 @@
 #pragma once
 
 #include <postgres.h>
-#include "continuous_aggs/materialize.h"
 #include <fmgr.h>
 
 #include "invalidation.h"
@@ -22,3 +21,6 @@ extern void continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 											const CaggRefreshCallContext callctx,
 											const bool start_isnull, const bool end_isnull,
 											bool force);
+extern List *continuous_agg_split_refresh_window(ContinuousAgg *cagg,
+												 InternalTimeRange *original_refresh_window,
+												 int32 range_factor);
