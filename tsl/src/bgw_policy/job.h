@@ -37,7 +37,7 @@ typedef struct PolicyContinuousAggData
 	InternalTimeRange refresh_window;
 	ContinuousAgg *cagg;
 	bool include_tiered_data;
-	bool start_is_null, end_is_null, include_tiered_data_isnull;
+	bool include_tiered_data_isnull;
 } PolicyContinuousAggData;
 
 typedef struct PolicyCompressionData

@@ -445,39 +445,7 @@ validate_window_size(const ContinuousAgg *cagg, const CaggPolicyConfig *config)
 	else
 		end_offset = interval_to_int64(config->offset_end.value, config->offset_end.type);
 
-	if (cagg->bucket_function->bucket_fixed_interval == false)
-	{
-		/*
-		 * There are several cases of variable-sized buckets:
-		 * 1. Monthly buckets
-		 * 2. Buckets with timezones
-		 * 3. Cases 1 and 2 at the same time
-		 *
-		 * For months we simply take 30 days like on interval_to_int64 and
-		 * multiply this number by the number of months in the bucket. This
-		 * reduces the task to days/hours/minutes scenario.
-		 *
-		 * Days/hours/minutes case is handled the same way as for fixed-sized
-		 * buckets. The refresh window at least two buckets in size is adequate
-		 * for such corner cases as DST.
-		 */
-
-		/* bucket_function should always be specified for variable-sized buckets */
-		Assert(cagg->bucket_function != NULL);
-		/* ... and bucket_function->bucket_time_width too */
-		Assert(cagg->bucket_function->bucket_time_width != NULL);
-
-		/* Make a temporary copy of bucket_width */
-		Interval interval = *cagg->bucket_function->bucket_time_width;
-		interval.day += 30 * interval.month;
-		interval.month = 0;
-		bucket_width = ts_interval_value_to_internal(IntervalPGetDatum(&interval), INTERVALOID);
-	}
-	else
-	{
-		bucket_width = ts_continuous_agg_fixed_bucket_width(cagg->bucket_function);
-	}
-
+	bucket_width = ts_continuous_agg_bucket_width(cagg->bucket_function);
 	Assert(bucket_width > 0);
 
 	if (ts_time_saturating_add(end_offset, bucket_width * 2, INT8OID) > start_offset)

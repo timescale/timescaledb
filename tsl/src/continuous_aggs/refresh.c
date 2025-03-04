@@ -907,3 +907,211 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	if (rc != SPI_OK_FINISH)
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
 }
+
+static void
+debug_refresh_window(int elevel, const ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
+					 const char *msg)
+{
+	return;
+	Datum start_ts;
+	Datum end_ts;
+	Oid outfuncid = InvalidOid;
+	bool isvarlena;
+
+	start_ts = ts_internal_to_time_value(refresh_window->start, refresh_window->type);
+	end_ts = ts_internal_to_time_value(refresh_window->end, refresh_window->type);
+	getTypeOutputInfo(refresh_window->type, &outfuncid, &isvarlena);
+	Assert(!isvarlena);
+
+	elog(elevel,
+		 "%s \"%s\" in window [ %s, %s ] internal [ " INT64_FORMAT ", " INT64_FORMAT
+		 " ] minimum [ %s ]",
+		 msg,
+		 NameStr(cagg->data.user_view_name),
+		 DatumGetCString(OidFunctionCall1(outfuncid, start_ts)),
+		 DatumGetCString(OidFunctionCall1(outfuncid, end_ts)),
+
+		 refresh_window->start,
+		 refresh_window->end,
+		 DatumGetCString(
+			 OidFunctionCall1(outfuncid, Int64GetDatum(ts_time_get_min(refresh_window->type)))));
+}
+
+List *
+continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *original_refresh_window,
+									int32 range_factor)
+{
+	/* Do not produce batches when the range_range factor = 0 (disabled) */
+	if (range_factor == 0)
+	{
+		// refresh_window_list = lappend(refresh_window_list, &original_refresh_window);
+		// return refresh_window_list;
+		return NIL;
+	}
+
+	InternalTimeRange refresh_window = {
+		.type = original_refresh_window->type,
+		.start = original_refresh_window->start,
+		.start_isnull = original_refresh_window->start_isnull,
+		.end = original_refresh_window->end,
+		.end_isnull = original_refresh_window->end_isnull,
+	};
+
+	debug_refresh_window(INFO, cagg, &refresh_window, "begin");
+
+	Hypertable *ht = cagg_get_hypertable_or_fail(cagg->data.raw_hypertable_id);
+
+	/* If refresh window range start is NULL then get the first bucket from the original hypertable
+	 */
+	if (refresh_window.start_isnull)
+	{
+		debug_refresh_window(INFO, cagg, &refresh_window, "START IS NULL");
+		refresh_window.start =
+			ts_hypertable_get_min_dimension_slice(ht, 0, &refresh_window.start_isnull);
+
+		/* If there's no MIN data then produce only one range */
+		if (refresh_window.start_isnull ||
+			TS_TIME_IS_MIN(refresh_window.start, refresh_window.type) ||
+			TS_TIME_IS_NOBEGIN(refresh_window.start, refresh_window.type))
+		{
+			// MemoryContextSwitchTo(oldcontext);
+			// refresh_window_list = lappend(refresh_window_list, &original_refresh_window);
+			return NIL;
+		}
+	}
+
+	if (refresh_window.end_isnull)
+	{
+		debug_refresh_window(INFO, cagg, &refresh_window, "END IS NULL");
+		refresh_window.end =
+			ts_hypertable_get_max_dimension_slice(ht, 0, &refresh_window.end_isnull);
+
+		/* If there's no MIN data then produce only one range */
+		if (refresh_window.end_isnull || TS_TIME_IS_MAX(refresh_window.end, refresh_window.type) ||
+			TS_TIME_IS_NOEND(refresh_window.end, refresh_window.type))
+		{
+			// MemoryContextSwitchTo(oldcontext);
+			// refresh_window_list = lappend(refresh_window_list, &original_refresh_window);
+			// return refresh_window_list;
+			return NIL;
+		}
+	}
+
+	/* @TODO: move this limitation to the cagg policy execution limiting the maximum number of
+	 * executions */
+	int64 bucket_width = ts_continuous_agg_bucket_width(cagg->bucket_function);
+	int64 refresh_size = refresh_window.end - refresh_window.start;
+	int64 batch_size = (bucket_width * range_factor);
+	int64 estimated_batches = refresh_size / batch_size;
+	if (estimated_batches > ts_guc_cagg_max_individual_materializations ||
+		refresh_size <= batch_size)
+	{
+		// refresh_window_list = lappend(refresh_window_list, &original_refresh_window);
+		// return refresh_window_list;
+		return NIL;
+	}
+
+	debug_refresh_window(INFO, cagg, &refresh_window, "before produce ranges");
+
+	const Dimension *time_dim;
+	time_dim = hyperspace_get_open_dimension(ht->space, 0);
+
+	const char *query_str = " \
+		WITH chunk_ranges AS ( \
+			SELECT \
+				range_start AS start, \
+				range_end AS end \
+			FROM \
+				_timescaledb_catalog.dimension_slice \
+				JOIN _timescaledb_catalog.dimension ON dimension.id = dimension_slice.dimension_id \
+			WHERE \
+				hypertable_id = $1 \
+				AND dimension_id = $2 \
+			ORDER BY \
+				range_end DESC \
+		) \
+		SELECT \
+			refresh_start AS start, \
+			LEAST($5::numeric, refresh_start::numeric + $3::numeric)::bigint AS end \
+		FROM \
+			pg_catalog.generate_series($4, $5, $3) AS refresh_start \
+		WHERE \
+			EXISTS ( \
+			    SELECT FROM chunk_ranges \
+				WHERE \
+					pg_catalog.int8range(refresh_start, LEAST($5::numeric, refresh_start::numeric + $3::numeric)::bigint) \
+					OPERATOR(pg_catalog.&&) \
+					pg_catalog.int8range(chunk_ranges.start, chunk_ranges.end) \
+				) \
+		ORDER BY \
+			refresh_start DESC;";
+
+	List *refresh_window_list = NIL;
+	int res;
+	Oid types[] = { INT4OID, INT4OID, INT8OID, INT8OID, INT8OID };
+	Datum values[] = { Int32GetDatum(ht->fd.id),
+					   Int32GetDatum(time_dim->fd.id),
+					   Int64GetDatum(batch_size),
+					   Int64GetDatum(refresh_window.start),
+					   Int64GetDatum(refresh_window.end) };
+	char nulls[] = { false, false, false, false, false };
+	MemoryContext oldcontext = CurrentMemoryContext;
+
+	/*
+	 * Query for the oldest chunk in the hypertable.
+	 */
+	if (SPI_connect() != SPI_OK_CONNECT)
+		elog(ERROR, "could not connect to SPI");
+
+	res = SPI_execute_with_args(query_str,
+								5,
+								types,
+								values,
+								nulls,
+								false /* read_only */,
+								0 /* count */);
+
+	if (res < 0)
+		elog(ERROR, "%s: could not get the last bucket of the materialized data", __func__);
+
+	for (uint64 i = 0; i < SPI_processed; i++)
+	{
+		MemoryContext saved_context = MemoryContextSwitchTo(oldcontext);
+		InternalTimeRange *range = palloc0(sizeof(InternalTimeRange));
+		MemoryContextSwitchTo(saved_context);
+
+		range->start =
+			SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 1, &range->start_isnull);
+
+		/* When dropping chunks we need to align the start of the first range to cover dropped
+		 * chunks if they exist */
+		if (i == (SPI_processed - 1) && original_refresh_window->start_isnull)
+		{
+			range->start = original_refresh_window->start;
+			range->start_isnull = true;
+		}
+
+		range->end =
+			SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 2, &range->end_isnull);
+
+		if (i == 0 && original_refresh_window->end_isnull)
+		{
+			range->end = original_refresh_window->end;
+			range->end_isnull = true;
+		}
+
+		range->type = original_refresh_window->type;
+
+		saved_context = MemoryContextSwitchTo(oldcontext);
+		refresh_window_list = lappend(refresh_window_list, range);
+		MemoryContextSwitchTo(saved_context);
+
+		debug_refresh_window(INFO, cagg, range, "range refresh");
+	}
+
+	res = SPI_finish();
+	if (res != SPI_OK_FINISH)
+		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+
+	return refresh_window_list;
+}

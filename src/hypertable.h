@@ -141,6 +141,11 @@ extern TSDLLEXPORT bool ts_hypertable_set_compressed(Hypertable *ht,
 extern TSDLLEXPORT bool ts_hypertable_unset_compressed(Hypertable *ht);
 extern TSDLLEXPORT bool ts_hypertable_set_compress_interval(Hypertable *ht,
 															int64 compress_interval);
+extern TSDLLEXPORT int64 ts_hypertable_get_min_dimension_slice(const Hypertable *ht,
+															   int dimension_index, bool *isnull);
+
+extern TSDLLEXPORT int64 ts_hypertable_get_max_dimension_slice(const Hypertable *ht,
+															   int dimension_index, bool *isnull);
 extern TSDLLEXPORT int64 ts_hypertable_get_open_dim_max_value(const Hypertable *ht,
 															  int dimension_index, bool *isnull);
 
