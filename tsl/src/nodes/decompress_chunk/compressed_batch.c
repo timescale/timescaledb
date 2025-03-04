@@ -170,25 +170,57 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	const int value_bytes = get_typlen(column_description->typid);
 	Assert(value_bytes != 0);
 
-	bool isnull;
-	Datum value = slot_getattr(compressed_slot, column_description->compressed_scan_attno, &isnull);
+	/*
+	 * We have to distinguish the missing compressed column values (after
+	 * an ALTER that adds a column) from the NULL (for batches where all values
+	 * are NULL). This means we have to reimplement here a part of
+	 * slot_getsomeattrs_int().
+	 *
+	 * First, try to destructure the tuple up to the required attribute number
+	 * by calling the corresponding tts_ops method.
+	 */
+	if (compressed_slot->tts_nvalid < column_description->compressed_scan_attno)
+	{
+		compressed_slot->tts_ops->getsomeattrs(compressed_slot,
+											   column_description->compressed_scan_attno);
+	}
 
-	if (isnull)
+	if (compressed_slot->tts_nvalid < column_description->compressed_scan_attno)
 	{
 		/*
-		 * The column will have a default value for the entire batch,
-		 * set it now.
-		 */
-		column_values->decompression_type = DT_Scalar;
-
-		/*
+		 * The tuple destructuring operator couldn't produce the required
+		 * attribute number, this means this attribute is missing in the tuple.
+		 * This happens after an ALTER that has added a column, so in this
+		 * batch the column has the value that is the "default for missing"
+		 * (pg_attribute.attrmissingval).
+		 *
 		 * We might use a custom targetlist-based scan tuple which has no
 		 * default values, so the default values are fetched from the
 		 * uncompressed chunk tuple descriptor.
 		 */
+		column_values->decompression_type = DT_Scalar;
 		*column_values->output_value = getmissingattr(dcontext->uncompressed_chunk_tdesc,
 													  column_description->uncompressed_chunk_attno,
 													  column_values->output_isnull);
+		return;
+	}
+
+	/*
+	 * We verified above that the compressed column is not missing, so now we
+	 * can use the normal Postgres slot_getattr function to get the compressed
+	 * column value.
+	 */
+	bool isnull;
+	Datum value = slot_getattr(compressed_slot, column_description->compressed_scan_attno, &isnull);
+	if (isnull)
+	{
+		/*
+		 * The compressed data is null, so the column has null value in this
+		 * batch.
+		 */
+		column_values->decompression_type = DT_Scalar;
+		*column_values->output_isnull = true;
+		*column_values->output_value = 0;
 		return;
 	}
 
