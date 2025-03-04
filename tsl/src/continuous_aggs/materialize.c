@@ -4,12 +4,10 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+
 #include <executor/spi.h>
 #include <fmgr.h>
 #include <lib/stringinfo.h>
-#include <scan_iterator.h>
-#include <scanner.h>
-#include <time_utils.h>
 #include <utils/builtins.h>
 #include <utils/date.h>
 #include <utils/guc.h>
@@ -20,9 +18,13 @@
 #include <utils/timestamp.h>
 
 #include "compat/compat.h"
+#include "bucket.h"
 #include "debug_assert.h"
 #include "guc.h"
 #include "materialize.h"
+#include "scan_iterator.h"
+#include "scanner.h"
+#include "time_utils.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
 
@@ -64,6 +66,7 @@ typedef struct MaterializationContext
 	SchemaAndName materialization_table;
 	NameData *time_column_name;
 	TimeRange materialization_range;
+	InternalTimeRange internal_materialization_range;
 	char *chunk_condition;
 } MaterializationContext;
 
@@ -146,6 +149,7 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 		.materialization_table = materialization_table,
 		.time_column_name = (NameData *) time_column_name,
 		.materialization_range = internal_time_range_to_time_range(new_materialization_range),
+		.internal_materialization_range = new_materialization_range,
 		/*
 		 * chunk_id is valid if the materializaion update should be done only on the given chunk.
 		 * This is used currently for refresh on chunk drop only. In other cases, manual
@@ -197,15 +201,18 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 	{
 		context.materialization_range =
 			internal_time_range_to_time_range(combined_materialization_range);
+		context.internal_materialization_range = combined_materialization_range;
 		execute_materializations(&context);
 	}
 	else
 	{
 		context.materialization_range = internal_time_range_to_time_range(invalidation_range);
+		context.internal_materialization_range = invalidation_range;
 		execute_materializations(&context);
 
 		context.materialization_range =
 			internal_time_range_to_time_range(new_materialization_range);
+		context.internal_materialization_range = new_materialization_range;
 		execute_materializations(&context);
 	}
 
@@ -739,37 +746,251 @@ update_watermark(MaterializationContext *context)
 }
 
 static void
+log_refresh_window(int elevel, const ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
+				   const char *msg)
+{
+	return;
+	Datum start_ts;
+	Datum end_ts;
+	Oid outfuncid = InvalidOid;
+	bool isvarlena;
+
+	start_ts = ts_internal_to_time_value(refresh_window->start, refresh_window->type);
+	end_ts = ts_internal_to_time_value(refresh_window->end, refresh_window->type);
+	getTypeOutputInfo(refresh_window->type, &outfuncid, &isvarlena);
+	Assert(!isvarlena);
+
+	elog(elevel,
+		 "%s \"%s\" in window [ %s, %s ] internal [ " INT64_FORMAT ", " INT64_FORMAT
+		 " ] minimum [ %s ]",
+		 msg,
+		 NameStr(cagg->data.user_view_name),
+		 DatumGetCString(OidFunctionCall1(outfuncid, start_ts)),
+		 DatumGetCString(OidFunctionCall1(outfuncid, end_ts)),
+
+		 refresh_window->start,
+		 refresh_window->end,
+		 DatumGetCString(
+			 OidFunctionCall1(outfuncid, Int64GetDatum(ts_time_get_min(refresh_window->type)))));
+}
+
+static List *
+create_materialization_refresh_window_list(MaterializationContext *context, int64 bucket_width,
+										   int32 range_factor)
+{
+	List *refresh_window_list = NIL;
+	InternalTimeRange refresh_window = context->internal_materialization_range;
+	FuncInfo *func_info =
+		ts_func_cache_get_bucketing_func(context->cagg->bucket_function->bucket_function);
+	Ensure(func_info != NULL,
+		   "unable to get bucket function for Oid %d",
+		   context->cagg->bucket_function->bucket_function);
+
+	/* Do not produce batches for CAggs using deprecated time_bucket_ng function */
+	if (func_info->origin == ORIGIN_TIMESCALE_EXPERIMENTAL || range_factor == 0/* ||
+		ContinuousAggIsHierarchical(context->cagg)*/)
+	{
+		refresh_window_list =
+			lappend(refresh_window_list, &context->internal_materialization_range);
+		return refresh_window_list;
+	}
+
+	log_refresh_window(INFO, context->cagg, &refresh_window, "begin");
+
+	Hypertable *ht = cagg_get_hypertable_or_fail(context->cagg->data.raw_hypertable_id);
+
+	/* Get the minimum bucket start for the time dimension type */
+	int64 min_bucket_start = ts_time_get_min(refresh_window.type);
+	if (!IS_TIMESTAMP_TYPE(refresh_window.type))
+	{
+		min_bucket_start =
+			ts_time_saturating_add(min_bucket_start, bucket_width - 1, refresh_window.type);
+		min_bucket_start =
+			ts_time_bucket_by_type(bucket_width, min_bucket_start, refresh_window.type);
+	}
+
+	/* If refresh window range start is NULL then get the first bucket from the original hypertable
+	 */
+	if (refresh_window.start == min_bucket_start ||
+		TS_TIME_IS_NOBEGIN(refresh_window.start, refresh_window.type))
+	{
+		log_refresh_window(INFO, context->cagg, &refresh_window, "IS NULL");
+		bool isnull;
+		refresh_window.start = ts_hypertable_get_open_dim_min_value(ht, 0, &isnull);
+
+		/* If there's no MIN data then produce only one range */
+		if (TS_TIME_IS_MIN(refresh_window.start, refresh_window.type) || isnull)
+		{
+			refresh_window_list =
+				lappend(refresh_window_list, &context->internal_materialization_range);
+			return refresh_window_list;
+		}
+
+		log_refresh_window(INFO, context->cagg, &refresh_window, "min");
+
+		if (!isnull)
+		{
+			if (refresh_window.start >= refresh_window.end)
+				refresh_window.end = refresh_window.start + 1;
+
+			refresh_window =
+				cagg_compute_circumscribed_bucketed_refresh_window(context->cagg,
+																   &refresh_window,
+																   context->cagg->bucket_function);
+		}
+
+		refresh_window.end = context->internal_materialization_range.end;
+		log_refresh_window(INFO, context->cagg, &refresh_window, "bucket");
+	}
+
+	int64 refresh_size = refresh_window.end - refresh_window.start;
+	int64 batch_size = (bucket_width * range_factor);
+	int64 estimated_batches = refresh_size / batch_size;
+	if (estimated_batches > ts_guc_cagg_max_individual_materializations ||
+		refresh_size <= batch_size)
+	{
+		// elog(INFO, "Fallback to single refresh window: %ld", estimated_batches);
+		refresh_window_list =
+			lappend(refresh_window_list, &context->internal_materialization_range);
+		return refresh_window_list;
+	}
+
+	log_refresh_window(INFO, context->cagg, &refresh_window, "before produce ranges");
+
+	const Dimension *time_dim;
+	time_dim = hyperspace_get_open_dimension(ht->space, 0);
+
+	const char *query_str = " \
+		WITH chunk_ranges AS ( \
+			SELECT \
+				range_start AS start, \
+				range_end AS end \
+			FROM \
+				_timescaledb_catalog.dimension_slice \
+				JOIN _timescaledb_catalog.dimension ON dimension.id = dimension_slice.dimension_id \
+			WHERE \
+				hypertable_id = $1 \
+				AND dimension_id = $2 \
+			ORDER BY \
+				range_start \
+		) \
+		SELECT \
+			refresh_start AS start, \
+			LEAST($5::numeric, refresh_start::numeric + $3::numeric)::bigint AS end \
+		FROM \
+			pg_catalog.generate_series($4, $5, $3) AS refresh_start \
+		WHERE \
+			EXISTS ( \
+			    SELECT FROM chunk_ranges \
+				WHERE \
+					pg_catalog.int8range(refresh_start, LEAST($5::numeric, refresh_start::numeric + $3::numeric)::bigint) \
+					OPERATOR(pg_catalog.&&) \
+					pg_catalog.int8range(chunk_ranges.start, chunk_ranges.end) \
+				);";
+
+	int res;
+	Oid types[] = { INT4OID, INT4OID, INT8OID, INT8OID, INT8OID };
+	Datum values[] = { Int32GetDatum(ht->fd.id),
+					   Int32GetDatum(time_dim->fd.id),
+					   Int64GetDatum(batch_size),
+					   Int64GetDatum(refresh_window.start),
+					   Int64GetDatum(refresh_window.end) };
+	char nulls[] = { false, false, false, false, false };
+
+	res = SPI_execute_with_args(query_str,
+								5,
+								types,
+								values,
+								nulls,
+								false /* read_only */,
+								0 /* count */);
+
+	if (res < 0)
+		elog(ERROR, "%s: could not get the last bucket of the materialized data", __func__);
+
+	for (uint64 i = 0; i < SPI_processed; i++)
+	{
+		bool isnull;
+		InternalTimeRange *range = palloc(sizeof(InternalTimeRange));
+		range->start = SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 1, &isnull);
+
+		/* When dropping chunks we need to align the start of the first range to cover dropped
+		 * chunks if they exist */
+		if (i == 0)
+			range->start = int64_min(range->start, refresh_window.start);
+
+		range->end = SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 2, &isnull);
+		range->type = refresh_window.type;
+		refresh_window_list = lappend(refresh_window_list, range);
+
+		log_refresh_window(INFO, context->cagg, range, "range refresh");
+	}
+
+	return refresh_window_list;
+}
+
+/* MERGE statement is available starting on PG15 and we'll support it only in the new
+ * format of CAggs and for non-compressed hypertables */
+static inline bool
+should_use_merge(MaterializationContext *context)
+{
+	return (ts_guc_enable_merge_on_cagg_refresh && PG_VERSION_NUM >= 150000 &&
+			ContinuousAggIsFinalized(context->cagg) &&
+			!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(context->mat_ht));
+}
+
+static void
 execute_materializations(MaterializationContext *context)
 {
 	volatile uint64 rows_processed = 0;
 
 	PG_TRY();
 	{
-		/* MERGE statement is available starting on PG15 and we'll support it only in the new format
-		 * of CAggs and for non-compressed hypertables */
-		if (ts_guc_enable_merge_on_cagg_refresh && PG_VERSION_NUM >= 150000 &&
-			ContinuousAggIsFinalized(context->cagg) &&
-			!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(context->mat_ht))
+		int64 bucket_width = ts_continuous_agg_bucket_width(context->cagg->bucket_function);
+		Assert(bucket_width > 0);
+
+		ListCell *lc;
+		List *ranges = create_materialization_refresh_window_list(context, bucket_width, 2000);
+
+		foreach (lc, ranges)
 		{
-			/* Fallback to INSERT materializations if there are no rows to change on it */
-			if (execute_materialization_plan(context, PLAN_TYPE_EXISTS) == 0)
+			InternalTimeRange *range = lfirst(lc);
+			context->materialization_range.start =
+				internal_to_time_value_or_infinite(range->start,
+												   context->materialization_range.type,
+												   NULL);
+			context->internal_materialization_range.start = range->start;
+			context->materialization_range.end =
+				internal_to_time_value_or_infinite(range->end,
+												   context->materialization_range.type,
+												   NULL);
+			context->internal_materialization_range.end = range->end;
+
+			/* MERGE statement is available starting on PG15 and we'll support it only in the new
+			 * format of CAggs and for non-compressed hypertables */
+			if (should_use_merge(context))
 			{
-				elog(DEBUG2,
-					 "no rows to merge on materialization table \"%s.%s\", falling back to INSERT",
-					 NameStr(*context->materialization_table.schema),
-					 NameStr(*context->materialization_table.name));
-				rows_processed = execute_materialization_plan(context, PLAN_TYPE_INSERT);
+				/* Fallback to INSERT materializations if there are no rows to change on it */
+				if (execute_materialization_plan(context, PLAN_TYPE_EXISTS) == 0)
+				{
+					elog(DEBUG2,
+						 "no rows to merge on materialization table \"%s.%s\", falling back to "
+						 "INSERT",
+						 NameStr(*context->materialization_table.schema),
+						 NameStr(*context->materialization_table.name));
+					rows_processed = execute_materialization_plan(context, PLAN_TYPE_INSERT);
+				}
+				else
+				{
+					rows_processed += execute_materialization_plan(context, PLAN_TYPE_MERGE);
+					rows_processed += execute_materialization_plan(context, PLAN_TYPE_MERGE_DELETE);
+				}
 			}
 			else
 			{
-				rows_processed += execute_materialization_plan(context, PLAN_TYPE_MERGE);
-				rows_processed += execute_materialization_plan(context, PLAN_TYPE_MERGE_DELETE);
+				rows_processed += execute_materialization_plan(context, PLAN_TYPE_DELETE);
+				rows_processed += execute_materialization_plan(context, PLAN_TYPE_INSERT);
 			}
-		}
-		else
-		{
-			rows_processed += execute_materialization_plan(context, PLAN_TYPE_DELETE);
-			rows_processed += execute_materialization_plan(context, PLAN_TYPE_INSERT);
 		}
 
 		/* Free all cached plans */

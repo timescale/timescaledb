@@ -39,6 +39,23 @@
 #define DEFAULT_MATPARTCOLUMN_NAME "time_partition_col"
 #define CAGG_INVALIDATION_THRESHOLD_NAME "invalidation threshold watermark"
 
+/***********************
+ * Time ranges
+ ***********************/
+typedef struct TimeRange
+{
+	Oid type;
+	Datum start;
+	Datum end;
+} TimeRange;
+
+typedef struct InternalTimeRange
+{
+	Oid type;
+	int64 start; /* inclusive */
+	int64 end;	 /* exclusive */
+} InternalTimeRange;
+
 typedef struct FinalizeQueryInfo
 {
 	List *final_seltlist;	/* select target list for finalize query */
@@ -141,3 +158,4 @@ cagg_get_time_min(const ContinuousAgg *cagg)
 }
 
 ContinuousAggsBucketFunction *ts_cagg_get_bucket_function_info(Oid view_oid);
+Hypertable *cagg_get_hypertable_or_fail(int32 hypertable_id);

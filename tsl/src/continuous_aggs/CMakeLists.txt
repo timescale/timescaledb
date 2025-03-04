@@ -1,4 +1,5 @@
 set(SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/bucket.c
     ${CMAKE_CURRENT_SOURCE_DIR}/common.c
     ${CMAKE_CURRENT_SOURCE_DIR}/create.c
     ${CMAKE_CURRENT_SOURCE_DIR}/finalize.c

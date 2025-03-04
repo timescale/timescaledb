@@ -2329,6 +2329,76 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 }
 
 /*
+ * Get the min value of an open dimension for the hypertable based on the dimension slice info
+ * Note: only takes non-tiered chunks into account.
+ */
+int64
+ts_hypertable_get_open_dim_min_value(const Hypertable *ht, int dimension_index, bool *isnull)
+{
+	const char *query_str = "\
+		SELECT \
+			min(dimsl.range_start) \
+		FROM \
+			_timescaledb_catalog.chunk AS srcch \
+			JOIN _timescaledb_catalog.hypertable AS ht ON ht.id = srcch.hypertable_id  \
+			JOIN _timescaledb_catalog.chunk_constraint AS chcons ON srcch.id = chcons.chunk_id \
+			JOIN _timescaledb_catalog.dimension AS dim ON srcch.hypertable_id = dim.hypertable_id \
+			JOIN _timescaledb_catalog.dimension_slice AS dimsl \
+				ON dim.id = dimsl.dimension_id \
+				AND chcons.dimension_slice_id = dimsl.id \
+        WHERE \
+			ht.id = $1 \
+			AND dimsl.id = $2 \
+			AND srcch.osm_chunk IS FALSE";
+
+	const Dimension *dim = hyperspace_get_open_dimension(ht->space, dimension_index);
+
+	if (NULL == dim)
+		elog(ERROR, "invalid open dimension index %d", dimension_index);
+
+	Oid timetype = ts_dimension_get_partition_type(dim);
+
+	Datum values[] = { Int32GetDatum(ht->fd.id), Int32GetDatum(dim->fd.id) };
+	Oid types[] = { INT4OID, INT4OID };
+	char nulls[] = { false, false };
+
+	/*
+	 * Query for the oldest chunk in the hypertable.
+	 */
+	if (SPI_connect() != SPI_OK_CONNECT)
+		elog(ERROR, "could not connect to SPI");
+
+	int res = SPI_execute_with_args(query_str,
+									2,
+									types,
+									values,
+									nulls,
+									false /* read_only */,
+									0 /* count */);
+
+	if (res < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 (errmsg("could not find the minimum time value for hypertable \"%s\"",
+						 get_rel_name(ht->main_table_relid)))));
+
+	bool min_isnull;
+	Datum mindat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &min_isnull);
+
+	if (isnull)
+		*isnull = min_isnull;
+
+	/* we fetch the int64 value from the dimension slice catalog. so read it back as int64 */
+	int64 min_value = min_isnull ? ts_time_get_min(timetype) : DatumGetInt64(mindat);
+
+	res = SPI_finish();
+	if (res != SPI_OK_FINISH)
+		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+
+	return min_value;
+}
+
+/*
  * Get the max value of an open dimension.
  */
 int64
