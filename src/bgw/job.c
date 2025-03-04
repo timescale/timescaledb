@@ -56,6 +56,25 @@
 static scheduler_test_hook_type scheduler_test_hook = NULL;
 static char *job_entrypoint_function_name = "ts_bgw_job_entrypoint";
 
+/*
+ * Get the mem_guard callbacks.
+ *
+ * You might get a NULL pointer back if there are no mem_guard installed, so
+ * check before using.
+ */
+MGCallbacks *
+get_mem_guard_callbacks(void)
+{
+	static MGCallbacks **mem_guard_callback_ptr = NULL;
+
+	if (mem_guard_callback_ptr)
+		return *mem_guard_callback_ptr;
+
+	mem_guard_callback_ptr = (MGCallbacks **) find_rendezvous_variable(MG_CALLBACKS_VAR_NAME);
+
+	return *mem_guard_callback_ptr;
+}
+
 typedef enum JobLockLifetime
 {
 	SESSION_LOCK = 0,
@@ -1141,6 +1160,20 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	pqsignal(SIGTERM, die);
 	BackgroundWorkerUnblockSignals();
 
+	/*
+	 * Set up mem_guard before starting to allocate memory.
+	 */
+	MGCallbacks *callbacks = get_mem_guard_callbacks();
+	if (callbacks && callbacks->version_num == MG_CALLBACKS_VERSION &&
+		callbacks->toggle_allocation_blocking && !callbacks->enabled)
+		callbacks->toggle_allocation_blocking(/*enable=*/true);
+
+	TS_PLUGIN_CALLBACK(*timescaledb_plugin_ptr,
+					   bgw_job_starting,
+					   db_oid,
+					   params.job_id,
+					   params.user_oid);
+
 	BackgroundWorkerInitializeConnectionByOid(db_oid, params.user_oid, 0);
 
 	log_min_messages = ts_guc_bgw_log_level;
@@ -1258,6 +1291,11 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 		CommitTransactionCommand();
 		FlushErrorState();
+		TS_PLUGIN_CALLBACK(*timescaledb_plugin_ptr,
+						   bgw_job_exiting,
+						   db_oid,
+						   params.job_id,
+						   JOB_FAILURE_IN_EXECUTION);
 		ReThrowError(edata);
 	}
 	PG_END_TRY();
@@ -1282,6 +1320,8 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	INSTR_TIME_SET_CURRENT(duration);
 	INSTR_TIME_SUBTRACT(duration, start);
+
+	TS_PLUGIN_CALLBACK(*timescaledb_plugin_ptr, bgw_job_exiting, db_oid, params.job_id, res);
 
 	elog(DEBUG1,
 		 "job %d (%s) exiting with %s: execution time %.2f ms",
