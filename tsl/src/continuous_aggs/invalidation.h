@@ -49,6 +49,6 @@ extern InvalidationStore *
 invalidation_process_cagg_log(const ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
 							  const CaggsInfo *all_caggs_info, const long max_materializations,
 							  bool *do_merged_refresh, InternalTimeRange *ret_merged_refresh_window,
-							  const CaggRefreshCallContext callctx, bool force);
+							  const CaggRefreshContext context, bool force);
 
 extern void invalidation_store_free(InvalidationStore *store);

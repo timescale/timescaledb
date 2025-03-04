@@ -20,6 +20,8 @@
 #define POL_REFRESH_CONF_KEY_START_OFFSET "start_offset"
 #define POL_REFRESH_CONF_KEY_END_OFFSET "end_offset"
 #define POL_REFRESH_CONF_KEY_INCLUDE_TIERED_DATA "include_tiered_data"
+#define POL_REFRESH_CONF_KEY_BUCKETS_PER_BATCH "buckets_per_batch"
+#define POL_REFRESH_CONF_KEY_MAX_BATCHES_PER_EXECUTION "max_batches_per_execution"
 
 #define POLICY_COMPRESSION_PROC_NAME "policy_compression"
 #define POLICY_COMPRESSION_CHECK_NAME "policy_compression_check"

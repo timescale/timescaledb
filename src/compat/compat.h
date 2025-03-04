@@ -971,3 +971,17 @@ pg_cmp_u32(uint32 a, uint32 b)
 }
 
 #endif
+
+#if PG16_LT
+/*
+ * Similarly, wrappers around labs()/llabs() matching our int64.
+ *
+ * Introduced on PG16:
+ * https://github.com/postgres/postgres/commit/357cfefb09115292cfb98d504199e6df8201c957
+ */
+#ifdef HAVE_LONG_INT_64
+#define i64abs(i) labs(i)
+#else
+#define i64abs(i) llabs(i)
+#endif
+#endif
