@@ -22,7 +22,7 @@ SET enable_indexonlyscan TO FALSE;
 -- create a now() function for repeatable testing that always returns
 -- the same timestamp. It needs to be marked STABLE
 CREATE OR REPLACE FUNCTION now_s()
-RETURNS timestamptz LANGUAGE PLPGSQL STABLE AS
+RETURNS timestamptz LANGUAGE PLPGSQL STABLE PARALLEL SAFE AS
 $BODY$
 BEGIN
     RAISE NOTICE 'Stable function now_s() called!';
@@ -45,9 +45,28 @@ BEGIN
     RETURN '2017-08-22T10:00:00'::timestamptz;
 END;
 $BODY$;
+CREATE OR REPLACE PROCEDURE force_parallel(on_or_off bool)
+LANGUAGE PLPGSQL AS
+$$
+BEGIN
+    IF current_setting('server_version_num')::int < 160000 THEN
+        IF on_or_off THEN
+            set force_parallel_mode = 'on';
+        ELSE
+            set force_parallel_mode = 'off';
+        END IF;
+    ELSE
+        IF on_or_off THEN
+            set debug_parallel_query = 'on';
+        ELSE
+            set debug_parallel_query = 'off';
+        END IF;
+    END IF;
+END;
+$$;
 CREATE TABLE append_test(time timestamptz, temp float, colorid integer, attr jsonb);
 SELECT create_hypertable('append_test', 'time', chunk_time_interval => 2628000000000);
-psql:include/append_load.sql:35: NOTICE:  adding not-null constraint to column "time"
+psql:include/append_load.sql:56: NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (1,public,append_test,t)
@@ -63,7 +82,7 @@ VACUUM (ANALYZE) append_test;
 -- Create another hypertable to join with
 CREATE TABLE join_test(time timestamptz, temp float, colorid integer);
 SELECT create_hypertable('join_test', 'time', chunk_time_interval => 2628000000000);
-psql:include/append_load.sql:47: NOTICE:  adding not-null constraint to column "time"
+psql:include/append_load.sql:68: NOTICE:  adding not-null constraint to column "time"
    create_hypertable    
 ------------------------
  (2,public,join_test,t)
@@ -92,7 +111,7 @@ VACUUM (ANALYZE) metrics_date;
 -- create hypertable with TIMESTAMP time dimension
 CREATE TABLE metrics_timestamp(time TIMESTAMP NOT NULL);
 SELECT create_hypertable('metrics_timestamp','time');
-psql:include/append_load.sql:70: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+psql:include/append_load.sql:91: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
        create_hypertable        
 --------------------------------
  (4,public,metrics_timestamp,t)
@@ -135,7 +154,7 @@ CREATE TABLE i2661 (
   "first" float4 NULL
 );
 SELECT create_hypertable('i2661', 'timestamp');
-psql:include/append_load.sql:102: WARNING:  column type "character varying" used for "name" does not follow best practices
+psql:include/append_load.sql:123: WARNING:  column type "character varying" used for "name" does not follow best practices
  create_hypertable  
 --------------------
  (7,public,i2661,t)
@@ -2149,6 +2168,49 @@ WHERE a.attr @> ANY((SELECT array_agg(attr) FROM join_test_plain WHERE temp > 10
          Rows Removed by Filter: 1
 (16 rows)
 
+-- Test that ConstraintAwareAppend properly locks relations in
+-- parallel query mode
+set timescaledb.enable_chunk_append=false;
+call force_parallel(true);
+:PREFIX
+select time, avg(temp), colorid from append_test
+where time > now_s() - interval '3 months 20 days'
+group by time, colorid;
+psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
+                                      QUERY PLAN                                       
+---------------------------------------------------------------------------------------
+ Gather (actual rows=3 loops=1)
+   Workers Planned: 1
+   Workers Launched: 1
+   Single Copy: true
+   ->  HashAggregate (actual rows=3 loops=1)
+         Group Key: append_test."time", append_test.colorid
+         Worker 0:  Batches: 1 
+         ->  Custom Scan (ConstraintAwareAppend) (actual rows=3 loops=1)
+               Hypertable: append_test
+               Chunks excluded during startup: 1
+               ->  Append (actual rows=3 loops=1)
+                     ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
+                           Filter: ("time" > (now_s() - '@ 3 mons 20 days'::interval))
+                     ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
+                           Filter: ("time" > (now_s() - '@ 3 mons 20 days'::interval))
+(15 rows)
+
+reset timescaledb.enable_chunk_append;
+reset max_parallel_workers_per_gather;
+call force_parallel(false);
 --generate the results into two different files
 \set ECHO errors
 --- Unoptimized results
