@@ -435,8 +435,7 @@ $$, :'chunk1'));
 ------------------------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
    Scankey: ((location_id >= 5) AND (location_id <= 10))
- Array: cache misses=N, decompress count=N calls=N
-(3 rows)
+(2 rows)
 
 -- These should generate decompressions as above, but for all columns.
 select explain_analyze_anonymize(format($$
