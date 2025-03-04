@@ -1142,10 +1142,16 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 	else
 		orderby = "";
 
-	elog(NOTICE,
-		 "default order by for hypertable \"%s\" is set to \"%s\"",
-		 get_rel_name(ht->main_table_relid),
-		 orderby);
+	if (*orderby == '\0')
+		ereport(NOTICE,
+				(errmsg("default order by for hypertable \"%s\" is set to \"\"",
+						get_rel_name(ht->main_table_relid))),
+				errdetail("Segmentwise recompression will be disabled"));
+	else
+		elog(NOTICE,
+			 "default order by for hypertable \"%s\" is set to \"%s\"",
+			 get_rel_name(ht->main_table_relid),
+			 orderby);
 
 	elog(LOG_SERVER_ONLY,
 		 "order_by default: hypertable=\"%s\" clauses=\"%s\" function=\"%s.%s\" confidence=%d",

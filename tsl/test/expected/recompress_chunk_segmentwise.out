@@ -647,13 +647,51 @@ INFO:  Using index "compress_hyper_19_20_chunk__ts_meta_min_1__ts_meta_max_1_idx
  _timescaledb_internal._hyper_18_19_chunk
 (1 row)
 
+-- Test behaviour when default order by is empty: should not segmentwise-recompress in this case
+CREATE TABLE no_oby(ts int, c1 int);
+SELECT create_hypertable('no_oby','ts');
+NOTICE:  adding not-null constraint to column "ts"
+  create_hypertable   
+----------------------
+ (20,public,no_oby,t)
+(1 row)
+
+\set VERBOSITY default
+ALTER TABLE no_oby SET (timescaledb.compress, timescaledb.compress_segmentby = 'ts');
+NOTICE:  default order by for hypertable "no_oby" is set to ""
+DETAIL:  Segmentwise recompression will be disabled
+\set VERBOSITY terse
+INSERT INTO no_oby (ts,c1) VALUES (6,6);
+SELECT show_chunks as chunk_to_compress FROM show_chunks('no_oby') LIMIT 1 \gset
+SELECT compress_chunk(:'chunk_to_compress');
+INFO:  using tuplesort to scan rows from "_hyper_20_21_chunk" for compression
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_20_21_chunk
+(1 row)
+
+INSERT INTO no_oby (ts,c1) VALUES (7,7);
+-- Direct segmentwise-recompress request: throw an error
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress');
+ERROR:  segmentwise recompression cannot be applied for compression with no order by
+\set ON_ERROR_STOP 1
+-- Compress wrapper: do full recompress instead of by segment
+SELECT compress_chunk(:'chunk_to_compress');
+NOTICE:  segmentwise recompression is disabled due to no order by, performing full recompression on chunk "_timescaledb_internal._hyper_20_21_chunk"
+INFO:  using tuplesort to scan rows from "_hyper_20_21_chunk" for compression
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_20_21_chunk
+(1 row)
+
 RESET timescaledb.debug_compression_path_info;
 --- Test behaviour when enable_segmentwise_recompression GUC if OFF
 CREATE TABLE guc_test(time timestamptz not null, a int, b int, c int);
 SELECT create_hypertable('guc_test', by_range('time', INTERVAL '1 day'));
  create_hypertable 
 -------------------
- (20,t)
+ (22,t)
 (1 row)
 
 ALTER TABLE guc_test set (timescaledb.compress, timescaledb.compress_segmentby = 'a, b');
@@ -663,7 +701,7 @@ SELECT show_chunks as chunk_to_compress FROM show_chunks('guc_test') LIMIT 1 \gs
 SELECT compress_chunk(:'chunk_to_compress');
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_20_21_chunk
+ _timescaledb_internal._hyper_22_24_chunk
 (1 row)
 
 INSERT INTO guc_test VALUES ('2024-10-30 14:14:00.501519-06'::timestamptz, 1, 1, 2);
@@ -675,9 +713,9 @@ ERROR:  segmentwise recompression functionality disabled, enable it by first set
 \set ON_ERROR_STOP 1
 -- When GUC is OFF, entire chunk should be fully uncompressed and compressed instead
 SELECT compress_chunk(:'chunk_to_compress');
-NOTICE:  segmentwise recompression is disabled, performing full recompression on chunk "_timescaledb_internal._hyper_20_21_chunk"
+NOTICE:  segmentwise recompression is disabled, performing full recompression on chunk "_timescaledb_internal._hyper_22_24_chunk"
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_20_21_chunk
+ _timescaledb_internal._hyper_22_24_chunk
 (1 row)
 

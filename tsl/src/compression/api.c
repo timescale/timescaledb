@@ -940,12 +940,14 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 
 	if (ts_chunk_is_compressed(chunk))
 	{
+		CompressionSettings *chunk_settings = ts_compression_settings_get(chunk->table_id);
+		bool valid_orderby_settings = chunk_settings->fd.orderby;
 		if (recompress)
 		{
 			CompressionSettings *ht_settings = ts_compression_settings_get(chunk->hypertable_relid);
-			CompressionSettings *chunk_settings = ts_compression_settings_get(chunk->table_id);
 
-			if (!ts_compression_settings_equal(ht_settings, chunk_settings))
+			if (!valid_orderby_settings ||
+				!ts_compression_settings_equal(ht_settings, chunk_settings))
 			{
 				decompress_chunk_impl(chunk, false);
 				compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
@@ -962,17 +964,21 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 			return uncompressed_chunk_id;
 		}
 
-		if (ts_guc_enable_segmentwise_recompression && ts_chunk_is_partial(chunk) &&
-			get_compressed_chunk_index_for_recompression(chunk))
+		if (ts_guc_enable_segmentwise_recompression && valid_orderby_settings &&
+			ts_chunk_is_partial(chunk) && get_compressed_chunk_index_for_recompression(chunk))
 		{
 			uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk);
 		}
 		else
 		{
-			if (!ts_guc_enable_segmentwise_recompression)
+			if (!ts_guc_enable_segmentwise_recompression || !valid_orderby_settings)
 				elog(NOTICE,
-					 "segmentwise recompression is disabled, performing full recompression on "
+					 "segmentwise recompression is disabled%s, performing full "
+					 "recompression on "
 					 "chunk \"%s.%s\"",
+					 (ts_guc_enable_segmentwise_recompression && !valid_orderby_settings ?
+						  " due to no order by" :
+						  ""),
 					 NameStr(chunk->fd.schema_name),
 					 NameStr(chunk->fd.table_name));
 			decompress_chunk_impl(chunk, false);
