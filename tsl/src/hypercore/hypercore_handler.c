@@ -2790,6 +2790,7 @@ typedef struct IndexBuildCallbackState
 	Bitmapset *orderby_cols;
 	bool is_segmentby_index;
 	MemoryContext decompression_mcxt;
+	MemoryContext batch_mcxt;
 	ArrowArray **arrow_columns;
 } IndexBuildCallbackState;
 
@@ -2828,6 +2829,9 @@ hypercore_index_build_callback(Relation index, ItemPointer tid, Datum *values, b
 									   * indexes, we might change this from
 									   * the actual number of rows to indexing
 									   * only one row per segment. */
+
+	MemoryContext old_mcxt = MemoryContextSwitchTo(icstate->batch_mcxt);
+	MemoryContextReset(icstate->batch_mcxt);
 
 	/* Update ntuples for accurate statistics. When building the index, the
 	 * relation's reltuples is updated based on this count. */
@@ -2878,7 +2882,7 @@ hypercore_index_build_callback(Relation index, ItemPointer tid, Datum *values, b
 					TupleDescAttr(tupdesc, AttrNumberGetAttrOffset(attno));
 				icstate->arrow_columns[i] = arrow_from_compressed(values[i],
 																  attr->atttypid,
-																  CurrentMemoryContext,
+																  icstate->batch_mcxt,
 																  icstate->decompression_mcxt);
 
 				/* The number of elements in the arrow array should be the
@@ -2911,7 +2915,7 @@ hypercore_index_build_callback(Relation index, ItemPointer tid, Datum *values, b
 		/* The slot is a table slot, not index slot. But we only fill in the
 		 * columns needed for the index and predicate checks. Therefore, make sure
 		 * other columns are initialized to "null" */
-		memset(slot->tts_isnull, true, sizeof(bool) * slot->tts_tupleDescriptor->natts);
+		MemSet(slot->tts_isnull, true, sizeof(bool) * slot->tts_tupleDescriptor->natts);
 		ExecClearTuple(slot);
 
 		for (int colnum = 0; colnum < natts; colnum++)
@@ -2950,6 +2954,9 @@ hypercore_index_build_callback(Relation index, ItemPointer tid, Datum *values, b
 		hypercore_tid_encode(&index_tid, tid, rownum + 1);
 		Assert(!icstate->is_segmentby_index || rownum == 0);
 
+		/* Reset memory for predicate checks */
+		MemoryContextReset(icstate->econtext->ecxt_per_tuple_memory);
+
 		/*
 		 * In a partial index, discard tuples that don't satisfy the
 		 * predicate.
@@ -2963,8 +2970,13 @@ hypercore_index_build_callback(Relation index, ItemPointer tid, Datum *values, b
 				continue;
 		}
 
+		/* Call the original callback on the original memory context */
+		MemoryContextSwitchTo(old_mcxt);
 		icstate->callback(index, &index_tid, values, isnull, tupleIsAlive, icstate->orig_state);
+		MemoryContextSwitchTo(icstate->batch_mcxt);
 	}
+
+	MemoryContextSwitchTo(old_mcxt);
 }
 
 /*
@@ -3125,8 +3137,11 @@ hypercore_index_build_range_scan(Relation relation, Relation indexRelation, Inde
 		.index_info = indexInfo,
 		.tuple_index = -1,
 		.ntuples = 0,
+		.batch_mcxt = AllocSetContextCreate(CurrentMemoryContext,
+											"Compressed batch for index build",
+											ALLOCSET_DEFAULT_SIZES),
 		.decompression_mcxt = AllocSetContextCreate(CurrentMemoryContext,
-													"bulk decompression",
+													"Bulk decompression for index build",
 													/* minContextSize = */ 0,
 													/* initBlockSize = */ 64 * 1024,
 													/* maxBlockSize = */ 64 * 1024),
@@ -3265,6 +3280,7 @@ hypercore_index_build_range_scan(Relation relation, Relation indexRelation, Inde
 	FreeExecutorState(icstate.estate);
 	ExecDropSingleTupleTableSlot(icstate.slot);
 	MemoryContextDelete(icstate.decompression_mcxt);
+	MemoryContextDelete(icstate.batch_mcxt);
 	pfree((void *) icstate.arrow_columns);
 	bms_free(icstate.segmentby_cols);
 	bms_free(icstate.orderby_cols);
