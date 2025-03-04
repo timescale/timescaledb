@@ -6,6 +6,7 @@
 #pragma once
 
 #include <postgres.h>
+#include <fmgr.h>
 #include <postmaster/bgworker.h>
 #include <storage/lock.h>
 

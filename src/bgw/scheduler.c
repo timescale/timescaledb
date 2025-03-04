@@ -804,6 +804,8 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 		goto scheduler_exit;
 	}
 
+	TS_PLUGIN_CALLBACK(bgw_scheduler_start);
+
 	/* txn to read the list of jobs from the DB */
 	StartTransactionCommand();
 	scheduled_jobs = ts_update_scheduled_jobs_list(scheduled_jobs, scheduler_mctx);
@@ -884,6 +886,7 @@ scheduler_exit:
 	wait_for_all_jobs_to_shutdown();
 	check_for_stopped_and_timed_out_jobs();
 	scheduled_jobs = NIL;
+	TS_PLUGIN_CALLBACK(bgw_scheduler_exit, ts_debug_bgw_scheduler_exit_status);
 	proc_exit(ts_debug_bgw_scheduler_exit_status);
 }
 

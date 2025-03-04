@@ -109,6 +109,12 @@ if(USE_OPENSSL)
   endif(MSVC)
 endif(USE_OPENSSL)
 
+# This is a kind of strange usage, but it follows the convention of
+# PG_VERSION_NUM, where you can get the major version by dividing by 100.
+# However, the major number shows up as, e.g., 1500 for PostgreSQL version 15.
+math(EXPR TS_VERSION_NUM
+     "${PROJECT_VERSION_MAJOR} * 10000 + ${PROJECT_VERSION_MINOR}")
+
 configure_file(config.h.in config.h)
 add_dependencies(${PROJECT_NAME} gitcheck)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
