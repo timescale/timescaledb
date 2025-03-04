@@ -909,7 +909,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 }
 
 static void
-debug_refresh_window(int elevel, const ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
+debug_refresh_window(const ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
 					 const char *msg)
 {
 	return;
@@ -923,7 +923,7 @@ debug_refresh_window(int elevel, const ContinuousAgg *cagg, const InternalTimeRa
 	getTypeOutputInfo(refresh_window->type, &outfuncid, &isvarlena);
 	Assert(!isvarlena);
 
-	elog(elevel,
+	elog(DEBUG1,
 		 "%s \"%s\" in window [ %s, %s ] internal [ " INT64_FORMAT ", " INT64_FORMAT
 		 " ] minimum [ %s ]",
 		 msg,
@@ -939,13 +939,11 @@ debug_refresh_window(int elevel, const ContinuousAgg *cagg, const InternalTimeRa
 
 List *
 continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *original_refresh_window,
-									int32 range_factor)
+									int32 nbuckets_per_batch)
 {
-	/* Do not produce batches when the range_range factor = 0 (disabled) */
-	if (range_factor == 0)
+	/* Do not produce batches when the number of buckets per batch is zero (disabled) */
+	if (nbuckets_per_batch == 0)
 	{
-		// refresh_window_list = lappend(refresh_window_list, &original_refresh_window);
-		// return refresh_window_list;
 		return NIL;
 	}
 
@@ -957,7 +955,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		.end_isnull = original_refresh_window->end_isnull,
 	};
 
-	debug_refresh_window(INFO, cagg, &refresh_window, "begin");
+	debug_refresh_window(cagg, &refresh_window, "begin");
 
 	Hypertable *ht = cagg_get_hypertable_or_fail(cagg->data.raw_hypertable_id);
 
@@ -965,7 +963,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	 */
 	if (refresh_window.start_isnull)
 	{
-		debug_refresh_window(INFO, cagg, &refresh_window, "START IS NULL");
+		debug_refresh_window(cagg, &refresh_window, "START IS NULL");
 		refresh_window.start =
 			ts_hypertable_get_min_dimension_slice(ht, 0, &refresh_window.start_isnull);
 
@@ -974,15 +972,13 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 			TS_TIME_IS_MIN(refresh_window.start, refresh_window.type) ||
 			TS_TIME_IS_NOBEGIN(refresh_window.start, refresh_window.type))
 		{
-			// MemoryContextSwitchTo(oldcontext);
-			// refresh_window_list = lappend(refresh_window_list, &original_refresh_window);
 			return NIL;
 		}
 	}
 
 	if (refresh_window.end_isnull)
 	{
-		debug_refresh_window(INFO, cagg, &refresh_window, "END IS NULL");
+		debug_refresh_window(cagg, &refresh_window, "END IS NULL");
 		refresh_window.end =
 			ts_hypertable_get_max_dimension_slice(ht, 0, &refresh_window.end_isnull);
 
@@ -990,9 +986,6 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		if (refresh_window.end_isnull || TS_TIME_IS_MAX(refresh_window.end, refresh_window.type) ||
 			TS_TIME_IS_NOEND(refresh_window.end, refresh_window.type))
 		{
-			// MemoryContextSwitchTo(oldcontext);
-			// refresh_window_list = lappend(refresh_window_list, &original_refresh_window);
-			// return refresh_window_list;
 			return NIL;
 		}
 	}
@@ -1001,17 +994,16 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	 * executions */
 	int64 bucket_width = ts_continuous_agg_bucket_width(cagg->bucket_function);
 	int64 refresh_size = refresh_window.end - refresh_window.start;
-	int64 batch_size = (bucket_width * range_factor);
+	int64 batch_size = (bucket_width * nbuckets_per_batch);
 	int64 estimated_batches = refresh_size / batch_size;
+
 	if (estimated_batches > ts_guc_cagg_max_individual_materializations ||
 		refresh_size <= batch_size)
 	{
-		// refresh_window_list = lappend(refresh_window_list, &original_refresh_window);
-		// return refresh_window_list;
 		return NIL;
 	}
 
-	debug_refresh_window(INFO, cagg, &refresh_window, "before produce ranges");
+	debug_refresh_window(cagg, &refresh_window, "before produce ranges");
 
 	const Dimension *time_dim;
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
@@ -1106,7 +1098,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		refresh_window_list = lappend(refresh_window_list, range);
 		MemoryContextSwitchTo(saved_context);
 
-		debug_refresh_window(INFO, cagg, range, "range refresh");
+		debug_refresh_window(cagg, range, "range refresh");
 	}
 
 	res = SPI_finish();
