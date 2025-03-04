@@ -146,6 +146,31 @@ policy_refresh_cagg_get_include_tiered_data(const Jsonb *config, bool *isnull)
 	return res;
 }
 
+int32
+policy_refresh_cagg_get_nbuckets_per_batch(const Jsonb *config, bool *isnull)
+{
+	bool found;
+	int32 res = ts_jsonb_get_int32_field(config, POL_REFRESH_CONF_KEY_NBUCKETS_PER_BATCH, &found);
+
+	*isnull = !found;
+	return res;
+}
+
+int32
+policy_refresh_cagg_get_max_batches_per_job_execution(const Jsonb *config, bool *isnull)
+{
+	bool found;
+	int32 res = ts_jsonb_get_int32_field(config,
+										 POL_REFRESH_CONF_KEY_MAX_BATCHES_PER_JOB_EXECUTION,
+										 &found);
+
+	if (!found)
+		res = 10; /* default value */
+
+	*isnull = !found;
+	return res;
+}
+
 /* returns false if a policy could not be found */
 bool
 policy_refresh_cagg_exists(int32 materialization_id)
@@ -498,7 +523,9 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 								 Oid end_offset_type, NullableDatum end_offset,
 								 Interval refresh_interval, bool if_not_exists, bool fixed_schedule,
 								 TimestampTz initial_start, const char *timezone,
-								 NullableDatum include_tiered_data)
+								 NullableDatum include_tiered_data,
+								 NullableDatum nbuckets_per_batch,
+								 NullableDatum max_batches_per_job_execution)
 {
 	NameData application_name;
 	NameData proc_name, proc_schema, check_name, check_schema, owner;
@@ -595,6 +622,7 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 	ts_jsonb_add_int32(parse_state,
 					   POL_REFRESH_CONF_KEY_MAT_HYPERTABLE_ID,
 					   cagg->data.mat_hypertable_id);
+
 	if (!policyconf.offset_start.isnull)
 		json_add_dim_interval_value(parse_state,
 									POL_REFRESH_CONF_KEY_START_OFFSET,
@@ -602,6 +630,7 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 									policyconf.offset_start.value);
 	else
 		ts_jsonb_add_null(parse_state, POL_REFRESH_CONF_KEY_START_OFFSET);
+
 	if (!policyconf.offset_end.isnull)
 		json_add_dim_interval_value(parse_state,
 									POL_REFRESH_CONF_KEY_END_OFFSET,
@@ -609,10 +638,22 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 									policyconf.offset_end.value);
 	else
 		ts_jsonb_add_null(parse_state, POL_REFRESH_CONF_KEY_END_OFFSET);
+
 	if (!include_tiered_data.isnull)
 		ts_jsonb_add_bool(parse_state,
 						  POL_REFRESH_CONF_KEY_INCLUDE_TIERED_DATA,
 						  include_tiered_data.value);
+
+	if (!nbuckets_per_batch.isnull)
+		ts_jsonb_add_int32(parse_state,
+						   POL_REFRESH_CONF_KEY_NBUCKETS_PER_BATCH,
+						   nbuckets_per_batch.value);
+
+	if (!max_batches_per_job_execution.isnull)
+		ts_jsonb_add_int32(parse_state,
+						   POL_REFRESH_CONF_KEY_MAX_BATCHES_PER_JOB_EXECUTION,
+						   max_batches_per_job_execution.value);
+
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	Jsonb *config = JsonbValueToJsonb(result);
 
@@ -644,6 +685,8 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	bool if_not_exists;
 	NullableDatum start_offset, end_offset;
 	NullableDatum include_tiered_data;
+	NullableDatum nbuckets_per_batch;
+	NullableDatum max_batches_per_job_execution;
 
 	ts_feature_flag_check(FEATURE_POLICY);
 
@@ -668,6 +711,10 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	char *valid_timezone = NULL;
 	include_tiered_data.value = PG_GETARG_DATUM(7);
 	include_tiered_data.isnull = PG_ARGISNULL(7);
+	nbuckets_per_batch.value = PG_GETARG_DATUM(8);
+	nbuckets_per_batch.isnull = PG_ARGISNULL(8);
+	max_batches_per_job_execution.value = PG_GETARG_DATUM(9);
+	max_batches_per_job_execution.isnull = PG_ARGISNULL(9);
 
 	Datum retval;
 	/* if users pass in -infinity for initial_start, then use the current_timestamp instead */
@@ -691,7 +738,9 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 											  fixed_schedule,
 											  initial_start,
 											  valid_timezone,
-											  include_tiered_data);
+											  include_tiered_data,
+											  nbuckets_per_batch,
+											  max_batches_per_job_execution);
 	if (!TIMESTAMP_NOT_FINITE(initial_start))
 	{
 		int32 job_id = DatumGetInt32(retval);
