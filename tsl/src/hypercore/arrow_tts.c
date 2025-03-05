@@ -4,6 +4,7 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include "guc.h"
 #include <access/attnum.h>
 #include <access/htup_details.h>
 #include <access/tupdesc.h>
@@ -94,6 +95,7 @@ tts_arrow_init(TupleTableSlot *slot)
 	aslot->total_row_count = 0;
 	aslot->referenced_attrs = NULL;
 	aslot->arrow_qual_result = NULL;
+	aslot->arrow_arrays = NULL;
 
 	/*
 	 * Set up child slots, one for the non-compressed relation and one for the
@@ -112,6 +114,8 @@ tts_arrow_init(TupleTableSlot *slot)
 	aslot->child_slot = aslot->noncompressed_slot;
 	aslot->valid_attrs = palloc0(sizeof(bool) * slot->tts_tupleDescriptor->natts);
 	aslot->segmentby_attrs = palloc0(sizeof(bool) * slot->tts_tupleDescriptor->natts);
+	aslot->arrow_arrays = palloc0(sizeof(ArrowArray *) * slot->tts_tupleDescriptor->natts);
+
 	/* Note that aslot->referenced_attrs is initialized on demand, and not
 	 * here, because NULL is a valid state for referenced_attrs. */
 	MemoryContextSwitchTo(oldmcxt);
@@ -126,6 +130,24 @@ tts_arrow_init(TupleTableSlot *slot)
 	 * filters */
 	aslot->per_segment_mcxt =
 		GenerationContextCreateCompat(slot->tts_mcxt, "Per-segment memory context", 64 * 1024);
+}
+
+static void
+clear_arrow_arrays(TupleTableSlot *slot)
+{
+	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
+
+	if (aslot->arrow_arrays)
+	{
+		for (int i = 0; i < slot->tts_tupleDescriptor->natts; i++)
+		{
+			if (aslot->arrow_arrays[i] != NULL)
+			{
+				arrow_release(aslot->arrow_arrays[i]);
+				aslot->arrow_arrays[i] = NULL;
+			}
+		}
+	}
 }
 
 /*
@@ -153,6 +175,7 @@ tts_arrow_release(TupleTableSlot *slot)
 	aslot->compressed_slot = NULL;
 	aslot->noncompressed_slot = NULL;
 	aslot->arrow_cache_entry = NULL;
+	aslot->arrow_arrays = NULL;
 }
 
 static void
@@ -269,6 +292,7 @@ tts_arrow_clear(TupleTableSlot *slot)
 	memset(aslot->valid_attrs, 0, sizeof(bool) * slot->tts_tupleDescriptor->natts);
 	aslot->arrow_cache_entry = NULL;
 	aslot->arrow_qual_result = NULL;
+	clear_arrow_arrays(slot);
 	MemoryContextReset(aslot->per_segment_mcxt);
 }
 
@@ -276,6 +300,7 @@ static inline void
 tts_arrow_store_tuple(TupleTableSlot *slot, TupleTableSlot *child_slot, uint16 tuple_index)
 {
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
+	bool clear_arrow_data = true;
 
 	Assert(!TTS_EMPTY(child_slot));
 	Assert(OidIsValid(slot->tts_tableOid));
@@ -315,6 +340,8 @@ tts_arrow_store_tuple(TupleTableSlot *slot, TupleTableSlot *child_slot, uint16 t
 
 				if (!ItemPointerEquals(&decoded_tid, &child_slot->tts_tid))
 					clear_arrow_parent(slot);
+				else
+					clear_arrow_data = false;
 			}
 		}
 
@@ -339,6 +366,10 @@ tts_arrow_store_tuple(TupleTableSlot *slot, TupleTableSlot *child_slot, uint16 t
 	aslot->child_slot = child_slot;
 	aslot->tuple_index = tuple_index;
 	aslot->arrow_cache_entry = NULL;
+
+	if (clear_arrow_data)
+		clear_arrow_arrays(slot);
+
 	/* Clear valid attributes */
 	memset(aslot->valid_attrs, 0, sizeof(bool) * slot->tts_tupleDescriptor->natts);
 	MemoryContextReset(aslot->per_segment_mcxt);
@@ -462,6 +493,52 @@ is_compressed_col(const TupleDesc tupdesc, AttrNumber attno)
 	return coltypid == typinfo->type_oid;
 }
 
+static inline ArrowArray *
+get_arrow_array(ArrowTupleTableSlot *aslot, const int16 attoff)
+{
+	const AttrNumber attnum = AttrOffsetGetAttrNumber(attoff);
+	TupleTableSlot *slot = &aslot->base.base;
+
+	/*
+	 * Only use the arrow array cache if the slot is used in an index scan and
+	 * the cache hasn't been disabled by configuration.
+	 */
+	if (aslot->index_attrs != NULL && ts_guc_hypercore_arrow_cache_max_entries > 0)
+	{
+		ArrowArray **arrow_arrays = arrow_column_cache_read_one(aslot, attnum);
+		return arrow_arrays[attoff];
+	}
+
+	Assert(aslot->arrow_arrays);
+
+	if (NULL == aslot->arrow_arrays[attoff])
+	{
+		const int16 *attrs_offset_map = arrow_slot_get_attribute_offset_map(&aslot->base.base);
+		const AttrNumber cattno = AttrOffsetGetAttrNumber(attrs_offset_map[attoff]);
+		const TupleDesc compressed_tupdesc = aslot->compressed_slot->tts_tupleDescriptor;
+
+		if (is_compressed_col(compressed_tupdesc, cattno))
+		{
+			bool isnull;
+			Datum value = slot_getattr(aslot->child_slot, cattno, &isnull);
+
+			/* Can this ever be NULL? */
+			if (!isnull)
+			{
+				const ArrowColumnCache *acache = &aslot->arrow_cache;
+				const TupleDesc tupdesc = slot->tts_tupleDescriptor;
+				const Form_pg_attribute attr = TupleDescAttr(tupdesc, attoff);
+				aslot->arrow_arrays[attoff] = arrow_from_compressed(value,
+																	attr->atttypid,
+																	slot->tts_mcxt,
+																	acache->decompression_mcxt);
+			}
+		}
+	}
+
+	return aslot->arrow_arrays[attoff];
+}
+
 static pg_attribute_always_inline ArrowArray *
 set_attr_value(TupleTableSlot *slot, const int16 attoff)
 {
@@ -486,13 +563,11 @@ set_attr_value(TupleTableSlot *slot, const int16 attoff)
 	}
 	else
 	{
-		const AttrNumber attnum = AttrOffsetGetAttrNumber(attoff);
-		ArrowArray **arrow_arrays = arrow_column_cache_read_one(aslot, attnum);
-
-		arrow_array = arrow_arrays[attoff];
+		arrow_array = get_arrow_array(aslot, attoff);
 
 		if (arrow_array == NULL)
 		{
+			const AttrNumber attnum = AttrOffsetGetAttrNumber(attoff);
 			/* Since the column is not the segment-by column, and there is no
 			 * decompressed data, the column must be NULL. Use the default
 			 * value. */
@@ -506,7 +581,7 @@ set_attr_value(TupleTableSlot *slot, const int16 attoff)
 			const Oid typid = attr->atttypid;
 			const int16 typlen = attr->attlen;
 			const NullableDatum datum =
-				arrow_get_datum(arrow_arrays[attoff], typid, typlen, aslot->tuple_index - 1);
+				arrow_get_datum(arrow_array, typid, typlen, aslot->tuple_index - 1);
 			slot->tts_values[attoff] = datum.value;
 			slot->tts_isnull[attoff] = datum.isnull;
 		}
@@ -777,7 +852,6 @@ arrow_slot_get_array(TupleTableSlot *slot, AttrNumber attno)
 {
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
 	const int attoff = AttrNumberGetAttrOffset(attno);
-	ArrowArray **arrow_arrays;
 
 	TS_DEBUG_LOG("attno: %d, tuple_index: %d", attno, aslot->tuple_index);
 
@@ -800,8 +874,7 @@ arrow_slot_get_array(TupleTableSlot *slot, AttrNumber attno)
 	if (!aslot->valid_attrs[attoff])
 		return set_attr_value(slot, attoff);
 
-	arrow_arrays = arrow_column_cache_read_one(aslot, attno);
-	return arrow_arrays[attoff];
+	return get_arrow_array(aslot, attoff);
 }
 
 /*
