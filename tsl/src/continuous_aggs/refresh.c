@@ -1010,15 +1010,11 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		refresh_window.end_isnull = false;
 	}
 
-	/* @TODO: move this limitation to the cagg policy execution limiting the maximum number of
-	 * executions */
 	int64 bucket_width = ts_continuous_agg_bucket_width(cagg->bucket_function);
 	int64 refresh_size = refresh_window.end - refresh_window.start;
 	int64 batch_size = (bucket_width * nbuckets_per_batch);
-	int64 estimated_batches = refresh_size / batch_size;
 
-	if (estimated_batches > ts_guc_cagg_max_individual_materializations ||
-		refresh_size <= batch_size)
+	if (refresh_size <= batch_size)
 	{
 		return NIL;
 	}

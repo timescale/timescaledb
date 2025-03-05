@@ -423,6 +423,13 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 										refresh_window->start_isnull,
 										refresh_window->end_isnull,
 										false);
+		if (processing_batch >= policy_data.max_batches_per_job_execution)
+		{
+			elog(LOG,
+				 "reached maximum number of batches per job execution (%d)",
+				 policy_data.max_batches_per_job_execution);
+			break;
+		}
 	}
 
 	if (!policy_data.include_tiered_data_isnull)
