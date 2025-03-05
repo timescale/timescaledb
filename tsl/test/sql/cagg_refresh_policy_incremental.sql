@@ -52,8 +52,8 @@ SELECT
     t, d, 10
 FROM
     generate_series(
-        '2025-02-05 00:00:00-03', 
-        '2025-03-05 00:00:00-03', 
+        '2025-02-05 00:00:00-03',
+        '2025-03-05 00:00:00-03',
         '1 hour'::interval) AS t,
     generate_series(1,5) AS d;
 
@@ -62,7 +62,11 @@ WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
     time_bucket('1 day', time),
     device_id,
-    max(temperature)
+    count(*),
+    min(temperature),
+    max(temperature),
+    avg(temperature),
+    sum(temperature)
 FROM
     conditions
 GROUP BY
@@ -81,6 +85,30 @@ SELECT
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
+
+
+CREATE MATERIALIZED VIEW conditions_by_day_manual_refresh
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
+SELECT
+    time_bucket('1 day', time),
+    device_id,
+    count(*),
+    min(temperature),
+    max(temperature),
+    avg(temperature),
+    sum(temperature)
+FROM
+    conditions
+GROUP BY
+    1, 2
+WITH NO DATA;
+
+CALL refresh_continuous_aggregate('conditions_by_day_manual_refresh', NULL, NULL);
+
+-- Should return zero rows
+(SELECT * FROM conditions_by_day ORDER BY 1, 2)
+EXCEPT
+(SELECT * FROM conditions_by_day_manual_refresh ORDER BY 1, 2);
 
 TRUNCATE bgw_log, conditions_by_day;
 

@@ -59,7 +59,11 @@ WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
     time_bucket('1 day', time),
     device_id,
-    max(temperature)
+    count(*),
+    min(temperature),
+    max(temperature),
+    avg(temperature),
+    sum(temperature)
 FROM
     conditions
 GROUP BY
@@ -99,6 +103,30 @@ SELECT * FROM sorted_bgw_log;
      10 |         0 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
      11 |         0 | Refresh Continuous Aggregate Policy [1000] | inserted 20 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 (15 rows)
+
+CREATE MATERIALIZED VIEW conditions_by_day_manual_refresh
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
+SELECT
+    time_bucket('1 day', time),
+    device_id,
+    count(*),
+    min(temperature),
+    max(temperature),
+    avg(temperature),
+    sum(temperature)
+FROM
+    conditions
+GROUP BY
+    1, 2
+WITH NO DATA;
+CALL refresh_continuous_aggregate('conditions_by_day_manual_refresh', NULL, NULL);
+-- Should return zero rows
+(SELECT * FROM conditions_by_day ORDER BY 1, 2)
+EXCEPT
+(SELECT * FROM conditions_by_day_manual_refresh ORDER BY 1, 2);
+ time_bucket | device_id | count | min | max | avg | sum 
+-------------+-----------+-------+-----+-----+-----+-----
+(0 rows)
 
 TRUNCATE bgw_log, conditions_by_day;
 SELECT
