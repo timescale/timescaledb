@@ -80,7 +80,15 @@ typedef enum CaggRefreshCallContext
 	CAGG_REFRESH_CREATION,
 	CAGG_REFRESH_WINDOW,
 	CAGG_REFRESH_POLICY,
+	CAGG_REFRESH_POLICY_BATCHED
 } CaggRefreshCallContext;
+
+typedef struct CaggRefreshContext
+{
+	CaggRefreshCallContext callctx;
+	int32 processing_batch;
+	int32 number_of_batches;
+} CaggRefreshContext;
 
 #define IS_TIME_BUCKET_INFO_TIME_BASED(bucket_function)                                            \
 	(bucket_function->bucket_width_type == INTERVALOID)

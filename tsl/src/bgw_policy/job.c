@@ -389,6 +389,8 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 						PGC_S_SESSION);
 	}
 
+	CaggRefreshContext context = { .callctx = CAGG_REFRESH_POLICY };
+
 	/* Try to split window range into a list of ranges */
 	List *refresh_window_list = continuous_agg_split_refresh_window(policy_data.cagg,
 																	&policy_data.refresh_window,
@@ -397,8 +399,14 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 	{
 		refresh_window_list = lappend(refresh_window_list, &policy_data.refresh_window);
 	}
+	else
+	{
+		context.callctx = CAGG_REFRESH_POLICY_BATCHED;
+		context.number_of_batches = list_length(refresh_window_list);
+	}
 
 	ListCell *lc;
+	int32 processing_batch = 0;
 	foreach (lc, refresh_window_list)
 	{
 		InternalTimeRange *refresh_window = (InternalTimeRange *) lfirst(lc);
@@ -408,12 +416,13 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 			 ts_internal_to_time_string(refresh_window->start, refresh_window->type),
 			 ts_internal_to_time_string(refresh_window->end, refresh_window->type));
 
-		(void) continuous_agg_refresh_internal(policy_data.cagg,
-											   refresh_window,
-											   CAGG_REFRESH_POLICY,
-											   refresh_window->start_isnull,
-											   refresh_window->end_isnull,
-											   false);
+		context.processing_batch = ++processing_batch;
+		continuous_agg_refresh_internal(policy_data.cagg,
+										refresh_window,
+										context,
+										refresh_window->start_isnull,
+										refresh_window->end_isnull,
+										false);
 	}
 
 	if (!policy_data.include_tiered_data_isnull)

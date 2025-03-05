@@ -15,10 +15,10 @@ extern Datum continuous_agg_refresh(PG_FUNCTION_ARGS);
 extern void continuous_agg_calculate_merged_refresh_window(
 	const ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
 	const InvalidationStore *invalidations, const ContinuousAggsBucketFunction *bucket_function,
-	InternalTimeRange *merged_refresh_window, const CaggRefreshCallContext callctx);
+	InternalTimeRange *merged_refresh_window, const CaggRefreshContext callctx);
 extern void continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 											const InternalTimeRange *refresh_window,
-											const CaggRefreshCallContext callctx,
+											const CaggRefreshContext callctx,
 											const bool start_isnull, const bool end_isnull,
 											bool force);
 extern List *continuous_agg_split_refresh_window(ContinuousAgg *cagg,
