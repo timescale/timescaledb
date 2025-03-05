@@ -50,8 +50,8 @@ SELECT
     t, d, 10
 FROM
     generate_series(
-        '2025-02-05 00:00:00-03', 
-        '2025-03-05 00:00:00-03', 
+        '2025-02-05 00:00:00-03',
+        '2025-03-05 00:00:00-03',
         '1 hour'::interval) AS t,
     generate_series(1,5) AS d;
 CREATE MATERIALIZED VIEW conditions_by_day

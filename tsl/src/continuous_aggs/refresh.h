@@ -18,7 +18,7 @@ extern void continuous_agg_calculate_merged_refresh_window(
 	InternalTimeRange *merged_refresh_window, const CaggRefreshContext callctx);
 extern void continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 											const InternalTimeRange *refresh_window,
-											const CaggRefreshContext callctx,
+											const CaggRefreshContext context,
 											const bool start_isnull, const bool end_isnull,
 											bool force);
 extern List *continuous_agg_split_refresh_window(ContinuousAgg *cagg,
