@@ -18,21 +18,21 @@
 #include <utils/lsyscache.h>
 #include <utils/snapmgr.h>
 
-#include "ts_catalog/catalog.h"
-#include "ts_catalog/continuous_agg.h"
-#include <dimension.h>
-#include <hypertable.h>
-#include <hypertable_cache.h>
-#include <time_bucket.h>
-#include <time_utils.h>
-#include <utils.h>
-
+#include "dimension.h"
+#include "dimension_slice.h"
 #include "guc.h"
+#include "hypertable.h"
+#include "hypertable_cache.h"
 #include "invalidation.h"
 #include "invalidation_threshold.h"
 #include "materialize.h"
 #include "process_utility.h"
 #include "refresh.h"
+#include "time_bucket.h"
+#include "time_utils.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/continuous_agg.h"
+#include "utils.h"
 
 #define CAGG_REFRESH_LOG_LEVEL (callctx == CAGG_REFRESH_POLICY ? LOG : DEBUG1)
 
@@ -958,36 +958,39 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	debug_refresh_window(cagg, &refresh_window, "begin");
 
 	Hypertable *ht = cagg_get_hypertable_or_fail(cagg->data.raw_hypertable_id);
+	const Dimension *time_dim;
+	time_dim = hyperspace_get_open_dimension(ht->space, 0);
 
 	/* If refresh window range start is NULL then get the first bucket from the original hypertable
 	 */
 	if (refresh_window.start_isnull)
 	{
 		debug_refresh_window(cagg, &refresh_window, "START IS NULL");
-		refresh_window.start =
-			ts_hypertable_get_min_dimension_slice(ht, 0, &refresh_window.start_isnull);
+		DimensionSlice *slice = ts_dimension_slice_nth_earliest_slice(time_dim->fd.id, 1);
 
-		/* If there's no MIN data then produce only one range */
-		if (refresh_window.start_isnull ||
-			TS_TIME_IS_MIN(refresh_window.start, refresh_window.type) ||
-			TS_TIME_IS_NOBEGIN(refresh_window.start, refresh_window.type))
+		/* If still there's no MIN range then produce only one range */
+		if (NULL == slice || TS_TIME_IS_MIN(slice->fd.range_start, refresh_window.type) ||
+			TS_TIME_IS_NOBEGIN(slice->fd.range_start, refresh_window.type))
 		{
 			return NIL;
 		}
+		refresh_window.start = slice->fd.range_start;
+		refresh_window.start_isnull = false;
 	}
 
 	if (refresh_window.end_isnull)
 	{
 		debug_refresh_window(cagg, &refresh_window, "END IS NULL");
-		refresh_window.end =
-			ts_hypertable_get_max_dimension_slice(ht, 0, &refresh_window.end_isnull);
+		DimensionSlice *slice = ts_dimension_slice_nth_latest_slice(time_dim->fd.id, 1);
 
-		/* If there's no MIN data then produce only one range */
-		if (refresh_window.end_isnull || TS_TIME_IS_MAX(refresh_window.end, refresh_window.type) ||
-			TS_TIME_IS_NOEND(refresh_window.end, refresh_window.type))
+		/* If still there's no MAX range then produce only one range */
+		if (NULL == slice || TS_TIME_IS_MAX(slice->fd.range_end, refresh_window.type) ||
+			TS_TIME_IS_NOEND(slice->fd.range_end, refresh_window.type))
 		{
 			return NIL;
 		}
+		refresh_window.end = slice->fd.range_end;
+		refresh_window.end_isnull = false;
 	}
 
 	/* @TODO: move this limitation to the cagg policy execution limiting the maximum number of
@@ -1004,9 +1007,6 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	}
 
 	debug_refresh_window(cagg, &refresh_window, "before produce ranges");
-
-	const Dimension *time_dim;
-	time_dim = hyperspace_get_open_dimension(ht->space, 0);
 
 	const char *query_str = " \
 		WITH chunk_ranges AS ( \
@@ -1068,12 +1068,21 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 
 	for (uint64 i = 0; i < SPI_processed; i++)
 	{
+		bool range_start_isnull, range_end_isnull;
+		Datum range_start =
+			SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 1, &range_start_isnull);
+		Datum range_end =
+			SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 2, &range_end_isnull);
+
+		/* We need to allocate the list in the old memory context because here we're in the SPI
+		 * context */
 		MemoryContext saved_context = MemoryContextSwitchTo(oldcontext);
 		InternalTimeRange *range = palloc0(sizeof(InternalTimeRange));
-		MemoryContextSwitchTo(saved_context);
-
-		range->start =
-			SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 1, &range->start_isnull);
+		range->start = DatumGetInt64(range_start);
+		range->start_isnull = range_start_isnull;
+		range->end = DatumGetInt64(range_end);
+		range->end_isnull = range_end_isnull;
+		range->type = original_refresh_window->type;
 
 		/* When dropping chunks we need to align the start of the first range to cover dropped
 		 * chunks if they exist */
@@ -1083,18 +1092,12 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 			range->start_isnull = true;
 		}
 
-		range->end =
-			SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 2, &range->end_isnull);
-
 		if (i == 0 && original_refresh_window->end_isnull)
 		{
 			range->end = original_refresh_window->end;
 			range->end_isnull = true;
 		}
 
-		range->type = original_refresh_window->type;
-
-		saved_context = MemoryContextSwitchTo(oldcontext);
 		refresh_window_list = lappend(refresh_window_list, range);
 		MemoryContextSwitchTo(saved_context);
 

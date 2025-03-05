@@ -1216,6 +1216,36 @@ ts_dimension_slice_nth_latest_slice(int32 dimension_id, int n)
 	return ret;
 }
 
+DimensionSlice *
+ts_dimension_slice_nth_earliest_slice(int32 dimension_id, int n)
+{
+	ScanKeyData scankey[1];
+	int num_tuples;
+	DimensionSlice *ret = NULL;
+
+	ScanKeyInit(&scankey[0],
+				Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(dimension_id));
+
+	num_tuples = dimension_slice_scan_limit_direction_internal(
+		DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
+		scankey,
+		1,
+		dimension_slice_nth_tuple_found,
+		(void *) &ret,
+		n,
+		ForwardScanDirection,
+		AccessShareLock,
+		NULL,
+		CurrentMemoryContext);
+	if (num_tuples < n)
+		return NULL;
+
+	return ret;
+}
+
 int32
 ts_dimension_slice_oldest_valid_chunk_for_reorder(int32 job_id, int32 dimension_id,
 												  StrategyNumber start_strategy, int64 start_value,
