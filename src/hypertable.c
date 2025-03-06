@@ -752,6 +752,7 @@ ts_hypertable_drop(Hypertable *hypertable, DropBehavior behavior)
 		};
 
 		/* Drop the postgres table */
+		ts_compression_settings_delete(hypertable->main_table_relid);
 		performDeletion(&hypertable_addr, behavior, 0);
 	}
 
