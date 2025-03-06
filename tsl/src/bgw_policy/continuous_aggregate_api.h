@@ -31,5 +31,5 @@ Datum policy_refresh_cagg_add_internal(
 	Oid cagg_oid, Oid start_offset_type, NullableDatum start_offset, Oid end_offset_type,
 	NullableDatum end_offset, Interval refresh_interval, bool if_not_exists, bool fixed_schedule,
 	TimestampTz initial_start, const char *timezone, NullableDatum include_tiered_data,
-	NullableDatum nbuckets_per_batch, NullableDatum max_batches_per_job_execution);
+	NullableDatum buckets_per_batch, NullableDatum max_batches_per_execution);
 Datum policy_refresh_cagg_remove_internal(Oid cagg_oid, bool if_exists);

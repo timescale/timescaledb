@@ -956,10 +956,10 @@ debug_refresh_window(const ContinuousAgg *cagg, const InternalTimeRange *refresh
 
 List *
 continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *original_refresh_window,
-									int32 nbuckets_per_batch)
+									int32 buckets_per_batch)
 {
 	/* Do not produce batches when the number of buckets per batch is zero (disabled) */
-	if (nbuckets_per_batch == 0)
+	if (buckets_per_batch == 0)
 	{
 		return NIL;
 	}
@@ -1012,7 +1012,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 
 	int64 bucket_width = ts_continuous_agg_bucket_width(cagg->bucket_function);
 	int64 refresh_size = refresh_window.end - refresh_window.start;
-	int64 batch_size = (bucket_width * nbuckets_per_batch);
+	int64 batch_size = (bucket_width * buckets_per_batch);
 
 	if (refresh_size <= batch_size)
 	{

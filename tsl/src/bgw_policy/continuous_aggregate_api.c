@@ -523,9 +523,8 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 								 Oid end_offset_type, NullableDatum end_offset,
 								 Interval refresh_interval, bool if_not_exists, bool fixed_schedule,
 								 TimestampTz initial_start, const char *timezone,
-								 NullableDatum include_tiered_data,
-								 NullableDatum nbuckets_per_batch,
-								 NullableDatum max_batches_per_job_execution)
+								 NullableDatum include_tiered_data, NullableDatum buckets_per_batch,
+								 NullableDatum max_batches_per_execution)
 {
 	NameData application_name;
 	NameData proc_name, proc_schema, check_name, check_schema, owner;
@@ -644,15 +643,15 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 						  POL_REFRESH_CONF_KEY_INCLUDE_TIERED_DATA,
 						  include_tiered_data.value);
 
-	if (!nbuckets_per_batch.isnull)
+	if (!buckets_per_batch.isnull)
 		ts_jsonb_add_int32(parse_state,
 						   POL_REFRESH_CONF_KEY_NBUCKETS_PER_BATCH,
-						   nbuckets_per_batch.value);
+						   buckets_per_batch.value);
 
-	if (!max_batches_per_job_execution.isnull)
+	if (!max_batches_per_execution.isnull)
 		ts_jsonb_add_int32(parse_state,
 						   POL_REFRESH_CONF_KEY_MAX_BATCHES_PER_JOB_EXECUTION,
-						   max_batches_per_job_execution.value);
+						   max_batches_per_execution.value);
 
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	Jsonb *config = JsonbValueToJsonb(result);
@@ -685,8 +684,8 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	bool if_not_exists;
 	NullableDatum start_offset, end_offset;
 	NullableDatum include_tiered_data;
-	NullableDatum nbuckets_per_batch;
-	NullableDatum max_batches_per_job_execution;
+	NullableDatum buckets_per_batch;
+	NullableDatum max_batches_per_execution;
 
 	ts_feature_flag_check(FEATURE_POLICY);
 
@@ -711,10 +710,10 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	char *valid_timezone = NULL;
 	include_tiered_data.value = PG_GETARG_DATUM(7);
 	include_tiered_data.isnull = PG_ARGISNULL(7);
-	nbuckets_per_batch.value = PG_GETARG_DATUM(8);
-	nbuckets_per_batch.isnull = PG_ARGISNULL(8);
-	max_batches_per_job_execution.value = PG_GETARG_DATUM(9);
-	max_batches_per_job_execution.isnull = PG_ARGISNULL(9);
+	buckets_per_batch.value = PG_GETARG_DATUM(8);
+	buckets_per_batch.isnull = PG_ARGISNULL(8);
+	max_batches_per_execution.value = PG_GETARG_DATUM(9);
+	max_batches_per_execution.isnull = PG_ARGISNULL(9);
 
 	Datum retval;
 	/* if users pass in -infinity for initial_start, then use the current_timestamp instead */
@@ -739,8 +738,8 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 											  initial_start,
 											  valid_timezone,
 											  include_tiered_data,
-											  nbuckets_per_batch,
-											  max_batches_per_job_execution);
+											  buckets_per_batch,
+											  max_batches_per_execution);
 	if (!TIMESTAMP_NOT_FINITE(initial_start))
 	{
 		int32 job_id = DatumGetInt32(retval);

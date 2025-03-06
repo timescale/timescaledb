@@ -394,7 +394,7 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 	/* Try to split window range into a list of ranges */
 	List *refresh_window_list = continuous_agg_split_refresh_window(policy_data.cagg,
 																	&policy_data.refresh_window,
-																	policy_data.nbuckets_per_batch);
+																	policy_data.buckets_per_batch);
 	if (refresh_window_list == NIL)
 	{
 		refresh_window_list = lappend(refresh_window_list, &policy_data.refresh_window);
@@ -423,11 +423,11 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 										refresh_window->start_isnull,
 										refresh_window->end_isnull,
 										false);
-		if (processing_batch >= policy_data.max_batches_per_job_execution)
+		if (processing_batch >= policy_data.max_batches_per_execution)
 		{
 			elog(LOG,
 				 "reached maximum number of batches per job execution (%d)",
-				 policy_data.max_batches_per_job_execution);
+				 policy_data.max_batches_per_execution);
 			break;
 		}
 	}
@@ -451,7 +451,7 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 	const Dimension *open_dim;
 	Oid dim_type;
 	int64 refresh_start, refresh_end;
-	int32 nbuckets_per_batch, max_batches_per_job_execution;
+	int32 buckets_per_batch, max_batches_per_execution;
 	bool start_isnull, end_isnull;
 	bool include_tiered_data, include_tiered_data_isnull;
 	bool nbuckets_per_batch_isnull, max_batches_per_job_execution_isnull;
@@ -484,10 +484,10 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 	include_tiered_data =
 		policy_refresh_cagg_get_include_tiered_data(config, &include_tiered_data_isnull);
 
-	nbuckets_per_batch =
+	buckets_per_batch =
 		policy_refresh_cagg_get_nbuckets_per_batch(config, &nbuckets_per_batch_isnull);
 
-	max_batches_per_job_execution = policy_refresh_cagg_get_max_batches_per_job_execution(
+	max_batches_per_execution = policy_refresh_cagg_get_max_batches_per_job_execution(
 		config, &max_batches_per_job_execution_isnull);
 
 	if (policy_data)
@@ -500,8 +500,8 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 		policy_data->cagg = cagg;
 		policy_data->include_tiered_data = include_tiered_data;
 		policy_data->include_tiered_data_isnull = include_tiered_data_isnull;
-		policy_data->nbuckets_per_batch = nbuckets_per_batch;
-		policy_data->max_batches_per_job_execution = max_batches_per_job_execution;
+		policy_data->buckets_per_batch = buckets_per_batch;
+		policy_data->max_batches_per_execution = max_batches_per_execution;
 	}
 }
 

@@ -23,4 +23,4 @@ extern void continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 											bool force);
 extern List *continuous_agg_split_refresh_window(ContinuousAgg *cagg,
 												 InternalTimeRange *original_refresh_window,
-												 int32 nbuckets_per_batch);
+												 int32 buckets_per_batch);

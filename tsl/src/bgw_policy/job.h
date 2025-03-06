@@ -38,8 +38,8 @@ typedef struct PolicyContinuousAggData
 	ContinuousAgg *cagg;
 	bool include_tiered_data;
 	bool include_tiered_data_isnull;
-	int32 nbuckets_per_batch;
-	int32 max_batches_per_job_execution;
+	int32 buckets_per_batch;
+	int32 max_batches_per_execution;
 } PolicyContinuousAggData;
 
 typedef struct PolicyCompressionData
