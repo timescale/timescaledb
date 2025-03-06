@@ -117,13 +117,13 @@ CALL refresh_continuous_aggregate('conditions_by_day_manual_refresh', NULL, NULL
 SELECT count(*) FROM conditions_by_day;
 SELECT count(*) FROM conditions_by_day_manual_refresh;
 
--- Should return zero
+-- Should have no differences
 SELECT
-    count(*)
+    count(*) > 0 AS has_diff
 FROM
     ((SELECT * FROM conditions_by_day_manual_refresh ORDER BY 1, 2)
     EXCEPT
-    (SELECT * FROM conditions_by_day ORDER BY 1, 2));
+    (SELECT * FROM conditions_by_day ORDER BY 1, 2)) AS diff;
 
 TRUNCATE bgw_log, conditions_by_day;
 
@@ -144,15 +144,69 @@ SELECT * FROM sorted_bgw_log;
 SELECT count(*) FROM conditions_by_day;
 SELECT count(*) FROM conditions_by_day_manual_refresh;
 
+-- Should have differences
 SELECT
-    count(*)
+    count(*) > 0 AS has_diff
 FROM
     ((SELECT * FROM conditions_by_day_manual_refresh ORDER BY 1, 2)
     EXCEPT
-    (SELECT * FROM conditions_by_day ORDER BY 1, 2));
+    (SELECT * FROM conditions_by_day ORDER BY 1, 2)) AS diff;
 
 -- advance time by 2h so that job runs one more time
 SELECT ts_bgw_params_reset_time(extract(epoch from interval '2 hour')::bigint * 1000000, true);
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
+
+-- Should have no differences
+SELECT
+    count(*) > 0 AS has_diff
+FROM
+    ((SELECT * FROM conditions_by_day_manual_refresh ORDER BY 1, 2)
+    EXCEPT
+    (SELECT * FROM conditions_by_day ORDER BY 1, 2)) AS diff;
+
+-- Set max_batches_per_execution to 10
+SELECT
+    config
+FROM
+    alter_job(
+        :'job_id',
+        config => jsonb_set(:'config', '{max_batches_per_execution}', '10')
+    );
+
+TRUNCATE bgw_log;
+
+-- Insert data into the past
+INSERT INTO conditions
+SELECT
+    t, d, 10
+FROM
+    generate_series(
+        '2020-02-05 00:00:00-03',
+        '2020-03-05 00:00:00-03',
+        '1 hour'::interval) AS t,
+    generate_series(1,5) AS d;
+
+-- advance time by 3h so that job runs one more time
+SELECT ts_bgw_params_reset_time(extract(epoch from interval '3 hour')::bigint * 1000000, true);
+
+-- Should process all four batches in the past
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+SELECT * FROM sorted_bgw_log;
+
+SELECT count(*) FROM conditions_by_day;
+SELECT count(*) FROM conditions_by_day_manual_refresh;
+
+CALL refresh_continuous_aggregate('conditions_by_day_manual_refresh', NULL, NULL);
+
+SELECT count(*) FROM conditions_by_day;
+SELECT count(*) FROM conditions_by_day_manual_refresh;
+
+-- Should have no differences
+SELECT
+    count(*) > 0 AS has_diff
+FROM
+    ((SELECT * FROM conditions_by_day_manual_refresh ORDER BY 1, 2)
+    EXCEPT
+    (SELECT * FROM conditions_by_day ORDER BY 1, 2)) AS diff;

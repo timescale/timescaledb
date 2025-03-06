@@ -929,7 +929,6 @@ static void
 debug_refresh_window(const ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
 					 const char *msg)
 {
-	return;
 	Datum start_ts;
 	Datum end_ts;
 	Oid outfuncid = InvalidOid;
@@ -940,14 +939,13 @@ debug_refresh_window(const ContinuousAgg *cagg, const InternalTimeRange *refresh
 	getTypeOutputInfo(refresh_window->type, &outfuncid, &isvarlena);
 	Assert(!isvarlena);
 
-	elog(LOG,
+	elog(DEBUG1,
 		 "%s \"%s\" in window [ %s, %s ] internal [ " INT64_FORMAT ", " INT64_FORMAT
 		 " ] minimum [ %s ]",
 		 msg,
 		 NameStr(cagg->data.user_view_name),
 		 DatumGetCString(OidFunctionCall1(outfuncid, start_ts)),
 		 DatumGetCString(OidFunctionCall1(outfuncid, end_ts)),
-
 		 refresh_window->start,
 		 refresh_window->end,
 		 DatumGetCString(
@@ -995,6 +993,19 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		refresh_window.start_isnull = false;
 	}
 
+	int64 bucket_width = ts_continuous_agg_bucket_width(cagg->bucket_function);
+	if (cagg->bucket_function->bucket_fixed_interval == false)
+	{
+		ts_compute_inscribed_bucketed_refresh_window_variable(&refresh_window.start,
+															  &refresh_window.end,
+															  cagg->bucket_function);
+	}
+	else
+	{
+		refresh_window =
+			compute_inscribed_bucketed_refresh_window(cagg, &refresh_window, bucket_width);
+	}
+
 	if (refresh_window.end_isnull)
 	{
 		debug_refresh_window(cagg, &refresh_window, "END IS NULL");
@@ -1010,7 +1021,6 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		refresh_window.end_isnull = false;
 	}
 
-	int64 bucket_width = ts_continuous_agg_bucket_width(cagg->bucket_function);
 	int64 refresh_size = refresh_window.end - refresh_window.start;
 	int64 batch_size = (bucket_width * buckets_per_batch);
 
@@ -1034,6 +1044,23 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 				AND dimension_id = $2 \
 			ORDER BY \
 				range_end DESC \
+		), \
+		invalidation_logs AS ( \
+			SELECT \
+				lowest_modified_value, \
+				greatest_modified_value \
+			FROM \
+				_timescaledb_catalog.continuous_aggs_materialization_invalidation_log \
+			WHERE \
+				materialization_id = $3 \
+			UNION ALL \
+			SELECT \
+				pg_catalog.min(lowest_modified_value) AS lowest_modified_value, \
+				pg_catalog.max(greatest_modified_value) AS greatest_modified_value \
+			FROM \
+				_timescaledb_catalog.continuous_aggs_hypertable_invalidation_log \
+			WHERE \
+				hypertable_id = $1 \
 		) \
 		SELECT \
 			refresh_start AS start, \
@@ -1050,12 +1077,13 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 			) \
 			AND EXISTS ( \
 				SELECT FROM \
-					_timescaledb_catalog.continuous_aggs_materialization_invalidation_log \
+					invalidation_logs \
 				WHERE \
-					materialization_id = $3 \
-					AND pg_catalog.int8range(refresh_start, LEAST($6::numeric, refresh_start::numeric + $4::numeric)::bigint) \
-						OPERATOR(pg_catalog.&&) \
-						pg_catalog.int8range(lowest_modified_value, greatest_modified_value) \
+					pg_catalog.int8range(refresh_start, LEAST($6::numeric, refresh_start::numeric + $4::numeric)::bigint) \
+					OPERATOR(pg_catalog.&&) \
+					pg_catalog.int8range(lowest_modified_value, greatest_modified_value) \
+					AND lowest_modified_value IS NOT NULL \
+					AND (greatest_modified_value IS NOT NULL AND greatest_modified_value != -210866803200000001) \
 			) \
 		ORDER BY \
 			refresh_start DESC;";
