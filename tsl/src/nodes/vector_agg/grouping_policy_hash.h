@@ -79,11 +79,6 @@ typedef struct GroupingPolicyHash
 	HashingStrategy hashing;
 
 	/*
-	 * The last used index of an unique grouping key. Key index 0 is invalid.
-	 */
-	uint32 last_used_key_index;
-
-	/*
 	 * Temporary storage of unique indexes of keys corresponding to a given row
 	 * of the compressed batch that is currently being aggregated. We keep it in
 	 * the policy because it is potentially too big to keep on stack, and we
