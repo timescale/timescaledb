@@ -8,6 +8,8 @@ CREATE OR REPLACE FUNCTION ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_f
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION ts_bgw_params_create() RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
+CREATE OR REPLACE FUNCTION ts_bgw_params_reset_time(set_time BIGINT = 0, wait BOOLEAN = false) RETURNS VOID
+AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
@@ -58,7 +60,7 @@ FROM
     generate_series(1,5) AS d;
 
 CREATE MATERIALIZED VIEW conditions_by_day
-WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT
     time_bucket('1 day', time),
     device_id,
@@ -78,17 +80,24 @@ SELECT
         'conditions_by_day',
         start_offset => NULL,
         end_offset => NULL,
-        schedule_interval => INTERVAL '12 h',
-        nbuckets_per_batch => 10,
-        max_batches_per_job_execution => 10
+        schedule_interval => INTERVAL '1 h',
+        buckets_per_batch => 10,
+        max_batches_per_execution => 10
     ) AS job_id \gset
 
+SELECT
+    config
+FROM
+    timescaledb_information.jobs
+WHERE
+    job_id = :'job_id' \gset
+
+SELECT ts_bgw_params_reset_time(0, true);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
 
-
 CREATE MATERIALIZED VIEW conditions_by_day_manual_refresh
-WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT
     time_bucket('1 day', time),
     device_id,
@@ -105,25 +114,45 @@ WITH NO DATA;
 
 CALL refresh_continuous_aggregate('conditions_by_day_manual_refresh', NULL, NULL);
 
--- Should return zero rows
-(SELECT * FROM conditions_by_day ORDER BY 1, 2)
-EXCEPT
-(SELECT * FROM conditions_by_day_manual_refresh ORDER BY 1, 2);
+SELECT count(*) FROM conditions_by_day;
+SELECT count(*) FROM conditions_by_day_manual_refresh;
+
+-- Should return zero
+SELECT
+    count(*)
+FROM
+    ((SELECT * FROM conditions_by_day_manual_refresh ORDER BY 1, 2)
+    EXCEPT
+    (SELECT * FROM conditions_by_day ORDER BY 1, 2));
 
 TRUNCATE bgw_log, conditions_by_day;
 
 SELECT
-    delete_job(:'job_id');
+    config
+FROM
+    alter_job(
+        :'job_id',
+        config => jsonb_set(:'config', '{max_batches_per_execution}', '2')
+    );
+
+-- advance time by 1h so that job runs one more time
+SELECT ts_bgw_params_reset_time(extract(epoch from interval '1 hour')::bigint * 1000000, true);
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+SELECT * FROM sorted_bgw_log;
+
+SELECT count(*) FROM conditions_by_day;
+SELECT count(*) FROM conditions_by_day_manual_refresh;
 
 SELECT
-    add_continuous_aggregate_policy(
-        'conditions_by_day',
-        start_offset => NULL,
-        end_offset => NULL,
-        schedule_interval => INTERVAL '12 h',
-        nbuckets_per_batch => 10,
-        max_batches_per_job_execution => 2
-    ) AS job_id \gset
+    count(*)
+FROM
+    ((SELECT * FROM conditions_by_day_manual_refresh ORDER BY 1, 2)
+    EXCEPT
+    (SELECT * FROM conditions_by_day ORDER BY 1, 2));
+
+-- advance time by 2h so that job runs one more time
+SELECT ts_bgw_params_reset_time(extract(epoch from interval '2 hour')::bigint * 1000000, true);
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;

@@ -1037,29 +1037,39 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		) \
 		SELECT \
 			refresh_start AS start, \
-			LEAST($5::numeric, refresh_start::numeric + $3::numeric)::bigint AS end \
+			LEAST($6::numeric, refresh_start::numeric + $4::numeric)::bigint AS end \
 		FROM \
-			pg_catalog.generate_series($4, $5, $3) AS refresh_start \
+			pg_catalog.generate_series($5, $6, $4) AS refresh_start \
 		WHERE \
 			EXISTS ( \
 			    SELECT FROM chunk_ranges \
 				WHERE \
-					pg_catalog.int8range(refresh_start, LEAST($5::numeric, refresh_start::numeric + $3::numeric)::bigint) \
+					pg_catalog.int8range(refresh_start, LEAST($6::numeric, refresh_start::numeric + $4::numeric)::bigint) \
 					OPERATOR(pg_catalog.&&) \
 					pg_catalog.int8range(chunk_ranges.start, chunk_ranges.end) \
-				) \
+			) \
+			AND EXISTS ( \
+				SELECT FROM \
+					_timescaledb_catalog.continuous_aggs_materialization_invalidation_log \
+				WHERE \
+					materialization_id = $3 \
+					AND pg_catalog.int8range(refresh_start, LEAST($6::numeric, refresh_start::numeric + $4::numeric)::bigint) \
+						OPERATOR(pg_catalog.&&) \
+						pg_catalog.int8range(lowest_modified_value, greatest_modified_value) \
+			) \
 		ORDER BY \
 			refresh_start DESC;";
 
 	List *refresh_window_list = NIL;
 	int res;
-	Oid types[] = { INT4OID, INT4OID, INT8OID, INT8OID, INT8OID };
+	Oid types[] = { INT4OID, INT4OID, INT4OID, INT8OID, INT8OID, INT8OID };
 	Datum values[] = { Int32GetDatum(ht->fd.id),
 					   Int32GetDatum(time_dim->fd.id),
+					   Int32GetDatum(cagg->data.mat_hypertable_id),
 					   Int64GetDatum(batch_size),
 					   Int64GetDatum(refresh_window.start),
 					   Int64GetDatum(refresh_window.end) };
-	char nulls[] = { false, false, false, false, false };
+	char nulls[] = { false, false, false, false, false, false };
 	MemoryContext oldcontext = CurrentMemoryContext;
 
 	/*
@@ -1069,7 +1079,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		elog(ERROR, "could not connect to SPI");
 
 	res = SPI_execute_with_args(query_str,
-								5,
+								6,
 								types,
 								values,
 								nulls,
