@@ -50,8 +50,8 @@ DROP FUNCTION @extschema@.add_continuous_aggregate_policy(
     initial_start TIMESTAMPTZ,
     timezone TEXT,
 	include_tiered_data BOOL,
-    nbuckets_per_batch INTEGER,
-    max_batches_per_job_execution INTEGER
+    buckets_per_batch INTEGER,
+    max_batches_per_execution INTEGER
 );
 
 CREATE FUNCTION @extschema@.add_continuous_aggregate_policy(

@@ -410,7 +410,7 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 	foreach (lc, refresh_window_list)
 	{
 		InternalTimeRange *refresh_window = (InternalTimeRange *) lfirst(lc);
-		elog(DEBUG1,
+		elog(INFO,
 			 "refreshing continuous aggregate \"%s\" from %s to %s",
 			 NameStr(policy_data.cagg->data.user_view_name),
 			 ts_internal_to_time_string(refresh_window->start, refresh_window->type),

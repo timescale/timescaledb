@@ -150,7 +150,7 @@ int32
 policy_refresh_cagg_get_nbuckets_per_batch(const Jsonb *config, bool *isnull)
 {
 	bool found;
-	int32 res = ts_jsonb_get_int32_field(config, POL_REFRESH_CONF_KEY_NBUCKETS_PER_BATCH, &found);
+	int32 res = ts_jsonb_get_int32_field(config, POL_REFRESH_CONF_KEY_BUCKETS_PER_BATCH, &found);
 
 	*isnull = !found;
 	return res;
@@ -160,9 +160,8 @@ int32
 policy_refresh_cagg_get_max_batches_per_job_execution(const Jsonb *config, bool *isnull)
 {
 	bool found;
-	int32 res = ts_jsonb_get_int32_field(config,
-										 POL_REFRESH_CONF_KEY_MAX_BATCHES_PER_JOB_EXECUTION,
-										 &found);
+	int32 res =
+		ts_jsonb_get_int32_field(config, POL_REFRESH_CONF_KEY_MAX_BATCHES_PER_EXECUTION, &found);
 
 	if (!found)
 		res = 10; /* default value */
@@ -645,12 +644,12 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 
 	if (!buckets_per_batch.isnull)
 		ts_jsonb_add_int32(parse_state,
-						   POL_REFRESH_CONF_KEY_NBUCKETS_PER_BATCH,
+						   POL_REFRESH_CONF_KEY_BUCKETS_PER_BATCH,
 						   buckets_per_batch.value);
 
 	if (!max_batches_per_execution.isnull)
 		ts_jsonb_add_int32(parse_state,
-						   POL_REFRESH_CONF_KEY_MAX_BATCHES_PER_JOB_EXECUTION,
+						   POL_REFRESH_CONF_KEY_MAX_BATCHES_PER_EXECUTION,
 						   max_batches_per_execution.value);
 
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
