@@ -77,8 +77,7 @@ SELECT
         start_offset => NULL,
         end_offset => NULL,
         schedule_interval => INTERVAL '1 h',
-        buckets_per_batch => 10,
-        max_batches_per_execution => 10
+        buckets_per_batch => 10
     ) AS job_id \gset
 SELECT
     config
@@ -363,3 +362,28 @@ FROM
  f
 (1 row)
 
+-- Check invalid configurations
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+SELECT
+    config
+FROM
+    alter_job(
+        :'job_id',
+        config => jsonb_set(:'config', '{max_batches_per_execution}', '-1')
+    );
+ERROR:  invalid max batches per execution
+DETAIL:  max_batches_per_execution: -1
+HINT:  The max batches per execution should be greater than or equal to zero.
+SELECT
+    config
+FROM
+    alter_job(
+        :'job_id',
+        config => jsonb_set(:'config', '{buckets_per_batch}', '-1')
+    );
+ERROR:  invalid buckets per batch
+DETAIL:  buckets_per_batch: -1
+HINT:  The buckets per batch should be greater than or equal to zero.
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1

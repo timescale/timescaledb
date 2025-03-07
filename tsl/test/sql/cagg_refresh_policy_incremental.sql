@@ -81,8 +81,7 @@ SELECT
         start_offset => NULL,
         end_offset => NULL,
         schedule_interval => INTERVAL '1 h',
-        buckets_per_batch => 10,
-        max_batches_per_execution => 10
+        buckets_per_batch => 10
     ) AS job_id \gset
 
 SELECT
@@ -210,3 +209,23 @@ FROM
     ((SELECT * FROM conditions_by_day_manual_refresh ORDER BY 1, 2)
     EXCEPT
     (SELECT * FROM conditions_by_day ORDER BY 1, 2)) AS diff;
+
+-- Check invalid configurations
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+SELECT
+    config
+FROM
+    alter_job(
+        :'job_id',
+        config => jsonb_set(:'config', '{max_batches_per_execution}', '-1')
+    );
+SELECT
+    config
+FROM
+    alter_job(
+        :'job_id',
+        config => jsonb_set(:'config', '{buckets_per_batch}', '-1')
+    );
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1

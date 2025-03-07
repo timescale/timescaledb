@@ -421,7 +421,8 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 										refresh_window->end_isnull,
 										false);
 		if (processing_batch >= policy_data.max_batches_per_execution &&
-			processing_batch < context.number_of_batches)
+			processing_batch < context.number_of_batches &&
+			policy_data.max_batches_per_execution > 0)
 		{
 			elog(LOG,
 				 "reached maximum number of batches per execution (%d), batches not processed (%d)",
@@ -484,10 +485,26 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 		policy_refresh_cagg_get_include_tiered_data(config, &include_tiered_data_isnull);
 
 	buckets_per_batch =
-		policy_refresh_cagg_get_nbuckets_per_batch(config, &nbuckets_per_batch_isnull);
+		policy_refresh_cagg_get_buckets_per_batch(config, &nbuckets_per_batch_isnull);
 
-	max_batches_per_execution = policy_refresh_cagg_get_max_batches_per_job_execution(
-		config, &max_batches_per_job_execution_isnull);
+	if (buckets_per_batch < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid buckets per batch"),
+				 errdetail("buckets_per_batch: %d", buckets_per_batch),
+				 errhint("The buckets per batch should be greater than or equal to zero.")));
+
+	max_batches_per_execution =
+		policy_refresh_cagg_get_max_batches_per_execution(config,
+														  &max_batches_per_job_execution_isnull);
+
+	if (max_batches_per_execution < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid max batches per execution"),
+				 errdetail("max_batches_per_execution: %d", max_batches_per_execution),
+				 errhint(
+					 "The max batches per execution should be greater than or equal to zero.")));
 
 	if (policy_data)
 	{

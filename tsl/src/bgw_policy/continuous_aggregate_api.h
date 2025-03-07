@@ -21,8 +21,8 @@ int64 policy_refresh_cagg_get_refresh_start(const ContinuousAgg *cagg, const Dim
 int64 policy_refresh_cagg_get_refresh_end(const Dimension *dim, const Jsonb *config,
 										  bool *end_isnull);
 bool policy_refresh_cagg_get_include_tiered_data(const Jsonb *config, bool *isnull);
-int32 policy_refresh_cagg_get_nbuckets_per_batch(const Jsonb *config, bool *isnull);
-int32 policy_refresh_cagg_get_max_batches_per_job_execution(const Jsonb *config, bool *isnull);
+int32 policy_refresh_cagg_get_buckets_per_batch(const Jsonb *config, bool *isnull);
+int32 policy_refresh_cagg_get_max_batches_per_execution(const Jsonb *config, bool *isnull);
 bool policy_refresh_cagg_refresh_start_lt(int32 materialization_id, Oid cmp_type,
 										  Datum cmp_interval);
 bool policy_refresh_cagg_exists(int32 materialization_id);
