@@ -1161,6 +1161,10 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI");
 
+	/* Lock down search_path */
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
+
 	res = SPI_execute_with_args(query_str,
 								6,
 								types,
@@ -1179,6 +1183,9 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 			 "batch processing",
 			 NameStr(cagg->data.user_view_schema),
 			 NameStr(cagg->data.user_view_name));
+
+		/* Restore search_path */
+		AtEOXact_GUC(false, save_nestlevel);
 
 		res = SPI_finish();
 		if (res != SPI_OK_FINISH)
@@ -1233,6 +1240,9 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 
 		debug_refresh_window(cagg, range, "batch produced");
 	}
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
