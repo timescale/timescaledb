@@ -225,7 +225,7 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 	 * the unique elements is less. The TOAST compression doesn't handle even
 	 * the sparse filters very well. Apply a simple compression technique: split
 	 * the filter in half and bitwise OR the halves. Repeat this until we reach
-	 * the filter size that gives the desired false positive ratio of 1%.
+	 * the filter size that gives the desired false positive ratio of 0.1%.
 	 */
 	const double m0 = orig_num_bits;
 	//	const double n = bloom1_estimate_ndistinct(bloom);
@@ -281,12 +281,6 @@ bloom1_get_one_hash(uint64 value_hash, uint32 index)
 {
 	const uint32 low = value_hash & ~(uint32) 0;
 	const uint32 high = (value_hash >> 32) & ~(uint32) 0;
-	//		if (index == 0)
-	//		{
-	//			fprintf(stderr, "low 0x%.8x, high 0x%.8x\n", low, high);
-	//		}
-
-	//	return low + index * high + index * index;
 
 	/*
 	 * Add a quadratic component to lessen degradation in the unlikely case when
@@ -312,28 +306,18 @@ bloom1_get_one_word_mask(uint64 value_hash, uint32 num_bits, uint64 *word_mask)
 	return high % (num_bits / (sizeof(mask) * 8));
 }
 
-#define BLOOM_SEED_1 0x71d924af
-#define BLOOM_SEED_2 0xba48b314
-
 static void
 bloom1_update_val(void *builder_, Datum needle)
 {
 	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
 
-	// const uint64 datum_hash_1 = builder->hash_function(val);
-	//	const uint64 datum_hash_1 = DatumGetUInt64(
-	//		FunctionCall2Coll(&builder->hash_function, C_COLLATION_OID, val, BLOOM_SEED_1));
-	//	const uint64 datum_hash_2 = DatumGetUInt64(
-	//		FunctionCall2Coll(&builder->hash_function, C_COLLATION_OID, val, BLOOM_SEED_2));
-	const uint64 datum_hash_1 = builder->hash_function(needle);
-
 	char *restrict words_buf = bloom1_words(builder->bloom_bytea);
 	const uint32 num_bits = bloom1_num_bits(builder->bloom_bytea);
 
 	/*
-	 * This is a little clunky but I had to switch to another buffer type
-	 * already, so it's worth keeping it generic with respect to the word size
-	 * for now.
+	 * These calculations are a little inconvenient, but I had to switch to
+	 * another buffer word size already, so for now I'm keeping the code generic
+	 * relative to this size.
 	 */
 	const uint32 num_word_bits = sizeof(*words_buf) * 8;
 	Assert(num_bits % num_word_bits == 0);
@@ -344,29 +328,14 @@ bloom1_update_val(void *builder_, Datum needle)
 	Assert((word_mask >> num_word_bits) == 0);
 
 	const uint32 absolute_mask = num_bits - 1;
-	// Assert((absolute_mask >> log2_words) == 0);
-
+	const uint64 datum_hash_1 = builder->hash_function(needle);
 	for (int i = 0; i < BLOOM1_HASHES; i++)
 	{
 		const uint32 absolute_bit_index = bloom1_get_one_hash(datum_hash_1, i) & absolute_mask;
-		// Assert(absolute_bit_index == bloom1_get_one_hash(datum_hash_1, i) % num_bits);
-		//  const uint32 h = (datum_hash_1 + i * datum_hash_2) % num_bits;
-		//		const uint32 h = bloom1_get_one_hash(datum_hash_1, i) % num_bits;
 		const uint32 word_index = absolute_bit_index >> log2_word_bits;
 		const uint32 word_bit_index = absolute_bit_index & word_mask;
 		words_buf[word_index] |= 1ULL << word_bit_index;
 	}
-
-	//  /* 64-bit blocked */
-	//	uint64 word_mask;
-	//	uint32 word_index = bloom1_get_one_word_mask(datum_hash_1, num_bits, &word_mask);
-
-	//	/* This might be an unaligned read. */
-	//	char *restrict dest = words_buf + 8 * word_index;
-	//	uint64 tmp;
-	//	memcpy(&tmp, dest, sizeof(tmp));
-	//	tmp |= word_mask;
-	//	memcpy(dest, &tmp, sizeof(tmp));
 }
 
 /*
@@ -402,25 +371,13 @@ tsl_bloom1_matches(PG_FUNCTION_ARGS)
 	if (type_entry->typlen == -1)
 	{
 		/*
-		 * Have to detoast the varlena type here, because we might be calculating
-		 * many hashes and don't want it detoasted many times.
+		 * Detoast the varlena type once to not accidentally detoast it in
+		 * several places.
 		 */
 		needle = PointerGetDatum(PG_DETOAST_DATUM_PACKED(needle));
 	}
 
-	//// The old alternative construction with two PG filters similar to the
-	//// BRIN opclass.
-	//	const uint64 datum_hash_1 =
-	// DatumGetUInt64(OidFunctionCall2Coll(type_entry->hash_extended_proc,
-	// C_COLLATION_OID, 																	needle,
-	//																	BLOOM_SEED_1));
-	//	const uint64 datum_hash_2 =
-	// DatumGetUInt64(OidFunctionCall2Coll(type_entry->hash_extended_proc,
-	// C_COLLATION_OID, 																	needle,
-	//																	BLOOM_SEED_2));
-
 	HashFunction fn = bloom1_get_hash_function(type_oid);
-	const uint64 datum_hash_1 = fn(needle);
 
 	bytea *bloom = PG_GETARG_VARLENA_P(0);
 	const char *words_buf = bloom1_words(bloom);
@@ -441,16 +398,10 @@ tsl_bloom1_matches(PG_FUNCTION_ARGS)
 	Assert((word_mask >> num_word_bits) == 0);
 
 	const uint32 absolute_mask = num_bits - 1;
-	/*
-	 * FIXME check compressed data that it's a power of two. Use mask instead
-	 * of division.
-	 */
+	const uint64 datum_hash_1 = fn(needle);
 	for (int i = 0; i < BLOOM1_HASHES; i++)
 	{
 		const uint32 absolute_bit_index = bloom1_get_one_hash(datum_hash_1, i) & absolute_mask;
-		// Assert(absolute_bit_index == bloom1_get_one_hash(datum_hash_1, i) % num_bits);
-		//  const uint32 h = (datum_hash_1 + i * datum_hash_2) % num_bits;
-		//		const uint32 h = bloom1_get_one_hash(datum_hash_1, i) % num_bits;
 		const uint32 word_index = absolute_bit_index >> log2_word_bits;
 		const uint32 word_bit_index = absolute_bit_index & word_mask;
 		if ((words_buf[word_index] & (1ULL << word_bit_index)) == 0)
@@ -459,16 +410,6 @@ tsl_bloom1_matches(PG_FUNCTION_ARGS)
 		}
 	}
 	PG_RETURN_BOOL(true);
-
-	//	uint64 word_mask;
-	//	uint32 word_index = bloom1_get_one_word_mask(datum_hash_1, num_bits, &word_mask);
-	//	/* This might be an unaligned read. */
-	//	uint64 tmp;
-	//	memcpy(&tmp, words_buf + 8 * word_index, sizeof(tmp));
-	//	PG_RETURN_BOOL((tmp & word_mask) == word_mask);
-
-	(void) bloom1_get_one_hash;
-	(void) bloom1_get_one_word_mask;
 }
 
 static int
@@ -483,10 +424,9 @@ BatchMetadataBuilder *
 batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
 {
 	/*
-	 * Better make the bloom filter size a power of two, because we pack the
-	 * sparse filters using division in half.
-	 * The calculation for the lowest enclosing power of two is
-	 * pow(2, floor(log2(x * 2 - 1))).
+	 * Better make the bloom filter size a power of two, because we compress the
+	 * sparse filters using division in half. The formula for the lowest
+	 * enclosing power of two is pow(2, floor(log2(x * 2 - 1))).
 	 */
 	const int expected_elements = TARGET_COMPRESSED_BATCH_SIZE * 16;
 	const int lowest_power = pg_leftmost_one_pos32(expected_elements * 2 - 1);

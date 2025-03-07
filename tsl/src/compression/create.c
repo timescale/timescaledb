@@ -330,7 +330,7 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 				ColumnDef *bloom_column_def =
 					makeColumnDef(compressed_column_metadata_name_v2("bloom1",
 																	 NameStr(attr->attname)),
-								  BYTEAOID,
+								  ts_custom_type_cache_get(CUSTOM_TYPE_BLOOM1)->type_oid,
 								  /* typmod = */ -1,
 								  /* collation = */ 0);
 

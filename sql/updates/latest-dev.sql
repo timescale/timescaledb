@@ -1,9 +1,3 @@
-CREATE OR REPLACE FUNCTION _timescaledb_functions.ts_bloom1_matches(bytea, anyelement)
-RETURNS bool
-AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
-LANGUAGE C IMMUTABLE STRICT;
-
-
 CREATE FUNCTION _timescaledb_functions.compressed_data_has_nulls(_timescaledb_internal.compressed_data)
     RETURNS BOOL
     LANGUAGE C STRICT IMMUTABLE
@@ -83,3 +77,8 @@ CREATE TYPE _timescaledb_internal.bloom1 (
     OUTPUT = _timescaledb_functions.bloom1out,
     LIKE = bytea
 );
+CREATE OR REPLACE FUNCTION _timescaledb_functions.ts_bloom1_matches(_timescaledb_internal.bloom1, anyelement)
+RETURNS bool
+AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
+LANGUAGE C IMMUTABLE STRICT;
+
