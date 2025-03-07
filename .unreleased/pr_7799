@@ -1,0 +1,1 @@
+Fixes: #7799 Handle DEFAULT table access name in ALTER TABLE

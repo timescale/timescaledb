@@ -3839,9 +3839,14 @@ hypercore_alter_access_method_begin(Oid relid, bool to_other_am)
 void
 hypercore_alter_access_method_finish(Oid relid, bool to_other_am)
 {
+	Chunk *chunk = ts_chunk_get_by_relid(relid, false);
+
+	/* If this is not a chunk, we just abort since there is nothing to do */
+	if (!chunk)
+		return;
+
 	if (to_other_am)
 	{
-		Chunk *chunk = ts_chunk_get_by_relid(relid, true);
 		Chunk *compress_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
 
 		ts_compression_chunk_size_delete(chunk->fd.id);
