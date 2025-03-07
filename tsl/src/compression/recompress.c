@@ -18,6 +18,7 @@
 #include "compression.h"
 #include "compression_dml.h"
 #include "create.h"
+#include "debug_assert.h"
 #include "guc.h"
 #include "hypercore/hypercore_handler.h"
 #include "hypercore/utils.h"
@@ -83,6 +84,15 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 							"enable it by first setting "
 							"timescaledb.enable_segmentwise_recompression to on")));
 		}
+		CompressionSettings *settings = ts_compression_settings_get(uncompressed_chunk_id);
+		if (!settings->fd.orderby)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("segmentwise recompression cannot be applied for "
+							"compression with no "
+							"order by")));
+		}
 		uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk);
 	}
 
@@ -111,6 +121,10 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 	/* need it to find the segby cols from the catalog */
 	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
 	CompressionSettings *settings = ts_compression_settings_get(uncompressed_chunk->table_id);
+
+	/* We should not do segment-wise recompression with empty orderby, see #7748
+	 */
+	Ensure(settings->fd.orderby, "empty order by, cannot recompress segmentwise");
 
 	/* new status after recompress should simply be compressed (1)
 	 * It is ok to update this early on in the transaction as it keeps a lock
