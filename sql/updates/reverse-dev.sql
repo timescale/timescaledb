@@ -39,3 +39,31 @@ FROM
 DROP TABLE _timescaledb_catalog.tempsettings CASCADE;
 GRANT SELECT ON _timescaledb_catalog.compression_settings TO PUBLIC;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_settings', '');
+
+-- Revert add_continuous_aggregate_policy API for incremental refresh policy
+DROP FUNCTION @extschema@.add_continuous_aggregate_policy(
+    continuous_aggregate REGCLASS,
+    start_offset "any",
+    end_offset "any",
+    schedule_interval INTERVAL,
+    if_not_exists BOOL,
+    initial_start TIMESTAMPTZ,
+    timezone TEXT,
+	include_tiered_data BOOL,
+    buckets_per_batch INTEGER,
+    max_batches_per_execution INTEGER
+);
+
+CREATE FUNCTION @extschema@.add_continuous_aggregate_policy(
+    continuous_aggregate REGCLASS,
+    start_offset "any",
+    end_offset "any",
+    schedule_interval INTERVAL,
+    if_not_exists BOOL = false,
+    initial_start TIMESTAMPTZ = NULL,
+    timezone TEXT = NULL,
+	include_tiered_data BOOL = NULL
+)
+RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
+LANGUAGE C VOLATILE;
