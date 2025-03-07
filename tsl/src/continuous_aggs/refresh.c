@@ -972,28 +972,60 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 
 	debug_refresh_window(cagg, &refresh_window, "begin");
 
-	Hypertable *ht = cagg_get_hypertable_or_fail(cagg->data.raw_hypertable_id);
-	const Dimension *time_dim;
-	time_dim = hyperspace_get_open_dimension(ht->space, 0);
+	const Hypertable *ht = cagg_get_hypertable_or_fail(cagg->data.raw_hypertable_id);
+	const Dimension *time_dim = hyperspace_get_open_dimension(ht->space, 0);
 
-	/* If refresh window range start is NULL then get the first bucket from the original hypertable
+	/*
+	 * Cap the refresh window to the min and max time of the hypertable
+	 *
+	 * In order to don't produce unnecessary batches we need to check if the start and end of the
+	 * refresh window is NULL then get the min/max slice from the original hypertable
+	 *
 	 */
 	if (refresh_window.start_isnull)
 	{
 		debug_refresh_window(cagg, &refresh_window, "START IS NULL");
 		DimensionSlice *slice = ts_dimension_slice_nth_earliest_slice(time_dim->fd.id, 1);
 
-		/* If still there's no MIN range then produce only one range */
+		/* If still there's no MIN slice range start then return no batches */
 		if (NULL == slice || TS_TIME_IS_MIN(slice->fd.range_start, refresh_window.type) ||
 			TS_TIME_IS_NOBEGIN(slice->fd.range_start, refresh_window.type))
 		{
+			elog(LOG,
+				 "no min slice range start for continuous aggregate \"%s.%s\", falling back to "
+				 "single "
+				 "batch processing",
+				 NameStr(cagg->data.user_view_schema),
+				 NameStr(cagg->data.user_view_name));
 			return NIL;
 		}
 		refresh_window.start = slice->fd.range_start;
 		refresh_window.start_isnull = false;
 	}
 
-	int64 bucket_width = ts_continuous_agg_bucket_width(cagg->bucket_function);
+	if (refresh_window.end_isnull)
+	{
+		debug_refresh_window(cagg, &refresh_window, "END IS NULL");
+		DimensionSlice *slice = ts_dimension_slice_nth_latest_slice(time_dim->fd.id, 1);
+
+		/* If still there's no MAX slice range start then return no batches */
+		if (NULL == slice || TS_TIME_IS_MAX(slice->fd.range_end, refresh_window.type) ||
+			TS_TIME_IS_NOEND(slice->fd.range_end, refresh_window.type))
+		{
+			elog(LOG,
+				 "no min slice range start for continuous aggregate \"%s.%s\", falling back to "
+				 "single "
+				 "batch processing",
+				 NameStr(cagg->data.user_view_schema),
+				 NameStr(cagg->data.user_view_name));
+			return NIL;
+		}
+		refresh_window.end = slice->fd.range_end;
+		refresh_window.end_isnull = false;
+	}
+
+	/* Compute the inscribed bucket for the capped refresh window range */
+	const int64 bucket_width = ts_continuous_agg_bucket_width(cagg->bucket_function);
 	if (cagg->bucket_function->bucket_fixed_interval == false)
 	{
 		ts_compute_inscribed_bucketed_refresh_window_variable(&refresh_window.start,
@@ -1006,33 +1038,56 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 			compute_inscribed_bucketed_refresh_window(cagg, &refresh_window, bucket_width);
 	}
 
-	if (refresh_window.end_isnull)
+	/* Check if the refresh size is large enough to produce bathes, if not then return no batches */
+	const int64 refresh_window_size = refresh_window.end - refresh_window.start;
+	const int64 batch_size = (bucket_width * buckets_per_batch);
+
+	if (refresh_window_size <= batch_size)
 	{
-		debug_refresh_window(cagg, &refresh_window, "END IS NULL");
-		DimensionSlice *slice = ts_dimension_slice_nth_latest_slice(time_dim->fd.id, 1);
+		Oid type = IS_TIMESTAMP_TYPE(refresh_window.type) ? INTERVALOID : refresh_window.type;
+		Datum refresh_size_interval = ts_internal_to_interval_value(refresh_window_size, type);
+		Datum batch_size_interval = ts_internal_to_interval_value(batch_size, type);
+		Oid typoutputfunc;
+		bool isvarlena;
+		FmgrInfo typoutputinfo;
 
-		/* If still there's no MAX range then produce only one range */
-		if (NULL == slice || TS_TIME_IS_MAX(slice->fd.range_end, refresh_window.type) ||
-			TS_TIME_IS_NOEND(slice->fd.range_end, refresh_window.type))
-		{
-			return NIL;
-		}
-		refresh_window.end = slice->fd.range_end;
-		refresh_window.end_isnull = false;
-	}
+		getTypeOutputInfo(type, &typoutputfunc, &isvarlena);
+		fmgr_info(typoutputfunc, &typoutputinfo);
 
-	int64 refresh_size = refresh_window.end - refresh_window.start;
-	int64 batch_size = (bucket_width * buckets_per_batch);
-
-	if (refresh_size <= batch_size)
-	{
+		elog(LOG,
+			 "refresh window size (%s) is smaller than or equal to batch size (%s), falling back "
+			 "to single batch processing",
+			 OutputFunctionCall(&typoutputinfo, refresh_size_interval),
+			 OutputFunctionCall(&typoutputinfo, batch_size_interval));
 		return NIL;
 	}
 
-	debug_refresh_window(cagg, &refresh_window, "before produce ranges");
+	debug_refresh_window(cagg, &refresh_window, "before produce batches");
 
+	/*
+	 * Produce the batches to be processed
+	 *
+	 * The refresh window is split into multiple batches of size `batch_size` each. The batches are
+	 * produced in reverse order so that the first range produced is the last range to be processed.
+	 *
+	 * The batches are produced in reverse order because the most recent data should be the first to
+	 * be processed and be visible for the users.
+	 *
+	 * It takes in account the invalidation logs (hypertable and materialization hypertable) to
+	 * avoid producing wholes that have no data to be processed.
+	 *
+	 * The logic is somethinkg like the following:
+	 * 1. Get dimension slices from the original hypertables
+	 * 2. Get either hypertable and materialization hypertable invalidation logs
+	 * 3. Produce the batches in reverse order
+	 * 4. Check if the produced batch overlaps either with dimension slices #1 and invalidation logs
+	 * #2
+	 * 5. If the batch overlaps with both then it's a valid batch to be processed
+	 * 6. If the batch overlaps with only one of them then it's not a valid batch to be processed
+	 * 7. If the batch does not overlap with any of them then it's not a valid batch to be processed
+	 */
 	const char *query_str = " \
-		WITH chunk_ranges AS ( \
+		WITH dimension_slices AS ( \
 			SELECT \
 				range_start AS start, \
 				range_end AS end \
@@ -1069,11 +1124,11 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 			pg_catalog.generate_series($5, $6, $4) AS refresh_start \
 		WHERE \
 			EXISTS ( \
-			    SELECT FROM chunk_ranges \
+			    SELECT FROM dimension_slices \
 				WHERE \
 					pg_catalog.int8range(refresh_start, LEAST($6::numeric, refresh_start::numeric + $4::numeric)::bigint) \
 					OPERATOR(pg_catalog.&&) \
-					pg_catalog.int8range(chunk_ranges.start, chunk_ranges.end) \
+					pg_catalog.int8range(dimension_slices.start, dimension_slices.end) \
 			) \
 			AND EXISTS ( \
 				SELECT FROM \
@@ -1088,7 +1143,10 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		ORDER BY \
 			refresh_start DESC;";
 
+	/* List of InternalTimeRange elements to be returned */
 	List *refresh_window_list = NIL;
+
+	/* Prepare for SPI call */
 	int res;
 	Oid types[] = { INT4OID, INT4OID, INT4OID, INT8OID, INT8OID, INT8OID };
 	Datum values[] = { Int32GetDatum(ht->fd.id),
@@ -1100,9 +1158,6 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	char nulls[] = { false, false, false, false, false, false };
 	MemoryContext oldcontext = CurrentMemoryContext;
 
-	/*
-	 * Query for the oldest chunk in the hypertable.
-	 */
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI");
 
@@ -1115,8 +1170,24 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 								0 /* count */);
 
 	if (res < 0)
-		elog(ERROR, "%s: could not get the last bucket of the materialized data", __func__);
+		elog(ERROR, "%s: could not produce batches for the policy cagg refresh", __func__);
 
+	if (SPI_processed == 1)
+	{
+		elog(LOG,
+			 "only one batch produced for continuous aggregate \"%s.%s\", falling back to single "
+			 "batch processing",
+			 NameStr(cagg->data.user_view_schema),
+			 NameStr(cagg->data.user_view_name));
+
+		res = SPI_finish();
+		if (res != SPI_OK_FINISH)
+			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+
+		return NIL;
+	}
+
+	/* Build the batches list */
 	for (uint64 i = 0; i < SPI_processed; i++)
 	{
 		bool range_start_isnull, range_end_isnull;
@@ -1135,29 +1206,46 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		range->end_isnull = range_end_isnull;
 		range->type = original_refresh_window->type;
 
-		/* When dropping chunks we need to align the start of the first range to cover dropped
-		 * chunks if they exist */
-		if (i == (SPI_processed - 1) && original_refresh_window->start_isnull)
-		{
-			range->start = original_refresh_window->start;
-			range->start_isnull = true;
-		}
-
+		/*
+		 * To make sure that the first range is aligned with the end of the refresh window
+		 * we need to set the end to the maximum value of the time type if the original refresh
+		 * window end is NULL.
+		 */
 		if (i == 0 && original_refresh_window->end_isnull)
 		{
-			range->end = original_refresh_window->end;
+			range->end = ts_time_get_noend_or_max(range->type);
 			range->end_isnull = true;
+		}
+
+		/*
+		 * To make sure that the last range is aligned with the start of the refresh window
+		 * we need to set the start to the maximum value of the time type if the original refresh
+		 * window start is NULL.
+		 */
+		if (i == (SPI_processed - 1) && original_refresh_window->start_isnull)
+		{
+			range->start = ts_time_get_nobegin_or_min(range->type);
+			range->start_isnull = true;
 		}
 
 		refresh_window_list = lappend(refresh_window_list, range);
 		MemoryContextSwitchTo(saved_context);
 
-		debug_refresh_window(cagg, range, "range refresh");
+		debug_refresh_window(cagg, range, "batch produced");
 	}
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+
+	if (refresh_window_list == NIL)
+	{
+		elog(LOG,
+			 "no valid batches produced for continuous aggregate \"%s.%s\", falling back to single "
+			 "batch processing",
+			 NameStr(cagg->data.user_view_schema),
+			 NameStr(cagg->data.user_view_name));
+	}
 
 	return refresh_window_list;
 }

@@ -229,3 +229,55 @@ FROM
     );
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1
+
+-- Truncate all data from the original hypertable
+TRUNCATE bgw_log, conditions;
+
+-- advance time by 4h so that job runs one more time
+SELECT ts_bgw_params_reset_time(extract(epoch from interval '4 hour')::bigint * 1000000, true);
+
+-- Should fallback to single batch processing because there's no data to be refreshed on the original hypertable
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+SELECT * FROM sorted_bgw_log;
+
+-- Should return zero rows
+SELECT count(*) FROM conditions_by_day;
+
+-- 1 day of data
+INSERT INTO conditions
+SELECT
+    t, d, 10
+FROM
+    generate_series(
+        '2020-02-05 00:00:00-03',
+        '2020-02-06 00:00:00-03',
+        '1 hour'::interval) AS t,
+    generate_series(1,5) AS d;
+
+TRUNCATE bgw_log;
+
+-- advance time by 5h so that job runs one more time
+SELECT ts_bgw_params_reset_time(extract(epoch from interval '5 hour')::bigint * 1000000, true);
+
+-- Should fallback to single batch processing because the refresh size is too small
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+SELECT * FROM sorted_bgw_log;
+
+-- Should return 10 rows because the bucket width is `1 day` and buckets per batch is `10`
+SELECT count(*) FROM conditions_by_day;
+
+TRUNCATE conditions_by_day, conditions, bgw_log;
+
+-- Less than 1 day of data (smaller than the bucket width)
+INSERT INTO conditions
+VALUES ('2020-02-05 00:00:00-03', 1, 10);
+
+-- advance time by 6h so that job runs one more time
+SELECT ts_bgw_params_reset_time(extract(epoch from interval '6 hour')::bigint * 1000000, true);
+
+-- Should fallback to single batch processing because the refresh size is too small
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+SELECT * FROM sorted_bgw_log;
+
+-- Should return 1 row
+SELECT count(*) FROM conditions_by_day;

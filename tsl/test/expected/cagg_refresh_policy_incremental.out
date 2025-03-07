@@ -387,3 +387,116 @@ DETAIL:  buckets_per_batch: -1
 HINT:  The buckets per batch should be greater than or equal to zero.
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1
+-- Truncate all data from the original hypertable
+TRUNCATE bgw_log, conditions;
+-- advance time by 4h so that job runs one more time
+SELECT ts_bgw_params_reset_time(extract(epoch from interval '4 hour')::bigint * 1000000, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+(1 row)
+
+-- Should fallback to single batch processing because there's no data to be refreshed on the original hypertable
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+(1 row)
+
+SELECT * FROM sorted_bgw_log;
+ msg_no |  mock_time  |              application_name              |                                                                            msg                                                                            
+--------+-------------+--------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+      0 | 14400000000 | DB Scheduler                               | [TESTING] Registered new background worker
+      1 | 14400000000 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      0 | 14400000000 | Refresh Continuous Aggregate Policy [1000] | no min slice range start for continuous aggregate "public.conditions_by_day", falling back to single batch processing
+      1 | 14400000000 | Refresh Continuous Aggregate Policy [1000] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Sun Nov 23 16:07:02 4714 LMT BC, Wed Mar 05 16:00:00 2025 PST ]
+      2 | 14400000000 | Refresh Continuous Aggregate Policy [1000] | deleted 295 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
+      3 | 14400000000 | Refresh Continuous Aggregate Policy [1000] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
+(6 rows)
+
+-- Should return zero rows
+SELECT count(*) FROM conditions_by_day;
+ count 
+-------
+     0
+(1 row)
+
+-- 1 day of data
+INSERT INTO conditions
+SELECT
+    t, d, 10
+FROM
+    generate_series(
+        '2020-02-05 00:00:00-03',
+        '2020-02-06 00:00:00-03',
+        '1 hour'::interval) AS t,
+    generate_series(1,5) AS d;
+TRUNCATE bgw_log;
+-- advance time by 5h so that job runs one more time
+SELECT ts_bgw_params_reset_time(extract(epoch from interval '5 hour')::bigint * 1000000, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+(1 row)
+
+-- Should fallback to single batch processing because the refresh size is too small
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+(1 row)
+
+SELECT * FROM sorted_bgw_log;
+ msg_no |  mock_time  |              application_name              |                                                                          msg                                                                           
+--------+-------------+--------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------
+      0 | 18000000000 | DB Scheduler                               | [TESTING] Registered new background worker
+      1 | 18000000000 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      0 | 18000000000 | Refresh Continuous Aggregate Policy [1000] | only one batch produced for continuous aggregate "public.conditions_by_day", falling back to single batch processing
+      1 | 18000000000 | Refresh Continuous Aggregate Policy [1000] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Tue Feb 04 16:00:00 2020 PST, Thu Feb 06 16:00:00 2020 PST ]
+      2 | 18000000000 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
+      3 | 18000000000 | Refresh Continuous Aggregate Policy [1000] | inserted 10 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
+(6 rows)
+
+-- Should return 10 rows because the bucket width is `1 day` and buckets per batch is `10`
+SELECT count(*) FROM conditions_by_day;
+ count 
+-------
+    10
+(1 row)
+
+TRUNCATE conditions_by_day, conditions, bgw_log;
+-- Less than 1 day of data (smaller than the bucket width)
+INSERT INTO conditions
+VALUES ('2020-02-05 00:00:00-03', 1, 10);
+-- advance time by 6h so that job runs one more time
+SELECT ts_bgw_params_reset_time(extract(epoch from interval '6 hour')::bigint * 1000000, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+(1 row)
+
+-- Should fallback to single batch processing because the refresh size is too small
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+(1 row)
+
+SELECT * FROM sorted_bgw_log;
+ msg_no |  mock_time  |              application_name              |                                                                            msg                                                                            
+--------+-------------+--------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+      0 | 21600000000 | DB Scheduler                               | [TESTING] Registered new background worker
+      1 | 21600000000 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      0 | 21600000000 | Refresh Continuous Aggregate Policy [1000] | refresh window size (7 days) is smaller than or equal to batch size (10 days), falling back to single batch processing
+      1 | 21600000000 | Refresh Continuous Aggregate Policy [1000] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Sun Nov 23 16:07:02 4714 LMT BC, Wed Mar 05 16:00:00 2025 PST ]
+      2 | 21600000000 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
+      3 | 21600000000 | Refresh Continuous Aggregate Policy [1000] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
+(6 rows)
+
+-- Should return 1 row
+SELECT count(*) FROM conditions_by_day;
+ count 
+-------
+     1
+(1 row)
+
