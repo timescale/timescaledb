@@ -117,6 +117,12 @@ static const struct config_enum_entry hypercore_copy_to_options[] = {
 	{ NULL, 0, false }
 };
 
+static const struct config_enum_entry compress_truncate_behaviour_options[] = {
+	{ "truncate_only", COMPRESS_TRUNCATE_ONLY, false},
+	{"truncate_or_delete", COMPRESS_TRUNCATE_OR_DELETE, false},
+	{"truncate_disabled", COMPRESS_TRUNCATE_DISABLED, false},
+};
+
 bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
@@ -153,6 +159,7 @@ TSDLLEXPORT bool ts_guc_default_hypercore_use_access_method = false;
 bool ts_guc_enable_chunk_skipping = false;
 TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
 TSDLLEXPORT bool ts_guc_enable_bool_compression = false;
+TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour = COMPRESS_TRUNCATE_ONLY;
 
 /* Enable of disable columnar scans for columnar-oriented storage engines. If
  * disabled, regular sequence scans will be used instead. */
@@ -936,6 +943,19 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
+	DefineCustomEnumVariable(MAKE_EXTOPTION("compress_truncate_behaviour"),
+							 "Define behaviour of truncate after compression",
+							 "Define behaviour of truncate after compression",
+							 (int*)&ts_guc_compress_truncate_behaviour,
+							 COMPRESS_TRUNCATE_ONLY,
+							 compress_truncate_behaviour_options,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 
 #ifdef USE_TELEMETRY
 	DefineCustomEnumVariable(MAKE_EXTOPTION("telemetry_level"),
