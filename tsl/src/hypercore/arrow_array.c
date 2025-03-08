@@ -364,6 +364,14 @@ arrow_from_compressed(Datum compressed, Oid typid, MemoryContext dest_mcxt, Memo
 	 */
 	MemoryContext oldcxt = MemoryContextSwitchTo(tmp_mcxt);
 	const CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
+	if (header->compression_algorithm == COMPRESSION_ALGORITHM_NULL)
+	{
+		/*
+		 * The NULL compression algorithm represents all NULL values.
+		 */
+		MemoryContextSwitchTo(oldcxt);
+		return NULL;
+	}
 	DecompressAllFunction decompress_all =
 		arrow_get_decompress_all(header->compression_algorithm, typid);
 
