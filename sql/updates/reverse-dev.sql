@@ -39,3 +39,7 @@ FROM
 DROP TABLE _timescaledb_catalog.tempsettings CASCADE;
 GRANT SELECT ON _timescaledb_catalog.compression_settings TO PUBLIC;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_settings', '');
+
+
+-- Drop the type used by the bloom sparse indexes on compressed hypertables.
+DROP TYPE _timescaledb_internal.bloom1 CASCADE;

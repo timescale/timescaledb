@@ -135,8 +135,8 @@ get_pushdownsafe_expr(const QualPushdownContext *input_context, Expr *input)
 }
 
 static void
-expr_fetch_metadata(QualPushdownContext *context, Expr *expr, AttrNumber *min_attno,
-					AttrNumber *max_attno)
+expr_fetch_minmax_metadata(QualPushdownContext *context, Expr *expr, AttrNumber *min_attno,
+						   AttrNumber *max_attno)
 {
 	*min_attno = InvalidAttrNumber;
 	*max_attno = InvalidAttrNumber;
@@ -192,7 +192,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 	/* Find the side that has var with segment meta set expr to the other side */
 	AttrNumber min_attno;
 	AttrNumber max_attno;
-	expr_fetch_metadata(context, leftop, &min_attno, &max_attno);
+	expr_fetch_minmax_metadata(context, leftop, &min_attno, &max_attno);
 	if (min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber)
 	{
 		/* No metadata for the left operand, try to commute the operator. */
@@ -201,7 +201,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 		leftop = rightop;
 		rightop = tmp;
 
-		expr_fetch_metadata(context, leftop, &min_attno, &max_attno);
+		expr_fetch_minmax_metadata(context, leftop, &min_attno, &max_attno);
 	}
 
 	if (min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber)
@@ -309,6 +309,129 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 	}
 }
 
+static void
+expr_fetch_bloom1_metadata(QualPushdownContext *context, Expr *expr, AttrNumber *bloom1_attno)
+{
+	*bloom1_attno = InvalidAttrNumber;
+
+	if (!IsA(expr, Var))
+		return;
+
+	Var *var = castNode(Var, expr);
+
+	/*
+	 * Not on the chunk we expect. This doesn't really happen because we don't
+	 * push down the join quals, only the baserestrictinfo.
+	 */
+	if ((Index) var->varno != context->chunk_rel->relid)
+		return;
+
+	/* ignore system attributes or whole row references */
+	if (var->varattno <= 0)
+		return;
+
+	*bloom1_attno = compressed_column_metadata_attno(context->settings,
+													 context->chunk_rte->relid,
+													 var->varattno,
+													 context->compressed_rte->relid,
+													 "bloom1");
+}
+
+static Expr *
+pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args, Oid op_oid,
+								   Oid op_collation)
+{
+	Expr *leftop, *rightop;
+	TypeCacheEntry *tce;
+	int strategy;
+	Oid expr_type_id;
+
+	if (list_length(expr_args) != 2)
+		return NULL;
+
+	leftop = linitial(expr_args);
+	rightop = lsecond(expr_args);
+
+	if (IsA(leftop, RelabelType))
+		leftop = ((RelabelType *) leftop)->arg;
+	if (IsA(rightop, RelabelType))
+		rightop = ((RelabelType *) rightop)->arg;
+
+	/* Find the side that has var with segment meta set expr to the other side */
+	AttrNumber bloom1_attno = InvalidAttrNumber;
+	expr_fetch_bloom1_metadata(context, leftop, &bloom1_attno);
+	if (bloom1_attno == InvalidAttrNumber)
+	{
+		/* No metadata for the left operand, try to commute the operator. */
+		op_oid = get_commutator(op_oid);
+		Expr *tmp = leftop;
+		leftop = rightop;
+		rightop = tmp;
+
+		expr_fetch_bloom1_metadata(context, leftop, &bloom1_attno);
+	}
+
+	if (bloom1_attno == InvalidAttrNumber)
+	{
+		/* No metadata for either operand. */
+		return NULL;
+	}
+
+	Var *var_with_segment_meta = castNode(Var, leftop);
+	Expr *expr = rightop;
+
+	/* May be able to allow non-strict operations as well.
+	 * Next steps: Think through edge cases, either allow and write tests or figure out why we must
+	 * block strict operations
+	 */
+	if (!OidIsValid(op_oid) || !op_strict(op_oid))
+		return NULL;
+
+	/* If the collation to be used by the OP doesn't match the column's collation do not push down
+	 * as the materialized min/max value do not match the semantics of what we need here */
+	if (var_with_segment_meta->varcollid != op_collation)
+		return NULL;
+
+	tce = lookup_type_cache(var_with_segment_meta->vartype, TYPECACHE_BTREE_OPFAMILY);
+
+	strategy = get_op_opfamily_strategy(op_oid, tce->btree_opf);
+	if (strategy != BTEqualStrategyNumber)
+		return NULL;
+
+	expr = get_pushdownsafe_expr(context, expr);
+
+	if (expr == NULL)
+		return NULL;
+
+	expr_type_id = exprType((Node *) expr);
+
+	/* var = expr implies ts_bloom1_match(var_bloom, expr) */
+	Oid opno_le =
+		get_opfamily_member(tce->btree_opf, tce->type_id, expr_type_id, BTLessEqualStrategyNumber);
+	Oid opno_ge = get_opfamily_member(tce->btree_opf,
+									  tce->type_id,
+									  expr_type_id,
+									  BTGreaterEqualStrategyNumber);
+
+	if (!OidIsValid(opno_le) || !OidIsValid(opno_ge))
+		return NULL;
+
+	Var *bloom_var =
+		makeVar(context->compressed_rel->relid, bloom1_attno, BYTEAOID, -1, InvalidOid, 0);
+
+	Oid func = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
+										 makeString("ts_bloom1_matches")),
+							  /* nargs = */ -1,
+							  /* argtypes = */ (void *) -1,
+							  /* missing_ok = */ false);
+	return (Expr *) makeFuncExpr(func,
+								 BOOLOID,
+								 list_make2(bloom_var, expr),
+								 /* funccollid = */ InvalidOid,
+								 /* inputcollid = */ InvalidOid,
+								 COERCE_EXPLICIT_CALL);
+}
+
 static Node *
 modify_expression(Node *node, QualPushdownContext *context)
 {
@@ -322,10 +445,21 @@ modify_expression(Node *node, QualPushdownContext *context)
 			OpExpr *opexpr = (OpExpr *) node;
 			if (opexpr->opresulttype == BOOLOID)
 			{
-				Expr *pd = pushdown_op_to_segment_meta_min_max(context,
-															   opexpr->args,
-															   opexpr->opno,
-															   opexpr->inputcollid);
+				Expr *pd = pushdown_op_to_segment_meta_bloom1(context,
+															  opexpr->args,
+															  opexpr->opno,
+															  opexpr->inputcollid);
+				if (pd != NULL)
+				{
+					context->needs_recheck = true;
+					/* pd is on the compressed table so do not mutate further */
+					return (Node *) pd;
+				}
+
+				pd = pushdown_op_to_segment_meta_min_max(context,
+														 opexpr->args,
+														 opexpr->opno,
+														 opexpr->inputcollid);
 				if (pd != NULL)
 				{
 					context->needs_recheck = true;
