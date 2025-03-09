@@ -23,6 +23,7 @@ set(TEST_FILES
     compressed_detoaster.sql
     compression.sql
     compression_conflicts.sql
+    compression_constraints.sql
     compression_create_compressed_table.sql
     compression_defaults.sql
     compression_fks.sql
