@@ -307,8 +307,10 @@ lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 		}
 		else
 		{
-			colsettings->cattnum_min = InvalidAttrNumber;
-			colsettings->cattnum_max = InvalidAttrNumber;
+			const char *min_attname = compressed_column_metadata_name_v2("min", attname);
+			const char *max_attname = compressed_column_metadata_name_v2("max", attname);
+			colsettings->cattnum_min = get_attnum(hsinfo->compressed_relid, min_attname);
+			colsettings->cattnum_max = get_attnum(hsinfo->compressed_relid, max_attname);
 		}
 	}
 
