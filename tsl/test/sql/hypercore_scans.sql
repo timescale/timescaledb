@@ -303,6 +303,27 @@ where time = '2022-06-01' and 4 < device;
 set timescaledb.enable_hypercore_scankey_pushdown=true;
 
 --
+-- Test scankey push down on non-orderby min/max column
+--
+explain (costs off)
+select * from readings
+where time = '2022-06-01' and '5' = location;
+
+select sum(humidity) from readings
+where time = '2022-06-01' and '5' = location;
+
+set timescaledb.enable_hypercore_scankey_pushdown=false;
+
+explain (costs off)
+select * from readings
+where time = '2022-06-01' and '5' = location;
+
+select sum(humidity) from readings
+where time = '2022-06-01' and '4' = location;
+
+set timescaledb.enable_hypercore_scankey_pushdown=true;
+
+--
 -- Test non-btree operator on segmentby column and compare with btree
 -- operators.
 --
