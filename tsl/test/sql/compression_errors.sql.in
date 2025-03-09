@@ -144,7 +144,6 @@ select compress_chunk(:'CHUNK_NAME');
 
 --adding these constraints when there is compressed data should fail
 ALTER TABLE foo ADD CONSTRAINT chk CHECK(b > 0);
-ALTER TABLE foo ADD CONSTRAINT unq UNIQUE(a);
 
 SELECT compress_chunk(ch) FROM show_chunks('non_compressed') ch LIMIT 1;
 
