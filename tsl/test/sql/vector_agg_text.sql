@@ -55,6 +55,20 @@ select *, ss::text as x from (
 ) t
 ;
 
+
+-- print a few reference values before compression
+select x, count(*) from agggroup group by x having (x='11' or x is null) order by count(*), x limit 10;
+select x, count(cint2) from agggroup group by x having (x='11' or x is null) order by count(cint2), x limit 10;
+select x, min(cint2) from agggroup group by x having (x='11' or x is null) order by min(cint2), x limit 10;
+select x, count(*) from agggroup where cint2 > 0 group by x having (x='11' or x is null) order by count(*), x limit 10;
+select x, count(cint2) from agggroup where cint2 > 0 group by x having (x='11' or x is null) order by count(cint2), x limit 10;
+select x, min(cint2) from agggroup where cint2 > 0 group by x order by min(cint2), x limit 10;
+select x, count(*) from agggroup where cint2 is null group by x having (x='11') order by count(*), x limit 10;
+select x, count(cint2) from agggroup where cint2 is null group by x having (x is null) order by count(cint2), x limit 10;
+select x, count(*) from agggroup where cint2 is null and x is null group by x order by count(*), x limit 10;
+select x, count(cint2) from agggroup where cint2 is null and x is null group by x order by count(cint2), x limit 10;
+select x, min(cint2) from agggroup where cint2 is null and x is null group by x order by min(cint2), x limit 10;
+
 select count(compress_chunk(x)) from show_chunks('agggroup') x;
 vacuum freeze analyze agggroup;
 

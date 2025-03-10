@@ -30,6 +30,7 @@
 #include "compression/algorithms/dictionary.h"
 #include "compression/algorithms/float_utils.h"
 #include "compression/algorithms/gorilla.h"
+#include "compression/algorithms/null.h"
 #include "compression/arrow_c_data_interface.h"
 #include "compression/batch_metadata_builder_minmax.h"
 
@@ -845,6 +846,56 @@ test_bool()
 	TestAssertTrue(rle_size == baseline);
 }
 
+static void
+test_null()
+{
+	/* pointless tests to make codecov happy */
+	StringInfoData buffer = (StringInfoData){
+		.data = NULL,
+		.len = 0,
+		.maxlen = 0,
+	};
+	TestEnsureError(null_decompression_iterator_from_datum_forward((Datum) 0, INT2OID));
+	TestEnsureError(null_decompression_iterator_from_datum_reverse((Datum) 0, BOOLOID));
+	TestEnsureError(null_compressed_send(NULL, &buffer));
+	TestEnsureError(null_compressed_recv(&buffer));
+	TestEnsureError(null_compressor_for_type(BOOLOID));
+
+	{
+		StringInfoData buffer;
+
+		void *compressed = null_compressor_get_dummy_block();
+		Datum sent_datum = DirectFunctionCall2(tsl_compressed_data_send,
+											   PointerGetDatum(compressed),
+											   PointerGetDatum(&buffer));
+
+		bytea *sent = (bytea *) DatumGetPointer(sent_datum);
+		StringInfoData transmission = (StringInfoData){
+			.data = VARDATA(sent),
+			.len = VARSIZE(sent),
+			.maxlen = VARSIZE(sent),
+		};
+
+		TestAssertTrue(transmission.len > 0);
+		TestAssertTrue(transmission.data != NULL);
+
+		LOCAL_FCINFO(local_fcinfo, 1);
+		local_fcinfo->args[0] =
+			(NullableDatum){ .value = PointerGetDatum(&transmission), .isnull = false };
+
+		// Call the function directly
+		tsl_compressed_data_recv(local_fcinfo);
+
+		TestAssertTrue(local_fcinfo->isnull);
+	}
+	{
+		void *compressed = null_compressor_get_dummy_block();
+		Datum has_nulls =
+			DirectFunctionCall1(tsl_compressed_data_has_nulls, PointerGetDatum(compressed));
+		TestAssertTrue(DatumGetBool(has_nulls));
+	}
+}
+
 Datum
 ts_test_compression(PG_FUNCTION_ARGS)
 {
@@ -865,6 +916,7 @@ ts_test_compression(PG_FUNCTION_ARGS)
 	test_delta3(/* have_nulls = */ true, /* have_random = */ false);
 	test_delta3(/* have_nulls = */ true, /* have_random = */ true);
 	test_bool();
+	test_null();
 
 	/* Some tests for zig-zag encoding overflowing the original element width. */
 	test_delta4(test_delta4_case1, sizeof(test_delta4_case1) / sizeof(*test_delta4_case1));

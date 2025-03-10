@@ -23,6 +23,7 @@
 #include "algorithms/deltadelta.h"
 #include "algorithms/dictionary.h"
 #include "algorithms/gorilla.h"
+#include "algorithms/null.h"
 #include "batch_metadata_builder.h"
 #include "chunk.h"
 #include "compression.h"
@@ -49,6 +50,7 @@ static const CompressionAlgorithmDefinition definitions[_END_COMPRESSION_ALGORIT
 	[COMPRESSION_ALGORITHM_GORILLA] = GORILLA_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_DELTADELTA] = DELTA_DELTA_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_BOOL] = BOOL_COMPRESS_ALGORITHM_DEFINITION,
+	[COMPRESSION_ALGORITHM_NULL] = NULL_COMPRESS_ALGORITHM_DEFINITION,
 };
 
 static NameData compression_algorithm_name[] = {
@@ -58,6 +60,7 @@ static NameData compression_algorithm_name[] = {
 	[COMPRESSION_ALGORITHM_GORILLA] = { "GORILLA" },
 	[COMPRESSION_ALGORITHM_DELTADELTA] = { "DELTADELTA" },
 	[COMPRESSION_ALGORITHM_BOOL] = { "BOOL" },
+	[COMPRESSION_ALGORITHM_NULL] = { "NULL" },
 };
 
 Name
@@ -1025,9 +1028,14 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 			Assert(column->segment_info == NULL);
 
 			compressed_data = compressor->finish(compressor);
-
-			/* non-segment columns are NULL iff all the values are NULL */
+			if (compressed_data == NULL)
+			{
+				if (ts_guc_enable_null_compression &&
+					row_compressor->rows_compressed_into_current_value > 0)
+					compressed_data = null_compressor_get_dummy_block();
+			}
 			row_compressor->compressed_is_null[compressed_col] = compressed_data == NULL;
+
 			if (compressed_data != NULL)
 				row_compressor->compressed_values[compressed_col] =
 					PointerGetDatum(compressed_data);
@@ -1439,6 +1447,18 @@ decompress_batch(RowDecompressor *decompressor)
 										&decompressor->detoaster,
 										CurrentMemoryContext));
 		CompressedDataHeader *header = get_compressed_data_header(compressed_datum);
+
+		/* Special compression block with the NULL compression algorithm,
+		 * tells that all values in the compressed block are NULLs.
+		 */
+		if (header->compression_algorithm == COMPRESSION_ALGORITHM_NULL)
+		{
+			column_info->iterator = NULL;
+			decompressor->compressed_is_nulls[input_column] = true;
+			decompressor->decompressed_is_nulls[output_index] = true;
+			continue;
+		}
+
 		column_info->iterator =
 			definitions[header->compression_algorithm]
 				.iterator_init_forward(PointerGetDatum(header), column_info->decompressed_type);
@@ -1701,7 +1721,10 @@ tsl_compressed_data_send(PG_FUNCTION_ARGS)
 	pq_begintypsend(&buf);
 	pq_sendbyte(&buf, header->compression_algorithm);
 
-	definitions[header->compression_algorithm].compressed_data_send(header, &buf);
+	if (header->compression_algorithm != COMPRESSION_ALGORITHM_NULL)
+	{
+		definitions[header->compression_algorithm].compressed_data_send(header, &buf);
+	}
 
 	PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
 }
@@ -1717,7 +1740,14 @@ tsl_compressed_data_recv(PG_FUNCTION_ARGS)
 	if (header.compression_algorithm >= _END_COMPRESSION_ALGORITHMS)
 		elog(ERROR, "invalid compression algorithm %d", header.compression_algorithm);
 
-	return definitions[header.compression_algorithm].compressed_data_recv(buf);
+	if (header.compression_algorithm == COMPRESSION_ALGORITHM_NULL)
+	{
+		PG_RETURN_NULL();
+	}
+	else
+	{
+		return definitions[header.compression_algorithm].compressed_data_recv(buf);
+	}
 }
 
 extern Datum
@@ -1812,6 +1842,9 @@ tsl_compressed_data_info(PG_FUNCTION_ARGS)
 		case COMPRESSION_ALGORITHM_BOOL:
 			has_nulls = bool_compressed_has_nulls(header);
 			break;
+		case COMPRESSION_ALGORITHM_NULL:
+			has_nulls = true;
+			break;
 		default:
 			elog(ERROR, "unknown compression algorithm %d", header->compression_algorithm);
 			break;
@@ -1852,6 +1885,9 @@ tsl_compressed_data_has_nulls(PG_FUNCTION_ARGS)
 			break;
 		case COMPRESSION_ALGORITHM_BOOL:
 			has_nulls = bool_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_NULL:
+			has_nulls = true;
 			break;
 		default:
 			elog(ERROR, "unknown compression algorithm %d", header->compression_algorithm);

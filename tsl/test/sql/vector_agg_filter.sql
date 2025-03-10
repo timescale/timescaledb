@@ -60,6 +60,17 @@ select t, s, cint2, cint4,
     end as ss
 from source where s != 1
 ;
+
+-- print a few reference values before compression
+select count(ss) from aggfilter;
+select count(ss) filter (where cint2 < 0) from aggfilter;
+select count(ss) filter (where cint4 > 0) from aggfilter;
+select count(ss) filter (where s != 5) from aggfilter;
+select s, count(ss) from aggfilter group by s having s=2 order by count(ss), s limit 10;
+select s, count(ss) filter (where cint2 < 0) from aggfilter group by s having s=2 order by count(ss), s limit 10;
+select s, count(ss) filter (where ss > 1000) from aggfilter group by s having s=2 order by count(ss), s limit 10;
+select s, count(ss) filter (where cint4 > 0) from aggfilter group by s having s=2 order by count(ss), s limit 10;
+
 select count(compress_chunk(x)) from show_chunks('aggfilter') x;
 vacuum freeze analyze aggfilter;
 

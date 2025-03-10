@@ -2889,8 +2889,12 @@ hypercore_index_build_callback(Relation index, ItemPointer tid, Datum *values, b
 
 				/* The number of elements in the arrow array should be the
 				 * same as the number of rows in the segment (count
-				 * column). */
-				Assert(num_rows == icstate->arrow_columns[i]->length);
+				 * column), except when we use the NULL compression method
+				 * to signify all values are NULLs. In this case the
+				 * arrow_column value is NULL.
+				 */
+				Assert(icstate->arrow_columns[i] == NULL ||
+					   num_rows == icstate->arrow_columns[i]->length);
 			}
 			else
 			{

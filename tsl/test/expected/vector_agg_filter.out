@@ -60,6 +60,55 @@ select t, s, cint2, cint4,
     end as ss
 from source where s != 1
 ;
+-- print a few reference values before compression
+select count(ss) from aggfilter;
+ count  
+--------
+ 179981
+(1 row)
+
+select count(ss) filter (where cint2 < 0) from aggfilter;
+ count 
+-------
+ 90014
+(1 row)
+
+select count(ss) filter (where cint4 > 0) from aggfilter;
+ count 
+-------
+ 90142
+(1 row)
+
+select count(ss) filter (where s != 5) from aggfilter;
+ count  
+--------
+ 159981
+(1 row)
+
+select s, count(ss) from aggfilter group by s having s=2 order by count(ss), s limit 10;
+ s | count 
+---+-------
+ 2 |     0
+(1 row)
+
+select s, count(ss) filter (where cint2 < 0) from aggfilter group by s having s=2 order by count(ss), s limit 10;
+ s | count 
+---+-------
+ 2 |     0
+(1 row)
+
+select s, count(ss) filter (where ss > 1000) from aggfilter group by s having s=2 order by count(ss), s limit 10;
+ s | count 
+---+-------
+ 2 |     0
+(1 row)
+
+select s, count(ss) filter (where cint4 > 0) from aggfilter group by s having s=2 order by count(ss), s limit 10;
+ s | count 
+---+-------
+ 2 |     0
+(1 row)
+
 select count(compress_chunk(x)) from show_chunks('aggfilter') x;
  count 
 -------
@@ -851,13 +900,13 @@ select s, min(s) filter (where s != 5) from aggfilter group by s order by min(s)
 select count(ss) from aggfilter;
  count  
 --------
- 199981
+ 179981
 (1 row)
 
 select count(ss) filter (where cint2 < 0) from aggfilter;
- count  
---------
- 100127
+ count 
+-------
+ 90014
 (1 row)
 
 select count(ss) filter (where ss > 1000) from aggfilter;
@@ -867,24 +916,24 @@ select count(ss) filter (where ss > 1000) from aggfilter;
 (1 row)
 
 select count(ss) filter (where cint4 > 0) from aggfilter;
- count  
---------
- 100027
+ count 
+-------
+ 90142
 (1 row)
 
 select count(ss) filter (where s != 5) from aggfilter;
  count  
 --------
- 179981
+ 159981
 (1 row)
 
 select s, count(ss) from aggfilter group by s order by count(ss), s limit 10;
  s | count 
 ---+-------
+ 2 |     0
  3 | 19981
  0 | 20000
  1 | 20000
- 2 | 20000
  4 | 20000
  5 | 20000
  6 | 20000
@@ -896,10 +945,10 @@ select s, count(ss) from aggfilter group by s order by count(ss), s limit 10;
 select s, count(ss) filter (where cint2 < 0) from aggfilter group by s order by count(ss), s limit 10;
  s | count 
 ---+-------
+ 2 |     0
  3 | 10076
  0 |  9968
  1 |  9885
- 2 | 10113
  4 | 10074
  5 |  9871
  6 | 10089
@@ -911,10 +960,10 @@ select s, count(ss) filter (where cint2 < 0) from aggfilter group by s order by 
 select s, count(ss) filter (where ss > 1000) from aggfilter group by s order by count(ss), s limit 10;
  s | count 
 ---+-------
+ 2 |     0
  3 |     0
  0 |     0
  1 |     0
- 2 |     0
  4 |     0
  5 |     0
  6 |     0
@@ -926,10 +975,10 @@ select s, count(ss) filter (where ss > 1000) from aggfilter group by s order by 
 select s, count(ss) filter (where cint4 > 0) from aggfilter group by s order by count(ss), s limit 10;
  s | count 
 ---+-------
+ 2 |     0
  3 | 10052
  0 | 10002
  1 | 10046
- 2 |  9885
  4 |  9995
  5 | 10106
  6 |  9977
@@ -941,10 +990,10 @@ select s, count(ss) filter (where cint4 > 0) from aggfilter group by s order by 
 select s, count(ss) filter (where s != 5) from aggfilter group by s order by count(ss), s limit 10;
  s | count 
 ---+-------
+ 2 |     0
  3 | 19981
  0 | 20000
  1 | 20000
- 2 | 20000
  4 | 20000
  5 |     0
  6 | 20000
@@ -995,7 +1044,7 @@ select s, min(ss) from aggfilter group by s order by min(ss), s limit 10;
  8 |   8
  9 |   9
  1 |  11
- 2 |  11
+ 2 |    
 (10 rows)
 
 select s, min(ss) filter (where cint2 < 0) from aggfilter group by s order by min(ss), s limit 10;
@@ -1010,7 +1059,7 @@ select s, min(ss) filter (where cint2 < 0) from aggfilter group by s order by mi
  8 |   8
  9 |   9
  1 |  11
- 2 |  11
+ 2 |    
 (10 rows)
 
 select s, min(ss) filter (where ss > 1000) from aggfilter group by s order by min(ss), s limit 10;
@@ -1040,7 +1089,7 @@ select s, min(ss) filter (where cint4 > 0) from aggfilter group by s order by mi
  8 |   8
  9 |   9
  1 |  11
- 2 |  11
+ 2 |    
 (10 rows)
 
 select s, min(ss) filter (where s != 5) from aggfilter group by s order by min(ss), s limit 10;
@@ -1055,7 +1104,7 @@ select s, min(ss) filter (where s != 5) from aggfilter group by s order by min(s
  8 |   8
  9 |   9
  1 |  11
- 2 |  11
+ 2 |    
 (10 rows)
 
 select count(*) from aggfilter where cint2 > 0;
@@ -1796,7 +1845,7 @@ select s, min(s) filter (where s != 5) from aggfilter where cint2 > 0 group by s
 select count(ss) from aggfilter where cint2 > 0;
  count 
 -------
- 99657
+ 89789
 (1 row)
 
 select count(ss) filter (where cint2 < 0) from aggfilter where cint2 > 0;
@@ -1814,19 +1863,19 @@ select count(ss) filter (where ss > 1000) from aggfilter where cint2 > 0;
 select count(ss) filter (where cint4 > 0) from aggfilter where cint2 > 0;
  count 
 -------
- 49813
+ 44890
 (1 row)
 
 select count(ss) filter (where s != 5) from aggfilter where cint2 > 0;
  count 
 -------
- 89547
+ 79679
 (1 row)
 
 select s, count(ss) from aggfilter where cint2 > 0 group by s order by count(ss), s limit 10;
  s | count 
 ---+-------
- 2 |  9868
+ 2 |     0
  3 |  9886
  6 |  9890
  8 |  9898
@@ -1871,7 +1920,7 @@ select s, count(ss) filter (where ss > 1000) from aggfilter where cint2 > 0 grou
 select s, count(ss) filter (where cint4 > 0) from aggfilter where cint2 > 0 group by s order by count(ss), s limit 10;
  s | count 
 ---+-------
- 2 |  4923
+ 2 |     0
  3 |  4968
  6 |  4911
  8 |  4929
@@ -1886,7 +1935,7 @@ select s, count(ss) filter (where cint4 > 0) from aggfilter where cint2 > 0 grou
 select s, count(ss) filter (where s != 5) from aggfilter where cint2 > 0 group by s order by count(ss), s limit 10;
  s | count 
 ---+-------
- 2 |  9868
+ 2 |     0
  3 |  9886
  6 |  9890
  8 |  9898
@@ -1940,7 +1989,7 @@ select s, min(ss) from aggfilter where cint2 > 0 group by s order by min(ss), s 
  8 |   8
  9 |   9
  1 |  11
- 2 |  11
+ 2 |    
 (10 rows)
 
 select s, min(ss) filter (where cint2 < 0) from aggfilter where cint2 > 0 group by s order by min(ss), s limit 10;
@@ -1985,7 +2034,7 @@ select s, min(ss) filter (where cint4 > 0) from aggfilter where cint2 > 0 group 
  8 |   8
  9 |   9
  1 |  11
- 2 |  11
+ 2 |    
 (10 rows)
 
 select s, min(ss) filter (where s != 5) from aggfilter where cint2 > 0 group by s order by min(ss), s limit 10;
@@ -2000,7 +2049,7 @@ select s, min(ss) filter (where s != 5) from aggfilter where cint2 > 0 group by 
  8 |   8
  9 |   9
  1 |  11
- 2 |  11
+ 2 |    
 (10 rows)
 
 select count(*) from aggfilter where cint2 is null;
@@ -2741,7 +2790,7 @@ select s, min(s) filter (where s != 5) from aggfilter where cint2 is null group 
 select count(ss) from aggfilter where cint2 is null;
  count 
 -------
-   190
+   171
 (1 row)
 
 select count(ss) filter (where cint2 < 0) from aggfilter where cint2 is null;
@@ -2759,21 +2808,21 @@ select count(ss) filter (where ss > 1000) from aggfilter where cint2 is null;
 select count(ss) filter (where cint4 > 0) from aggfilter where cint2 is null;
  count 
 -------
-    92
+    83
 (1 row)
 
 select count(ss) filter (where s != 5) from aggfilter where cint2 is null;
  count 
 -------
-   171
+   152
 (1 row)
 
 select s, count(ss) from aggfilter where cint2 is null group by s order by count(ss), s limit 10;
  s | count 
 ---+-------
+ 2 |     0
  0 |    19
  1 |    19
- 2 |    19
  3 |    19
  4 |    19
  5 |    19
@@ -2786,9 +2835,9 @@ select s, count(ss) from aggfilter where cint2 is null group by s order by count
 select s, count(ss) filter (where cint2 < 0) from aggfilter where cint2 is null group by s order by count(ss), s limit 10;
  s | count 
 ---+-------
+ 2 |     0
  0 |     0
  1 |     0
- 2 |     0
  3 |     0
  4 |     0
  5 |     0
@@ -2801,9 +2850,9 @@ select s, count(ss) filter (where cint2 < 0) from aggfilter where cint2 is null 
 select s, count(ss) filter (where ss > 1000) from aggfilter where cint2 is null group by s order by count(ss), s limit 10;
  s | count 
 ---+-------
+ 2 |     0
  0 |     0
  1 |     0
- 2 |     0
  3 |     0
  4 |     0
  5 |     0
@@ -2816,9 +2865,9 @@ select s, count(ss) filter (where ss > 1000) from aggfilter where cint2 is null 
 select s, count(ss) filter (where cint4 > 0) from aggfilter where cint2 is null group by s order by count(ss), s limit 10;
  s | count 
 ---+-------
+ 2 |     0
  0 |     9
  1 |    12
- 2 |     9
  3 |    11
  4 |     5
  5 |    11
@@ -2831,9 +2880,9 @@ select s, count(ss) filter (where cint4 > 0) from aggfilter where cint2 is null 
 select s, count(ss) filter (where s != 5) from aggfilter where cint2 is null group by s order by count(ss), s limit 10;
  s | count 
 ---+-------
+ 2 |     0
  0 |    19
  1 |    19
- 2 |    19
  3 |    19
  4 |    19
  5 |     0
@@ -2885,7 +2934,7 @@ select s, min(ss) from aggfilter where cint2 is null group by s order by min(ss)
  8 |   8
  9 |   9
  1 |  11
- 2 |  11
+ 2 |    
 (10 rows)
 
 select s, min(ss) filter (where cint2 < 0) from aggfilter where cint2 is null group by s order by min(ss), s limit 10;
@@ -2930,7 +2979,7 @@ select s, min(ss) filter (where cint4 > 0) from aggfilter where cint2 is null gr
  8 |   8
  9 |   9
  1 |  11
- 2 |  11
+ 2 |    
 (10 rows)
 
 select s, min(ss) filter (where s != 5) from aggfilter where cint2 is null group by s order by min(ss), s limit 10;
@@ -2945,7 +2994,7 @@ select s, min(ss) filter (where s != 5) from aggfilter where cint2 is null group
  8 |   8
  9 |   9
  1 |  11
- 2 |  11
+ 2 |    
 (10 rows)
 
 reset timescaledb.debug_require_vector_agg;
@@ -2976,7 +3025,6 @@ order by 2, 3;
  ss | count | count 
 ----+-------+-------
   5 |     0 |  9871
-    |    19 |    12
   4 | 19981 | 10064
   3 | 19981 | 10076
   9 | 20000 |  9961
@@ -2984,7 +3032,8 @@ order by 2, 3;
   7 | 20000 | 10008
   8 | 20000 | 10082
   6 | 20000 | 10089
- 11 | 40019 | 20008
+ 11 | 20019 |  9895
+    | 20019 | 10125
 (10 rows)
 
 reset timescaledb.debug_require_vector_agg;

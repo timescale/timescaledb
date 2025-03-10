@@ -4,8 +4,9 @@ CREATE FUNCTION _timescaledb_functions.compressed_data_has_nulls(_timescaledb_in
     AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
 
 INSERT INTO _timescaledb_catalog.compression_algorithm( id, version, name, description) values
-( 5, 1, 'COMPRESSION_ALGORITHM_BOOL', 'bool');
-
+( 5, 1, 'COMPRESSION_ALGORITHM_BOOL', 'bool'),
+( 6, 1, 'COMPRESSION_ALGORITHM_NULL', 'null')
+;
 
 -------------------------------
 -- Update compression settings
