@@ -18,7 +18,11 @@ typedef struct BatchHashingParams
 	const uint64 *batch_filter;
 	CompressedColumnValues single_grouping_column;
 
-	GroupingPolicyHash *restrict policy;
+	int num_grouping_columns;
+	const CompressedColumnValues *grouping_column_values;
+
+	GroupingPolicyHash *policy;
+	HashingStrategy *restrict hashing;
 
 	uint32 *restrict result_key_indexes;
 } BatchHashingParams;
@@ -29,12 +33,18 @@ build_batch_hashing_params(GroupingPolicyHash *policy, TupleTableSlot *vector_sl
 	uint16 nrows;
 	BatchHashingParams params = {
 		.policy = policy,
+		.hashing = &policy->hashing,
 		.batch_filter = vector_slot_get_qual_result(vector_slot, &nrows),
+		.num_grouping_columns = policy->num_grouping_columns,
+		.grouping_column_values = policy->current_batch_grouping_column_values,
 		.result_key_indexes = policy->key_index_for_row,
 	};
 
-	Assert(policy->num_grouping_columns == 1);
-	params.single_grouping_column = policy->current_batch_grouping_column_values[0];
+	Assert(policy->num_grouping_columns > 0);
+	if (policy->num_grouping_columns == 1)
+	{
+		params.single_grouping_column = policy->current_batch_grouping_column_values[0];
+	}
 
 	return params;
 }
