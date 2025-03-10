@@ -374,3 +374,54 @@ SELECT * FROM metrics WHERE d1 = 'foo';
 ------+----+----+-------
 (0 rows)
 
+SELECT * FROM settings;
+                 relid                  |                 compress_relid                  | segmentby |      orderby       | orderby_desc | orderby_nullsfirst 
+----------------------------------------+-------------------------------------------------+-----------+--------------------+--------------+--------------------
+ metrics                                |                                                 | {d1,d2}   | {time}             | {t}          | {t}
+ metrics2                               |                                                 |           | {d1,d2,value,time} | {t,f,t,f}    | {f,t,t,t}
+ _timescaledb_internal._hyper_3_6_chunk | _timescaledb_internal.compress_hyper_4_11_chunk |           | {time}             | {t}          | {t}
+ _timescaledb_internal._hyper_3_8_chunk | _timescaledb_internal.compress_hyper_4_12_chunk |           | {time}             | {t}          | {t}
+(4 rows)
+
+-- Check that TRUNCATE <hypertable> also cleans up compression
+-- settings for chunks that are dropped when truncating.
+TRUNCATE metrics;
+SELECT * FROM settings;
+  relid   | compress_relid | segmentby |      orderby       | orderby_desc | orderby_nullsfirst 
+----------+----------------+-----------+--------------------+--------------+--------------------
+ metrics  |                | {d1,d2}   | {time}             | {t}          | {t}
+ metrics2 |                |           | {d1,d2,value,time} | {t,f,t,f}    | {f,t,t,t}
+(2 rows)
+
+SELECT * FROM chunk_settings;
+ hypertable | chunk | segmentby | orderby 
+------------+-------+-----------+---------
+(0 rows)
+
+-- Recreate chunks
+INSERT INTO metrics VALUES ('2000-01-01'), ('2001-01-01');
+SELECT compress_chunk(ch) FROM show_chunks('metrics') ch;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_3_13_chunk
+ _timescaledb_internal._hyper_3_14_chunk
+(2 rows)
+
+SELECT * FROM settings;
+                  relid                  |                 compress_relid                  | segmentby |      orderby       | orderby_desc | orderby_nullsfirst 
+-----------------------------------------+-------------------------------------------------+-----------+--------------------+--------------+--------------------
+ metrics                                 |                                                 | {d1,d2}   | {time}             | {t}          | {t}
+ metrics2                                |                                                 |           | {d1,d2,value,time} | {t,f,t,f}    | {f,t,t,t}
+ _timescaledb_internal._hyper_3_13_chunk | _timescaledb_internal.compress_hyper_4_15_chunk | {d1,d2}   | {time}             | {t}          | {t}
+ _timescaledb_internal._hyper_3_14_chunk | _timescaledb_internal.compress_hyper_4_16_chunk | {d1,d2}   | {time}             | {t}          | {t}
+(4 rows)
+
+-- DROP TABLE with CASCADE uses a different code path for dropping
+-- hypertable so needs to be tested separately.
+DROP TABLE metrics CASCADE;
+SELECT * FROM settings;
+  relid   | compress_relid | segmentby |      orderby       | orderby_desc | orderby_nullsfirst 
+----------+----------------+-----------+--------------------+--------------+--------------------
+ metrics2 |                |           | {d1,d2,value,time} | {t,f,t,f}    | {f,t,t,t}
+(1 row)
+

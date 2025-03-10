@@ -1413,6 +1413,7 @@ process_drop_table_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 		.objectId = chunk_relid,
 	};
 
+	ts_compression_settings_delete(chunk_relid);
 	performDeletion(&objaddr, stmt->behavior, 0);
 }
 
