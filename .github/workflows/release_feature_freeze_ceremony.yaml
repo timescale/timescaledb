@@ -1,4 +1,4 @@
-name: Minor Release - Feature Freeze
+name: Releases - Feature Freeze Ceremony
 on:
   workflow_dispatch:
 
