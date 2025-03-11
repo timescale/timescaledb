@@ -65,7 +65,7 @@ SELECT sum(segment_by_value) FROM testtable GROUP BY float_value;
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable GROUP BY int_value;
 
--- Vectorization not possible with grouping by multiple columns
+-- Vectorization possible with grouping by multiple columns
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable GROUP BY int_value, float_value;
 
