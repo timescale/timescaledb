@@ -22,13 +22,16 @@
 #include "guc.h"
 #include "hypercore/hypercore_handler.h"
 #include "hypercore/utils.h"
+#include "indexing.h"
 #include "recompress.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/chunk_column_stats.h"
 #include "ts_catalog/compression_settings.h"
 
 static bool fetch_uncompressed_chunk_into_tuplesort(Tuplesortstate *tuplesortstate,
-													Relation uncompressed_chunk_rel);
+													Relation uncompressed_chunk_rel,
+													Snapshot snapshot);
+static bool delete_tuple_for_recompression(Relation rel, ItemPointer tid, Snapshot snapshot);
 static void update_current_segment(CompressedSegmentInfo *current_segment, TupleTableSlot *slot,
 								   int nsegmentby_cols);
 static void create_segmentby_scankeys(CompressionSettings *settings, Relation index_rel,
@@ -126,30 +129,49 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 	 */
 	Ensure(settings->fd.orderby, "empty order by, cannot recompress segmentwise");
 
-	/* new status after recompress should simply be compressed (1)
-	 * It is ok to update this early on in the transaction as it keeps a lock
-	 * on the updated tuple in the CHUNK table potentially preventing other transaction
-	 * from updating it
-	 */
-	if (ts_chunk_clear_status(uncompressed_chunk,
-							  CHUNK_STATUS_COMPRESSED_UNORDERED | CHUNK_STATUS_COMPRESSED_PARTIAL))
-		ereport(DEBUG1,
-				(errmsg("cleared chunk status for recompression: \"%s.%s\"",
-						NameStr(uncompressed_chunk->fd.schema_name),
-						NameStr(uncompressed_chunk->fd.table_name))));
-
 	ereport(DEBUG1,
 			(errmsg("acquiring locks for recompression: \"%s.%s\"",
 					NameStr(uncompressed_chunk->fd.schema_name),
 					NameStr(uncompressed_chunk->fd.table_name))));
 	/* lock both chunks, compressed and uncompressed */
-	/* TODO: Take RowExclusive locks instead of ExclusiveLock
-	 * Taking a weaker lock is possible but in order to use that,
-	 * we have to check row level locking results when modifying tuples
-	 * and make decisions based on them.
+	Relation uncompressed_chunk_rel =
+		table_open(uncompressed_chunk->table_id, ShareUpdateExclusiveLock);
+	Relation compressed_chunk_rel =
+		table_open(compressed_chunk->table_id, ShareUpdateExclusiveLock);
+
+	bool has_unique_constraints =
+		ts_indexing_relation_has_primary_or_unique_index(uncompressed_chunk_rel);
+	int count;
+	LOCKTAG locktag;
+	SET_LOCKTAG_RELATION(locktag, MyDatabaseId, uncompressed_chunk_id);
+
+	/*
+	 * Recompression does not block inserts but it can interfere with
+	 * constraint checking since it moves uncompressed tuples from
+	 * uncompressed chunk to compressed chunk but the INSERTs check
+	 * tuples in the opposite order.
+	 *
+	 * If there are unique constraints and multiple INSERTs happening at start
+	 * we want to just bail out so not to cause wasted work and bloat.
 	 */
-	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, ExclusiveLock);
-	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, ExclusiveLock);
+	if (has_unique_constraints)
+	{
+		GetLockConflicts(&locktag, ExclusiveLock, &count);
+
+		if (count > 1)
+		{
+			elog(WARNING,
+				 "skipping recompression of chunk %s.%s due to unique constraints and concurrent "
+				 "DML",
+				 NameStr(uncompressed_chunk->fd.schema_name),
+				 NameStr(uncompressed_chunk->fd.table_name));
+
+			table_close(uncompressed_chunk_rel, NoLock);
+			table_close(compressed_chunk_rel, NoLock);
+
+			PG_RETURN_OID(uncompressed_chunk_id);
+		}
+	}
 
 	/*
 	 * Calculate and add the column dimension ranges for the src chunk used by chunk skipping
@@ -286,8 +308,9 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 	IndexScanDesc index_scan =
 		index_beginscan(compressed_chunk_rel, index_rel, snapshot, num_segmentby, 0);
 
-	bool found_tuple =
-		fetch_uncompressed_chunk_into_tuplesort(input_tuplesortstate, uncompressed_chunk_rel);
+	bool found_tuple = fetch_uncompressed_chunk_into_tuplesort(input_tuplesortstate,
+															   uncompressed_chunk_rel,
+															   snapshot);
 	if (!found_tuple)
 		goto finish;
 	tuplesort_performsort(input_tuplesortstate);
@@ -396,9 +419,14 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 				row_decompressor_decompress_row_to_tuplesort(&decompressor,
 															 recompress_tuplesortstate);
 
-				simple_table_tuple_delete(compressed_chunk_rel,
-										  &(compressed_slot->tts_tid),
-										  snapshot);
+				if (!delete_tuple_for_recompression(compressed_chunk_rel,
+													&(compressed_slot->tts_tid),
+													snapshot))
+					ereport(ERROR,
+							(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+							 errmsg(
+								 "cannot proceed with recompression due to concurrent updates on "
+								 "compressed data")));
 				CommandCounterIncrement();
 
 				if (should_free)
@@ -479,9 +507,6 @@ finish:
 	pfree(index_scankeys);
 	pfree(orderby_scankeys);
 
-	/* changed chunk status, so invalidate any plans involving this chunk */
-	CacheInvalidateRelcacheByRelid(uncompressed_chunk_id);
-
 	/* Need to rebuild indexes if the relation is using hypercore
 	 * TAM. Alternatively, we could insert into indexes when inserting into
 	 * the compressed rel. */
@@ -497,6 +522,63 @@ finish:
 #else
 		reindex_relation(RelationGetRelid(uncompressed_chunk_rel), 0, &params);
 #endif
+	}
+
+	/* If we can quickly upgrade the lock, lets try updating the chunk status to fully
+	 * compressed. But we need to check if there are any uncompressed tuples in the
+	 * relation since somebody might have inserted new tuples while we were recompressing.
+	 */
+	if (ConditionalLockRelation(uncompressed_chunk_rel, ExclusiveLock))
+	{
+		TableScanDesc scan = table_beginscan(uncompressed_chunk_rel, GetLatestSnapshot(), 0, 0);
+		hypercore_scan_set_skip_compressed(scan, true);
+		ScanDirection scan_dir = uncompressed_chunk_rel->rd_tableam == hypercore_routine() ?
+									 ForwardScanDirection :
+									 BackwardScanDirection;
+		TupleTableSlot *slot = table_slot_create(uncompressed_chunk_rel, NULL);
+
+		/* Doing a backwards scan with assumption that newly inserted tuples
+		 * are most likely at the end of the heap.
+		 */
+		bool has_tuples = false;
+		if (table_scan_getnextslot(scan, scan_dir, slot))
+		{
+			has_tuples = true;
+		}
+
+		ExecDropSingleTupleTableSlot(slot);
+		table_endscan(scan);
+
+		if (!has_tuples)
+		{
+			if (ts_chunk_clear_status(uncompressed_chunk,
+									  CHUNK_STATUS_COMPRESSED_UNORDERED |
+										  CHUNK_STATUS_COMPRESSED_PARTIAL))
+				ereport(DEBUG1,
+						(errmsg("cleared chunk status for recompression: \"%s.%s\"",
+								NameStr(uncompressed_chunk->fd.schema_name),
+								NameStr(uncompressed_chunk->fd.table_name))));
+
+			/* changed chunk status, so invalidate any plans involving this chunk */
+			CacheInvalidateRelcacheByRelid(uncompressed_chunk_id);
+		}
+	}
+	else if (has_unique_constraints)
+	{
+		/*
+		 * This can be problematic since we cannot acquire ExclusiveLock meaning its
+		 * possible there are inserts going which need to check unique constraints.
+		 * Due to the reverse direction of tuple movement, concurrent recompression
+		 * and speculative insertion could potentially cause false negatives during
+		 * constraint checking. For now, our best option here is to bail.
+		 *
+		 * This can be improved by using a spin lock to wait for the ExclusiveLock
+		 * or bail out if we can't get it in time.
+		 */
+		ereport(ERROR,
+				(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+				 errmsg("cannot proceed with recompression due to concurrent DML on uncompressed "
+						"data")));
 	}
 
 	table_close(uncompressed_chunk_rel, NoLock);
@@ -572,10 +654,9 @@ match_tuple_batch(TupleTableSlot *compressed_slot, int num_orderby, ScanKey orde
 
 static bool
 fetch_uncompressed_chunk_into_tuplesort(Tuplesortstate *tuplesortstate,
-										Relation uncompressed_chunk_rel)
+										Relation uncompressed_chunk_rel, Snapshot snapshot)
 {
 	bool matching_exist = false;
-	Snapshot snapshot = GetLatestSnapshot();
 	/* Let compression TAM know it should only return tuples from the
 	 * non-compressed relation. */
 
@@ -588,9 +669,12 @@ fetch_uncompressed_chunk_into_tuplesort(Tuplesortstate *tuplesortstate,
 		matching_exist = true;
 		slot_getallattrs(slot);
 		tuplesort_puttupleslot(tuplesortstate, slot);
-		/* simple_table_tuple_delete since we don't expect concurrent
-		 * updates, have exclusive lock on the relation */
-		simple_table_tuple_delete(uncompressed_chunk_rel, &slot->tts_tid, snapshot);
+		if (!delete_tuple_for_recompression(uncompressed_chunk_rel, &slot->tts_tid, snapshot))
+			ereport(ERROR,
+					(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+					 errmsg("cannot proceed with recompression due to concurrent updates on "
+							"uncompressed "
+							"data")));
 	}
 	ExecDropSingleTupleTableSlot(slot);
 	table_endscan(scan);
@@ -755,4 +839,28 @@ create_orderby_scankeys(CompressionSettings *settings, Relation index_rel,
 					 attnumCollationId(compressed_chunk_rel, second_attno),
 					 second_strategy);
 	}
+}
+
+/* Deleting a tuple for recompression if we can.
+ * If there is an unexpected result, we should just abort the operation completely.
+ * There are potential optimizations that can be done here in certain scenarios.
+ */
+static bool
+delete_tuple_for_recompression(Relation rel, ItemPointer tid, Snapshot snapshot)
+{
+	TM_Result result;
+	TM_FailureData tmfd;
+
+	result =
+		table_tuple_delete(rel,
+						   tid,
+						   GetCurrentCommandId(true),
+						   snapshot,
+						   InvalidSnapshot,
+						   true /* for now, just wait for commit/abort, that might let us proceed */
+						   ,
+						   &tmfd,
+						   true /* changingPart */);
+
+	return result == TM_Ok;
 }

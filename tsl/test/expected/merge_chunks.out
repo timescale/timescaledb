@@ -37,7 +37,8 @@ from pg_class cl
 join pg_am am on (cl.relam = am.oid)
 join show_chunks('mergeme') ch on (cl.oid = ch)
 join pg_constraint con on (con.conrelid = ch)
-where con.contype = 'c';
+where con.contype = 'c'
+order by 1,2,3 desc;
 --
 -- Insert data to create two chunks with same time ranges like this:
 -- _______
