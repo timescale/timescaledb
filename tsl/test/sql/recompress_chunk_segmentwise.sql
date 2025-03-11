@@ -307,6 +307,25 @@ INSERT INTO noseg VALUES ('2025-01-24 10:54:27.323421-07'::timestamptz, 1, 1, 2)
 -- should recompress chunk using the default index
 SELECT compress_chunk(:'chunk_to_compress');
 
+-- Test behaviour when default order by is empty: should not segmentwise-recompress in this case
+CREATE TABLE no_oby(ts int, c1 int);
+SELECT create_hypertable('no_oby','ts');
+\set VERBOSITY default
+ALTER TABLE no_oby SET (timescaledb.compress, timescaledb.compress_segmentby = 'ts');
+\set VERBOSITY terse
+
+INSERT INTO no_oby (ts,c1) VALUES (6,6);
+SELECT show_chunks as chunk_to_compress FROM show_chunks('no_oby') LIMIT 1 \gset
+SELECT compress_chunk(:'chunk_to_compress');
+
+INSERT INTO no_oby (ts,c1) VALUES (7,7);
+-- Direct segmentwise-recompress request: throw an error
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress');
+\set ON_ERROR_STOP 1
+-- Compress wrapper: do full recompress instead of by segment
+SELECT compress_chunk(:'chunk_to_compress');
+
 RESET timescaledb.debug_compression_path_info;
 
 --- Test behaviour when enable_segmentwise_recompression GUC if OFF

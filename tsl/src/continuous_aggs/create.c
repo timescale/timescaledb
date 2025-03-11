@@ -940,12 +940,8 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 		refresh_window.start = cagg_get_time_min(cagg);
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
 
-		continuous_agg_refresh_internal(cagg,
-										&refresh_window,
-										CAGG_REFRESH_CREATION,
-										true,
-										true,
-										false);
+		CaggRefreshContext context = { .callctx = CAGG_REFRESH_CREATION };
+		continuous_agg_refresh_internal(cagg, &refresh_window, context, true, true, false);
 	}
 
 	return DDL_DONE;

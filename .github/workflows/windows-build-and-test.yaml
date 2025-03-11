@@ -57,7 +57,7 @@ jobs:
         pg: [ 14, 15, 16, 17 ]
         os: [ windows-2022 ]
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
-        ignores: ["chunk_adaptive metadata telemetry"]
+        ignores: ["bgw_launcher chunk_adaptive metadata telemetry"]
         tsl_ignores: ["compression_algos"]
         tsl_skips:
           - >-

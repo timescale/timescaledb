@@ -131,7 +131,8 @@ tsl_ddl_command_start(ProcessUtilityArgs *args)
 					case AT_SetAccessMethod:
 					{
 						Oid relid = AlterTableLookupRelation(stmt, NoLock);
-						bool to_hypercore = (strcmp(cmd->name, TS_HYPERCORE_TAM_NAME) == 0);
+						bool to_hypercore =
+							(cmd->name && strcmp(cmd->name, TS_HYPERCORE_TAM_NAME) == 0);
 						Relation rel = RelationIdGetRelation(relid);
 						bool is_hypercore = rel->rd_tableam == hypercore_routine();
 						RelationClose(rel);
@@ -278,7 +279,8 @@ tsl_ddl_command_end(EventTriggerData *command)
 					case AT_SetAccessMethod:
 					{
 						Oid relid = AlterTableLookupRelation(stmt, NoLock);
-						bool to_hypercore = (strcmp(cmd->name, TS_HYPERCORE_TAM_NAME) == 0);
+						bool to_hypercore =
+							(cmd->name && strcmp(cmd->name, TS_HYPERCORE_TAM_NAME) == 0);
 						hypercore_alter_access_method_finish(relid, !to_hypercore);
 						break;
 					}

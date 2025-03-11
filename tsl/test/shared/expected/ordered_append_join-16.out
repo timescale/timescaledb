@@ -18,6 +18,7 @@ SELECT format('\! diff -u --label "Uncompressed results" --label "Compressed res
 \set PREFIX_VERBOSE 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
 set work_mem to '64MB';
 set max_parallel_workers_per_gather to 0;
+set enable_nestloop to off;
 \set TEST_TABLE 'metrics'
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Timescale License.
@@ -30,6 +31,7 @@ set max_parallel_workers_per_gather to 0;
 -- SequentialScans. Disable the optimization for the following tests to ensure we have
 -- stable query plans in all CI environments.
 SET timescaledb.enable_decompression_sorted_merge = 0;
+SET enable_nestloop TO on;
 -- test LATERAL with ordered append in the outer query
 :PREFIX
 SELECT time,
@@ -80,6 +82,7 @@ QUERY PLAN
                                  ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
 (11 rows)
 
+SET enable_nestloop TO off;
 -- test plan with best index is chosen
 -- this should use device_id, time index
 :PREFIX
@@ -117,6 +120,7 @@ QUERY PLAN
          ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
 (6 rows)
 
+SET enable_nestloop TO on;
 -- test LATERAL with correlated query
 -- only last chunk should be executed
 :PREFIX
@@ -266,7 +270,6 @@ QUERY PLAN
                      Index Cond: ((device_id = 2) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
 (19 rows)
 
-RESET enable_nestloop;
 -- test JOIN
 -- last chunk of o2 should not be executed
 :PREFIX
@@ -302,7 +305,6 @@ QUERY PLAN
 -- test join against max query
 -- not ChunkAppend so no chunk exclusion
 SET enable_hashjoin = FALSE;
-SET enable_nestloop = FALSE;
 SET enable_hashagg = FALSE;
 :PREFIX
 SELECT o1.time,
@@ -341,7 +343,6 @@ QUERY PLAN
 (24 rows)
 
 RESET enable_hashjoin;
-RESET enable_nestloop;
 RESET enable_hashagg;
 SET enable_seqscan TO false;
 -- test JOIN on time column
@@ -746,6 +747,7 @@ RESET enable_seqscan;
 -- SequentialScans. Disable the optimization for the following tests to ensure we have
 -- stable query plans in all CI environments.
 SET timescaledb.enable_decompression_sorted_merge = 0;
+SET enable_nestloop TO on;
 -- test LATERAL with ordered append in the outer query
 :PREFIX
 SELECT time,
@@ -820,6 +822,7 @@ QUERY PLAN
                                        ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
 (23 rows)
 
+SET enable_nestloop TO off;
 -- test plan with best index is chosen
 -- this should use device_id, time index
 :PREFIX
@@ -869,6 +872,7 @@ QUERY PLAN
                ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
 (18 rows)
 
+SET enable_nestloop TO on;
 -- test LATERAL with correlated query
 -- only last chunk should be executed
 :PREFIX
@@ -1092,7 +1096,6 @@ QUERY PLAN
                      Index Cond: ((device_id = 2) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
 (22 rows)
 
-RESET enable_nestloop;
 -- test JOIN
 -- last chunk of o2 should not be executed
 :PREFIX
@@ -1152,7 +1155,6 @@ QUERY PLAN
 -- test join against max query
 -- not ChunkAppend so no chunk exclusion
 SET enable_hashjoin = FALSE;
-SET enable_nestloop = FALSE;
 SET enable_hashagg = FALSE;
 :PREFIX
 SELECT o1.time,
@@ -1209,7 +1211,6 @@ QUERY PLAN
 (42 rows)
 
 RESET enable_hashjoin;
-RESET enable_nestloop;
 RESET enable_hashagg;
 SET enable_seqscan TO false;
 -- test JOIN on time column
@@ -1638,6 +1639,7 @@ RESET enable_seqscan;
 -- SequentialScans. Disable the optimization for the following tests to ensure we have
 -- stable query plans in all CI environments.
 SET timescaledb.enable_decompression_sorted_merge = 0;
+SET enable_nestloop TO on;
 -- test LATERAL with ordered append in the outer query
 :PREFIX
 SELECT time,
@@ -1708,6 +1710,7 @@ QUERY PLAN
                                              ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
 (21 rows)
 
+SET enable_nestloop TO off;
 -- test plan with best index is chosen
 -- this should use device_id, time index
 :PREFIX
@@ -1758,6 +1761,7 @@ QUERY PLAN
                      ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
 (16 rows)
 
+SET enable_nestloop TO on;
 -- test LATERAL with correlated query
 -- only last chunk should be executed
 :PREFIX
@@ -1967,7 +1971,6 @@ QUERY PLAN
                            Index Cond: ((device_id = 2) AND (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
 (31 rows)
 
-RESET enable_nestloop;
 -- test JOIN
 -- last chunk of o2 should not be executed
 :PREFIX
@@ -2022,7 +2025,6 @@ QUERY PLAN
 -- test join against max query
 -- not ChunkAppend so no chunk exclusion
 SET enable_hashjoin = FALSE;
-SET enable_nestloop = FALSE;
 SET enable_hashagg = FALSE;
 :PREFIX
 SELECT o1.time,
@@ -2074,7 +2076,6 @@ QUERY PLAN
 (37 rows)
 
 RESET enable_hashjoin;
-RESET enable_nestloop;
 RESET enable_hashagg;
 SET enable_seqscan TO false;
 -- test JOIN on time column
@@ -2549,6 +2550,7 @@ RESET enable_seqscan;
 -- SequentialScans. Disable the optimization for the following tests to ensure we have
 -- stable query plans in all CI environments.
 SET timescaledb.enable_decompression_sorted_merge = 0;
+SET enable_nestloop TO on;
 -- test LATERAL with ordered append in the outer query
 :PREFIX
 SELECT time,
@@ -2683,6 +2685,7 @@ QUERY PLAN
                                                    ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
 (53 rows)
 
+SET enable_nestloop TO off;
 -- test plan with best index is chosen
 -- this should use device_id, time index
 :PREFIX
@@ -2765,6 +2768,7 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
 (48 rows)
 
+SET enable_nestloop TO on;
 -- test LATERAL with correlated query
 -- only last chunk should be executed
 :PREFIX
@@ -3237,7 +3241,6 @@ QUERY PLAN
                            Index Cond: ((device_id = 2) AND (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
 (31 rows)
 
-RESET enable_nestloop;
 -- test JOIN
 -- last chunk of o2 should not be executed
 :PREFIX
@@ -3354,7 +3357,6 @@ QUERY PLAN
 -- test join against max query
 -- not ChunkAppend so no chunk exclusion
 SET enable_hashjoin = FALSE;
-SET enable_nestloop = FALSE;
 SET enable_hashagg = FALSE;
 :PREFIX
 SELECT o1.time,
@@ -3444,7 +3446,6 @@ QUERY PLAN
 (75 rows)
 
 RESET enable_hashjoin;
-RESET enable_nestloop;
 RESET enable_hashagg;
 SET enable_seqscan TO false;
 -- test JOIN on time column

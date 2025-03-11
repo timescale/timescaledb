@@ -1413,6 +1413,7 @@ process_drop_table_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 		.objectId = chunk_relid,
 	};
 
+	ts_compression_settings_delete(chunk_relid);
 	performDeletion(&objaddr, stmt->behavior, 0);
 }
 
@@ -3834,7 +3835,7 @@ process_set_access_method(AlterTableCmd *cmd, ProcessUtilityArgs *args)
 	Oid relid = AlterTableLookupRelation(stmt, NoLock);
 	Cache *hcache;
 	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
-	if (ht && (strcmp(cmd->name, TS_HYPERCORE_TAM_NAME) == 0))
+	if (ht && cmd->name && (strcmp(cmd->name, TS_HYPERCORE_TAM_NAME) == 0))
 	{
 		/* For hypertables, we automatically add command to set the
 		 * compression flag if we are setting the access method to be a

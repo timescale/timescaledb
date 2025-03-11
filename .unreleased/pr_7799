@@ -1,0 +1,2 @@
+Fixes: #7799 Handle DEFAULT table access name in ALTER TABLE
+Thanks: @kav23alex for reporting a segmentation fault on ALTER TABLE with DEFAULT
