@@ -25,3 +25,4 @@ extra_float_digits=0
 @TELEMETRY_DEFAULT_SETTING@
 
 timescaledb.license='apache'
+timescaledb.enable_compression_ratio_warnings=false

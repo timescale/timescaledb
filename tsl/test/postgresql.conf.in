@@ -35,3 +35,4 @@ log_statement='all'
 # It is necessary to have at least 2 more workers than `max_worker_processes`
 # in order to test failures starting bgworkers.
 timescaledb.max_background_workers=26
+timescaledb.enable_compression_ratio_warnings=false
