@@ -1,0 +1,1 @@
+Fixes: #7714 Fixes a wrong result when compressed NULL values were confused with default values. This happened in very special circumstances with alter table added a new column with a default value, an update and compression in a very particular order.
