@@ -62,8 +62,8 @@ vacuum freeze analyze agggroup;
 
 
 set timescaledb.debug_require_vector_agg = 'require';
----- Uncomment to generate reference. Note that there are minor discrepancies
----- on float4 due to different numeric stability in our and PG implementations.
+-- Uncomment to generate reference. Note that there are minor discrepancies
+-- on float4 due to different numeric stability in our and PG implementations.
 --set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
 
 select
@@ -128,7 +128,7 @@ alter table long set (timescaledb.compress, timescaledb.compress_segmentby = 'a'
 select count(compress_chunk(x)) from show_chunks('long') x;
 
 set timescaledb.debug_require_vector_agg = 'require';
----- Uncomment to generate reference.
+-- Uncomment to generate reference.
 --set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
 
 -- Various placements of long scalar column
@@ -156,7 +156,7 @@ alter table keylength set (timescaledb.compress, timescaledb.compress_segmentby 
 select count(compress_chunk(x)) from show_chunks('keylength') x;
 
 set timescaledb.debug_require_vector_agg = 'require';
----- Uncomment to generate reference.
+-- Uncomment to generate reference.
 --set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
 
 select sum(t) from keylength group by a, b order by 1 desc limit 10;
@@ -175,6 +175,9 @@ alter table groupnull set (timescaledb.compress, timescaledb.compress_segmentby 
 select count(compress_chunk(x)) from show_chunks('groupnull') x;
 
 set timescaledb.debug_require_vector_agg = 'require';
+-- Uncomment to generate reference.
+--set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
+
 select sum(t), a, b from groupnull group by a, b order by 1;
 select sum(t), a, b from groupnull group by b, a order by 1;
 reset timescaledb.debug_require_vector_agg;
