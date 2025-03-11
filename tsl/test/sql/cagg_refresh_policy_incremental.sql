@@ -309,8 +309,8 @@ SELECT
     t, d, 10
 FROM
     generate_series(
-        NOW() - INTERVAL '30 days',
-        NOW(),
+        '2025-03-11 00:00:00+00'::timestamptz - INTERVAL '30 days',
+        '2025-03-11 00:00:00+00'::timestamptz,
         '1 hour'::interval) AS t,
     generate_series(1,5) AS d;
 
