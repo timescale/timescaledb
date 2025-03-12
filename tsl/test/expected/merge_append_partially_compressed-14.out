@@ -1481,5 +1481,51 @@ SELECT * FROM test3 ORDER BY x1, x2, x5, time LIMIT 10;
 (10 rows)
 
 reset enable_indexscan;
+-- test ordering on single chunk queries
+CREATE TABLE test4(time timestamptz not null, device text, value float);
+SELECT table_name FROM create_hypertable('test4','time',chunk_time_interval:='1 year'::interval);
+ table_name 
+------------
+ test4
+(1 row)
+
+ALTER TABLE test4 SET (tsdb.compress, tsdb.compress_segmentby='device', tsdb.compress_orderby='time');
+INSERT INTO test4 SELECT '2025-01-01', NULL, 0.1;
+INSERT INTO test4 SELECT '2025-01-02', NULL, 0.1;
+INSERT INTO test4 SELECT '2025-01-02', 'd', 0.1;
+SELECT count(compress_chunk(ch)) FROM show_chunks('test4') ch;
+ count 
+-------
+     1
+(1 row)
+
+INSERT INTO test4 SELECT '2025-01-02', 'd', 0.1;
+set enable_hashagg TO false;
+SELECT time, device FROM _timescaledb_internal._hyper_9_21_chunk GROUP BY time, device;
+             time             | device 
+------------------------------+--------
+ Wed Jan 01 00:00:00 2025 PST | 
+ Thu Jan 02 00:00:00 2025 PST | d
+ Thu Jan 02 00:00:00 2025 PST | 
+(3 rows)
+
+EXPLAIN (costs off, analyze, timing off, summary off) SELECT time, device FROM _timescaledb_internal._hyper_9_21_chunk GROUP BY time, device;
+                                          QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
+ Group (actual rows=3 loops=1)
+   Group Key: _hyper_9_21_chunk."time", _hyper_9_21_chunk.device
+   ->  Merge Append (actual rows=4 loops=1)
+         Sort Key: _hyper_9_21_chunk."time", _hyper_9_21_chunk.device
+         ->  Sort (actual rows=3 loops=1)
+               Sort Key: _hyper_9_21_chunk."time", _hyper_9_21_chunk.device
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_9_21_chunk (actual rows=3 loops=1)
+                     ->  Seq Scan on compress_hyper_10_22_chunk (actual rows=2 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_9_21_chunk."time", _hyper_9_21_chunk.device
+               Sort Method: quicksort 
+               ->  Seq Scan on _hyper_9_21_chunk (actual rows=1 loops=1)
+(13 rows)
+
 reset timescaledb.enable_decompression_sorted_merge;
 reset max_parallel_workers_per_gather;
