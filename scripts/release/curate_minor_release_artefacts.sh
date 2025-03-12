@@ -40,6 +40,6 @@ rm -vf pr_* fix_*
 # Set only next minor release version in version.config 
 # and create this as a separate PR on `main`
 echo "Set next minor release version.config"
-sed -i.bak "s/${{ env.CURRENT_VERSION }}/${{ env.NEXT_VERSION }}/g" version.config
+sed -i.bak "s/${CURRENT_VERSION}/${NEXT_VERSION}/g" version.config
 rm version.config.bak
 head -n1 version.config
