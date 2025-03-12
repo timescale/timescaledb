@@ -18,7 +18,7 @@ HISTORY_DEPTH = 1000
 def run_query(query):
     """A simple function to use requests.post to make the GraphQL API call."""
 
-    token = os.environ.get("GITHUB_TOKEN")
+    token = os.environ.get("ORG_AUTOMATION_TOKEN")
 
     request = requests.post(
         "https://api.github.com/graphql",
@@ -137,7 +137,7 @@ def git_returncode(command):
 
 
 # The token has to have the "access public repositories" permission, or else creating a PR returns 404.
-github = Github(os.environ.get("GITHUB_TOKEN"))
+github = Github(os.environ.get("ORG_AUTOMATION_TOKEN"))
 
 source_remote = "origin"
 source_repo_name = os.environ.get("GITHUB_REPOSITORY")  # This is set in GitHub Actions.
@@ -413,7 +413,7 @@ print(
 target_remote = "backport-target-remote"
 git_returncode(f"remote remove {target_remote}")
 git_check(
-    f'remote add {target_remote} https://{os.environ["GITHUB_TOKEN"]}@github.com/{source_repo.owner.login}/{source_repo.name}.git'
+    f'remote add {target_remote} https://{os.environ["ORG_AUTOMATION_TOKEN"]}@github.com/{source_repo.owner.login}/{source_repo.name}.git'
 )
 
 # Fetch all branches from the target repository, because we use the presence

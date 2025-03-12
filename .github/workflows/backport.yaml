@@ -38,7 +38,7 @@ jobs:
 
       - name: Run the Backport Script
         env:
-          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          ORG_AUTOMATION_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           git remote --verbose
 
