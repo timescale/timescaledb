@@ -1,1 +1,0 @@
-Fixes: #7816 Fix ORDER BY for direct queries on partial chunks
