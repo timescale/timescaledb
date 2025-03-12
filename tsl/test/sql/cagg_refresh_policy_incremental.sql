@@ -13,7 +13,8 @@ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
-SET timezone = 'America/Sao_Paulo';
+SET timezone TO 'UTC';
+SET timescaledb.current_timestamp_mock TO '2025-03-11 00:00:00+00';
 
 CREATE TABLE public.bgw_log(
     msg_no INT,
@@ -301,7 +302,6 @@ SELECT
         schedule_interval => INTERVAL '1 h'
     ) AS job_id \gset
 
-
 TRUNCATE bgw_log, conditions_by_day, conditions_by_day_manual_refresh, conditions;
 
 INSERT INTO conditions
@@ -314,7 +314,6 @@ FROM
         '1 hour'::interval) AS t,
     generate_series(1,5) AS d;
 
-SET timescaledb.current_timestamp_mock TO '2025-03-11 00:00:00+00';
 SELECT ts_bgw_params_reset_time(0, true);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
