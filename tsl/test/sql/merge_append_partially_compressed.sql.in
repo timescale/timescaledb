@@ -264,6 +264,21 @@ SELECT * FROM test3 ORDER BY x1, x2, x5, time LIMIT 10;
 
 reset enable_indexscan;
 
+-- test ordering on single chunk queries
+CREATE TABLE test4(time timestamptz not null, device text, value float);
+SELECT table_name FROM create_hypertable('test4','time',chunk_time_interval:='1 year'::interval);
+
+ALTER TABLE test4 SET (tsdb.compress, tsdb.compress_segmentby='device', tsdb.compress_orderby='time');
+
+INSERT INTO test4 SELECT '2025-01-01', NULL, 0.1;
+INSERT INTO test4 SELECT '2025-01-02', NULL, 0.1;
+INSERT INTO test4 SELECT '2025-01-02', 'd', 0.1;
+SELECT count(compress_chunk(ch)) FROM show_chunks('test4') ch;
+INSERT INTO test4 SELECT '2025-01-02', 'd', 0.1;
+
+set enable_hashagg TO false;
+SELECT time, device FROM _timescaledb_internal._hyper_9_21_chunk GROUP BY time, device;
+EXPLAIN (costs off, analyze, timing off, summary off) SELECT time, device FROM _timescaledb_internal._hyper_9_21_chunk GROUP BY time, device;
 
 reset timescaledb.enable_decompression_sorted_merge;
 reset max_parallel_workers_per_gather;
