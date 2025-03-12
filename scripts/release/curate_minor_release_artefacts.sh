@@ -16,11 +16,11 @@ LAST_DOWNGRADE_FILE=$(ls sql/updates/${CURRENT_VERSION}--*.sql | head -1 | cut -
 
 # prepare next up & down files
 echo "Generate upgrade and downgrade files"
-cp latest-dev.sql $UPDATE_FILE
-cp reverse-dev.sql $DOWNGRADE_FILE
+cp ./sql/updates/latest-dev.sql ./sql/updates/$UPDATE_FILE
+cp ./sql/updates/reverse-dev.sql ./sql/updates/$DOWNGRADE_FILE
 
-truncate -s 0 latest-dev.sql
-truncate -s 0 reverse-dev.sql
+truncate -s 0 ./sql/updates/latest-dev.sql
+truncate -s 0 ./sql/updates/reverse-dev.sql
 
 # CMakeLists
 echo "Adding update & downgrade sql file to CMakeLists.txt"
@@ -35,7 +35,7 @@ sed -i.bak "s/FILE reverse-dev.sql)/FILE ${DOWNGRADE_FILE})/g" ./sql/CMakeLists.
 # Remove the CHANGELOG generating
 # Fresh start for next version
 echo "Deleting all unreleased pr_* , fix_*"
-rm -vf pr_* fix_*
+rm -vf .unreleased/pr_* .unreleased/fix_*
 
 # Set only next minor release version in version.config 
 # and create this as a separate PR on `main`
