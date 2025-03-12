@@ -406,6 +406,11 @@ print(
     f"Will commit as {os.environ['GIT_COMMITTER_NAME']} <{os.environ['GIT_COMMITTER_EMAIL']}>"
 )
 
+# Fetch all branches from the repository, because we use the presence
+# of the backport branches to determine that a backport exists. It's not convenient
+# to query for branch existence through the PyGithub API.
+git_check(f"fetch {source_remote}")
+
 # Now, go over the list of PRs that we have collected, and try to backport
 # each of them.
 print(f"Have {len(prs_to_backport)} PRs to backport.")
