@@ -59,7 +59,7 @@ jobs:
 
       - name: Curate minor release artefacts
         run: |
-          ./scripts/release/curate_minor_release_artefacts.sh
+          ./scripts/release/curate_minor_release_artefacts.sh ${{ env.CURRENT_VERSION }} ${{ env.NEXT_VERSION }}
 
       - name: Create Pull Request for next version changes
         id: cpr_next_version_changes
