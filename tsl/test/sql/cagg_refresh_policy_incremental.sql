@@ -13,7 +13,8 @@ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
-SET timezone = 'America/Sao_Paulo';
+SET timezone TO 'UTC';
+SET timescaledb.current_timestamp_mock TO '2025-03-11 00:00:00+00';
 
 CREATE TABLE public.bgw_log(
     msg_no INT,
@@ -300,7 +301,6 @@ SELECT
         end_offset => NULL,
         schedule_interval => INTERVAL '1 h'
     ) AS job_id \gset
-
 
 TRUNCATE bgw_log, conditions_by_day, conditions_by_day_manual_refresh, conditions;
 
