@@ -53,6 +53,7 @@ typedef enum ContinuousAggViewOption
 	ContinuousViewOptionMaterializedOnly,
 	ContinuousViewOptionCompress,
 	ContinuousViewOptionFinalized,
+	ContinuousViewOptionChunkTimeInterval,
 	ContinuousViewOptionCompressSegmentBy,
 	ContinuousViewOptionCompressOrderBy,
 	ContinuousViewOptionCompressChunkTimeInterval,

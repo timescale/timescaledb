@@ -71,6 +71,10 @@ static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
 			.type_id = BOOLOID,
 			.default_val = (Datum)true,
 		},
+		[ContinuousViewOptionChunkTimeInterval] = {
+			.arg_names = {"chunk_time_interval", NULL},
+			 .type_id = INTERVALOID,
+		},
 		[ContinuousViewOptionCompressSegmentBy] = {
 			.arg_names = {"segmentby", "compress_segmentby", NULL},
 			.type_id = TEXTOID,
