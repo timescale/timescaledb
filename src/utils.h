@@ -36,6 +36,13 @@
 #define TS_DEBUG_LOG(FMT, ...)
 #endif
 
+static inline int64
+interval_to_usec(Interval *interval)
+{
+	return (interval->month * DAYS_PER_MONTH * USECS_PER_DAY) + (interval->day * USECS_PER_DAY) +
+		   interval->time;
+}
+
 #ifdef TS_DEBUG
 
 static inline const char *

@@ -2129,3 +2129,34 @@ SELECT time_bucket(INTERVAL '1 day', time) FROM conditions GROUP BY 1 WITH NO DA
 ALTER MATERIALIZED VIEW cagg_alias SET (timescaledb.materialized_only=false);
 ALTER MATERIALIZED VIEW cagg_alias SET (tsdb.materialized_only=false);
 DROP MATERIALIZED VIEW cagg_alias;
+-- test SET chunk_time_interval
+CREATE MATERIALIZED VIEW cagg_set
+WITH (tsdb.continuous, tsdb.chunk_time_interval='1day') AS
+SELECT time_bucket(INTERVAL '1 day', time) AS cagg_interval_setter FROM conditions GROUP BY 1 WITH NO DATA;
+SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE column_name='cagg_interval_setter';
+     column_name      | time_interval 
+----------------------+---------------
+ cagg_interval_setter | @ 1 day
+(1 row)
+
+ALTER MATERIALIZED VIEW cagg_set SET (tsdb.chunk_time_interval='23 day');
+SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE column_name='cagg_interval_setter';
+     column_name      | time_interval 
+----------------------+---------------
+ cagg_interval_setter | @ 23 days
+(1 row)
+
+ALTER MATERIALIZED VIEW cagg_set SET (tsdb.chunk_time_interval='6 month');
+SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE column_name='cagg_interval_setter';
+     column_name      | time_interval 
+----------------------+---------------
+ cagg_interval_setter | @ 180 days
+(1 row)
+
+ALTER MATERIALIZED VIEW cagg_set SET (tsdb.chunk_time_interval='1 year');
+SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE column_name='cagg_interval_setter';
+     column_name      | time_interval 
+----------------------+---------------
+ cagg_interval_setter | @ 360 days
+(1 row)
+
