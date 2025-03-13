@@ -13,7 +13,8 @@ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
-SET timezone = 'America/Sao_Paulo';
+SET timezone TO 'UTC';
+SET timescaledb.current_timestamp_mock TO '2025-03-11 00:00:00+00';
 
 CREATE TABLE public.bgw_log(
     msg_no INT,
@@ -54,8 +55,8 @@ SELECT
     t, d, 10
 FROM
     generate_series(
-        '2025-02-05 00:00:00-03',
-        '2025-03-05 00:00:00-03',
+        '2025-02-05 00:00:00+00',
+        '2025-03-05 00:00:00+00',
         '1 hour'::interval) AS t,
     generate_series(1,5) AS d;
 
@@ -182,8 +183,8 @@ SELECT
     t, d, 10
 FROM
     generate_series(
-        '2020-02-05 00:00:00-03',
-        '2020-03-05 00:00:00-03',
+        '2020-02-05 00:00:00+00',
+        '2020-03-05 00:00:00+00',
         '1 hour'::interval) AS t,
     generate_series(1,5) AS d;
 
@@ -249,8 +250,8 @@ SELECT
     t, d, 10
 FROM
     generate_series(
-        '2020-02-05 00:00:00-03',
-        '2020-02-06 00:00:00-03',
+        '2020-02-05 00:00:00+00',
+        '2020-02-06 00:00:00+00',
         '1 hour'::interval) AS t,
     generate_series(1,5) AS d;
 
@@ -270,7 +271,7 @@ TRUNCATE conditions_by_day, conditions, bgw_log;
 
 -- Less than 1 day of data (smaller than the bucket width)
 INSERT INTO conditions
-VALUES ('2020-02-05 00:00:00-03', 1, 10);
+VALUES ('2020-02-05 00:00:00+00', 1, 10);
 
 -- advance time by 6h so that job runs one more time
 SELECT ts_bgw_params_reset_time(extract(epoch from interval '6 hour')::bigint * 1000000, true);
@@ -300,7 +301,6 @@ SELECT
         end_offset => NULL,
         schedule_interval => INTERVAL '1 h'
     ) AS job_id \gset
-
 
 TRUNCATE bgw_log, conditions_by_day, conditions_by_day_manual_refresh, conditions;
 
