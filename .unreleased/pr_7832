@@ -1,0 +1,1 @@
+Implements: #7832 Allow setting chunk_time_interval for continuous aggregates during creation
