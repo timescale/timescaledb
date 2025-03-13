@@ -4,6 +4,37 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.19.0 (2025-03-18)
+
+This release contains performance improvements and bug fixes since  the 2.18.2 release. We recommend that you upgrade at the next  available opportunity.
+
+**Features**
+* [#7586](https://github.com/timescale/timescaledb/pull/7586) Vectorized aggregation with grouping by a single text column.
+* [#7632](https://github.com/timescale/timescaledb/pull/7632) Optimize recompression for chunks without segmentby
+* [#7655](https://github.com/timescale/timescaledb/pull/7655) Support vectorized aggregation on Hypercore TAM
+* [#7669](https://github.com/timescale/timescaledb/pull/7669) Add support for merging compressed chunks
+* [#7701](https://github.com/timescale/timescaledb/pull/7701) Implement a custom compression algorithm for bool columns. It is experimental and can undergo backwards-incompatible changes. For testing, enable it using timescaledb.enable_bool_compression = on.
+* [#7707](https://github.com/timescale/timescaledb/pull/7707) Support ALTER COLUMN SET NOT NULL on compressed chunks
+* [#7765](https://github.com/timescale/timescaledb/pull/7765) Allow tsdb as alias for timescaledb in WITH and SET clauses
+* [#7786](https://github.com/timescale/timescaledb/pull/7786) Show warning for inefficient compress_chunk_time_interval configuration
+* [#7788](https://github.com/timescale/timescaledb/pull/7788) Add callback to mem_guard for background workers
+* [#7789](https://github.com/timescale/timescaledb/pull/7789) Do not recompress segmentwise when default order by is empty
+* [#7790](https://github.com/timescale/timescaledb/pull/7790) Add configurable Incremental CAgg Refresh Policy
+
+**Bugfixes**
+* [#7665](https://github.com/timescale/timescaledb/pull/7665) Block merging of frozen chunks
+* [#7673](https://github.com/timescale/timescaledb/pull/7673) Don't abort additional INSERTs when hitting first conflict
+* [#7714](https://github.com/timescale/timescaledb/pull/7714) Fixes a wrong result when compressed NULL values were confused with default values. This happened in very special circumstances with alter table added a new column with a default value, an update and compression in a very particular order.
+* [#7747](https://github.com/timescale/timescaledb/pull/7747) Block TAM rewrites with incompatible GUC setting
+* [#7748](https://github.com/timescale/timescaledb/pull/7748) Crash in the segmentwise recompression
+* [#7764](https://github.com/timescale/timescaledb/pull/7764) Fix compression settings handling in Hypercore TAM
+* [#7768](https://github.com/timescale/timescaledb/pull/7768) Remove costing index scan of hypertable parent
+* [#7799](https://github.com/timescale/timescaledb/pull/7799) Handle DEFAULT table access name in ALTER TABLE
+
+**Thanks**
+* @bjornuppeke for reporting a problem with INSERT INTO ... ON CONFLICT DO NOTHING on compressed chunks
+* @kav23alex for reporting a segmentation fault on ALTER TABLE with DEFAULT
+
 ## 2.18.2 (2025-02-19)
 
 This release contains performance improvements and bug fixes since
