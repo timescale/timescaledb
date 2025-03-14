@@ -8,13 +8,18 @@ CREATE OR REPLACE FUNCTION ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_f
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION ts_bgw_params_create() RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
+CREATE OR REPLACE FUNCTION ts_bgw_params_destroy() RETURNS VOID
+AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION ts_bgw_params_reset_time(set_time BIGINT = 0, wait BOOLEAN = false) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+-- Create a user with specific timezone and mock time
+CREATE ROLE test_cagg_refresh_policy_user WITH LOGIN;
+ALTER ROLE test_cagg_refresh_policy_user SET timezone TO 'UTC';
+ALTER ROLE test_cagg_refresh_policy_user SET timescaledb.current_timestamp_mock TO '2025-03-11 00:00:00+00';
+GRANT ALL ON SCHEMA public TO test_cagg_refresh_policy_user;
 
-SET timezone TO 'UTC';
-SET timescaledb.current_timestamp_mock TO '2025-03-11 00:00:00+00';
+\c :TEST_DBNAME test_cagg_refresh_policy_user
 
 CREATE TABLE public.bgw_log(
     msg_no INT,
@@ -330,3 +335,8 @@ FROM
     ((SELECT * FROM conditions_by_day_manual_refresh ORDER BY 1, 2)
     EXCEPT
     (SELECT * FROM conditions_by_day ORDER BY 1, 2)) AS diff;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+REASSIGN OWNED BY test_cagg_refresh_policy_user TO :ROLE_CLUSTER_SUPERUSER;
+REVOKE ALL ON SCHEMA public FROM test_cagg_refresh_policy_user;
+DROP ROLE test_cagg_refresh_policy_user;
