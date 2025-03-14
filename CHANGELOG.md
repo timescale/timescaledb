@@ -7,7 +7,10 @@ accidentally triggering the load of a previous DB version.**
 ## 2.19.0 (2025-03-18)
 
 This release contains performance improvements and bug fixes since  the 2.18.2 release. We recommend that you upgrade at the next  available opportunity.
-
+**Highlights of the v2.19.0 release**
+* The Hypercore columnstore no longer blocks DML statements during recompression, allowing INSERT, UPDATE, and DELETE operations on compressed chunks significantly improves concurrency.
+* Improvements to Continuous Aggregation now materialize the most recent data first, to enhance query experience. Additionally, the refresh policy now supports batching, which helps reduce system pressure and minimize the risk of spilling to disk, leading to better overall performance.
+* We are further investing in vectorization (SIMD) to enhance Hypercore’s performance, improving analytical queries such as aggregations over text columns and those with an arbitrary number of columns to aggregate on.
 **Features**
 * [#7586](https://github.com/timescale/timescaledb/pull/7586) Vectorized aggregation with grouping by a single text column.
 * [#7632](https://github.com/timescale/timescaledb/pull/7632) Optimize recompression for chunks without segmentby
