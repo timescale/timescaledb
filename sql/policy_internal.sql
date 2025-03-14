@@ -100,7 +100,8 @@ BEGIN
       AND (
         ch.status = 0 OR
         (
-          ch.status & bit_compressed > 0 AND (
+          ch.status & bit_compressed > 0 AND
+          ch.status & bit_frozen = 0 AND (
             ch.status & bit_compressed_unordered > 0 OR
             ch.status & bit_compressed_partial > 0
           )
@@ -122,7 +123,8 @@ BEGIN
       END;
     ELSIF
       (
-        chunk_rec.status & bit_compressed > 0 AND (
+        chunk_rec.status & bit_compressed > 0 AND
+        chunk_rec.status & bit_frozen = 0 AND (
           chunk_rec.status & bit_compressed_unordered > 0 OR
           chunk_rec.status & bit_compressed_partial > 0
         )
