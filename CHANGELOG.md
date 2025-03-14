@@ -41,6 +41,7 @@ This is the last minor release supporting PostgreSQL 14. Starting with the minor
 
 **GUCs**
 * TBD
+
 **Thanks**
 * @bjornuppeke for reporting a problem with INSERT INTO ... ON CONFLICT DO NOTHING on compressed chunks
 * @kav23alex for reporting a segmentation fault on ALTER TABLE with DEFAULT
