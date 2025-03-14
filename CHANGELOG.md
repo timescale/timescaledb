@@ -33,7 +33,8 @@ This release contains performance improvements and bug fixes since  the 2.18.2 r
 * [#7764](https://github.com/timescale/timescaledb/pull/7764) Fix compression settings handling in Hypercore TAM
 * [#7768](https://github.com/timescale/timescaledb/pull/7768) Remove costing index scan of hypertable parent
 * [#7799](https://github.com/timescale/timescaledb/pull/7799) Handle DEFAULT table access name in ALTER TABLE
-
+**GUCs**
+* TBD
 **Thanks**
 * @bjornuppeke for reporting a problem with INSERT INTO ... ON CONFLICT DO NOTHING on compressed chunks
 * @kav23alex for reporting a segmentation fault on ALTER TABLE with DEFAULT
