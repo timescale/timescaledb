@@ -52,6 +52,7 @@ jobs:
       CLANG: ${{ matrix.clang }}
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
+      FAKETIME: ${{ (runner.os == 'Linux') && 'faketime -f +379d' || '' }}
     strategy:
       matrix: ${{ fromJson(needs.matrixbuilder.outputs.matrix) }}
       fail-fast: false
@@ -187,7 +188,7 @@ jobs:
       id: installcheck
       run: |
         set -o pipefail
-        faketime -f +379d make -k -C build installcheck IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \
+        ${FAKETIME} make -k -C build installcheck IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \
             SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }} \
             | tee installcheck.log
 
