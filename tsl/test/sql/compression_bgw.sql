@@ -216,6 +216,69 @@ WHERE hypertable_name = 'conditions' and is_compressed = true;
 
 \i include/recompress_basic.sql
 
+--TEST 7
+--compression policy should ignore frozen partially compressed chunks
+CREATE TABLE test_table_frozen(time TIMESTAMPTZ, val SMALLINT);
+SELECT create_hypertable('test_table_frozen', 'time', chunk_time_interval => '1 day'::interval);
+
+INSERT INTO test_table_frozen SELECT time, (random()*10)::smallint
+FROM generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '10 min') AS time;
+
+ALTER TABLE test_table_frozen SET (timescaledb.compress);
+select add_compression_policy( 'test_table_frozen', compress_after=> '1 day'::interval ) as compressjob_id \gset
+SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+SELECT show_chunks('test_table_frozen') as first_chunk LIMIT 1 \gset
+
+--will compress all chunks that need compression
+CALL run_job(:compressjob_id);
+
+-- make the chunks partial
+INSERT INTO test_table_frozen SELECT time, (random()*10)::smallint
+FROM generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '10 min') AS time;
+
+SELECT c.id, c.status
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
+WHERE h.table_name = 'test_table_frozen'
+ORDER BY c.id
+LIMIT 1;
+
+-- freeze first chunk
+SELECT _timescaledb_functions.freeze_chunk(:'first_chunk');
+
+-- first chunk status is  1 (Compressed) + 8 (Partially compressed) + 4 (Frozen) = 13
+SELECT c.id, c.status
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
+WHERE h.table_name = 'test_table_frozen'
+ORDER BY c.id
+LIMIT 1;
+
+--should recompress all chunks except first since its frozen
+CALL run_job(:compressjob_id);
+
+-- first chunk status is unchanged
+SELECT c.id, c.status
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
+WHERE h.table_name = 'test_table_frozen'
+ORDER BY c.id
+LIMIT 1;
+
+-- unfreeze first chunk
+SELECT _timescaledb_functions.unfreeze_chunk(:'first_chunk');
+
+-- should be able to recompress the chunk since its unfrozen
+CALL run_job(:compressjob_id);
+
+-- first chunk status is Compressed (1)
+SELECT c.id, c.status
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
+WHERE h.table_name = 'test_table_frozen'
+ORDER BY c.id
+LIMIT 1;
+
 -- Teardown test
 \c :TEST_DBNAME :ROLE_SUPERUSER
 REVOKE CREATE ON SCHEMA public FROM NOLOGIN_ROLE;
