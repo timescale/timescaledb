@@ -8,6 +8,7 @@
 #include <access/heapam.h>
 #include <access/parallel.h>
 #include <access/xact.h>
+#include <catalog/pg_database.h>
 #include <commands/dbcommands.h>
 #include <commands/defrem.h>
 #include <commands/user.h>
@@ -390,6 +391,39 @@ stop_workers_on_db_drop(DropdbStmt *drop_db_statement)
 	}
 }
 
+static bool
+database_allowconn(const Oid db_oid)
+{
+	Relation pg_database;
+	ScanKeyData entry[1];
+	SysScanDesc scan;
+	HeapTuple dbtuple;
+	bool allowconn = false;
+
+	pg_database = table_open(DatabaseRelationId, AccessShareLock);
+	ScanKeyInit(&entry[0],
+				Anum_pg_database_oid,
+				BTEqualStrategyNumber,
+				F_OIDEQ,
+				ObjectIdGetDatum(db_oid));
+	scan = systable_beginscan(pg_database, DatabaseOidIndexId, true, NULL, 1, entry);
+
+	dbtuple = systable_getnext(scan);
+
+	/* We assume that there can be at most one matching tuple */
+	if (!HeapTupleIsValid(dbtuple))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_DATABASE),
+				 errmsg("database with OID \"%u\" does not exist", db_oid)));
+
+	allowconn = ((Form_pg_database) GETSTRUCT(dbtuple))->datallowconn;
+
+	systable_endscan(scan);
+	table_close(pg_database, AccessShareLock);
+
+	return allowconn;
+}
+
 static void
 post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 {
@@ -440,7 +474,7 @@ post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 					{
 						Oid db_oid = get_database_oid(defGetString(option), false);
 
-						if (OidIsValid(db_oid))
+						if (OidIsValid(db_oid) && database_allowconn(db_oid))
 							ts_bgw_message_send_and_wait(RESTART, db_oid);
 					}
 				}
