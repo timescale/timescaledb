@@ -1,4 +1,16 @@
 #!/bin/bash
+
+#
+# Build the necessary artefacts for the next release (Minor & Patch)
+# - up & down files for the next version
+# - latest.sql & reverse.sql
+# - sets new version in version.config
+# - adjusts the CMakeLists.txt
+#
+# Param: <current_version>
+# Param: <nextt_version>
+#
+
 set -eu
 
 if [ "$#" -ne 2 ]; then
@@ -35,6 +47,6 @@ sed -i.bak "s/FILE reverse-dev.sql)/FILE ${DOWNGRADE_FILE})/g" ./sql/CMakeLists.
 # Set only next minor release version in version.config 
 # and create this as a separate PR on `main`
 echo "Set next minor release version.config"
-sed -i.bak "s/${CURRENT_VERSION}/${NEXT_VERSION}/g" version.config
+sed -i.bak "s/${NEXT_VERSION}-dev/${NEXT_VERSION}/g" version.config
 rm version.config.bak
 head -n1 version.config
