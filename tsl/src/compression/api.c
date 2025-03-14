@@ -933,7 +933,7 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 	if (ts_chunk_is_compressed(chunk))
 	{
 		CompressionSettings *chunk_settings = ts_compression_settings_get(chunk->table_id);
-		bool valid_orderby_settings = chunk_settings->fd.orderby;
+		bool valid_orderby_settings = chunk_settings && chunk_settings->fd.orderby;
 		if (recompress)
 		{
 			CompressionSettings *ht_settings = ts_compression_settings_get(chunk->hypertable_relid);
