@@ -155,6 +155,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     merge_chunks.sql
     cagg_refresh_using_merge.sql
     compress_sort_transform.sql
+    compression_constraints.sql
     hypercore_columnar.sql
     hypercore_constraints.sql
     hypercore_copy.sql
@@ -209,6 +210,7 @@ set(SOLO_TESTS
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
     cagg_invalidation
+    cagg_refresh_policy_incremental
     hypercore
     move
     reorder
