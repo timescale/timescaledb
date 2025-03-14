@@ -380,14 +380,6 @@ check_is_chunk_order_violated_by_merge(CompressChunkCxt *cxt, const Dimension *t
 	if (index != 1)
 		return true;
 
-	/*
-	 * Sort order must not be DESC for merge. We don't need to check
-	 * NULLS FIRST/LAST here because partitioning columns have NOT NULL
-	 * constraint.
-	 */
-	if (ts_array_get_element_bool(ht_settings->fd.orderby_desc, index))
-		return true;
-
 	return false;
 }
 
