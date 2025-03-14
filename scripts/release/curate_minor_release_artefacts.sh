@@ -32,11 +32,6 @@ sed -i.bak "s/ ${LAST_DOWNGRADE_FILE})/  ${LAST_DOWNGRADE_FILE}/g" ./sql/CMakeLi
 
 sed -i.bak "s/FILE reverse-dev.sql)/FILE ${DOWNGRADE_FILE})/g" ./sql/CMakeLists.txt
 
-# Remove the CHANGELOG generating
-# Fresh start for next version
-echo "Deleting all unreleased pr_* , fix_*"
-rm -vf .unreleased/pr_* .unreleased/fix_*
-
 # Set only next minor release version in version.config 
 # and create this as a separate PR on `main`
 echo "Set next minor release version.config"
