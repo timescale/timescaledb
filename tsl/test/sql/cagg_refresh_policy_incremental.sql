@@ -60,8 +60,8 @@ SELECT
     t, d, 10
 FROM
     generate_series(
-        '2025-02-05 00:00:00-03',
-        '2025-03-05 00:00:00-03',
+        '2025-02-05 00:00:00+00',
+        '2025-03-05 00:00:00+00',
         '1 hour'::interval) AS t,
     generate_series(1,5) AS d;
 
@@ -188,8 +188,8 @@ SELECT
     t, d, 10
 FROM
     generate_series(
-        '2020-02-05 00:00:00-03',
-        '2020-03-05 00:00:00-03',
+        '2020-02-05 00:00:00+00',
+        '2020-03-05 00:00:00+00',
         '1 hour'::interval) AS t,
     generate_series(1,5) AS d;
 
@@ -255,8 +255,8 @@ SELECT
     t, d, 10
 FROM
     generate_series(
-        '2020-02-05 00:00:00-03',
-        '2020-02-06 00:00:00-03',
+        '2020-02-05 00:00:00+00',
+        '2020-02-06 00:00:00+00',
         '1 hour'::interval) AS t,
     generate_series(1,5) AS d;
 
@@ -276,7 +276,7 @@ TRUNCATE conditions_by_day, conditions, bgw_log;
 
 -- Less than 1 day of data (smaller than the bucket width)
 INSERT INTO conditions
-VALUES ('2020-02-05 00:00:00-03', 1, 10);
+VALUES ('2020-02-05 00:00:00+00', 1, 10);
 
 -- advance time by 6h so that job runs one more time
 SELECT ts_bgw_params_reset_time(extract(epoch from interval '6 hour')::bigint * 1000000, true);
@@ -319,6 +319,7 @@ FROM
         '1 hour'::interval) AS t,
     generate_series(1,5) AS d;
 
+SET timescaledb.current_timestamp_mock TO '2025-03-11 00:00:00+00';
 SELECT ts_bgw_params_reset_time(0, true);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
