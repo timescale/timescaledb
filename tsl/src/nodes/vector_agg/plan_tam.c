@@ -12,7 +12,7 @@
 #include "nodes/decompress_chunk/vector_quals.h"
 #include "plan.h"
 
-bool
+void
 vectoragg_plan_tam(Plan *childplan, const List *rtable, VectorQualInfo *vqi)
 {
 	const CustomScan *customscan = castNode(CustomScan, childplan);
@@ -47,6 +47,4 @@ vectoragg_plan_tam(Plan *childplan, const List *rtable, VectorQualInfo *vqi)
 	}
 
 	table_close(rel, NoLock);
-
-	return true;
 }
