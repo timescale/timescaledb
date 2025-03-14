@@ -18,7 +18,7 @@ HISTORY_DEPTH = 1000
 def run_query(query):
     """A simple function to use requests.post to make the GraphQL API call."""
 
-    token = os.environ.get("GITHUB_TOKEN")
+    token = os.environ.get("ORG_AUTOMATION_TOKEN")
 
     request = requests.post(
         "https://api.github.com/graphql",
@@ -137,7 +137,7 @@ def git_returncode(command):
 
 
 # The token has to have the "access public repositories" permission, or else creating a PR returns 404.
-github = Github(os.environ.get("GITHUB_TOKEN"))
+github = Github(os.environ.get("ORG_AUTOMATION_TOKEN"))
 
 source_remote = "origin"
 source_repo_name = os.environ.get("GITHUB_REPOSITORY")  # This is set in GitHub Actions.
@@ -406,20 +406,10 @@ print(
     f"Will commit as {os.environ['GIT_COMMITTER_NAME']} <{os.environ['GIT_COMMITTER_EMAIL']}>"
 )
 
-# We have to push using the personal access token of the automation user.
-# If we use the default credentials of the GitHub Actions to push, the workflows
-# in the backport PRs don't start. To keep the things more fun for us, GitHub
-# does this only for the merge commits, but not for the new PRs.
-target_remote = "backport-target-remote"
-git_returncode(f"remote remove {target_remote}")
-git_check(
-    f'remote add {target_remote} https://{os.environ["GITHUB_TOKEN"]}@github.com/{source_repo.owner.login}/{source_repo.name}.git'
-)
-
-# Fetch all branches from the target repository, because we use the presence
+# Fetch all branches from the repository, because we use the presence
 # of the backport branches to determine that a backport exists. It's not convenient
 # to query for branch existence through the PyGithub API.
-git_check(f"fetch {target_remote}")
+git_check(f"fetch {source_remote}")
 
 # Now, go over the list of PRs that we have collected, and try to backport
 # each of them.
@@ -443,7 +433,7 @@ for index, pr_info in enumerate(prs_to_backport.values()):
     # depending on the branch protection settings. We want to update to the
     # recent target automatically to minimize the amount of manual work.
     if (
-        git_returncode(f"rev-parse {target_remote}/{backport_branch} > /dev/null 2>&1")
+        git_returncode(f"rev-parse {source_remote}/{backport_branch} > /dev/null 2>&1")
         == 0
     ):
         print(
@@ -460,12 +450,12 @@ for index, pr_info in enumerate(prs_to_backport.values()):
         git_check("reset --hard")
         git_check("clean -xfd")
         git_check(
-            f"checkout --quiet --force --detach {target_remote}/{backport_branch} > /dev/null"
+            f"checkout --quiet --force --detach {source_remote}/{backport_branch} > /dev/null"
         )
         # Use merge and no force-push, so that the simultaneous changes made by
         # other users are not accidentally overwritten.
         git_check(f"merge --quiet --no-edit {source_remote}/{backport_target}")
-        git_check(f"push {target_remote} @:{backport_branch}")
+        git_check(f"push {source_remote} @:{backport_branch}")
         continue
 
     # Try to cherry-pick the commits.
@@ -507,7 +497,7 @@ for index, pr_info in enumerate(prs_to_backport.values()):
         )
 
     # Push the backport branch.
-    git_check(f"push {target_remote} @:refs/heads/{backport_branch}")
+    git_check(f"push {source_remote} @:refs/heads/{backport_branch}")
 
     # Prepare description for the backport PR.
     backport_description = (
