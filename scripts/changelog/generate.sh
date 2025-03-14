@@ -28,6 +28,9 @@ echo "This release contains performance improvements and bug fixes since " >> CH
 echo "the 2.18.2 release. We recommend that you upgrade at the next " >> CHANGELOG_NEXT.md
 echo "available opportunity." >> CHANGELOG_NEXT.md
 echo "" >> CHANGELOG_NEXT.md
+echo "Highlighted features in TimescaleDB v${RELEASE_NEXT}" >> CHANGELOG.md
+echo "* " >> CHANGELOG.md
+echo "" >> CHANGELOG.md
 echo_changelog '**Features**' '^Implements:' >> CHANGELOG_next.md
 echo_changelog '**Bugfixes**' '^Fixes:' >> CHANGELOG_next.md
 echo "**GUCs**" >> CHANGELOG.md
