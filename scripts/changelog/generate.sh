@@ -30,6 +30,8 @@ echo "available opportunity." >> CHANGELOG_NEXT.md
 echo "" >> CHANGELOG_NEXT.md
 echo_changelog '**Features**' '^Implements:' >> CHANGELOG_next.md
 echo_changelog '**Bugfixes**' '^Fixes:' >> CHANGELOG_next.md
+echo "**GUCs**" >> CHANGELOG.md
+echo "" >> CHANGELOG.md
 echo_changelog '**Thanks**' '^Thanks:' >> CHANGELOG_next.md
 
 RELEASE_NOTE_START=$(grep -n $RELEASE_PREVIOUS CHANGELOG.md | cut -d ':' -f 1 | head -1)
