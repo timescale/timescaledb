@@ -73,6 +73,7 @@ typedef struct ArrowTupleTableSlot
 	uint16 total_row_count;
 	ArrowColumnCache arrow_cache;
 	ArrowColumnCacheEntry *arrow_cache_entry;
+	ArrowArray **arrow_arrays;
 	bool *referenced_attrs;
 	bool *segmentby_attrs;
 	bool *valid_attrs;		 /* Per-column validity up to "tts_nvalid" */
