@@ -53,10 +53,10 @@ FUNCTION_NAME(key_hashing_get_key)(BatchHashingParams params, int row,
 }
 
 static pg_attribute_always_inline void
-FUNCTION_NAME(key_hashing_store_new)(GroupingPolicyHash *restrict policy, uint32 new_key_index,
+FUNCTION_NAME(key_hashing_store_new)(HashingStrategy *restrict hashing, uint32 new_key_index,
 									 OUTPUT_KEY_TYPE output_key)
 {
-	policy->hashing.output_keys[new_key_index] = OUTPUT_KEY_TO_DATUM(output_key);
+	hashing->output_keys[new_key_index] = OUTPUT_KEY_TO_DATUM(output_key);
 }
 
 static void

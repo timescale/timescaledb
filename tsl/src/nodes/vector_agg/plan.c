@@ -396,7 +396,14 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 #endif
 	}
 
+#ifdef TS_USE_UMASH
+	/*
+	 * Use hashing of serialized keys when we have many grouping columns.
+	 */
+	return VAGT_HashSerialized;
+#else
 	return VAGT_Invalid;
+#endif
 }
 
 /*
