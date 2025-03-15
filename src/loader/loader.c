@@ -187,6 +187,12 @@ ts_loader_extension_version(void)
 	return extension_version(EXTENSION_NAME);
 }
 
+TSDLLEXPORT char *
+ts_osm_extension_version(void)
+{
+	return extension_version(OSM_EXTENSION_NAME);
+}
+
 extern bool
 ts_loader_extension_exists(void)
 {
