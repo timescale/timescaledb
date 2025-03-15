@@ -402,3 +402,17 @@ WHERE a.attr @> ANY((SELECT select_tag(100))::jsonb[]);
 SELECT *
 FROM append_test a
 WHERE a.attr @> ANY((SELECT array_agg(attr) FROM join_test_plain WHERE temp > 100)::jsonb[]);
+
+-- Test that ConstraintAwareAppend properly locks relations in
+-- parallel query mode
+set timescaledb.enable_chunk_append=false;
+call force_parallel(true);
+
+:PREFIX
+select time, avg(temp), colorid from append_test
+where time > now_s() - interval '3 months 20 days'
+group by time, colorid;
+reset timescaledb.enable_chunk_append;
+
+reset max_parallel_workers_per_gather;
+call force_parallel(false);
