@@ -118,7 +118,7 @@ export TEST_DBNAME
 # We run the regression test with changed time using the faketime utility, to
 # catch the erroneous use of now(). This breaks waiting in the isolation test
 # runner, so we only do it for the pg_regress.
-PG_REGRESS_FAKETIME="${FAKETIME[@]:-}"
+PG_REGRESS_FAKETIME=("${FAKETIME[@]:-}")
 export PG_REGRESS_FAKETIME
 
 # we strip out any output between <exclude_from_test></exclude_from_test>
