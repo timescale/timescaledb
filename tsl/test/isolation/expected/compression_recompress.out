@@ -155,7 +155,7 @@ step s1_recompress_chunk:
    FROM show_chunks('sensor_data') i
    LIMIT 1;
 
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step s2_insert_do_nothing: 
    INSERT INTO sensor_data
    VALUES ('2022-01-01 20:00'::timestamptz, 1, 1.0, 1.0), ('2022-01-01 21:00'::timestamptz, 2, 2.0, 2.0) 
@@ -215,7 +215,7 @@ step s1_recompress_chunk:
    FROM show_chunks('sensor_data') i
    LIMIT 1;
 
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step s2_insert_existing_do_nothing: 
    INSERT INTO sensor_data 
    SELECT time, sensor_id, 1.0, 1.0 FROM sensor_data
@@ -274,7 +274,7 @@ step s1_recompress_chunk:
    FROM show_chunks('sensor_data') i
    LIMIT 1;
 
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step s2_wait_for_finish: 
 
 step s2_commit: 
@@ -325,7 +325,7 @@ step s1_recompress_chunk:
    FROM show_chunks('sensor_data') i
    LIMIT 1;
 
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step s2_wait_for_finish: 
 
 step s2_commit: 
@@ -410,7 +410,7 @@ step s1_recompress_chunk:
    FROM show_chunks('sensor_data') i
    LIMIT 1;
 
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step s2_wait_for_finish: 
 
 step s2_commit: 
@@ -580,7 +580,7 @@ step s1_recompress_chunk:
    FROM show_chunks('sensor_data') i
    LIMIT 1;
 
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step s2_upsert: 
    INSERT INTO sensor_data 
    VALUES ('2022-01-01 20:00'::timestamptz, 100, 9999, 9999), ('2022-01-01 21:00'::timestamptz, 101, 9999, 9999) 
@@ -644,7 +644,7 @@ step s1_recompress_chunk:
    FROM show_chunks('sensor_data') i
    LIMIT 1;
 
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step s2_upsert_existing: 
    INSERT INTO sensor_data 
    SELECT time, sensor_id, 9999, 9999 FROM sensor_data
@@ -711,7 +711,7 @@ step s1_recompress_chunk:
    FROM show_chunks('sensor_data') i
    LIMIT 1;
 
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step s2_wait_for_finish: 
 
 step s2_commit: 
@@ -770,7 +770,7 @@ step s1_recompress_chunk:
    FROM show_chunks('sensor_data') i
    LIMIT 1;
 
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step s2_wait_for_finish: 
 
 step s2_commit: 
@@ -849,7 +849,7 @@ step s1_recompress_chunk:
    FROM show_chunks('sensor_data') i
    LIMIT 1;
 
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step s2_wait_for_finish: 
 
 step s2_commit: 
@@ -1136,7 +1136,7 @@ step s1_recompress_chunk:
    FROM show_chunks('sensor_data') i
    LIMIT 1;
 
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step s2_delete_compressed: 
 	DELETE FROM sensor_data WHERE sensor_id = 1;
 
@@ -1190,7 +1190,7 @@ step s1_recompress_chunk:
    FROM show_chunks('sensor_data') i
    LIMIT 1;
 
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step s2_delete_uncompressed: 
 	DELETE FROM sensor_data WHERE sensor_id = 11;
 
@@ -1262,7 +1262,7 @@ step s1_recompress_chunk:
    FROM show_chunks('sensor_data') i
    LIMIT 1;
 
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step s2_delete_recompressed: 
 	DELETE FROM sensor_data WHERE sensor_id = 5 AND time > '2022-01-01 01:00'::timestamptz;
 
@@ -1317,7 +1317,7 @@ step s2_commit:
 	COMMIT;
 
 step s1_recompress_chunk: <... completed>
-ERROR:  cannot proceed with recompression due to concurrent updates on uncompressed data
+ERROR:  aborting recompression due to concurrent updates on uncompressed data, retrying with next policy run
 step s1_show_chunk_state: 
    SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
    SELECT count(*) FROM sensor_data;
@@ -1359,7 +1359,7 @@ step s1_recompress_chunk:
    FROM show_chunks('sensor_data') i
    LIMIT 1;
 
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step s2_commit: 
 	COMMIT;
 
@@ -1428,7 +1428,7 @@ step s2_commit:
 	COMMIT;
 
 step s1_recompress_chunk: <... completed>
-ERROR:  cannot proceed with recompression due to concurrent updates on compressed data
+ERROR:  aborting recompression due to concurrent updates on compressed data, retrying with next policy run
 step s1_show_chunk_state: 
    SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
    SELECT count(*) FROM sensor_data;
@@ -1651,7 +1651,7 @@ step s1_recompress_chunk:
    FROM show_chunks('sensor_data') i
    LIMIT 1;
 
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step s2_update_compressed: 
 	UPDATE sensor_data SET cpu = 9999 WHERE sensor_id = 1;
 
@@ -1713,7 +1713,7 @@ step s1_recompress_chunk:
    FROM show_chunks('sensor_data') i
    LIMIT 1;
 
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step s2_update_uncompressed: 
 	UPDATE sensor_data SET cpu = 9999 WHERE sensor_id = 11;
 
@@ -1779,7 +1779,7 @@ step s1_recompress_chunk:
    FROM show_chunks('sensor_data') i
    LIMIT 1;
 
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step s2_update_recompressed: 
 	UPDATE sensor_data SET cpu = 9999 WHERE sensor_id = 5 AND time > '2022-01-01 01:00'::timestamptz;
 
@@ -1842,7 +1842,7 @@ step s2_commit:
 	COMMIT;
 
 step s1_recompress_chunk: <... completed>
-ERROR:  cannot proceed with recompression due to concurrent updates on uncompressed data
+ERROR:  aborting recompression due to concurrent updates on uncompressed data, retrying with next policy run
 step s1_show_chunk_state: 
    SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
    SELECT count(*) FROM sensor_data;
@@ -1892,7 +1892,7 @@ step s1_recompress_chunk:
    FROM show_chunks('sensor_data') i
    LIMIT 1;
 
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step s2_commit: 
 	COMMIT;
 
@@ -1969,7 +1969,7 @@ step s2_commit:
 	COMMIT;
 
 step s1_recompress_chunk: <... completed>
-ERROR:  cannot proceed with recompression due to concurrent updates on compressed data
+ERROR:  aborting recompression due to concurrent updates on compressed data, retrying with next policy run
 step s1_show_chunk_state: 
    SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
    SELECT count(*) FROM sensor_data;
