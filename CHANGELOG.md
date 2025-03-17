@@ -16,6 +16,10 @@ This release contains performance improvements and bug fixes since  the 2.18.2 r
 
 This is the last minor release supporting PostgreSQL 14. Starting with the minor version of TimescaleDB only Postgres 15, 16 and 17 will be supported.
 
+**Downgrading from 2.19.0**
+
+This release introduces custom bool compression, if you enable this feature via the `enable_bool_compression` and must downgrade to a previous, please use the [following script](https://github.com/timescale/timescaledb-extras/blob/master/utils/2.19.0-downgrade_new_compression_algorithms.sql) to convert the columns back to their previous state. TimescaleDB versions prior to 2.19.0 do not know how to handle this new type.
+
 **Features**
 * [#7586](https://github.com/timescale/timescaledb/pull/7586) Vectorized aggregation with grouping by a single text column.
 * [#7632](https://github.com/timescale/timescaledb/pull/7632) Optimize recompression for chunks without segmentby
