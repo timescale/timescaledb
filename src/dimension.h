@@ -140,7 +140,7 @@ extern int32 ts_dimension_get_hypertable_id(int32 dimension_id);
 extern int ts_dimension_set_type(Dimension *dim, Oid newtype);
 extern TSDLLEXPORT Oid ts_dimension_get_partition_type(const Dimension *dim);
 extern int ts_dimension_set_name(Dimension *dim, const char *newname);
-extern int ts_dimension_set_chunk_interval(Dimension *dim, int64 chunk_interval);
+extern TSDLLEXPORT int ts_dimension_set_chunk_interval(Dimension *dim, int64 chunk_interval);
 extern int ts_dimension_set_compress_interval(Dimension *dim, int64 compress_interval);
 extern Datum ts_dimension_transform_value(const Dimension *dim, Oid collation, Datum value,
 										  Oid const_datum_type, Oid *restype);

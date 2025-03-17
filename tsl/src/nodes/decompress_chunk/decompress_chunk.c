@@ -1069,22 +1069,24 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 
 					pathkeys = lappend(pathkeys, pathkey);
 				}
-				/*
-				 * Ideally, we would like for this to be a MergeAppend path.
-				 * However, accumulate_append_subpath will cut out MergeAppend
-				 * and directly add its children, so we have to combine the children
-				 * into a MergeAppend node later, at the chunk append level.
-				 */
-				chunk_path =
-					(Path *) create_append_path(root,
-												chunk_rel,
-												list_make2(chunk_path, uncompressed_path),
-												NIL /* partial paths */,
-												pathkeys,
-												req_outer,
-												0,
-												false,
-												chunk_path->rows + uncompressed_path->rows);
+				if (pathkeys)
+					chunk_path =
+						(Path *) create_merge_append_path(root,
+														  chunk_rel,
+														  list_make2(chunk_path, uncompressed_path),
+														  pathkeys,
+														  req_outer);
+				else
+					chunk_path =
+						(Path *) create_append_path(root,
+													chunk_rel,
+													list_make2(chunk_path, uncompressed_path),
+													NIL /* partial paths */,
+													pathkeys,
+													req_outer,
+													0,
+													false,
+													chunk_path->rows + uncompressed_path->rows);
 			}
 		}
 
