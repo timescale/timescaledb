@@ -995,13 +995,6 @@ ts_hyperspace_calculate_point(const Hyperspace *hs, TupleTableSlot *slot)
 	return p;
 }
 
-static inline int64
-interval_to_usec(Interval *interval)
-{
-	return (interval->month * DAYS_PER_MONTH * USECS_PER_DAY) + (interval->day * USECS_PER_DAY) +
-		   interval->time;
-}
-
 #define INT_TYPE_MAX(type)                                                                         \
 	(int64)(((type) == INT2OID) ? PG_INT16_MAX :                                                   \
 								  (((type) == INT4OID) ? PG_INT32_MAX : PG_INT64_MAX))

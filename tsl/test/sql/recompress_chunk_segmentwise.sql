@@ -346,4 +346,41 @@ SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress')
 -- When GUC is OFF, entire chunk should be fully uncompressed and compressed instead
 SELECT compress_chunk(:'chunk_to_compress');
 
+RESET timescaledb.enable_segmentwise_recompression;
 
+--- Test behaviour of enable_exclusive_locking_recompression GUC
+CREATE TABLE exclusive_test(time timestamptz not null, a int, b int, c int);
+SELECT create_hypertable('exclusive_test', by_range('time', INTERVAL '1 day'));
+
+ALTER TABLE guc_test set (timescaledb.compress, timescaledb.compress_segmentby = 'a, b');
+INSERT INTO guc_test VALUES ('2024-10-30 14:04:00.501519-06'::timestamptz, 1, 1, 1);
+SELECT show_chunks as chunk_to_compress FROM show_chunks('guc_test') LIMIT 1 \gset
+SELECT compress_chunk(:'chunk_to_compress');
+
+INSERT INTO guc_test VALUES ('2024-10-30 14:14:00.501519-06'::timestamptz, 1, 1, 2);
+
+-- Default behavior will try to get exclusive lock at the end of operation
+-- in order to change the chunk status. Here it will succeed since there
+-- isn't any concurrent operations.
+RESET timescaledb.enable_exclusive_locking_recompression;
+BEGIN;
+SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress');
+SELECT c.relname FROM pg_locks l
+INNER JOIN pg_class c ON c.oid = l.relation
+WHERE locktype = 'relation' AND mode = 'ExclusiveLock'
+ORDER BY 1;
+ROLLBACK;
+
+-- If we enable this GUC, it should get exclusive locks on 3 relations:
+-- uncompressed chunk table, compressed chunk table, and compressed chunk index.
+-- This is done so that we keep locking consistency to legacy way of locking.
+SET timescaledb.enable_exclusive_locking_recompression TO ON;
+BEGIN;
+SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress');
+SELECT c.relname FROM pg_locks l
+INNER JOIN pg_class c ON c.oid = l.relation
+WHERE locktype = 'relation' AND mode = 'ExclusiveLock'
+ORDER BY 1;
+ROLLBACK;
+
+RESET timescaledb.enable_exclusive_locking_recompression;

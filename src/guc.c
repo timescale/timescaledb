@@ -152,6 +152,7 @@ TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
 TSDLLEXPORT bool ts_guc_default_hypercore_use_access_method = false;
 bool ts_guc_enable_chunk_skipping = false;
 TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
+TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression = false;
 TSDLLEXPORT bool ts_guc_enable_bool_compression = false;
 
 /* Only settable in debug mode for testing */
@@ -747,6 +748,17 @@ _guc_init(void)
 							 "Enable segmentwise recompression",
 							 &ts_guc_enable_segmentwise_recompression,
 							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_exclusive_locking_recompression"),
+							 "Enable exclusive locking recompression",
+							 "Enable getting exclusive lock on chunk during segmentwise "
+							 "recompression",
+							 &ts_guc_enable_exclusive_locking_recompression,
+							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,
