@@ -64,7 +64,7 @@ while [ ! -f ${TEST_OUTPUT_DIR}/.pg_init/done ]; do sleep 0.2; done
 # We run the regression test with changed time using the faketime utility, to
 # catch the erroneous use of now(). This breaks waiting in the isolation test
 # runner, so we only do it for the pg_regress.
-PG_REGRESS_FAKETIME=("${FAKETIME[@]:-}")
+PG_REGRESS_FAKETIME="${FAKETIME:-}"
 export PG_REGRESS_FAKETIME
 
 cd ${EXE_DIR}/sql
