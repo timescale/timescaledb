@@ -549,31 +549,28 @@ SELECT * FROM sorted_bgw_log;
       0 |         0 | DB Scheduler                               | [TESTING] Registered new background worker
       1 |         0 | DB Scheduler                               | [TESTING] Registered new background worker
       2 |         0 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 |         0 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Thu Mar 06 16:00:00 2025 PST, Tue Mar 11 17:00:00 2025 PDT ] (batch 2 of 4)
+      0 |         0 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Fri Mar 07 16:00:00 2025 PST, Tue Mar 11 17:00:00 2025 PDT ] (batch 1 of 2)
       1 |         0 | Refresh Continuous Aggregate Policy [1001] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
-      2 |         0 | Refresh Continuous Aggregate Policy [1001] | inserted 25 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
-      3 |         0 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Sat Mar 01 16:00:00 2025 PST, Thu Mar 06 16:00:00 2025 PST ] (batch 3 of 4)
+      2 |         0 | Refresh Continuous Aggregate Policy [1001] | inserted 20 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
+      3 |         0 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Sun Mar 02 16:00:00 2025 PST, Fri Mar 07 16:00:00 2025 PST ] (batch 2 of 2)
       4 |         0 | Refresh Continuous Aggregate Policy [1001] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
       5 |         0 | Refresh Continuous Aggregate Policy [1001] | inserted 25 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
-      6 |         0 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Mon Feb 24 16:00:00 2025 PST, Sat Mar 01 16:00:00 2025 PST ] (batch 4 of 4)
-      7 |         0 | Refresh Continuous Aggregate Policy [1001] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
-      8 |         0 | Refresh Continuous Aggregate Policy [1001] | inserted 25 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
-      0 |         0 | Refresh Continuous Aggregate Policy [1002] | continuous aggregate refresh (individual invalidation) on "conditions_by_day_manual_refresh" in window [ Mon Feb 24 16:00:00 2025 PST, Tue Mar 11 17:00:00 2025 PDT ]
+      0 |         0 | Refresh Continuous Aggregate Policy [1002] | continuous aggregate refresh (individual invalidation) on "conditions_by_day_manual_refresh" in window [ Sun Mar 02 16:00:00 2025 PST, Tue Mar 11 17:00:00 2025 PDT ]
       1 |         0 | Refresh Continuous Aggregate Policy [1002] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
-      2 |         0 | Refresh Continuous Aggregate Policy [1002] | inserted 75 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
-(15 rows)
+      2 |         0 | Refresh Continuous Aggregate Policy [1002] | inserted 45 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
+(12 rows)
 
 -- Both continuous aggregates should have the same data
 SELECT count(*) FROM conditions_by_day;
  count 
 -------
-    75
+    45
 (1 row)
 
 SELECT count(*) FROM conditions_by_day_manual_refresh;
  count 
 -------
-    75
+    45
 (1 row)
 
 -- Should have no differences
@@ -586,5 +583,12 @@ FROM
  has_diff 
 ----------
  f
+(1 row)
+
+-- FIXME
+select time_bucket('1 month', now());
+         time_bucket          
+------------------------------
+ Fri Feb 28 21:00:00 2025 -03
 (1 row)
 
