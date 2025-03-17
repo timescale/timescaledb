@@ -45,6 +45,7 @@ This release introduces custom bool compression, if you enable this feature via 
 
 **GUCs**
 * enable_bool_compression: enable the BOOL compression algorithm, default: OFF
+* `enable_exclusive_locking_recompression`: enable exclusive locking during recompression (legacy mode), default: `OFF`
 
 **Thanks**
 * @bjornuppeke for reporting a problem with INSERT INTO ... ON CONFLICT DO NOTHING on compressed chunks
