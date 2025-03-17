@@ -53,6 +53,6 @@ rm -f CHANGELOG.md.tmp CHANGELOG_next.md
 # Remove the CHANGELOG generating
 # Fresh start for next version
 echo "Deleting all .unreleased files"
-rm -f .unreleased/pr_* .unreleased/fix_*
+rm -f .unreleased/*
 
 echo "done."
