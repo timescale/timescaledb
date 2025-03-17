@@ -188,7 +188,7 @@ jobs:
       id: installcheck
       run: |
         set -o pipefail
-        ${FAKETIME} make -k -C build installcheck IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \
+        make -k -C build installcheck IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \
             SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }} \
             | tee installcheck.log
 
