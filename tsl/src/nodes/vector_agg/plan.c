@@ -396,7 +396,14 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 #endif
 	}
 
+#ifdef TS_USE_UMASH
+	/*
+	 * Use hashing of serialized keys when we have many grouping columns.
+	 */
+	return VAGT_HashSerialized;
+#else
 	return VAGT_Invalid;
+#endif
 }
 
 /*
@@ -492,15 +499,14 @@ vectoragg_plan_possible(Plan *childplan, const List *rtable, VectorQualInfo *vqi
 	}
 
 	CustomScan *customscan = castNode(CustomScan, childplan);
-	bool vectoragg_possible = false;
 	RangeTblEntry *rte = rt_fetch(customscan->scan.scanrelid, rtable);
 
 	if (ts_is_hypercore_am(ts_get_rel_am(rte->relid)))
-		vectoragg_possible = vectoragg_plan_tam(childplan, rtable, vqi);
+		vectoragg_plan_tam(childplan, rtable, vqi);
 	else if (strcmp(customscan->methods->CustomName, "DecompressChunk") == 0)
-		vectoragg_possible = vectoragg_plan_decompress_chunk(childplan, vqi);
+		vectoragg_plan_decompress_chunk(childplan, vqi);
 
-	return vectoragg_possible;
+	return true;
 }
 
 /*

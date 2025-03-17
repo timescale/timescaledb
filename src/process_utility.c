@@ -1306,7 +1306,7 @@ process_truncate(ProcessUtilityArgs *args)
 						 * the truncated region. */
 						if (ts_continuous_agg_hypertable_status(ht->fd.id) == HypertableIsRawTable)
 							ts_continuous_agg_invalidate_chunk(ht, chunk);
-						/* Truncate the compressed chunk too, unless it is a hypercore table. */
+						/* Truncate the compressed chunk too, unless the chunk is using TAM. */
 						if (!ts_is_hypercore_am(chunk->amoid) &&
 							chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
 						{
@@ -2517,6 +2517,102 @@ typedef struct ChunkConstraintInfo
 	Oid hypertable_constraint_oid;
 } ChunkConstraintInfo;
 
+/*
+ * Unique constraints are validated by postgres during creation
+ * but the postgres process does not cover data present in compressed
+ * chunks or data split between compressed and uncompressed chunks.
+ * When adding unique constraints to chunks with compressed data we
+ * have to check for constraint violation ourself.
+ */
+static void
+validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
+{
+	if ((stmt->primary || stmt->unique) && ts_chunk_is_compressed(chunk) &&
+		!ts_is_hypercore_am(chunk->amoid))
+	{
+		StringInfoData command;
+		Oid nspcid = get_rel_namespace(chunk->table_id);
+		ListCell *lc;
+
+		initStringInfo(&command);
+		appendStringInfo(&command,
+						 "SELECT EXISTS(SELECT FROM %s.%s",
+						 quote_identifier(get_namespace_name(nspcid)),
+						 quote_identifier(get_rel_name(chunk->table_id)));
+
+#if PG15_GE
+		/*
+		 * Before PG15 NULLs were always considered distinct, with
+		 * PG15 the behaviour became configurable.
+		 */
+		if (!stmt->nulls_not_distinct)
+		{
+#endif
+			int i = 0;
+			appendStringInfo(&command, " WHERE ");
+			foreach (lc, stmt->indexParams)
+			{
+				i++;
+				IndexElem *elem = lfirst_node(IndexElem, lc);
+				appendStringInfo(&command, "%s IS NOT NULL", quote_identifier(elem->name));
+				if (i < list_length(stmt->indexParams))
+					appendStringInfo(&command, " AND ");
+			}
+			Assert(i > 0);
+#if PG15_GE
+		}
+#endif
+
+		appendStringInfo(&command, " GROUP BY ");
+		int j = 0;
+		foreach (lc, stmt->indexParams)
+		{
+			j++;
+			IndexElem *elem = lfirst_node(IndexElem, lc);
+			appendStringInfo(&command, "%s", quote_identifier(elem->name));
+			if (j < list_length(stmt->indexParams))
+				appendStringInfo(&command, ",");
+		}
+		Assert(j > 0);
+
+		appendStringInfo(&command, " HAVING count(*) > 1");
+
+		appendStringInfo(&command, ")");
+
+		if (SPI_connect() != SPI_OK_CONNECT)
+			elog(ERROR, "could not connect to SPI");
+
+		/* Lock down search_path */
+		int save_nestlevel = NewGUCNestLevel();
+		RestrictSearchPath();
+
+		int res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
+
+		if (res < 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_INTERNAL_ERROR),
+					 (errmsg("could not verify unique constraint on \"%s\"",
+							 get_rel_name(chunk->table_id)))));
+
+		bool isnull;
+		Datum has_conflicts =
+			SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+		Assert(!isnull);
+
+		if (isnull || DatumGetBool(has_conflicts))
+			ereport(ERROR,
+					(errcode(ERRCODE_UNIQUE_VIOLATION),
+					 (errmsg("duplicate key value violates unique constraint"))));
+
+		/* Restore search_path */
+		AtEOXact_GUC(false, save_nestlevel);
+
+		res = SPI_finish();
+		if (res != SPI_OK_FINISH)
+			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+	}
+}
+
 static void
 process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
@@ -2526,19 +2622,34 @@ process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	switch (info->cmd->subtype)
 	{
 		case AT_AddIndex:
+			if (ts_chunk_is_compressed(chunk) && !ts_is_hypercore_am(chunk->amoid))
+				validate_index_constraints(chunk, castNode(IndexStmt, info->cmd->def));
+
+			break;
 		case AT_AddConstraint:
 #if PG16_LT
 		case AT_AddConstraintRecurse:
 #endif
-			if (ts_chunk_is_compressed(chunk) && !ts_is_hypercore_am(chunk->amoid))
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("operation not supported on hypertables that have compressed "
-								"data"),
-						 errhint("Decompress the data before retrying the operation.")));
+		{
+			Constraint *con = castNode(Constraint, info->cmd->def);
+			switch (con->contype)
+			{
+				case CONSTR_UNIQUE:
+				case CONSTR_PRIMARY:
+					break;
+				default:
+					if (ts_chunk_is_compressed(chunk) && !ts_is_hypercore_am(chunk->amoid))
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								 errmsg(
+									 "operation not supported on hypertables that have compressed "
+									 "data"),
+								 errhint("Decompress the data before retrying the operation.")));
+			}
 			break;
 			/* Other AT commands might not be allowed on compressed chunks, but
 			 * they are checked at hypertable level in that case */
+		}
 		default:
 			break;
 	}
@@ -2826,22 +2937,6 @@ typedef struct CreateIndexInfo
 	MemoryContext mctx;
 } CreateIndexInfo;
 
-static inline void
-raise_error_if_creating_index_on_compressed(const Chunk *chunk, const IndexStmt *stmt)
-{
-	if (ts_chunk_is_compressed(chunk) && !ts_is_hypercore_am(chunk->amoid))
-	{
-		/* unique indexes are not allowed on compressed hypertables*/
-		if (stmt->unique || stmt->primary || stmt->isconstraint)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("operation not supported on hypertables that have compression "
-							"enabled")));
-		}
-	}
-}
-
 /*
  * Create index on a chunk.
  *
@@ -2864,7 +2959,7 @@ process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 		return;
 	}
 
-	raise_error_if_creating_index_on_compressed(chunk, info->stmt);
+	validate_index_constraints(chunk, info->stmt);
 
 	chunk_rel = table_open(chunk_relid, ShareLock);
 	hypertable_index_rel = index_open(info->obj.objectId, AccessShareLock);
@@ -2992,7 +3087,7 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 		ereport(NOTICE, (errmsg("skipping index creation for tiered data")));
 	}
 
-	raise_error_if_creating_index_on_compressed(chunk, info->stmt);
+	validate_index_constraints(chunk, info->stmt);
 
 	table_close(chunk_rel, NoLock);
 

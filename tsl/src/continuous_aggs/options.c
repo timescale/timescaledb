@@ -185,6 +185,19 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		cagg_update_materialized_only(agg, materialized_only);
 		ts_cache_release(hcache);
 	}
+	if (!with_clause_options[ContinuousViewOptionChunkTimeInterval].is_default)
+	{
+		Cache *hcache = ts_hypertable_cache_pin();
+		Hypertable *mat_ht =
+			ts_hypertable_cache_get_entry_by_id(hcache, agg->data.mat_hypertable_id);
+
+		int64 interval = interval_to_usec(
+			DatumGetIntervalP(with_clause_options[ContinuousViewOptionChunkTimeInterval].parsed));
+		Dimension *dim = ts_hyperspace_get_mutable_dimension(mat_ht->space, DIMENSION_TYPE_OPEN, 0);
+
+		ts_dimension_set_chunk_interval(dim, interval);
+		ts_cache_release(hcache);
+	}
 	List *compression_options = ts_continuous_agg_get_compression_defelems(with_clause_options);
 
 	if (list_length(compression_options) > 0)

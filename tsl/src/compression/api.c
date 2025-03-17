@@ -380,14 +380,6 @@ check_is_chunk_order_violated_by_merge(CompressChunkCxt *cxt, const Dimension *t
 	if (index != 1)
 		return true;
 
-	/*
-	 * Sort order must not be DESC for merge. We don't need to check
-	 * NULLS FIRST/LAST here because partitioning columns have NOT NULL
-	 * constraint.
-	 */
-	if (ts_array_get_element_bool(ht_settings->fd.orderby_desc, index))
-		return true;
-
 	return false;
 }
 
@@ -941,7 +933,7 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 	if (ts_chunk_is_compressed(chunk))
 	{
 		CompressionSettings *chunk_settings = ts_compression_settings_get(chunk->table_id);
-		bool valid_orderby_settings = chunk_settings->fd.orderby;
+		bool valid_orderby_settings = chunk_settings && chunk_settings->fd.orderby;
 		if (recompress)
 		{
 			CompressionSettings *ht_settings = ts_compression_settings_get(chunk->hypertable_relid);
