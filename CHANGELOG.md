@@ -44,7 +44,7 @@ This release introduces custom bool compression, if you enable this feature via 
 * [#7799](https://github.com/timescale/timescaledb/pull/7799) Handle DEFAULT table access name in ALTER TABLE
 
 **GUCs**
-* TBD
+* enable_bool_compression: enable the BOOL compression algorithm, default: OFF
 
 **Thanks**
 * @bjornuppeke for reporting a problem with INSERT INTO ... ON CONFLICT DO NOTHING on compressed chunks
