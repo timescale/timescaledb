@@ -428,9 +428,8 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 													snapshot))
 					ereport(ERROR,
 							(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
-							 errmsg(
-								 "cannot proceed with recompression due to concurrent updates on "
-								 "compressed data")));
+							 errmsg("aborting recompression due to concurrent updates on "
+									"compressed data, retrying with next policy run")));
 				CommandCounterIncrement();
 
 				if (should_free)
@@ -581,8 +580,8 @@ finish:
 		 */
 		ereport(ERROR,
 				(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
-				 errmsg("cannot proceed with recompression due to concurrent DML on uncompressed "
-						"data")));
+				 errmsg("aborting recompression due to concurrent DML on uncompressed "
+						"data, retrying with next policy run")));
 	}
 
 	table_close(uncompressed_chunk_rel, NoLock);
@@ -676,9 +675,8 @@ fetch_uncompressed_chunk_into_tuplesort(Tuplesortstate *tuplesortstate,
 		if (!delete_tuple_for_recompression(uncompressed_chunk_rel, &slot->tts_tid, snapshot))
 			ereport(ERROR,
 					(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
-					 errmsg("cannot proceed with recompression due to concurrent updates on "
-							"uncompressed "
-							"data")));
+					 errmsg("aborting recompression due to concurrent updates on "
+							"uncompressed data, retrying with next policy run")));
 	}
 	ExecDropSingleTupleTableSlot(slot);
 	table_endscan(scan);
