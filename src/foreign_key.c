@@ -35,9 +35,7 @@ static void createForeignKeyActionTriggers(Form_pg_constraint fk, Oid relid, Oid
 static void clone_constraint_on_chunk(const Chunk *chunk, Relation parentRel, Form_pg_constraint fk,
 									  int numfks, AttrNumber *conkey, AttrNumber *confkey,
 									  Oid *conpfeqop, Oid *conppeqop, Oid *conffeqop,
-#if PG15_GE
 									  int numfkdelsetcols, AttrNumber *confdelsetcols,
-#endif
 									  Oid parentDelTrigger, Oid parentUpdTrigger);
 
 /*
@@ -54,10 +52,8 @@ propagate_fk(Relation ht_rel, HeapTuple fk_tuple, List *chunks)
 	Oid conpfeqop[INDEX_MAX_KEYS];
 	Oid conppeqop[INDEX_MAX_KEYS];
 	Oid conffeqop[INDEX_MAX_KEYS];
-#if PG15_GE
 	int numfkdelsetcols;
 	AttrNumber confdelsetcols[INDEX_MAX_KEYS];
-#endif
 
 	DeconstructFkConstraintRow(fk_tuple,
 							   &numfks,
@@ -65,13 +61,9 @@ propagate_fk(Relation ht_rel, HeapTuple fk_tuple, List *chunks)
 							   confkey,
 							   conpfeqop,
 							   conppeqop,
-							   conffeqop
-#if PG15_GE
-							   ,
+							   conffeqop,
 							   &numfkdelsetcols,
-							   confdelsetcols
-#endif
-	);
+							   confdelsetcols);
 
 	Oid parentDelTrigger, parentUpdTrigger;
 	constraint_get_trigger(fk->oid, &parentUpdTrigger, &parentDelTrigger);
@@ -92,10 +84,8 @@ propagate_fk(Relation ht_rel, HeapTuple fk_tuple, List *chunks)
 								  conpfeqop,
 								  conppeqop,
 								  conffeqop,
-#if PG15_GE
 								  numfkdelsetcols,
 								  confdelsetcols,
-#endif
 								  parentDelTrigger,
 								  parentUpdTrigger);
 	}
@@ -143,10 +133,7 @@ ts_fk_propagate(Oid conrelid, Hypertable *ht)
 static void
 clone_constraint_on_chunk(const Chunk *chunk, Relation parentRel, Form_pg_constraint fk, int numfks,
 						  AttrNumber *conkey, AttrNumber *confkey, Oid *conpfeqop, Oid *conppeqop,
-						  Oid *conffeqop,
-#if PG15_GE
-						  int numfkdelsetcols, AttrNumber *confdelsetcols,
-#endif
+						  Oid *conffeqop, int numfkdelsetcols, AttrNumber *confdelsetcols,
 						  Oid parentDelTrigger, Oid parentUpdTrigger)
 {
 	AttrNumber mapped_confkey[INDEX_MAX_KEYS];
@@ -196,10 +183,8 @@ clone_constraint_on_chunk(const Chunk *chunk, Relation parentRel, Form_pg_constr
 									   numfks,
 									   fk->confupdtype,
 									   fk->confdeltype,
-#if PG15_GE
 									   confdelsetcols,
 									   numfkdelsetcols,
-#endif
 									   fk->confmatchtype,
 									   NULL,
 									   NULL,

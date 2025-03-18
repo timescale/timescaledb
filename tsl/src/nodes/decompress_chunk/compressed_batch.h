@@ -139,14 +139,18 @@ extern void compressed_batch_save_first_tuple(DecompressContext *dcontext,
  * This reduces memory usage and improves performance with batch sorted merge.
  */
 #define create_bulk_decompression_mctx(parent_mctx)                                                \
-	GenerationContextCreateCompat(parent_mctx,                                                     \
-								  "DecompressBatchState bulk decompression",                       \
-								  64 * 1024);
+	GenerationContextCreate(parent_mctx,                                                           \
+							"DecompressBatchState bulk decompression",                             \
+							0,                                                                     \
+							64 * 1024,                                                             \
+							64 * 1024);
 
 #define create_per_batch_mctx(dcontext)                                                            \
-	GenerationContextCreateCompat(CurrentMemoryContext,                                            \
-								  "DecompressBatchState per-batch",                                \
-								  dcontext->enable_bulk_decompression ? 64 * 1024 : 8 * 1024);
+	GenerationContextCreate(CurrentMemoryContext,                                                  \
+							"DecompressBatchState per-batch",                                      \
+							0,                                                                     \
+							dcontext->enable_bulk_decompression ? 64 * 1024 : 8 * 1024,            \
+							dcontext->enable_bulk_decompression ? 64 * 1024 : 8 * 1024);
 
 extern void compressed_batch_destroy(DecompressBatchState *batch_state);
 

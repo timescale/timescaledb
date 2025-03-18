@@ -816,11 +816,11 @@ merge_relinfos(RelationMergeInfo *relinfos, int nrelids, int mergeindex)
 	struct VacuumCutoffs *merged_cutoffs = &result_minfo->cutoffs;
 
 	/* Create the transient heap that will receive the re-ordered data */
-	Oid new_relid = make_new_heap_compat(RelationGetRelid(result_rel),
-										 tablespace,
-										 result_rel->rd_rel->relam,
-										 result_minfo->relpersistence,
-										 ExclusiveLock);
+	Oid new_relid = make_new_heap(RelationGetRelid(result_rel),
+								  tablespace,
+								  result_rel->rd_rel->relam,
+								  result_minfo->relpersistence,
+								  ExclusiveLock);
 	Relation new_rel = table_open(new_relid, AccessExclusiveLock);
 	double total_num_tuples = 0.0;
 

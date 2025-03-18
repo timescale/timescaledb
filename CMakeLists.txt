@@ -301,13 +301,13 @@ if(WIN32)
   find_path(
     PG_PATH postgres.exe
     PATHS "C:/PostgreSQL" "C:/Program Files/PostgreSQL"
-    PATH_SUFFIXES bin 14/bin 15/bin 16/bin
+    PATH_SUFFIXES bin 15/bin 16/bin
     DOC "The path to a PostgreSQL installation")
 elseif(UNIX)
   find_path(
     PG_PATH postgres
     PATHS $ENV{HOME} /opt/local/pgsql /usr/local/pgsql /usr/lib/postgresql
-    PATH_SUFFIXES bin 14/bin 15/bin 16/bin
+    PATH_SUFFIXES bin 15/bin 16/bin
     DOC "The path to a PostgreSQL installation")
 endif()
 
@@ -349,10 +349,10 @@ message(
 
 # Ensure that PostgreSQL version is supported and consistent with src/compat.h
 # version check
-if((${PG_VERSION_MAJOR} LESS "14")
+if((${PG_VERSION_MAJOR} LESS "15")
    OR (${PG_VERSION_MAJOR} GREATER "17")
    AND NOT (${EXPERIMENTAL}))
-  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 14, 15, 16 and 17")
+  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 15, 16 and 17")
 endif()
 
 # Get PostgreSQL configuration from pg_config

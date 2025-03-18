@@ -752,7 +752,6 @@ ts_get_appendrelinfo(PlannerInfo *root, Index rti, bool missing_ok)
 	return NULL;
 }
 
-#if PG15_GE
 /*
  * Find an equivalence class member expression, all of whose Vars, come from
  * the indicated relation.
@@ -785,7 +784,6 @@ ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
 	/* We didn't find any suitable equivalence class expression */
 	return NULL;
 }
-#endif
 
 bool
 ts_has_row_security(Oid relid)
@@ -1303,10 +1301,6 @@ ts_get_node_name(Node *node)
 		NODE_CASE(RangeVar);
 		NODE_CASE(TableFunc);
 		NODE_CASE(IntoClause);
-#if PG15_LT
-		/* PG15 removed T_Expr nodetag because it's an abstract type. */
-		NODE_CASE(Expr);
-#endif
 		NODE_CASE(Var);
 		NODE_CASE(Const);
 		NODE_CASE(Param);

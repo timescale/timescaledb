@@ -186,7 +186,6 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 			return;
 		}
 	}
-#if PG15_GE
 	/*
 	 * We do not support MERGE command with UPDATE/DELETE merge actions on
 	 * compressed hypertables, because Custom Scan (HypertableModify) node is
@@ -200,7 +199,6 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 					 errmsg("The MERGE command with UPDATE/DELETE merge actions is not support on "
 							"compressed hypertables")));
 	}
-#endif
 }
 
 /*

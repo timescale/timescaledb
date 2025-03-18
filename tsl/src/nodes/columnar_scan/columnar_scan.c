@@ -453,12 +453,8 @@ getnextslot(TableScanDesc scandesc, ScanDirection direction, TupleTableSlot *slo
 static bool
 should_project(const CustomScanState *state)
 {
-#if PG15_GE
 	const CustomScan *scan = castNode(CustomScan, state->ss.ps.plan);
 	return scan->flags & CUSTOMPATH_SUPPORT_PROJECTION;
-#else
-	return false;
-#endif
 }
 
 static inline bool
@@ -1103,9 +1099,7 @@ columnar_scan_path_create(PlannerInfo *root, RelOptInfo *rel, Relids required_ou
 						   * ordering */
 
 	cspath->custom_path.flags = CUSTOMPATH_SUPPORT_BACKWARD_SCAN;
-#if PG15_GE
 	cspath->custom_path.flags |= CUSTOMPATH_SUPPORT_PROJECTION;
-#endif
 	cspath->custom_path.methods = &columnar_scan_path_methods;
 
 	cost_columnar_scan(path, root, rel);

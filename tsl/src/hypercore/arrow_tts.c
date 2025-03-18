@@ -124,8 +124,11 @@ tts_arrow_init(TupleTableSlot *slot)
 
 	/* Memory context reset every new segment. Used to store, e.g., vectorized
 	 * filters */
-	aslot->per_segment_mcxt =
-		GenerationContextCreateCompat(slot->tts_mcxt, "Per-segment memory context", 64 * 1024);
+	aslot->per_segment_mcxt = GenerationContextCreate(slot->tts_mcxt,
+													  "Per-segment memory context",
+													  0,
+													  64 * 1024,
+													  64 * 1024);
 }
 
 /*

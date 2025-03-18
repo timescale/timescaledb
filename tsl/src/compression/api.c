@@ -759,7 +759,6 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 static Oid
 set_access_method(Oid relid, const char *amname)
 {
-#if PG15_GE
 	AlterTableCmd cmd = {
 		.type = T_AlterTableCmd,
 		.subtype = AT_SetAccessMethod,
@@ -804,11 +803,6 @@ set_access_method(Oid relid, const char *amname)
 #endif
 	hypercore_alter_access_method_finish(relid, !to_hypercore);
 
-#else
-	ereport(ERROR,
-			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("compression using hypercore is not supported")));
-#endif
 	return relid;
 }
 

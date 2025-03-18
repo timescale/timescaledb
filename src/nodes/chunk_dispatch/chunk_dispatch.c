@@ -258,7 +258,6 @@ chunk_dispatch_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *be
 	cscan->custom_scan_tlist = tlist;
 	cscan->scan.plan.targetlist = tlist;
 
-#if (PG15_GE)
 	if (root->parse->commandType == CMD_MERGE)
 	{
 		/* replace expressions of ROWID_VAR */
@@ -266,7 +265,6 @@ chunk_dispatch_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *be
 		cscan->scan.plan.targetlist = tlist;
 		cscan->custom_scan_tlist = tlist;
 	}
-#endif
 	return &cscan->scan.plan;
 }
 
@@ -326,7 +324,6 @@ on_chunk_insert_state_changed(ChunkInsertState *cis, void *data)
 	state->rri = cis->result_relation_info;
 }
 
-#if PG15_GE
 static AttrNumber
 rel_get_natts(Oid relid)
 {
@@ -350,7 +347,6 @@ attr_is_dropped_or_missing(Oid relid, AttrNumber attno)
 	ReleaseSysCache(tp);
 	return result;
 }
-#endif
 
 static TupleTableSlot *
 chunk_dispatch_exec(CustomScanState *node)
@@ -377,7 +373,6 @@ chunk_dispatch_exec(CustomScanState *node)
 	/* Switch to the executor's per-tuple memory context */
 	old = MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
 
-#if PG15_GE
 	TupleTableSlot *newslot = NULL;
 	if (dispatch->dispatch_state->mtstate->operation == CMD_MERGE)
 	{
@@ -422,10 +417,6 @@ chunk_dispatch_exec(CustomScanState *node)
 	}
 	/* Calculate the tuple's point in the N-dimensional hyperspace */
 	point = ts_hyperspace_calculate_point(ht->space, (newslot ? newslot : slot));
-
-#else
-	point = ts_hyperspace_calculate_point(ht->space, slot);
-#endif
 
 	/* Save the main table's (hypertable's) ResultRelInfo */
 	if (!dispatch->hypertable_result_rel_info)

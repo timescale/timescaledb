@@ -38,13 +38,11 @@ typedef struct ModifyTableContext {
 	 * During EvalPlanQual, project and return the new version of the new
 	 * tuple
 	 */
-#if PG15_GE
 	TupleTableSlot *(*GetUpdateNewTuple) (ResultRelInfo * resultRelInfo, TupleTableSlot * epqslot,
 		    TupleTableSlot * oldSlot, MergeActionState * relaction);
 
 	/* MERGE specific */
 	MergeActionState *relaction;	/* MERGE action in progress */
-#endif
 	/*
 	 * Information about the changes that were made concurrently to a
 	 * tuple being updated or deleted
@@ -103,7 +101,6 @@ TM_Result	ht_ExecDeleteAct(ModifyTableContext * context, ResultRelInfo * resultR
 void		ht_ExecDeleteEpilogue(ModifyTableContext * context, ResultRelInfo * resultRelInfo,
 				   ItemPointer tupleid, HeapTuple oldtuple);
 
-#if PG15_GE
 TupleTableSlot *
 ht_ExecMerge(ModifyTableContext * context, ResultRelInfo * resultRelInfo, ChunkDispatchState * cds,
 	     ItemPointer tupleid, HeapTuple oldtuple, bool canSetTag);
@@ -111,4 +108,3 @@ TupleTableSlot*		ht_ExecMergeMatched(ModifyTableContext * context, ResultRelInfo
 				    ItemPointer tupleid, HeapTuple oldtuple, bool canSetTag, bool *matched);
 TupleTableSlot*		ht_ExecMergeNotMatched(ModifyTableContext * context, ResultRelInfo * resultRelInfo,
 				  ChunkDispatchState * cds, bool canSetTag);
-#endif
