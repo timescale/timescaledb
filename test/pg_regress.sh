@@ -211,15 +211,14 @@ mkdir -p ${EXE_DIR}/sql/dump
 
 export PG_REGRESS_DIFF_OPTS
 
+# If so configured, we run the tests with faketime utility to change the current
+# time. This helps catch the mistakes with using the current time in test
+# references. We can't do this for isolation tests because this breaks the
+# waiting mechanism in isolation tester.
 if [[ "${PG_REGRESS_USE_FAKETIME}" == "1" ]]
 then
     PG_REGRESS_FAKETIME="${FAKETIME}"
 fi
-
-echo --------------------------------
-echo FAKETIME IS ${FAKETIME}, PG_REGRESS_FAKETIME IS ${PG_REGRESS_FAKETIME}
-echo ********************************
-pstree -sla $$
 
 PG_REGRESS_OPTS="${PG_REGRESS_OPTS}  --schedule=${SCHEDULE}"
 ${PG_REGRESS_FAKETIME} ${PG_REGRESS} "$@" ${PG_REGRESS_OPTS}
