@@ -52,7 +52,7 @@ jobs:
       CLANG: ${{ matrix.clang }}
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
-      FAKETIME: ${{ (matrix.os == 'Linux') && 'faketime -f +379d' || '' }}
+      FAKETIME: ${{ contains(matrix.name, 'flaky') && 'faketime -f +379d' || '' }}
     strategy:
       matrix: ${{ fromJson(needs.matrixbuilder.outputs.matrix) }}
       fail-fast: false
