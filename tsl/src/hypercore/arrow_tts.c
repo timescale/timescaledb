@@ -746,6 +746,21 @@ tts_arrow_copy_heap_tuple(TupleTableSlot *slot)
 	return tuple;
 }
 
+#if PG17_GE
+static bool
+tts_arrow_is_current_xact_tuple(TupleTableSlot *slot)
+{
+	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
+	Assert(!TTS_EMPTY(slot));
+	if (NULL == aslot->child_slot)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("don't have transaction information in this context")));
+
+	return aslot->child_slot->tts_ops->is_current_xact_tuple(aslot->child_slot);
+}
+#endif
+
 /*
  * Produce a Minimal tuple copy from the slot Datum values.
  *
@@ -837,15 +852,20 @@ arrow_slot_set_index_attrs(TupleTableSlot *slot, Bitmapset *attrs)
 	MemoryContextSwitchTo(oldmcxt);
 }
 
-const TupleTableSlotOps TTSOpsArrowTuple = { .base_slot_size = sizeof(ArrowTupleTableSlot),
-											 .init = tts_arrow_init,
-											 .release = tts_arrow_release,
-											 .clear = tts_arrow_clear,
-											 .getsomeattrs = tts_arrow_getsomeattrs,
-											 .getsysattr = tts_arrow_getsysattr,
-											 .materialize = tts_arrow_materialize,
-											 .copyslot = tts_arrow_copyslot,
-											 .get_heap_tuple = NULL,
-											 .get_minimal_tuple = NULL,
-											 .copy_heap_tuple = tts_arrow_copy_heap_tuple,
-											 .copy_minimal_tuple = tts_arrow_copy_minimal_tuple };
+const TupleTableSlotOps TTSOpsArrowTuple = {
+	.base_slot_size = sizeof(ArrowTupleTableSlot),
+	.init = tts_arrow_init,
+	.release = tts_arrow_release,
+	.clear = tts_arrow_clear,
+	.getsomeattrs = tts_arrow_getsomeattrs,
+	.getsysattr = tts_arrow_getsysattr,
+	.materialize = tts_arrow_materialize,
+	.copyslot = tts_arrow_copyslot,
+	.get_heap_tuple = NULL,
+	.get_minimal_tuple = NULL,
+	.copy_heap_tuple = tts_arrow_copy_heap_tuple,
+	.copy_minimal_tuple = tts_arrow_copy_minimal_tuple,
+#if PG17_GE
+	.is_current_xact_tuple = tts_arrow_is_current_xact_tuple,
+#endif
+};
