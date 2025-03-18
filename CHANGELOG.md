@@ -11,7 +11,7 @@ This release contains performance improvements and bug fixes since  the 2.18.2 r
 * Improved concurrency of INSERT, UPDATE and DELETE operations on the columnstore by no longer blocking DML statements during the recompression of a chunk.
 * Improved system performance during Continuous Aggregates refreshes by breaking them into smaller batches which reduces systems pressure and minimizes the risk of spilling to disk.
 * Faster and more up-to-date results for queries against Continuous Aggregates by materializing the most recent data first (vs old data first in prior versions).
-* Faster analytical queries with SIMD vectorization of aggregations over text columns and group by over multiple column
+* Faster analytical queries with SIMD vectorization of aggregations over text columns and group by over multiple columns.
 * Enable optimizing chunk size for faster query performance on the columnstore by adding support for merging columnstore chunks to the `merge_chunk` API.
 
 **Deprecation warning**
