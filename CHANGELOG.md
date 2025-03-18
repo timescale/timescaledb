@@ -8,9 +8,11 @@ accidentally triggering the load of a previous DB version.**
 
 This release contains performance improvements and bug fixes since  the 2.18.2 release. We recommend that you upgrade at the next  available opportunity.
 **Highlights of the v2.19.0 release**
-* The Hypercore columnstore no longer blocks DML statements during recompression, allowing INSERT, UPDATE, and DELETE operations on compressed chunks significantly improves concurrency.
-* Improvements to Continuous Aggregation now materialize the most recent data first, to enhance query experience. Additionally, the refresh policy now supports batching, which helps reduce system pressure and minimize the risk of spilling to disk, leading to better overall performance.
-* We are further investing in vectorization (SIMD) to enhance Hypercore’s performance, improving analytical queries such as aggregations over text columns and those with an arbitrary number of columns to aggregate on.
+* Improved concurrency of INSERT, UPDATE and DELETE operations on the columnstore by no longer blocking DML statements during the recompression of a chunk.
+* Improved system performance during Continuous Aggregates refreshes by breaking them into smaller batches which reduces systems pressure and minimizes the risk of spilling to disk.
+* Faster and more up-to-date results for queries against Continuous Aggregates by materializing the most recent data first (vs old data first in prior versions).
+* Faster analytical queries with SIMD vectorization of aggregations over text columns and group by over multiple column
+* Enable optimizing chunk size for faster query performance on the columnstore by adding support for merging columnstore chunks to the merge_chunk API.n.
 
 **Deprecation warning**
 
