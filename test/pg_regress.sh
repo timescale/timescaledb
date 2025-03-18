@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 # shellcheck disable=SC2053
-# shellcheck disable=SC2235
 
 # Wrapper around pg_regress and pg_isolation_regress to be able to control the schedule with environment variables
 #
@@ -78,7 +77,7 @@ if [[ -z ${TESTS} ]] && [[ -z ${SKIPS} ]] && [[ -z ${IGNORES} ]]; then
 
   SCHEDULE=${TEST_SCHEDULE}
 
-elif [[ -z ${TESTS} ]] && ( [[ -n ${SKIPS} ]] || [[ -n ${IGNORES} ]] ); then
+elif [[ -z ${TESTS} && ( -n ${SKIPS} || -n ${IGNORES} ) ]]; then
   # If we only have IGNORES or SKIPS we can use the cmake created schedule
   # and just prepend ignore lines for the tests whose result should be
   # ignored and strip out the skipped tests. This will allow us to retain

@@ -52,7 +52,16 @@ jobs:
       CLANG: ${{ matrix.clang }}
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
-      FAKETIME: ${{ contains(matrix.os, 'ubuntu') && 'faketime -f +379d' || '' }}
+
+      # For some reason, on PG <= 15 with faketime the client backends get the
+      # modified time, and the background workers the unmodified time, so it
+      # doesn't work.
+      FAKETIME: |
+        ${{ (contains(matrix.os, 'ubuntu')
+               && !startsWith(matrix.pg, '14.')
+               && !startsWith(matrix.pg, '15.')
+            ) && 'faketime -f +379d' || '' }}
+
     strategy:
       matrix: ${{ fromJson(needs.matrixbuilder.outputs.matrix) }}
       fail-fast: false
