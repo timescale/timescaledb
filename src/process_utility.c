@@ -2636,6 +2636,7 @@ process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 			{
 				case CONSTR_UNIQUE:
 				case CONSTR_PRIMARY:
+				case CONSTR_FOREIGN:
 					break;
 				default:
 					if (ts_chunk_is_compressed(chunk) && !ts_is_hypercore_am(chunk->amoid))

@@ -196,19 +196,6 @@ alter table table_constr drop constraint table_constr_exclu ;
 --now it works
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id, location, d');
 
-
---can add fks after compression enabled but before any data is compressed
-alter table table_constr add constraint table_constr_fk_add_after FOREIGN KEY(d) REFERENCES fortable(col) on delete cascade;
-
-alter table table_constr drop constraint table_constr_fk_add_after;
-insert into table_constr values (1, 1, 1, 21, 1);
---can still add fks when chunks exists as long as there is no compressed data
-alter table table_constr add constraint table_constr_fk_add_after FOREIGN KEY(d) REFERENCES fortable(col) on delete cascade;
-alter table table_constr drop constraint table_constr_fk_add_after;
-select compress_chunk(ch) from show_chunks('table_constr') ch;
---can't add fks after compressed data exists
-alter table table_constr add constraint table_constr_fk_add_after FOREIGN KEY(d) REFERENCES fortable(col) on delete cascade;
-
 -- ddl ADD column variants that are not supported
 ALTER TABLE table_constr ADD COLUMN newcol integer CHECK ( newcol < 10 );
 ALTER TABLE table_constr ADD COLUMN newcol integer UNIQUE;
