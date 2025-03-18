@@ -1,0 +1,1 @@
+Fixes: #7850 Add is_current_xact_tuple to Arrow TTS
