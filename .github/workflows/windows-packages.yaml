@@ -18,7 +18,6 @@ jobs:
   config:
     runs-on: ubuntu-latest
     outputs:
-      pg14_latest: ${{ steps.config.outputs.pg14_latest }}
       pg15_latest: ${{ steps.config.outputs.pg15_latest }}
       pg16_latest: ${{ steps.config.outputs.pg16_latest }}
       pg17_latest: ${{ steps.config.outputs.pg17_latest }}
@@ -38,10 +37,8 @@ jobs:
       fail-fast: false
       matrix:
         os: [ windows-2019 ]
-        pg: [ "14", "15", "16", "17" ]
+        pg: [ "15", "16", "17" ]
         include:
-          - pg: 14
-            pkg_version: ${{ fromJson(needs.config.outputs.pg14_latest) }}.0
           - pg: 15
             pkg_version: ${{ fromJson(needs.config.outputs.pg15_latest) }}.0
           - pg: 16

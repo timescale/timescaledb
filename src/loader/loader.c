@@ -112,9 +112,7 @@ int ts_guc_bgw_launcher_poll_time = BGW_LAUNCHER_POLL_TIME_MS;
 /* This is the hook that existed before the loader was installed */
 static post_parse_analyze_hook_type prev_post_parse_analyze_hook;
 static shmem_startup_hook_type prev_shmem_startup_hook;
-#if PG15_GE
 static shmem_request_hook_type prev_shmem_request_hook;
-#endif
 
 typedef struct TsExtension
 {
@@ -557,10 +555,8 @@ timescaledb_shmem_startup_hook(void)
 static void
 timescaledb_shmem_request_hook(void)
 {
-#if PG15_GE
 	if (prev_shmem_request_hook)
 		prev_shmem_request_hook();
-#endif
 
 	ts_bgw_counter_shmem_alloc();
 	ts_bgw_message_queue_alloc();
@@ -586,10 +582,6 @@ _PG_init(void)
 	extension_mark_loader_present();
 
 	elog(INFO, "timescaledb loaded");
-
-#if PG15_LT
-	timescaledb_shmem_request_hook();
-#endif
 
 	ts_bgw_cluster_launcher_init();
 	ts_bgw_counter_setup_gucs();
@@ -638,10 +630,8 @@ _PG_init(void)
 	post_parse_analyze_hook = post_analyze_hook;
 	shmem_startup_hook = timescaledb_shmem_startup_hook;
 
-#if PG15_GE
 	prev_shmem_request_hook = shmem_request_hook;
 	shmem_request_hook = timescaledb_shmem_request_hook;
-#endif
 }
 
 inline static void

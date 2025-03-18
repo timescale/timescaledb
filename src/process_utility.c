@@ -158,10 +158,7 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 				case AT_SetTableSpace:
 				case AT_ReAddStatistics:
 				case AT_SetCompression:
-#if PG15_GE
-
 				case AT_SetAccessMethod:
-#endif
 					/* allowed on chunks */
 					break;
 				case AT_AddConstraint:
@@ -291,9 +288,7 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			case AT_SetCompression:
 			case AT_DropNotNull:
 			case AT_SetNotNull:
-#if PG15_GE
 			case AT_SetAccessMethod:
-#endif
 				continue;
 				/*
 				 * BLOCKED:
@@ -514,11 +509,7 @@ process_drop_schema_start(DropStmt *stmt)
 		Ensure(!schema_isnull, "corrupt job entry: schema for job %d is null", job_id);
 		foreach (cell, stmt->objects)
 		{
-#if PG15_GE
 			String *object = lfirst_node(String, cell);
-#else
-			Value *object = lfirst(cell);
-#endif
 			if (namestrcmp(proc_schema, strVal(object)) == 0)
 			{
 				CatalogSecurityContext sec_ctx;
@@ -2540,14 +2531,12 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 						 quote_identifier(get_namespace_name(nspcid)),
 						 quote_identifier(get_rel_name(chunk->table_id)));
 
-#if PG15_GE
 		/*
 		 * Before PG15 NULLs were always considered distinct, with
 		 * PG15 the behaviour became configurable.
 		 */
 		if (!stmt->nulls_not_distinct)
 		{
-#endif
 			int i = 0;
 			appendStringInfo(&command, " WHERE ");
 			foreach (lc, stmt->indexParams)
@@ -2559,9 +2548,7 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 					appendStringInfo(&command, " AND ");
 			}
 			Assert(i > 0);
-#if PG15_GE
 		}
-#endif
 
 		appendStringInfo(&command, " GROUP BY ");
 		int j = 0;
@@ -3923,7 +3910,6 @@ process_altertable_chunk_set_tablespace(AlterTableCmd *cmd, Oid relid)
  * If called on a hypertable, this will set the compression flag on the
  * hypertable in addition to running the set access method code.
  */
-#if PG15_GE
 static void
 process_set_access_method(AlterTableCmd *cmd, ProcessUtilityArgs *args)
 {
@@ -3950,7 +3936,6 @@ process_set_access_method(AlterTableCmd *cmd, ProcessUtilityArgs *args)
 	}
 	ts_cache_release(hcache);
 }
-#endif
 
 static DDLResult
 process_altertable_start_table(ProcessUtilityArgs *args)
@@ -4075,11 +4060,9 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				if (NULL == ht)
 					process_altertable_chunk_set_tablespace(cmd, relid);
 				break;
-#if PG15_GE
 			case AT_SetAccessMethod:
 				process_set_access_method(cmd, args);
 				break;
-#endif
 			default:
 				break;
 		}
@@ -4837,7 +4820,6 @@ process_create_table_as(ProcessUtilityArgs *args)
 	return DDL_CONTINUE;
 }
 
-#if PG15_GE
 static DDLResult
 process_create_stmt(ProcessUtilityArgs *args)
 {
@@ -4863,7 +4845,6 @@ process_create_stmt(ProcessUtilityArgs *args)
 
 	return DDL_CONTINUE;
 }
-#endif
 
 static DDLResult
 process_refresh_mat_view_start(ProcessUtilityArgs *args)
@@ -4985,11 +4966,9 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 		case T_CreateTableAsStmt:
 			handler = process_create_table_as;
 			break;
-#if PG15_GE
 		case T_CreateStmt:
 			handler = process_create_stmt;
 			break;
-#endif
 
 		case T_ExecuteStmt:
 			check_read_only = false;

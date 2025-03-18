@@ -84,13 +84,8 @@ process_copy(ProcessUtilityArgs *args)
 			 * parent hypercore relation. */
 			SelectStmt *select = makeNode(SelectStmt);
 			A_Const *aconst = makeNode(A_Const);
-#if PG15_LT
-			aconst->val.type = T_Integer;
-			aconst->val.val.ival = 0;
-#else
 			aconst->val.boolval.boolval = false;
 			aconst->val.boolval.type = T_Boolean;
-#endif
 			select->whereClause = (Node *) aconst;
 			stmt->relation = NULL;
 			stmt->attlist = NIL;
@@ -127,7 +122,6 @@ tsl_ddl_command_start(ProcessUtilityArgs *args)
 
 				switch (cmd->subtype)
 				{
-#if PG15_GE
 					case AT_SetAccessMethod:
 					{
 						Oid relid = AlterTableLookupRelation(stmt, NoLock);
@@ -175,7 +169,6 @@ tsl_ddl_command_start(ProcessUtilityArgs *args)
 
 						break;
 					}
-#endif
 					default:
 						break;
 				}
@@ -275,7 +268,6 @@ tsl_ddl_command_end(EventTriggerData *command)
 
 				switch (cmd->subtype)
 				{
-#if PG15_GE
 					case AT_SetAccessMethod:
 					{
 						Oid relid = AlterTableLookupRelation(stmt, NoLock);
@@ -284,7 +276,6 @@ tsl_ddl_command_end(EventTriggerData *command)
 						hypercore_alter_access_method_finish(relid, !to_hypercore);
 						break;
 					}
-#endif
 					default:
 						break;
 				}

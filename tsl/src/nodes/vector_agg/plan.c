@@ -178,7 +178,6 @@ vector_agg_plan_create(Plan *childplan, Agg *agg, List *resolved_targetlist,
 	lfirst(list_nth_cell(vector_agg->custom_private, VASI_GroupingType)) =
 		makeInteger(grouping_type);
 
-#if PG15_GE
 	if (is_columnar_scan(childplan))
 	{
 		CustomScan *custom = castNode(CustomScan, childplan);
@@ -197,7 +196,6 @@ vector_agg_plan_create(Plan *childplan, Agg *agg, List *resolved_targetlist,
 		 */
 		custom->flags &= ~CUSTOMPATH_SUPPORT_PROJECTION;
 	}
-#endif
 
 	return (Plan *) vector_agg;
 }

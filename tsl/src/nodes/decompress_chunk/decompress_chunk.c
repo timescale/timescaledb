@@ -299,7 +299,7 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 			for (; lc != NULL; lc = lnext(chunk_pathkeys, lc))
 			{
 				pk = lfirst(lc);
-				expr = find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
+				expr = ts_find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
 
 				Assert(expr != NULL && IsA(expr, Var));
 				var = castNode(Var, expr);
@@ -1061,7 +1061,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 					PathKey *pathkey = (PathKey *) lfirst(lc);
 					EquivalenceClass *pathkey_ec = pathkey->pk_eclass;
 
-					Expr *em_expr = find_em_expr_for_rel(pathkey_ec, chunk_rel);
+					Expr *em_expr = ts_find_em_expr_for_rel(pathkey_ec, chunk_rel);
 
 					/* No em expression found for our rel */
 					if (!em_expr)
@@ -2271,7 +2271,7 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		Expr *em_expr = NULL;
 		if (!ec->ec_has_volatile)
 		{
-			em_expr = find_em_expr_for_rel(pk->pk_eclass, compression_info->chunk_rel);
+			em_expr = ts_find_em_expr_for_rel(pk->pk_eclass, compression_info->chunk_rel);
 		}
 		chunk_em_exprs = lappend(chunk_em_exprs, em_expr);
 	}
