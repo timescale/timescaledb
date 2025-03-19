@@ -6,47 +6,47 @@ accidentally triggering the load of a previous DB version.**
 
 ## 2.19.0 (2025-03-18)
 
-This release contains performance improvements and bug fixes since  the 2.18.2 release. We recommend that you upgrade at the next  available opportunity.
-**Highlights of the v2.19.0 release**
-* Improved concurrency of INSERT, UPDATE and DELETE operations on the columnstore by no longer blocking DML statements during the recompression of a chunk.
-* Improved system performance during Continuous Aggregates refreshes by breaking them into smaller batches which reduces systems pressure and minimizes the risk of spilling to disk.
-* Faster and more up-to-date results for queries against Continuous Aggregates by materializing the most recent data first (vs old data first in prior versions).
-* Faster analytical queries with SIMD vectorization of aggregations over text columns and group by over multiple columns.
-* Enable optimizing chunk size for faster query performance on the columnstore by adding support for merging columnstore chunks to the `merge_chunk` API.
+This release contains performance improvements and bug fixes since the 2.18.2 release. We recommend that you upgrade at the next available opportunity.
+
+* Improved concurrency of `INSERT`, `UPDATE`, and `DELETE` operations on the columnstore by no longer blocking DML statements during the recompression of a chunk.
+* Improved system performance during continuous aggregate refreshes by breaking them into smaller batches. This reduces systems pressure and minimizes the risk of spilling to disk.
+* Faster and more up-to-date results for queries against continuous aggregates by materializing the most recent data first, as opposed to old data first in prior versions.
+* Faster analytical queries with SIMD vectorization of aggregations over text columns and `GROUP BY` over multiple columns.
+* Enable optimizing the chunk size for better query performance in the columnstore by merging them with `merge_chunk`.
 
 **Deprecation warning**
 
-This is the last minor release supporting PostgreSQL 14. Starting with the minor version of TimescaleDB only Postgres 15, 16 and 17 will be supported.
+This is the last minor release supporting PostgreSQL 14. Starting with the next minor version of TimescaleDB, only Postgres 15, 16, and 17 will be supported.
 
-**Downgrading from 2.19.0**
+**Downgrading of 2.19.0**
 
-This release introduces custom bool compression, if you enable this feature via the `enable_bool_compression` and must downgrade to a previous, please use the [following script](https://github.com/timescale/timescaledb-extras/blob/master/utils/2.19.0-downgrade_new_compression_algorithms.sql) to convert the columns back to their previous state. TimescaleDB versions prior to 2.19.0 do not know how to handle this new type.
+This release introduces custom bool compression. If you enable this feature with `enable_bool_compression` and need to revert it, use [this script](https://github.com/timescale/timescaledb-extras/blob/master/utils/2.19.0-downgrade_new_compression_algorithms.sql) to convert the columns back to their previous state. TimescaleDB versions prior to 2.19.0 do not support this new type.
 
 **Features**
-* [#7586](https://github.com/timescale/timescaledb/pull/7586) Vectorized aggregation with grouping by a single text column.
+* [#7586](https://github.com/timescale/timescaledb/pull/7586) Vectorized aggregation with grouping by a single text column
 * [#7632](https://github.com/timescale/timescaledb/pull/7632) Optimize recompression for chunks without segmentby
-* [#7655](https://github.com/timescale/timescaledb/pull/7655) Support vectorized aggregation on Hypercore TAM
+* [#7655](https://github.com/timescale/timescaledb/pull/7655) Support vectorized aggregation on hypercore TAM
 * [#7669](https://github.com/timescale/timescaledb/pull/7669) Add support for merging compressed chunks
-* [#7701](https://github.com/timescale/timescaledb/pull/7701) Implement a custom compression algorithm for bool columns. It is experimental and can undergo backwards-incompatible changes. For testing, enable it using timescaledb.enable_bool_compression = on.
-* [#7707](https://github.com/timescale/timescaledb/pull/7707) Support ALTER COLUMN SET NOT NULL on compressed chunks
-* [#7765](https://github.com/timescale/timescaledb/pull/7765) Allow tsdb as alias for timescaledb in WITH and SET clauses
-* [#7786](https://github.com/timescale/timescaledb/pull/7786) Show warning for inefficient compress_chunk_time_interval configuration
-* [#7788](https://github.com/timescale/timescaledb/pull/7788) Add callback to mem_guard for background workers
+* [#7701](https://github.com/timescale/timescaledb/pull/7701) Implement a custom compression algorithm for bool columns. It is in early access and can undergo backwards-incompatible changes. For testing, enable it using `timescaledb.enable_bool_compression = on`
+* [#7707](https://github.com/timescale/timescaledb/pull/7707) Support `ALTER COLUMN SET NOT NULL` on compressed chunks
+* [#7765](https://github.com/timescale/timescaledb/pull/7765) Allow `tsdb` as alias for `timescaledb` in `WITH` and `SET` clauses
+* [#7786](https://github.com/timescale/timescaledb/pull/7786) Show a warning for inefficient `compress_chunk_time_interval` configuration
+* [#7788](https://github.com/timescale/timescaledb/pull/7788) Add a callback to `mem_guard` for background workers
 * [#7789](https://github.com/timescale/timescaledb/pull/7789) Do not recompress segmentwise when default order by is empty
-* [#7790](https://github.com/timescale/timescaledb/pull/7790) Add configurable Incremental CAgg Refresh Policy
+* [#7790](https://github.com/timescale/timescaledb/pull/7790) Add a configurable incremental CAgg refresh policy
 
 **Bugfixes**
 * [#7665](https://github.com/timescale/timescaledb/pull/7665) Block merging of frozen chunks
-* [#7673](https://github.com/timescale/timescaledb/pull/7673) Don't abort additional INSERTs when hitting first conflict
-* [#7714](https://github.com/timescale/timescaledb/pull/7714) Fixes a wrong result when compressed NULL values were confused with default values. This happened in very special circumstances with alter table added a new column with a default value, an update and compression in a very particular order.
+* [#7673](https://github.com/timescale/timescaledb/pull/7673) Don't abort additional `INSERT`s when hitting the first conflict
+* [#7714](https://github.com/timescale/timescaledb/pull/7714) Fix the wrong result when compressed `NULL` values were confused with default values. This happened for a very particular order of events.
 * [#7747](https://github.com/timescale/timescaledb/pull/7747) Block TAM rewrites with incompatible GUC setting
 * [#7748](https://github.com/timescale/timescaledb/pull/7748) Crash in the segmentwise recompression
-* [#7764](https://github.com/timescale/timescaledb/pull/7764) Fix compression settings handling in Hypercore TAM
+* [#7764](https://github.com/timescale/timescaledb/pull/7764) Fix compression settings handling in hypercore TAM
 * [#7768](https://github.com/timescale/timescaledb/pull/7768) Remove costing index scan of hypertable parent
-* [#7799](https://github.com/timescale/timescaledb/pull/7799) Handle DEFAULT table access name in ALTER TABLE
+* [#7799](https://github.com/timescale/timescaledb/pull/7799) Handle the `DEFAULT` table access name in `ALTER TABLE`
 
 **GUCs**
-* enable_bool_compression: enable the BOOL compression algorithm, default: OFF
+* `enable_bool_compression`: enable the BOOL compression algorithm, default: `OFF`
 * `enable_exclusive_locking_recompression`: enable exclusive locking during recompression (legacy mode), default: `OFF`
 
 **Thanks**
