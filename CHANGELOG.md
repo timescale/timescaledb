@@ -43,7 +43,7 @@ This release introduces custom bool compression. If you enable this feature with
 * [#7748](https://github.com/timescale/timescaledb/pull/7748) Crash in the segmentwise recompression
 * [#7764](https://github.com/timescale/timescaledb/pull/7764) Fix compression settings handling in hypercore TAM
 * [#7768](https://github.com/timescale/timescaledb/pull/7768) Remove costing index scan of hypertable parent
-* [#7799](https://github.com/timescale/timescaledb/pull/7799) Handle `DEFAULT` table access name in `ALTER TABLE`
+* [#7799](https://github.com/timescale/timescaledb/pull/7799) Handle the `DEFAULT` table access name in `ALTER TABLE`
 
 **GUCs**
 * `enable_bool_compression`: enable the BOOL compression algorithm, default: `OFF`
