@@ -15,7 +15,6 @@ name: Test Docker images
     branches:
     - release_test
     - trigger/package_test
-    - prerelease_test
   workflow_dispatch:
 jobs:
   docker_tests:
