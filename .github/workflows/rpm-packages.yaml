@@ -12,7 +12,6 @@ name: RPM packages
     branches:
     - release_test
     - trigger/package_test
-    - prerelease_test
   workflow_dispatch:
 
 jobs:

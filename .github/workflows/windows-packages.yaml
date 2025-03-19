@@ -12,7 +12,6 @@ name: Windows Packages
     branches:
     - release_test
     - trigger/windows_packages
-    - prerelease_test
   workflow_dispatch:
 
 jobs:

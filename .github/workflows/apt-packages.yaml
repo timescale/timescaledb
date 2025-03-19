@@ -12,7 +12,6 @@ name: APT packages
     branches:
     - release_test
     - trigger/package_test
-    - prerelease_test
   workflow_dispatch:
 jobs:
   apt_tests:
