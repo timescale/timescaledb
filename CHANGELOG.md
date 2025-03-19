@@ -28,7 +28,7 @@ This release introduces custom bool compression. If you enable this feature with
 * [#7655](https://github.com/timescale/timescaledb/pull/7655) Support vectorized aggregation on hypercore TAM
 * [#7669](https://github.com/timescale/timescaledb/pull/7669) Add support for merging compressed chunks
 * [#7701](https://github.com/timescale/timescaledb/pull/7701) Implement a custom compression algorithm for bool columns. It is in early access and can undergo backwards-incompatible changes. For testing, enable it using `timescaledb.enable_bool_compression = on`
-* [#7707](https://github.com/timescale/timescaledb/pull/7707) Support A`LTER COLUMN SET NOT NULL` on compressed chunks
+* [#7707](https://github.com/timescale/timescaledb/pull/7707) Support `ALTER COLUMN SET NOT NULL` on compressed chunks
 * [#7765](https://github.com/timescale/timescaledb/pull/7765) Allow `tsdb` as alias for `timescaledb` in `WITH` and `SET` clauses
 * [#7786](https://github.com/timescale/timescaledb/pull/7786) Show a warning for inefficient `compress_chunk_time_interval` configuration
 * [#7788](https://github.com/timescale/timescaledb/pull/7788) Add a callback to `mem_guard` for background workers
