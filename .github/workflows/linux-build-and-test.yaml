@@ -310,7 +310,7 @@ jobs:
     - name: Check that no new internal program errors are introduced
       if: contains(matrix.name, 'Flaky')
       run: |
-        ! [ -s ipe.tsv ]
+        ! grep . ipe.tsv
 
     - name: Upload test results to the database
       # Don't upload the results of the flaky check, because the db schema only
