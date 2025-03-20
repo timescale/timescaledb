@@ -1,0 +1,1 @@
+Fixes: #7862 Release cache pin when checking for NOT NULL
