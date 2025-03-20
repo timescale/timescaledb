@@ -277,3 +277,46 @@ INSERT INTO events SELECT '2025-03-01','d1','';
 \set ON_ERROR_STOP 1
 ROLLBACK;
 
+DROP TABLE metrics CASCADE;
+DROP TABLE device CASCADE;
+DROP TABLE events CASCADE;
+
+-- test CHECK constraints
+
+CREATE TABLE metrics(time timestamptz not null, device text, value float);
+SELECT create_hypertable('metrics','time');
+
+ALTER TABLE metrics SET (tsdb.compress, tsdb.compress_segmentby='device', tsdb.compress_orderby='time');
+
+INSERT INTO metrics SELECT '2025-01-01','d1',1;
+INSERT INTO metrics SELECT '2025-01-01','d1',NULL;
+
+\set ON_ERROR_STOP 0
+ALTER TABLE metrics ADD CONSTRAINT metrics_check CHECK (value > 9000);
+ALTER TABLE metrics ADD CONSTRAINT metrics_check CHECK (time > '2026-01-01' AND value > 0);
+\set ON_ERROR_STOP 1
+BEGIN;
+ALTER TABLE metrics ADD CONSTRAINT metrics_check CHECK (value > 0.9);
+ALTER TABLE metrics ADD CONSTRAINT metrics_check2 CHECK (time >= '2025-01-01' AND value > 0);
+INSERT INTO metrics SELECT '2025-01-01','d1',2;
+\set ON_ERROR_STOP 0
+INSERT INTO metrics SELECT '2025-01-01','d1',0;
+\set ON_ERROR_STOP 1
+ROLLBACK;
+
+SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
+
+\set ON_ERROR_STOP 0
+ALTER TABLE metrics ADD CONSTRAINT metrics_check CHECK (value > 9000);
+ALTER TABLE metrics ADD CONSTRAINT metrics_check CHECK (time > '2026-01-01' AND value > 0);
+\set ON_ERROR_STOP 1
+BEGIN;
+ALTER TABLE metrics ADD CONSTRAINT metrics_check CHECK (value > 0.9);
+ALTER TABLE metrics ADD CONSTRAINT metrics_check2 CHECK (time >= '2025-01-01' AND value > 0);
+INSERT INTO metrics SELECT '2025-01-01','d1',2;
+\set ON_ERROR_STOP 0
+INSERT INTO metrics SELECT '2025-01-01','d1',0;
+\set ON_ERROR_STOP 1
+ROLLBACK;
+
+

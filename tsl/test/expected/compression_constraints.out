@@ -326,3 +326,53 @@ INSERT INTO events SELECT '2025-03-01','d1','';
 ERROR:  insert or update on table "events" violates foreign key constraint "events_fk"
 \set ON_ERROR_STOP 1
 ROLLBACK;
+DROP TABLE metrics CASCADE;
+DROP TABLE device CASCADE;
+DROP TABLE events CASCADE;
+-- test CHECK constraints
+CREATE TABLE metrics(time timestamptz not null, device text, value float);
+SELECT create_hypertable('metrics','time');
+  create_hypertable   
+----------------------
+ (7,public,metrics,t)
+(1 row)
+
+ALTER TABLE metrics SET (tsdb.compress, tsdb.compress_segmentby='device', tsdb.compress_orderby='time');
+INSERT INTO metrics SELECT '2025-01-01','d1',1;
+INSERT INTO metrics SELECT '2025-01-01','d1',NULL;
+\set ON_ERROR_STOP 0
+ALTER TABLE metrics ADD CONSTRAINT metrics_check CHECK (value > 9000);
+ERROR:  check constraint "metrics_check" of relation "_hyper_7_30_chunk" is violated by some row
+ALTER TABLE metrics ADD CONSTRAINT metrics_check CHECK (time > '2026-01-01' AND value > 0);
+ERROR:  check constraint "metrics_check" of relation "_hyper_7_30_chunk" is violated by some row
+\set ON_ERROR_STOP 1
+BEGIN;
+ALTER TABLE metrics ADD CONSTRAINT metrics_check CHECK (value > 0.9);
+ALTER TABLE metrics ADD CONSTRAINT metrics_check2 CHECK (time >= '2025-01-01' AND value > 0);
+INSERT INTO metrics SELECT '2025-01-01','d1',2;
+\set ON_ERROR_STOP 0
+INSERT INTO metrics SELECT '2025-01-01','d1',0;
+ERROR:  new row for relation "_hyper_7_30_chunk" violates check constraint "metrics_check"
+\set ON_ERROR_STOP 1
+ROLLBACK;
+SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
+ count 
+-------
+     1
+(1 row)
+
+\set ON_ERROR_STOP 0
+ALTER TABLE metrics ADD CONSTRAINT metrics_check CHECK (value > 9000);
+ERROR:  check constraint "metrics_check" of relation "_hyper_7_30_chunk" is violated by some row
+ALTER TABLE metrics ADD CONSTRAINT metrics_check CHECK (time > '2026-01-01' AND value > 0);
+ERROR:  check constraint "metrics_check" of relation "_hyper_7_30_chunk" is violated by some row
+\set ON_ERROR_STOP 1
+BEGIN;
+ALTER TABLE metrics ADD CONSTRAINT metrics_check CHECK (value > 0.9);
+ALTER TABLE metrics ADD CONSTRAINT metrics_check2 CHECK (time >= '2025-01-01' AND value > 0);
+INSERT INTO metrics SELECT '2025-01-01','d1',2;
+\set ON_ERROR_STOP 0
+INSERT INTO metrics SELECT '2025-01-01','d1',0;
+ERROR:  new row for relation "_hyper_7_30_chunk" violates check constraint "metrics_check"
+\set ON_ERROR_STOP 1
+ROLLBACK;
