@@ -292,10 +292,6 @@ NOTICE:  chunk "_hyper_10_2_chunk" is already compressed
  _timescaledb_internal._hyper_10_2_chunk
 (1 row)
 
---adding these constraints when there is compressed data should fail
-ALTER TABLE foo ADD CONSTRAINT chk CHECK(b > 0);
-ERROR:  operation not supported on hypertables that have compressed data
-HINT:  Decompress the data before retrying the operation.
 SELECT compress_chunk(ch) FROM show_chunks('non_compressed') ch LIMIT 1;
 ERROR:  compression not enabled on "non_compressed"
 DETAIL:  It is not possible to compress chunks on a hypertable or continuous aggregate that does not have compression enabled.

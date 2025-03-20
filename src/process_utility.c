@@ -32,6 +32,8 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodes.h>
 #include <nodes/parsenodes.h>
+#include <parser/parse_expr.h>
+#include <parser/parse_relation.h>
 #include <parser/parse_type.h>
 #include <parser/parse_utilcmd.h>
 #include <storage/lmgr.h>
@@ -46,6 +48,7 @@
 #include <utils/palloc.h>
 #include <utils/regproc.h>
 #include <utils/rel.h>
+#include <utils/ruleutils.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
 
@@ -2601,6 +2604,68 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 }
 
 static void
+validate_check_constraint(Chunk *chunk, Constraint *con)
+{
+	if (ts_chunk_is_compressed(chunk) && !ts_is_hypercore_am(chunk->amoid))
+	{
+		StringInfoData command;
+		Oid nspcid = get_rel_namespace(chunk->table_id);
+
+		ParseState *pstate = make_parsestate(NULL);
+		Relation rel = table_open(chunk->table_id, AccessExclusiveLock);
+		ParseNamespaceItem *nsitem =
+			addRangeTableEntryForRelation(pstate, rel, AccessShareLock, NULL, false, true);
+		addNSItemToQuery(pstate, nsitem, true, true, true);
+		List *context = deparse_context_for(get_rel_name(chunk->table_id), chunk->table_id);
+		Node *tf = transformExpr(pstate, con->raw_expr, EXPR_KIND_CHECK_CONSTRAINT);
+		char *deparsed = deparse_expression(tf, context, false, false);
+
+		initStringInfo(&command);
+		appendStringInfo(&command,
+						 "SELECT EXISTS(SELECT FROM %s.%s WHERE NOT (%s))",
+						 quote_identifier(get_namespace_name(nspcid)),
+						 quote_identifier(RelationGetRelationName(rel)),
+						 deparsed);
+
+		if (SPI_connect() != SPI_OK_CONNECT)
+			elog(ERROR, "could not connect to SPI");
+
+		/* Lock down search_path */
+		int save_nestlevel = NewGUCNestLevel();
+		RestrictSearchPath();
+
+		int res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
+
+		if (res < 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_INTERNAL_ERROR),
+					 (errmsg("could not verify check constraint on \"%s\"",
+							 get_rel_name(chunk->table_id)))));
+
+		bool isnull;
+		Datum has_conflicts =
+			SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+		Assert(!isnull);
+
+		if (isnull || DatumGetBool(has_conflicts))
+			ereport(ERROR,
+					(errcode(ERRCODE_CHECK_VIOLATION),
+					 errmsg("check constraint \"%s\" of relation \"%s\" is violated by some row",
+							con->conname,
+							RelationGetRelationName(rel)),
+					 errtableconstraint(rel, con->conname)));
+
+		table_close(rel, NoLock);
+		/* Restore search_path */
+		AtEOXact_GUC(false, save_nestlevel);
+
+		res = SPI_finish();
+		if (res != SPI_OK_FINISH)
+			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+	}
+}
+
+static void
 process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	const ChunkConstraintInfo *info = arg;
@@ -2625,6 +2690,11 @@ process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 				case CONSTR_PRIMARY:
 				case CONSTR_FOREIGN:
 					break;
+				case CONSTR_CHECK:
+				{
+					validate_check_constraint(chunk, con);
+					break;
+				}
 				default:
 					if (ts_chunk_is_compressed(chunk) && !ts_is_hypercore_am(chunk->amoid))
 						ereport(ERROR,
@@ -4453,15 +4523,6 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 }
 
 static void
-process_altertable_end_simple_cmd(Hypertable *ht, CollectedCommand *cmd)
-{
-	AlterTableStmt *stmt = (AlterTableStmt *) cmd->parsetree;
-
-	Assert(IsA(stmt, AlterTableStmt));
-	process_altertable_end_subcmd(ht, linitial(stmt->cmds), &cmd->d.simple.secondaryObject);
-}
-
-static void
 process_altertable_end_subcmds(Hypertable *ht, List *cmds)
 {
 	ListCell *lc;
@@ -4496,7 +4557,9 @@ process_altertable_end_table(Node *parsetree, CollectedCommand *cmd)
 		switch (cmd->type)
 		{
 			case SCT_Simple:
-				process_altertable_end_simple_cmd(ht, cmd);
+				process_altertable_end_subcmd(ht,
+											  linitial(stmt->cmds),
+											  &cmd->d.simple.secondaryObject);
 				break;
 			case SCT_AlterTable:
 				process_altertable_end_subcmds(ht, cmd->d.alterTable.subcmds);
