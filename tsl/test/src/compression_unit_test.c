@@ -652,6 +652,8 @@ test_bool_rle(bool nulls, int run_length, int expected_size)
 	val = true;
 	DecompressionIterator *iter =
 		bool_decompression_iterator_from_datum_forward(compressed, BOOLOID);
+	ArrowArray *bulk_result = bool_decompress_all(compressed, BOOLOID, CurrentMemoryContext);
+	const uint64 *bulk_data = bulk_result->buffers[1];
 
 	for (int i = 0; i < TEST_ELEMENTS; ++i)
 	{
@@ -660,16 +662,29 @@ test_bool_rle(bool nulls, int run_length, int expected_size)
 		if (rlen == 0)
 		{
 			if (nulls)
+			{
+				TestAssertTrue(!arrow_row_is_valid(bulk_result->buffers[0], i));
 				TestAssertTrue(r.is_null);
+			}
 			else
+			{
+				TestAssertTrue(arrow_row_is_valid(bulk_result->buffers[0], i));
 				TestAssertTrue(DatumGetBool(r.val) == val);
+				const int16 block = i / 64;
+				const int16 offset = i % 64;
+				TestAssertTrue(((bulk_data[block] >> offset) & 1UL) == (int) val);
+			}
 			rlen = run_length;
 			val = !val;
 		}
 		else
 		{
+			TestAssertTrue(arrow_row_is_valid(bulk_result->buffers[0], i));
 			TestAssertTrue(r.is_null == false);
 			TestAssertTrue(DatumGetBool(r.val) == val);
+			const int16 block = i / 64;
+			const int16 offset = i % 64;
+			TestAssertTrue(((bulk_data[block] >> offset) & 1UL) == (int) val);
 			--rlen;
 		}
 	}
