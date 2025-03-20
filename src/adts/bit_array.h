@@ -30,6 +30,9 @@ static void bit_array_init(BitArray *array, int expected_bits);
 /* Append num_bits to the array */
 static void bit_array_append(BitArray *array, uint8 num_bits, uint64 bits);
 
+/* Append bit num_repeated times */
+static void bit_array_append_repeated_bit(BitArray *array, uint32 num_repeat, bool bit);
+
 static void bit_array_iterator_init(BitArrayIterator *iter, const BitArray *array);
 /* return next num_bits from the iterator; must have been written as num_bits */
 pg_attribute_always_inline static uint64 bit_array_iter_next(BitArrayIterator *iter,
