@@ -299,6 +299,19 @@ jobs:
           build/test/tmp_check/log
           build/tsl/test/tmp_check/log
 
+    - name: Find internal program errors in the server log
+      run: |
+        # This is used to save the IPEs into the CI checks database, and also to
+        # check that no new IPEs were introduced in the Flaky Check.
+        jq 'select(.state_code == "XX000" and .error_severity != "LOG")
+            | [env.JOB_DATE, .message, .func_name,  .statement] | @tsv
+        ' -r postmaster.json > ipe.tsv ||:
+
+    - name: Check that no new internal program errors are introduced
+      if: contains(matrix.name, 'Flaky')
+      run: |
+        ! [ -s ipe.tsv ]
+
     - name: Upload test results to the database
       # Don't upload the results of the flaky check, because the db schema only
       # supports running one test once per job.
