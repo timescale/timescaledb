@@ -51,6 +51,8 @@ extern DecompressResult bool_decompression_iterator_try_next_reverse(Decompressi
 extern DecompressionIterator *bool_decompression_iterator_from_datum_reverse(Datum bool_compressed,
 																			 Oid element_type);
 
+extern ArrowArray *bool_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx);
+
 extern void bool_compressed_send(CompressedDataHeader *header, StringInfo buffer);
 
 extern Datum bool_compressed_recv(StringInfo buf);
@@ -61,7 +63,7 @@ extern Compressor *bool_compressor_for_type(Oid element_type);
 	{                                                                                              \
 		.iterator_init_forward = bool_decompression_iterator_from_datum_forward,                   \
 		.iterator_init_reverse = bool_decompression_iterator_from_datum_reverse,                   \
-		.decompress_all = NULL, .compressed_data_send = bool_compressed_send,                      \
+		.decompress_all = bool_decompress_all, .compressed_data_send = bool_compressed_send,       \
 		.compressed_data_recv = bool_compressed_recv,                                              \
 		.compressor_for_type = bool_compressor_for_type,                                           \
 		.compressed_data_storage = TOAST_STORAGE_EXTERNAL,                                         \

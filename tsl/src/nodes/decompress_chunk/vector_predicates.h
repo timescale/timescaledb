@@ -18,6 +18,12 @@ void vector_array_predicate(VectorPredicate *vector_const_predicate, bool is_or,
 
 void vector_nulltest(const ArrowArray *arrow, int test_type, uint64 *restrict result);
 
+/* this implements the vectorized BooleanTest, where NULLs are handled in a special way:
+ * for example IS_NOT_TRUE(NULL) is true and IS_NOT_FALSE(NULL) is true, plus there are
+ * NULL test types, like IS_UNKNOWN and IS_NOT_UNKNOWN.
+ */
+void vector_booleantest(const ArrowArray *arrow, int test_type, uint64 *restrict result);
+
 typedef enum VectorQualSummary
 {
 	AllRowsPass,
