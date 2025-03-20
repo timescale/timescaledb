@@ -228,3 +228,6 @@ BEGIN
   END CASE;
 END;
 $$ LANGUAGE PLPGSQL;
+
+-- Split chunk
+DROP PROCEDURE IF EXISTS @extschema@.split_chunk(chunk REGCLASS, split_at "any");
