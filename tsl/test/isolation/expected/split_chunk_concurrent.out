@@ -1,0 +1,614 @@
+Parsed test spec with 3 sessions
+
+starting permutation: s3_query_data s3_wp_at_end_on s2_split_chunk s1_insert_into_existing_chunk s3_wp_at_end_off s3_query_data
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ("Mon Jan 08 02:00:00 2024 PST",3,3)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+step s3_wp_at_end_on: select debug_waitpoint_enable('split_chunk_at_end');
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s2_split_chunk: 
+    call split_first_chunk('readings');
+ <waiting ...>
+step s1_insert_into_existing_chunk: 
+    insert into readings values ('2024-01-12 01:05', 12, 12.0);
+
+step s3_wp_at_end_off: select debug_waitpoint_release('split_chunk_at_end');
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s2_split_chunk: <... completed>
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Sun Jan 07 04:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+s3: NOTICE:  ("Fri Jan 12 01:05:00 2024 PST",12,12)
+s3: NOTICE:  ---- chunk 2 [ Sun Jan 07 04:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Mon Jan 08 02:00:00 2024 PST",3,3)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+
+starting permutation: s3_query_data s3_wp_before_routing_on s2_split_chunk s1_insert_into_existing_chunk s3_wp_before_routing_off s3_query_data
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ("Mon Jan 08 02:00:00 2024 PST",3,3)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+step s3_wp_before_routing_on: select debug_waitpoint_enable('split_chunk_before_tuple_routing');
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s2_split_chunk: 
+    call split_first_chunk('readings');
+ <waiting ...>
+step s1_insert_into_existing_chunk: 
+    insert into readings values ('2024-01-12 01:05', 12, 12.0);
+
+step s3_wp_before_routing_off: select debug_waitpoint_release('split_chunk_before_tuple_routing');
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s2_split_chunk: <... completed>
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Sun Jan 07 04:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+s3: NOTICE:  ("Fri Jan 12 01:05:00 2024 PST",12,12)
+s3: NOTICE:  ---- chunk 2 [ Sun Jan 07 04:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Mon Jan 08 02:00:00 2024 PST",3,3)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+
+starting permutation: s3_query_data s3_wp_at_end_on s2_split_chunk s1_insert_into_new_chunk s3_wp_at_end_off s3_query_data
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ("Mon Jan 08 02:00:00 2024 PST",3,3)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+step s3_wp_at_end_on: select debug_waitpoint_enable('split_chunk_at_end');
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s2_split_chunk: 
+    call split_first_chunk('readings');
+ <waiting ...>
+step s1_insert_into_new_chunk: 
+    insert into readings values ('2024-01-18 10:00', 13, 13.0);
+ <waiting ...>
+step s3_wp_at_end_off: select debug_waitpoint_release('split_chunk_at_end');
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s2_split_chunk: <... completed>
+step s1_insert_into_new_chunk: <... completed>
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Sun Jan 07 04:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+s3: NOTICE:  ---- chunk 2 [ Sun Jan 07 04:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Mon Jan 08 02:00:00 2024 PST",3,3)
+s3: NOTICE:  ---- chunk 3 [ Wed Jan 17 16:00:00 2024 PST : Wed Jan 24 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 18 10:00:00 2024 PST",13,13)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+
+starting permutation: s3_query_data s3_wp_before_routing_on s2_split_chunk s1_insert_into_new_chunk s3_wp_before_routing_off s3_query_data
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ("Mon Jan 08 02:00:00 2024 PST",3,3)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+step s3_wp_before_routing_on: select debug_waitpoint_enable('split_chunk_before_tuple_routing');
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s2_split_chunk: 
+    call split_first_chunk('readings');
+ <waiting ...>
+step s1_insert_into_new_chunk: 
+    insert into readings values ('2024-01-18 10:00', 13, 13.0);
+ <waiting ...>
+step s3_wp_before_routing_off: select debug_waitpoint_release('split_chunk_before_tuple_routing');
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s2_split_chunk: <... completed>
+step s1_insert_into_new_chunk: <... completed>
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Sun Jan 07 04:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+s3: NOTICE:  ---- chunk 2 [ Sun Jan 07 04:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Mon Jan 08 02:00:00 2024 PST",3,3)
+s3: NOTICE:  ---- chunk 3 [ Wed Jan 17 16:00:00 2024 PST : Wed Jan 24 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 18 10:00:00 2024 PST",13,13)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+
+starting permutation: s3_query_data s3_wp_at_end_on s2_split_chunk s1_insert_into_splitting_chunk s3_wp_at_end_off s3_query_data
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ("Mon Jan 08 02:00:00 2024 PST",3,3)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+step s3_wp_at_end_on: select debug_waitpoint_enable('split_chunk_at_end');
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s2_split_chunk: 
+    call split_first_chunk('readings');
+ <waiting ...>
+step s1_insert_into_splitting_chunk: 
+    insert into readings values ('2024-01-05 01:05', 10, 10.0), ('2024-01-09 01:05', 11, 11.0);
+ <waiting ...>
+step s3_wp_at_end_off: select debug_waitpoint_release('split_chunk_at_end');
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s2_split_chunk: <... completed>
+step s1_insert_into_splitting_chunk: <... completed>
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Sun Jan 07 04:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ("Fri Jan 05 01:05:00 2024 PST",10,10)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+s3: NOTICE:  ---- chunk 2 [ Sun Jan 07 04:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Mon Jan 08 02:00:00 2024 PST",3,3)
+s3: NOTICE:  ("Tue Jan 09 01:05:00 2024 PST",11,11)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+
+starting permutation: s3_query_data s3_wp_before_routing_on s2_split_chunk s1_insert_into_splitting_chunk s3_wp_before_routing_off s3_query_data
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ("Mon Jan 08 02:00:00 2024 PST",3,3)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+step s3_wp_before_routing_on: select debug_waitpoint_enable('split_chunk_before_tuple_routing');
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s2_split_chunk: 
+    call split_first_chunk('readings');
+ <waiting ...>
+step s1_insert_into_splitting_chunk: 
+    insert into readings values ('2024-01-05 01:05', 10, 10.0), ('2024-01-09 01:05', 11, 11.0);
+ <waiting ...>
+step s3_wp_before_routing_off: select debug_waitpoint_release('split_chunk_before_tuple_routing');
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s2_split_chunk: <... completed>
+step s1_insert_into_splitting_chunk: <... completed>
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Sun Jan 07 04:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ("Fri Jan 05 01:05:00 2024 PST",10,10)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+s3: NOTICE:  ---- chunk 2 [ Sun Jan 07 04:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Mon Jan 08 02:00:00 2024 PST",3,3)
+s3: NOTICE:  ("Tue Jan 09 01:05:00 2024 PST",11,11)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+
+starting permutation: s3_query_data s1_begin s1_insert_into_splitting_chunk s2_split_chunk s1_commit s3_query_data
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ("Mon Jan 08 02:00:00 2024 PST",3,3)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+step s1_begin: 
+    start transaction isolation level repeatable read;
+    select count(*) > 0 from pg_stat_activity;
+
+?column?
+--------
+t       
+(1 row)
+
+step s1_insert_into_splitting_chunk: 
+    insert into readings values ('2024-01-05 01:05', 10, 10.0), ('2024-01-09 01:05', 11, 11.0);
+
+step s2_split_chunk: 
+    call split_first_chunk('readings');
+ <waiting ...>
+step s1_commit: commit;
+step s2_split_chunk: <... completed>
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Sun Jan 07 04:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ("Fri Jan 05 01:05:00 2024 PST",10,10)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+s3: NOTICE:  ---- chunk 2 [ Sun Jan 07 04:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Mon Jan 08 02:00:00 2024 PST",3,3)
+s3: NOTICE:  ("Tue Jan 09 01:05:00 2024 PST",11,11)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+
+starting permutation: s4_begin s3_query_data s1_begin s1_delete_from_splitting_chunk s2_split_chunk s1_commit s3_query_data s4_query s4_commit s4_query
+step s4_begin: 
+    start transaction isolation level repeatable read;
+    select count(*) > 0 from pg_stat_activity;
+
+?column?
+--------
+t       
+(1 row)
+
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ("Mon Jan 08 02:00:00 2024 PST",3,3)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+step s1_begin: 
+    start transaction isolation level repeatable read;
+    select count(*) > 0 from pg_stat_activity;
+
+?column?
+--------
+t       
+(1 row)
+
+step s1_delete_from_splitting_chunk: 
+    delete from readings where device = 1;
+
+step s2_split_chunk: 
+    call split_first_chunk('readings');
+ <waiting ...>
+step s1_commit: commit;
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ("Mon Jan 08 02:00:00 2024 PST",3,3)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+step s4_query: 
+    select * from readings order by time, device;
+
+time                        |device|temp
+----------------------------+------+----
+Thu Jan 04 01:00:00 2024 PST|     1|   1
+Fri Jan 05 02:00:00 2024 PST|     2|   2
+Mon Jan 08 02:00:00 2024 PST|     3|   3
+Thu Jan 11 01:01:00 2024 PST|     4|   4
+Mon Jan 15 02:00:00 2024 PST|     5|   5
+(5 rows)
+
+step s4_commit: commit;
+step s2_split_chunk: <... completed>
+step s4_query: 
+    select * from readings order by time, device;
+
+time                        |device|temp
+----------------------------+------+----
+Fri Jan 05 02:00:00 2024 PST|     2|   2
+Mon Jan 08 02:00:00 2024 PST|     3|   3
+Thu Jan 11 01:01:00 2024 PST|     4|   4
+Mon Jan 15 02:00:00 2024 PST|     5|   5
+(4 rows)
+
+
+starting permutation: s4_begin s3_query_data s1_delete_from_splitting_chunk s2_split_chunk s3_query_data s4_query s4_commit s4_query
+step s4_begin: 
+    start transaction isolation level repeatable read;
+    select count(*) > 0 from pg_stat_activity;
+
+?column?
+--------
+t       
+(1 row)
+
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ("Mon Jan 08 02:00:00 2024 PST",3,3)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+step s1_delete_from_splitting_chunk: 
+    delete from readings where device = 1;
+
+step s2_split_chunk: 
+    call split_first_chunk('readings');
+ <waiting ...>
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ("Mon Jan 08 02:00:00 2024 PST",3,3)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+step s4_query: 
+    select * from readings order by time, device;
+
+time                        |device|temp
+----------------------------+------+----
+Thu Jan 04 01:00:00 2024 PST|     1|   1
+Fri Jan 05 02:00:00 2024 PST|     2|   2
+Mon Jan 08 02:00:00 2024 PST|     3|   3
+Thu Jan 11 01:01:00 2024 PST|     4|   4
+Mon Jan 15 02:00:00 2024 PST|     5|   5
+(5 rows)
+
+step s4_commit: commit;
+step s2_split_chunk: <... completed>
+step s4_query: 
+    select * from readings order by time, device;
+
+time                        |device|temp
+----------------------------+------+----
+Fri Jan 05 02:00:00 2024 PST|     2|   2
+Mon Jan 08 02:00:00 2024 PST|     3|   3
+Thu Jan 11 01:01:00 2024 PST|     4|   4
+Mon Jan 15 02:00:00 2024 PST|     5|   5
+(4 rows)
+
+
+starting permutation: s3_query_data s4_begin s1_delete_from_splitting_chunk s2_split_chunk s3_query_data s4_query s4_commit s4_query s3_query_data
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ("Mon Jan 08 02:00:00 2024 PST",3,3)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+step s4_begin: 
+    start transaction isolation level repeatable read;
+    select count(*) > 0 from pg_stat_activity;
+
+?column?
+--------
+t       
+(1 row)
+
+step s1_delete_from_splitting_chunk: 
+    delete from readings where device = 1;
+
+step s2_split_chunk: 
+    call split_first_chunk('readings');
+
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+step s4_query: 
+    select * from readings order by time, device;
+
+time                        |device|temp
+----------------------------+------+----
+Thu Jan 04 01:00:00 2024 PST|     1|   1
+Fri Jan 05 02:00:00 2024 PST|     2|   2
+Mon Jan 08 02:00:00 2024 PST|     3|   3
+Thu Jan 11 01:01:00 2024 PST|     4|   4
+Mon Jan 15 02:00:00 2024 PST|     5|   5
+(5 rows)
+
+step s4_commit: commit;
+step s4_query: 
+    select * from readings order by time, device;
+
+time                        |device|temp
+----------------------------+------+----
+Fri Jan 05 02:00:00 2024 PST|     2|   2
+Mon Jan 08 02:00:00 2024 PST|     3|   3
+Thu Jan 11 01:01:00 2024 PST|     4|   4
+Mon Jan 15 02:00:00 2024 PST|     5|   5
+(4 rows)
+
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Sun Jan 07 04:00:00 2024 PST ]
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+s3: NOTICE:  ---- chunk 2 [ Sun Jan 07 04:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Mon Jan 08 02:00:00 2024 PST",3,3)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+
+starting permutation: s3_query_data s4_begin s1_update_splitting_chunk s2_split_chunk s3_query_data s4_query s4_commit s4_query s3_query_data
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ("Mon Jan 08 02:00:00 2024 PST",3,3)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+step s4_begin: 
+    start transaction isolation level repeatable read;
+    select count(*) > 0 from pg_stat_activity;
+
+?column?
+--------
+t       
+(1 row)
+
+step s1_update_splitting_chunk: 
+    update readings set device = 1 where device = 2;
+
+step s2_split_chunk: 
+    call split_first_chunk('readings');
+
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+step s4_query: 
+    select * from readings order by time, device;
+
+time                        |device|temp
+----------------------------+------+----
+Thu Jan 04 01:00:00 2024 PST|     1|   1
+Fri Jan 05 02:00:00 2024 PST|     2|   2
+Mon Jan 08 02:00:00 2024 PST|     3|   3
+Thu Jan 11 01:01:00 2024 PST|     4|   4
+Mon Jan 15 02:00:00 2024 PST|     5|   5
+(5 rows)
+
+step s4_commit: commit;
+step s4_query: 
+    select * from readings order by time, device;
+
+time                        |device|temp
+----------------------------+------+----
+Thu Jan 04 01:00:00 2024 PST|     1|   1
+Fri Jan 05 02:00:00 2024 PST|     1|   2
+Mon Jan 08 02:00:00 2024 PST|     3|   3
+Thu Jan 11 01:01:00 2024 PST|     4|   4
+Mon Jan 15 02:00:00 2024 PST|     5|   5
+(5 rows)
+
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Sun Jan 07 04:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",1,2)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+s3: NOTICE:  ---- chunk 2 [ Sun Jan 07 04:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+s3: NOTICE:  ("Mon Jan 08 02:00:00 2024 PST",3,3)
+step s3_query_data: 
+    call show_all_chunks('readings');
+
+
+starting permutation: s2_begin s2_insert_into_splitting_chunk s2_split_chunk s3_query_data s2_commit
+step s2_begin: 
+    start transaction isolation level repeatable read;
+    select count(*) > 0 from pg_stat_activity;
+
+?column?
+--------
+t       
+(1 row)
+
+step s2_insert_into_splitting_chunk: 
+    insert into readings values ('2024-01-05 01:05', 15, 15.0);
+
+step s2_split_chunk: 
+    call split_first_chunk('readings');
+
+s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
+step s3_query_data: 
+    call show_all_chunks('readings');
+ <waiting ...>
+step s2_commit: commit;
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
+s3: NOTICE:  ("Fri Jan 05 01:05:00 2024 PST",15,15)
+s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
+s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
+s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
+step s3_query_data: <... completed>

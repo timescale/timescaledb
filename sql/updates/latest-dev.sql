@@ -1,6 +1,7 @@
 DROP FUNCTION IF EXISTS _timescaledb_internal.create_chunk_table;
 DROP FUNCTION IF EXISTS _timescaledb_functions.create_chunk_table;
 
+
 -- New option `refresh_newest_first` for incremental cagg refresh policy
 DROP FUNCTION @extschema@.add_continuous_aggregate_policy(
     continuous_aggregate REGCLASS,
@@ -38,3 +39,10 @@ DROP VIEW IF EXISTS timescaledb_information.hypertables;
 
 -- Rename Columnstore Policy jobs to Compression Policy
 UPDATE _timescaledb_config.bgw_job SET application_name = replace(application_name, 'Compression Policy', 'Columnstore Policy') WHERE application_name LIKE '%Compression Policy%';
+
+-- Split chunk
+CREATE PROCEDURE @extschema@.split_chunk(
+    chunk REGCLASS,
+    split_at "any" = NULL
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
+
