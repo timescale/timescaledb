@@ -193,9 +193,7 @@ DEALLOCATE prep;
 --  DISTINCT aggs on different columns in different subqueries
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE UNION ALL SELECT count(DISTINCT time) FROM :TABLE;
 
-:PREFIX SELECT *, 'q9_2' FROM 
-    (SELECT count(DISTINCT dev) cd, dev FROM :TABLE GROUP BY dev) a,
-    LATERAL (SELECT count(DISTINCT time) ct FROM :TABLE WHERE dev = a.dev) b;
+:PREFIX SELECT *, 'q9_2' FROM (SELECT count(DISTINCT dev) cd, dev FROM :TABLE GROUP BY dev) a, LATERAL (SELECT count(DISTINCT time) ct FROM :TABLE WHERE dev = a.dev) b;
 
 -- SkipScan into INSERT
 :PREFIX INSERT INTO skip_scan_insert(dev, val, query) SELECT dev, sd, 'q10_1' FROM (SELECT sum(DISTINCT dev) sd, dev FROM :TABLE GROUP BY dev) a;

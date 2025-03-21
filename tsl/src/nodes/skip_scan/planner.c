@@ -201,7 +201,7 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 					if (!IsA(expr, Var))
 						return NULL;
 
-					/* Don't support sevaral distinct aggs over different columns */
+					/* Don't support multiple distinct aggs over different columns */
 					if (tlexpr && !tlist_member_match_var((Var *) tlexpr, agg->args))
 						return NULL;
 
