@@ -163,6 +163,9 @@ TSDLLEXPORT bool ts_guc_enable_null_compression = true;
 TSDLLEXPORT bool ts_guc_enable_columnarscan = true;
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
+#if PG16_GE
+TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates = true;
+#endif
 static char *ts_guc_default_segmentby_fn = NULL;
 static char *ts_guc_default_orderby_fn = NULL;
 TSDLLEXPORT bool ts_guc_enable_job_execution_logging = false;
@@ -651,7 +654,18 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
-
+#if PG16_GE
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_skipscan_for_distinct_aggregates"),
+							 "Enable SkipScan for DISTINCT aggregates",
+							 "Enable SkipScan for DISTINCT aggregates",
+							 &ts_guc_enable_skip_scan_for_distinct_aggregates,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+#endif
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compression_wal_markers"),
 							 "Enable WAL markers for compression ops",
 							 "Enable the generation of markers in the WAL stream which mark the "
