@@ -1836,3 +1836,4 @@ group by 2, 3 order by 1 desc
      1 | false       | false
 (7 rows)
 
+FIXME
