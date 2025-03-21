@@ -393,7 +393,7 @@ extern int decompress_batch(RowDecompressor *decompressor);
  */
 #ifndef TS_COMPRESSION_FUZZING
 #define CORRUPT_DATA_MESSAGE(X)                                                                    \
-	(errmsg("the compressed data is corrupt"), errdetail("%s", X), errcode(ERRCODE_DATA_CORRUPTED))
+	(errmsg("the compressed data is corrupt"), errdetail("%s", X), errcode(ERRCODE_INTERNAL_ERROR))
 #else
 #define CORRUPT_DATA_MESSAGE(X) (errcode(ERRCODE_DATA_CORRUPTED))
 #endif
