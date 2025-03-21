@@ -309,18 +309,19 @@ jobs:
           build/test/tmp_check/log
           build/tsl/test/tmp_check/log
 
-    - name: Find internal program errors in the server log
-      run: |
-        # This is used to save the IPEs into the CI checks database, and also to
-        # check that no new IPEs were introduced in the Flaky Check.
-        jq 'select(.state_code == "XX000" and .error_severity != "LOG")
-            | [env.JOB_DATE, .message, .func_name,  .statement] | @tsv
-        ' -r postmaster.json > ipe.tsv ||:
-
     - name: Check that no new internal program errors are introduced
-      if: contains(matrix.name, 'Flaky')
+      # We collect the same messages when uploading to the CI checks database,
+      # but it runs on different conditions (not on forks and not on flaky check),
+      # and requires different data (job date), so we do it separately here.
+      # The jq --exit-code option is broken with select() on jq-1.6 which we see
+      # on some machines, so we use grep instead (see https://github.com/jqlang/jq/issues/1139).
+      if: always() && contains(matrix.name, 'Flaky')
       run: |
-        ! grep . ipe.tsv
+        ! jq 'select(
+                (.state_code == "XX000" and .error_severity != "LOG")
+                or (.message | test("resource was not closed"))
+            ) | [.message, .func_name,  .statement] | @tsv
+        ' -r postmaster.json | grep .
 
     - name: Upload test results to the database
       # Don't upload the results of the flaky check, because the db schema only
