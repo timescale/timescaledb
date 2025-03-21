@@ -173,10 +173,14 @@ done
 # Save a snippet of logs where a backend was terminated by signal.
 grep -C40 "was terminated by signal" postmaster.log > postgres-failure.log ||:
 
-if [ -s ipe.tsv ]
-then
-    "${PSQL[@]}" -c "\copy ipe from ipe.tsv"
-fi
+# Save the internal program errors and the resource owner leak warnings.
+jq 'select(
+        (.state_code == "XX000" and .error_severity != "LOG")
+        or (.message | test("resource was not closed")))
+    ) | [env.JOB_DATE, .message, .func_name,  .statement] | @tsv
+' -r postmaster.json > ipe.tsv ||:
+"${PSQL[@]}" -c "\copy ipe from ipe.tsv"
+
 
 # Upload the logs.
 # Note that the sanitizer setting log_path means "write logs to 'log_path.pid'".
