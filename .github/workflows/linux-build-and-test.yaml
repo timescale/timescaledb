@@ -312,9 +312,12 @@ jobs:
     - name: Find internal program errors in the server log
       run: |
         # This is used to save the IPEs into the CI checks database, and also to
-        # check that no new IPEs were introduced in the Flaky Check.
-        jq 'select(.state_code == "XX000" and .error_severity != "LOG")
-            | [env.JOB_DATE, .message, .func_name,  .statement] | @tsv
+        # check that no new IPEs were introduced in the Flaky Check. Treat the
+        # resource owner leak warnings the same way.
+        jq 'select(
+                (.state_code == "XX000" and .error_severity != "LOG")
+                or (.message | test("resource was not closed")))
+            ) | [env.JOB_DATE, .message, .func_name,  .statement] | @tsv
         ' -r postmaster.json > ipe.tsv ||:
 
     - name: Check that no new internal program errors are introduced
