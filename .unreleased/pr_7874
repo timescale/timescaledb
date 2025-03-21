@@ -1,1 +1,1 @@
-Implements: #7873 Support for SkipScan for distinct aggregates over the same column
+Implements: #7874 Support for SkipScan for distinct aggregates over the same column
