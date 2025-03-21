@@ -426,6 +426,7 @@ as :TSL_MODULE_PATHNAME, 'ts_read_compressed_data_file' language c;
 
 \set ON_ERROR_STOP 0
 select ts_read_compressed_data_file('gorilla', 'float8', '--nonexistent');
+-- Just some random file that returns "compressed data is corrupt", for one-off testing.
 select ts_read_compressed_data_file('gorilla', 'float8', (:'TEST_INPUT_DIR' || '/fuzzing/compression/gorilla-float8/1f09f12d930daae8e5fd34e11e7b2303e1705b2e')::cstring);
 \set ON_ERROR_STOP 1
 
