@@ -116,6 +116,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compression_bgw.sql
     compression_bools.sql
     compression_ddl.sql
+    compression_errors.sql
     compression_hypertable.sql
     compression_merge.sql
     compression_indexscan.sql
@@ -165,7 +166,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_migrate_function.sql.in
     cagg_repair.sql.in
     cagg_usage.sql.in
-    compression_errors.sql.in
     compression_update_delete.sql.in
     continuous_aggs.sql.in)
 
