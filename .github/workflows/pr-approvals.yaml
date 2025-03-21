@@ -13,7 +13,7 @@ jobs:
 
   check_approvals:
     name: Check for sufficient approvals
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner
     steps:
       - name: Checkout source
         uses: actions/checkout@v4

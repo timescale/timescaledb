@@ -17,7 +17,7 @@ name: ABI Test Against Snapshot
 
 jobs:
   config:
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner
     outputs:
       pg15_abi_min: ${{ steps.config.outputs.pg15_abi_min }}
       pg16_abi_min: ${{ steps.config.outputs.pg16_abi_min }}
@@ -32,7 +32,7 @@ jobs:
 
   abi_snapshot_test:
     name: ABI Snapshot Test PG${{ matrix.pg }}
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner
     needs: config
 
     env:

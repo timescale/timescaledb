@@ -20,7 +20,7 @@ jobs:
   # Implements: #NNNN <feature description> (mandatory in case of new features)
   check_changelog_file:
     name: Check for file with CHANGELOG entry
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner
     steps:
       - name: Install Linux Dependencies
         run: |

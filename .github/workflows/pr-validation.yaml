@@ -18,7 +18,7 @@ jobs:
   # but this is currently not enforced.
   count_commits:
     name: Enforce single commit pull request
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner
     steps:
     - name: Checkout source
       uses: actions/checkout@v4
@@ -60,7 +60,7 @@ jobs:
     name: Check for loader changes
     # Ignore loader changes if acknowledged already
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'upgrade-requires-restart') }}
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner
     steps:
       - name: Checkout source
         uses: actions/checkout@v4

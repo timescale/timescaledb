@@ -17,7 +17,7 @@ name: RPM packages
 jobs:
   rpm_tests:
     name: RPM ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }}
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner
     container:
       image: ${{ matrix.image }}
     strategy:

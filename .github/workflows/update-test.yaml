@@ -10,7 +10,7 @@ name: Test Update and Downgrade
 jobs:
   update_test:
     name: Update test PG${{ matrix.pg }}
-    runs-on: 'ubuntu-latest'
+    runs-on: timescaledb-runner
     strategy:
       matrix:
         pg: [15, 16, 17]

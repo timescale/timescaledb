@@ -16,7 +16,7 @@ name: APT packages
 jobs:
   apt_tests:
     name: APT ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }}
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner
     container:
       image: ${{ matrix.image }}
       env:

@@ -16,7 +16,7 @@ name: Windows Packages
 
 jobs:
   config:
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner
     outputs:
       pg15_latest: ${{ steps.config.outputs.pg15_latest }}
       pg16_latest: ${{ steps.config.outputs.pg16_latest }}

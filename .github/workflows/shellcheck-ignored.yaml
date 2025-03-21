@@ -16,7 +16,7 @@ name: Shellcheck
 jobs:
   shellcheck:
     name: Shellcheck
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner
     steps:
       - run: |
           echo "No build required"

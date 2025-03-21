@@ -26,7 +26,7 @@ permissions:
 jobs:
   backport:
     name: Backport Bug Fixes
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner
 
     steps:
       - name: Install Python Dependencies

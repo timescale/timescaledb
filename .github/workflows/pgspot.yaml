@@ -9,7 +9,7 @@ name: pgspot
 
 jobs:
   pgspot:
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner
     env:
       # time_bucket with offset is intentional without explicit search_path to allow for inlining
       # policy_compression, policy_compression_execute, cagg_migrate_execute_plan and cagg_migrate
