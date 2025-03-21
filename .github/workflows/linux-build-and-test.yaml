@@ -52,6 +52,16 @@ jobs:
       CLANG: ${{ matrix.clang }}
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
+
+      # For some reason, on PG <= 15 with faketime the client backends get the
+      # modified time, and the background workers the unmodified time, so it
+      # doesn't work.
+      FAKETIME: |
+        ${{ (contains(matrix.os, 'ubuntu')
+               && !startsWith(matrix.pg, '14.')
+               && !startsWith(matrix.pg, '15.')
+            ) && 'faketime -f +379d' || '' }}
+
     strategy:
       matrix: ${{ fromJson(needs.matrixbuilder.outputs.matrix) }}
       fail-fast: false
@@ -64,7 +74,7 @@ jobs:
         # If needed, install them before opening the core dump.
         sudo apt-get update
         sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl \
-          libtest-most-perl pkgconf icu-devtools ${{ matrix.extra_packages }}
+          libtest-most-perl pkgconf icu-devtools faketime ${{ matrix.extra_packages }}
 
     - name: Install macOS Dependencies
       if: runner.os == 'macOS'
