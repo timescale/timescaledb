@@ -9,7 +9,7 @@ permissions:
 jobs:
   minor-release-feature-freeze:
     name: Minor Release - Feature Freeze
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner
     environment:
       name: Release Ceremonies
 

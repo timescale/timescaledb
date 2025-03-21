@@ -4,7 +4,7 @@ name: Check for unsafe catalog updates
 jobs:
   check_catalog_correctly_updated:
     name: Check updates to latest-dev and reverse-dev are properly handled by PR
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner
     steps:
       - name: Checkout source
         uses: actions/checkout@v4

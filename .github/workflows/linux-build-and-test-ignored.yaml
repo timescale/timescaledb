@@ -19,7 +19,7 @@ name: Regression
       - NOTICE
 jobs:
   matrixbuilder:
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
@@ -40,7 +40,7 @@ jobs:
   regress:
     name: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
     needs: matrixbuilder
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner
     strategy:
       matrix: ${{ fromJson(needs.matrixbuilder.outputs.matrix) }}
     steps:

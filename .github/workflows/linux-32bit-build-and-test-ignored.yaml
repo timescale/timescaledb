@@ -19,7 +19,7 @@ name: Regression Linux i386
       - NOTICE
 jobs:
   config:
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner
     outputs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
     steps:
@@ -31,7 +31,7 @@ jobs:
 
   regress_linux_32bit:
     name: PG${{ matrix.pg }} ${{ matrix.build_type }} linux-i386
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner
     needs: config
     strategy:
       matrix:

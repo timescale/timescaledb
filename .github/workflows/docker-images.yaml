@@ -19,7 +19,7 @@ name: Test Docker images
 jobs:
   docker_tests:
     name: ${{ matrix.image }}
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner
     services:
       ts:
         image: timescale/${{ matrix.image }}
