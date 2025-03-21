@@ -2786,7 +2786,6 @@ validate_set_not_null(Hypertable *ht, Oid chunk_relid, void *arg)
 								 "_timescaledb_functions.compressed_data_has_nulls(%s)",
 								 quote_identifier(cmd->name),
 								 quote_identifier(cmd->name));
-			ReleaseSysCache(atttuple);
 		}
 		appendStringInfo(&command, ")");
 
