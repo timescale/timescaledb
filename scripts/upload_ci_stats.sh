@@ -11,6 +11,7 @@ fi
 PSQL=${PSQL:-psql}
 PSQL=("${PSQL}" "${CI_STATS_DB}" -qtAX "--set=ON_ERROR_STOP=1")
 
+
 # The tables we are going to use. This schema is here just as a reminder, you'll
 # have to create them manually. After you manually change the actual DB schema,
 # don't forget to append the needed migration code below.
@@ -94,6 +95,16 @@ returning job_date;
 ")
 export JOB_DATE
 
+
+# Save the internal program errors and the resource owner leak warnings.
+jq 'select(
+        (.state_code == "XX000" and .error_severity != "LOG")
+        or (.message | test("resource was not closed")))
+    ) | [env.JOB_DATE, .message, .func_name,  .statement] | @tsv
+' -r postmaster.json > ipe.tsv ||:
+"${PSQL[@]}" -c "\copy ipe from ipe.tsv"
+
+
 # Parse the installcheck.log to find the individual test results. Note that this
 # file might not exist for failed checks or non-regression checks like SQLSmith.
 # We still want to save the other logs.
@@ -107,8 +118,14 @@ then
         print ENVIRON["JOB_DATE"], a[2], a[1], a[3];
     }
     ' installcheck.log > tests.tsv
+fi
 
-    # Save the test results into the database.
+
+# Save the test results into the database. Don't do this for the flaky check,
+# because the database schema doesn't support running one test case many times
+# per job.
+if [[ "${JOB_NAME}" =~ [Ff]laky ]]
+then
     "${PSQL[@]}" -c "\copy test from tests.tsv"
 
     # Split the regression.diffs into per-test files.
@@ -121,6 +138,7 @@ then
         { if (file) print $0 > file; }
     ' regression.log
 fi
+
 
 # Snip the long sequences of "+" or "-" changes in the diffs.
 for x in *.diff;
@@ -170,16 +188,9 @@ do
     mv "$x.tmp" "$x"
 done
 
+
 # Save a snippet of logs where a backend was terminated by signal.
 grep -C40 "was terminated by signal" postmaster.log > postgres-failure.log ||:
-
-# Save the internal program errors and the resource owner leak warnings.
-jq 'select(
-        (.state_code == "XX000" and .error_severity != "LOG")
-        or (.message | test("resource was not closed")))
-    ) | [env.JOB_DATE, .message, .func_name,  .statement] | @tsv
-' -r postmaster.json > ipe.tsv ||:
-"${PSQL[@]}" -c "\copy ipe from ipe.tsv"
 
 
 # Upload the logs.

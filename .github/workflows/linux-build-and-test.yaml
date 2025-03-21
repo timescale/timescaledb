@@ -340,7 +340,7 @@ jobs:
     # do it for Flaky Check because we have some pre-existing incorrectly used
     # IPEs already.
     - name: Check that no new internal program errors are introduced
-      if: contains(matrix.name, 'Flaky')
+      if: always() && contains(matrix.name, 'Flaky')
       run: |
         ! grep . ipe.tsv
 
