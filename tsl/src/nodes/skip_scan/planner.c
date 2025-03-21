@@ -50,13 +50,21 @@ typedef struct SkipScanPath
 	Var *distinct_var;
 } SkipScanPath;
 
+typedef struct DistinctPathInfo
+{
+	UpperRelationKind stage; /* What kind of Upper distinct path we are dealing with */
+	Path *unique_path;		 /* If not NULL, valid Upper distinct path */
+	Expr *distinct_expr;	 /* If not NULL, valid distinct expression for Upper distinct path */
+} DistinctPathInfo;
+
 static int get_idx_key(IndexOptInfo *idxinfo, AttrNumber attno);
 static List *sort_indexquals(IndexOptInfo *indexinfo, List *quals);
 static OpExpr *fix_indexqual(IndexOptInfo *index, RestrictInfo *rinfo, AttrNumber scankey_attno);
 static bool build_skip_qual(PlannerInfo *root, SkipScanPath *skip_scan_path, IndexPath *index_path,
 							Var *var);
-static List *build_subpath(PlannerInfo *root, List *subpaths, double ndistinct);
-static Var *get_distinct_var(PlannerInfo *root, IndexPath *index_path,
+static List *build_subpath(PlannerInfo *root, List *subpaths, DistinctPathInfo *dpinfo,
+						   List *top_pathkeys);
+static Var *get_distinct_var(PlannerInfo *root, DistinctPathInfo *dpinfo, IndexPath *index_path,
 							 SkipScanPath *skip_scan_path);
 static TargetEntry *tlist_member_match_var(Var *var, List *targetlist);
 
@@ -135,8 +143,175 @@ static CustomPathMethods skip_scan_path_methods = {
 	.PlanCustomPath = skip_scan_plan_create,
 };
 
+/* We can get upper path Distinct expression once for upper path,
+ * rather than repeat this check for each child path of an upper path input
+ */
+static Expr *
+get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
+{
+	ListCell *lc;
+	int num_vars = 0;
+	Expr *tlexpr = NULL;
+
+	if (stage == UPPERREL_DISTINCT && root->parse->distinctClause)
+	{
+		foreach (lc, root->parse->distinctClause)
+		{
+			SortGroupClause *clause = lfirst_node(SortGroupClause, lc);
+			Node *expr = get_sortgroupclause_expr(clause, root->parse->targetList);
+
+			/* we ignore any columns that can be constified to allow for cases like DISTINCT 'abc',
+			 * column */
+			if (IsA(estimate_expression_value(root, expr), Const))
+				continue;
+
+			num_vars++;
+			if (num_vars > 1)
+				return NULL;
+
+			/* We ignore binary-compatible relabeling */
+			tlexpr = (Expr *) expr;
+			while (tlexpr && IsA(tlexpr, RelabelType))
+				tlexpr = ((RelabelType *) tlexpr)->arg;
+		}
+	}
+	else if (stage == UPPERREL_GROUP_AGG)
+	{
+		foreach (lc, root->parse->targetList)
+		{
+			TargetEntry *tle = lfirst_node(TargetEntry, lc);
+			if (IsA(tle->expr, Aggref))
+			{
+				Aggref *agg = (Aggref *) tle->expr;
+				/* Only distinct aggs with 1 argument are eligible*/
+				if (agg->aggdistinct && list_length(agg->args) == 1)
+				{
+					TargetEntry *tle = (TargetEntry *) linitial(agg->args);
+
+					Expr *expr = tle->expr;
+					/* We ignore binary-compatible relabeling */
+					while (expr && IsA(expr, RelabelType))
+						expr = ((RelabelType *) expr)->arg;
+
+					/* Distinct agg over a Const is OK */
+					if (IsA(estimate_expression_value(root, (Node *) expr), Const))
+						continue;
+
+					/* Don't support no-var arguments */
+					if (!IsA(expr, Var))
+						return NULL;
+
+					/* Don't support sevaral distinct aggs over different columns */
+					if (tlexpr && !tlist_member_match_var((Var *) tlexpr, agg->args))
+						return NULL;
+
+					/* Found a valid distinct agg over a valid Var */
+					if (!tlexpr)
+					{
+						tlexpr = expr;
+						num_vars = 1;
+					}
+				}
+				else
+				{
+					return NULL;
+				}
+			}
+		}
+	}
+	if (num_vars != 1)
+		return NULL;
+
+	/* SkipScan on expressions not supported */
+	if (!tlexpr || !IsA(tlexpr, Var))
+		return NULL;
+
+	return tlexpr;
+}
+
+static void
+obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPathInfo *dpinfo)
+{
+	ListCell *lc;
+
+	/*
+	 * look for Unique Path so we dont have repeat some of
+	 * the calculations done by postgres and can also assume
+	 * that the DISTINCT clause is eligible for sort based
+	 * DISTINCT
+	 */
+	if (dpinfo->stage == UPPERREL_DISTINCT)
+	{
+		foreach (lc, output_rel->pathlist)
+		{
+			if (IsA(lfirst(lc), UpperUniquePath))
+			{
+				UpperUniquePath *unique = (UpperUniquePath *) lfirst_node(UpperUniquePath, lc);
+
+				/* currently we do not handle DISTINCT on more than one key. To do so,
+				 * we would need to break down the SkipScan into subproblems: first
+				 * find the minimal tuple then for each prefix find all unique suffix
+				 * tuples. For instance, if we are searching over (int, int), we would
+				 * first find (0, 0) then find (0, N) for all N in the domain, then
+				 * find (1, N), then (2, N), etc
+				 */
+				if (unique->numkeys > 1)
+					return;
+
+				dpinfo->unique_path = (Path *) unique;
+				break;
+			}
+		}
+	}
+	/* Look for Aggpath with eligible Distinct aggregates */
+	else if (dpinfo->stage == UPPERREL_GROUP_AGG)
+	{
+		foreach (lc, output_rel->pathlist)
+		{
+			if (IsA(lfirst(lc), AggPath))
+			{
+				dpinfo->unique_path = (Path *) lfirst_node(AggPath, lc);
+				break;
+			}
+		}
+	}
+	else
+		return;
+
+	if (!dpinfo->unique_path)
+		return;
+
+	/* Check if we have valid distinct expression to source from the underlying index */
+	dpinfo->distinct_expr = get_upper_distinct_expr(root, dpinfo->stage);
+	if (!dpinfo->distinct_expr)
+	{
+		dpinfo->unique_path = NULL;
+		return;
+	}
+
+	/* Need to make a copy of the unique path here because add_path() in the
+	 * pathlist loop below might prune it if the new unique path
+	 * (SkipScanPath) dominates the old one. When the unique path is pruned,
+	 * the pointer will no longer be valid in the next iteration of the
+	 * pathlist loop. Fortunately, the Path object is not deeply freed, so a
+	 * shallow copy is enough. */
+	if (dpinfo->stage == UPPERREL_DISTINCT)
+	{
+		UpperUniquePath *unique = makeNode(UpperUniquePath);
+		memcpy(unique, lfirst_node(UpperUniquePath, lc), sizeof(UpperUniquePath));
+		dpinfo->unique_path = (Path *) unique;
+	}
+	else if (dpinfo->stage == UPPERREL_GROUP_AGG)
+	{
+		AggPath *dist_agg_path = makeNode(AggPath);
+		memcpy(dist_agg_path, lfirst_node(AggPath, lc), sizeof(AggPath));
+		dpinfo->unique_path = (Path *) dist_agg_path;
+	}
+	return;
+}
+
 static SkipScanPath *skip_scan_path_create(PlannerInfo *root, IndexPath *index_path,
-										   double ndistinct);
+										   DistinctPathInfo *dpinfo);
 
 /*
  * Create SkipScan paths based on existing Unique paths.
@@ -170,74 +345,54 @@ static SkipScanPath *skip_scan_path_create(PlannerInfo *root, IndexPath *index_p
  *                ->  Index Scan using _hyper_2_2_chunk_idx on _hyper_2_2_chunk
  */
 void
-tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output_rel)
+tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output_rel,
+						UpperRelationKind stage)
 {
-	ListCell *lc;
-	UpperUniquePath *unique = NULL;
-
 	if (!ts_guc_enable_skip_scan)
 		return;
 
-	/*
-	 * look for Unique Path so we dont have repeat some of
-	 * the calculations done by postgres and can also assume
-	 * that the DISTINCT clause is eligible for sort based
-	 * DISTINCT
-	 */
-	foreach (lc, output_rel->pathlist)
-	{
-		if (IsA(lfirst(lc), UpperUniquePath))
-		{
-			unique = lfirst_node(UpperUniquePath, lc);
-
-			/* currently we do not handle DISTINCT on more than one key. To do so,
-			 * we would need to break down the SkipScan into subproblems: first
-			 * find the minimal tuple then for each prefix find all unique suffix
-			 * tuples. For instance, if we are searching over (int, int), we would
-			 * first find (0, 0) then find (0, N) for all N in the domain, then
-			 * find (1, N), then (2, N), etc
-			 */
-			if (unique->numkeys > 1)
-				return;
-
-			break;
-		}
-	}
-
-	/* no UniquePath found so this query might not be
-	 * eligible for sort-based DISTINCT and therefore
-	 * not eligible for SkipScan either */
-	if (!unique)
+	DistinctPathInfo dpinfo = { stage, NULL, NULL };
+	obtain_upper_distinct_path(root, output_rel, &dpinfo);
+	if (!dpinfo.unique_path)
 		return;
 
-	/* Need to make a copy of the unique path here because add_path() in the
-	 * pathlist loop below might prune it if the new unique path
-	 * (SkipScanPath) dominates the old one. When the unique path is pruned,
-	 * the pointer will no longer be valid in the next iteration of the
-	 * pathlist loop. Fortunately, the Path object is not deeply freed, so a
-	 * shallow copy is enough. */
-	unique = makeNode(UpperUniquePath);
-	memcpy(unique, lfirst_node(UpperUniquePath, lc), sizeof(UpperUniquePath));
-
+	Assert(IsA(dpinfo.unique_path, UpperUniquePath) || IsA(dpinfo.unique_path, AggPath));
+	ListCell *lc;
 	foreach (lc, input_rel->pathlist)
 	{
-		bool project = false;
 		bool has_caa = false;
 
 		Path *subpath = lfirst(lc);
 
-		if (!pathkeys_contained_in(unique->path.pathkeys, subpath->pathkeys))
-			continue;
+		List *top_pathkeys = NULL;
+
+		/* Unique path has to be sorted on at least DISTINCT ON key */
+		if (IsA(dpinfo.unique_path, UpperUniquePath))
+		{
+			if (!pathkeys_contained_in(dpinfo.unique_path->pathkeys, subpath->pathkeys))
+				continue;
+		}
+		/* AppPath with distinct aggs may not be sorted, but the input into distinct aggs needs to
+		 * be sorted */
+		else if (IsA(dpinfo.unique_path, AggPath))
+		{
+			if (!subpath->pathkeys ||
+				!pathkeys_contained_in(dpinfo.unique_path->pathkeys, subpath->pathkeys))
+				continue;
+			/* Need to check sortedness for inputs of Distinct aggs, so we'll keep track of the
+			 * input pathkeys  */
+			top_pathkeys = subpath->pathkeys;
+		}
 
 		/* If path is a ProjectionPath we strip it off for processing
 		 * but also add a ProjectionPath on top of the SKipScanPaths
 		 * later.
 		 */
+		ProjectionPath *proj = NULL;
 		if (IsA(subpath, ProjectionPath))
 		{
-			ProjectionPath *proj = castNode(ProjectionPath, subpath);
+			proj = castNode(ProjectionPath, subpath);
 			subpath = proj->subpath;
-			project = true;
 		}
 
 		/* Path might be wrapped in a ConstraintAwareAppendPath if this
@@ -256,14 +411,15 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 		{
 			IndexPath *index_path = castNode(IndexPath, subpath);
 
-			subpath = (Path *) skip_scan_path_create(root, index_path, unique->path.rows);
+			subpath = (Path *) skip_scan_path_create(root, index_path, &dpinfo);
 			if (!subpath)
 				continue;
 		}
 		else if (IsA(subpath, MergeAppendPath))
 		{
 			MergeAppendPath *merge_path = castNode(MergeAppendPath, subpath);
-			List *new_paths = build_subpath(root, merge_path->subpaths, unique->path.rows);
+
+			List *new_paths = build_subpath(root, merge_path->subpaths, &dpinfo, top_pathkeys);
 
 			/* build_subpath returns NULL when no SkipScanPath was created */
 			if (!new_paths)
@@ -279,7 +435,7 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 		else if (ts_is_chunk_append_path(subpath))
 		{
 			ChunkAppendPath *ca = (ChunkAppendPath *) subpath;
-			List *new_paths = build_subpath(root, ca->cpath.custom_paths, unique->path.rows);
+			List *new_paths = build_subpath(root, ca->cpath.custom_paths, &dpinfo, top_pathkeys);
 			/* ChunkAppend should never be wrapped in ConstraintAwareAppendPath */
 			Assert(!has_caa);
 
@@ -302,22 +458,55 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 		if (has_caa)
 			subpath = ts_constraint_aware_append_path_create(root, subpath);
 
-		Path *new_unique = (Path *)
-			create_upper_unique_path(root, output_rel, subpath, unique->numkeys, unique->path.rows);
-		new_unique->pathtarget = unique->path.pathtarget;
+		Path *new_unique = NULL;
 
-		if (project)
-			new_unique = (Path *) create_projection_path(root,
-														 output_rel,
-														 new_unique,
-														 copy_pathtarget(new_unique->pathtarget));
+		if (IsA(dpinfo.unique_path, UpperUniquePath))
+		{
+			UpperUniquePath *unique = (UpperUniquePath *) dpinfo.unique_path;
+			new_unique = (Path *) create_upper_unique_path(root,
+														   output_rel,
+														   subpath,
+														   unique->numkeys,
+														   unique->path.rows);
+			new_unique->pathtarget = unique->path.pathtarget;
+
+			if (proj)
+				new_unique =
+					(Path *) create_projection_path(root,
+													output_rel,
+													new_unique,
+													copy_pathtarget(new_unique->pathtarget));
+		}
+		else if (IsA(dpinfo.unique_path, AggPath))
+		{
+			AggPath *dist_agg_path = (AggPath *) dpinfo.unique_path;
+			if (proj)
+			{
+				proj->subpath = subpath;
+				subpath = (Path *) proj;
+			}
+			/* Is there a better way to cost new AggPath w/o recreating AggClauseCosts from the new
+			 * input? */
+			AggClauseCosts dummy_aggcosts;
+			MemSet(&dummy_aggcosts, 0, sizeof(AggClauseCosts));
+			new_unique = (Path *) create_agg_path(root,
+												  output_rel,
+												  subpath,
+												  dist_agg_path->path.pathtarget,
+												  dist_agg_path->aggstrategy,
+												  dist_agg_path->aggsplit,
+												  dist_agg_path->groupClause,
+												  dist_agg_path->qual,
+												  (const AggClauseCosts *) &dummy_aggcosts,
+												  dist_agg_path->numGroups);
+		}
 
 		add_path(output_rel, new_unique);
 	}
 }
 
 static SkipScanPath *
-skip_scan_path_create(PlannerInfo *root, IndexPath *index_path, double ndistinct)
+skip_scan_path_create(PlannerInfo *root, IndexPath *index_path, DistinctPathInfo *dpinfo)
 {
 	double startup = index_path->path.startup_cost;
 	double total = index_path->path.total_cost;
@@ -332,7 +521,7 @@ skip_scan_path_create(PlannerInfo *root, IndexPath *index_path, double ndistinct
 		return NULL;
 
 	SkipScanPath *skip_scan_path = (SkipScanPath *) newNode(sizeof(SkipScanPath), T_CustomPath);
-
+	int ndistinct = dpinfo->unique_path->rows;
 	skip_scan_path->cpath.path.pathtype = T_CustomScan;
 	skip_scan_path->cpath.path.pathkeys = index_path->path.pathkeys;
 	skip_scan_path->cpath.path.pathtarget = index_path->path.pathtarget;
@@ -363,7 +552,7 @@ skip_scan_path_create(PlannerInfo *root, IndexPath *index_path, double ndistinct
 	 * free so reusing the IndexPath here is safe. */
 	skip_scan_path->index_path = index_path;
 
-	Var *var = get_distinct_var(root, index_path, skip_scan_path);
+	Var *var = get_distinct_var(root, dpinfo, index_path, skip_scan_path);
 
 	if (!var)
 		return NULL;
@@ -379,35 +568,12 @@ skip_scan_path_create(PlannerInfo *root, IndexPath *index_path, double ndistinct
 
 /* Extract the Var to use for the SkipScan and do attno mapping if required. */
 static Var *
-get_distinct_var(PlannerInfo *root, IndexPath *index_path, SkipScanPath *skip_scan_path)
+get_distinct_var(PlannerInfo *root, DistinctPathInfo *dpinfo, IndexPath *index_path,
+				 SkipScanPath *skip_scan_path)
 {
-	ListCell *lc;
-	int num_vars = 0;
 	RelOptInfo *rel = index_path->path.parent;
-	Expr *tlexpr = NULL;
+	Expr *tlexpr = dpinfo->distinct_expr;
 
-	foreach (lc, root->parse->distinctClause)
-	{
-		SortGroupClause *clause = lfirst_node(SortGroupClause, lc);
-		Node *expr = get_sortgroupclause_expr(clause, root->parse->targetList);
-
-		/* we ignore any columns that can be constified to allow for cases like DISTINCT 'abc',
-		 * column */
-		if (IsA(estimate_expression_value(root, expr), Const))
-			continue;
-
-		num_vars++;
-
-		/* We ignore binary-compatible relabeling */
-		tlexpr = (Expr *) expr;
-		while (tlexpr && IsA(tlexpr, RelabelType))
-			tlexpr = ((RelabelType *) tlexpr)->arg;
-	}
-
-	if (num_vars != 1)
-		return NULL;
-
-	/* SkipScan on expressions not supported */
 	if (!tlexpr || !IsA(tlexpr, Var))
 		return NULL;
 
@@ -474,7 +640,7 @@ get_distinct_var(PlannerInfo *root, IndexPath *index_path, SkipScanPath *skip_sc
  * otherwise returns list of new paths
  */
 static List *
-build_subpath(PlannerInfo *root, List *subpaths, double ndistinct)
+build_subpath(PlannerInfo *root, List *subpaths, DistinctPathInfo *dpinfo, List *top_pathkeys)
 {
 	bool has_skip_path = false;
 	List *new_paths = NIL;
@@ -485,8 +651,12 @@ build_subpath(PlannerInfo *root, List *subpaths, double ndistinct)
 		Path *child = lfirst(lc);
 		if (IsA(child, IndexPath))
 		{
+			if (top_pathkeys &&
+				!pathkeys_contained_in(top_pathkeys, castNode(IndexPath, child)->path.pathkeys))
+				continue;
+
 			SkipScanPath *skip_path =
-				skip_scan_path_create(root, castNode(IndexPath, child), ndistinct);
+				skip_scan_path_create(root, castNode(IndexPath, child), dpinfo);
 
 			if (skip_path)
 			{
