@@ -40,7 +40,7 @@ gawk -i inplace '/'${LAST_UPDATE_FILE}')/ { print; print "    updates/'${UPDATE_
 sed -i.bak "s/${LAST_UPDATE_FILE})/${LAST_UPDATE_FILE}/g" ./sql/CMakeLists.txt
 
 gawk -i inplace '/ '${LAST_DOWNGRADE_FILE}')/ { print; print "    '${DOWNGRADE_FILE}')"; next }1' ./sql/CMakeLists.txt
-sed -i.bak "s/ ${LAST_DOWNGRADE_FILE})/  ${LAST_DOWNGRADE_FILE}/g" ./sql/CMakeLists.txt
+sed -i.bak "s/${LAST_DOWNGRADE_FILE})/  ${LAST_DOWNGRADE_FILE}/g" ./sql/CMakeLists.txt
 
 sed -i.bak "s/FILE reverse-dev.sql)/FILE ${DOWNGRADE_FILE})/g" ./sql/CMakeLists.txt
 
