@@ -194,7 +194,6 @@ alter table table_constr drop constraint table_constr_exclu ;
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id, location, d');
 
 -- ddl ADD column variants that are not supported
-ALTER TABLE table_constr ADD COLUMN newcol integer CHECK ( newcol < 10 );
 ALTER TABLE table_constr ADD COLUMN newcol integer UNIQUE;
 ALTER TABLE table_constr ADD COLUMN newcol integer PRIMARY KEY;
 ALTER TABLE table_constr ADD COLUMN newcol integer NOT NULL;

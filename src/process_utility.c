@@ -338,6 +338,12 @@ check_altertable_add_column_for_compressed(Hypertable *ht, ColumnDef *col)
 				case CONSTR_NOTNULL:
 					has_notnull = true;
 					continue;
+					/*
+					 * check constraints are validated at end of alter table command
+					 * in validate_check_constraint
+					 */
+				case CONSTR_CHECK:
+					continue;
 				case CONSTR_DEFAULT:
 					/*
 					 * Since default expressions might trigger a table rewrite we
@@ -2686,8 +2692,17 @@ process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 			Constraint *con = castNode(Constraint, info->cmd->def);
 			switch (con->contype)
 			{
+					/*
+					 * Unique and primary key constraints are checked as part of
+					 * creation of the index enforcing it so nothing to do here.
+					 */
 				case CONSTR_UNIQUE:
 				case CONSTR_PRIMARY:
+					/*
+					 * Foreign key constraints are checked by postgres since
+					 * the check happens through SPI and we adjust those queries
+					 * to include compressed data.
+					 */
 				case CONSTR_FOREIGN:
 					break;
 				case CONSTR_CHECK:

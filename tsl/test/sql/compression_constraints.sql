@@ -319,4 +319,43 @@ INSERT INTO metrics SELECT '2025-01-01','d1',0;
 \set ON_ERROR_STOP 1
 ROLLBACK;
 
+DROP TABLE metrics CASCADE;
+
+-- test adding columns and constraints together
+CREATE TABLE metrics(time timestamptz not null, device text, value float);
+SELECT create_hypertable('metrics','time');
+
+ALTER TABLE metrics SET (tsdb.compress, tsdb.compress_segmentby='device', tsdb.compress_orderby='time');
+
+INSERT INTO metrics SELECT '2025-01-01','d1',1;
+-- should fail in validation since the new column will be NULL for existing tuples
+\set ON_ERROR_STOP 0
+ALTER TABLE metrics ADD COLUMN c1 int CHECK ( c1 IS NOT NULL );
+\set ON_ERROR_STOP 1
+
+BEGIN;
+-- should succeed since the CHECK constraint will succeed for NULL values
+ALTER TABLE metrics ADD COLUMN c1 int CHECK (c1 <> 42);
+INSERT INTO metrics SELECT '2025-01-01','d1',1,23;
+\set ON_ERROR_STOP 0
+INSERT INTO metrics SELECT '2025-01-01','d1',1,42;
+\set ON_ERROR_STOP 1
+ROLLBACK;
+
+SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
+
+-- should fail in validation since the new column will be NULL for existing tuples
+\set ON_ERROR_STOP 0
+ALTER TABLE metrics ADD COLUMN c1 int CHECK ( c1 IS NOT NULL );
+\set ON_ERROR_STOP 1
+
+BEGIN;
+-- should succeed since the CHECK constraint will succeed for NULL values
+ALTER TABLE metrics ADD COLUMN c1 int CHECK (c1 <> 42);
+INSERT INTO metrics SELECT '2025-01-01','d1',1,23;
+\set ON_ERROR_STOP 0
+INSERT INTO metrics SELECT '2025-01-01','d1',1,42;
+\set ON_ERROR_STOP 1
+ROLLBACK;
+
 
