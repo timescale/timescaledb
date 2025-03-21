@@ -310,6 +310,7 @@ jobs:
           build/tsl/test/tmp_check/log
 
     - name: Find internal program errors in the server log
+      if: always()
       run: |
         # This is used to save the IPEs into the CI checks database, and also to
         # check that no new IPEs were introduced in the Flaky Check.

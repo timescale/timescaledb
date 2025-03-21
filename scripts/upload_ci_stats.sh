@@ -173,7 +173,10 @@ done
 # Save a snippet of logs where a backend was terminated by signal.
 grep -C40 "was terminated by signal" postmaster.log > postgres-failure.log ||:
 
-"${PSQL[@]}" -c "\copy ipe from ipe.tsv"
+if [ -s ipe.tsv ]
+then
+    "${PSQL[@]}" -c "\copy ipe from ipe.tsv"
+fi
 
 # Upload the logs.
 # Note that the sanitizer setting log_path means "write logs to 'log_path.pid'".
