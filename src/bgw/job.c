@@ -12,6 +12,7 @@
 #include <executor/instrument.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
+#include <nodes/pg_list.h>
 #include <parser/parse_func.h>
 #include <parser/parser.h>
 #include <pgstat.h>
@@ -1170,6 +1171,8 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		callbacks->toggle_allocation_blocking && !callbacks->enabled)
 		callbacks->toggle_allocation_blocking(/*enable=*/true);
 
+	TS_PLUGIN_CALLBACK(bgw_job_init, params.job_id, params.user_oid);
+
 	BackgroundWorkerInitializeConnectionByOid(db_oid, params.user_oid, 0);
 
 	log_min_messages = ts_guc_bgw_log_level;
@@ -1190,6 +1193,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 									SESSION_LOCK,
 									/* block */ true,
 									&got_lock);
+
 	if (job == NULL)
 		/* If the job is not found, we can't proceed */
 		elog(ERROR, "job %d not found when running the background worker", params.job_id);
@@ -1201,9 +1205,16 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	CommitTransactionCommand();
 
-	elog(DEBUG2, "job %d (%s) found", params.job_id, NameStr(job->fd.application_name));
+	const char *application_name = NameStr(job->fd.application_name);
+	elog(DEBUG2, "job %d (%s) found", params.job_id, application_name);
+	pgstat_report_appname(application_name);
+	TS_PLUGIN_CALLBACK(bgw_job_start,
+					   params.job_id,
+					   job->fd.owner,
+					   application_name,
+					   list_make2(makeString(NameStr(job->fd.proc_schema)),
+								  makeString(NameStr(job->fd.proc_name))));
 
-	pgstat_report_appname(NameStr(job->fd.application_name));
 	MemoryContext oldcontext = CurrentMemoryContext;
 
 	bool job_failed = false;
@@ -1287,6 +1298,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 		CommitTransactionCommand();
 		FlushErrorState();
+		TS_PLUGIN_CALLBACK(bgw_job_exit, params.job_id, JOB_FAILURE_IN_EXECUTION);
 		ReThrowError(edata);
 	}
 	PG_END_TRY();
@@ -1311,6 +1323,8 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	INSTR_TIME_SET_CURRENT(duration);
 	INSTR_TIME_SUBTRACT(duration, start);
+
+	TS_PLUGIN_CALLBACK(bgw_job_exit, params.job_id, res);
 
 	elog(DEBUG1,
 		 "job %d (%s) exiting with %s: execution time %.2f ms",
