@@ -2666,3 +2666,4 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('alias') ch;
      1
 (1 row)
 
+FIXME

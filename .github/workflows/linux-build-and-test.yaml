@@ -313,13 +313,15 @@ jobs:
       # We collect the same messages when uploading to the CI checks database,
       # but it runs on different conditions (not on forks and not on flaky check),
       # and requires different data (job date), so we do it separately here.
+      # The jq --exit-code option is broken with select() on jq-1.6 which we see
+      # on some machines, so we use grep instead (see https://github.com/jqlang/jq/issues/1139).
       if: always() && contains(matrix.name, 'Flaky')
       run: |
         ! jq 'select(
                 (.state_code == "XX000" and .error_severity != "LOG")
                 or (.message | test("resource was not closed"))
             ) | [.message, .func_name,  .statement] | @tsv
-        ' -r postmaster.json | grep . ipe.tsv
+        ' -r postmaster.json | grep .
 
     - name: Upload test results to the database
       # Don't upload the results of the flaky check, because the db schema only
