@@ -173,10 +173,6 @@ done
 # Save a snippet of logs where a backend was terminated by signal.
 grep -C40 "was terminated by signal" postmaster.log > postgres-failure.log ||:
 
-# Find internal program errors in Postgres logs.
-jq 'select(.state_code == "XX000" and .error_severity != "LOG")
-    | [env.JOB_DATE, .message, .func_name,  .statement] | @tsv
-' -r postmaster.json > ipe.tsv ||:
 "${PSQL[@]}" -c "\copy ipe from ipe.tsv"
 
 # Upload the logs.

@@ -318,17 +318,6 @@ elif len(sys.argv) > 2:
                     "coverage": False,
                     "installcheck_args": installcheck_args,
                     "name": "Flaky Check Debug",
-                    "pg": PG16_LATEST,
-                    "pginstallcheck": False,
-                }
-            )
-        )
-        m["include"].append(
-            build_debug_config(
-                {
-                    "coverage": False,
-                    "installcheck_args": installcheck_args,
-                    "name": "Flaky Check Debug",
                     "pg": PG17_LATEST,
                     "pginstallcheck": False,
                 }
