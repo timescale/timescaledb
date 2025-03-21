@@ -97,11 +97,13 @@ select distinct on (device) device, time from :CHUNK order by 1, 2;
 
 -- check that the indexes are used
 explain (costs off) select count(distinct tag) from :CHUNK;
-                                QUERY PLAN                                
---------------------------------------------------------------------------
+                                   QUERY PLAN                                   
+--------------------------------------------------------------------------------
  Aggregate
-   ->  Index Only Scan using _hyper_1_1_chunk_tag_idx on _hyper_1_1_chunk
-(2 rows)
+   ->  Custom Scan (SkipScan) on _hyper_1_1_chunk
+         ->  Index Only Scan using _hyper_1_1_chunk_tag_idx on _hyper_1_1_chunk
+               Index Cond: (tag > NULL::text)
+(4 rows)
 
 explain (costs off) select distinct on (device) device, time from :CHUNK order by 1, 2;
                                        QUERY PLAN                                       
