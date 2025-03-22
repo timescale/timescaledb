@@ -1,11 +1,9 @@
-set(SOURCES
-    loader.c
-    bgw_message_queue.c
-    bgw_counter.c
-    bgw_launcher.c
-    bgw_interface.c
-    function_telemetry.c
-    lwlocks.c)
+set(SOURCES loader.c bgw_message_queue.c bgw_counter.c bgw_launcher.c
+            bgw_interface.c lwlocks.c)
+
+if(USE_TELEMETRY)
+  list(APPEND SOURCES function_telemetry.c)
+endif()
 
 set(TEST_SOURCES ${PROJECT_SOURCE_DIR}/test/src/symbol_conflict.c)
 
