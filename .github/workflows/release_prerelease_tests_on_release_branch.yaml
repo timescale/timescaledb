@@ -1,0 +1,58 @@
+# Prerelease Tests
+
+name: Release - Prerelease Tests on Release branch
+on:
+  workflow_dispatch:
+  schedule:
+    # run prerelease tests daily at 5 am UTC
+    - cron: '0 5 * * *'
+    # run coverity tests at 22:00 on every sunday
+    - cron: '0 22 * * SUN'
+
+# The workflow needs the permission to push branches
+permissions:
+  contents: write
+
+jobs:
+  prerelease_test:
+    name: Prerelease test
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@v4
+
+      - name: Set RELEASE_BRANCH as per environment
+        run: |
+          OLD_MINOR_VERSION=$(tail -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
+          echo "RELEASE_BRANCH="$(echo ${OLD_MINOR_VERSION%?}x)"" >> $GITHUB_ENV
+
+      - name: Checkout TimescaleDB release branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_BRANCH }}
+
+      # Prerelease Testing
+      #
+      # Run the nightly pre-release tests on the release branch
+      #
+      - name: Nightly Prerelease tests
+        if: github.event.schedule == '0 5 * * *'
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        run: |
+          gh workflow run abi.yml --ref ${{ env.RELEASE_BRANCH }}
+          gh workflow run docker-images.yml --ref ${{ env.RELEASE_BRANCH }}
+          gh workflow run homebrew.yml --ref ${{ env.RELEASE_BRANCH }}
+
+      # Coverity Testing
+      #
+      # Note: Some rate limits (https://scan.coverity.com/faq#frequency) apply to the Coverity service. So,
+      # don't push your branch too often to this service.
+      - name: Run coverity scan on release branch
+        if: github.event.schedule == '0 22 * * SUN'
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        run: |
+          gh workflow run coverity.yml --ref ${{ env.RELEASE_BRANCH }}
