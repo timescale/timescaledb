@@ -366,9 +366,11 @@ alter table table_constr drop constraint table_constr_exclu ;
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id, location, d');
 -- ddl ADD column variants that are not supported
 ALTER TABLE table_constr ADD COLUMN newcol integer UNIQUE;
-ERROR:  cannot add column with constraints to a hypertable that has compression enabled
+ERROR:  cannot create a unique index without the column "timec" (used in partitioning)
+HINT:  If you're creating a hypertable on a table with a primary key, ensure the partitioning column is part of the primary or composite key.
 ALTER TABLE table_constr ADD COLUMN newcol integer PRIMARY KEY;
-ERROR:  cannot add column with constraints to a hypertable that has compression enabled
+ERROR:  cannot create a unique index without the column "timec" (used in partitioning)
+HINT:  If you're creating a hypertable on a table with a primary key, ensure the partitioning column is part of the primary or composite key.
 ALTER TABLE table_constr ADD COLUMN newcol integer NOT NULL;
 ERROR:  cannot add column with NOT NULL constraint without default to a hypertable that has compression enabled
 ALTER TABLE table_constr ADD COLUMN newcol integer DEFAULT random() + random();

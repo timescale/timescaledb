@@ -328,6 +328,14 @@ check_altertable_add_column_for_compressed(Hypertable *ht, ColumnDef *col)
 			switch (constraint->contype)
 			{
 				/*
+				 * These will fail in combination with ADD COLUMN because this will
+				 * be a single column constraint and we require all partitioning
+				 * columns to be part if the unique/primary key constraint.
+				 */
+				case CONSTR_PRIMARY:
+				case CONSTR_UNIQUE:
+					break;
+				/*
 				 * We can safelly ignore NULL constraints because it does nothing
 				 * and according to Postgres docs is useless and exist just for
 				 * compatibility with other database systems
