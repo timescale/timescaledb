@@ -2191,3 +2191,27 @@ SELECT sum(temperature), min(location)
 FROM conditions
 GROUP BY time_bucket('1week', time), test_stablefunc(temperature::int) WITH NO DATA;
 WARNING:  using non-immutable functions in continuous aggregate view may lead to inconsistent results on rematerialization
+-- test window functions in caggs
+-- first do sanity check that we error without the GUC
+\set ON_ERROR_STOP 0
+CREATE MATERIALIZED VIEW cagg_window WITH (tsdb.continuous)
+AS SELECT time_bucket('1week', time), rank() OVER (PARTITION BY time_bucket('1 week',time)) FROM conditions GROUP BY 1;
+ERROR:  invalid continuous aggregate query
+\set ON_ERROR_STOP 1
+SET timescaledb.enable_cagg_window_functions TO on;
+CREATE MATERIALIZED VIEW cagg_window_1 WITH (tsdb.continuous)
+AS SELECT time_bucket('1week', time), rank() OVER (PARTITION BY time_bucket('1 week',time)) FROM conditions GROUP BY 1;
+WARNING:  window function support is experimental and may result in unexpected results depending on the functions used.
+NOTICE:  refreshing continuous aggregate "cagg_window_1"
+CREATE MATERIALIZED VIEW cagg_window_2 WITH (tsdb.continuous)
+AS SELECT time_bucket('1week', time), rank() OVER (PARTITION BY time_bucket('1 week',time), location) FROM conditions GROUP BY 1, location;
+WARNING:  window function support is experimental and may result in unexpected results depending on the functions used.
+NOTICE:  refreshing continuous aggregate "cagg_window_2"
+CREATE MATERIALIZED VIEW cagg_window_3 WITH (tsdb.continuous)
+AS SELECT time_bucket('1week', time), rank() OVER (PARTITION BY time_bucket('1 week',time)) FROM conditions GROUP BY 1, location;
+WARNING:  window function support is experimental and may result in unexpected results depending on the functions used.
+NOTICE:  refreshing continuous aggregate "cagg_window_3"
+CREATE MATERIALIZED VIEW cagg_window_4 WITH (tsdb.continuous)
+AS SELECT time_bucket('1week', time), rank() OVER w FROM conditions GROUP BY 1, location WINDOW w AS (PARTITION BY time_bucket('1 week',time));
+WARNING:  window function support is experimental and may result in unexpected results depending on the functions used.
+NOTICE:  refreshing continuous aggregate "cagg_window_4"

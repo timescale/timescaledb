@@ -517,9 +517,20 @@ cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail, con
 
 	if (query->hasWindowFuncs)
 	{
-		appendStringInfoString(detail,
-							   "Window functions are not supported by continuous aggregates.");
-		return false;
+		if (ts_guc_enable_cagg_window_functions)
+		{
+			elog(WARNING,
+				 "window function support is experimental and may result in unexpected results "
+				 "depending on the functions used.");
+		}
+		else
+		{
+			appendStringInfoString(detail, "Window function support not enabled.");
+			appendStringInfoString(hint,
+								   "Enable experimental window function support by setting "
+								   "timescaledb.enable_cagg_window_functions.");
+			return false;
+		}
 	}
 
 	if (query->hasDistinctOn || query->distinctClause)
