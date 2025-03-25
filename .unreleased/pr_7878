@@ -1,0 +1,1 @@
+Implements: #7878 Don't block non-immutable functions in continuous aggregates

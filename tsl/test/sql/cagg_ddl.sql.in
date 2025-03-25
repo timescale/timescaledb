@@ -1373,3 +1373,28 @@ SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE 
 
 ALTER MATERIALIZED VIEW cagg_set SET (tsdb.chunk_time_interval='1 year');
 SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE column_name='cagg_interval_setter';
+
+-- test cagg with stable functions
+CREATE MATERIALIZED VIEW cagg_stable WITH (tsdb.continuous) AS
+SELECT sum(temperature), max(time + INTERVAL '1h')
+FROM conditions
+GROUP BY time_bucket('1week', time), location;
+
+SELECT * FROM cagg_stable t ORDER BY t;
+
+--aggregate without combine function but stable function
+CREATE MATERIALIZED VIEW cagg_json_agg WITH (tsdb.continuous, tsdb.materialized_only=false)
+AS SELECT json_agg(location) from conditions group by time_bucket('1week', time), location WITH NO DATA;
+
+CREATE FUNCTION test_stablefunc(int) RETURNS int LANGUAGE 'sql' STABLE AS 'SELECT $1 + 10';
+
+CREATE MATERIALIZED VIEW cagg_stable2 WITH (tsdb.continuous) AS
+SELECT sum(test_stablefunc(temperature::int)), min(location)
+FROM conditions
+GROUP BY time_bucket('1week', time) WITH NO DATA;
+
+CREATE MATERIALIZED VIEW cagg_stable3 WITH (tsdb.continuous) AS
+SELECT sum(temperature), min(location)
+FROM conditions
+GROUP BY time_bucket('1week', time), test_stablefunc(temperature::int) WITH NO DATA;
+
