@@ -969,6 +969,7 @@ process_settings(Oid databaseid)
 static PGFunction
 get_versioned_scheduler()
 {
+	volatile PGFunction versioned_scheduler_main = NULL;
 	PG_TRY();
 	{
 		bool ts_installed = false;
@@ -998,13 +999,12 @@ get_versioned_scheduler()
 		{
 			char soname[MAX_SO_NAME_LEN];
 			snprintf(soname, MAX_SO_NAME_LEN, "%s-%s", EXTENSION_SO, version);
-			PGFunction versioned_scheduler_main =
+			versioned_scheduler_main =
 				load_external_function(soname, BGW_DB_SCHEDULER_FUNCNAME, false, NULL);
 			if (versioned_scheduler_main == NULL)
 				ereport(ERROR,
 						(errmsg("TimescaleDB version %s does not have a background worker, exiting",
 								soname)));
-			return versioned_scheduler_main;
 		}
 	}
 	PG_CATCH();
@@ -1013,7 +1013,7 @@ get_versioned_scheduler()
 		FlushErrorState();
 	}
 	PG_END_TRY();
-	return NULL;
+	return versioned_scheduler_main;
 }
 
 /*
