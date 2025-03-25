@@ -2160,3 +2160,34 @@ SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE 
  cagg_interval_setter | @ 360 days
 (1 row)
 
+-- test cagg with stable functions
+CREATE MATERIALIZED VIEW cagg_stable WITH (tsdb.continuous) AS
+SELECT sum(temperature), max(time + INTERVAL '1h')
+FROM conditions
+GROUP BY time_bucket('1week', time), location;
+WARNING:  using non-immutable functions in continuous aggregate view may lead to inconsistent results on rematerialization
+NOTICE:  refreshing continuous aggregate "cagg_stable"
+SELECT * FROM cagg_stable t ORDER BY t;
+ sum |             max              
+-----+------------------------------
+  65 | Tue Jan 02 10:10:00 2018 UTC
+ 100 | Tue Jan 02 10:30:00 2018 UTC
+ 120 | Tue Jan 02 10:20:00 2018 UTC
+ 355 | Fri Nov 02 11:30:00 2018 UTC
+(4 rows)
+
+--aggregate without combine function but stable function
+CREATE MATERIALIZED VIEW cagg_json_agg WITH (tsdb.continuous, tsdb.materialized_only=false)
+AS SELECT json_agg(location) from conditions group by time_bucket('1week', time), location WITH NO DATA;
+WARNING:  using non-immutable functions in continuous aggregate view may lead to inconsistent results on rematerialization
+CREATE FUNCTION test_stablefunc(int) RETURNS int LANGUAGE 'sql' STABLE AS 'SELECT $1 + 10';
+CREATE MATERIALIZED VIEW cagg_stable2 WITH (tsdb.continuous) AS
+SELECT sum(test_stablefunc(temperature::int)), min(location)
+FROM conditions
+GROUP BY time_bucket('1week', time) WITH NO DATA;
+WARNING:  using non-immutable functions in continuous aggregate view may lead to inconsistent results on rematerialization
+CREATE MATERIALIZED VIEW cagg_stable3 WITH (tsdb.continuous) AS
+SELECT sum(temperature), min(location)
+FROM conditions
+GROUP BY time_bucket('1week', time), test_stablefunc(temperature::int) WITH NO DATA;
+WARNING:  using non-immutable functions in continuous aggregate view may lead to inconsistent results on rematerialization
