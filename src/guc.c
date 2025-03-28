@@ -477,8 +477,10 @@ _guc_init(void)
 							 NULL);
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("restoring"),
-							 "Install timescale in restoring mode",
-							 "Used for running pg_restore",
+							 "Enable restoring mode for timescaledb",
+							 "In restoring mode all timescaledb internal hooks are disabled. This "
+							 "mode is required for restoring logical dumps of databases with "
+							 "timescaledb.",
 							 &ts_guc_restoring,
 							 false,
 							 PGC_SUSET,
