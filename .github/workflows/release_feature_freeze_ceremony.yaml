@@ -1,0 +1,90 @@
+name: Release - Feature Freeze Ceremony
+on:
+  workflow_dispatch:
+
+# The workflow needs the permission to push branches
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-feature-freeze-ceremony:
+    name: Minor Release - Feature Freeze
+    runs-on: ubuntu-latest
+    environment:
+      name: Release Ceremonies
+
+    steps:
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@v4
+
+      # Create `2.XX.x` release branch of `main`
+      # Release branch is a dependency for the next steps
+      - name: Create Release Branch
+        uses: peterjgrainger/action-create-branch@v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        with:
+          branch: '${{ env.RELEASE_BRANCH }}'
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install pip
+          pip install PyGithub requests
+
+      - name: Set version configuration
+        run: |
+          NEXT_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
+          CURRENT_VERSION=$(tail -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
+          RELEASE_BRANCH="${NEXT_VERSION/%.0/.x}"
+
+          echo "RELEASE_BRANCH=${RELEASE_BRANCH}" >> $GITHUB_ENV
+          echo "CURRENT_VERSION=${CURRENT_VERSION}" >> $GITHUB_ENV
+          echo "NEXT_VERSION=${NEXT_VERSION}" >> $GITHUB_ENV
+
+          echo "Release branch: $RELEASE_BRANCH"
+
+      - name: Generate the CHANGELOG
+        run: |
+          ./scripts/changelog/generate.sh 
+          head -n 10 CHANGELOG.md
+
+      # Generate the CHANGELOG and submit it in a separate PR
+      #
+      - name: Create Pull Request for CHANGELOG
+        id: cpr_changelog
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          branch: release/${{ env.NEXT_VERSION }}--changelog"
+          base: ${{ env.RELEASE_BRANCH }}
+          delete-branch: true
+          title: 'CHANGELOG for ${{ env.NEXT_VERSION }}'
+          labels: |
+            release
+            changelog
+          add-paths: |
+            CHANGELOG.md
+
+      - name: Curate minor release artefacts
+        run: |
+          ./scripts/release/curate_minor_release_artefacts.sh ${{ env.CURRENT_VERSION }} ${{ env.NEXT_VERSION }}
+
+      - name: Create Pull Request for next version changes on release branch
+        id: cpr_next_version_changes
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          branch: release/${{ env.NEXT_VERSION }}--next"
+          base: ${{ env.RELEASE_BRANCH }}
+          delete-branch: true
+          title: 'Bump version to ${{ env.NEXT_VERSION }}'
+          labels: |
+            release
+          add-paths: |
+            version.config
+            sql/updates/*.sql
+            sql/CMakeLists.txt
+            .unreleased/*
+
