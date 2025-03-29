@@ -515,10 +515,11 @@ cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail, con
 		return false;
 	}
 
-	if (query->hasWindowFuncs)
+	if (!ts_guc_enable_cagg_window_functions && query->hasWindowFuncs)
 	{
 		appendStringInfoString(detail,
-							   "Window functions are not supported by continuous aggregates.");
+							   "Window function support not enabled.");
+		appendStringInfoString(hint, "Enable window function support by setting timescaledb.enable_cagg_window_functions.");
 		return false;
 	}
 
