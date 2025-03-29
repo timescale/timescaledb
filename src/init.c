@@ -19,12 +19,15 @@
 #include "guc.h"
 #include "license_guc.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
+#include "timescaledb.h"
 #include "ts_catalog/catalog.h"
 #include "version.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
 #endif
+
+TimescaleDBCallbacks **timescaledb_plugin_ptr = NULL;
 
 extern void _hypertable_cache_init(void);
 extern void _hypertable_cache_fini(void);
@@ -107,6 +110,16 @@ _PG_init(void)
 	if (init_done)
 		return;
 
+	/*
+	 * Get the plugin pointer to the plugin struct.
+	 *
+	 * We do not set it here since the plugin might fill in the structure with
+	 * some information in its call to _PG_init. It will be set before any
+	 * callback to the plugin.
+	 */
+	timescaledb_plugin_ptr =
+		(TimescaleDBCallbacks **) find_rendezvous_variable(TIMESCALEDB_PLUGIN_NAME);
+
 	_cache_init();
 	_hypertable_cache_init();
 	_cache_invalidate_init();
@@ -140,4 +153,16 @@ ts_post_load_init(PG_FUNCTION_ARGS)
 	ts_license_enable_module_loading();
 
 	PG_RETURN_VOID();
+}
+
+TSDLLEXPORT void
+ts_setup_timescaledb_plugin_header(void)
+{
+	static const Pg_magic_struct Pg_magic_data = PG_MODULE_MAGIC_DATA;
+	if (*timescaledb_plugin_ptr)
+	{
+		(*timescaledb_plugin_ptr)->magic = &Pg_magic_data;
+		(*timescaledb_plugin_ptr)->pg_version = PG_VERSION_NUM;
+		(*timescaledb_plugin_ptr)->ts_version = TS_VERSION_NUM;
+	}
 }

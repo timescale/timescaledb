@@ -11,6 +11,7 @@
 #define BUILD_OS_VERSION "@CMAKE_SYSTEM_VERSION@"
 #define BUILD_PROCESSOR "@CMAKE_SYSTEM_PROCESSOR@"
 #define BUILD_POINTER_BYTES @CMAKE_SIZEOF_VOID_P@
+#define TS_VERSION_NUM @TS_VERSION_NUM@
 
 /*
  * Value should be set in package release scripts. Otherwise
