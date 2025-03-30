@@ -60,39 +60,24 @@ static void ExecCheckTupleVisible(EState *estate, Relation rel, TupleTableSlot *
 static void ExecCheckTIDVisible(EState *estate, ResultRelInfo *relinfo, ItemPointer tid,
 								TupleTableSlot *tempSlot);
 
-static List *
-get_chunk_dispatch_states(PlanState *substate)
+static ChunkDispatchState *
+get_chunk_dispatch_state(PlanState *substate)
 {
 	switch (nodeTag(substate))
 	{
 		case T_CustomScanState:
 		{
-			CustomScanState *csstate = castNode(CustomScanState, substate);
-			ListCell *lc;
-			List *result = NIL;
-
 			if (ts_is_chunk_dispatch_state(substate))
-				return list_make1(substate);
-
-			/*
-			 * In case of remote insert, the ChunkDispatchState could be a
-			 * child of a ServerDispatchState subnode.
-			 */
-			foreach (lc, csstate->custom_ps)
-			{
-				PlanState *ps = lfirst(lc);
-
-				result = list_concat(result, get_chunk_dispatch_states(ps));
-			}
-			return result;
+				return (ChunkDispatchState *) substate;
+			break;
 		}
 		case T_ResultState:
-			return get_chunk_dispatch_states(castNode(ResultState, substate)->ps.lefttree);
+			return get_chunk_dispatch_state(castNode(ResultState, substate)->ps.lefttree);
 		default:
 			break;
 	}
 
-	return NIL;
+	return NULL;
 }
 
 /*
@@ -112,8 +97,6 @@ hypertable_modify_begin(CustomScanState *node, EState *estate, int eflags)
 	HypertableModifyState *state = (HypertableModifyState *) node;
 	ModifyTableState *mtstate;
 	PlanState *ps;
-	List *chunk_dispatch_states = NIL;
-	ListCell *lc;
 
 	ModifyTable *mt = castNode(ModifyTable, &state->mt->plan);
 	/*
@@ -121,12 +104,8 @@ hypertable_modify_begin(CustomScanState *node, EState *estate, int eflags)
 	 * we need to set the hypertable as the rootRelation otherwise
 	 * statement trigger defined only on the hypertable will not fire.
 	 */
-	if (mt->operation == CMD_DELETE || mt->operation == CMD_UPDATE)
+	if (mt->operation == CMD_DELETE || mt->operation == CMD_UPDATE || mt->operation == CMD_MERGE)
 		mt->rootRelation = mt->nominalRelation;
-	if (mt->operation == CMD_MERGE)
-	{
-		mt->rootRelation = mt->nominalRelation;
-	}
 	ps = ExecInitNode(&mt->plan, estate, eflags);
 	node->custom_ps = list_make1(ps);
 	mtstate = castNode(ModifyTableState, ps);
@@ -143,23 +122,20 @@ hypertable_modify_begin(CustomScanState *node, EState *estate, int eflags)
 		linitial(estate->es_auxmodifytables) = node;
 
 	/*
-	 * Find all ChunkDispatchState subnodes and set their parent
+	 * Find the ChunkDispatchState subnode and set their parent
 	 * ModifyTableState node
-	 * We assert we only have 1 ModifyTable subpath when we create
-	 * the HypertableInsert path so this should not have changed here.
 	 */
 	PlanState *subplan = outerPlanState(mtstate);
 
 	if (mtstate->operation == CMD_INSERT || mtstate->operation == CMD_MERGE)
 	{
 		/* setup chunk dispatch state only for INSERTs */
-		chunk_dispatch_states = get_chunk_dispatch_states(subplan);
+		ChunkDispatchState *cds = get_chunk_dispatch_state(subplan);
 
 		/* Ensure that we found at least one ChunkDispatchState node */
-		Assert(list_length(chunk_dispatch_states) > 0);
+		Assert(cds);
 
-		foreach (lc, chunk_dispatch_states)
-			ts_chunk_dispatch_state_set_parent((ChunkDispatchState *) lfirst(lc), mtstate);
+		ts_chunk_dispatch_state_set_parent(cds, mtstate);
 	}
 }
 
@@ -227,17 +203,12 @@ hypertable_modify_explain(CustomScanState *node, List *ancestors, ExplainState *
 	if ((mtstate->operation == CMD_INSERT || mtstate->operation == CMD_MERGE) &&
 		outerPlanState(mtstate))
 	{
-		List *chunk_dispatch_states = get_chunk_dispatch_states(outerPlanState(mtstate));
-		ListCell *lc;
+		ChunkDispatchState *cds = get_chunk_dispatch_state(outerPlanState(mtstate));
 
-		foreach (lc, chunk_dispatch_states)
-		{
-			ChunkDispatchState *cds = (ChunkDispatchState *) lfirst(lc);
-			state->batches_deleted += cds->batches_deleted;
-			state->batches_filtered += cds->batches_filtered;
-			state->batches_decompressed += cds->batches_decompressed;
-			state->tuples_decompressed += cds->tuples_decompressed;
-		}
+		state->batches_deleted += cds->batches_deleted;
+		state->batches_filtered += cds->batches_filtered;
+		state->batches_decompressed += cds->batches_decompressed;
+		state->tuples_decompressed += cds->tuples_decompressed;
 	}
 	if (state->batches_filtered > 0)
 		ExplainPropertyInteger("Batches filtered", NULL, state->batches_filtered, es);
@@ -588,15 +559,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 
 	if (operation == CMD_INSERT || operation == CMD_MERGE)
 	{
-		if (ts_is_chunk_dispatch_state(subplanstate))
-		{
-			cds = (ChunkDispatchState *) subplanstate;
-		}
-		else
-		{
-			Assert(list_length(get_chunk_dispatch_states(subplanstate)) == 1);
-			cds = linitial(get_chunk_dispatch_states(subplanstate));
-		}
+		cds = get_chunk_dispatch_state(subplanstate);
 	}
 	/* Set global context */
 	context.mtstate = node;
@@ -805,7 +768,15 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 				/* ri_RowIdAttNo refers to a ctid attribute */
 				Assert(AttributeNumberIsValid(resultRelInfo->ri_RowIdAttNo));
 				datum = ExecGetJunkAttribute(slot, resultRelInfo->ri_RowIdAttNo, &isNull);
-				/* shouldn't ever get a null result... */
+
+				/*
+				 * For commands other than MERGE, any tuples having a null row
+				 * identifier are errors.  For MERGE, we may need to handle
+				 * them as WHEN NOT MATCHED clauses if any, so do that.
+				 *
+				 * Note that we use the node's toplevel resultRelInfo, not any
+				 * specific partition's.
+				 */
 				if (isNull)
 				{
 					if (operation == CMD_MERGE)
