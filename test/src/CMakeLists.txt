@@ -23,6 +23,7 @@ target_compile_definitions(${TESTS_LIB_NAME} PUBLIC MODULE_NAME=timescaledb)
 target_include_directories(${TESTS_LIB_NAME}
                            PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+add_subdirectory(plugin)
 add_subdirectory(bgw)
 add_subdirectory(net)
 if(USE_TELEMETRY)
