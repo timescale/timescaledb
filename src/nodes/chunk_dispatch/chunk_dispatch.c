@@ -77,7 +77,9 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 	 * for a compressed hypertable.
 	 */
 	if (dispatch->hypertable->fd.compression_state == HypertableInternalCompressionTable)
-		elog(ERROR, "direct insert into internal compressed hypertable is not supported");
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("direct insert into internal compressed hypertable is not supported")));
 
 	cis = ts_subspace_store_get(dispatch->cache, point);
 
