@@ -411,11 +411,12 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 		MemoryContextSwitchTo(oldctx);
 		CurrentResourceOwner = oldowner;
 		ErrorData *errdata = CopyErrorData();
+		FlushErrorState();
 		ereport(LOG,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("could not calculate next start on failure: resetting value"),
 				 errdetail("Error: %s.", errdata->message)));
-		FlushErrorState();
+		FreeErrorData(errdata);
 	}
 	PG_END_TRY();
 	Assert(CurrentMemoryContext == oldctx);

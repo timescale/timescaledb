@@ -1184,6 +1184,7 @@ ts_telemetry_main(const char *host, const char *path, const char *service)
 		/* If the response is malformed, ts_check_version_response() will
 		 * throw an error, so we capture the error here and print debugging
 		 * information. */
+		FlushErrorState();
 		ereport(NOTICE,
 				(errcode(ERRCODE_DATA_EXCEPTION),
 				 errmsg("malformed telemetry response body"),
