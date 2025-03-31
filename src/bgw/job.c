@@ -1251,6 +1251,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		MemoryContextSwitchTo(oldcontext);
 		job_failed = true;
 		edata = CopyErrorData();
+		FlushErrorState();
 
 		/*
 		 * Note that the mark_start happens in the scheduler right before the
@@ -1286,7 +1287,6 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		elog(LOG, "job %d threw an error", params.job_id);
 
 		CommitTransactionCommand();
-		FlushErrorState();
 		ReThrowError(edata);
 	}
 	PG_END_TRY();

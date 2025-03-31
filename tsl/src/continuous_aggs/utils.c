@@ -32,8 +32,7 @@ enum
 #define ORIGIN_PARAMETER_NAME "origin"
 
 static Datum
-create_cagg_validate_query_datum(TupleDesc tupdesc, const bool is_valid_query,
-								 const ErrorData *edata)
+create_cagg_validate_query_datum(TupleDesc tupdesc, const bool is_valid_query, ErrorData *edata)
 {
 	NullableDatum datums[Natts_cagg_validate_query] = { { 0 } };
 	HeapTuple tuple;
@@ -60,7 +59,6 @@ create_cagg_validate_query_datum(TupleDesc tupdesc, const bool is_valid_query,
 
 	Assert(tupdesc->natts == Natts_cagg_validate_query);
 	tuple = ts_heap_form_tuple(tupdesc, datums);
-
 	return HeapTupleGetDatum(tuple);
 }
 

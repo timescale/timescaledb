@@ -3899,9 +3899,9 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		ErrorData *edata;
 		MemoryContextSwitchTo(oldcontext);
 		edata = CopyErrorData();
+		FlushErrorState();
 		if (edata->sqlerrcode == ERRCODE_LOCK_NOT_AVAILABLE)
 		{
-			FlushErrorState();
 			edata->detail = edata->message;
 			edata->message =
 				psprintf("some chunks could not be read since they are being concurrently updated");
