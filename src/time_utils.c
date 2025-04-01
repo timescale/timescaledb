@@ -10,6 +10,7 @@
 #include <parser/parse_coerce.h>
 #include <utils/builtins.h>
 #include <utils/date.h>
+#include <utils/elog.h>
 #include <utils/timestamp.h>
 
 #include "dimension.h"
@@ -169,7 +170,9 @@ coerce_to_time_type(Oid type)
 	if (ts_type_is_int8_binary_compatible(type))
 		return INT8OID;
 
-	elog(ERROR, "unsupported time type \"%s\"", format_type_be(type));
+	ereport(ERROR,
+			errcode(ERRCODE_WRONG_OBJECT_TYPE),
+			errmsg("unsupported time type \"%s\"", format_type_be(type)));
 	pg_unreachable();
 }
 
@@ -226,7 +229,9 @@ ts_time_datum_get_end(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
-			elog(ERROR, "END is not defined for \"%s\"", format_type_be(timetype));
+			ereport(ERROR,
+					errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					errmsg("END is not defined for \"%s\"", format_type_be(timetype)));
 			break;
 		default:
 			break;
@@ -274,7 +279,9 @@ ts_time_datum_get_nobegin(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
-			elog(ERROR, "NOBEGIN is not defined for \"%s\"", format_type_be(timetype));
+			ereport(ERROR,
+					errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					errmsg("NOBEGIN is not defined for \"%s\"", format_type_be(timetype)));
 			break;
 		default:
 			break;
@@ -306,7 +313,9 @@ ts_time_datum_get_noend(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
-			elog(ERROR, "NOEND is not defined for \"%s\"", format_type_be(timetype));
+			ereport(ERROR,
+					errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					errmsg("NOEND is not defined for \"%s\"", format_type_be(timetype)));
 			break;
 		default:
 			break;
@@ -388,7 +397,9 @@ ts_time_get_end(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
-			elog(ERROR, "END is not defined for \"%s\"", format_type_be(timetype));
+			ereport(ERROR,
+					errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					errmsg("END is not defined for \"%s\"", format_type_be(timetype)));
 			break;
 		default:
 			break;
@@ -423,7 +434,9 @@ ts_time_get_nobegin(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
-			elog(ERROR, "-Infinity not defined for \"%s\"", format_type_be(timetype));
+			ereport(ERROR,
+					errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					errmsg("-Infinity not defined for \"%s\"", format_type_be(timetype)));
 			break;
 		default:
 			break;
@@ -453,7 +466,9 @@ ts_time_get_noend(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
-			elog(ERROR, "+Infinity not defined for \"%s\"", format_type_be(timetype));
+			ereport(ERROR,
+					errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					errmsg("+Infinity not defined for \"%s\"", format_type_be(timetype)));
 			break;
 		default:
 			break;
@@ -538,7 +553,9 @@ ts_subtract_integer_from_now_saturating(Oid now_func, int64 interval, Oid timety
 			break;
 		}
 		default:
-			elog(ERROR, "unsupported integer time type \"%s\"", format_type_be(timetype));
+			ereport(ERROR,
+					errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					errmsg("unsupported integer time type \"%s\"", format_type_be(timetype)));
 	}
 	if (nowval > 0 && interval < 0 && nowval > time_max + interval)
 		res = time_max;
