@@ -4,6 +4,21 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.19.1 (2025-04-01)
+
+This release contains bug fixes since the 2.19.0 release. We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* [#7816](https://github.com/timescale/timescaledb/pull/7816) Fix `ORDER BY` for direct queries on partial chunks
+* [#7834](https://github.com/timescale/timescaledb/pull/7834) Avoid unnecessary scheduler restarts
+* [#7837](https://github.com/timescale/timescaledb/pull/7837) Ignore frozen chunks in compression policy
+* [#7850](https://github.com/timescale/timescaledb/pull/7850) Add `is_current_xact_tuple` to Arrow TTS
+* [#7890](https://github.com/timescale/timescaledb/pull/7890) Flush error state before doing anything else
+
+**Thanks**
+* @bjornuppeke for reporting a problem with `INSERT INTO ... ON CONFLICT DO NOTHING` on compressed chunks
+* @kav23alex for reporting a segmentation fault on `ALTER TABLE` with `DEFAULT`
+
 ## 2.19.0 (2025-03-18)
 
 This release contains performance improvements and bug fixes since the 2.18.2 release. We recommend that you upgrade at the next available opportunity.
