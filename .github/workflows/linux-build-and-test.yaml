@@ -159,7 +159,7 @@ jobs:
       if: github.event_name != 'pull_request' && runner.os == 'Linux' && matrix.build_type == 'Debug'
       run: |
         BUILD_DIR=nossl ./bootstrap -DCMAKE_BUILD_TYPE=Debug \
-          -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
+          -DPG_SOURCE_DIR=$HOME/$PG_SRC_DIR -DPG_PATH=$HOME/$PG_INSTALL_DIR \
           ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} -DUSE_OPENSSL=OFF \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         make -j $(nproc) -C nossl
@@ -172,7 +172,7 @@ jobs:
         "$CC" -march=native -E -v - </dev/null 2>&1 | grep cc1
 
         ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" \
-          -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
+          -DPG_SOURCE_DIR=$HOME/$PG_SRC_DIR -DPG_PATH=$HOME/$PG_INSTALL_DIR \
           ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         make -j $(nproc) -C build
