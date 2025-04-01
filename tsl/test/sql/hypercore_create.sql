@@ -105,6 +105,11 @@ insert into test2 (created_at, location_id, device_id, temp, humidity)
 select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
 from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') t;
 
+-- Show compression stats updated after recompression
+select * from _timescaledb_catalog.compression_chunk_size;
+select compress_chunk(ch) from show_chunks('test2') ch;
+select * from _timescaledb_catalog.compression_chunk_size;
+
 -- Save the count for test2 for later comparison
 select count(*) as orig_test2_count from test2 \gset
 

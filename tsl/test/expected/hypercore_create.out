@@ -171,6 +171,40 @@ where rel='test2'::regclass;
 insert into test2 (created_at, location_id, device_id, temp, humidity)
 select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
 from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') t;
+-- Show compression stats updated after recompression
+select * from _timescaledb_catalog.compression_chunk_size;
+ chunk_id | compressed_chunk_id | uncompressed_heap_size | uncompressed_toast_size | uncompressed_index_size | compressed_heap_size | compressed_toast_size | compressed_index_size | numrows_pre_compression | numrows_post_compression | numrows_frozen_immediately 
+----------+---------------------+------------------------+-------------------------+-------------------------+----------------------+-----------------------+-----------------------+-------------------------+--------------------------+----------------------------
+        1 |                   2 |                      0 |                       0 |                       0 |                    0 |                  8192 |                  8192 |                       0 |                        0 |                          0
+        3 |                   4 |                      0 |                       0 |                       0 |                    0 |                  8192 |                  8192 |                       0 |                        0 |                          0
+        5 |                   6 |                      0 |                       0 |                       0 |                    0 |                  8192 |                  8192 |                       0 |                        0 |                          0
+        7 |                   8 |                      0 |                       0 |                       0 |                    0 |                  8192 |                  8192 |                       0 |                        0 |                          0
+        9 |                  10 |                      0 |                       0 |                       0 |                    0 |                  8192 |                  8192 |                       0 |                        0 |                          0
+       11 |                  12 |                      0 |                       0 |                       0 |                    0 |                  8192 |                  8192 |                       0 |                        0 |                          0
+(6 rows)
+
+select compress_chunk(ch) from show_chunks('test2') ch;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_7_chunk
+ _timescaledb_internal._hyper_1_9_chunk
+ _timescaledb_internal._hyper_1_11_chunk
+(6 rows)
+
+select * from _timescaledb_catalog.compression_chunk_size;
+ chunk_id | compressed_chunk_id | uncompressed_heap_size | uncompressed_toast_size | uncompressed_index_size | compressed_heap_size | compressed_toast_size | compressed_index_size | numrows_pre_compression | numrows_post_compression | numrows_frozen_immediately 
+----------+---------------------+------------------------+-------------------------+-------------------------+----------------------+-----------------------+-----------------------+-------------------------+--------------------------+----------------------------
+        1 |                   2 |                  40960 |                       0 |                   32768 |                81920 |                  8192 |                 65536 |                     204 |                       10 |                          0
+        3 |                   4 |                 147456 |                       0 |                  212992 |               155648 |                 98304 |                237568 |                    2016 |                       10 |                          0
+        5 |                   6 |                 147456 |                       0 |                  204800 |               155648 |                 98304 |                237568 |                    2016 |                       10 |                          0
+        7 |                   8 |                 147456 |                       0 |                  204800 |               155648 |                 98304 |                237568 |                    2016 |                       10 |                          0
+        9 |                  10 |                 147456 |                       0 |                  229376 |               155648 |                 98304 |                237568 |                    2016 |                       10 |                          0
+       11 |                  12 |                  49152 |                       0 |                   57344 |                90112 |                  8192 |                 90112 |                     373 |                       10 |                          0
+(6 rows)
+
 -- Save the count for test2 for later comparison
 select count(*) as orig_test2_count from test2 \gset
 -- All chunks should use the hypercore access method
@@ -448,12 +482,12 @@ where amname = 'hypercore' and numrows_pre_compression is null;
 select * from compressed_rel_size_stats order by rel;
                    rel                   |  amname   | relparent | numrows_pre_compression | numrows_post_compression | numrows_frozen_immediately 
 -----------------------------------------+-----------+-----------+-------------------------+--------------------------+----------------------------
- _timescaledb_internal._hyper_1_1_chunk  | hypercore | test2     |                       0 |                        0 |                          0
- _timescaledb_internal._hyper_1_3_chunk  | hypercore | test2     |                       0 |                        0 |                          0
- _timescaledb_internal._hyper_1_5_chunk  | hypercore | test2     |                       0 |                        0 |                          0
- _timescaledb_internal._hyper_1_7_chunk  | hypercore | test2     |                       0 |                        0 |                          0
- _timescaledb_internal._hyper_1_9_chunk  | hypercore | test2     |                       0 |                        0 |                          0
- _timescaledb_internal._hyper_1_11_chunk | hypercore | test2     |                       0 |                        0 |                          0
+ _timescaledb_internal._hyper_1_1_chunk  | hypercore | test2     |                     204 |                       10 |                          0
+ _timescaledb_internal._hyper_1_3_chunk  | hypercore | test2     |                    2016 |                       10 |                          0
+ _timescaledb_internal._hyper_1_5_chunk  | hypercore | test2     |                    2016 |                       10 |                          0
+ _timescaledb_internal._hyper_1_7_chunk  | hypercore | test2     |                    2016 |                       10 |                          0
+ _timescaledb_internal._hyper_1_9_chunk  | hypercore | test2     |                    2016 |                       10 |                          0
+ _timescaledb_internal._hyper_1_11_chunk | hypercore | test2     |                     373 |                       10 |                          0
  _timescaledb_internal._hyper_4_13_chunk | hypercore | test3     |                       1 |                        1 |                          1
  _timescaledb_internal._hyper_4_18_chunk | hypercore | test3     |                       0 |                        0 |                          0
 (8 rows)
@@ -464,14 +498,14 @@ select decompress_chunk(rel)
   where amname = 'hypercore';
             decompress_chunk             
 -----------------------------------------
+ _timescaledb_internal._hyper_4_13_chunk
+ _timescaledb_internal._hyper_4_18_chunk
  _timescaledb_internal._hyper_1_1_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_5_chunk
  _timescaledb_internal._hyper_1_7_chunk
  _timescaledb_internal._hyper_1_9_chunk
  _timescaledb_internal._hyper_1_11_chunk
- _timescaledb_internal._hyper_4_13_chunk
- _timescaledb_internal._hyper_4_18_chunk
 (8 rows)
 
 -- All stats should be removed

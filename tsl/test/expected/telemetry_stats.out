@@ -328,13 +328,13 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
              "num_compressed_chunks": 5,                  +
              "uncompressed_heap_size": 221184,            +
              "uncompressed_row_count": 736,               +
-             "compressed_indexes_size": 81920,            +
+             "compressed_indexes_size": 131072,           +
              "uncompressed_toast_size": 0,                +
              "uncompressed_indexes_size": 131072,         +
              "num_compressed_hypertables": 2,             +
              "compressed_row_count_frozen_immediately": 14+
          },                                               +
-         "indexes_size": 270336,                          +
+         "indexes_size": 319488,                          +
          "num_children": 11,                              +
          "num_relations": 2,                              +
          "num_reltuples": 658                             +

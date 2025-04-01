@@ -121,9 +121,9 @@ before_compression_index_bytes | 32768
 before_compression_toast_bytes | 0
 before_compression_total_bytes | 40960
 after_compression_table_bytes  | 16384
-after_compression_index_bytes  | 16384
+after_compression_index_bytes  | 32768
 after_compression_toast_bytes  | 8192
-after_compression_total_bytes  | 40960
+after_compression_total_bytes  | 57344
 node_name                      | 
 
 \x
@@ -144,7 +144,7 @@ uncompressed_toast_size    | 0
 uncompressed_index_size    | 32768
 compressed_heap_size       | 16384
 compressed_toast_size      | 8192
-compressed_index_size      | 16384
+compressed_index_size      | 32768
 numrows_pre_compression    | 1
 numrows_post_compression   | 1
 numrows_frozen_immediately | 1
@@ -156,7 +156,7 @@ uncompressed_toast_size    | 0
 uncompressed_index_size    | 32768
 compressed_heap_size       | 16384
 compressed_toast_size      | 8192
-compressed_index_size      | 16384
+compressed_index_size      | 32768
 numrows_pre_compression    | 1
 numrows_post_compression   | 1
 numrows_frozen_immediately | 1
@@ -403,9 +403,9 @@ before_compression_index_bytes | 16384
 before_compression_toast_bytes | 8192
 before_compression_total_bytes | 32768
 after_compression_table_bytes  | 16384
-after_compression_index_bytes  | 16384
-after_compression_toast_bytes  | 8192
-after_compression_total_bytes  | 40960
+after_compression_index_bytes  | 24576
+after_compression_toast_bytes  | 16384
+after_compression_total_bytes  | 57344
 node_name                      | 
 -[ RECORD 2 ]------------------+----------------------
 chunk_schema                   | _timescaledb_internal
@@ -416,9 +416,9 @@ before_compression_index_bytes | 16384
 before_compression_toast_bytes | 8192
 before_compression_total_bytes | 32768
 after_compression_table_bytes  | 16384
-after_compression_index_bytes  | 16384
-after_compression_toast_bytes  | 8192
-after_compression_total_bytes  | 40960
+after_compression_index_bytes  | 24576
+after_compression_toast_bytes  | 16384
+after_compression_total_bytes  | 57344
 node_name                      | 
 
 select * from hypertable_compression_stats('foo');
@@ -430,13 +430,13 @@ before_compression_index_bytes | 32768
 before_compression_toast_bytes | 0
 before_compression_total_bytes | 40960
 after_compression_table_bytes  | 16384
-after_compression_index_bytes  | 16384
+after_compression_index_bytes  | 32768
 after_compression_toast_bytes  | 8192
-after_compression_total_bytes  | 40960
+after_compression_total_bytes  | 57344
 node_name                      | 
 
 select * from hypertable_compression_stats('conditions');
--[ RECORD 1 ]------------------+------
+-[ RECORD 1 ]------------------+-------
 total_chunks                   | 2
 number_compressed_chunks       | 2
 before_compression_table_bytes | 16384
@@ -444,9 +444,9 @@ before_compression_index_bytes | 32768
 before_compression_toast_bytes | 16384
 before_compression_total_bytes | 65536
 after_compression_table_bytes  | 32768
-after_compression_index_bytes  | 32768
-after_compression_toast_bytes  | 16384
-after_compression_total_bytes  | 81920
+after_compression_index_bytes  | 49152
+after_compression_toast_bytes  | 32768
+after_compression_total_bytes  | 114688
 node_name                      | 
 
 vacuum full foo;

@@ -15,18 +15,19 @@
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
+#include "api.h"
 #include "compression.h"
 #include "compression_dml.h"
 #include "create.h"
 #include "debug_assert.h"
 #include "guc.h"
 #include "hypercore/hypercore_handler.h"
-#include "hypercore/utils.h"
 #include "indexing.h"
 #include "recompress.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/chunk_column_stats.h"
 #include "ts_catalog/compression_settings.h"
+#include "utils.h"
 
 static bool fetch_uncompressed_chunk_into_tuplesort(Tuplesortstate *tuplesortstate,
 													Relation uncompressed_chunk_rel,
@@ -303,7 +304,12 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 
 	/************** snapshot ****************************/
 	Snapshot snapshot = RegisterSnapshot(GetTransactionSnapshot());
+	/* Need to call ts_relation_has_tuples with an active snapshot */
+	PushActiveSnapshot(snapshot);
+	bool has_compressed_tuples = ts_relation_has_tuples(compressed_chunk_rel);
+	PopActiveSnapshot();
 
+	RelationSize before_size = ts_relation_size_impl(uncompressed_chunk_id);
 	TupleTableSlot *uncompressed_slot =
 		MakeTupleTableSlot(uncompressed_rel_tupdesc, &TTSOpsMinimalTuple);
 	TupleTableSlot *compressed_slot = table_slot_create(compressed_chunk_rel, NULL);
@@ -527,6 +533,19 @@ finish:
 #endif
 	}
 
+	if (!has_compressed_tuples)
+	{
+		/* Update compression chunk size stats if the compressed relation was empty */
+		RelationSize after_size =
+			compression_total_size(uncompressed_chunk_id, compressed_chunk->table_id);
+
+		compression_chunk_size_catalog_update(uncompressed_chunk->fd.id,
+											  &before_size,
+											  compressed_chunk->fd.id,
+											  &after_size,
+											  row_compressor.rowcnt_pre_compression,
+											  row_compressor.num_compressed_rows);
+	}
 	/* If we can quickly upgrade the lock, lets try updating the chunk status to fully
 	 * compressed. But we need to check if there are any uncompressed tuples in the
 	 * relation since somebody might have inserted new tuples while we were recompressing.

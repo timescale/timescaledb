@@ -8,7 +8,7 @@
  *  compress and decompress chunks
  */
 #include <postgres.h>
-#include "guc.h"
+#include <access/attnum.h>
 #include <access/tableam.h>
 #include <access/xact.h>
 #include <catalog/dependency.h>
@@ -45,6 +45,7 @@
 #include "debug_point.h"
 #include "error_utils.h"
 #include "errors.h"
+#include "guc.h"
 #include "hypercore/hypercore_handler.h"
 #include "hypercore/utils.h"
 #include "hypercube.h"
@@ -80,24 +81,13 @@ create_dummy_query()
 	return (Node *) query;
 }
 
-void
-compression_chunk_size_catalog_insert(int32 src_chunk_id, const RelationSize *src_size,
-									  int32 compress_chunk_id, const RelationSize *compress_size,
-									  int64 rowcnt_pre_compression, int64 rowcnt_post_compression,
-									  int64 rowcnt_frozen)
+static void
+fill_chunk_size_catalog_values(Datum values[Natts_compression_chunk_size], int32 src_chunk_id,
+							   const RelationSize *src_size, int32 compress_chunk_id,
+							   const RelationSize *compress_size, int64 rowcnt_pre_compression,
+							   int64 rowcnt_post_compression, int64 rowcnt_frozen)
 {
-	Catalog *catalog = ts_catalog_get();
-	Relation rel;
-	TupleDesc desc;
-	CatalogSecurityContext sec_ctx;
-
-	Datum values[Natts_compression_chunk_size];
-	bool nulls[Natts_compression_chunk_size] = { false };
-
-	rel = table_open(catalog_get_table_id(catalog, COMPRESSION_CHUNK_SIZE), RowExclusiveLock);
-	desc = RelationGetDescr(rel);
-
-	memset(values, 0, sizeof(values));
+	memset(values, 0, sizeof(Datum) * Natts_compression_chunk_size);
 
 	values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_chunk_id)] =
 		Int32GetDatum(src_chunk_id);
@@ -121,11 +111,96 @@ compression_chunk_size_catalog_insert(int32 src_chunk_id, const RelationSize *sr
 		Int64GetDatum(rowcnt_post_compression);
 	values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_numrows_frozen_immediately)] =
 		Int64GetDatum(rowcnt_frozen);
+}
+
+void
+compression_chunk_size_catalog_insert(int32 src_chunk_id, const RelationSize *src_size,
+									  int32 compress_chunk_id, const RelationSize *compress_size,
+									  int64 rowcnt_pre_compression, int64 rowcnt_post_compression,
+									  int64 rowcnt_frozen)
+{
+	Catalog *catalog = ts_catalog_get();
+	Relation rel;
+	TupleDesc desc;
+	CatalogSecurityContext sec_ctx;
+
+	Datum values[Natts_compression_chunk_size];
+	bool nulls[Natts_compression_chunk_size] = { false };
+
+	rel = table_open(catalog_get_table_id(catalog, COMPRESSION_CHUNK_SIZE), RowExclusiveLock);
+	desc = RelationGetDescr(rel);
+	fill_chunk_size_catalog_values(values,
+								   src_chunk_id,
+								   src_size,
+								   compress_chunk_id,
+								   compress_size,
+								   rowcnt_pre_compression,
+								   rowcnt_post_compression,
+								   rowcnt_frozen);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
 	table_close(rel, RowExclusiveLock);
+}
+
+bool
+compression_chunk_size_catalog_update(int32 chunk_id, const RelationSize *size,
+									  int32 compress_chunk_id, const RelationSize *compress_size,
+									  int64 rowcnt_pre_compression, int64 rowcnt_post_compression)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(COMPRESSION_CHUNK_SIZE, RowExclusiveLock, CurrentMemoryContext);
+	bool updated = false;
+
+	iterator.ctx.index =
+		catalog_get_index(ts_catalog_get(), COMPRESSION_CHUNK_SIZE, COMPRESSION_CHUNK_SIZE_PKEY);
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_compression_chunk_size_pkey_chunk_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(chunk_id));
+	ts_scanner_foreach(&iterator)
+	{
+		Datum values[Natts_compression_chunk_size];
+		bool replIsnull[Natts_compression_chunk_size] = { false };
+		bool repl[Natts_compression_chunk_size] = { true };
+		bool should_free;
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+		HeapTuple new_tuple;
+		heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, replIsnull);
+
+		MemSet(repl, true, sizeof(bool) * Natts_compression_chunk_size);
+
+		/* Increment existing sizes with sizes from uncompressed chunk. */
+		fill_chunk_size_catalog_values(values,
+									   chunk_id,
+									   size,
+									   compress_chunk_id,
+									   compress_size,
+									   rowcnt_pre_compression,
+									   rowcnt_post_compression,
+									   0);
+
+		repl[AttrNumberGetAttrOffset(Anum_compression_chunk_size_numrows_frozen_immediately)] =
+			false;
+
+		new_tuple =
+			heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, replIsnull, repl);
+		ts_catalog_update(ti->scanrel, new_tuple);
+		heap_freetuple(new_tuple);
+
+		if (should_free)
+			heap_freetuple(tuple);
+
+		updated = true;
+		break;
+	}
+
+	ts_scan_iterator_end(&iterator);
+	ts_scan_iterator_close(&iterator);
+	return updated;
 }
 
 static int
@@ -383,6 +458,21 @@ check_is_chunk_order_violated_by_merge(CompressChunkCxt *cxt, const Dimension *t
 	return false;
 }
 
+RelationSize
+compression_total_size(Oid relid, Oid compress_relid)
+{
+	RelationSize noncompress_size = ts_relation_size_impl(relid);
+	RelationSize compress_size = ts_relation_size_impl(compress_relid);
+	RelationSize total_size = {
+		.total_size = noncompress_size.total_size + compress_size.total_size,
+		.heap_size = noncompress_size.heap_size + compress_size.heap_size,
+		.index_size = noncompress_size.index_size + compress_size.index_size,
+		.toast_size = noncompress_size.toast_size + compress_size.toast_size,
+	};
+
+	return total_size;
+}
+
 static Oid
 compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 {
@@ -518,7 +608,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		ts_chunk_column_stats_calculate(cxt.srcht, cxt.srcht_chunk);
 
 	cstat = compress_chunk(cxt.srcht_chunk->table_id, compress_ht_chunk->table_id, insert_options);
-	after_size = ts_relation_size_impl(compress_ht_chunk->table_id);
+	after_size = compression_total_size(cxt.srcht_chunk->table_id, compress_ht_chunk->table_id);
 
 	if (new_compressed_chunk)
 	{
@@ -928,6 +1018,7 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 	{
 		CompressionSettings *chunk_settings = ts_compression_settings_get(chunk->table_id);
 		bool valid_orderby_settings = chunk_settings && chunk_settings->fd.orderby;
+
 		if (recompress)
 		{
 			CompressionSettings *ht_settings = ts_compression_settings_get(chunk->hypertable_relid);
@@ -967,6 +1058,7 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 						  ""),
 					 NameStr(chunk->fd.schema_name),
 					 NameStr(chunk->fd.table_name));
+
 			decompress_chunk_impl(chunk, false);
 			compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
 		}

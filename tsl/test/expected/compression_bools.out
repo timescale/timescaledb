@@ -73,11 +73,11 @@ FROM
 	chunk_compression_stats('t');
      chunk_schema      |    chunk_name    | compression_status | after_compression_total_bytes 
 -----------------------+------------------+--------------------+-------------------------------
- _timescaledb_internal | _hyper_1_1_chunk | Compressed         |                         65536
- _timescaledb_internal | _hyper_1_2_chunk | Compressed         |                         65536
- _timescaledb_internal | _hyper_1_3_chunk | Compressed         |                         65536
- _timescaledb_internal | _hyper_1_4_chunk | Compressed         |                         65536
- _timescaledb_internal | _hyper_1_5_chunk | Compressed         |                         40960
+ _timescaledb_internal | _hyper_1_1_chunk | Compressed         |                         73728
+ _timescaledb_internal | _hyper_1_2_chunk | Compressed         |                         73728
+ _timescaledb_internal | _hyper_1_3_chunk | Compressed         |                         73728
+ _timescaledb_internal | _hyper_1_4_chunk | Compressed         |                         73728
+ _timescaledb_internal | _hyper_1_5_chunk | Compressed         |                         49152
 (5 rows)
 
 -- enable bool compression and add more data, so the two compression
@@ -125,10 +125,10 @@ WHERE
 	format('%I.%I', chunk_schema, chunk_name)::regclass NOT IN (SELECT chunk_name FROM chunks_done);
      chunk_schema      |    chunk_name     | compression_status | after_compression_total_bytes 
 -----------------------+-------------------+--------------------+-------------------------------
- _timescaledb_internal | _hyper_1_11_chunk | Compressed         |                         40960
- _timescaledb_internal | _hyper_1_12_chunk | Compressed         |                         40960
- _timescaledb_internal | _hyper_1_13_chunk | Compressed         |                         40960
- _timescaledb_internal | _hyper_1_14_chunk | Compressed         |                         40960
+ _timescaledb_internal | _hyper_1_11_chunk | Compressed         |                         49152
+ _timescaledb_internal | _hyper_1_12_chunk | Compressed         |                         49152
+ _timescaledb_internal | _hyper_1_13_chunk | Compressed         |                         49152
+ _timescaledb_internal | _hyper_1_14_chunk | Compressed         |                         49152
 (4 rows)
 
 -- check the compression algorithm for the compressed chunks
