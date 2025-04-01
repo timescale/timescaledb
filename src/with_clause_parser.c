@@ -161,12 +161,38 @@ parse_arg(WithClauseDefinition arg, DefElem *def)
 
 	Assert(OidIsValid(in_fn));
 
+	/*
+	 * We could use InputFunctionCallSafe() here but this is just supported
+	 * for PG16 and later, so we opt for checking if the failure is what we
+	 * expected and re-throwing the error otherwise.
+	 */
 	PG_TRY();
 	{
 		val = OidInputFunctionCall(in_fn, value, typIOParam, -1);
 	}
 	PG_CATCH();
 	{
+		const int sqlerrcode = geterrcode();
+		/*
+		 * We can deal with the Data Exception category and in the Syntax
+		 * Error or Access Rule Violation category, but if the error is an
+		 * insufficient resources category, for example, an out of memory
+		 * error, we should just re-throw it.
+		 *
+		 * Errors in other categories are unlikely, but we cannot do anything
+		 * with them anyway, so just re-throw them as well.
+		 */
+		if (ERRCODE_TO_CATEGORY(sqlerrcode) != ERRCODE_DATA_EXCEPTION &&
+			ERRCODE_TO_CATEGORY(sqlerrcode) != ERRCODE_SYNTAX_ERROR_OR_ACCESS_RULE_VIOLATION)
+		{
+			PG_RE_THROW();
+		}
+		FlushErrorState();
+
+		/* We are currently using the ErrorContext, but since we are going to
+		 * raise an error later, there is no reason to switch memory context
+		 * nor restore the resource owner here. */
+
 		Form_pg_type typetup;
 		HeapTuple tup = SearchSysCache1(TYPEOID, ObjectIdGetDatum(arg.type_id));
 		if (!HeapTupleIsValid(tup))
