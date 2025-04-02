@@ -177,7 +177,9 @@ grep -C40 "was terminated by signal" postmaster.log > postgres-failure.log ||:
 # We do the same thing in Flaky Check and error out if we find any, not to
 # introduce these errors for the new tests.
 jq 'select(
-        (.state_code == "XX000" and .error_severity != "LOG")
+        (.state_code == "XX000"
+            and .error_severity != "LOG"
+            and (.statement | contains("ignore this error in CI") | not))
         or (.message | test("resource was not closed"))
     ) | [env.JOB_DATE, .message, .func_name,  .statement] | @tsv
 ' -r postmaster.json > ipe.tsv ||:

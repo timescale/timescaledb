@@ -153,7 +153,7 @@ TSDLLEXPORT bool ts_guc_default_hypercore_use_access_method = false;
 bool ts_guc_enable_chunk_skipping = false;
 TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
 TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression = false;
-TSDLLEXPORT bool ts_guc_enable_bool_compression = false;
+TSDLLEXPORT bool ts_guc_enable_bool_compression = true;
 
 /* Only settable in debug mode for testing */
 TSDLLEXPORT bool ts_guc_enable_null_compression = true;
@@ -771,7 +771,7 @@ _guc_init(void)
 							 "Enable experimental bool compression functionality",
 							 "Enable bool compression",
 							 &ts_guc_enable_bool_compression,
-							 false,
+							 true,
 							 PGC_USERSET,
 							 0,
 							 NULL,

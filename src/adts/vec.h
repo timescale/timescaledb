@@ -45,6 +45,7 @@
 #define VEC_APPEND VEC_MAKE_NAME(vec_append)
 #define VEC_APPEND_ARRAY VEC_MAKE_NAME(vec_append_array)
 #define VEC_APPEND_ZEROS VEC_MAKE_NAME(vec_append_zeros)
+#define VEC_APPEND_FILL_BITS VEC_MAKE_NAME(vec_append_fill_bits)
 #define VEC_DELETE VEC_MAKE_NAME(vec_delete)
 #define VEC_DELETE_RANGE VEC_MAKE_NAME(vec_delete_range)
 #define VEC_RESERVE VEC_MAKE_NAME(vec_reserve)
@@ -236,6 +237,18 @@ VEC_APPEND_ZEROS(VEC_TYPE *vec, uint32 num_elements)
 	return first_new_element;
 }
 
+VEC_SCOPE VEC_ELEMENT_TYPE *
+VEC_APPEND_FILL_BITS(VEC_TYPE *vec, uint32 num_elements)
+{
+	VEC_ELEMENT_TYPE *first_new_element;
+	VEC_RESERVE(vec, num_elements);
+	Assert(vec->num_elements + num_elements <= vec->max_elements);
+	first_new_element = vec->data + vec->num_elements;
+	memset(first_new_element, 0xFF, sizeof(*first_new_element) * num_elements);
+	vec->num_elements += num_elements;
+	return first_new_element;
+}
+
 VEC_SCOPE void
 VEC_DELETE_RANGE(VEC_TYPE *vec, uint32 start, uint32 len)
 {
@@ -288,6 +301,7 @@ VEC_DELETE(VEC_TYPE *vec, uint32 index)
 #undef VEC_APPEND
 #undef VEC_APPEND_ARRAY
 #undef VEC_APPEND_ZEROS
+#undef VEC_APPEND_FILL_BITS
 #undef VEC_DELETE
 #undef VEC_DELETE_RANGE
 #undef VEC_RESERVE

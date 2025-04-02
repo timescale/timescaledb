@@ -8,6 +8,7 @@
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
 #include "simple8b_rle.h"
+#include "simple8b_rle_bitarray.h"
 #include "simple8b_rle_bitmap.h"
 
 typedef struct BoolCompressed
@@ -315,6 +316,55 @@ tsl_bool_compressor_finish(PG_FUNCTION_ARGS)
 	if (compressed == NULL)
 		PG_RETURN_NULL();
 	PG_RETURN_POINTER(compressed);
+}
+
+extern ArrowArray *
+bool_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
+{
+	MemoryContext old_context;
+	Simple8bRleBitArray value_bits;
+	Simple8bRleBitArray null_bits;
+
+	Simple8bRleSerialized *serialized_values = NULL;
+	Simple8bRleSerialized *serialized_validity_bitmap = NULL;
+
+	ArrowArray *result = NULL;
+	uint64 *validity_bitmap = NULL;
+	uint64 *decompressed_values = NULL;
+
+	void *detoasted = PG_DETOAST_DATUM(compressed);
+	StringInfoData si = { .data = detoasted, .len = VARSIZE(compressed) };
+	BoolCompressed *header = consumeCompressedData(&si, sizeof(BoolCompressed));
+
+	Assert(header->has_nulls == 0 || header->has_nulls == 1);
+	Assert(element_type == BOOLOID);
+
+	serialized_values = bytes_deserialize_simple8b_and_advance(&si);
+	const bool has_nulls = header->has_nulls == 1;
+
+	if (has_nulls)
+	{
+		serialized_validity_bitmap = bytes_deserialize_simple8b_and_advance(&si);
+	}
+
+	/* Decompress the values directly to bit arrays */
+	old_context = MemoryContextSwitchTo(dest_mctx);
+	value_bits = simple8brle_bitarray_decompress(serialized_values, /* inverted*/ false);
+	decompressed_values = value_bits.bits.buckets.data;
+	null_bits = simple8brle_bitarray_decompress(serialized_validity_bitmap, /* inverted*/ false);
+	validity_bitmap = null_bits.bits.buckets.data;
+	MemoryContextSwitchTo(old_context);
+
+	result = MemoryContextAllocZero(dest_mctx, sizeof(ArrowArray) + sizeof(void *) * 2);
+	const void **buffers = (const void **) &result[1];
+	buffers[0] = validity_bitmap;
+	buffers[1] = decompressed_values;
+	result->n_buffers = 2;
+	result->buffers = buffers;
+	result->length = bit_array_num_bits(&value_bits.bits);
+	result->null_count = result->length - bit_array_num_bits(&null_bits.bits);
+
+	return result;
 }
 
 /*

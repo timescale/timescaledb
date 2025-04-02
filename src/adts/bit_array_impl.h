@@ -225,6 +225,75 @@ bit_array_append(BitArray *array, uint8 num_bits, uint64 bits)
 }
 
 static inline void
+bit_array_append_repeated_bit(BitArray *array, uint32 num_repeat, bool bit)
+{
+	uint8 free_bits_in_first_bucket;
+	uint8 bits_to_set_in_first_bucket;
+	uint32 num_new_buckets_needed;
+	uint8 bits_to_set_in_last_bucket;
+
+	if (num_repeat == 0)
+		return;
+
+	if (array->buckets.num_elements == 0)
+	{
+		free_bits_in_first_bucket = 0;
+	}
+	else
+	{
+		free_bits_in_first_bucket = 64 - array->bits_used_in_last_bucket;
+	}
+
+	/* calculate the number of full buckets to fill */
+	num_new_buckets_needed =
+		(num_repeat > free_bits_in_first_bucket ? (num_repeat - free_bits_in_first_bucket + 63) :
+												  0) /
+		64;
+	bits_to_set_in_first_bucket =
+		(num_repeat > free_bits_in_first_bucket ? free_bits_in_first_bucket : num_repeat);
+	bits_to_set_in_last_bucket =
+		(num_repeat > free_bits_in_first_bucket ? (num_repeat - free_bits_in_first_bucket) : 0) %
+		64;
+
+	uint64 mask = bit ? ~0ULL : 0;
+
+	/* fill the current bucket */
+	if (bits_to_set_in_first_bucket > 0)
+	{
+		uint64 *current_bucket = uint64_vec_last(&array->buckets);
+		*current_bucket |= mask << array->bits_used_in_last_bucket;
+		array->bits_used_in_last_bucket += bits_to_set_in_first_bucket;
+	}
+
+	/* append the needed buckets and set their value to the required bits */
+	if (num_new_buckets_needed > 0)
+	{
+		/* add an extra bucket for padding */
+		if (bits_to_set_in_last_bucket == 0)
+			++num_new_buckets_needed;
+
+		if (bit)
+			uint64_vec_append_fill_bits(&array->buckets, num_new_buckets_needed);
+		else
+			uint64_vec_append_zeros(&array->buckets, num_new_buckets_needed);
+
+		/* set the bits in the last bucket */
+		if (bits_to_set_in_last_bucket > 0)
+		{
+			uint64 *last_bucket = uint64_vec_last(&array->buckets);
+			*last_bucket = mask & bit_array_low_bits_mask(bits_to_set_in_last_bucket);
+			array->bits_used_in_last_bucket = bits_to_set_in_last_bucket;
+		}
+		else
+		{
+			/* make sure the unused space is set to zero */
+			array->bits_used_in_last_bucket = 0;
+			uint64_vec_last(&array->buckets)[0] = 0;
+		}
+	}
+}
+
+static inline void
 bit_array_iterator_init(BitArrayIterator *iter, const BitArray *array)
 {
 	*iter = (BitArrayIterator){
