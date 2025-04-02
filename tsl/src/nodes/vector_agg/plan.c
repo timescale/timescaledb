@@ -221,7 +221,9 @@ is_vector_var(const VectorQualInfo *vqinfo, Expr *expr)
 		return false;
 	}
 
-	return vqinfo->vector_attrs[var->varattno];
+	Assert(var->varattno <= vqinfo->maxattno);
+
+	return vqinfo->vector_attrs && vqinfo->vector_attrs[var->varattno];
 }
 
 /*
@@ -497,14 +499,26 @@ vectoragg_plan_possible(Plan *childplan, const List *rtable, VectorQualInfo *vqi
 	}
 
 	CustomScan *customscan = castNode(CustomScan, childplan);
-	RangeTblEntry *rte = rt_fetch(customscan->scan.scanrelid, rtable);
 
-	if (ts_is_hypercore_am(ts_get_rel_am(rte->relid)))
-		vectoragg_plan_tam(childplan, rtable, vqi);
-	else if (strcmp(customscan->methods->CustomName, "DecompressChunk") == 0)
+	if (strcmp(customscan->methods->CustomName, "DecompressChunk") == 0)
+	{
 		vectoragg_plan_decompress_chunk(childplan, vqi);
+		return true;
+	}
 
-	return true;
+	/* We're looking for a baserel scan */
+	if (customscan->scan.scanrelid > 0)
+	{
+		RangeTblEntry *rte = rt_fetch(customscan->scan.scanrelid, rtable);
+
+		if (rte && ts_is_hypercore_am(ts_get_rel_am(rte->relid)))
+		{
+			vectoragg_plan_tam(childplan, rtable, vqi);
+			return true;
+		}
+	}
+
+	return false;
 }
 
 /*
@@ -597,6 +611,7 @@ try_insert_vector_agg_node(Plan *plan, List *rtable)
 
 	Plan *childplan = agg->plan.lefttree;
 	VectorQualInfo vqi;
+	MemSet(&vqi, 0, sizeof(VectorQualInfo));
 
 	/*
 	 * Build supplementary info to determine whether we can vectorize the
