@@ -137,6 +137,7 @@ as
  , _timescaledb_functions.partialize_agg(stddev(b))
  , _timescaledb_functions.partialize_agg(stddev(e)) from foo group by a, b ;
 
+create table saved_partials as select * from v1;
 create table t1 as select * from v1;
 
 --sum 2114, collid 0, min(text) 2145, collid 100, max(ts) 2127
@@ -370,3 +371,25 @@ SELECT
   _timescaledb_functions.finalize_agg('pg_catalog.max(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_max, NULL::integer) AS max,
   _timescaledb_functions.finalize_agg('pg_catalog.count()'::text, NULL::name, NULL::name, '{}'::name[], partial_count, NULL::bigint) AS count
 FROM issue4922_partials_parallel;
+
+-- Test that a "soft" error causes an attempt to repair the row
+
+-- We don't care about the result here (but it is the sum of the b
+-- column where a = 1 in table "foo" above), just that it should
+-- attempt a repair, do the repair, and then not fail.
+--
+-- Do this by reading the partial numeric format and drop bytes from
+-- the end of it (16 bytes, meaning 32 characters). This is what we
+-- know how to repair.  Next, attempt to decode the partial and check
+-- that it attempt a repair and actually does the repair (zero-filling
+-- the end).
+SET client_min_messages TO debug2;
+\set VERBOSITY default
+WITH
+  sample AS (SELECT encode(partialb, 'hex') part FROM saved_partials WHERE a = 1),
+  broken AS (SELECT decode(left(part, -32), 'hex') partialb FROM sample)
+SELECT _timescaledb_functions.finalize_agg('sum(numeric)', null, null, null, broken.partialb, null::numeric) sumb
+  FROM broken;
+RESET client_min_messages;
+\set VERBOSITY terse
+DROP TABLE saved_partials;
