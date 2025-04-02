@@ -28,7 +28,11 @@ typedef struct VectorQualInfo
 	/*
 	 * Arrays indexed by uncompressed attno indicating whether an
 	 * attribute/column is a vectorizable type and/or a segmentby attribute.
+	 *
+	 * Note that since arrays are attnum (1-)indexed, the size of the arrays
+	 * are num_attrs+1.
 	 */
+	int num_attrs;
 	bool *vector_attrs;
 	bool *segmentby_attrs;
 } VectorQualInfo;

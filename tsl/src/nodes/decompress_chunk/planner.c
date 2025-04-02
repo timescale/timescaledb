@@ -884,6 +884,7 @@ find_vectorized_quals(DecompressionMapContext *context, DecompressChunkPath *pat
 					  List **vectorized, List **nonvectorized)
 {
 	VectorQualInfo vqi = {
+		.num_attrs = path->info->chunk_rel->max_attr + 1,
 		.vector_attrs = build_vector_attrs_array(context->uncompressed_attno_info, path->info),
 		.rti = path->info->chunk_rel->relid,
 	};
