@@ -1042,6 +1042,7 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_p
 	VectorQualInfoHypercore vqih = {
 		.vqinfo = {
 			.rti = rel->relid,
+			.maxattno = hcinfo->num_columns,
 			.vector_attrs = columnar_scan_build_vector_attrs(hcinfo->columns, hcinfo->num_columns),
 		},
 		.hcinfo = hcinfo,

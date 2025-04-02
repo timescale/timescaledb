@@ -3602,3 +3602,42 @@ SELECT sum(float_value), int_value FROM testtable2 WHERE int_value = 1 GROUP BY 
  3162 |         1
 (1 row)
 
+--
+-- Test handling of Agg on top of ChunkAppend. This reproduces a crash
+-- in the vector agg planning code introduced in commit 947f7f400.
+--
+CREATE TABLE testtable3 (time timestamptz, location_id int, device_id int, sensor_id int);
+SELECT create_hypertable('testtable3', 'time');
+NOTICE:  adding not-null constraint to column "time"
+    create_hypertable    
+-------------------------
+ (5,public,testtable3,t)
+(1 row)
+
+ALTER TABLE testtable3 SET (timescaledb.compress_orderby='time', timescaledb.compress_segmentby='location_id');
+INSERT INTO testtable3 SELECT t, ceil(random() * 20)::int, ceil(random() * 30)::int, ceil(random() * 20)::int FROM generate_series('2024-01-01'::timestamptz, '2024-01-10'::timestamptz, '1h') AS t;
+SELECT count(compress_chunk(ch)) FROM show_chunks('testtable3') ch;
+ count 
+-------
+     2
+(1 row)
+
+EXPLAIN (costs off) SELECT (date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour')::timestamp as time, TT.location_id as location_id, TT.device_id as device_id, 0 as sensor_id, date_trunc('day', current_timestamp) as discovered_date FROM testtable3 TT WHERE time >= date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour' GROUP BY TT.location_id, TT.device_id;
+                                                                                 QUERY PLAN                                                                                 
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Group
+   Group Key: tt.location_id, tt.device_id
+   ->  Gather Merge
+         Workers Planned: 2
+         ->  Sort
+               Sort Key: tt.location_id, tt.device_id
+               ->  Partial HashAggregate
+                     Group Key: tt.location_id, tt.device_id
+                     ->  Parallel Custom Scan (ChunkAppend) on testtable3 tt
+                           Chunks excluded during startup: 1
+                           ->  Custom Scan (DecompressChunk) on _hyper_5_120_chunk tt_1
+                                 Vectorized Filter: ("time" >= (date_trunc('hour'::text, 'Tue Jan 09 00:00:00 2024 PST'::timestamp with time zone) - '@ 1 hour'::interval))
+                                 ->  Parallel Seq Scan on compress_hyper_6_122_chunk
+(13 rows)
+
+SELECT (date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour')::timestamp as time, TT.location_id as location_id, TT.device_id as device_id, 0 as sensor_id, date_trunc('day', current_timestamp) as discovered_date FROM testtable3 TT WHERE time >= date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour' GROUP BY TT.location_id, TT.device_id \g :TEST_OUTPUT_DIR/vectorized_aggregation_query_result.out
