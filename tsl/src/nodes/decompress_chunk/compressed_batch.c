@@ -265,6 +265,12 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 		column_values->buffers[1] = arrow->buffers[1];
 		column_values->buffers[2] = NULL;
 		column_values->buffers[3] = NULL;
+
+		if (value_bytes == 1 && column_description->typid == BOOLOID)
+		{
+			/* Overrode the decompression type for bool columns */
+			column_values->decompression_type = DT_ArrowBits;
+		}
 	}
 	else
 	{
@@ -489,14 +495,17 @@ compute_plain_qual(VectorQualState *vqstate, TupleTableSlot *slot, Node *qual,
 	}
 
 	/*
-	 * For now, we support NullTest, "Var ? Const" predicates and
-	 * ScalarArrayOperations.
+	 * For now, we support NullTest, "Var ? Const" predicates,
+	 * boolean Variables, the negation of boolean variables
+	 * and ScalarArrayOperations.
 	 */
 	List *args = NULL;
 	RegProcedure vector_const_opcode = InvalidOid;
 	ScalarArrayOpExpr *saop = NULL;
 	OpExpr *opexpr = NULL;
 	NullTest *nulltest = NULL;
+	Var *bool_var = NULL;
+	bool negate_bool_var = false;
 	if (IsA(qual, NullTest))
 	{
 		nulltest = castNode(NullTest, qual);
@@ -507,6 +516,30 @@ compute_plain_qual(VectorQualState *vqstate, TupleTableSlot *slot, Node *qual,
 		saop = castNode(ScalarArrayOpExpr, qual);
 		args = saop->args;
 		vector_const_opcode = get_opcode(saop->opno);
+	}
+	else if (IsA(qual, Var))
+	{
+		bool_var = castNode(Var, qual);
+		Ensure(bool_var->vartype == BOOLOID, "expected boolean Var");
+		args = list_make1(bool_var);
+	}
+	else if (IsA(qual, BoolExpr))
+	{
+		BoolExpr *boolexpr = castNode(BoolExpr, qual);
+		Ensure(boolexpr->boolop == NOT_EXPR, "expected NOT BoolExpr");
+		Ensure(list_length(boolexpr->args) == 1, "expected one argument in NOT BoolExpr");
+		Ensure(IsA(linitial(boolexpr->args), Var), "expected Var in NOT BoolExpr");
+
+		bool_var = castNode(Var, linitial(boolexpr->args));
+		Ensure(bool_var->vartype == BOOLOID, "expected boolean Var");
+
+		/*
+		 * We can vectorize boolean variables like 'COL = false' which is
+		 * transformed to BoolExpr(NOT_EXPR, Var).
+		 */
+		negate_bool_var = true;
+		bool_var = castNode(Var, linitial(boolexpr->args));
+		args = list_make1(bool_var);
 	}
 	else
 	{
@@ -538,6 +571,10 @@ compute_plain_qual(VectorQualState *vqstate, TupleTableSlot *slot, Node *qual,
 	if (nulltest)
 	{
 		vector_nulltest(vector, nulltest->nulltesttype, predicate_result);
+	}
+	else if (bool_var)
+	{
+		vector_booltest(vector, negate_bool_var, predicate_result);
 	}
 	else
 	{
@@ -670,13 +707,15 @@ compute_qual_disjunction(VectorQualState *vqstate, TupleTableSlot *compressed_sl
 {
 	const size_t n_rows = vqstate->num_results;
 	const size_t n_result_words = (n_rows + 63) / 64;
-	uint64 *or_result = palloc(sizeof(uint64) * n_result_words);
+	uint64 *or_result =
+		MemoryContextAlloc(vqstate->per_vector_mcxt, (sizeof(uint64) * n_result_words));
 	for (size_t i = 0; i < n_result_words; i++)
 	{
 		or_result[i] = 0;
 	}
 
-	uint64 *one_qual_result = palloc(sizeof(uint64) * n_result_words);
+	uint64 *one_qual_result =
+		MemoryContextAlloc(vqstate->per_vector_mcxt, (sizeof(uint64) * n_result_words));
 
 	ListCell *lc;
 	foreach (lc, quals)
@@ -726,8 +765,25 @@ compute_one_qual(VectorQualState *vqstate, TupleTableSlot *compressed_slot, Node
 
 	/*
 	 * Postgres removes NOT for operators we can vectorize, so we don't support
-	 * NOT and consider it non-vectorizable at planning time. So only OR is left.
+	 * NOT in general, except when the column is boolean and the expression is
+	 * like 'Col = false'. In this case, the NOT is present and we can vectorize
+	 * it.
+	 *
+	 * Apart from these cases, only OR is left.
 	 */
+	if (boolexpr->boolop == NOT_EXPR)
+	{
+		/*
+		 * We can only handle NOT for boolean variables, which are
+		 * transformed to BoolExpr(NOT_EXPR, Var) by Postgres.
+		 */
+		if (list_length(boolexpr->args) == 1 && IsA(linitial(boolexpr->args), Var))
+		{
+			compute_plain_qual(vqstate, compressed_slot, qual, result);
+			return;
+		}
+	}
+
 	Ensure(boolexpr->boolop == OR_EXPR, "expected OR");
 	compute_qual_disjunction(vqstate, compressed_slot, boolexpr->args, result);
 }
@@ -1097,6 +1153,21 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_dat
 			const uint8 value_bytes = column_values->decompression_type;
 			const char *src = column_values->buffers[1];
 			*column_values->output_value = PointerGetDatum(&src[value_bytes * arrow_row]);
+			*column_values->output_isnull =
+				!arrow_row_is_valid(column_values->buffers[0], arrow_row);
+		}
+		else if (column_values->decompression_type == DT_ArrowBits)
+		{
+			/*
+			 * The DT_ArrowBits type is a special case, because the value is
+			 * stored as an Array of bits.
+			 */
+			const uint64 *src = column_values->buffers[1];
+			const size_t qword_index = arrow_row / 64;
+			const size_t bit_index = arrow_row % 64;
+			const uint64 mask = 1ULL << bit_index;
+
+			*column_values->output_value = BoolGetDatum(src[qword_index] & mask);
 			*column_values->output_isnull =
 				!arrow_row_is_valid(column_values->buffers[0], arrow_row);
 		}

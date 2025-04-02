@@ -96,3 +96,30 @@ vector_nulltest(const ArrowArray *arrow, int test_type, uint64 *restrict result)
 		}
 	}
 }
+
+void
+vector_booltest(const ArrowArray *arrow, bool negate, uint64 *restrict result)
+{
+	const uint16 bitmap_words = (arrow->length + 63) / 64;
+	/*
+	 * Since this is a boolean column, the validity bitmap is always present
+	 * and the values are stored as a vector of bits, just like the validity.
+	 */
+	const uint64 *validity = (const uint64 *) arrow->buffers[0];
+	const uint64 *values = (const uint64 *) arrow->buffers[1];
+
+	if (negate)
+	{
+		for (uint16 i = 0; i < bitmap_words; i++)
+		{
+			result[i] &= (validity[i] & ~values[i]);
+		}
+	}
+	else
+	{
+		for (uint16 i = 0; i < bitmap_words; i++)
+		{
+			result[i] &= (validity[i] & values[i]);
+		}
+	}
+}

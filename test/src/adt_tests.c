@@ -139,11 +139,183 @@ bit_array_test(void)
 		TestAssertInt64Eq(bit_array_iter_next_rev(&iter, i), i);
 }
 
+static bool
+bit_array_iter_get_nth_bit(BitArray *bits, uint32 nth)
+{
+	BitArrayIterator iter;
+	bit_array_iterator_init(&iter, bits);
+	uint32 i;
+	for (i = 0; i < nth; i++)
+		bit_array_iter_next(&iter, 1);
+	return bit_array_iter_next(&iter, 1);
+}
+
+static void
+bit_array_repeated_bits(void)
+{
+	/* Repeated bit cases */
+	{
+		BitArray bits;
+		bit_array_init(&bits, 0);
+
+		/* Repeated bits in the first bucket */
+		bit_array_append_repeated_bit(&bits, 5, true);
+
+		/* Size checks */
+		TestAssertInt64Eq(bit_array_num_bits(&bits), 5);
+		TestAssertInt64Eq(bit_array_num_buckets(&bits), 1);
+
+		/* Check first, last and a middle bit */
+		TestAssertTrue(bit_array_iter_get_nth_bit(&bits, 0));
+		TestAssertTrue(bit_array_iter_get_nth_bit(&bits, 4));
+		TestAssertTrue(bit_array_iter_get_nth_bit(&bits, 2));
+
+		/* Add repeated 'zero' bits spanning over a full bucket */
+		bit_array_append_repeated_bit(&bits, 64, false);
+
+		/* Size checks */
+		TestAssertInt64Eq(bit_array_num_bits(&bits), 69);
+		TestAssertInt64Eq(bit_array_num_buckets(&bits), 2);
+
+		/* Check first, last and a middle bit */
+		TestAssertTrue(bit_array_iter_get_nth_bit(&bits, 5) == false);
+		TestAssertTrue(bit_array_iter_get_nth_bit(&bits, 68) == false);
+		TestAssertTrue(bit_array_iter_get_nth_bit(&bits, 36) == false);
+		/* Re-check that nothing was overwritten */
+		TestAssertTrue(bit_array_iter_get_nth_bit(&bits, 0));
+		TestAssertTrue(bit_array_iter_get_nth_bit(&bits, 4));
+		TestAssertTrue(bit_array_iter_get_nth_bit(&bits, 2));
+
+		/* Add repeated 'one' bits spanning over a full bucket */
+		bit_array_append_repeated_bit(&bits, 64, true);
+
+		/* Size checks */
+		TestAssertInt64Eq(bit_array_num_bits(&bits), 133);
+		TestAssertInt64Eq(bit_array_num_buckets(&bits), 3);
+
+		/* Check first, last and a middle bit */
+		TestAssertTrue(bit_array_iter_get_nth_bit(&bits, 69));
+		TestAssertTrue(bit_array_iter_get_nth_bit(&bits, 132));
+		TestAssertTrue(bit_array_iter_get_nth_bit(&bits, 100));
+		/* Re-check that nothing was overwritten */
+		TestAssertTrue(bit_array_iter_get_nth_bit(&bits, 0));
+		TestAssertTrue(bit_array_iter_get_nth_bit(&bits, 4));
+		TestAssertTrue(bit_array_iter_get_nth_bit(&bits, 2));
+		TestAssertTrue(bit_array_iter_get_nth_bit(&bits, 5) == false);
+		TestAssertTrue(bit_array_iter_get_nth_bit(&bits, 68) == false);
+		TestAssertTrue(bit_array_iter_get_nth_bit(&bits, 36) == false);
+	}
+
+	/* Mixed cases */
+	{
+		BitArray bits;
+		bit_array_init(&bits, 0);
+
+		/* Add an aligned block first */
+		bit_array_append(&bits, 64, 0x3030303030303030ULL);
+
+		BitArrayIterator iter;
+		bit_array_iterator_init(&iter, &bits);
+		TestAssertInt64Eq(bit_array_iter_next(&iter, 64), 0x3030303030303030ULL);
+
+		/* Size checks */
+		TestAssertInt64Eq(bit_array_num_bits(&bits), 64);
+		TestAssertInt64Eq(bit_array_num_buckets(&bits), 1);
+
+		/* Add repeated bits spanning over two buckets */
+		bit_array_append_repeated_bit(&bits, 39, true);
+
+		TestAssertInt64Eq(bit_array_iter_next(&iter, 32), 0xFFffFFffULL);
+		TestAssertInt64Eq(bit_array_iter_next(&iter, 7), 0x7fULL);
+
+		/* Size checks */
+		TestAssertInt64Eq(bit_array_num_bits(&bits), 103);
+		TestAssertInt64Eq(bit_array_num_buckets(&bits), 2);
+
+		/* Add a block that need splitting */
+		bit_array_append(&bits, 32, 0xf0f0f0f0ULL);
+
+		TestAssertInt64Eq(bit_array_iter_next(&iter, 32), 0xf0f0f0f0ULL);
+
+		/* Size checks */
+		TestAssertInt64Eq(bit_array_num_bits(&bits), 135);
+		TestAssertInt64Eq(bit_array_num_buckets(&bits), 3);
+	}
+
+	/* Preallocated */
+	{
+		BitArray bits;
+		bit_array_init(&bits, 135);
+
+		/* Add an aligned block first */
+		bit_array_append(&bits, 64, 0x3030303030303030ULL);
+
+		BitArrayIterator iter;
+		bit_array_iterator_init(&iter, &bits);
+		TestAssertInt64Eq(bit_array_iter_next(&iter, 64), 0x3030303030303030ULL);
+
+		/* Size checks */
+		TestAssertInt64Eq(bit_array_num_bits(&bits), 64);
+		TestAssertInt64Eq(bit_array_num_buckets(&bits), 1);
+
+		/* Add repeated bits spanning over two buckets */
+		bit_array_append_repeated_bit(&bits, 39, true);
+
+		TestAssertInt64Eq(bit_array_iter_next(&iter, 32), 0xFFffFFffULL);
+		TestAssertInt64Eq(bit_array_iter_next(&iter, 7), 0x7fULL);
+
+		/* Size checks */
+		TestAssertInt64Eq(bit_array_num_bits(&bits), 103);
+		TestAssertInt64Eq(bit_array_num_buckets(&bits), 2);
+
+		/* Add a block that need splitting */
+		bit_array_append(&bits, 32, 0xf0f0f0f0ULL);
+
+		TestAssertInt64Eq(bit_array_iter_next(&iter, 32), 0xf0f0f0f0ULL);
+
+		/* Size checks */
+		TestAssertInt64Eq(bit_array_num_bits(&bits), 135);
+		TestAssertInt64Eq(bit_array_num_buckets(&bits), 3);
+	}
+
+	/* Make codecov happy */
+	{
+		BitArray bits;
+		bit_array_init(&bits, 0);
+		bit_array_append_repeated_bit(&bits, 0, true);
+		bit_array_append_repeated_bit(&bits, 0, false);
+		bit_array_append_repeated_bit(&bits, 1, true);
+		bit_array_append_repeated_bit(&bits, 1, false);
+		bit_array_append_repeated_bit(&bits, 31, true);
+		bit_array_append_repeated_bit(&bits, 31, false);
+
+		/* Size checks */
+		TestAssertInt64Eq(bit_array_num_bits(&bits), 64);
+		TestAssertInt64Eq(bit_array_num_buckets(&bits), 1);
+
+		bit_array_append_repeated_bit(&bits, 1, true);
+		bit_array_append_repeated_bit(&bits, 1, false);
+		bit_array_append_repeated_bit(&bits, 31, true);
+		bit_array_append_repeated_bit(&bits, 31, false);
+
+		/* Size checks */
+		TestAssertInt64Eq(bit_array_num_bits(&bits), 128);
+		TestAssertInt64Eq(bit_array_num_buckets(&bits), 2);
+
+		bit_array_append_repeated_bit(&bits, 64, true);
+
+		/* Size checks */
+		TestAssertInt64Eq(bit_array_num_bits(&bits), 192);
+		TestAssertInt64Eq(bit_array_num_buckets(&bits), 4);
+	}
+}
+
 Datum
 ts_test_adts(PG_FUNCTION_ARGS)
 {
 	i32_vec_test();
 	uint64_vec_test();
 	bit_array_test();
+	bit_array_repeated_bits();
 	PG_RETURN_VOID();
 }

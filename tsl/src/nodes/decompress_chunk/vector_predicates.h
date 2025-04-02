@@ -18,6 +18,8 @@ void vector_array_predicate(VectorPredicate *vector_const_predicate, bool is_or,
 
 void vector_nulltest(const ArrowArray *arrow, int test_type, uint64 *restrict result);
 
+void vector_booltest(const ArrowArray *arrow, bool negate, uint64 *restrict result);
+
 typedef enum VectorQualSummary
 {
 	AllRowsPass,
