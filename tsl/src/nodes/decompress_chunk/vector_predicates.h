@@ -9,6 +9,8 @@
  */
 #pragma once
 
+#include "vector_utils.h"
+
 typedef void(VectorPredicate)(const ArrowArray *, Datum, uint64 *restrict);
 
 VectorPredicate *get_vector_const_predicate(Oid pg_predicate);
@@ -32,6 +34,8 @@ get_vector_qual_summary(const uint64 *qual_result, size_t n_rows)
 {
 	bool any_rows_pass = false;
 	bool all_rows_pass = true;
+
+	VECTORIZE_LOOP
 	for (size_t i = 0; i < n_rows / 64; i++)
 	{
 		any_rows_pass = any_rows_pass || (qual_result[i] != 0);

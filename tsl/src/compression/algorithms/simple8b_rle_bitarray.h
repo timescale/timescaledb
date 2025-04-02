@@ -7,6 +7,7 @@
 
 #include "simple8b_rle.h"
 #include <adts/bit_array.h>
+#include "vector_utils.h"
 
 /*
  * This is a specialization of Simple8bRLE decoder for encoded 1 bit values
@@ -38,6 +39,7 @@ typedef struct Simple8bRleBitArray
 	uint16 num_ones;
 } Simple8bRleBitArray;
 
+VECTORIZE_FUNCTION
 static Simple8bRleBitArray
 simple8brle_bitarray_decompress(Simple8bRleSerialized *compressed, bool inverted)
 {

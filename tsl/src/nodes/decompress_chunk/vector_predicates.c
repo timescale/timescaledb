@@ -21,6 +21,7 @@
 #include "compat/compat.h"
 #include "compression/compression.h"
 #include "debug_assert.h"
+#include "vector_utils.h"
 
 /*
  * We include all implementations of vector-const predicates here. No separate
@@ -101,6 +102,7 @@ vector_nulltest(const ArrowArray *arrow, int test_type, uint64 *restrict result)
 
 	if (should_be_null)
 	{
+		VECTORIZE_LOOP
 		for (uint16 i = 0; i < bitmap_words; i++)
 		{
 			result[i] &= ~validity[i];
@@ -108,6 +110,7 @@ vector_nulltest(const ArrowArray *arrow, int test_type, uint64 *restrict result)
 	}
 	else
 	{
+		VECTORIZE_LOOP
 		for (uint16 i = 0; i < bitmap_words; i++)
 		{
 			result[i] &= validity[i];
@@ -126,6 +129,7 @@ vector_booltest(const ArrowArray *arrow, bool negate, uint64 *restrict result)
 	{
 		if (negate)
 		{
+			VECTORIZE_LOOP
 			for (uint16 i = 0; i < bitmap_words; i++)
 			{
 				result[i] &= (validity[i] & ~values[i]);
@@ -133,6 +137,7 @@ vector_booltest(const ArrowArray *arrow, bool negate, uint64 *restrict result)
 		}
 		else
 		{
+			VECTORIZE_LOOP
 			for (uint16 i = 0; i < bitmap_words; i++)
 			{
 				result[i] &= (validity[i] & values[i]);
@@ -143,6 +148,7 @@ vector_booltest(const ArrowArray *arrow, bool negate, uint64 *restrict result)
 	{
 		if (negate)
 		{
+			VECTORIZE_LOOP
 			for (uint16 i = 0; i < bitmap_words; i++)
 			{
 				result[i] &= ~values[i];
@@ -150,6 +156,7 @@ vector_booltest(const ArrowArray *arrow, bool negate, uint64 *restrict result)
 		}
 		else
 		{
+			VECTORIZE_LOOP
 			for (uint16 i = 0; i < bitmap_words; i++)
 			{
 				result[i] &= values[i];

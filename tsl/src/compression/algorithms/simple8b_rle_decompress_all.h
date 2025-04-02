@@ -4,6 +4,8 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
+#include "vector_utils.h"
+
 #define FUNCTION_NAME_HELPER(X, Y) X##_##Y
 #define FUNCTION_NAME(X, Y) FUNCTION_NAME_HELPER(X, Y)
 
@@ -14,6 +16,7 @@
  * The buffer must have a padding of 63 elements after the last one, because
  * decompression is performed always in full blocks.
  */
+VECTORIZE_FUNCTION
 static uint32
 FUNCTION_NAME(simple8brle_decompress_all_buf,
 			  ELEMENT_TYPE)(Simple8bRleSerialized *compressed,
