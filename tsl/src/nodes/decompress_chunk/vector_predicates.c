@@ -82,17 +82,35 @@ vector_nulltest(const ArrowArray *arrow, int test_type, uint64 *restrict result)
 	const bool should_be_null = test_type == IS_NULL;
 
 	const uint16 bitmap_words = (arrow->length + 63) / 64;
-	const uint64 *validity = (const uint64 *) arrow->buffers[0];
-	for (uint16 i = 0; i < bitmap_words; i++)
+	const uint64 *restrict validity = (const uint64 *) arrow->buffers[0];
+
+	/* If validity map is NULL then all values are not NULL */
+	if (validity == NULL)
 	{
-		const uint64 validity_word = validity != NULL ? validity[i] : ~0ULL;
+		Assert(arrow->null_count == 0 || arrow->null_count == -1);
 		if (should_be_null)
 		{
-			result[i] &= ~validity_word;
+			memset(result, 0, bitmap_words * sizeof(uint64));
+			return;
 		}
 		else
 		{
-			result[i] &= validity_word;
+			return;
+		}
+	}
+
+	if (should_be_null)
+	{
+		for (uint16 i = 0; i < bitmap_words; i++)
+		{
+			result[i] &= ~validity[i];
+		}
+	}
+	else
+	{
+		for (uint16 i = 0; i < bitmap_words; i++)
+		{
+			result[i] &= validity[i];
 		}
 	}
 }
@@ -101,25 +119,41 @@ void
 vector_booltest(const ArrowArray *arrow, bool negate, uint64 *restrict result)
 {
 	const uint16 bitmap_words = (arrow->length + 63) / 64;
-	/*
-	 * Since this is a boolean column, the validity bitmap is always present
-	 * and the values are stored as a vector of bits, just like the validity.
-	 */
-	const uint64 *validity = (const uint64 *) arrow->buffers[0];
-	const uint64 *values = (const uint64 *) arrow->buffers[1];
+	const uint64 *restrict validity = (const uint64 *) arrow->buffers[0];
+	const uint64 *restrict values = (const uint64 *) arrow->buffers[1];
 
-	if (negate)
+	if (validity)
 	{
-		for (uint16 i = 0; i < bitmap_words; i++)
+		if (negate)
 		{
-			result[i] &= (validity[i] & ~values[i]);
+			for (uint16 i = 0; i < bitmap_words; i++)
+			{
+				result[i] &= (validity[i] & ~values[i]);
+			}
+		}
+		else
+		{
+			for (uint16 i = 0; i < bitmap_words; i++)
+			{
+				result[i] &= (validity[i] & values[i]);
+			}
 		}
 	}
 	else
 	{
-		for (uint16 i = 0; i < bitmap_words; i++)
+		if (negate)
 		{
-			result[i] &= (validity[i] & values[i]);
+			for (uint16 i = 0; i < bitmap_words; i++)
+			{
+				result[i] &= ~values[i];
+			}
+		}
+		else
+		{
+			for (uint16 i = 0; i < bitmap_words; i++)
+			{
+				result[i] &= values[i];
+			}
 		}
 	}
 }
