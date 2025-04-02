@@ -166,6 +166,7 @@ as
  , _timescaledb_functions.partialize_agg(max(d))
  , _timescaledb_functions.partialize_agg(stddev(b))
  , _timescaledb_functions.partialize_agg(stddev(e)) from foo group by a, b ;
+create table saved_partials as select * from v1;
 create table t1 as select * from v1;
 --sum 2114, collid 0, min(text) 2145, collid 100, max(ts) 2127
 insert into foo values(12, 10, 'hello', '2010-01-02 09:00:00-05', 10);
@@ -1102,3 +1103,62 @@ FROM issue4922_partials_parallel;
  5001129 | 50.0112900000000000 |   0 | 100 | 100000
 (1 row)
 
+-- Test that a "soft" error causes an attempt to repair the row
+-- We don't care about the result here (but it is the sum of the b
+-- column where a = 1 in table "foo" above), just that it should
+-- attempt a repair, do the repair, and then not fail.
+--
+-- Do this by reading the partial numeric format and drop bytes from
+-- the end of it (16 bytes, meaning 32 characters). This is what we
+-- know how to repair.  Next, attempt to decode the partial and check
+-- that it attempt a repair and actually does the repair (zero-filling
+-- the end).
+SET client_min_messages TO debug2;
+\set VERBOSITY default
+WITH
+  sample AS (SELECT encode(partialb, 'hex') part FROM saved_partials WHERE a = 1),
+  broken AS (SELECT decode(left(part, -32), 'hex') partialb FROM sample)
+SELECT _timescaledb_functions.finalize_agg('sum(numeric)', null, null, null, broken.partialb, null::numeric) sumb
+  FROM broken;
+LOG:  statement: WITH
+  sample AS (SELECT encode(partialb, 'hex') part FROM saved_partials WHERE a = 1),
+  broken AS (SELECT decode(left(part, -32), 'hex') partialb FROM sample)
+SELECT _timescaledb_functions.finalize_agg('sum(numeric)', null, null, null, broken.partialb, null::numeric) sumb
+  FROM broken;
+DEBUG:  capture_ExecutorStart - rtable #0: (null)
+DEBUG:  capture_ExecutorStart - rtable #1: (null)
+DEBUG:  capture_ExecutorStart - rtable #2: saved_partials
+DEBUG:  inner_agg_deserialize - deserializing partial
+DETAIL:  mcxt: ExprContext
+DEBUG:  inner_agg_deserialize - attempting repair of serialized partial
+DETAIL:  mcxt: ExprContext
+DEBUG:  sanitize_serialized_partial - zero-filling serialized numeric type
+DEBUG:  inner_agg_deserialize - deserializing partial
+DETAIL:  mcxt: ExprContext
+DEBUG:  inner_agg_deserialize - attempting repair of serialized partial
+DETAIL:  mcxt: ExprContext
+DEBUG:  sanitize_serialized_partial - zero-filling serialized numeric type
+DEBUG:  inner_agg_deserialize - deserializing partial
+DETAIL:  mcxt: ExprContext
+DEBUG:  inner_agg_deserialize - attempting repair of serialized partial
+DETAIL:  mcxt: ExprContext
+DEBUG:  sanitize_serialized_partial - zero-filling serialized numeric type
+DEBUG:  inner_agg_deserialize - deserializing partial
+DETAIL:  mcxt: ExprContext
+DEBUG:  inner_agg_deserialize - attempting repair of serialized partial
+DETAIL:  mcxt: ExprContext
+DEBUG:  sanitize_serialized_partial - zero-filling serialized numeric type
+DEBUG:  inner_agg_deserialize - deserializing partial
+DETAIL:  mcxt: ExprContext
+DEBUG:  inner_agg_deserialize - attempting repair of serialized partial
+DETAIL:  mcxt: ExprContext
+DEBUG:  sanitize_serialized_partial - zero-filling serialized numeric type
+ sumb 
+------
+  150
+(1 row)
+
+RESET client_min_messages;
+LOG:  statement: RESET client_min_messages;
+\set VERBOSITY terse
+DROP TABLE saved_partials;

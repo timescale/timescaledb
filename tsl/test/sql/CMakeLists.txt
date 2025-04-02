@@ -67,7 +67,6 @@ set(TEST_FILES
     merge_compress.sql
     modify_exclusion.sql
     move.sql
-    partialize_finalize.sql
     policy_generalization.sql
     reorder.sql
     size_utils_tsl.sql
@@ -149,6 +148,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     tsl_tables.sql
     license_tsl.sql
     fixed_schedules.sql
+    partialize_finalize.sql
     recompress_chunk_segmentwise.sql
     feature_flags.sql
     vector_agg_default.sql
