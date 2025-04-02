@@ -63,7 +63,6 @@ select * from arithmetic where
     and e > 1::int2 and e > 1::int4 and e > 1::int8 and e > 1::float4 and e > 1::float8
 ;
 
-
 -- Test columns that don't support bulk decompression.
 alter table vectorqual add column tag name;
 insert into vectorqual(ts, device, metric2, metric3, metric4, tag) values ('2025-01-01 00:00:00', 5, 52, 53, 54, 'tag5');
@@ -382,12 +381,12 @@ select count(*) from vectorqual where metric4 > null;
 set timescaledb.enable_bulk_decompression to on;
 
 
--- Test that the debug GUC works
+-- Test that the debug GUC works and make sure CI doesn't bark
 \set ON_ERROR_STOP 0
 set timescaledb.debug_require_vector_qual to 'forbid';
-select count(*) from vectorqual where metric4 > 4;
+select count(*), 'ignore this error in CI' as x from vectorqual where metric4 > 4;
 set timescaledb.debug_require_vector_qual to 'require';
-select count(*) from vectorqual where metric3 === 4;
+select count(*), 'ignore this error in CI' as x from vectorqual where metric3 === 4;
 \set ON_ERROR_STOP 1
 
 
@@ -542,3 +541,61 @@ from
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bulk_decompression;
 
+-- Test predicates on boolean columns can be vectorized
+-- with the bool compression enabled.
+set timescaledb.enable_bulk_decompression to on;
+set timescaledb.enable_bool_compression = on;
+
+create table bool_table(ts int, b bool);
+select create_hypertable('bool_table', 'ts');
+alter table bool_table set (timescaledb.compress);
+insert into bool_table values (100, true), (101, false), (102, null);
+
+select count(compress_chunk(x, true)) from show_chunks('bool_table') x;
+set timescaledb.debug_require_vector_qual to 'require';
+select * from bool_table where b = true order by 1;
+select * from bool_table where b = true or b = false order by 1;
+select * from bool_table where b = true and b = false order by 1;
+select * from bool_table where b = true or b is null order by 1;
+select * from bool_table where b = true or b is not null order by 1;
+select * from bool_table where b = true and b is null order by 1;
+select * from bool_table where b = true and b is not null order by 1;
+select * from bool_table where b = false order by 1;
+select * from bool_table where b = false or b is null order by 1;
+select * from bool_table where b = false or b is not null order by 1;
+select * from bool_table where b = false and b is null order by 1;
+select * from bool_table where b = false and b is not null order by 1;
+select * from bool_table where b is null order by 1;
+select * from bool_table where b is null or b is not null order by 1;
+select * from bool_table where b is null and b is not null order by 1;
+select * from bool_table where b is not null order by 1;
+
+reset timescaledb.debug_require_vector_qual;
+reset timescaledb.enable_bulk_decompression;
+reset timescaledb.enable_bool_compression;
+
+-- Check that the bool compression changes didn't mess up the
+-- array compression support for the bools.
+delete from bool_table;
+set timescaledb.enable_bool_compression = off;
+insert into bool_table values (100, true), (101, false), (102, null);
+select count(compress_chunk(x, true)) from show_chunks('bool_table') x;
+
+select * from bool_table where b = true order by 1;
+select * from bool_table where b = true or b = false order by 1;
+select * from bool_table where b = true and b = false order by 1;
+select * from bool_table where b = true or b is null order by 1;
+select * from bool_table where b = true or b is not null order by 1;
+select * from bool_table where b = true and b is null order by 1;
+select * from bool_table where b = true and b is not null order by 1;
+select * from bool_table where b = false order by 1;
+select * from bool_table where b = false or b is null order by 1;
+select * from bool_table where b = false or b is not null order by 1;
+select * from bool_table where b = false and b is null order by 1;
+select * from bool_table where b = false and b is not null order by 1;
+select * from bool_table where b is null order by 1;
+select * from bool_table where b is null or b is not null order by 1;
+select * from bool_table where b is null and b is not null order by 1;
+select * from bool_table where b is not null order by 1;
+
+reset timescaledb.enable_bool_compression;
