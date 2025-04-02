@@ -9,9 +9,12 @@
  * Specialized for each supported data type.
  */
 
+ #include "vector_utils.h"
+
 #define FUNCTION_NAME_HELPER(X, Y) X##_##Y
 #define FUNCTION_NAME(X, Y) FUNCTION_NAME_HELPER(X, Y)
 
+VECTORIZE_FUNCTION
 static ArrowArray *
 FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *gorilla_data,
 													MemoryContext dest_mctx)
