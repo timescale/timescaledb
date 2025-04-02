@@ -22,6 +22,7 @@ vectoragg_plan_tam(Plan *childplan, const List *rtable, VectorQualInfo *vqi)
 
 	*vqi = (VectorQualInfo){
 		.rti = customscan->scan.scanrelid,
+		.maxattno = hinfo->num_columns,
 		.vector_attrs = (bool *) palloc0(sizeof(bool) * (hinfo->num_columns + 1)),
 		.segmentby_attrs = (bool *) palloc0(sizeof(bool) * (hinfo->num_columns + 1)),
 		/*
