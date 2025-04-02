@@ -111,6 +111,7 @@ vectoragg_plan_decompress_chunk(Plan *childplan, VectorQualInfo *vqi)
 		}
 	}
 
+	vqi->maxattno = maxattno;
 	vqi->vector_attrs = (bool *) palloc0(sizeof(bool) * (maxattno + 1));
 	vqi->segmentby_attrs = (bool *) palloc0(sizeof(bool) * (maxattno + 1));
 

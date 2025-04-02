@@ -25,12 +25,18 @@ typedef struct VectorQualInfo
 	Index rti;
 
 	bool reverse;
+
 	/*
 	 * Arrays indexed by uncompressed attno indicating whether an
 	 * attribute/column is a vectorizable type and/or a segmentby attribute.
+	 *
+	 * Note: array lengths are maxattno + 1.
 	 */
 	bool *vector_attrs;
 	bool *segmentby_attrs;
+
+	/* Max attribute number found in arrays above */
+	AttrNumber maxattno;
 } VectorQualInfo;
 
 /*
