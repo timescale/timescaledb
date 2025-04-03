@@ -1,0 +1,2 @@
+Fixes: #7911 Don't create hypertable for published tables
+Thanks: @soedirgo for reporting that published tables don't get dropped when they have a hypertable
