@@ -283,7 +283,20 @@ select * from chunk_info;
  _hyper_1_5_chunk | heap | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 16:00:00 2024 PST'::timestamp with time zone))
 (10 rows)
 
+select * from _timescaledb_catalog.compression_chunk_size order by chunk_id;
+ chunk_id | compressed_chunk_id | uncompressed_heap_size | uncompressed_toast_size | uncompressed_index_size | compressed_heap_size | compressed_toast_size | compressed_index_size | numrows_pre_compression | numrows_post_compression | numrows_frozen_immediately 
+----------+---------------------+------------------------+-------------------------+-------------------------+----------------------+-----------------------+-----------------------+-------------------------+--------------------------+----------------------------
+        1 |                   6 |                   8192 |                       0 |                   32768 |                16384 |                  8192 |                 16384 |                       1 |                        1 |                          1
+        3 |                   7 |                   8192 |                       0 |                   32768 |                16384 |                  8192 |                 16384 |                       1 |                        1 |                          1
+(2 rows)
+
 call merge_chunks('{_timescaledb_internal._hyper_1_1_chunk, _timescaledb_internal._hyper_1_2_chunk, _timescaledb_internal._hyper_1_3_chunk}');
+select * from _timescaledb_catalog.compression_chunk_size order by chunk_id;
+ chunk_id | compressed_chunk_id | uncompressed_heap_size | uncompressed_toast_size | uncompressed_index_size | compressed_heap_size | compressed_toast_size | compressed_index_size | numrows_pre_compression | numrows_post_compression | numrows_frozen_immediately 
+----------+---------------------+------------------------+-------------------------+-------------------------+----------------------+-----------------------+-----------------------+-------------------------+--------------------------+----------------------------
+        1 |                   6 |                  16384 |                       0 |                   65536 |                32768 |                 16384 |                 32768 |                       2 |                        2 |                          2
+(1 row)
+
 select * from chunk_info;
       chunk       | tam  |                                                                checkconstraint                                                                 
 ------------------+------+------------------------------------------------------------------------------------------------------------------------------------------------
@@ -627,7 +640,65 @@ select * from partitions;
  _hyper_1_14_chunk | device      |           1431655764 | 9223372036854775807
 (24 rows)
 
--- Merge all chunks until only 1 remains
+-- Show which chunks are compressed. Their compression_chunk_size
+-- metadata should be merged.
+select chunk_name from timescaledb_information.chunks
+where is_compressed=true order by chunk_name;
+    chunk_name    
+------------------
+ _hyper_1_1_chunk
+ _hyper_1_2_chunk
+(2 rows)
+
+--
+-- Check that compression_chunk_size stats are also merged when we
+-- merge compressed chunks.
+--
+-- Use a view to compare merged stats against the total sum of that
+-- stats for all chunks. There are only two compressed chunks, 1 and
+-- 2. Show each chunks stats as the fraction of the total size. This
+-- is to make the test work across different architectures that show
+-- slightly different absolute disk sizes.
+---
+select
+    sum(ccs.uncompressed_heap_size) as total_uncompressed_heap_size,
+    sum(ccs.uncompressed_toast_size) as total_uncompressed_toast_size,
+    sum(ccs.uncompressed_index_size) as total_uncompressed_index_size,
+    sum(ccs.compressed_heap_size) as total_compressed_heap_size,
+    sum(ccs.compressed_toast_size) as total_compressed_toast_size,
+    sum(ccs.compressed_index_size) as total_compressed_index_size,
+    sum(ccs.numrows_pre_compression) as total_numrows_pre_compression,
+    sum(ccs.numrows_post_compression) as total_numrows_post_compression,
+    sum(ccs.numrows_frozen_immediately) as total_numrows_frozen_immediately
+from _timescaledb_catalog.compression_chunk_size ccs \gset
+-- View to show current chunk compression size stats as a fraction of
+-- the totals.
+create view compression_size_fraction as
+select
+    ccs.chunk_id,
+    ccs.compressed_chunk_id,
+    round(ccs.uncompressed_heap_size::numeric / :total_uncompressed_heap_size, 1) as uncompressed_heap_size_fraction,
+    ccs.uncompressed_toast_size::numeric as uncompressed_toast_size_fraction,
+    round(ccs.uncompressed_index_size::numeric / :total_uncompressed_index_size, 1) as uncompressed_index_size_fraction,
+    round(ccs.compressed_heap_size::numeric / :total_compressed_heap_size, 1) as compressed_heap_size_fraction,
+    round(ccs.compressed_toast_size::numeric / :total_compressed_toast_size, 1) as compressed_toast_size_fraction,
+    round(ccs.compressed_index_size::numeric / :total_compressed_index_size, 1) as compressed_index_size_fraction,
+    round(ccs.numrows_pre_compression ::numeric/ :total_numrows_pre_compression, 1) as numrows_pre_compression_fraction,
+    round(ccs.numrows_post_compression::numeric / :total_numrows_post_compression, 1) as numrows_post_compression_fraction,
+    round(ccs.numrows_frozen_immediately::numeric / :total_numrows_frozen_immediately, 1) as numrows_frozen_immediately_fraction
+from _timescaledb_catalog.compression_chunk_size ccs
+order by chunk_id;
+--
+-- Merge all chunks until only 1 remains.  Also check that metadata is
+-- merged.
+---
+select * from compression_size_fraction;
+ chunk_id | compressed_chunk_id | uncompressed_heap_size_fraction | uncompressed_toast_size_fraction | uncompressed_index_size_fraction | compressed_heap_size_fraction | compressed_toast_size_fraction | compressed_index_size_fraction | numrows_pre_compression_fraction | numrows_post_compression_fraction | numrows_frozen_immediately_fraction 
+----------+---------------------+---------------------------------+----------------------------------+----------------------------------+-------------------------------+--------------------------------+--------------------------------+----------------------------------+-----------------------------------+-------------------------------------
+        1 |                  17 |                             0.5 |                                0 |                              0.5 |                           0.5 |                            0.5 |                            0.5 |                              0.5 |                               0.5 |                                 0.5
+        2 |                  18 |                             0.5 |                                0 |                              0.5 |                           0.5 |                            0.5 |                            0.5 |                              0.5 |                               0.5 |                                 0.5
+(2 rows)
+
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
  count  |   sum   |     round     
 --------+---------+---------------
@@ -689,6 +760,15 @@ select * from partitions;
 (12 rows)
 
 call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_11_chunk','_timescaledb_internal._hyper_1_14_chunk', '_timescaledb_internal._hyper_1_16_chunk']);
+-- Final merge, involving the two compressed chunks 1 and 2. The stats
+-- should also be merged.
+select * from compression_size_fraction;
+ chunk_id | compressed_chunk_id | uncompressed_heap_size_fraction | uncompressed_toast_size_fraction | uncompressed_index_size_fraction | compressed_heap_size_fraction | compressed_toast_size_fraction | compressed_index_size_fraction | numrows_pre_compression_fraction | numrows_post_compression_fraction | numrows_frozen_immediately_fraction 
+----------+---------------------+---------------------------------+----------------------------------+----------------------------------+-------------------------------+--------------------------------+--------------------------------+----------------------------------+-----------------------------------+-------------------------------------
+        1 |                  17 |                             0.5 |                                0 |                              0.5 |                           0.5 |                            0.5 |                            0.5 |                              0.5 |                               0.5 |                                 0.5
+        2 |                  18 |                             0.5 |                                0 |                              0.5 |                           0.5 |                            0.5 |                            0.5 |                              0.5 |                               0.5 |                                 0.5
+(2 rows)
+
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
  count  |   sum   |     round     
 --------+---------+---------------
@@ -707,6 +787,12 @@ select * from partitions;
 (6 rows)
 
 call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_2_chunk']);
+select * from compression_size_fraction;
+ chunk_id | compressed_chunk_id | uncompressed_heap_size_fraction | uncompressed_toast_size_fraction | uncompressed_index_size_fraction | compressed_heap_size_fraction | compressed_toast_size_fraction | compressed_index_size_fraction | numrows_pre_compression_fraction | numrows_post_compression_fraction | numrows_frozen_immediately_fraction 
+----------+---------------------+---------------------------------+----------------------------------+----------------------------------+-------------------------------+--------------------------------+--------------------------------+----------------------------------+-----------------------------------+-------------------------------------
+        1 |                  17 |                             1.0 |                                0 |                              1.0 |                           1.0 |                            1.0 |                            1.0 |                              1.0 |                               1.0 |                                 1.0
+(1 row)
+
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
  count  |   sum   |     round     
 --------+---------+---------------
