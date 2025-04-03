@@ -4824,7 +4824,7 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 
 	parse_results = ts_compress_hypertable_set_clause_parse(compress_options);
 
-	ts_cm_functions->process_compress_table(cmd, ht, parse_results);
+	ts_cm_functions->process_compress_table(ht, parse_results);
 	return DDL_DONE;
 }
 
