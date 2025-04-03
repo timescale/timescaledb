@@ -1227,21 +1227,23 @@ DROP INDEX skip_scan_idx_dev_time_idx;
 -- multicolumn index with dev as non-leading column
 CREATE INDEX skip_scan_idx_time_dev_idx ON :TABLE(time, dev);
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE time = 100;
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
-   ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_idx_time_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
-         Index Cond: ("time" = 100)
-(4 rows)
+   ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
+         ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_idx_time_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
+               Index Cond: (("time" = 100) AND (dev > NULL::integer))
+(5 rows)
 
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time = 100 GROUP BY dev;
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
  GroupAggregate (actual rows=11 loops=1)
    Group Key: _hyper_1_1_chunk.dev
-   ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_idx_time_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
-         Index Cond: ("time" = 100)
-(5 rows)
+   ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
+         ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_idx_time_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
+               Index Cond: (("time" = 100) AND (dev > NULL::integer))
+(6 rows)
 
 DROP INDEX skip_scan_idx_time_dev_idx;
 -- hash index is not ordered so can't use skipscan
@@ -2492,12 +2494,13 @@ WHERE CLAUSES
 
 -- multiple constraints in WHERE clause
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE dev > 5 AND time = 100;
-                                                       QUERY PLAN                                                       
-------------------------------------------------------------------------------------------------------------------------
+                                                          QUERY PLAN                                                          
+------------------------------------------------------------------------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
-   ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_time_dev_val_idx on _hyper_1_1_chunk (actual rows=5 loops=1)
-         Index Cond: (("time" = 100) AND (dev > 5))
-(4 rows)
+   ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=5 loops=1)
+         ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_time_dev_val_idx on _hyper_1_1_chunk (actual rows=5 loops=1)
+               Index Cond: (("time" = 100) AND (dev > NULL::integer) AND (dev > 5))
+(5 rows)
 
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE dev > 5 AND time > 200;
                                                            QUERY PLAN                                                           
@@ -3039,7 +3042,7 @@ EXPLAIN (costs off, timing off, summary off) SELECT count(DISTINCT 1) FROM pg_re
                      Index Cond: (dev > NULL::integer)
 (19 rows)
 
--- compression doesnt prevent skipscan
+-- compression on one chunk doesnt prevent skipscan on other chunks
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
              compress_chunk             
 ----------------------------------------
@@ -3065,11 +3068,33 @@ SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
                      Index Cond: (dev > NULL::integer)
 (17 rows)
 
+-- compression on one chunk will prevent skipscan if it's the only chunk remaining
+:PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE time = 100;
+                                                                    QUERY PLAN                                                                    
+--------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=11 loops=1)
+         Vectorized Filter: ("time" = 100)
+         Rows Removed by Filter: 2494
+         ->  Index Scan using compress_hyper_2_5_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_2_5_chunk (actual rows=11 loops=1)
+               Index Cond: ((_ts_meta_min_1 <= 100) AND (_ts_meta_max_1 >= 100))
+(6 rows)
+
 SELECT decompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
             decompress_chunk            
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
 (1 row)
+
+-- skipscan will be applied on decompressed chunk if it's the only chunk remaining
+:PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE time = 100;
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
+         ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_time_dev_val_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
+               Index Cond: (("time" = 100) AND (dev > NULL::integer))
+(5 rows)
 
 --baseline query with skipscan
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
