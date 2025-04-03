@@ -66,6 +66,8 @@
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/compression_chunk_size.h"
 #include "utils.h"
 
 /* Data in a frozen chunk cannot be modified. So any operation
@@ -216,6 +218,7 @@ typedef struct RelationMergeInfo
 {
 	Oid relid;
 	struct VacuumCutoffs cutoffs;
+	FormData_compression_chunk_size ccs;
 	Chunk *chunk;
 	Relation rel;
 	char relpersistence;
@@ -827,6 +830,9 @@ merge_relinfos(RelationMergeInfo *relinfos, int nrelids, int mergeindex)
 								  ExclusiveLock);
 	Relation new_rel = table_open(new_relid, AccessExclusiveLock);
 	double total_num_tuples = 0.0;
+	FormData_compression_chunk_size merged_ccs;
+
+	memset(&merged_ccs, 0, sizeof(FormData_compression_chunk_size));
 
 	pg17_workaround_init(new_rel, relinfos, nrelids);
 
@@ -843,6 +849,26 @@ merge_relinfos(RelationMergeInfo *relinfos, int nrelids, int mergeindex)
 			total_num_tuples += num_tuples;
 			relinfo->rel = NULL;
 		}
+
+		/*
+		 * Merge compression chunk size stats.
+		 *
+		 * Simply sum up the stats for all compressed relations that are
+		 * merged. Note that we don't add anything for non-compressed
+		 * relations that are merged because they don't have stats. This is a
+		 * bit weird because the data from uncompressed relations will not be
+		 * reflected in the stats of the merged chunk although the data is
+		 * part of the chunk.
+		 */
+		merged_ccs.compressed_heap_size += relinfo->ccs.compressed_heap_size;
+		merged_ccs.compressed_toast_size += relinfo->ccs.compressed_toast_size;
+		merged_ccs.compressed_index_size += relinfo->ccs.compressed_index_size;
+		merged_ccs.uncompressed_heap_size += relinfo->ccs.uncompressed_heap_size;
+		merged_ccs.uncompressed_toast_size += relinfo->ccs.uncompressed_toast_size;
+		merged_ccs.uncompressed_index_size += relinfo->ccs.uncompressed_index_size;
+		merged_ccs.numrows_post_compression += relinfo->ccs.numrows_post_compression;
+		merged_ccs.numrows_pre_compression += relinfo->ccs.numrows_pre_compression;
+		merged_ccs.numrows_frozen_immediately += relinfo->ccs.numrows_frozen_immediately;
 	}
 
 	pg17_workaround_cleanup(new_rel);
@@ -852,6 +878,22 @@ merge_relinfos(RelationMergeInfo *relinfos, int nrelids, int mergeindex)
 	update_relstats(relRelation, new_rel, total_num_tuples);
 	table_close(new_rel, NoLock);
 	table_close(relRelation, RowExclusiveLock);
+
+	/*
+	 * Update compression chunk size stats, but only if at least one of the
+	 * merged chunks was compressed. In that case the merged metadata should
+	 * be non-zero.
+	 */
+	if (merged_ccs.compressed_heap_size > 0)
+	{
+		/*
+		 * The result relation should always be compressed because we pick the
+		 * first compressed one, if one exists.
+		 */
+
+		Assert(result_minfo->ccs.compressed_heap_size > 0);
+		ts_compression_chunk_size_update(result_minfo->chunk->fd.id, &merged_ccs);
+	}
 
 	return new_relid;
 }
@@ -1048,6 +1090,14 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 
 			if (mergeindex == -1)
 				mergeindex = i;
+
+			/* Read compression chunk size stats */
+			bool found = ts_compression_chunk_size_get(chunk->fd.id, &relinfo->ccs);
+
+			if (!found)
+				elog(WARNING,
+					 "missing compression chunk size stats for compressed chunk \"%s\"",
+					 NameStr(chunk->fd.table_name));
 		}
 
 		if (ts_chunk_is_frozen(chunk))
