@@ -2085,13 +2085,6 @@ ts_hypertables_rename_schema_name(const char *old_name, const char *new_name)
 	ts_scanner_scan(&scanctx);
 }
 
-typedef struct AccumHypertable
-{
-	List *ht_oids;
-	Name schema_name;
-	Name table_name;
-} AccumHypertable;
-
 bool
 ts_is_partitioning_column(const Hypertable *ht, AttrNumber column_attno)
 {
