@@ -175,8 +175,14 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
-  list(APPEND TEST_FILES cagg_planning.sql hypercore_parallel.sql
-       hypercore_vectoragg.sql)
+  list(
+    APPEND
+    TEST_FILES
+    cagg_planning.sql
+    hypercore_parallel.sql
+    hypercore_vectoragg.sql
+    skip_scan_dagg.sql
+    plan_skip_scan_dagg.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
