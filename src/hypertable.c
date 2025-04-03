@@ -1864,6 +1864,18 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 			ereport(ERROR, (errcode(ERRCODE_WRONG_OBJECT_TYPE), errmsg("invalid relation type")));
 	}
 
+	/*
+	 * Check that the table is not part of any publication
+	 */
+	if (GetRelationPublications(table_relid) != NIL)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+				 errmsg("cannot create hypertable for table \"%s\" because it is part of a "
+						"publication",
+						get_rel_name(table_relid))));
+	}
+
 	/* Check that the table doesn't have any unsupported constraints */
 	hypertable_validate_constraints(table_relid);
 
