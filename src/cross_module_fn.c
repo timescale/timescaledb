@@ -174,8 +174,7 @@ tsl_postprocess_plan_stub(PlannedStmt *stmt)
 }
 
 static bool
-process_compress_table_default(AlterTableCmd *cmd, Hypertable *ht,
-							   WithClauseResult *with_clause_options)
+process_compress_table_default(Hypertable *ht, WithClauseResult *with_clause_options)
 {
 	error_no_default_fn_community();
 	pg_unreachable();
