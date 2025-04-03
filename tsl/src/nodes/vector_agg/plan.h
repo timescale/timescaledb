@@ -9,11 +9,6 @@
 
 #include "nodes/decompress_chunk/vector_quals.h"
 
-typedef struct VectorAggPlan
-{
-	CustomScan custom;
-} VectorAggPlan;
-
 /*
  * The indexes of settings that we have to pass through the custom_private list.
  */
