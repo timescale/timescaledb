@@ -209,6 +209,7 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 		NullableDatum include_tiered_data = { .isnull = true };
 		NullableDatum nbuckets_per_refresh = { .isnull = true };
 		NullableDatum max_batches_per_execution = { .isnull = true };
+		NullableDatum refresh_newest_first = { .isnull = true };
 
 		if (all_policies.is_alter_policy)
 			policy_refresh_cagg_remove_internal(all_policies.rel_oid, if_exists);
@@ -224,7 +225,8 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 														  NULL,
 														  include_tiered_data,
 														  nbuckets_per_refresh,
-														  max_batches_per_execution);
+														  max_batches_per_execution,
+														  refresh_newest_first);
 	}
 	if (all_policies.compress && all_policies.compress->create_policy)
 	{

@@ -296,7 +296,8 @@ SELECT
         start_offset => INTERVAL '15 days',
         end_offset => NULL,
         schedule_interval => INTERVAL '1 h',
-        buckets_per_batch => 5
+        buckets_per_batch => 5,
+        refresh_newest_first => true -- explicitly set to true to test the default behavior
     ) AS job_id \gset
 
 SELECT
@@ -305,7 +306,7 @@ SELECT
         start_offset => INTERVAL '15 days',
         end_offset => NULL,
         schedule_interval => INTERVAL '1 h'
-    ) AS job_id \gset
+    ) AS job_id_manual \gset
 
 TRUNCATE bgw_log, conditions_by_day, conditions_by_day_manual_refresh, conditions;
 
@@ -318,6 +319,45 @@ FROM
         '2025-03-11 00:00:00+00'::timestamptz,
         '1 hour'::interval) AS t,
     generate_series(1,5) AS d;
+
+SELECT ts_bgw_params_reset_time(0, true);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+SELECT * FROM sorted_bgw_log;
+
+-- Both continuous aggregates should have the same data
+SELECT count(*) FROM conditions_by_day;
+SELECT count(*) FROM conditions_by_day_manual_refresh;
+
+-- Should have no differences
+SELECT
+    count(*) > 0 AS has_diff
+FROM
+    ((SELECT * FROM conditions_by_day_manual_refresh ORDER BY 1, 2)
+    EXCEPT
+    (SELECT * FROM conditions_by_day ORDER BY 1, 2)) AS diff;
+
+-- Testing with explicit refresh_newest_first = false (from oldest to newest)
+SELECT delete_job(:job_id);
+SELECT delete_job(:job_id_manual);
+
+SELECT
+    add_continuous_aggregate_policy(
+        'conditions_by_day',
+        start_offset => INTERVAL '15 days',
+        end_offset => NULL,
+        schedule_interval => INTERVAL '1 h',
+        buckets_per_batch => 5,
+        refresh_newest_first => false
+    ) AS job_id \gset
+
+SELECT
+    config
+FROM
+    timescaledb_information.jobs
+WHERE
+    job_id = :'job_id';
+
+TRUNCATE bgw_log, conditions_by_day;
 
 SELECT ts_bgw_params_reset_time(0, true);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);

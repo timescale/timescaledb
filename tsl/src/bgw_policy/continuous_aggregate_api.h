@@ -23,6 +23,7 @@ int64 policy_refresh_cagg_get_refresh_end(const Dimension *dim, const Jsonb *con
 bool policy_refresh_cagg_get_include_tiered_data(const Jsonb *config, bool *isnull);
 int32 policy_refresh_cagg_get_buckets_per_batch(const Jsonb *config);
 int32 policy_refresh_cagg_get_max_batches_per_execution(const Jsonb *config);
+bool policy_refresh_cagg_get_refresh_newest_first(const Jsonb *config);
 bool policy_refresh_cagg_refresh_start_lt(int32 materialization_id, Oid cmp_type,
 										  Datum cmp_interval);
 bool policy_refresh_cagg_exists(int32 materialization_id);
@@ -31,5 +32,6 @@ Datum policy_refresh_cagg_add_internal(
 	Oid cagg_oid, Oid start_offset_type, NullableDatum start_offset, Oid end_offset_type,
 	NullableDatum end_offset, Interval refresh_interval, bool if_not_exists, bool fixed_schedule,
 	TimestampTz initial_start, const char *timezone, NullableDatum include_tiered_data,
-	NullableDatum buckets_per_batch, NullableDatum max_batches_per_execution);
+	NullableDatum buckets_per_batch, NullableDatum max_batches_per_execution,
+	NullableDatum refresh_newest_first);
 Datum policy_refresh_cagg_remove_internal(Oid cagg_oid, bool if_exists);

@@ -954,7 +954,7 @@ debug_refresh_window(const ContinuousAgg *cagg, const InternalTimeRange *refresh
 
 List *
 continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *original_refresh_window,
-									int32 buckets_per_batch)
+									int32 buckets_per_batch, bool refresh_newest_first)
 {
 	/* Do not produce batches when the number of buckets per batch is zero (disabled) */
 	if (buckets_per_batch == 0)
@@ -1085,7 +1085,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	 * 6. If the batch overlaps with only one of them then it's not a valid batch to be processed
 	 * 7. If the batch does not overlap with any of them then it's not a valid batch to be processed
 	 */
-	const char *query_str = " \
+	const char *query_str_template = " \
 		WITH dimension_slices AS ( \
 			SELECT \
 				range_start AS start, \
@@ -1097,7 +1097,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 				hypertable_id = $1 \
 				AND dimension_id = $2 \
 			ORDER BY \
-				range_end DESC \
+				%s \
 		), \
 		invalidation_logs AS ( \
 			SELECT \
@@ -1140,7 +1140,11 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 					AND (greatest_modified_value IS NOT NULL AND greatest_modified_value != -210866803200000001) \
 			) \
 		ORDER BY \
-			refresh_start DESC;";
+			refresh_start %s;";
+
+	const char *query_str = psprintf(query_str_template,
+									 refresh_newest_first ? "range_end DESC" : "range_start ASC",
+									 refresh_newest_first ? "DESC" : "ASC");
 
 	/* List of InternalTimeRange elements to be returned */
 	List *refresh_window_list = NIL;
@@ -1194,13 +1198,13 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	}
 
 	/* Build the batches list */
-	for (uint64 i = 0; i < SPI_processed; i++)
+	for (uint64 batch = 0; batch < SPI_processed; batch++)
 	{
 		bool range_start_isnull, range_end_isnull;
 		Datum range_start =
-			SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 1, &range_start_isnull);
+			SPI_getbinval(SPI_tuptable->vals[batch], SPI_tuptable->tupdesc, 1, &range_start_isnull);
 		Datum range_end =
-			SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 2, &range_end_isnull);
+			SPI_getbinval(SPI_tuptable->vals[batch], SPI_tuptable->tupdesc, 2, &range_end_isnull);
 
 		/* We need to allocate the list in the old memory context because here we're in the SPI
 		 * context */
@@ -1213,22 +1217,26 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		range->type = original_refresh_window->type;
 
 		/*
-		 * To make sure that the first range is aligned with the end of the refresh window
-		 * we need to set the end to the maximum value of the time type if the original refresh
-		 * window end is NULL.
+		 * To make sure that the first range (or last range in case of refreshing from oldest to
+		 * newest) is aligned with the end of the refresh window we need to set the end to the
+		 * maximum value of the time type if the original refresh window end is NULL.
 		 */
-		if (i == 0 && original_refresh_window->end_isnull)
+		if (((batch == 0 && refresh_newest_first) ||
+			 (batch == (SPI_processed - 1) && !refresh_newest_first)) &&
+			original_refresh_window->end_isnull)
 		{
 			range->end = ts_time_get_noend_or_max(range->type);
 			range->end_isnull = true;
 		}
 
 		/*
-		 * To make sure that the last range is aligned with the start of the refresh window
-		 * we need to set the start to the maximum value of the time type if the original refresh
-		 * window start is NULL.
+		 * To make sure that the last range (or first range in case of refreshing from oldest to
+		 * newest) is aligned with the start of the refresh window we need to set the start to the
+		 * maximum value of the time type if the original refresh window start is NULL.
 		 */
-		if (i == (SPI_processed - 1) && original_refresh_window->start_isnull)
+		if (((batch == (SPI_processed - 1) && refresh_newest_first) ||
+			 (batch == 0 && !refresh_newest_first)) &&
+			original_refresh_window->start_isnull)
 		{
 			range->start = ts_time_get_nobegin_or_min(range->type);
 			range->start_isnull = true;
