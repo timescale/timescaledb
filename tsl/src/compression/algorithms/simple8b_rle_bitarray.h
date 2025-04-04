@@ -127,11 +127,11 @@ simple8brle_bitarray_decompress(Simple8bRleSerialized *compressed, bool inverted
 			const int elements_this_block = Min(64, num_elements - decompressed_index);
 			Assert(elements_this_block <= 64);
 			Assert(elements_this_block > 0);
-			block_data &= (~0ULL) >> (64 - elements_this_block);
 			if (inverted)
 			{
 				block_data = ~block_data;
 			}
+			block_data &= (~0ULL) >> (64 - elements_this_block);
 
 			/*
 			 * The number of block elements should fit within padding. Previous
