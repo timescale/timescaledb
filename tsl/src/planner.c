@@ -31,8 +31,6 @@
 
 #include <math.h>
 
-#define OSM_EXTENSION_NAME "timescaledb_osm"
-
 static int osm_present = -1;
 
 static bool

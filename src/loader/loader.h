@@ -13,6 +13,8 @@ extern bool ts_loader_extension_exists(void);
 
 extern void ts_loader_extension_check(void);
 
+extern char *ts_osm_extension_version(void);
+
 /* WaitLatch expects a long, so make sure to cast the value */
 /* Default value for timescaledb.launcher_poll_time */
 #ifdef TS_DEBUG
