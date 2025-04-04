@@ -7,6 +7,7 @@
 #include <catalog/pg_type.h>
 #include <optimizer/optimizer.h>
 #include <parser/parse_oper.h>
+#include <utils/resowner.h>
 #include <utils/selfuncs.h>
 
 #include "compat/compat.h"
@@ -44,15 +45,46 @@ estimate_max_spread_var(PlannerInfo *root, Var *var)
 	if (!valid)
 		return INVALID_ESTIMATE;
 
+	/* We create a subtransaction to run the functions below, in case they
+	 * abort. */
+	MemoryContext oldcontext = CurrentMemoryContext;
+	ResourceOwner oldowner = CurrentResourceOwner;
+	BeginInternalSubTransaction(NULL);
+
 	PG_TRY();
 	{
 		max = ts_time_value_to_internal(max_datum, var->vartype);
 		min = ts_time_value_to_internal(min_datum, var->vartype);
+		ReleaseCurrentSubTransaction();
+		/* These two are more of a precaution. Neither the context nor the
+		 * owner should change. */
+		MemoryContextSwitchTo(oldcontext);
+		CurrentResourceOwner = oldowner;
 	}
 	PG_CATCH();
 	{
-		valid = false;
+		const int sqlerrcode = geterrcode();
+
+		/*
+		 * We can deal with the Data Exception category and in the Syntax
+		 * Error or Access Rule Violation category, but if the error is an
+		 * insufficient resources category, for example, an out of memory
+		 * error, we should just re-throw it and not treat it as an invalid
+		 * value.
+		 */
+		if (ERRCODE_TO_CATEGORY(sqlerrcode) != ERRCODE_DATA_EXCEPTION &&
+			ERRCODE_TO_CATEGORY(sqlerrcode) != ERRCODE_SYNTAX_ERROR_OR_ACCESS_RULE_VIOLATION)
+		{
+			PG_RE_THROW();
+		}
 		FlushErrorState();
+		RollbackAndReleaseCurrentSubTransaction();
+		/* We are error memory context here, so restore the old context before
+		 * continuing execution.  */
+		MemoryContextSwitchTo(oldcontext);
+		/* This is more of a precaution. It should not happen. */
+		CurrentResourceOwner = oldowner;
+		valid = false;
 	}
 	PG_END_TRY();
 

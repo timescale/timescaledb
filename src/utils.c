@@ -31,6 +31,7 @@
 #include <utils/builtins.h>
 #include <utils/catcache.h>
 #include <utils/date.h>
+#include <utils/elog.h>
 #include <utils/fmgroids.h>
 #include <utils/fmgrprotos.h>
 #include <utils/lsyscache.h>
@@ -145,7 +146,9 @@ ts_time_value_to_internal(Datum time_val, Oid type_oid)
 		if (ts_type_is_int8_binary_compatible(type_oid))
 			return DatumGetInt64(time_val);
 
-		elog(ERROR, "unknown time type \"%s\"", format_type_be(type_oid));
+		ereport(ERROR,
+				errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				errmsg("unknown time type \"%s\"", format_type_be(type_oid)));
 	}
 
 	if (IS_INTEGER_TYPE(type_oid))
@@ -190,7 +193,9 @@ ts_time_value_to_internal(Datum time_val, Oid type_oid)
 
 			return DatumGetInt64(res);
 		default:
-			elog(ERROR, "unknown time type \"%s\"", format_type_be(type_oid));
+			ereport(ERROR,
+					errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					errmsg("unknown time type \"%s\"", format_type_be(type_oid)));
 			return -1;
 	}
 }
@@ -216,7 +221,9 @@ ts_interval_value_to_internal(Datum time_val, Oid type_oid)
 			return interval->time + (interval->day * USECS_PER_DAY);
 		}
 		default:
-			elog(ERROR, "unknown interval type \"%s\"", format_type_be(type_oid));
+			ereport(ERROR,
+					errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					errmsg("unknown interval type \"%s\"", format_type_be(type_oid)));
 			return -1;
 	}
 }
@@ -233,7 +240,9 @@ ts_integer_to_internal(Datum time_val, Oid type_oid)
 		case INT2OID:
 			return (int64) DatumGetInt16(time_val);
 		default:
-			elog(ERROR, "unknown interval type \"%s\"", format_type_be(type_oid));
+			ereport(ERROR,
+					errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					errmsg("unknown interval type \"%s\"", format_type_be(type_oid)));
 			return -1;
 	}
 }
@@ -341,9 +350,10 @@ ts_internal_to_time_value(int64 value, Oid type)
 		default:
 			if (ts_type_is_int8_binary_compatible(type))
 				return Int64GetDatum(value);
-			elog(ERROR,
-				 "unknown time type \"%s\" in ts_internal_to_time_value",
-				 format_type_be(type));
+			ereport(ERROR,
+					errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					errmsg("unknown time type \"%s\" in ts_internal_to_time_value",
+						   format_type_be(type)));
 			pg_unreachable();
 	}
 }
@@ -373,9 +383,10 @@ ts_internal_to_time_int64(int64 value, Oid type)
 			return DatumGetInt64(
 				DirectFunctionCall1(ts_pg_unix_microseconds_to_date, Int64GetDatum(value)));
 		default:
-			elog(ERROR,
-				 "unknown time type \"%s\" in ts_internal_to_time_value",
-				 format_type_be(type));
+			ereport(ERROR,
+					errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					errmsg("unknown time type \"%s\" in ts_internal_to_time_value",
+						   format_type_be(type)));
 			pg_unreachable();
 	}
 }
@@ -417,9 +428,10 @@ ts_internal_to_interval_value(int64 value, Oid type)
 		case INTERVALOID:
 			return DirectFunctionCall1(ts_pg_unix_microseconds_to_interval, Int64GetDatum(value));
 		default:
-			elog(ERROR,
-				 "unknown time type \"%s\" in ts_internal_to_interval_value",
-				 format_type_be(type));
+			ereport(ERROR,
+					errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					errmsg("unknown time type \"%s\" in ts_internal_to_time_value",
+						   format_type_be(type)));
 			pg_unreachable();
 	}
 }
@@ -436,9 +448,10 @@ ts_integer_to_internal_value(int64 value, Oid type)
 		case INT8OID:
 			return Int64GetDatum(value);
 		default:
-			elog(ERROR,
-				 "unknown time type \"%s\" in ts_internal_to_time_value",
-				 format_type_be(type));
+			ereport(ERROR,
+					errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					errmsg("unknown time type \"%s\" in ts_internal_to_time_value",
+						   format_type_be(type)));
 			pg_unreachable();
 	}
 }
@@ -1708,7 +1721,7 @@ ts_makeaclitem(PG_FUNCTION_ARGS)
 		{ "MAINTAIN", ACL_MAINTAIN },
 #endif
 		{ "RULE", 0 }, /* ignore old RULE privileges */
-		{ NULL, 0 }
+		{ NULL, 0 },
 	};
 
 	priv = ts_convert_any_priv_string(privtext, any_priv_map);
