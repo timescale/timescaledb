@@ -296,7 +296,8 @@ SELECT
         start_offset => INTERVAL '15 days',
         end_offset => NULL,
         schedule_interval => INTERVAL '1 h',
-        buckets_per_batch => 5
+        buckets_per_batch => 5,
+        refresh_newest_first => false
     ) AS job_id \gset
 
 SELECT

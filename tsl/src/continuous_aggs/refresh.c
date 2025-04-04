@@ -954,7 +954,7 @@ debug_refresh_window(const ContinuousAgg *cagg, const InternalTimeRange *refresh
 
 List *
 continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *original_refresh_window,
-									int32 buckets_per_batch)
+									int32 buckets_per_batch, bool refresh_newest_first)
 {
 	/* Do not produce batches when the number of buckets per batch is zero (disabled) */
 	if (buckets_per_batch == 0)
@@ -1085,7 +1085,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	 * 6. If the batch overlaps with only one of them then it's not a valid batch to be processed
 	 * 7. If the batch does not overlap with any of them then it's not a valid batch to be processed
 	 */
-	const char *query_str = " \
+	const char *query_str_template = " \
 		WITH dimension_slices AS ( \
 			SELECT \
 				range_start AS start, \
@@ -1140,7 +1140,9 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 					AND (greatest_modified_value IS NOT NULL AND greatest_modified_value != -210866803200000001) \
 			) \
 		ORDER BY \
-			refresh_start DESC;";
+			refresh_start %s;";
+
+	const char *query_str = psprintf(query_str_template, refresh_newest_first ? "DESC" : "ASC");
 
 	/* List of InternalTimeRange elements to be returned */
 	List *refresh_window_list = NIL;

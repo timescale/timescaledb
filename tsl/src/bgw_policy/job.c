@@ -392,9 +392,11 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 	CaggRefreshContext context = { .callctx = CAGG_REFRESH_POLICY };
 
 	/* Try to split window range into a list of ranges */
-	List *refresh_window_list = continuous_agg_split_refresh_window(policy_data.cagg,
-																	&policy_data.refresh_window,
-																	policy_data.buckets_per_batch);
+	List *refresh_window_list =
+		continuous_agg_split_refresh_window(policy_data.cagg,
+											&policy_data.refresh_window,
+											policy_data.buckets_per_batch,
+											policy_data.refresh_newest_first);
 	if (refresh_window_list == NIL)
 		refresh_window_list = lappend(refresh_window_list, &policy_data.refresh_window);
 	else
@@ -454,6 +456,7 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 	int32 buckets_per_batch, max_batches_per_execution;
 	bool start_isnull, end_isnull;
 	bool include_tiered_data, include_tiered_data_isnull;
+	bool refresh_newest_first;
 
 	materialization_id = policy_continuous_aggregate_get_mat_hypertable_id(config);
 	mat_ht = ts_hypertable_get_by_id(materialization_id);
@@ -502,6 +505,8 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 				 errhint(
 					 "The max batches per execution should be greater than or equal to zero.")));
 
+	refresh_newest_first = policy_refresh_cagg_get_refresh_newest_first(config);
+
 	if (policy_data)
 	{
 		policy_data->refresh_window.type = dim_type;
@@ -514,6 +519,7 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 		policy_data->include_tiered_data_isnull = include_tiered_data_isnull;
 		policy_data->buckets_per_batch = buckets_per_batch;
 		policy_data->max_batches_per_execution = max_batches_per_execution;
+		policy_data->refresh_newest_first = refresh_newest_first;
 	}
 }
 
