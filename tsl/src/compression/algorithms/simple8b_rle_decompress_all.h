@@ -40,6 +40,8 @@ FUNCTION_NAME(simple8brle_decompress_all_buf,
 	Assert(num_blocks <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 	uint8 selector_values[GLOBAL_MAX_ROWS_PER_COMPRESSION];
 	const uint64 *slots = compressed->slots;
+
+	VECTORIZE_LOOP
 	for (uint32 block_index = 0; block_index < num_blocks; block_index++)
 	{
 		const uint32 selector_slot = block_index / SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
@@ -56,6 +58,7 @@ FUNCTION_NAME(simple8brle_decompress_all_buf,
 	 */
 	uint32 decompressed_index = 0;
 	const uint64 *blocks = compressed->slots + num_selector_slots;
+	VECTORIZE_LOOP
 	for (uint32 block_index = 0; block_index < num_blocks; block_index++)
 	{
 		const uint8 selector_value = selector_values[block_index];

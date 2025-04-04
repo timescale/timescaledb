@@ -156,7 +156,7 @@ simple8brle_bitarray_decompress(Simple8bRleSerialized *compressed, bool inverted
 	 * We might have unpacked more because we work in full blocks, but at least
 	 * we shouldn't have unpacked less.
 	 */
-	CheckCompressedData(decompressed_index >= bit_array_num_bits(&result.bits));
+	CheckCompressedData(decompressed_index >= num_elements);
 	Assert(decompressed_index <= num_elements_padded);
 
 	/*

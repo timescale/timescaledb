@@ -9,7 +9,7 @@
  * Specialized for each supported data type.
  */
 
- #include "vector_utils.h"
+#include "vector_utils.h"
 
 #define FUNCTION_NAME_HELPER(X, Y) X##_##Y
 #define FUNCTION_NAME(X, Y) FUNCTION_NAME_HELPER(X, Y)
@@ -92,6 +92,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	 * having a fast path for stretches of tag1 == 0.
 	 */
 	ELEMENT_TYPE prev = 0;
+	VECTORIZE_LOOP
 	for (uint16 i = 0; i < n_different; i++)
 	{
 		const uint8 current_xor_bits = bit_widths[simple8brle_bitmap_prefix_sum(&tag1s, i) - 1];
@@ -138,17 +139,19 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 		 * We have unpacked the non-null data. Now reshuffle it to account for nulls,
 		 * and fill the validity bitmap.
 		 */
-		const int validity_bitmap_bytes = sizeof(uint64) * ((n_total + 64 - 1) / 64);
-		validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
 
+		MemoryContext old_context = MemoryContextSwitchTo(dest_mctx);
+		const Simple8bRleBitArray non_nulls = simple8brle_bitarray_decompress(gorilla_data->nulls, /* inverted*/ true);
+		validity_bitmap = non_nulls.bits.buckets.data;
+		MemoryContextSwitchTo(old_context);
+		CheckCompressedData(n_notnull == non_nulls.num_ones);
+ 
 		/*
-		 * First, mark all data as valid, we will fill the nulls later if needed.
 		 * Note that the validity bitmap size is a multiple of 64 bits. We have to
 		 * fill the tail bits with zeros, because the corresponding elements are not
 		 * valid.
 		 *
 		 */
-		memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
 		if (n_total % 64)
 		{
 			const uint64 tail_mask = ~0ULL >> (64 - n_total % 64);
@@ -159,19 +162,17 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 		 * We have decompressed the data with nulls skipped, reshuffle it
 		 * according to the nulls bitmap.
 		 */
-		const Simple8bRleBitmap nulls = simple8brle_bitmap_decompress(gorilla_data->nulls);
-		CheckCompressedData(n_notnull + simple8brle_bitmap_num_ones(&nulls) == n_total);
 
 		int current_notnull_element = n_notnull - 1;
+		VECTORIZE_LOOP
 		for (int i = n_total - 1; i >= 0; i--)
 		{
 			Assert(i >= current_notnull_element);
 
-			if (simple8brle_bitmap_get_at(&nulls, i))
-			{
-				arrow_set_row_validity(validity_bitmap, i, false);
-			}
-			else
+			const uint16 validity_bitmap_index = i / 64;
+			const uint16 validity_bitmap_bit = i % 64;
+			const uint64 validity_bitmap_mask = 1ULL << validity_bitmap_bit;
+			if (validity_bitmap[validity_bitmap_index] & validity_bitmap_mask)
 			{
 				Assert(current_notnull_element >= 0);
 				decompressed_values[i] = decompressed_values[current_notnull_element];

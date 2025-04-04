@@ -49,6 +49,7 @@ simple8brle_bitmap_num_ones(const Simple8bRleBitmap *bitmap)
  * useful for gorilla decompression. Can be unused by other users of this
  * header.
  */
+VECTORIZE_FUNCTION
 static Simple8bRleBitmap simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 	pg_attribute_unused();
 
@@ -209,6 +210,11 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 
 	return result;
 }
+
+VECTORIZE_FUNCTION
+static Simple8bRleBitmap
+simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
+	pg_attribute_unused();
 
 VECTORIZE_FUNCTION
 static Simple8bRleBitmap
