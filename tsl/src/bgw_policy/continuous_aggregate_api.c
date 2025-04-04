@@ -168,6 +168,18 @@ policy_refresh_cagg_get_max_batches_per_execution(const Jsonb *config)
 	return res;
 }
 
+bool
+policy_refresh_cagg_get_refresh_newest_first(const Jsonb *config)
+{
+	bool found;
+	bool res = ts_jsonb_get_bool_field(config, POL_REFRESH_CONF_KEY_REFRESH_NEWEST_FIRST, &found);
+
+	if (!found)
+		res = true; /* default value */
+
+	return res;
+}
+
 /* returns false if a policy could not be found */
 bool
 policy_refresh_cagg_exists(int32 materialization_id)
