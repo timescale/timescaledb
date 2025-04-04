@@ -15,10 +15,16 @@ EXPLAIN (costs off, timing off, summary off) SELECT count(DISTINCT 1) FROM pg_re
 --baseline query with skipscan
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
 
--- compression doesnt prevent skipscan
+-- compression on one chunk doesnt prevent skipscan on other chunks
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
+
+-- compression on one chunk will prevent skipscan if it's the only chunk remaining
+:PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE time = 100;
 SELECT decompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+
+-- skipscan will be applied on decompressed chunk if it's the only chunk remaining
+:PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE time = 100;
 
 --baseline query with skipscan
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;

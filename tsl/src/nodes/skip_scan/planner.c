@@ -488,6 +488,33 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 														NULL);
 			subpath->pathtarget = copy_pathtarget(merge_path->path.pathtarget);
 		}
+		/* We may have Append over one input which will be removed from the plan later.
+		 * Consider it when it is sorted correctly. #7778
+		 */
+		else if (IsA(subpath, AppendPath))
+		{
+			AppendPath *append_path = castNode(AppendPath, subpath);
+
+			if (list_length(append_path->subpaths) > 1)
+				continue;
+
+			List *new_paths = build_subpath(root, append_path->subpaths, &dpinfo, top_pathkeys);
+
+			/* build_subpath returns NULL when no SkipScanPath was created */
+			if (!new_paths)
+				continue;
+
+			subpath = (Path *) create_append_path(root,
+												  append_path->path.parent,
+												  new_paths,
+												  NULL,
+												  append_path->path.pathkeys,
+												  NULL,
+												  append_path->path.parallel_workers,
+												  append_path->path.parallel_aware,
+												  -1);
+			subpath->pathtarget = copy_pathtarget(append_path->path.pathtarget);
+		}
 		else if (ts_is_chunk_append_path(subpath))
 		{
 			ChunkAppendPath *ca = (ChunkAppendPath *) subpath;
