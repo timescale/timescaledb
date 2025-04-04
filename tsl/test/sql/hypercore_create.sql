@@ -529,3 +529,60 @@ alter table :chunk set access method heap;
 vacuum full :chunk;
 select count(*) from :chunk;
 \set ON_ERROR_STOP 1
+
+set timescaledb.enable_transparent_decompression=true;
+
+-- Test chunk creation with non-owner user
+CREATE TABLE conditions (	-- create a regular table
+    time        timestamptz not null,
+    location    text not null,
+    temperature double precision null
+);
+
+select create_hypertable('conditions', 'time');	-- turn it into a hypertable
+
+-------------------------------------------------------------------------------
+-- Create a new user and grant privileges to work on conditions
+-------------------------------------------------------------------------------
+create role testuser;
+-- Grant ability to switch to testuser
+grant testuser to :ROLE_DEFAULT_PERM_USER;
+grant select,insert,update,delete on conditions to testuser;
+
+alter table conditions set (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'location,temperature',
+  timescaledb.compress_orderby = 'time'
+);
+
+
+-------------------------------------------------------------------------------
+-- Set hypercore access method on the hypertable
+-------------------------------------------------------------------------------
+alter table conditions set access method hypercore;
+
+-- Switch to testuser and make sure it can insert into conditions
+set role testuser;
+select current_user;
+select * from show_chunks('conditions') ch
+join _timescaledb_catalog.compression_settings cs on (cs.relid = ch);
+
+-- An insert should create a new hypercore chunk, including the compressed chunk
+insert into conditions values ('2024-01-02', 'school', 99.5);
+
+select chunk, amname, cs.compress_relid
+  from show_chunks('conditions') as chunk
+  join pg_class on (pg_class.oid = chunk)
+  join pg_am on (relam = pg_am.oid)
+  join _timescaledb_catalog.compression_settings cs on (cs.relid = chunk);
+
+-- Data is not compressed
+select _timescaledb_debug.is_compressed_tid(ctid), * from conditions;
+select compress_chunk(ch) from show_chunks('conditions') ch;
+-- Now the data is compressed
+select _timescaledb_debug.is_compressed_tid(ctid), * from conditions;
+reset role;
+
+-- Need to revoke privileges to drop user
+revoke all on conditions from testuser;
+drop role testuser;
