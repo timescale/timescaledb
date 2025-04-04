@@ -15,6 +15,11 @@ typedef struct ArrowArray ArrowArray;
 /* How to obtain the decompressed datum for individual row. */
 typedef enum
 {
+	/*
+	 * The decompressed value is a boolean and is stored as a vector of bits.
+	 */
+	DT_ArrowBits = -5,
+
 	DT_ArrowTextDict = -4,
 
 	DT_ArrowText = -3,
