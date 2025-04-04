@@ -58,9 +58,14 @@ flaky_exclude_tests = {
     # Not executed as a flake test since it easily exhausts available
     # background worker slots.
     "bgw_launcher",
+
     # Not executed as a flake test since it takes a very long time and
     # easily interferes with other tests.
     "bgw_scheduler_restart",
+
+    # Not executed as a flake test since it generates a lot of cruft
+    # in the log at debug levels.
+    "partialize_finalize",
 }
 
 
