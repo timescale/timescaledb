@@ -167,7 +167,11 @@ select compress_chunk('_timescaledb_internal._hyper_1_3_chunk');
 -- Test merging compressed chunks
 begin;
 select * from chunk_info;
+
+select * from _timescaledb_catalog.compression_chunk_size order by chunk_id;
+
 call merge_chunks('{_timescaledb_internal._hyper_1_1_chunk, _timescaledb_internal._hyper_1_2_chunk, _timescaledb_internal._hyper_1_3_chunk}');
+select * from _timescaledb_catalog.compression_chunk_size order by chunk_id;
 select * from chunk_info;
 select count(*) as num_orphaned_slices from orphaned_slices;
 select * from mergeme;
@@ -291,18 +295,30 @@ alter table _timescaledb_internal._hyper_1_2_chunk set access method hypercore;
 -- Show partitions before merge
 select * from partitions;
 
--- Merge all chunks until only 1 remains
+-- Show which chunks are compressed. Their compression_chunk_size
+-- metadata should be merged.
+select chunk_name from timescaledb_information.chunks
+where is_compressed=true order by chunk_name;
+--
+-- Merge all chunks until only 1 remains.  Also check that metadata is
+-- merged.
+---
+select * from _timescaledb_catalog.compression_chunk_size order by chunk_id;
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
 call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_12_chunk']);
+select * from _timescaledb_catalog.compression_chunk_size order by chunk_id;
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
 select * from partitions;
 call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_10_chunk','_timescaledb_internal._hyper_1_13_chunk', '_timescaledb_internal._hyper_1_15_chunk']);
+select * from _timescaledb_catalog.compression_chunk_size order by chunk_id;
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
 select * from partitions;
 call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_11_chunk','_timescaledb_internal._hyper_1_14_chunk', '_timescaledb_internal._hyper_1_16_chunk']);
+select * from _timescaledb_catalog.compression_chunk_size order by chunk_id;
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
 select * from partitions;
 call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_2_chunk']);
+select * from _timescaledb_catalog.compression_chunk_size order by chunk_id;
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
 select * from partitions;
 select * from chunk_info;
