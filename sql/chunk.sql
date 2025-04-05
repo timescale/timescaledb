@@ -49,13 +49,6 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.create_chunk(
 RETURNS TABLE(chunk_id INTEGER, hypertable_id INTEGER, schema_name NAME, table_name NAME, relkind "char", slices JSONB, created BOOLEAN)
 AS '@MODULE_PATHNAME@', 'ts_chunk_create' LANGUAGE C VOLATILE;
 
-CREATE OR REPLACE FUNCTION _timescaledb_functions.create_chunk_table(
-       hypertable REGCLASS,
-       slices JSONB,
-       schema_name NAME,
-       table_name NAME)
-RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_chunk_create_empty_table' LANGUAGE C VOLATILE;
-
 CREATE OR REPLACE FUNCTION _timescaledb_functions.freeze_chunk(
    chunk REGCLASS)
 RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_chunk_freeze_chunk' LANGUAGE C VOLATILE;
