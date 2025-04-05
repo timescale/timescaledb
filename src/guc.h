@@ -41,6 +41,7 @@ extern bool ts_guc_enable_qual_propagation;
 extern bool ts_guc_enable_runtime_exclusion;
 extern bool ts_guc_enable_constraint_exclusion;
 extern bool ts_guc_enable_cagg_reorder_groupby;
+extern TSDLLEXPORT bool ts_guc_enable_cagg_window_functions;
 extern TSDLLEXPORT int ts_guc_cagg_max_individual_materializations;
 extern bool ts_guc_enable_now_constify;
 extern bool ts_guc_enable_foreign_key_propagation;
