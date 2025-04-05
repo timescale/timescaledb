@@ -159,7 +159,6 @@ typedef struct CrossModuleFunctions
 	PGFunction create_chunk;
 	PGFunction show_chunk;
 
-	PGFunction chunk_create_empty_table;
 	PGFunction chunk_freeze_chunk;
 	PGFunction chunk_unfreeze_chunk;
 	PGFunction recompress_chunk_segmentwise;
