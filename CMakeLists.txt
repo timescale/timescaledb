@@ -511,44 +511,40 @@ if(LINTER)
     CLANG_TIDY clang-tidy
     PATHS /usr/bin /usr/local/bin /usr/local/opt/ /usr/local/opt/llvm/bin
           /opt/bin
-    DOC "The path to the clang-tidy linter")
+    DOC "The path to the clang-tidy linter" REQUIRED)
 
-  if(CLANG_TIDY)
-    message(STATUS "Using clang-tidy ${CLANG_TIDY}")
-    execute_process(COMMAND ${CLANG_TIDY} --version)
-    string(
-      CONCAT
-        CMAKE_C_CLANG_TIDY
-        "${CLANG_TIDY}"
-        ";--checks=clang-diagnostic-*,clang-analyzer-*"
-        ",-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling"
-        ",-clang-analyzer-deadcode.DeadStores"
-        ",bugprone-*"
-        ",-bugprone-branch-clone"
-        ",-bugprone-easily-swappable-parameters"
-        ",-bugprone-implicit-widening-of-multiplication-result"
-        ",-bugprone-narrowing-conversions"
-        ",-bugprone-reserved-identifier"
-        ",-bugprone-suspicious-include"
-        ",readability-*"
-        ",-readability-avoid-const-params-in-decls"
-        ",-readability-braces-around-statements"
-        ",-readability-else-after-return"
-        ",-readability-function-cognitive-complexity"
-        ",-readability-function-size"
-        ",-readability-identifier-length"
-        ",-readability-isolate-declaration"
-        ",-readability-magic-numbers"
-        ",-readability-non-const-parameter"
-        "${CLANG_TIDY_EXTRA_OPTS}")
-    if(WARNINGS_AS_ERRORS)
-      set(CMAKE_C_CLANG_TIDY "${CMAKE_C_CLANG_TIDY};--warnings-as-errors=*")
-    else()
-      set(CMAKE_C_CLANG_TIDY "${CMAKE_C_CLANG_TIDY};--quiet")
-    endif(WARNINGS_AS_ERRORS)
+  message(STATUS "Using clang-tidy ${CLANG_TIDY}")
+  execute_process(COMMAND ${CLANG_TIDY} --version)
+  string(
+    CONCAT
+      CMAKE_C_CLANG_TIDY
+      "${CLANG_TIDY}"
+      ";--checks=clang-diagnostic-*,clang-analyzer-*"
+      ",-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling"
+      ",-clang-analyzer-deadcode.DeadStores"
+      ",bugprone-*"
+      ",-bugprone-branch-clone"
+      ",-bugprone-easily-swappable-parameters"
+      ",-bugprone-implicit-widening-of-multiplication-result"
+      ",-bugprone-narrowing-conversions"
+      ",-bugprone-reserved-identifier"
+      ",-bugprone-suspicious-include"
+      ",readability-*"
+      ",-readability-avoid-const-params-in-decls"
+      ",-readability-braces-around-statements"
+      ",-readability-else-after-return"
+      ",-readability-function-cognitive-complexity"
+      ",-readability-function-size"
+      ",-readability-identifier-length"
+      ",-readability-isolate-declaration"
+      ",-readability-magic-numbers"
+      ",-readability-non-const-parameter"
+      "${CLANG_TIDY_EXTRA_OPTS}")
+  if(WARNINGS_AS_ERRORS)
+    set(CMAKE_C_CLANG_TIDY "${CMAKE_C_CLANG_TIDY};--warnings-as-errors=*")
   else()
-    message(STATUS "Install clang-tidy to enable code linting")
-  endif(CLANG_TIDY)
+    set(CMAKE_C_CLANG_TIDY "${CMAKE_C_CLANG_TIDY};--quiet")
+  endif(WARNINGS_AS_ERRORS)
 endif(LINTER)
 
 if(NOT EXISTS ${PG_INCLUDEDIR}/pg_config.h)
