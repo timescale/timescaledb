@@ -31,11 +31,11 @@ session "I"
 step "IB" { BEGIN; }
 step "IBRR" { BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ; }
 step "IBS" { BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE; }
-step "I1"   { 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
+step "I1"   {
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
 }
-step "Iu1"   { 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98; 
+step "Iu1"   {
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98;
 }
 step "Ic"   { COMMIT; }
 
@@ -182,13 +182,13 @@ permutation "CA1" "CAc" "I1" "SChunkStat" "LockChunk1" "IBS"  "Iu1" "RC"  "Unloc
 permutation "CA1" "CAc" "I1" "SChunkStat" "LockChunk1" "IN1"  "RC" "UnlockChunk" "INc" "SH" "SA" "SChunkStat"
 permutation "CA1" "CAc" "I1" "SChunkStat" "LockChunk1" "INu1" "RC" "UnlockChunk" "INc" "SH" "SA" "SChunkStat" "SU"
 
-# Decompressing a chunk should not stop any reads 
+# Decompressing a chunk should not stop any reads
 # until the end when we drop the compressed chunk
 # which happens after updates to the chunk catalog tuple
 permutation "CA1" "CAc" "LockChunkTuple" "DA1" "SA" "SF" "UnlockChunkTuple" "DAc"
 
 # Compressing a chunk should not stop any reads
-# until it comes to truncating the uncompressed chunk
-# which happens at the end of the operations along with
-# catalog updates.
+# Truncating the uncompressed chunk (which happens at the end
+# of the operations along with catalog updates) does not block
+# It falls back to deleting the tuples row-by-row if lock upgrade does not go through
 permutation "SB" "SA" "CA1" "SA" "SF" "SR" "CAc"
