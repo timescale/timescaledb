@@ -154,6 +154,7 @@ bool ts_guc_enable_chunk_skipping = false;
 TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
 TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression = false;
 TSDLLEXPORT bool ts_guc_enable_bool_compression = false;
+TSDLLEXPORT int ts_guc_compression_batch_size_limit = 1000;
 
 /* Only settable in debug mode for testing */
 TSDLLEXPORT bool ts_guc_enable_null_compression = true;
@@ -791,6 +792,23 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+	DefineCustomIntVariable(MAKE_EXTOPTION("compression_batch_size_limit"),
+							"The max number of tuples that can be batched together during "
+							"compression",
+							"Setting this option to a number between 1 and 999 will force "
+							"compression "
+							"to limit the size of compressed batches to that amount of "
+							"uncompressed tuples."
+							"Setting this to 0 defaults to the max batch size of 1000.",
+							&ts_guc_compression_batch_size_limit,
+							1000,
+							1,
+							1000,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
 
 #ifdef TS_DEBUG
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_null_compression"),
