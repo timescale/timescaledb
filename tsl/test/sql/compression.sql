@@ -1198,3 +1198,26 @@ SELECT relpages, reltuples::int AS reltuples FROM pg_catalog.pg_class WHERE oid 
 SELECT count(*) FROM :CHUNK;
 
 RESET timescaledb.enable_delete_after_compression;
+
+-- test limiting array compression to 1GB uncompressed data per batch
+
+-- Test decompression with DML which compares int8 to int4
+CREATE TABLE hyper_85 (time timestamptz, device int8, value text);
+SELECT create_hypertable('hyper_85', 'time', create_default_indexes => false);
+INSERT INTO hyper_85
+VALUES
+	('2025-01-01 00:00:00', 1, repeat(md5(random()::text), 32*1024*200)),
+	('2025-01-01 00:00:01', 1, repeat(md5(random()::text), 32*1024*200)),
+	('2025-01-01 00:00:02', 1, repeat(md5(random()::text), 32*1024*200)),
+	('2025-01-01 00:00:03', 1, repeat(md5(random()::text), 32*1024*200)),
+	('2025-01-01 00:00:04', 1, repeat(md5(random()::text), 32*1024*200)),
+	('2025-01-01 00:00:05', 1, repeat(md5(random()::text), 32*1024*200));
+
+ALTER TABLE hyper_85 SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+\set ON_ERROR_STOP 0
+SELECT compress_chunk(ch) FROM show_chunks('hyper_85') ch;
+\set ON_ERROR_STOP 1
+
+SET timescaledb.enable_compression_batch_size_limiting TO ON;
+SELECT compress_chunk(ch) FROM show_chunks('hyper_85') ch;
+

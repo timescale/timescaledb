@@ -154,6 +154,7 @@ bool ts_guc_enable_chunk_skipping = false;
 TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
 TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression = false;
 TSDLLEXPORT bool ts_guc_enable_bool_compression = false;
+TSDLLEXPORT bool ts_guc_enable_compression_batch_size_limiting = false;
 
 /* Only settable in debug mode for testing */
 TSDLLEXPORT bool ts_guc_enable_null_compression = true;
@@ -785,6 +786,22 @@ _guc_init(void)
 							 "Enable experimental bool compression functionality",
 							 "Enable bool compression",
 							 &ts_guc_enable_bool_compression,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compression_batch_size_limiting"),
+							 "Enable compression batch size limiting functionality",
+							 "This enables limiting batch size for variable size column "
+							 "types which are compressed using array compression. Depending on the "
+							 "datum values being "
+							 "compressed, we can go over allocation hard limits (1GB). To get "
+							 "around this, we limit "
+							 "batches on this size in in conjunction with existing row count "
+							 "limits.",
+							 &ts_guc_enable_compression_batch_size_limiting,
 							 false,
 							 PGC_USERSET,
 							 0,

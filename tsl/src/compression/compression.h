@@ -67,6 +67,7 @@ struct Compressor
 {
 	void (*append_null)(Compressor *compressord);
 	void (*append_val)(Compressor *compressor, Datum val);
+	bool (*is_full)(Compressor *compressor, Datum val);
 	void *(*finish)(Compressor *data);
 };
 

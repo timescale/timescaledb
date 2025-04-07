@@ -881,6 +881,39 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 	ExecDropSingleTupleTableSlot(slot);
 }
 
+static bool
+row_compressor_is_full(RowCompressor *row_compressor, TupleTableSlot *row)
+{
+	if (row_compressor->rows_compressed_into_current_value >= TARGET_COMPRESSED_BATCH_SIZE)
+		return true;
+
+	if (!ts_guc_enable_compression_batch_size_limiting)
+		return false;
+
+	/* Check with every column compressor if they can add the next value to current batch */
+
+	int col;
+	for (col = 0; col < row_compressor->n_input_columns; col++)
+	{
+		Compressor *compressor = row_compressor->per_column[col].compressor;
+		bool is_null;
+		Datum val;
+
+		/* if there is no compressor, this must be a segmenter, so just skip */
+		if (compressor == NULL)
+			continue;
+
+		val = slot_getattr(row, AttrOffsetGetAttrNumber(col), &is_null);
+		if (!is_null)
+		{
+			if (compressor->is_full(compressor, val))
+				return true;
+		}
+	}
+
+	return false;
+}
+
 static void
 row_compressor_process_ordered_slot(RowCompressor *row_compressor, TupleTableSlot *slot,
 									CommandId mycid)
@@ -894,8 +927,7 @@ row_compressor_process_ordered_slot(RowCompressor *row_compressor, TupleTableSlo
 		row_compressor->first_iteration = false;
 	}
 	bool changed_groups = row_compressor_new_row_is_in_new_group(row_compressor, slot);
-	bool compressed_row_is_full =
-		row_compressor->rows_compressed_into_current_value >= TARGET_COMPRESSED_BATCH_SIZE;
+	bool compressed_row_is_full = row_compressor_is_full(row_compressor, slot);
 	if (compressed_row_is_full || changed_groups)
 	{
 		if (row_compressor->rows_compressed_into_current_value > 0)

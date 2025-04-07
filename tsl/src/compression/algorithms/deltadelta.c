@@ -164,6 +164,13 @@ deltadelta_compressor_append_null_value(Compressor *compressor)
 	delta_delta_compressor_append_null(extended->internal);
 }
 
+static bool
+deltadelta_compressor_is_full(Compressor *compressor, Datum val)
+{
+	/* No limit */
+	return false;
+}
+
 static void *
 deltadelta_compressor_finish_and_reset(Compressor *compressor)
 {
@@ -177,40 +184,47 @@ deltadelta_compressor_finish_and_reset(Compressor *compressor)
 const Compressor deltadelta_bool_compressor = {
 	.append_val = deltadelta_compressor_append_bool,
 	.append_null = deltadelta_compressor_append_null_value,
+	.is_full = deltadelta_compressor_is_full,
 	.finish = deltadelta_compressor_finish_and_reset,
 };
 
 const Compressor deltadelta_uint16_compressor = {
 	.append_val = deltadelta_compressor_append_int16,
 	.append_null = deltadelta_compressor_append_null_value,
+	.is_full = deltadelta_compressor_is_full,
 	.finish = deltadelta_compressor_finish_and_reset,
 };
 const Compressor deltadelta_uint32_compressor = {
 	.append_val = deltadelta_compressor_append_int32,
 	.append_null = deltadelta_compressor_append_null_value,
+	.is_full = deltadelta_compressor_is_full,
 	.finish = deltadelta_compressor_finish_and_reset,
 };
 const Compressor deltadelta_uint64_compressor = {
 	.append_val = deltadelta_compressor_append_int64,
 	.append_null = deltadelta_compressor_append_null_value,
+	.is_full = deltadelta_compressor_is_full,
 	.finish = deltadelta_compressor_finish_and_reset,
 };
 
 const Compressor deltadelta_date_compressor = {
 	.append_val = deltadelta_compressor_append_date,
 	.append_null = deltadelta_compressor_append_null_value,
+	.is_full = deltadelta_compressor_is_full,
 	.finish = deltadelta_compressor_finish_and_reset,
 };
 
 const Compressor deltadelta_timestamp_compressor = {
 	.append_val = deltadelta_compressor_append_timestamp,
 	.append_null = deltadelta_compressor_append_null_value,
+	.is_full = deltadelta_compressor_is_full,
 	.finish = deltadelta_compressor_finish_and_reset,
 };
 
 const Compressor deltadelta_timestamptz_compressor = {
 	.append_val = deltadelta_compressor_append_timestamptz,
 	.append_null = deltadelta_compressor_append_null_value,
+	.is_full = deltadelta_compressor_is_full,
 	.finish = deltadelta_compressor_finish_and_reset,
 };
 

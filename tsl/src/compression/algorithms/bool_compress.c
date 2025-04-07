@@ -47,11 +47,14 @@ static void bool_compressor_append_bool(Compressor *compressor, Datum val);
 
 static void bool_compressor_append_null_value(Compressor *compressor);
 
+static bool bool_compressor_is_full(Compressor *compressor, Datum val);
+
 static void *bool_compressor_finish_and_reset(Compressor *compressor);
 
 const Compressor bool_compressor_initializer = {
 	.append_val = bool_compressor_append_bool,
 	.append_null = bool_compressor_append_null_value,
+	.is_full = bool_compressor_is_full,
 	.finish = bool_compressor_finish_and_reset,
 };
 
@@ -338,6 +341,13 @@ bool_compressor_append_null_value(Compressor *compressor)
 		extended->internal = bool_compressor_alloc();
 
 	bool_compressor_append_null(extended->internal);
+}
+
+static bool
+bool_compressor_is_full(Compressor *compressor, Datum val)
+{
+	/* No limit */
+	return false;
 }
 
 static void *

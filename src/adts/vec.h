@@ -110,17 +110,25 @@ VEC_RESERVE(VEC_TYPE *vec, uint32 additional)
 	if (num_new_elements == 0 || vec->num_elements + num_new_elements <= vec->max_elements)
 		return;
 
+	num_elements = vec->num_elements + num_new_elements;
 	if (num_new_elements < vec->num_elements)
 	{
 		/* Follow the usual doubling progression of allocation sizes. */
-		num_new_elements = vec->num_elements;
+		num_elements = vec->num_elements * 2;
 	}
 
-	num_elements = vec->num_elements + num_new_elements;
 	Assert(num_elements > vec->num_elements);
-	if (num_elements >= PG_UINT32_MAX / sizeof(VEC_ELEMENT_TYPE))
-		elog(ERROR, "vector allocation overflow");
 	vec->max_elements = num_elements;
+	if (vec->max_elements > MaxAllocSize / sizeof(VEC_ELEMENT_TYPE))
+	{
+		if (vec->num_elements + num_new_elements >= MaxAllocSize / sizeof(VEC_ELEMENT_TYPE))
+			ereport(ERROR,
+					(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+					 errmsg("vector allocation overflow")));
+
+		/* Clamp max_elements to max allocation size */
+		vec->max_elements = (MaxAllocSize / sizeof(VEC_ELEMENT_TYPE));
+	}
 
 	num_bytes = vec->max_elements * sizeof(VEC_ELEMENT_TYPE);
 	if (vec->data == NULL)
