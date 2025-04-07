@@ -682,7 +682,7 @@ select create_hypertable ('test_schema.partition_not_pk', 'time');
 \set ON_ERROR_STOP 1
 DROP TABLE test_schema.partition_not_pk;
 
--- test hypertable is not created for a table that is a part of a publication
+-- test hypertable is not created for a table that is a part of a publication explicitly
 SET client_min_messages = ERROR;
 CREATE TABLE test (timestamp TIMESTAMPTZ NOT NULL);
 CREATE PUBLICATION publication_test;
@@ -708,5 +708,22 @@ ALTER PUBLICATION publication_test1 DROP TABLE test;
 ALTER PUBLICATION publication_test2 DROP TABLE test;
 DROP PUBLICATION publication_test1;
 DROP PUBLICATION publication_test2;
+DROP TABLE test;
+
+-- test hypertable is not created for a table that is a part of a publication implicitly
+CREATE PUBLICATION publication_test FOR ALL tables;
+CREATE TABLE test (timestamp TIMESTAMPTZ NOT NULL);
+\set ON_ERROR_STOP 0
+SELECT create_hypertable('test', 'timestamp');
+\set ON_ERROR_STOP 1
+DROP PUBLICATION publication_test;
+DROP TABLE test;
+
+CREATE TABLE test (timestamp TIMESTAMPTZ NOT NULL);
+CREATE PUBLICATION publication_test FOR ALL tables;
+\set ON_ERROR_STOP 0
+SELECT create_hypertable('test', 'timestamp');
+\set ON_ERROR_STOP 1
+DROP PUBLICATION publication_test;
 DROP TABLE test;
 RESET client_min_messages;
