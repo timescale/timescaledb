@@ -894,8 +894,8 @@ row_compressor_process_ordered_slot(RowCompressor *row_compressor, TupleTableSlo
 		row_compressor->first_iteration = false;
 	}
 	bool changed_groups = row_compressor_new_row_is_in_new_group(row_compressor, slot);
-	bool compressed_row_is_full =
-		row_compressor->rows_compressed_into_current_value >= TARGET_COMPRESSED_BATCH_SIZE;
+	bool compressed_row_is_full = row_compressor->rows_compressed_into_current_value >=
+								  (uint32) ts_guc_compression_batch_size_limit;
 	if (compressed_row_is_full || changed_groups)
 	{
 		if (row_compressor->rows_compressed_into_current_value > 0)
