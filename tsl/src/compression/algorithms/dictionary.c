@@ -87,11 +87,13 @@ typedef struct DictionaryCompressor
 {
 	dictionary_hash *dictionary_items;
 	uint32 next_index;
+	uint32 dict_val_size;
 	Oid type;
 	int16 typlen;
 	bool typbyval;
 	char typalign;
 	bool has_nulls;
+	DatumSerializer *serializer;
 	Simple8bRleCompressor dictionary_indexes;
 	Simple8bRleCompressor nulls;
 } DictionaryCompressor;
@@ -123,6 +125,26 @@ dictionary_compressor_append_null_value(Compressor *compressor)
 	dictionary_compressor_append_null(extended->internal);
 }
 
+static bool
+dictionary_compressor_is_full(Compressor *compressor, Datum val)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	if (extended->internal == NULL)
+		extended->internal = dictionary_compressor_alloc(extended->element_type);
+
+	Size datum_size_and_align;
+	DictionaryCompressor *dict_comp = (DictionaryCompressor *) extended->internal;
+	if (datum_serializer_value_may_be_toasted(dict_comp->serializer))
+		val = PointerGetDatum(PG_DETOAST_DATUM_PACKED(val));
+
+	datum_size_and_align =
+		datum_get_bytes_size(dict_comp->serializer, dict_comp->dict_val_size, val) -
+		dict_comp->dict_val_size;
+
+	/* If we can't fit new datum in the max size, we are full */
+	return (datum_size_and_align + dict_comp->dict_val_size) > MAX_ARRAY_COMPRESSOR_SIZE_BYTES;
+}
+
 static void *
 dictionary_compressor_finish_and_reset(Compressor *compressor)
 {
@@ -136,6 +158,7 @@ dictionary_compressor_finish_and_reset(Compressor *compressor)
 const Compressor dictionary_compressor = {
 	.append_val = dictionary_compressor_append_datum,
 	.append_null = dictionary_compressor_append_null_value,
+	.is_full = dictionary_compressor_is_full,
 	.finish = dictionary_compressor_finish_and_reset,
 };
 
@@ -158,6 +181,7 @@ dictionary_compressor_alloc(Oid type)
 		lookup_type_cache(type, TYPECACHE_EQ_OPR_FINFO | TYPECACHE_HASH_PROC_FINFO);
 
 	compressor->next_index = 0;
+	compressor->dict_val_size = 0;
 	compressor->has_nulls = false;
 	compressor->type = type;
 	compressor->typlen = tentry->typlen;
@@ -165,6 +189,7 @@ dictionary_compressor_alloc(Oid type)
 	compressor->typalign = tentry->typalign;
 
 	compressor->dictionary_items = dictionary_hash_alloc(tentry);
+	compressor->serializer = create_datum_serializer(type);
 
 	simple8brle_compressor_init(&compressor->dictionary_indexes);
 	simple8brle_compressor_init(&compressor->nulls);
@@ -186,6 +211,9 @@ dictionary_compressor_append(DictionaryCompressor *compressor, Datum val)
 
 	Assert(compressor != NULL);
 
+	if (datum_serializer_value_may_be_toasted(compressor->serializer))
+		val = PointerGetDatum(PG_DETOAST_DATUM_PACKED(val));
+
 	dict_item = dictionary_insert(compressor->dictionary_items, val, &found);
 
 	if (!found)
@@ -196,6 +224,12 @@ dictionary_compressor_append(DictionaryCompressor *compressor, Datum val)
 		Assert(compressor->next_index <= INT16_MAX - 1);
 		compressor->next_index += 1;
 	}
+
+	Size datum_size_and_align =
+		datum_get_bytes_size(compressor->serializer, compressor->dict_val_size, val) -
+		compressor->dict_val_size;
+
+	compressor->dict_val_size += datum_size_and_align;
 
 	simple8brle_compressor_append(&compressor->dictionary_indexes, dict_item->index);
 	simple8brle_compressor_append(&compressor->nulls, 0);
