@@ -85,7 +85,7 @@ elif [[ -z ${TESTS} && ( -n ${SKIPS} || -n ${IGNORES} ) ]]; then
 
   echo > ${TEMP_SCHEDULE}
 
-  ALL_TESTS=$(grep '^test: ' ${TEST_SCHEDULE} 2>/dev/null | sed -e 's!^test: !!' |tr '\n' ' ')
+  ALL_TESTS=$(grep -a '^test: ' ${TEST_SCHEDULE} | sed -e 's!^test: !!' |tr '\n' ' ')
 
   # to support wildcards in IGNORES we match the IGNORES
   # list against the actual list of tests
@@ -119,7 +119,7 @@ elif [[ -z ${TESTS} && ( -n ${SKIPS} || -n ${IGNORES} ) ]]; then
 else
   # TESTS was specified so we need to create a new schedule based on that
 
-  ALL_TESTS=$(grep '^test: ' ${TEST_SCHEDULE} 2>/dev/null | sed -e 's!^test: !!' |tr '\n' ' ')
+  ALL_TESTS=$(grep -a '^test: ' ${TEST_SCHEDULE} | sed -e 's!^test: !!' |tr '\n' ' ')
 
   if [[ -z "${TESTS}" ]]; then
     TESTS=${ALL_TESTS}
