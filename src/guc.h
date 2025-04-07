@@ -73,6 +73,7 @@ extern TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression;
 extern TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression;
 extern TSDLLEXPORT bool ts_guc_enable_bool_compression;
 extern TSDLLEXPORT int ts_guc_compression_batch_size_limit;
+extern TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit;
 #if PG16_GE
 extern TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates;
 #endif

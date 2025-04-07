@@ -67,6 +67,7 @@ struct Compressor
 {
 	void (*append_null)(Compressor *compressord);
 	void (*append_val)(Compressor *compressor, Datum val);
+	bool (*is_full)(Compressor *compressor, Datum val);
 	void *(*finish)(Compressor *data);
 };
 
@@ -243,6 +244,8 @@ typedef struct RowCompressor
 
 	/* info about each column */
 	struct PerColumn *per_column;
+	/* do we have to check if compressors can accept more data */
+	bool needs_fullness_check;
 
 	/* the order of columns in the compressed data need not match the order in the
 	 * uncompressed. This array maps each attribute offset in the uncompressed
