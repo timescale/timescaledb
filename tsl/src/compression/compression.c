@@ -865,6 +865,19 @@ build_column_map(const CompressionSettings *settings, Relation uncompressed_tabl
 	*pmap = map;
 }
 
+/* Check if we contain any compressors which need allocation limit checking */
+static bool
+check_for_limited_size_compressors(PerColumn *pcolumns, int16 natts)
+{
+	for (int i = 0; i < natts; i++)
+	{
+		if (pcolumns[i].compressor && pcolumns[i].compressor->is_full)
+			return true;
+	}
+
+	return false;
+}
+
 /********************
  ** row_compressor **
  ********************/
@@ -907,6 +920,12 @@ row_compressor_init(const CompressionSettings *settings, RowCompressor *row_comp
 					 compressed_table,
 					 &row_compressor->per_column,
 					 &row_compressor->uncompressed_col_to_compressed_col);
+
+	/* If we have dictionary or array compressors, we have to check compressor size so we don't end
+	 * up going over allocation limit */
+	row_compressor->needs_fullness_check =
+		check_for_limited_size_compressors(row_compressor->per_column,
+										   row_compressor->n_input_columns);
 
 	row_compressor->index_oid = get_compressed_chunk_index(row_compressor->resultRelInfo, settings);
 }
@@ -953,6 +972,42 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 	ExecDropSingleTupleTableSlot(slot);
 }
 
+static bool
+row_compressor_is_full(RowCompressor *row_compressor, TupleTableSlot *row)
+{
+	if (row_compressor->rows_compressed_into_current_value >=
+		(uint32) ts_guc_compression_batch_size_limit)
+		return true;
+
+	if (!ts_guc_compression_enable_compressor_batch_limit)
+		return false;
+
+	if (!row_compressor->needs_fullness_check)
+		return false;
+
+	/* Check with every column compressor if they can add the next value to current batch */
+	int col;
+	for (col = 0; col < row_compressor->n_input_columns; col++)
+	{
+		Compressor *compressor = row_compressor->per_column[col].compressor;
+		bool is_null;
+		Datum val;
+
+		/* No compressor or the compressor has no check, just skip */
+		if (compressor == NULL || compressor->is_full == NULL)
+			continue;
+
+		val = slot_getattr(row, AttrOffsetGetAttrNumber(col), &is_null);
+		if (!is_null)
+		{
+			if (compressor->is_full(compressor, val))
+				return true;
+		}
+	}
+
+	return false;
+}
+
 static void
 row_compressor_process_ordered_slot(RowCompressor *row_compressor, TupleTableSlot *slot,
 									CommandId mycid)
@@ -966,8 +1021,7 @@ row_compressor_process_ordered_slot(RowCompressor *row_compressor, TupleTableSlo
 		row_compressor->first_iteration = false;
 	}
 	bool changed_groups = row_compressor_new_row_is_in_new_group(row_compressor, slot);
-	bool compressed_row_is_full = row_compressor->rows_compressed_into_current_value >=
-								  (uint32) ts_guc_compression_batch_size_limit;
+	bool compressed_row_is_full = row_compressor_is_full(row_compressor, slot);
 	if (compressed_row_is_full || changed_groups)
 	{
 		if (row_compressor->rows_compressed_into_current_value > 0)

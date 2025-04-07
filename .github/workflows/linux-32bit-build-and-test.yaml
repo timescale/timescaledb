@@ -54,6 +54,7 @@ jobs:
           append-*
           bgw_db_scheduler*
           compress_bloom_sparse_debug
+          compression_allocation
           hypercore_parallel
           hypercore_vacuum
           hypercore_vectoragg
