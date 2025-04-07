@@ -1867,7 +1867,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	/*
 	 * Check that the table is not part of any publication
 	 */
-	if (GetRelationPublications(table_relid) != NIL)
+	if (GetRelationPublications(table_relid) != NIL || GetAllTablesPublications() != NIL)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
