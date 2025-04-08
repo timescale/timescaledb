@@ -18,7 +18,7 @@ get_version_config_var() {
 }
 
 RELEASE_NEXT=$(get_version_config_var '^version')
-RELEASE_PREVIOUS=$(get_version_config_var '^update_from_version')
+RELEASE_PREVIOUS=$(get_version_config_var '^previous_version')
 
 echo "Building CHANGELOG"
 {
