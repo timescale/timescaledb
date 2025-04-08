@@ -1,0 +1,1 @@
+Fixes: #7935 Fix TAM segfault on DELETE using segmentby column

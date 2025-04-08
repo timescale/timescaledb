@@ -76,7 +76,7 @@ match_relvar(Expr *expr, Index relid)
 
 typedef struct QualProcessState
 {
-	const HypercoreInfo *hcinfo;
+	Relation rel;
 	Index relid;
 	/*
 	 * The original quals are split into scankey quals, vectorized and
@@ -114,8 +114,9 @@ segmentby_qual_walker(Node *qual, QualProcessState *qpc)
 
 		if (AttrNumberIsForUserDefinedAttr(v->varattno))
 		{
+			HypercoreInfo *hcinfo = RelationGetHypercoreInfo(qpc->rel);
 			const ColumnCompressionSettings *ccs =
-				&qpc->hcinfo->columns[AttrNumberGetAttrOffset(v->varattno)];
+				&hcinfo->columns[AttrNumberGetAttrOffset(v->varattno)];
 			qpc->relvar_found = true;
 
 			if (!ccs->is_segmentby)
@@ -233,8 +234,9 @@ process_opexpr(QualProcessState *qpi, OpExpr *opexpr)
 		argfound = true;
 	}
 
+	HypercoreInfo *hcinfo = RelationGetHypercoreInfo(qpi->rel);
 	const ColumnCompressionSettings *ccs =
-		&qpi->hcinfo->columns[AttrNumberGetAttrOffset(relvar->varattno)];
+		&hcinfo->columns[AttrNumberGetAttrOffset(relvar->varattno)];
 
 	/* Add a scankey if this is a segmentby column or the column
 	 * has min/max metadata */
@@ -358,7 +360,7 @@ classify_quals(QualProcessState *qpi, const VectorQualInfo *vqinfo, List *quals)
 	ListCell *lc;
 	List *nonscankey_quals = quals;
 
-	Assert(qpi->hcinfo && qpi->relid > 0);
+	Assert(qpi->relid > 0);
 
 	if (ts_guc_enable_hypercore_scankey_pushdown)
 		nonscankey_quals = process_scan_key_quals(qpi, quals);
@@ -384,11 +386,11 @@ classify_quals(QualProcessState *qpi, const VectorQualInfo *vqinfo, List *quals)
 }
 
 static ScanKey
-create_scankeys_from_quals(const HypercoreInfo *hcinfo, Index relid, const List *quals)
+create_scankeys_from_quals(Relation rel, Index relid, const List *quals)
 {
 	unsigned capacity = list_length(quals);
 	QualProcessState qpi = {
-		.hcinfo = hcinfo,
+		.rel = rel,
 		.relid = relid,
 		.scankeys = palloc0(sizeof(ScanKeyData) * capacity),
 		.scankeys_capacity = capacity,
@@ -762,10 +764,10 @@ columnar_scan_begin(CustomScanState *state, EState *estate, int eflags)
 
 	if (cstate->nscankeys > 0)
 	{
-		const HypercoreInfo *hsinfo = RelationGetHypercoreInfo(state->ss.ss_currentRelation);
 		Scan *scan = (Scan *) state->ss.ps.plan;
-		cstate->scankeys =
-			create_scankeys_from_quals(hsinfo, scan->scanrelid, cstate->scankey_quals);
+		cstate->scankeys = create_scankeys_from_quals(state->ss.ss_currentRelation,
+													  scan->scanrelid,
+													  cstate->scankey_quals);
 	}
 
 	PlannerGlobal glob = {
@@ -1005,7 +1007,6 @@ is_columnar_scan(const Plan *plan)
 typedef struct VectorQualInfoHypercore
 {
 	VectorQualInfo vqinfo;
-	const HypercoreInfo *hcinfo;
 } VectorQualInfoHypercore;
 
 static bool *
@@ -1036,7 +1037,7 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_p
 	Relation relation = RelationIdGetRelation(rte->relid);
 	HypercoreInfo *hcinfo = RelationGetHypercoreInfo(relation);
 	QualProcessState qpi = {
-		.hcinfo = hcinfo,
+		.rel = relation,
 		.relid = rel->relid,
 	};
 	VectorQualInfoHypercore vqih = {
@@ -1045,7 +1046,6 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_p
 			.maxattno = hcinfo->num_columns,
 			.vector_attrs = columnar_scan_build_vector_attrs(hcinfo->columns, hcinfo->num_columns),
 		},
-		.hcinfo = hcinfo,
 	};
 	Assert(best_path->path.parent->rtekind == RTE_RELATION);
 
