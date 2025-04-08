@@ -16,7 +16,7 @@ fi
 BUILD_DIR="build_update_pg${PG_MAJOR_VERSION}"
 
 CURRENT_VERSION=$(grep '^version ' version.config | awk '{ print $3 }')
-PREV_VERSION=$(grep '^downgrade_to_version ' version.config | awk '{ print $3 }')
+PREV_VERSION=$(grep '^previous_version ' version.config | awk '{ print $3 }')
 
 if [ ! -d "${BUILD_DIR}" ]; then
   echo "Initializing build directory"

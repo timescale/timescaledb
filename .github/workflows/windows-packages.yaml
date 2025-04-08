@@ -57,13 +57,13 @@ jobs:
     - name: Get version
       id: version
       run: |
-        # version will only be a proper version in a release branch so we use update_from_version
+        # version will only be a proper version in a release branch so we use previous_version
         # as fallback for main
         if (grep '^version = [0-9.]\+$' version.config)
         {
           $version=sed -n 's!^version = !!p' version.config
         } else {
-          $version=sed -n 's!^update_from_version = !!p' version.config
+          $version=sed -n 's!^previous_version = !!p' version.config
         }
         cat version.config
         echo "Determined version: "

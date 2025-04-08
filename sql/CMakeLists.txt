@@ -105,7 +105,7 @@ else()
     SOURCE_VERSION
     ${PROJECT_VERSION_MOD}
     TARGET_VERSION
-    ${DOWNGRADE_TO_VERSION}
+    ${PREVIOUS_VERSION}
     INPUT_DIRECTORY
     ${CMAKE_CURRENT_SOURCE_DIR}/updates
     FILES
@@ -235,12 +235,12 @@ set(MOD_FILE_REGEX
 
 # We'd like to process the updates in reverse (descending) order
 if(EXISTS
-   "${CMAKE_CURRENT_SOURCE_DIR}/updates/${UPDATE_FROM_VERSION}--${PROJECT_VERSION_MOD}.sql"
+   "${CMAKE_CURRENT_SOURCE_DIR}/updates/${PREVIOUS_VERSION}--${PROJECT_VERSION_MOD}.sql"
 )
   set(MOD_FILES_LIST ${MOD_FILES_VERSIONED})
 else()
   set(MOD_FILES_LIST
-      "${MOD_FILES_VERSIONED};updates/${UPDATE_FROM_VERSION}--${PROJECT_VERSION_MOD}.sql"
+      "${MOD_FILES_VERSIONED};updates/${PREVIOUS_VERSION}--${PROJECT_VERSION_MOD}.sql"
   )
 endif()
 
@@ -259,7 +259,7 @@ set(CURR_MOD_FILES "${LASTEST_MOD_VERSIONED}")
 foreach(transition_mod_file ${MOD_FILES_LIST})
 
   if(NOT (${transition_mod_file} MATCHES ${MOD_FILE_REGEX}))
-    message(FATAL_ERROR "Cannot parse update file name ${mod_file}")
+    message(FATAL_ERROR "Cannot parse update file name ${transition_mod_file}")
   endif()
 
   set(START_VERSION ${CMAKE_MATCH_1})

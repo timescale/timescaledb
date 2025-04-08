@@ -18,7 +18,7 @@ VERSIONS=""
 FAILED_VERSIONS=""
 
 ALL_VERSIONS=$(git tag --sort=taggerdate | grep -P '^[2]\.[0-9]+\.[0-9]+$')
-MAX_VERSION=$(grep '^downgrade_to_version ' version.config | awk '{ print $3 }')
+MAX_VERSION=$(grep '^previous_version ' version.config | awk '{ print $3 }')
 
 # major version is always 2 atm
 max_minor_version=$(echo "${MAX_VERSION}" | awk -F. '{print $2}')
