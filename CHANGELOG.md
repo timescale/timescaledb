@@ -4,6 +4,23 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.19.2 (2025-04-07)
+
+This release contains bug fixes since the 2.19.1 release. We recommend that you upgrade at the next available opportunity.
+
+**Features**
+* [#7923](https://github.com/timescale/timescaledb/pull/7923) Add a GUC to set a compression batch size limit
+
+**Bugfixes**
+* [#7911](https://github.com/timescale/timescaledb/pull/7911) Don't create a Hypertable for published tables
+* [#7902](https://github.com/timescale/timescaledb/pull/7902) Fix crash in VectorAgg plan code
+
+**GUCs**
+* `compression_batch_size_limit`: set batch size limit, default: `1000`
+
+**Thanks**
+* @soedirgo for reporting that published tables don't get dropped when they have a hypertable*
+
 ## 2.19.1 (2025-04-01)
 
 This release contains bug fixes since the 2.19.0 release. We recommend that you upgrade at the next available opportunity.
