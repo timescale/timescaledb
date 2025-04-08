@@ -183,7 +183,7 @@ m["include"].append(
     build_debug_config(
         {
             "pg": PG17_LATEST,
-            "os": "Ubuntu22.04-2Core",
+            "os": "timescaledb-runner-arm64",
             # We need to enable ARM crypto extensions to build the vectorized grouping
             # code. The actual architecture for our ARM CI runner is reported as:
             # -imultiarch aarch64-linux-gnu - -mlittle-endian -mabi=lp64 -march=armv8.2-a+crypto+fp16+rcpc+dotprod
