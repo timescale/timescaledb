@@ -28,7 +28,7 @@ jobs:
     - name: Checkout pg_ladybug
       uses: actions/checkout@v4
       with:
-        repository: 'svenklemm/pg_ladybug'
+        repository: 'timescale/pg_ladybug'
         path: 'pg_ladybug'
 
     - name: build pg_ladybug
