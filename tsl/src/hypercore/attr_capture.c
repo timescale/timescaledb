@@ -240,10 +240,7 @@ capture_ExecutorStart(QueryDesc *queryDesc, int eflags)
 	foreach (cell, queryDesc->plannedstmt->rtable)
 	{
 		RangeTblEntry *rte = lfirst(cell);
-		TS_DEBUG_LOG("rtable #%d: %s (relid: %d)",
-					 foreach_current_index(cell),
-					 get_rel_name(rte->relid),
-					 rte->relid);
+		TS_DEBUG_LOG("rtable #%d: %s", foreach_current_index(cell), get_rel_name(rte->relid));
 	}
 #endif
 
