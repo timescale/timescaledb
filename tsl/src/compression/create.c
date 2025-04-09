@@ -309,7 +309,8 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 
 			if (attr->atttypid == TIMESTAMPTZOID || attr->atttypid == TIMESTAMPOID ||
 				attr->atttypid == TIMEOID || attr->atttypid == TIMETZOID ||
-				attr->atttypid == DATEOID)
+				attr->atttypid == DATEOID || attr->atttypid == FLOAT4OID ||
+				attr->atttypid == FLOAT8OID || attr->atttypid == NUMERICOID)
 			{
 				/*
 				 * For time types, we expect:
@@ -317,6 +318,18 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 				 * 2) correlation with the orderby columns, e.g. creation time
 				 *    correlates with the update time that is used as orderby.
 				 * So bloom filters probably don't make sense.
+				 *
+				 * For fractional arithmetic types, equality queries are also
+				 * probably rare.
+				 */
+				can_use_bloom1 = false;
+			}
+
+			if (ts_is_hypercore_am(ts_get_rel_am(src_relid)))
+			{
+				/*
+				 * Bloom filter pushdown is not implemented for TAM at the moment,
+				 * so keep the old behavior with minmax filters.
 				 */
 				can_use_bloom1 = false;
 			}

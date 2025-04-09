@@ -289,22 +289,22 @@ bloom1_get_one_hash(uint64 value_hash, uint32 index)
 	return low + (index * high + index * index) % BLOOM1_BLOCK_BITS;
 }
 
-static inline uint32
-bloom1_get_one_word_mask(uint64 value_hash, uint32 num_bits, uint64 *word_mask)
-{
-	const uint32 low = value_hash & ~(uint32) 0;
-	const uint32 high = (value_hash >> 32) & ~(uint32) 0;
+// static inline uint32
+// bloom1_get_one_word_mask(uint64 value_hash, uint32 num_bits, uint64 *word_mask)
+//{
+//	const uint32 low = value_hash & ~(uint32) 0;
+//	const uint32 high = (value_hash >> 32) & ~(uint32) 0;
 
-	uint64 mask = 0;
-	for (int i = 0; i < BLOOM1_HASHES; i++)
-	{
-		const uint32 bit_offset = (low + high * i) % 64;
-		mask |= 1ULL << bit_offset;
-	}
+//	uint64 mask = 0;
+//	for (int i = 0; i < BLOOM1_HASHES; i++)
+//	{
+//		const uint32 bit_offset = (low + high * i) % 64;
+//		mask |= 1ULL << bit_offset;
+//	}
 
-	*word_mask = mask;
-	return high % (num_bits / (sizeof(mask) * 8));
-}
+//	*word_mask = mask;
+//	return high % (num_bits / (sizeof(mask) * 8));
+//}
 
 static void
 bloom1_update_val(void *builder_, Datum needle)

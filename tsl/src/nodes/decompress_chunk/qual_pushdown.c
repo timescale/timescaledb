@@ -416,8 +416,12 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args
 	if (!OidIsValid(opno_le) || !OidIsValid(opno_ge))
 		return NULL;
 
-	Var *bloom_var =
-		makeVar(context->compressed_rel->relid, bloom1_attno, BYTEAOID, -1, InvalidOid, 0);
+	Var *bloom_var = makeVar(context->compressed_rel->relid,
+							 bloom1_attno,
+							 ts_custom_type_cache_get(CUSTOM_TYPE_BLOOM1)->type_oid,
+							 -1,
+							 InvalidOid,
+							 0);
 
 	Oid func = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
 										 makeString("ts_bloom1_matches")),
