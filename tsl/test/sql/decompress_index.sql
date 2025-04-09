@@ -53,10 +53,12 @@ select count(*) from :CHUNK;
 select count(distinct tag) from :CHUNK;
 select distinct on (device) device, time from :CHUNK order by 1, 2;
 
+-- To avoid differences in PG15 output which doesn't support this feature
+SET timescaledb.enable_skipscan_for_distinct_aggregates TO false;
 
 -- check that the indexes are used
 explain (costs off) select count(distinct tag) from :CHUNK;
 explain (costs off) select distinct on (device) device, time from :CHUNK order by 1, 2;
 
-
+RESET timescaledb.enable_skipscan_for_distinct_aggregates;
 drop table ht_metrics_compressed;

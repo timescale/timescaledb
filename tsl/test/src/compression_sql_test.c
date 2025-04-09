@@ -278,6 +278,7 @@ ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
 			MemoryContextSwitchTo(call_memory_context);
 
 			ErrorData *error = CopyErrorData();
+			FlushErrorState();
 
 			values[out_sqlstate] =
 				PointerGetDatum(cstring_to_text(unpack_sql_state(error->sqlerrcode)));
@@ -289,8 +290,7 @@ ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
 					cstring_to_text(psprintf("%s:%d", error->filename, error->lineno)));
 				nulls[out_location] = false;
 			}
-
-			FlushErrorState();
+			FreeErrorData(error);
 		}
 		PG_END_TRY();
 

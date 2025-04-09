@@ -71,6 +71,10 @@ static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
 			.type_id = BOOLOID,
 			.default_val = (Datum)true,
 		},
+		[ContinuousViewOptionChunkTimeInterval] = {
+			.arg_names = {"chunk_time_interval", NULL},
+			 .type_id = INTERVALOID,
+		},
 		[ContinuousViewOptionCompressSegmentBy] = {
 			.arg_names = {"segmentby", "compress_segmentby", NULL},
 			.type_id = TEXTOID,
@@ -1679,4 +1683,48 @@ ts_continuous_agg_fixed_bucket_width(const ContinuousAggsBucketFunction *bucket_
 	{
 		return bucket_function->bucket_integer_width;
 	}
+}
+
+/*
+ * Get the width of a bucket
+ */
+int64
+ts_continuous_agg_bucket_width(const ContinuousAggsBucketFunction *bucket_function)
+{
+	int64 bucket_width;
+
+	if (bucket_function->bucket_fixed_interval == false)
+	{
+		/*
+		 * There are several cases of variable-sized buckets:
+		 * 1. Monthly buckets
+		 * 2. Buckets with timezones
+		 * 3. Cases 1 and 2 at the same time
+		 *
+		 * For months we simply take 30 days like on interval_to_int64 and
+		 * multiply this number by the number of months in the bucket. This
+		 * reduces the task to days/hours/minutes scenario.
+		 *
+		 * Days/hours/minutes case is handled the same way as for fixed-sized
+		 * buckets. The refresh window at least two buckets in size is adequate
+		 * for such corner cases as DST.
+		 */
+
+		/* bucket_function should always be specified for variable-sized buckets */
+		Assert(bucket_function != NULL);
+		/* ... and bucket_function->bucket_time_width too */
+		Assert(bucket_function->bucket_time_width != NULL);
+
+		/* Make a temporary copy of bucket_width */
+		Interval interval = *bucket_function->bucket_time_width;
+		interval.day += 30 * interval.month;
+		interval.month = 0;
+		bucket_width = ts_interval_value_to_internal(IntervalPGetDatum(&interval), INTERVALOID);
+	}
+	else
+	{
+		bucket_width = ts_continuous_agg_fixed_bucket_width(bucket_function);
+	}
+
+	return bucket_width;
 }

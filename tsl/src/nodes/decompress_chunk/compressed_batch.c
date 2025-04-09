@@ -197,8 +197,18 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 														&dcontext->detoaster,
 														batch_state->per_batch_context));
 
-	/* Decompress the entire batch if it is supported. */
 	CompressedDataHeader *header = (CompressedDataHeader *) value;
+
+	/* First check if this is a block of NULL values. */
+	if (header->compression_algorithm == COMPRESSION_ALGORITHM_NULL)
+	{
+		column_values->decompression_type = DT_Scalar;
+		*column_values->output_isnull = true;
+		*column_values->output_value = (Datum) NULL;
+		return;
+	}
+
+	/* Decompress the entire batch if it is supported. */
 	ArrowArray *arrow = NULL;
 	if (dcontext->enable_bulk_decompression && column_description->bulk_decompression_supported)
 	{

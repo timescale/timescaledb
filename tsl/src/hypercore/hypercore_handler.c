@@ -307,8 +307,10 @@ lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 		}
 		else
 		{
-			colsettings->cattnum_min = InvalidAttrNumber;
-			colsettings->cattnum_max = InvalidAttrNumber;
+			const char *min_attname = compressed_column_metadata_name_v2("min", attname);
+			const char *max_attname = compressed_column_metadata_name_v2("max", attname);
+			colsettings->cattnum_min = get_attnum(hsinfo->compressed_relid, min_attname);
+			colsettings->cattnum_max = get_attnum(hsinfo->compressed_relid, max_attname);
 		}
 	}
 
@@ -318,15 +320,11 @@ lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 HypercoreInfo *
 RelationGetHypercoreInfo(Relation rel)
 {
-	/*coverity[tainted_data_downcast : FALSE]*/
-	HypercoreInfo *info = rel->rd_amcache;
+	if (NULL == rel->rd_amcache)
+		rel->rd_amcache = lazy_build_hypercore_info_cache(rel, true, NULL);
 
-	if (NULL == info)
-		info = rel->rd_amcache = lazy_build_hypercore_info_cache(rel, true, NULL);
-
-	Assert(info && OidIsValid(info->compressed_relid));
-
-	return info;
+	Assert(rel->rd_amcache && OidIsValid(((HypercoreInfo *) rel->rd_amcache)->compressed_relid));
+	return (HypercoreInfo *) rel->rd_amcache;
 }
 
 static void
@@ -617,10 +615,8 @@ get_scan_type(uint32 flags)
 {
 	if (flags & SO_TYPE_TIDSCAN)
 		return "TID";
-#if PG14_GE
 	if (flags & SO_TYPE_TIDRANGESCAN)
 		return "TID range";
-#endif
 	if (flags & SO_TYPE_BITMAPSCAN)
 		return "bitmap";
 	if (flags & SO_TYPE_SAMPLESCAN)
@@ -2163,16 +2159,12 @@ compress_and_swap_heap(Relation rel, Tuplesortstate *tuplesort, TransactionId *x
 	Oid old_compressed_relid = hsinfo->compressed_relid;
 	const CompressionSettings *settings = ts_compression_settings_get(RelationGetRelid(rel));
 	Relation old_compressed_rel = table_open(old_compressed_relid, AccessExclusiveLock);
-#if PG15_GE
 	Oid accessMethod = old_compressed_rel->rd_rel->relam;
-#endif
 	Oid tableSpace = old_compressed_rel->rd_rel->reltablespace;
 	char relpersistence = old_compressed_rel->rd_rel->relpersistence;
 	Oid new_compressed_relid = make_new_heap(old_compressed_relid,
 											 tableSpace,
-#if PG15_GE
 											 accessMethod,
-#endif
 											 relpersistence,
 											 AccessExclusiveLock);
 	Relation new_compressed_rel = table_open(new_compressed_relid, AccessExclusiveLock);
@@ -2887,8 +2879,12 @@ hypercore_index_build_callback(Relation index, ItemPointer tid, Datum *values, b
 
 				/* The number of elements in the arrow array should be the
 				 * same as the number of rows in the segment (count
-				 * column). */
-				Assert(num_rows == icstate->arrow_columns[i]->length);
+				 * column), except when we use the NULL compression method
+				 * to signify all values are NULLs. In this case the
+				 * arrow_column value is NULL.
+				 */
+				Assert(icstate->arrow_columns[i] == NULL ||
+					   num_rows == icstate->arrow_columns[i]->length);
 			}
 			else
 			{
@@ -3081,11 +3077,7 @@ hypercore_index_build_range_scan(Relation relation, Relation indexRelation, Inde
 	/* okay to ignore lazy VACUUMs here */
 	if (!indexInfo->ii_Concurrent)
 	{
-#if PG14_LT
-		OldestXmin = GetOldestXmin(relation, PROCARRAY_FLAGS_VACUUM);
-#else
 		OldestXmin = GetOldestNonRemovableTransactionId(relation);
-#endif
 	}
 
 	if (!scan)
@@ -3839,9 +3831,14 @@ hypercore_alter_access_method_begin(Oid relid, bool to_other_am)
 void
 hypercore_alter_access_method_finish(Oid relid, bool to_other_am)
 {
+	Chunk *chunk = ts_chunk_get_by_relid(relid, false);
+
+	/* If this is not a chunk, we just abort since there is nothing to do */
+	if (!chunk)
+		return;
+
 	if (to_other_am)
 	{
-		Chunk *chunk = ts_chunk_get_by_relid(relid, true);
 		Chunk *compress_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
 
 		ts_compression_chunk_size_delete(chunk->fd.id);
@@ -3932,7 +3929,6 @@ static const TableAmRoutine hypercore_methods = {
 	.scan_end = hypercore_endscan,
 	.scan_rescan = hypercore_rescan,
 	.scan_getnextslot = hypercore_getnextslot,
-#if PG14_GE
 	/*-----------
 	 * Optional functions to provide scanning for ranges of ItemPointers.
 	 * Implementations must either provide both of these functions, or neither
@@ -3940,7 +3936,6 @@ static const TableAmRoutine hypercore_methods = {
 	 */
 	.scan_set_tidrange = NULL,
 	.scan_getnextslot_tidrange = NULL,
-#endif
 	/* ------------------------------------------------------------------------
 	 * Parallel table scan related functions.
 	 * ------------------------------------------------------------------------
@@ -3981,9 +3976,7 @@ static const TableAmRoutine hypercore_methods = {
 	.tuple_get_latest_tid = hypercore_get_latest_tid,
 	.tuple_tid_valid = hypercore_tuple_tid_valid,
 	.tuple_satisfies_snapshot = hypercore_tuple_satisfies_snapshot,
-#if PG14_GE
 	.index_delete_tuples = hypercore_index_delete_tuples,
-#endif
 
 /* ------------------------------------------------------------------------
  * DDL related functionality.

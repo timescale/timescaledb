@@ -46,12 +46,6 @@ SELECT relreplident, count(*) FROM show_chunks('test1') ch INNER JOIN pg_class c
 SELECT relreplident FROM pg_class c WHERE c.relname = 'test1';
 ALTER TABLE test1 REPLICA IDENTITY DEFAULT;
 
--- make sure we cannot create constraints or unique indexes on compressed hypertables
-\set ON_ERROR_STOP 0
-ALTER TABLE test1 ADD CONSTRAINT c1 UNIQUE("Time",i);
-CREATE UNIQUE INDEX unique_index ON test1("Time",i);
-\set ON_ERROR_STOP 1
-
 --test adding boolean columns with default and not null
 CREATE TABLE records (time timestamp NOT NULL);
 SELECT create_hypertable('records', 'time');
@@ -1150,8 +1144,10 @@ UPDATE test_notnull SET c2 = NULL;
 ALTER TABLE test_notnull ALTER COLUMN c2 SET NOT NULL;
 \set ON_ERROR_STOP 1
 SELECT compress_chunk(show_chunks('test_notnull'));
--- broken atm due to bug in default handling in compression
+
+\set ON_ERROR_STOP 0
 ALTER TABLE test_notnull ALTER COLUMN c2 SET NOT NULL;
+\set ON_ERROR_STOP 1
 
 -- test alias in parameter name
 CREATE TABLE alias(time timestamptz NOT NULL);

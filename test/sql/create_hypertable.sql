@@ -666,6 +666,7 @@ SELECT FROM create_hypertable('test', 'time', create_default_indexes => FALSE, m
 -- only user indexes should be returned
 SELECT * FROM test.show_indexes('test') ORDER BY 1;
 SELECT * FROM show_chunks('test') ch, LATERAL test.show_indexes(ch) ORDER BY 1, 2;
+DROP TABLE test;
 
 -- test creating a hypertable with a primary key where the partitioning column is not part of the primary key
 CREATE TABLE test_schema.partition_not_pk (id INT NOT NULL, device_id INT NOT NULL, time TIMESTAMPTZ NOT NULL, a TEXT NOT NULL, PRIMARY KEY (id));
@@ -680,3 +681,49 @@ CREATE TABLE test_schema.partition_not_pk (id INT NOT NULL, device_id INT NOT NU
 select create_hypertable ('test_schema.partition_not_pk', 'time');
 \set ON_ERROR_STOP 1
 DROP TABLE test_schema.partition_not_pk;
+
+-- test hypertable is not created for a table that is a part of a publication explicitly
+SET client_min_messages = ERROR;
+CREATE TABLE test (timestamp TIMESTAMPTZ NOT NULL);
+CREATE PUBLICATION publication_test;
+ALTER PUBLICATION publication_test ADD TABLE test;
+\set ON_ERROR_STOP 0
+SELECT create_hypertable('test', 'timestamp');
+\set ON_ERROR_STOP 1
+INSERT INTO test (timestamp) values (now());
+ALTER PUBLICATION publication_test DROP TABLE test;
+DROP PUBLICATION publication_test;
+DROP TABLE test;
+
+CREATE TABLE test (timestamp TIMESTAMPTZ NOT NULL);
+CREATE PUBLICATION publication_test1;
+CREATE PUBLICATION publication_test2;
+ALTER PUBLICATION publication_test1 ADD TABLE test;
+ALTER PUBLICATION publication_test2 ADD TABLE test;
+\set ON_ERROR_STOP 0
+SELECT create_hypertable('test', 'timestamp');
+\set ON_ERROR_STOP 1
+INSERT INTO test (timestamp) values (now());
+ALTER PUBLICATION publication_test1 DROP TABLE test;
+ALTER PUBLICATION publication_test2 DROP TABLE test;
+DROP PUBLICATION publication_test1;
+DROP PUBLICATION publication_test2;
+DROP TABLE test;
+
+-- test hypertable is not created for a table that is a part of a publication implicitly
+CREATE PUBLICATION publication_test FOR ALL tables;
+CREATE TABLE test (timestamp TIMESTAMPTZ NOT NULL);
+\set ON_ERROR_STOP 0
+SELECT create_hypertable('test', 'timestamp');
+\set ON_ERROR_STOP 1
+DROP PUBLICATION publication_test;
+DROP TABLE test;
+
+CREATE TABLE test (timestamp TIMESTAMPTZ NOT NULL);
+CREATE PUBLICATION publication_test FOR ALL tables;
+\set ON_ERROR_STOP 0
+SELECT create_hypertable('test', 'timestamp');
+\set ON_ERROR_STOP 1
+DROP PUBLICATION publication_test;
+DROP TABLE test;
+RESET client_min_messages;

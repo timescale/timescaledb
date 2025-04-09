@@ -89,9 +89,9 @@ single_text_key_hashing_get_key(BatchHashingParams params, int row, void *restri
 	}
 
 	DEBUG_PRINT("%p consider key row %d key index %d is %d bytes: ",
-				params.policy,
+				hashing,
 				row,
-				params.policy->last_used_key_index + 1,
+				hashing->last_used_key_index + 1,
 				output_key->len);
 	for (size_t i = 0; i < output_key->len; i++)
 	{
@@ -107,14 +107,14 @@ single_text_key_hashing_get_key(BatchHashingParams params, int row, void *restri
 }
 
 static pg_attribute_always_inline void
-single_text_key_hashing_store_new(GroupingPolicyHash *restrict policy, uint32 new_key_index,
+single_text_key_hashing_store_new(HashingStrategy *restrict hashing, uint32 new_key_index,
 								  BytesView output_key)
 {
 	const int total_bytes = output_key.len + VARHDRSZ;
-	text *restrict stored = (text *) MemoryContextAlloc(policy->hashing.key_body_mctx, total_bytes);
+	text *restrict stored = (text *) MemoryContextAlloc(hashing->key_body_mctx, total_bytes);
 	SET_VARSIZE(stored, total_bytes);
 	memcpy(VARDATA(stored), output_key.data, output_key.len);
-	policy->hashing.output_keys[new_key_index] = PointerGetDatum(stored);
+	hashing->output_keys[new_key_index] = PointerGetDatum(stored);
 }
 
 /*

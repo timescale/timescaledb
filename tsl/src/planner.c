@@ -85,13 +85,18 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 			{
 				tsl_pushdown_partial_agg(root, ht, input_rel, output_rel, extra);
 			}
+
+			if (root->numOrderedAggs && !IS_DUMMY_REL(input_rel) && output_rel != NULL)
+			{
+				tsl_skip_scan_paths_add(root, input_rel, output_rel, stage);
+			}
 			break;
 		case UPPERREL_WINDOW:
 			if (IsA(linitial(input_rel->pathlist), CustomPath))
 				gapfill_adjust_window_targetlist(root, input_rel, output_rel);
 			break;
 		case UPPERREL_DISTINCT:
-			tsl_skip_scan_paths_add(root, input_rel, output_rel);
+			tsl_skip_scan_paths_add(root, input_rel, output_rel, stage);
 			break;
 		default:
 			break;
@@ -186,7 +191,6 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 			return;
 		}
 	}
-#if PG15_GE
 	/*
 	 * We do not support MERGE command with UPDATE/DELETE merge actions on
 	 * compressed hypertables, because Custom Scan (HypertableModify) node is
@@ -200,7 +204,6 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 					 errmsg("The MERGE command with UPDATE/DELETE merge actions is not support on "
 							"compressed hypertables")));
 	}
-#endif
 }
 
 /*

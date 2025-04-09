@@ -236,13 +236,9 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 
 	if (contain_mutable_functions(input))
 	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("only immutable functions supported in continuous aggregate view"),
-				 errhint("Make sure all functions in the continuous aggregate definition"
-						 " have IMMUTABLE volatility. Note that functions or expressions"
-						 " may be IMMUTABLE for one data type, but STABLE or VOLATILE for"
-						 " another.")));
+		ereport(WARNING,
+				(errmsg("using non-immutable functions in continuous aggregate view may lead to "
+						"inconsistent results on rematerialization")));
 	}
 
 	switch (nodeTag(input))

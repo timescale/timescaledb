@@ -299,7 +299,7 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 			for (; lc != NULL; lc = lnext(chunk_pathkeys, lc))
 			{
 				pk = lfirst(lc);
-				expr = find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
+				expr = ts_find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
 
 				Assert(expr != NULL && IsA(expr, Var));
 				var = castNode(Var, expr);
@@ -1061,7 +1061,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 					PathKey *pathkey = (PathKey *) lfirst(lc);
 					EquivalenceClass *pathkey_ec = pathkey->pk_eclass;
 
-					Expr *em_expr = find_em_expr_for_rel(pathkey_ec, chunk_rel);
+					Expr *em_expr = ts_find_em_expr_for_rel(pathkey_ec, chunk_rel);
 
 					/* No em expression found for our rel */
 					if (!em_expr)
@@ -1069,22 +1069,24 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 
 					pathkeys = lappend(pathkeys, pathkey);
 				}
-				/*
-				 * Ideally, we would like for this to be a MergeAppend path.
-				 * However, accumulate_append_subpath will cut out MergeAppend
-				 * and directly add its children, so we have to combine the children
-				 * into a MergeAppend node later, at the chunk append level.
-				 */
-				chunk_path =
-					(Path *) create_append_path(root,
-												chunk_rel,
-												list_make2(chunk_path, uncompressed_path),
-												NIL /* partial paths */,
-												pathkeys,
-												req_outer,
-												0,
-												false,
-												chunk_path->rows + uncompressed_path->rows);
+				if (pathkeys)
+					chunk_path =
+						(Path *) create_merge_append_path(root,
+														  chunk_rel,
+														  list_make2(chunk_path, uncompressed_path),
+														  pathkeys,
+														  req_outer);
+				else
+					chunk_path =
+						(Path *) create_append_path(root,
+													chunk_rel,
+													list_make2(chunk_path, uncompressed_path),
+													NIL /* partial paths */,
+													pathkeys,
+													req_outer,
+													0,
+													false,
+													chunk_path->rows + uncompressed_path->rows);
 			}
 		}
 
@@ -2269,7 +2271,7 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		Expr *em_expr = NULL;
 		if (!ec->ec_has_volatile)
 		{
-			em_expr = find_em_expr_for_rel(pk->pk_eclass, compression_info->chunk_rel);
+			em_expr = ts_find_em_expr_for_rel(pk->pk_eclass, compression_info->chunk_rel);
 		}
 		chunk_em_exprs = lappend(chunk_em_exprs, em_expr);
 	}

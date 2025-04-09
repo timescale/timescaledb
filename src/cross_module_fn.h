@@ -123,8 +123,7 @@ typedef struct CrossModuleFunctions
 	PGFunction compressed_data_out;
 	PGFunction compressed_data_info;
 	PGFunction compressed_data_has_nulls;
-	bool (*process_compress_table)(AlterTableCmd *cmd, Hypertable *ht,
-								   WithClauseResult *with_clause_options);
+	bool (*process_compress_table)(Hypertable *ht, WithClauseResult *with_clause_options);
 	void (*process_altertable_cmd)(Hypertable *ht, const AlterTableCmd *cmd);
 	void (*process_rename_cmd)(Oid relid, Cache *hcache, const RenameStmt *stmt);
 	PGFunction create_compressed_chunk;
@@ -157,7 +156,6 @@ typedef struct CrossModuleFunctions
 	PGFunction create_chunk;
 	PGFunction show_chunk;
 
-	PGFunction chunk_create_empty_table;
 	PGFunction chunk_freeze_chunk;
 	PGFunction chunk_unfreeze_chunk;
 	PGFunction recompress_chunk_segmentwise;

@@ -842,11 +842,9 @@ get_batch_keys_for_unique_constraints(const ChunkInsertState *cis, Relation rela
 			constraints->covered = false;
 		}
 
-#if PG15_GE
 		/* If any of the unique indexes have NULLS NOT DISTINCT set, we proceed
 		 * with checking the constraints with decompression */
 		constraints->nullsnotdistinct |= indexDesc->rd_index->indnullsnotdistinct;
-#endif
 
 		/* When multiple unique indexes are present, in theory there could be no shared
 		 * columns even though that is very unlikely as they will probably at least share

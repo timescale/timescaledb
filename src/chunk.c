@@ -970,64 +970,6 @@ chunk_create_only_table_after_lock(const Hypertable *ht, Hypercube *cube, const 
 	return chunk;
 }
 
-static void
-chunk_table_drop_inherit(const Chunk *chunk, Hypertable *ht)
-{
-	AlterTableCmd drop_inh_cmd = {
-		.type = T_AlterTableCmd,
-		.subtype = AT_DropInherit,
-		.def = (Node *) makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), -1),
-		.missing_ok = false
-	};
-
-	ts_alter_table_with_event_trigger(chunk->table_id, NULL, list_make1(&drop_inh_cmd), false);
-}
-
-/*
- * Checks that given hypercube does not collide with existing chunks and
- * creates an empty table for a chunk without any metadata modifications.
- */
-Chunk *
-ts_chunk_create_only_table(Hypertable *ht, Hypercube *cube, const char *schema_name,
-						   const char *table_name)
-{
-	ChunkStub *stub;
-	Chunk *chunk;
-	ScanTupLock tuplock = {
-		.lockmode = LockTupleKeyShare,
-		.waitpolicy = LockWaitBlock,
-	};
-
-	/*
-	 * Chunk table can be created if no chunk collides with the dimension slices.
-	 */
-	stub = chunk_collides(ht, cube);
-	if (stub != NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_CHUNK_COLLISION),
-				 errmsg("chunk table creation failed due to dimension slice collision")));
-
-	/*
-	 * Serialize chunk creation around a lock on the "main table" to avoid
-	 * multiple processes trying to create the same chunk. We use a
-	 * ShareUpdateExclusiveLock, which is the weakest lock possible that
-	 * conflicts with itself. The lock needs to be held until transaction end.
-	 */
-	LockRelationOid(ht->main_table_relid, ShareUpdateExclusiveLock);
-
-	ts_hypercube_find_existing_slices(cube, &tuplock);
-
-	chunk = chunk_create_only_table_after_lock(ht,
-											   cube,
-											   schema_name,
-											   table_name,
-											   NULL,
-											   INVALID_CHUNK_ID);
-	chunk_table_drop_inherit(chunk, ht);
-
-	return chunk;
-}
-
 static Chunk *
 chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 									   const char *schema_name, const char *table_name,
@@ -3899,9 +3841,9 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		ErrorData *edata;
 		MemoryContextSwitchTo(oldcontext);
 		edata = CopyErrorData();
+		FlushErrorState();
 		if (edata->sqlerrcode == ERRCODE_LOCK_NOT_AVAILABLE)
 		{
-			FlushErrorState();
 			edata->detail = edata->message;
 			edata->message =
 				psprintf("some chunks could not be read since they are being concurrently updated");

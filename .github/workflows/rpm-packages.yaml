@@ -12,7 +12,6 @@ name: RPM packages
     branches:
     - release_test
     - trigger/package_test
-    - prerelease_test
   workflow_dispatch:
 
 jobs:
@@ -25,7 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         image: [ "rockylinux:8", "rockylinux:9" ]
-        pg: [ 14, 15, 16, 17 ]
+        pg: [ 15, 16, 17 ]
         license: [ "TSL", "Apache"]
         include:
           - license: Apache

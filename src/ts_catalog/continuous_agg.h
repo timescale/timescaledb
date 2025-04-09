@@ -53,6 +53,7 @@ typedef enum ContinuousAggViewOption
 	ContinuousViewOptionMaterializedOnly,
 	ContinuousViewOptionCompress,
 	ContinuousViewOptionFinalized,
+	ContinuousViewOptionChunkTimeInterval,
 	ContinuousViewOptionCompressSegmentBy,
 	ContinuousViewOptionCompressOrderBy,
 	ContinuousViewOptionCompressChunkTimeInterval,
@@ -215,3 +216,5 @@ extern TSDLLEXPORT Query *ts_continuous_agg_get_query(ContinuousAgg *cagg);
 
 extern TSDLLEXPORT int64
 ts_continuous_agg_fixed_bucket_width(const ContinuousAggsBucketFunction *bucket_function);
+extern TSDLLEXPORT int64
+ts_continuous_agg_bucket_width(const ContinuousAggsBucketFunction *bucket_function);

@@ -612,12 +612,6 @@ ts_chunk_constraint_scan_by_chunk_id(int32 chunk_id, Size num_constraints_hint, 
 	return constraints;
 }
 
-typedef struct ChunkConstraintScanData
-{
-	ChunkScanCtx *scanctx;
-	DimensionSlice *slice;
-} ChunkConstraintScanData;
-
 /*
  * Scan for all chunk constraints that match the given slice ID. The chunk
  * constraints are saved in the chunk scan context.

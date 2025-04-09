@@ -97,14 +97,6 @@ Select avg(temperature) over( order by humidity)
 from conditions
  WITH NO DATA;
 
---aggregate without combine function but stable function
-CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
-AS
-Select json_agg(location)
-from conditions
- group by time_bucket('1week', timec) , location WITH NO DATA;
-;
-
 -- using subqueries
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
@@ -202,28 +194,6 @@ AS
 Select sum(humidity), avg(temperature::int4)
 from conditions
 group by rollup(time_bucket('1week', timec) , location )  WITH NO DATA;
-
---NO immutable functions -- check all clauses
-CREATE FUNCTION test_stablefunc(int) RETURNS int LANGUAGE 'sql'
-       STABLE AS 'SELECT $1 + 10';
-
-CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
-AS
-Select sum(humidity), max(timec + INTERVAL '1h')
-from conditions
-group by time_bucket('1week', timec) , location   WITH NO DATA;
-
-CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
-AS
-Select sum( test_stablefunc(humidity::int) ), min(location)
-from conditions
-group by time_bucket('1week', timec) WITH NO DATA;
-
-CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
-AS
-Select sum( temperature ), min(location)
-from conditions
-group by time_bucket('1week', timec), test_stablefunc(humidity::int) WITH NO DATA;
 
 -- Should use CREATE MATERIALIZED VIEW to create continuous aggregates
 CREATE VIEW continuous_aggs_errors_tbl1 WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS

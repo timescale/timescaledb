@@ -152,13 +152,21 @@ TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
 TSDLLEXPORT bool ts_guc_default_hypercore_use_access_method = false;
 bool ts_guc_enable_chunk_skipping = false;
 TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
+TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression = false;
 TSDLLEXPORT bool ts_guc_enable_bool_compression = false;
+TSDLLEXPORT int ts_guc_compression_batch_size_limit = 1000;
+
+/* Only settable in debug mode for testing */
+TSDLLEXPORT bool ts_guc_enable_null_compression = true;
 
 /* Enable of disable columnar scans for columnar-oriented storage engines. If
  * disabled, regular sequence scans will be used instead. */
 TSDLLEXPORT bool ts_guc_enable_columnarscan = true;
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
+#if PG16_GE
+TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates = true;
+#endif
 static char *ts_guc_default_segmentby_fn = NULL;
 static char *ts_guc_default_orderby_fn = NULL;
 TSDLLEXPORT bool ts_guc_enable_job_execution_logging = false;
@@ -473,8 +481,10 @@ _guc_init(void)
 							 NULL);
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("restoring"),
-							 "Install timescale in restoring mode",
-							 "Used for running pg_restore",
+							 "Enable restoring mode for timescaledb",
+							 "In restoring mode all timescaledb internal hooks are disabled. This "
+							 "mode is required for restoring logical dumps of databases with "
+							 "timescaledb.",
 							 &ts_guc_restoring,
 							 false,
 							 PGC_SUSET,
@@ -645,7 +655,18 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
-
+#if PG16_GE
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_skipscan_for_distinct_aggregates"),
+							 "Enable SkipScan for DISTINCT aggregates",
+							 "Enable SkipScan for DISTINCT aggregates",
+							 &ts_guc_enable_skip_scan_for_distinct_aggregates,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+#endif
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compression_wal_markers"),
 							 "Enable WAL markers for compression ops",
 							 "Enable the generation of markers in the WAL stream which mark the "
@@ -749,6 +770,17 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_exclusive_locking_recompression"),
+							 "Enable exclusive locking recompression",
+							 "Enable getting exclusive lock on chunk during segmentwise "
+							 "recompression",
+							 &ts_guc_enable_exclusive_locking_recompression,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_bool_compression"),
 							 "Enable experimental bool compression functionality",
@@ -760,6 +792,36 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+	DefineCustomIntVariable(MAKE_EXTOPTION("compression_batch_size_limit"),
+							"The max number of tuples that can be batched together during "
+							"compression",
+							"Setting this option to a number between 1 and 999 will force "
+							"compression "
+							"to limit the size of compressed batches to that amount of "
+							"uncompressed tuples."
+							"Setting this to 0 defaults to the max batch size of 1000.",
+							&ts_guc_compression_batch_size_limit,
+							1000,
+							1,
+							1000,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
+
+#ifdef TS_DEBUG
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_null_compression"),
+							 "Debug only flag to enable NULL compression",
+							 "Enable null compression",
+							 &ts_guc_enable_null_compression,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+#endif
 
 	/*
 	 * Define the limit on number of invalidation-based refreshes we allow per

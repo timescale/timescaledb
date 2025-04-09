@@ -42,32 +42,6 @@ SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1515024
 SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time: [1515024000000000] "device": [-9223372036854775808, 1073741823]}');
 \set ON_ERROR_STOP 1
 
-SET ROLE :ROLE_DEFAULT_PERM_USER;
--- Test create_chunk_table for errors
-\set ON_ERROR_STOP 0
--- Test create_chunk_table for NULL input
-SELECT * FROM _timescaledb_functions.create_chunk_table(NULL,' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
-SELECT * FROM _timescaledb_functions.create_chunk_table('chunkapi', NULL, '_timescaledb_internal','_hyper_1_1_chunk');
-SELECT * FROM _timescaledb_functions.create_chunk_table('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', NULL,'_hyper_1_1_chunk');
-SELECT * FROM _timescaledb_functions.create_chunk_table('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal',NULL);
--- Modified time constraint should fail with collision
-SELECT * FROM _timescaledb_functions.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
--- Missing dimension
-SELECT * FROM _timescaledb_functions.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000]}', '_timescaledb_internal','_hyper_1_1_chunk');
--- Extra dimension
-SELECT * FROM _timescaledb_functions.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "device": [-9223372036854775808, 1073741823], "time2": [1514419600000000, 1515024000000000]}', '_timescaledb_internal','_hyper_1_1_chunk');
--- Bad dimension name
-SELECT * FROM _timescaledb_functions.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "dev": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
--- Same dimension twice
-SELECT * FROM _timescaledb_functions.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000], "time": [1514419600000000, 1515024000000000]}', '_timescaledb_internal','_hyper_1_1_chunk');
--- Bad bounds format
-SELECT * FROM _timescaledb_functions.create_chunk_table('chunkapi',' {"time": ["1514419200000000", 1515024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
--- Bad slices format
-SELECT * FROM _timescaledb_functions.create_chunk_table('chunkapi',' {"time": [1515024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
--- Bad slices json
-SELECT * FROM _timescaledb_functions.create_chunk_table('chunkapi',' {"time: [1515024000000000] "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
-\set ON_ERROR_STOP 1
-
 -- Test that granting insert on tables allow create_chunk to be
 -- called. This will also create a chunk that does not collide and has
 -- a custom schema and name.
@@ -76,215 +50,8 @@ GRANT INSERT ON chunkapi TO :ROLE_DEFAULT_PERM_USER_2;
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', 'ChunkSchema', 'My_chunk_Table_name');
 
-SET ROLE :ROLE_DEFAULT_PERM_USER;
-
--- Test create_chunk_table to recreate the chunk table and show dimension slices
-SET ROLE :ROLE_DEFAULT_PERM_USER;
-
-SELECT * FROM chunkapi ORDER BY time;
-
-SELECT chunk_schema AS "CHUNK_SCHEMA", chunk_name AS "CHUNK_NAME"
-FROM timescaledb_information.chunks c
-ORDER BY chunk_name DESC
-LIMIT 1 \gset
-
-SELECT slices AS "SLICES"
-FROM _timescaledb_functions.show_chunk(:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME') \gset
-
-SELECT relname
-FROM pg_catalog.pg_inherits, pg_class
-WHERE inhrelid = (:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME')::regclass AND inhparent = oid;
-
-SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
-
-DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
-
-SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
-
-SELECT count(*) FROM
-   _timescaledb_functions.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
-
-SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
-
-
-SELECT relname
-FROM pg_catalog.pg_inherits, pg_class
-WHERE inhrelid = (:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME')::regclass AND inhparent = oid;
-
--- Test that creat_chunk fails since chunk table already exists
-\set ON_ERROR_STOP 0
-SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
-\set ON_ERROR_STOP 1
-
--- Test create_chunk_table on a hypertable where the chunk didn't exist before
-
+SET ROLE :ROLE_SUPERUSER;
 DROP TABLE chunkapi;
-DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
-CREATE TABLE chunkapi(time timestamptz not null, device int, temp float);
-SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 2);
-
-SELECT count(*) FROM
-   _timescaledb_functions.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
-
--- Demonstrate that current settings for dimensions don't affect create_chunk_table
-
-DROP TABLE chunkapi;
-DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
-CREATE TABLE chunkapi (time timestamptz not null, device int, temp float);
-SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 2, '3d');
-
-SELECT count(*) FROM
-   _timescaledb_functions.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
-
-DROP TABLE chunkapi;
-DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
-CREATE TABLE chunkapi (time timestamptz not null, device int, temp float);
-SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 3);
-
-SELECT count(*) FROM
-   _timescaledb_functions.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
-
--- Test create_chunk_table if a colliding chunk exists
-
-DROP TABLE chunkapi;
-DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
-CREATE TABLE chunkapi (time timestamptz not null, device int, temp float);
-SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 3);
-
-INSERT INTO chunkapi VALUES ('2018-01-01 05:00:00-8', 1, 23.4);
-
-\set ON_ERROR_STOP 0
-SELECT _timescaledb_functions.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
-\set ON_ERROR_STOP 1
-
--- Test create_chunk_table when a chunk exists in different space partition and thus doesn't collide
-
-DROP TABLE chunkapi;
-CREATE TABLE chunkapi (time timestamptz not null, device int, temp float);
-SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 2);
-
-INSERT INTO chunkapi VALUES ('2018-01-01 05:00:00-8', 2, 23.4);
-
-SELECT _timescaledb_functions.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
-
--- Test create_chunk_table when a chunk exists in different time partition and thus doesn't collide
-
-DROP TABLE chunkapi;
-DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
-CREATE TABLE chunkapi (time timestamptz not null, device int, temp float);
-SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 2);
-
-INSERT INTO chunkapi VALUES ('2018-02-01 05:00:00-8', 1, 23.4);
-
-SELECT _timescaledb_functions.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
-
--- Test create_chunk_table with tablespaces
-
-\c :TEST_DBNAME :ROLE_SUPERUSER
-SET client_min_messages = ERROR;
-DROP TABLESPACE IF EXISTS tablespace1;
-DROP TABLESPACE IF EXISTS tablespace2;
-SET client_min_messages = NOTICE;
-CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE1_PATH;
-CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE2_PATH;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-
--- Use the space partition to calculate the tablespace id to use
-
-DROP TABLE chunkapi;
-DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
-CREATE TABLE chunkapi (time timestamptz not null, device int, temp float);
-SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 3);
-
-SELECT attach_tablespace('tablespace1', 'chunkapi');
-SELECT attach_tablespace('tablespace2', 'chunkapi');
-
-SELECT count(*) FROM
-   _timescaledb_functions.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
-
-SELECT tablespace FROM pg_tables WHERE tablename = :'CHUNK_NAME';
-
--- Use the time partition to calculate the tablespace id to use
-
-DROP TABLE chunkapi;
-DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
-CREATE TABLE devices (id int PRIMARY KEY);
-INSERT INTO devices VALUES (1);
-CREATE TABLE chunkapi (time timestamptz NOT NULL PRIMARY KEY, device int REFERENCES devices(id), temp float CHECK (temp > 0));
-SELECT * FROM create_hypertable('chunkapi', 'time');
-INSERT INTO chunkapi VALUES ('2018-01-01 05:00:00-8', 1, 23.4);
-
-SELECT chunk_schema AS "CHUNK_SCHEMA", chunk_name AS "CHUNK_NAME"
-FROM timescaledb_information.chunks c
-ORDER BY chunk_name DESC
-LIMIT 1 \gset
-
-SELECT slices AS "SLICES"
-FROM _timescaledb_functions.show_chunk(:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME') \gset
-
--- Save the constraints info in a table for later comparison
-CREATE TABLE original_chunk_constraints AS
-SELECT "Constraint", "Type", "Columns", "Index"::text, "Expr", "Deferrable", "Deferred", "Validated"
-FROM test.show_constraints(format('%I.%I', :'CHUNK_SCHEMA', :'CHUNK_NAME')::regclass);
-
--- Save constraints metadata
-CREATE TABLE original_chunk_constraints_metadata AS
-SELECT
-    chunk_id,
-    dimension_slice_id,
-    constraint_name,
-    hypertable_constraint_name
-FROM _timescaledb_catalog.chunk_constraint con
-INNER JOIN _timescaledb_catalog.chunk ch ON (con.chunk_id = ch.id)
-WHERE ch.schema_name = :'CHUNK_SCHEMA' AND ch.table_name = :'CHUNK_NAME';
-
-
-DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
-
-SELECT attach_tablespace('tablespace1', 'chunkapi');
-SELECT attach_tablespace('tablespace2', 'chunkapi');
-
-SELECT count(*) FROM
-   _timescaledb_functions.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
-
-SELECT tablespace FROM pg_tables WHERE tablename = :'CHUNK_NAME';
-
--- Now create the complete chunk from the chunk table
-SELECT _timescaledb_functions.create_chunk('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME',
-	   format('%I.%I', :'CHUNK_SCHEMA', :'CHUNK_NAME')::regclass);
-
--- Compare original and new constraints
-SELECT * FROM original_chunk_constraints;
-SELECT * FROM test.show_constraints(format('%I.%I', :'CHUNK_SCHEMA', :'CHUNK_NAME')::regclass);
-
--- Compare original and new chunk constraints metadata
-SELECT * FROM original_chunk_constraints_metadata;
-SELECT
-    chunk_id,
-    dimension_slice_id,
-    constraint_name,
-    hypertable_constraint_name
-FROM _timescaledb_catalog.chunk_constraint con
-INNER JOIN _timescaledb_catalog.chunk ch ON (con.chunk_id = ch.id)
-WHERE ch.schema_name = :'CHUNK_SCHEMA' AND ch.table_name = :'CHUNK_NAME';
-
-DROP TABLE original_chunk_constraints;
-DROP TABLE original_chunk_constraints_metadata;
-
--- The chunk should inherit the hypertable
-SELECT relname
-FROM pg_catalog.pg_inherits, pg_class
-WHERE inhrelid = (:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME')::regclass AND inhparent = oid;
-
--- Show chunk's attached to the table
-SELECT
-	:'CHUNK_SCHEMA' AS expected_schema,
-	:'CHUNK_NAME' AS expected_table_name,
-	(_timescaledb_functions.show_chunk(ch)).*
-FROM show_chunks('chunkapi') ch;
-
-DROP TABLE chunkapi;
-DROP TABLE devices;
 
 -- Test creating a chunk from an existing chunk table which was not
 -- created via create_chunk_table and having a different name.
@@ -292,11 +59,22 @@ CREATE TABLE devices (id int PRIMARY KEY);
 INSERT INTO devices VALUES (1);
 CREATE TABLE chunkapi (time timestamptz NOT NULL PRIMARY KEY, device int REFERENCES devices(id), temp float  CHECK(temp > 0));
 SELECT * FROM create_hypertable('chunkapi', 'time');
+INSERT INTO chunkapi VALUES ('2018-01-01 05:00:00-8', 1, 23.4);
+SELECT chunk_schema AS "CHUNK_SCHEMA", chunk_name AS "CHUNK_NAME"
+FROM timescaledb_information.chunks c
+ORDER BY chunk_name DESC
+LIMIT 1 \gset
+
+SELECT slices AS "SLICES"
+FROM _timescaledb_functions.show_chunk(:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME') \gset
+
+TRUNCATE chunkapi;
 
 CREATE TABLE newchunk (time timestamptz NOT NULL, device int, temp float);
 SELECT * FROM test.show_constraints('newchunk');
 
 INSERT INTO newchunk VALUES ('2018-01-01 05:00:00-8', 1, 23.4);
+
 \set ON_ERROR_STOP 0
 -- Creating the chunk without required CHECK constraints on a table
 -- should fail. Currently, PostgreSQL only enforces presence of CHECK

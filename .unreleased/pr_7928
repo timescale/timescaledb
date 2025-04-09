@@ -1,0 +1,2 @@
+Fixes: #7928 Don't create hypertable for implicitly published tables
+Thanks: @arajkumar for reporting that implicitly published tables were still able to create hypertables

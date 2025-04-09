@@ -74,7 +74,7 @@ custom_scan_to_uncompressed_chunk_attno(List *custom_scan_tlist, int custom_scan
 	return var->varattno;
 }
 
-bool
+void
 vectoragg_plan_decompress_chunk(Plan *childplan, VectorQualInfo *vqi)
 {
 	const CustomScan *custom = castNode(CustomScan, childplan);
@@ -111,6 +111,7 @@ vectoragg_plan_decompress_chunk(Plan *childplan, VectorQualInfo *vqi)
 		}
 	}
 
+	vqi->maxattno = maxattno;
 	vqi->vector_attrs = (bool *) palloc0(sizeof(bool) * (maxattno + 1));
 	vqi->segmentby_attrs = (bool *) palloc0(sizeof(bool) * (maxattno + 1));
 
@@ -134,6 +135,4 @@ vectoragg_plan_decompress_chunk(Plan *childplan, VectorQualInfo *vqi)
 
 	List *settings = linitial(custom->custom_private);
 	vqi->reverse = list_nth_int(settings, DCS_Reverse);
-
-	return vqi;
 }

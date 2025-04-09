@@ -178,7 +178,6 @@ vector_agg_plan_create(Plan *childplan, Agg *agg, List *resolved_targetlist,
 	lfirst(list_nth_cell(vector_agg->custom_private, VASI_GroupingType)) =
 		makeInteger(grouping_type);
 
-#if PG15_GE
 	if (is_columnar_scan(childplan))
 	{
 		CustomScan *custom = castNode(CustomScan, childplan);
@@ -197,7 +196,6 @@ vector_agg_plan_create(Plan *childplan, Agg *agg, List *resolved_targetlist,
 		 */
 		custom->flags &= ~CUSTOMPATH_SUPPORT_PROJECTION;
 	}
-#endif
 
 	return (Plan *) vector_agg;
 }
@@ -223,7 +221,9 @@ is_vector_var(const VectorQualInfo *vqinfo, Expr *expr)
 		return false;
 	}
 
-	return vqinfo->vector_attrs[var->varattno];
+	Assert(var->varattno <= vqinfo->maxattno);
+
+	return vqinfo->vector_attrs && vqinfo->vector_attrs[var->varattno];
 }
 
 /*
@@ -396,7 +396,14 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 #endif
 	}
 
+#ifdef TS_USE_UMASH
+	/*
+	 * Use hashing of serialized keys when we have many grouping columns.
+	 */
+	return VAGT_HashSerialized;
+#else
 	return VAGT_Invalid;
+#endif
 }
 
 /*
@@ -492,15 +499,26 @@ vectoragg_plan_possible(Plan *childplan, const List *rtable, VectorQualInfo *vqi
 	}
 
 	CustomScan *customscan = castNode(CustomScan, childplan);
-	bool vectoragg_possible = false;
-	RangeTblEntry *rte = rt_fetch(customscan->scan.scanrelid, rtable);
 
-	if (ts_is_hypercore_am(ts_get_rel_am(rte->relid)))
-		vectoragg_possible = vectoragg_plan_tam(childplan, rtable, vqi);
-	else if (strcmp(customscan->methods->CustomName, "DecompressChunk") == 0)
-		vectoragg_possible = vectoragg_plan_decompress_chunk(childplan, vqi);
+	if (strcmp(customscan->methods->CustomName, "DecompressChunk") == 0)
+	{
+		vectoragg_plan_decompress_chunk(childplan, vqi);
+		return true;
+	}
 
-	return vectoragg_possible;
+	/* We're looking for a baserel scan */
+	if (customscan->scan.scanrelid > 0)
+	{
+		RangeTblEntry *rte = rt_fetch(customscan->scan.scanrelid, rtable);
+
+		if (rte && ts_is_hypercore_am(ts_get_rel_am(rte->relid)))
+		{
+			vectoragg_plan_tam(childplan, rtable, vqi);
+			return true;
+		}
+	}
+
+	return false;
 }
 
 /*
@@ -593,6 +611,7 @@ try_insert_vector_agg_node(Plan *plan, List *rtable)
 
 	Plan *childplan = agg->plan.lefttree;
 	VectorQualInfo vqi;
+	MemSet(&vqi, 0, sizeof(VectorQualInfo));
 
 	/*
 	 * Build supplementary info to determine whether we can vectorize the

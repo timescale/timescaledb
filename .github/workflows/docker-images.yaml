@@ -15,7 +15,6 @@ name: Test Docker images
     branches:
     - release_test
     - trigger/package_test
-    - prerelease_test
   workflow_dispatch:
 jobs:
   docker_tests:
@@ -39,11 +38,9 @@ jobs:
       fail-fast: false
       matrix:
         image: [
-            "timescaledb:latest-pg14",
             "timescaledb:latest-pg15",
             "timescaledb:latest-pg16",
             "timescaledb:latest-pg17",
-            "timescaledb-ha:pg14",
             "timescaledb-ha:pg15",
             "timescaledb-ha:pg16",
             "timescaledb-ha:pg17",
