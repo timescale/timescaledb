@@ -84,8 +84,9 @@ jobs:
       TABLESPACE2: D:\tablespace2\
     steps:
     - name: Setup WSL
-      uses: Vampire/setup-wsl@v3.1.4
+      uses: Vampire/setup-wsl@v5
       with:
+        distribution: Ubuntu-22.04
         additional-packages:
           cmake
           gawk
