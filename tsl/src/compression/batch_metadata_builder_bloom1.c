@@ -36,7 +36,7 @@
  * Limit the bits belonging to the particular elements to a small contiguous
  * region. This improves memory locality when building the bloom filter.
  */
-#define BLOOM1_BLOCK_BITS 128
+#define BLOOM1_BLOCK_BITS 256
 
 typedef struct Bloom1MetadataBuilder
 {
@@ -50,6 +50,10 @@ typedef struct Bloom1MetadataBuilder
 	HashFunction hash_function;
 } Bloom1MetadataBuilder;
 
+/*
+ * Low-bias invertible hash function from this article:
+ * http://web.archive.org/web/20250406022607/https://nullprogram.com/blog/2018/07/31/
+ */
 static inline uint64
 bloom1_hash64(uint64 x)
 {
