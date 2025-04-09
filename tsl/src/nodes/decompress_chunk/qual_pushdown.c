@@ -16,8 +16,10 @@
 #include "compression/create.h"
 #include "custom_type_cache.h"
 #include "decompress_chunk.h"
-#include "qual_pushdown.h"
+#include "guc.h"
 #include "ts_catalog/array_utils.h"
+
+#include "qual_pushdown.h"
 
 typedef struct QualPushdownContext
 {
@@ -449,10 +451,20 @@ modify_expression(Node *node, QualPushdownContext *context)
 			OpExpr *opexpr = (OpExpr *) node;
 			if (opexpr->opresulttype == BOOLOID)
 			{
-				Expr *pd = pushdown_op_to_segment_meta_bloom1(context,
-															  opexpr->args,
-															  opexpr->opno,
-															  opexpr->inputcollid);
+				Expr *pd = NULL;
+
+				if (ts_guc_enable_sparse_index_bloom1)
+				{
+					/*
+					 * Try bloom1 sparse index.
+					 */
+					pd = pushdown_op_to_segment_meta_bloom1(context,
+															opexpr->args,
+															opexpr->opno,
+
+															opexpr->inputcollid);
+				}
+
 				if (pd != NULL)
 				{
 					context->needs_recheck = true;
@@ -460,6 +472,9 @@ modify_expression(Node *node, QualPushdownContext *context)
 					return (Node *) pd;
 				}
 
+				/*
+				 * Try minmax sparse index.
+				 */
 				pd = pushdown_op_to_segment_meta_min_max(context,
 														 opexpr->args,
 														 opexpr->opno,

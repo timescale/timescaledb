@@ -98,6 +98,7 @@ extern TSDLLEXPORT bool ts_guc_enable_2pc;
 extern TSDLLEXPORT bool ts_guc_enable_compression_indexscan;
 extern TSDLLEXPORT bool ts_guc_enable_bulk_decompression;
 extern TSDLLEXPORT bool ts_guc_auto_sparse_indexes;
+extern TSDLLEXPORT bool ts_guc_enable_sparse_index_bloom1;
 extern TSDLLEXPORT bool ts_guc_enable_columnarscan;
 extern TSDLLEXPORT int ts_guc_bgw_log_level;
 

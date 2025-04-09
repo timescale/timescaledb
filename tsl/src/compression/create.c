@@ -317,10 +317,10 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 				 * 1) range queries, not equality,
 				 * 2) correlation with the orderby columns, e.g. creation time
 				 *    correlates with the update time that is used as orderby.
-				 * So bloom filters probably don't make sense.
+				 * This makes minmax indexes more suitable than bloom filters.
 				 *
-				 * For fractional arithmetic types, equality queries are also
-				 * probably rare.
+				 * For fractional arithmetic types, equality queries are unlikely
+				 * as well.
 				 */
 				can_use_bloom1 = false;
 			}
@@ -334,7 +334,7 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 				can_use_bloom1 = false;
 			}
 
-			if (can_use_bloom1)
+			if (ts_guc_enable_sparse_index_bloom1 && can_use_bloom1)
 			{
 				/*
 				 * Add bloom filter metadata for columns that are not a part of
