@@ -11,6 +11,7 @@
 #include <access/table.h>
 #include <access/tableam.h>
 #include <access/transam.h>
+#include <access/tupconvert.h>
 #include <access/xact.h>
 #include <catalog/catalog.h>
 #include <catalog/dependency.h>
@@ -19,15 +20,18 @@
 #include <catalog/objectaddress.h>
 #include <catalog/pg_am.h>
 #include <catalog/pg_class.h>
+#include <catalog/pg_class_d.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_constraint_d.h>
 #include <catalog/pg_foreign_server.h>
 #include <catalog/pg_foreign_table.h>
+#include <catalog/pg_type_d.h>
 #include <commands/defrem.h>
 #include <commands/tablecmds.h>
 #include <commands/vacuum.h>
 #include <common/relpath.h>
 #include <executor/executor.h>
+#include <executor/tuptable.h>
 #include <fmgr.h>
 #include <foreign/foreign.h>
 #include <funcapi.h>
@@ -55,6 +59,8 @@
 #include <utils/syscache.h>
 #include <utils/tuplestore.h>
 
+#include "compat/compat.h"
+#include "annotations.h"
 #include "cache.h"
 #include "chunk.h"
 #include "debug_point.h"
@@ -1177,6 +1183,541 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 	pfree(nulls);
 	pfree(relinfos);
 	pfree(crelinfos);
+
+	PG_RETURN_VOID();
+}
+
+typedef struct RelationSplitInfo
+{
+	BulkInsertState bistate;
+	TupleTableSlot *dstslot;
+	RewriteState rwstate;
+	Relation rel;
+	Datum *values;
+	bool *isnull;
+	TupleConversionMap *tupmap;
+} RelationSplitInfo;
+
+static RelationSplitInfo *
+relation_split_info_create(Relation splitrel, Relation rel, struct VacuumCutoffs *cutoffs)
+{
+	RelationSplitInfo *rsi = palloc0(sizeof(RelationSplitInfo));
+
+	rsi->rel = rel;
+	rsi->bistate = GetBulkInsertState();
+	rsi->rwstate = begin_heap_rewrite(splitrel,
+									  rel,
+									  cutoffs->OldestXmin,
+									  cutoffs->FreezeLimit,
+									  cutoffs->MultiXactCutoff);
+
+	rsi->tupmap = convert_tuples_by_name(RelationGetDescr(splitrel), RelationGetDescr(rel));
+
+	/* Create tuple slot for new partition. */
+	rsi->dstslot = MakeSingleTupleTableSlot(RelationGetDescr(rel), table_slot_callbacks(rel));
+	ExecStoreAllNullTuple(rsi->dstslot);
+
+	rsi->values = (Datum *) palloc(RelationGetDescr(splitrel)->natts * sizeof(Datum));
+	rsi->isnull = (bool *) palloc(RelationGetDescr(splitrel)->natts * sizeof(bool));
+
+	return rsi;
+}
+
+static void
+relation_split_info_free(RelationSplitInfo *rsi, int ti_options)
+{
+	ExecDropSingleTupleTableSlot(rsi->dstslot);
+	FreeBulkInsertState(rsi->bistate);
+	table_finish_bulk_insert(rsi->rel, ti_options);
+	end_heap_rewrite(rsi->rwstate);
+	table_close(rsi->rel, NoLock);
+	pfree(rsi->values);
+	pfree(rsi->isnull);
+
+	if (rsi->tupmap)
+		free_conversion_map(rsi->tupmap);
+
+	rsi->rel = NULL;
+	rsi->bistate = NULL;
+	rsi->dstslot = NULL;
+	pfree(rsi);
+}
+
+/*
+ * Reconstruct and rewrite the given tuple.
+ *
+ * Basically taken from heapam module.
+ *
+ * The tuple needs to be rewritten because the new tuple doesn't include,
+ * e.g., dropped columns.
+ */
+static void
+reform_and_rewrite_tuple(HeapTuple tuple, Relation splitrel, RelationSplitInfo *rsi)
+{
+	TupleDesc oldTupDesc = RelationGetDescr(splitrel);
+	TupleDesc newTupDesc = RelationGetDescr(rsi->rel);
+	HeapTuple tupcopy;
+
+	if (rsi->tupmap)
+		tupcopy = execute_attr_map_tuple(tuple, rsi->tupmap);
+	else
+	{
+		int i;
+
+		heap_deform_tuple(tuple, oldTupDesc, rsi->values, rsi->isnull);
+
+		/* Be sure to null out any dropped columns */
+		for (i = 0; i < newTupDesc->natts; i++)
+		{
+			if (TupleDescAttr(newTupDesc, i)->attisdropped)
+				rsi->isnull[i] = true;
+		}
+
+		tupcopy = heap_form_tuple(newTupDesc, rsi->values, rsi->isnull);
+	}
+
+	/* The heap rewrite module does the rest */
+	rewrite_heap_tuple(rsi->rwstate, tuple, tupcopy);
+
+	heap_freetuple(tupcopy);
+}
+
+/*
+ * Split a chunk along a given dimension and split point.
+ *
+ * The column/dimension and split_at point are optional. If these arguments
+ * are not specified, the chunk is split in two equal sizes (from a range
+ * perspective) based on the primary partitioning column.
+ */
+Datum
+chunk_split_chunk(PG_FUNCTION_ARGS)
+{
+	Oid relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	const char *colname = PG_ARGISNULL(1) ? NULL : PG_GETARG_CSTRING(1);
+	Relation splitrel = table_open(relid, AccessExclusiveLock);
+	bool verbose = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
+	int elevel = verbose ? INFO : DEBUG1;
+
+	if (splitrel->rd_rel->relkind != RELKIND_RELATION)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot split non-table relations")));
+
+	/* Only owner is allowed to split */
+	if (!object_ownercheck(RelationRelationId, relid, GetUserId()))
+		aclcheck_error(ACLCHECK_NOT_OWNER,
+					   get_relkind_objtype(splitrel->rd_rel->relkind),
+					   get_rel_name(relid));
+
+	/* Lock toast table to prevent it from being concurrently vacuumed */
+	if (splitrel->rd_rel->reltoastrelid)
+		LockRelationOid(splitrel->rd_rel->reltoastrelid, AccessExclusiveLock);
+
+	/*
+	 * Check for active uses of the relation in the current transaction,
+	 * including open scans and pending AFTER trigger events.
+	 */
+	CheckTableNotInUse(splitrel, "split_chunk");
+
+	if (IsSystemRelation(splitrel))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot split system catalog relations")));
+
+	Oid amoid = splitrel->rd_rel->relam;
+
+	if (amoid != HEAP_TABLE_AM_OID)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("access method \"%s\" is not supported for split", get_am_name(amoid))));
+
+	const Chunk *chunk = ts_chunk_get_by_relid(relid, true);
+
+	if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("splitting a compressed chunk is not supported")));
+
+	if (chunk->fd.osm_chunk)
+		ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("cannot split OSM chunks")));
+
+	if (ts_chunk_is_frozen(chunk))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot split frozen chunk \"%s.%s\" scheduled for tiering",
+						NameStr(chunk->fd.schema_name),
+						NameStr(chunk->fd.table_name)),
+				 errhint("Untier the chunk before splitting.")));
+
+	Cache *hcache;
+	const Hypertable *ht =
+		ts_hypertable_cache_get_cache_and_entry(chunk->hypertable_relid, CACHE_FLAG_NONE, &hcache);
+	const Dimension *dim;
+
+	/* Get the dimension by name, or if not specified use the primary dimension */
+	if (colname != NULL)
+	{
+		const Dimension *primary_dim = hyperspace_get_open_dimension(ht->space, 0);
+		dim = ts_hyperspace_get_dimension_by_name(ht->space, DIMENSION_TYPE_ANY, colname);
+
+		if (dim != NULL && primary_dim->fd.id != dim->fd.id)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("dimension \"%s\" is not a primary for chunk \"%s\"",
+							colname,
+							get_rel_name(relid))));
+	}
+	else
+	{
+		dim = hyperspace_get_open_dimension(ht->space, 0);
+	}
+
+	if (NULL == dim)
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("no dimension \"%s\" exists for chunk \"%s\"",
+						colname,
+						get_rel_name(relid))));
+
+	Assert(colname == NULL || strcmp(colname, NameStr(dim->fd.column_name)) == 0);
+	colname = NameStr(dim->fd.column_name);
+
+	AttrNumber splitdim_attnum = get_attnum(relid, NameStr(dim->fd.column_name));
+	Oid splitdim_type = get_atttype(relid, splitdim_attnum);
+	Datum split_at;
+	bool have_split_at = false;
+
+	/* Check split_at argument */
+	if (!PG_ARGISNULL(2))
+	{
+		Oid argtype = get_fn_expr_argtype(fcinfo->flinfo, 2);
+		Datum arg = PG_GETARG_DATUM(2);
+
+		if (argtype == UNKNOWNOID)
+		{
+			Oid infuncid = InvalidOid;
+			Oid typioparam;
+
+			getTypeInputInfo(splitdim_type, &infuncid, &typioparam);
+
+			switch (get_func_nargs(infuncid))
+			{
+				case 1:
+					/* Functions that take one input argument, e.g., the Date function */
+					split_at = OidFunctionCall1(infuncid, arg);
+					break;
+				case 3:
+					/* Timestamp functions take three input arguments */
+					split_at = OidFunctionCall3(infuncid,
+												arg,
+												ObjectIdGetDatum(InvalidOid),
+												Int32GetDatum(-1));
+					break;
+				default:
+					ereport(ERROR,
+							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+							 errmsg("invalid type for split_at"),
+							 errhint("The split_at argument requires an explicit cast.")));
+			}
+			argtype = splitdim_type;
+		}
+		else
+			split_at = arg;
+
+		if (argtype != splitdim_type)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid type '%s' for split_at argument", format_type_be(argtype)),
+					 errdetail("The argument type must much the dimension \"%s\"",
+							   NameStr(dim->fd.column_name))));
+
+		have_split_at = true;
+	}
+
+	/* Serialize chunk creation around the root hypertable. NOTE: also taken
+	 * in ts_chunk_find_or_create_without_cuts() below. */
+	LockRelationOid(ht->main_table_relid, ShareUpdateExclusiveLock);
+
+	/*
+	 * Find the existing partition slice for the chunk being split.
+	 */
+	DimensionSlice *slice = NULL;
+	Hypercube *new_cube = ts_hypercube_copy(chunk->cube);
+
+	for (int i = 0; i < new_cube->num_slices; i++)
+	{
+		DimensionSlice *curr_slice = new_cube->slices[i];
+
+		if (curr_slice->fd.dimension_id == dim->fd.id)
+		{
+			slice = curr_slice;
+			break;
+		}
+	}
+
+	Ensure(slice, "no chunk slice for dimension %s", NameStr(dim->fd.column_name));
+
+	/*
+	 * Pick split point and calculate new ranges. If no split point is given
+	 * by the user, then split in the middle.
+	 */
+	int64 interval_range = slice->fd.range_end - slice->fd.range_start;
+	int64 split_point = 0;
+
+	if (have_split_at)
+	{
+		split_point = ts_time_value_to_internal(split_at, splitdim_type);
+
+		/*
+		 * Check that the split_at value actually produces a valid split. Note
+		 * that range_start is inclusive while range_end is non-inclusive. The
+		 * split_at value needs to produce partition ranges of at least length
+		 * 1.
+		 */
+		if (split_point < (slice->fd.range_start + 1) || split_point > (slice->fd.range_end - 2))
+		{
+			Oid outfuncid = InvalidOid;
+			bool isvarlena = false;
+
+			getTypeOutputInfo(splitdim_type, &outfuncid, &isvarlena);
+			Datum split_at_str = OidFunctionCall1(outfuncid, split_at);
+
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("cannot split chunk at %s", DatumGetCString(split_at_str))));
+		}
+	}
+	else
+		split_point = slice->fd.range_start + (interval_range / 2);
+
+	int64 old_end = slice->fd.range_end;
+
+	/* Update the slice range for the existing chunk */
+	slice->fd.range_end = split_point;
+	chunk_update_constraints(chunk, new_cube);
+
+	/* Update the slice for the new chunk */
+	slice->fd.range_start = split_point;
+	slice->fd.range_end = old_end;
+	slice->fd.id = 0; /* Must set to 0 to mark as new for it to be created */
+
+	/* Make updated constraints visible */
+	CommandCounterIncrement();
+	bool created = false;
+	Chunk *new_chunk = ts_chunk_find_or_create_without_cuts(ht,
+															new_cube,
+															NameStr(chunk->fd.schema_name),
+															NULL,
+															InvalidOid,
+															&created);
+	Ensure(created, "could not create chunk for split");
+	Assert(new_chunk);
+
+	int ti_options = TABLE_INSERT_SKIP_FSM;
+	TupleTableSlot *srcslot;
+	TableScanDesc scan;
+	MemoryContext oldcxt;
+	EState *estate;
+	ExprContext *econtext;
+	RelationSplitInfo *splitinfos[2];
+	struct VacuumCutoffs cutoffs;
+	char relpersistence = splitrel->rd_rel->relpersistence;
+
+	compute_rel_vacuum_cutoffs(splitrel, &cutoffs);
+
+	Oid new_heap_relid = make_new_heap(RelationGetRelid(splitrel),
+									   splitrel->rd_rel->reltablespace,
+									   splitrel->rd_rel->relam,
+									   relpersistence,
+									   AccessExclusiveLock);
+
+	Relation splitrel_new = table_open(new_heap_relid, AccessExclusiveLock);
+	Relation new_chunkrel = table_open(new_chunk->table_id, AccessExclusiveLock);
+
+	estate = CreateExecutorState();
+
+	/* Create the tuple slot */
+	srcslot = MakeSingleTupleTableSlot(RelationGetDescr(splitrel), table_slot_callbacks(splitrel));
+
+	/* Setup the state we need for each new chunk partition */
+	splitinfos[0] = relation_split_info_create(splitrel, splitrel_new, &cutoffs);
+	splitinfos[1] = relation_split_info_create(splitrel, new_chunkrel, &cutoffs);
+
+	/* Scan through the rows using SnapshotAny to see everything. */
+	scan = table_beginscan(splitrel, SnapshotAny, 0, NULL);
+
+	/*
+	 * Switch to per-tuple memory context and reset it for each tuple
+	 * produced, so we don't leak memory.
+	 */
+	econtext = GetPerTupleExprContext(estate);
+	oldcxt = MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
+
+	/*
+	 * Read all the data from the split relation and route the tuples to the
+	 * new partitions. Do some vacuuming and cleanup at the same
+	 * time. Transfer all visibility information to the new relations.
+	 *
+	 * Main loop inspired by heapam_relation_copy_for_cluster() used to run
+	 * CLUSTER and VACUUM FULL on a table.
+	 */
+	double num_tuples = 0.0;
+	double tups_vacuumed = 0.0;
+	double tups_recently_dead = 0.0;
+
+	BufferHeapTupleTableSlot *hslot = (BufferHeapTupleTableSlot *) srcslot;
+
+	while (table_scan_getnextslot(scan, ForwardScanDirection, srcslot))
+	{
+		RelationSplitInfo *rsi = NULL;
+		bool isnull = true;
+		HeapTuple tuple;
+		Buffer buf;
+		bool isdead;
+
+		CHECK_FOR_INTERRUPTS();
+		ResetExprContext(econtext);
+
+		tuple = ExecFetchSlotHeapTuple(srcslot, false, NULL);
+		buf = hslot->buffer;
+
+		LockBuffer(buf, BUFFER_LOCK_SHARE);
+
+		switch (HeapTupleSatisfiesVacuum(tuple, cutoffs.OldestXmin, buf))
+		{
+			case HEAPTUPLE_DEAD:
+				/* Definitely dead */
+				isdead = true;
+				break;
+			case HEAPTUPLE_RECENTLY_DEAD:
+				tups_recently_dead += 1;
+				/* fall through */
+				TS_FALLTHROUGH;
+			case HEAPTUPLE_LIVE:
+				/* Live or recently dead, must copy it */
+				isdead = false;
+				break;
+			case HEAPTUPLE_INSERT_IN_PROGRESS:
+
+				/*
+				 * Since we hold exclusive lock on the relation, normally the
+				 * only way to see this is if it was inserted earlier in our
+				 * own transaction.  However, it can happen in system
+				 * catalogs, since we tend to release write lock before commit
+				 * there.  Give a warning if neither case applies; but in any
+				 * case we had better copy it.
+				 */
+				if (!TransactionIdIsCurrentTransactionId(HeapTupleHeaderGetXmin(tuple->t_data)))
+					elog(WARNING,
+						 "concurrent insert in progress within table \"%s\"",
+						 RelationGetRelationName(splitrel));
+				/* treat as live */
+				isdead = false;
+				break;
+			case HEAPTUPLE_DELETE_IN_PROGRESS:
+
+				/*
+				 * Similar situation to INSERT_IN_PROGRESS case.
+				 */
+				if (!TransactionIdIsCurrentTransactionId(
+						HeapTupleHeaderGetUpdateXid(tuple->t_data)))
+					elog(WARNING,
+						 "concurrent delete in progress within table \"%s\"",
+						 RelationGetRelationName(splitrel));
+				/* treat as recently dead */
+				tups_recently_dead += 1;
+				isdead = false;
+				break;
+			default:
+				elog(ERROR, "unexpected HeapTupleSatisfiesVacuum result");
+				isdead = false; /* keep compiler quiet */
+				break;
+		}
+
+		LockBuffer(buf, BUFFER_LOCK_UNLOCK);
+
+		/* Find the partition/chunk to insert the tuple into */
+		Datum value = slot_getattr(srcslot, splitdim_attnum, &isnull);
+		Assert(!isnull);
+		int64 point = ts_time_value_to_internal(value, splitdim_type);
+
+		/*
+		 * Route to partition based on new boundaries. Only 2-way split is
+		 * supported now, so routing is easy. An N-way split requires, e.g.,
+		 * binary search.
+		 */
+		if (point < split_point)
+			rsi = splitinfos[0];
+		else
+			rsi = splitinfos[1];
+
+		if (isdead)
+		{
+			tups_vacuumed += 1;
+			/* heap rewrite module still needs to see it... */
+			if (rewrite_heap_dead_tuple(rsi->rwstate, tuple))
+			{
+				/* A previous recently-dead tuple is now known dead */
+				tups_vacuumed += 1;
+				tups_recently_dead -= 1;
+			}
+			continue;
+		}
+
+		num_tuples++;
+		reform_and_rewrite_tuple(tuple, splitrel, rsi);
+	}
+
+	MemoryContextSwitchTo(oldcxt);
+
+	const char *nspname = get_namespace_name(RelationGetNamespace(splitrel));
+
+	ereport(elevel,
+			(errmsg("\"%s.%s\": found %.0f removable, %.0f nonremovable row versions",
+					nspname,
+					RelationGetRelationName(splitrel),
+					tups_vacuumed,
+					num_tuples),
+			 errdetail("%.0f dead row versions cannot be removed yet.", tups_recently_dead)));
+
+	table_endscan(scan);
+	ExecDropSingleTupleTableSlot(srcslot);
+	FreeExecutorState(estate);
+
+	ts_cache_release(hcache);
+	table_close(splitrel, NoLock);
+
+	/* Cleanup split rel infos and reindex new chunks */
+	for (int i = 0; i < 2; i++)
+	{
+		ReindexParams reindex_params = { 0 };
+		int reindex_flags = REINDEX_REL_SUPPRESS_INDEX_USE;
+		Oid chunkrelid = splitinfos[i]->rel->rd_id;
+
+		if (relpersistence == RELPERSISTENCE_UNLOGGED)
+			reindex_flags |= REINDEX_REL_FORCE_INDEXES_UNLOGGED;
+		else if (relpersistence == RELPERSISTENCE_PERMANENT)
+			reindex_flags |= REINDEX_REL_FORCE_INDEXES_PERMANENT;
+
+		relation_split_info_free(splitinfos[i], ti_options);
+
+		/* Only reindex new chunks. Existing chunk will have be reindexed
+		 * during the heap swap below. */
+		if (i > 0)
+			reindex_relation_compat(NULL, chunkrelid, reindex_flags, &reindex_params);
+	}
+
+	/* Finally, swap the heap of the chunk that we split so that it only
+	 * contains the tuples for its new partition boundaries. */
+	finish_heap_swap(relid,
+					 new_heap_relid,
+					 false, /* system catalog */
+					 false /* swap toast by content */,
+					 true, /* check constraints */
+					 true, /* internal? */
+					 cutoffs.FreezeLimit,
+					 cutoffs.MultiXactCutoff,
+					 relpersistence);
 
 	PG_RETURN_VOID();
 }

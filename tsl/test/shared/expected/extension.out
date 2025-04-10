@@ -274,6 +274,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  set_partitioning_interval(regclass,anyelement,name)
  show_chunks(regclass,"any","any","any","any")
  show_tablespaces(regclass)
+ split_chunk(regclass,name,"any",boolean)
  time_bucket(bigint,bigint)
  time_bucket(bigint,bigint,bigint)
  time_bucket(integer,integer)

@@ -1,0 +1,212 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE ACCESS METHOD testam TYPE TABLE HANDLER heap_tableam_handler;
+set role :ROLE_DEFAULT_PERM_USER;
+create table splitme (time timestamptz not null, device int, location int, temp float);
+select create_hypertable('splitme', 'time', 'device', 2, chunk_time_interval => interval '1 week');
+  create_hypertable   
+----------------------
+ (1,public,splitme,t)
+(1 row)
+
+--
+-- Insert data to create two chunks with time ranges like this:
+-- _____________
+-- |     |     |
+-- |  1  |  2  |
+-- |_____|_____|
+---
+insert into splitme values
+       ('2024-01-03 22:00', 1, 1, 1.0),
+       ('2024-01-09 15:00', 1, 2, 2.0);
+-- Remove a column to ensure that split can handle it
+alter table splitme drop column location;
+-- All data in single chunk
+select chunk_name, range_start, range_end from timescaledb_information.chunks;
+    chunk_name    |         range_start          |          range_end           
+------------------+------------------------------+------------------------------
+ _hyper_1_1_chunk | Wed Jan 03 16:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
+(1 row)
+
+select * from _timescaledb_internal._hyper_1_1_chunk order by time;
+             time             | device | temp 
+------------------------------+--------+------
+ Wed Jan 03 22:00:00 2024 PST |      1 |    1
+ Tue Jan 09 15:00:00 2024 PST |      1 |    2
+(2 rows)
+
+select * from _timescaledb_catalog.dimension_slice;
+ id | dimension_id |     range_start      |    range_end     
+----+--------------+----------------------+------------------
+  1 |            1 |     1704326400000000 | 1704931200000000
+  2 |            2 | -9223372036854775808 |       1073741823
+(2 rows)
+
+\set ON_ERROR_STOP 0
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk', 'foo');
+ERROR:  no dimension "foo" exists for chunk "_hyper_1_1_chunk"
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk', 'device');
+ERROR:  dimension "device" is not a primary for chunk "_hyper_1_1_chunk"
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk', 'time', split_at => 1);
+ERROR:  invalid type 'integer' for split_at argument
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk', 'time', split_at => 1::int);
+ERROR:  invalid type 'integer' for split_at argument
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk', 'time', split_at => '2024-01-04 00:00'::timestamp);
+ERROR:  invalid type 'timestamp without time zone' for split_at argument
+-- split at multiple points. Not supported yet.
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk', 'time', split_at => '{ 2024-01-04 10:00, 2024-01-07 12:00 }'::timestamptz[]);
+ERROR:  invalid type 'timestamp with time zone[]' for split_at argument
+-- Split a chunk with unsupported access method
+alter table _timescaledb_internal._hyper_1_1_chunk set access method testam;
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
+ERROR:  access method "testam" is not supported for split
+alter table _timescaledb_internal._hyper_1_1_chunk set access method heap;
+-- Split an OSM chunk
+reset role;
+update _timescaledb_catalog.chunk ch set osm_chunk = true where table_name = '_hyper_1_1_chunk';
+set role :ROLE_DEFAULT_PERM_USER;
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
+ERROR:  cannot split OSM chunks
+reset role;
+update _timescaledb_catalog.chunk ch set osm_chunk = false where table_name = '_hyper_1_1_chunk';
+set role :ROLE_DEFAULT_PERM_USER;
+-- Split a frozen chunk
+select _timescaledb_functions.freeze_chunk('_timescaledb_internal._hyper_1_1_chunk');
+ freeze_chunk 
+--------------
+ t
+(1 row)
+
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
+ERROR:  cannot split frozen chunk "_timescaledb_internal._hyper_1_1_chunk" scheduled for tiering
+select _timescaledb_functions.unfreeze_chunk('_timescaledb_internal._hyper_1_1_chunk');
+ unfreeze_chunk 
+----------------
+ t
+(1 row)
+
+\set ON_ERROR_STOP 1
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk', split_at => '2024-01-04 00:00');
+select chunk_name, range_start, range_end from timescaledb_information.chunks;
+    chunk_name    |         range_start          |          range_end           
+------------------+------------------------------+------------------------------
+ _hyper_1_1_chunk | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 00:00:00 2024 PST
+ _hyper_1_2_chunk | Thu Jan 04 00:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
+(2 rows)
+
+select * from _timescaledb_catalog.dimension_slice;
+ id | dimension_id |     range_start      |    range_end     
+----+--------------+----------------------+------------------
+  2 |            2 | -9223372036854775808 |       1073741823
+  3 |            1 |     1704326400000000 | 1704355200000000
+  4 |            1 |     1704355200000000 | 1704931200000000
+(3 rows)
+
+select * from show_chunks('splitme');
+              show_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+(2 rows)
+
+-- Show that the two tuples ended up in different chunks
+select * from _timescaledb_internal._hyper_1_1_chunk order by time;
+             time             | device | temp 
+------------------------------+--------+------
+ Wed Jan 03 22:00:00 2024 PST |      1 |    1
+(1 row)
+
+select * from _timescaledb_internal._hyper_1_2_chunk order by time;
+             time             | device | temp 
+------------------------------+--------+------
+ Tue Jan 09 15:00:00 2024 PST |      1 |    2
+(1 row)
+
+select setseed(0.2);
+ setseed 
+---------
+ 
+(1 row)
+
+-- Test split with bigger data set and chunks with more blocks
+insert into splitme (time, device, temp)
+select t, ceil(random()*10), random()*40
+from generate_series('2024-01-03 23:00'::timestamptz, '2024-01-10 01:00', '10s') t;
+select count(*) from splitme;
+ count 
+-------
+ 52563
+(1 row)
+
+-- Add back location just to make things more difficult
+alter table splitme add column location int default 1;
+-- There are two space partitions (device), so several chunks will
+-- have the same time ranges
+select chunk_name, range_start, range_end from timescaledb_information.chunks;
+    chunk_name    |         range_start          |          range_end           
+------------------+------------------------------+------------------------------
+ _hyper_1_1_chunk | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 00:00:00 2024 PST
+ _hyper_1_2_chunk | Thu Jan 04 00:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
+ _hyper_1_3_chunk | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 00:00:00 2024 PST
+ _hyper_1_4_chunk | Thu Jan 04 00:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
+(4 rows)
+
+-- Split chunk 2. Save count to compare after split.
+select count(*) from _timescaledb_internal._hyper_1_2_chunk;
+ count 
+-------
+ 26165
+(1 row)
+
+select count(*) orig_count from _timescaledb_internal._hyper_1_2_chunk \gset
+-- Generate some garbage so that we can see that it gets cleaned up
+-- during split
+update  _timescaledb_internal._hyper_1_2_chunk set temp = temp+1 where temp > 10;
+-- This will split in two equal size chunks
+call split_chunk('_timescaledb_internal._hyper_1_2_chunk');
+select chunk_name, range_start, range_end from timescaledb_information.chunks;
+    chunk_name    |         range_start          |          range_end           
+------------------+------------------------------+------------------------------
+ _hyper_1_1_chunk | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 00:00:00 2024 PST
+ _hyper_1_2_chunk | Thu Jan 04 00:00:00 2024 PST | Sun Jan 07 08:00:00 2024 PST
+ _hyper_1_3_chunk | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 00:00:00 2024 PST
+ _hyper_1_4_chunk | Thu Jan 04 00:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
+ _hyper_1_5_chunk | Sun Jan 07 08:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
+(5 rows)
+
+-- Check that the counts in the two result partitions is the same as
+-- in the original partition and that the tuple counts are roughly the
+-- same across the partitions.
+with counts as (
+    select (select count(*) from _timescaledb_internal._hyper_1_2_chunk) count1,
+            (select count(*) from _timescaledb_internal._hyper_1_5_chunk) count2
+) select
+  c.count1, c.count2,
+  c.count1 + c.count2 as total_count,
+  (c.count1 + c.count2) = :orig_count as is_same_count
+from counts c;
+ count1 | count2 | total_count | is_same_count 
+--------+--------+-------------+---------------
+  14427 |  11738 |       26165 | t
+(1 row)
+
+-- Check that both rels return proper data and no columns are messed
+-- up
+select * from _timescaledb_internal._hyper_1_2_chunk order by time, device limit 3;
+             time             | device |       temp       | location 
+------------------------------+--------+------------------+----------
+ Thu Jan 04 00:00:10 2024 PST |      6 | 15.0341761730165 |        1
+ Thu Jan 04 00:00:20 2024 PST |      6 | 27.5663547962209 |        1
+ Thu Jan 04 00:00:30 2024 PST |      8 | 20.4535937985404 |        1
+(3 rows)
+
+select * from _timescaledb_internal._hyper_1_5_chunk order by time, device limit 3;
+             time             | device |       temp       | location 
+------------------------------+--------+------------------+----------
+ Sun Jan 07 08:00:00 2024 PST |     10 | 4.03503358112434 |        1
+ Sun Jan 07 08:00:10 2024 PST |      8 |  17.726969596003 |        1
+ Sun Jan 07 08:00:20 2024 PST |      6 | 9.63191118430237 |        1
+(3 rows)
+

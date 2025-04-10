@@ -65,6 +65,13 @@ CREATE OR REPLACE PROCEDURE @extschema@.merge_chunks(
     chunks REGCLASS[]
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_merge_chunks';
 
+CREATE OR REPLACE PROCEDURE @extschema@.split_chunk(
+    chunk REGCLASS,
+    column_name NAME = NULL,
+    split_at "any" = NULL,
+    verbose bool = false
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_split_chunk';
+
 CREATE OR REPLACE FUNCTION _timescaledb_functions.recompress_chunk_segmentwise(
     uncompressed_chunk REGCLASS,
     if_compressed BOOLEAN = true
