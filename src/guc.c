@@ -929,7 +929,7 @@ _guc_init(void)
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_sparse_index_bloom1"),
 							 "Enable creation of the bloom1 sparse index on compressed chunks",
 							 "This sparse index speeds up the equality queries on compressed "
-							 "columns, anc can be disabled when not desired.",
+							 "columns, and can be disabled when not desired.",
 							 &ts_guc_enable_sparse_index_bloom1,
 							 true,
 							 PGC_USERSET,

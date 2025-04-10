@@ -129,7 +129,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_functions.to_timestamp(bigint)
  _timescaledb_functions.to_timestamp_without_timezone(bigint)
  _timescaledb_functions.to_unix_microseconds(timestamp with time zone)
- _timescaledb_functions.ts_bloom1_matches(bytea,anyelement)
+ _timescaledb_functions.ts_bloom1_matches(_timescaledb_internal.bloom1,anyelement)
  _timescaledb_functions.tsl_loaded()
  _timescaledb_functions.unfreeze_chunk(regclass)
  _timescaledb_internal.alter_job_set_hypertable_id(integer,regclass)
