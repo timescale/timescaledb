@@ -58,6 +58,7 @@
 #include "chunk_index.h"
 #include "compression_with_clause.h"
 #include "copy.h"
+#include "create_table_with_clause.h"
 #include "cross_module_fn.h"
 #include "debug_assert.h"
 #include "debug_point.h"
@@ -100,6 +101,19 @@ static bool expect_chunk_modification = false;
 static ProcessUtilityContext last_process_utility_context = PROCESS_UTILITY_TOPLEVEL;
 static DDLResult process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht);
 static DDLResult process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht);
+
+static Oid
+get_sizing_func_oid()
+{
+	const char *sizing_func_name = "calculate_chunk_interval";
+	const int sizing_func_nargs = 3;
+	static Oid sizing_func_arg_types[] = { INT4OID, INT8OID, INT8OID };
+
+	return ts_get_function_oid(sizing_func_name,
+							   INTERNAL_SCHEMA_NAME,
+							   sizing_func_nargs,
+							   sizing_func_arg_types);
+}
 
 /* Call the default ProcessUtility and handle PostgreSQL version differences */
 static void
@@ -3665,6 +3679,13 @@ process_cluster_start(ProcessUtilityArgs *args)
 	return result;
 }
 
+typedef struct CreateTableInfo
+{
+	bool hypertable;
+	NameData time_column;
+} CreateTableInfo;
+
+static CreateTableInfo create_table_info = { 0 };
 /*
  * Process create table statements.
  *
@@ -3708,6 +3729,35 @@ process_create_table_end(Node *parsetree)
 			default:
 				break;
 		}
+	}
+
+	if (create_table_info.hypertable)
+	{
+		Oid table_relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+
+		DimensionInfo *open_dim_info =
+			ts_dimension_info_create_open(table_relid,
+										  &create_table_info.time_column, /* column name */
+										  -1,							  /* interval */
+										  InvalidOid,					  /* interval type */
+										  InvalidOid					  /* partitioning func */
+			);
+
+		ChunkSizingInfo chunk_sizing_info = {
+			.table_relid = table_relid,
+			.func = get_sizing_func_oid(),
+			.colname = NameStr(create_table_info.time_column),
+		};
+
+		ts_hypertable_create_from_info(table_relid,
+									   INVALID_HYPERTABLE_ID,
+									   0,			  /* flags */
+									   open_dim_info, /* open_dim_info */
+									   NULL,		  /* closed_dim_info */
+									   NULL,		  /* associated_schema_name */
+									   NULL,		  /* associated_table_prefix */
+									   &chunk_sizing_info);
+		create_table_info.hypertable = false;
 	}
 }
 
@@ -4929,6 +4979,43 @@ process_create_stmt(ProcessUtilityArgs *args)
 				errhint("It does not make sense to set the default access method for all "
 						"tables to \"%s\" since it is only supported for hypertables.",
 						TS_HYPERCORE_TAM_NAME));
+
+	List *pg_options = NIL, *hypertable_options = NIL;
+	ts_with_clause_filter(stmt->options, &hypertable_options, &pg_options);
+	stmt->options = pg_options;
+
+	/*
+	 * We can only convert the table into a hypertable after postgres has created
+	 * the initial table so we store the information passed in the WITH clause
+	 * and do some initial sanity check and do the actual work of creating the hypertable
+	 * in process_create_table_end.
+	 */
+	if (hypertable_options)
+	{
+		WithClauseResult *parsed_with_clauses =
+			ts_create_table_with_clause_parse(hypertable_options);
+		create_table_info.hypertable =
+			DatumGetBool(parsed_with_clauses[CreateTableFlagHypertable].parsed);
+
+		if (!parsed_with_clauses[CreateTableFlagHypertable].parsed)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_COLUMN),
+					 errmsg("timescaledb options requires hypertable option"),
+					 errhint("Use \"timescaledb.hypertable\" to enable creating a hypertable.")));
+
+		if (create_table_info.hypertable)
+		{
+			if (!parsed_with_clauses[CreateTableFlagTimeColumn].parsed)
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_COLUMN),
+						 errmsg("hypertable option requires time_column"),
+						 errhint("Use \"timescaledb.time_column\" to specify the column to use as "
+								 "partitioning column.")));
+
+			namestrcpy(&create_table_info.time_column,
+					   TextDatumGetCString(parsed_with_clauses[CreateTableFlagTimeColumn].parsed));
+		}
+	}
 
 	return DDL_CONTINUE;
 }

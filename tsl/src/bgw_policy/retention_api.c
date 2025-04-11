@@ -51,7 +51,8 @@ policy_retention_check(PG_FUNCTION_ARGS)
 
 	if (PG_ARGISNULL(0))
 	{
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("config must not be NULL")));
+		ereport(ERROR,
+				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), errmsg("config must not be NULL")));
 	}
 
 	policy_retention_read_and_validate_config(PG_GETARG_JSONB_P(0), NULL);

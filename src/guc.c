@@ -128,6 +128,7 @@ bool ts_guc_enable_runtime_exclusion = true;
 bool ts_guc_enable_constraint_exclusion = true;
 bool ts_guc_enable_qual_propagation = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
+TSDLLEXPORT bool ts_guc_enable_cagg_window_functions = false;
 bool ts_guc_enable_now_constify = true;
 bool ts_guc_enable_foreign_key_propagation = true;
 #if PG16_GE
@@ -697,6 +698,17 @@ _guc_init(void)
 							 "Enable group by clause reordering for continuous aggregates",
 							 &ts_guc_enable_cagg_reorder_groupby,
 							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_cagg_window_functions"),
+							 "Enable window functions in continuous aggregates",
+							 "Allow window functions in continuous aggregate views",
+							 &ts_guc_enable_cagg_window_functions,
+							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,

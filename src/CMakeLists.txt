@@ -10,6 +10,7 @@ set(SOURCES
     chunk_index.c
     chunk_scan.c
     constraint.c
+    create_table_with_clause.c
     cross_module_fn.c
     copy.c
     compression_with_clause.c

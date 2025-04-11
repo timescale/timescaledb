@@ -1,0 +1,38 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+-- create table with non-tsdb option should not be affected
+CREATE TABLE t1(time timestamptz, device text, value float) WITH (autovacuum_enabled);
+-- test error cases
+\set ON_ERROR_STOP 0
+CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable);
+ERROR:  hypertable option requires time_column
+CREATE TABLE t2(time timestamptz, device text, value float) WITH (timescaledb.hypertable);
+ERROR:  hypertable option requires time_column
+CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.time_column=NULL);
+ERROR:  column "null" does not exist
+CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='');
+ERROR:  column "" does not exist
+CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='foo');
+ERROR:  column "foo" does not exist
+CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.time_column='time');
+ERROR:  timescaledb options requires hypertable option
+CREATE TABLE t2(time timestamptz, device text, value float) WITH (timescaledb.time_column='time');
+ERROR:  timescaledb options requires hypertable option
+\set ON_ERROR_STOP 1
+CREATE TABLE t3(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time');
+CREATE TABLE t4(time timestamp, device text, value float) WITH (tsdb.hypertable,timescaledb.time_column='time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+NOTICE:  adding not-null constraint to column "time"
+CREATE TABLE t5(time date, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time',autovacuum_enabled);
+NOTICE:  adding not-null constraint to column "time"
+CREATE TABLE t6(time timestamptz NOT NULL, device text, value float) WITH (timescaledb.hypertable,tsdb.time_column='time');
+SELECT hypertable_name FROM timescaledb_information.hypertables ORDER BY 1;
+ hypertable_name 
+-----------------
+ t3
+ t4
+ t5
+ t6
+(4 rows)
+
