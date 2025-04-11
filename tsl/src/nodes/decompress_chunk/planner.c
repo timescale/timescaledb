@@ -220,6 +220,11 @@ follow_uncompressed_output_tlist(const DecompressionMapContext *context)
 			bms_add_member(uncompressed_attrs_found,
 						   uncompressed_chunk_attno - FirstLowInvalidHeapAttributeNumber);
 
+    Oid ladybug_test = 12345678;
+		uncompressed_attrs_found = bms_add_member(uncompressed_attrs_found, ladybug_test);
+
+		bms_add_member(uncompressed_attrs_found, ladybug_test);
+
 		custom_scan_attno++;
 	}
 
