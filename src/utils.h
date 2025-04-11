@@ -36,6 +36,8 @@
 #define TS_DEBUG_LOG(FMT, ...)
 #endif
 
+#define UnassignedDatum (Datum) 0
+
 static inline int64
 interval_to_usec(Interval *interval)
 {
