@@ -1609,7 +1609,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	int16 num_partitions = PG_ARGISNULL(3) ? -1 : PG_GETARG_INT16(3);
 	Name associated_schema_name = PG_ARGISNULL(4) ? NULL : PG_GETARG_NAME(4);
 	Name associated_table_prefix = PG_ARGISNULL(5) ? NULL : PG_GETARG_NAME(5);
-	Datum default_interval = PG_ARGISNULL(6) ? Int64GetDatum(-1) : PG_GETARG_DATUM(6);
+	Datum default_interval = PG_ARGISNULL(6) ? UnassignedDatum : PG_GETARG_DATUM(6);
 	Oid interval_type = PG_ARGISNULL(6) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 6);
 	bool create_default_indexes =
 		PG_ARGISNULL(7) ? false : PG_GETARG_BOOL(7); /* Defaults to true in the sql code */
