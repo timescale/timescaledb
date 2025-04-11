@@ -679,9 +679,23 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 		{
 			/*
 			 * NOT should be removed by Postgres for all operators we can
-			 * vectorize (see prepqual.c), so we don't support it.
+			 * vectorize (see prepqual.c) except when the where clause is
+			 * something like 'COL = false' for bool columns. In this case, we
+			 * have to check if it was transformed to BoolExpr(NOT_EXPR, Var) so
+			 * we can vectorize it, provided that the column supports bulk
+			 * decompression.
 			 */
-			return NULL;
+			if (list_length(boolexpr->args) == 1 && IsA(linitial(boolexpr->args), Var))
+			{
+				if (!vqinfo->vector_attrs[castNode(Var, linitial(boolexpr->args))->varattno])
+				{
+					return NULL;
+				}
+			}
+			else
+			{
+				return NULL;
+			}
 		}
 
 		bool need_copy = false;
@@ -716,7 +730,8 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 
 	/*
 	 * Among the simple predicates, we vectorize some "Var op Const" binary
-	 * predicates, scalar array operations with these predicates, and null test.
+	 * predicates, scalar array operations with these predicates, boolean variables
+	 * and null test.
 	 */
 	NullTest *nulltest = NULL;
 	OpExpr *opexpr = NULL;
@@ -724,6 +739,7 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 	Node *arg1 = NULL;
 	Node *arg2 = NULL;
 	Oid opno = InvalidOid;
+	Var *var = NULL;
 	if (IsA(qual, OpExpr))
 	{
 		opexpr = castNode(OpExpr, qual);
@@ -747,6 +763,16 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 	{
 		nulltest = castNode(NullTest, qual);
 		arg1 = (Node *) nulltest->arg;
+	}
+	else if (IsA(qual, Var) && (castNode(Var, qual))->vartype == BOOLOID)
+	{
+		/* We can vectorize boolean variables if bulk decompression is possible. */
+		var = castNode(Var, qual);
+		if (!vqinfo->vector_attrs[var->varattno])
+		{
+			return NULL;
+		}
+		return (Node *) var;
 	}
 	else
 	{
@@ -785,7 +811,7 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 		return NULL;
 	}
 
-	Var *var = castNode(Var, arg1);
+	var = castNode(Var, arg1);
 	if ((Index) var->varno != vqinfo->rti)
 	{
 		/*
