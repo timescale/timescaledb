@@ -27,6 +27,17 @@ NOTICE:  adding not-null constraint to column "time"
 CREATE TABLE t5(time date, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time',autovacuum_enabled);
 NOTICE:  adding not-null constraint to column "time"
 CREATE TABLE t6(time timestamptz NOT NULL, device text, value float) WITH (timescaledb.hypertable,tsdb.time_column='time');
+-- IF NOT EXISTS
+CREATE TABLE IF NOT EXISTS t7(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time');
+CREATE TABLE IF NOT EXISTS t7(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time');
+NOTICE:  relation "t7" already exists, skipping
+CREATE TABLE IF NOT EXISTS t7(time timestamptz NOT NULL, device text, value float);
+NOTICE:  relation "t7" already exists, skipping
+CREATE TABLE IF NOT EXISTS t8(time timestamptz NOT NULL, device text, value float);
+CREATE TABLE IF NOT EXISTS t8(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time');
+NOTICE:  relation "t8" already exists, skipping
+CREATE TABLE IF NOT EXISTS t8(time timestamptz NOT NULL, device text, value float);
+NOTICE:  relation "t8" already exists, skipping
 SELECT hypertable_name FROM timescaledb_information.hypertables ORDER BY 1;
  hypertable_name 
 -----------------
@@ -34,5 +45,7 @@ SELECT hypertable_name FROM timescaledb_information.hypertables ORDER BY 1;
  t4
  t5
  t6
-(4 rows)
+ t7
+ t8
+(6 rows)
 

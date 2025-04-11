@@ -22,5 +22,14 @@ CREATE TABLE t4(time timestamp, device text, value float) WITH (tsdb.hypertable,
 CREATE TABLE t5(time date, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time',autovacuum_enabled);
 CREATE TABLE t6(time timestamptz NOT NULL, device text, value float) WITH (timescaledb.hypertable,tsdb.time_column='time');
 
+-- IF NOT EXISTS
+CREATE TABLE IF NOT EXISTS t7(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time');
+CREATE TABLE IF NOT EXISTS t7(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time');
+CREATE TABLE IF NOT EXISTS t7(time timestamptz NOT NULL, device text, value float);
+
+CREATE TABLE IF NOT EXISTS t8(time timestamptz NOT NULL, device text, value float);
+CREATE TABLE IF NOT EXISTS t8(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time');
+CREATE TABLE IF NOT EXISTS t8(time timestamptz NOT NULL, device text, value float);
+
 SELECT hypertable_name FROM timescaledb_information.hypertables ORDER BY 1;
 
