@@ -39,6 +39,7 @@
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/compression_settings.h"
+#include <nodes/decompress_chunk/vector_quals.h>
 
 /*
  * Timing parameters for truncate locking heuristics.
@@ -1692,6 +1693,61 @@ decompress_batch_next_row(RowDecompressor *decompressor, AttrNumber *attnos, int
 	MemoryContextSwitchTo(old_ctx);
 
 	return true;
+}
+
+/* Decompress single column using vectorized decompression */
+ArrowArray *
+decompress_single_column(RowDecompressor *decompressor, AttrNumber attno, bool *default_value)
+{
+	int16 target_col = -1;
+	PerCompressedColumn *column_info;
+
+	for (int16 col = 0; col < decompressor->num_compressed_columns; col++)
+	{
+		column_info = &decompressor->per_compressed_cols[col];
+		if (!column_info->is_compressed)
+			continue;
+
+		if (column_info->decompressed_column_offset == AttrNumberGetAttrOffset(attno))
+		{
+			target_col = col;
+			break;
+		}
+	}
+	Assert(target_col > -1);
+
+	if (decompressor->compressed_is_nulls[target_col])
+	{
+		/* Compressed column has a default value, handle it by generating
+		 * a single-value ArrowArray based on the default value. This will have to
+		 * be handled specially because of the assumption that the whole row has
+		 * this default value.
+		 */
+		*default_value = true;
+		bool isnull;
+		Datum default_datum = getmissingattr(decompressor->out_desc, attno, &isnull);
+
+		return make_single_value_arrow(column_info->decompressed_type, default_datum, isnull);
+	}
+
+	*default_value = false;
+
+	Datum compressed_datum = PointerGetDatum(
+		detoaster_detoast_attr_copy((struct varlena *) DatumGetPointer(
+										decompressor->compressed_datums[target_col]),
+									&decompressor->detoaster,
+									CurrentMemoryContext));
+	CompressedDataHeader *header = get_compressed_data_header(compressed_datum);
+
+	DecompressAllFunction decompress_all =
+		tsl_get_decompress_all_function(header->compression_algorithm,
+										column_info->decompressed_type);
+
+	Assert(decompress_all);
+
+	return decompress_all(compressed_datum,
+						  column_info->decompressed_type,
+						  decompressor->per_compressed_row_ctx);
 }
 
 int
