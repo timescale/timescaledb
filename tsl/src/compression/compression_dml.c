@@ -20,6 +20,7 @@
 #include <utils/typcache.h>
 
 #include <compat/compat.h>
+#include <compression/arrow_c_data_interface.h>
 #include <compression/compression.h>
 #include <compression/compression_dml.h>
 #include <compression/create.h>
@@ -28,6 +29,8 @@
 #include <indexing.h>
 #include <nodes/chunk_dispatch/chunk_dispatch.h>
 #include <nodes/chunk_dispatch/chunk_insert_state.h>
+#include <nodes/decompress_chunk/vector_dict.h>
+#include <nodes/decompress_chunk/vector_predicates.h>
 #include <nodes/hypertable_modify.h>
 #include <ts_catalog/array_utils.h>
 
@@ -41,6 +44,9 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 
 static bool batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
 						  tuple_filtering_constraints *constraints, bool *skip_current_tuple);
+static bool batch_matches_vectorized(RowDecompressor *decompressor, ScanKeyData *scankeys,
+									 int num_scankeys, tuple_filtering_constraints *constraints,
+									 bool *skip_current_tuple);
 static void process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 							   ScanKeyData **mem_scankeys, int *num_mem_scankeys,
 							   List **heap_filters, List **index_filters, List **is_null);
@@ -60,6 +66,9 @@ static bool key_column_is_null(tuple_filtering_constraints *constraints, Relatio
 static bool can_delete_without_decompression(ModifyHypertableState *ht_state,
 											 CompressionSettings *settings, Chunk *chunk,
 											 List *predicates);
+static bool can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
+											CompressionSettings *settings, Relation chunk_rel,
+											Oid ht_relid, TupleTableSlot *slot);
 
 void
 decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
@@ -102,6 +111,12 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 	Bitmapset *index_columns = NULL;
 	Bitmapset *null_columns = NULL;
 	struct decompress_batches_stats stats;
+
+	constraints->vectorized_filtering = can_vectorize_constraint_checks(constraints,
+																		settings,
+																		out_rel,
+																		cis->hypertable_relid,
+																		slot);
 
 	/* the scan keys used for in memory tests of the decompressed tuples */
 	int num_mem_scankeys = 0;
@@ -407,6 +422,8 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 	int num_filtered_rows = 0;
 	TM_Result result;
 	DecompressBatchScanDesc scan = NULL;
+	BatchMatcher *batch_matcher =
+		constraints && constraints->vectorized_filtering ? batch_matches_vectorized : batch_matches;
 
 	struct decompress_batches_stats stats = { 0 };
 
@@ -501,7 +518,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 						  decompressor.compressed_datums,
 						  decompressor.compressed_is_nulls);
 
-		if (num_mem_scankeys && !batch_matches(&decompressor,
+		if (num_mem_scankeys && !batch_matcher(&decompressor,
 											   mem_scankeys,
 											   num_mem_scankeys,
 											   constraints,
@@ -643,6 +660,123 @@ batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scan
 		}
 
 		next_tuple = decompress_batch_next_row(decompressor, attnos, num_scankeys);
+	}
+
+	return false;
+}
+
+static void
+apply_validity_bitmap(const ArrowArray *arrow, uint64 *restrict result)
+{
+	const uint64 *validity = (const uint64 *) arrow->buffers[0];
+	if (validity)
+	{
+		const size_t n_vector_result_words = (arrow->length + 63) / 64;
+		for (size_t i = 0; i < n_vector_result_words; i++)
+		{
+			result[i] &= validity[i];
+		}
+	}
+	else
+	{
+		Assert(arrow->null_count == 0);
+	}
+}
+
+/* Look for default value match by checking the first result.
+ * Default value arrow arrays contain a single member so that the only result that matters.
+ * If we fail this check, it means the whole batch passed so we can bail immediately.
+ */
+static inline bool
+check_default_value_match(const uint64 *result)
+{
+	return result[0] & 1;
+}
+
+static bool
+batch_matches_vectorized(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
+						 tuple_filtering_constraints *constraints, bool *skip_current_tuple)
+{
+	const int n_rows =
+		DatumGetInt32(decompressor->compressed_datums[decompressor->count_compressed_attindex]);
+	const int bitmap_bytes = sizeof(uint64) * ((n_rows + 63) / 64);
+	uint64 *restrict result =
+		MemoryContextAlloc(decompressor->per_compressed_row_ctx, bitmap_bytes);
+	uint64 dict_result[(GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64];
+	memset(result, 0xFF, bitmap_bytes);
+	bool default_value = false;
+	bool batch_failed = false;
+
+	for (int sk = 0; sk < num_scankeys; sk++)
+	{
+		ArrowArray *arrow =
+			decompress_single_column(decompressor, scankeys[sk].sk_attno, &default_value);
+
+		/* Handle null check */
+		if (scankeys[sk].sk_flags & SK_ISNULL)
+		{
+			vector_nulltest(arrow, IS_NULL, result);
+			if (default_value && !check_default_value_match(result))
+			{
+				batch_failed = true;
+				break;
+			}
+			continue;
+		}
+
+		VectorPredicate *predicate = get_vector_const_predicate(scankeys[sk].sk_func.fn_oid);
+
+		/* Handle non-dictionary compressed data */
+		if (!arrow->dictionary)
+		{
+			predicate(arrow, scankeys[sk].sk_argument, result);
+		}
+		else
+		{
+			/* Handle dictionary compressed data by decompressing the dictionary
+			 * first and then translating the results to actual results */
+			const size_t dict_rows = arrow->dictionary->length;
+			const size_t dict_result_words = (dict_rows + 63) / 64;
+			memset(dict_result, 0xFF, dict_result_words * 8);
+			predicate(arrow->dictionary, scankeys[sk].sk_argument, dict_result);
+			translate_bitmap_from_dictionary(arrow, dict_result, result);
+		}
+
+		apply_validity_bitmap(arrow, result);
+
+		if (default_value && !check_default_value_match(result))
+		{
+			batch_failed = true;
+			break;
+		}
+	}
+
+	if (batch_failed)
+	{
+		return false;
+	}
+
+	VectorQualSummary summary = get_vector_qual_summary(result, n_rows);
+
+	if (summary != NoRowsPass)
+	{
+		if (constraints)
+		{
+			if (constraints->on_conflict == ONCONFLICT_NONE)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_UNIQUE_VIOLATION),
+						 errmsg("duplicate key value violates unique constraint \"%s\"",
+								get_rel_name(constraints->index_relid))
+
+							 ));
+			}
+			if (constraints->on_conflict == ONCONFLICT_NOTHING && skip_current_tuple)
+			{
+				*skip_current_tuple = true;
+			}
+		}
+		return true;
 	}
 
 	return false;
@@ -1485,5 +1619,41 @@ can_delete_without_decompression(ModifyHypertableState *ht_state, CompressionSet
 		}
 		return false;
 	}
+	return true;
+}
+
+static bool
+can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
+								CompressionSettings *settings, Relation chunk_rel, Oid ht_relid,
+								TupleTableSlot *slot)
+{
+	AttrNumber chunk_attno = -1;
+	Oid typoid, collid;
+	int32 typmod;
+	while ((chunk_attno = bms_next_member(constraints->key_columns, chunk_attno)) > 0)
+	{
+		/*
+		 * slot has the physical layout of the hypertable, so we need to
+		 * get the attribute number of the hypertable for the column.
+		 */
+		char *attname = get_attname(chunk_rel->rd_id, chunk_attno, false);
+
+		/* Ignore segmentby columns, they aren't compressed */
+		if (ts_array_is_member(settings->fd.segmentby, attname))
+			continue;
+
+		get_atttypetypmodcoll(chunk_rel->rd_id, chunk_attno, &typoid, &typmod, &collid);
+
+		/* No bulk decompression function, no vectorized filtering */
+		if (tsl_get_decompress_all_function(compression_get_default_algorithm(typoid), typoid) ==
+			NULL)
+			return false;
+
+		/* For text types, check for non-deterministic collation which
+		 * prevents vectorized filtering */
+		if (typoid == TEXTOID && OidIsValid(collid) && !get_collation_isdeterministic(collid))
+			return false;
+	}
+
 	return true;
 }
