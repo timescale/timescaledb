@@ -53,14 +53,9 @@ jobs:
 
     - name: Build timescaledb sqlfiles
       run: |
-        downgrade_to=$(grep '^downgrade_to_version = ' version.config | sed -e 's!^[^=]\+ = !!')
+        downgrade_to=$(grep '^previous_version = ' version.config | sed -e 's!^[^=]\+ = !!')
         git fetch --tags
         ./bootstrap -DGENERATE_DOWNGRADE_SCRIPT=ON
-        # We use downgrade_to_version instead of update_from_version because
-        # when the release PR for a new version has been merged to main but
-        # the version is not tagged yet update_from_version will not exist yet.
-        # In all other situations update_from_version and downgrade_to_version
-        # should point to the same version.
         git checkout ${downgrade_to}
         make -C build sqlfile sqlupdatescripts
         git checkout ${GITHUB_SHA}
@@ -70,7 +65,7 @@ jobs:
     - name: Run pgspot
       run: |
         version=$(grep '^version = ' version.config | sed -e 's!^[^=]\+ = !!')
-        downgrade_to=$(grep '^downgrade_to_version = ' version.config | sed -e 's!^[^=]\+ = !!')
+        downgrade_to=$(grep '^previous_version = ' version.config | sed -e 's!^[^=]\+ = !!')
 
         # Show files used
         ls -la build/sql/timescaledb--${version}.sql build/sql/timescaledb--${downgrade_to}--${version}.sql \

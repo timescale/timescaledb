@@ -78,16 +78,9 @@ endif()
 
 if(VERSION_CONFIG
    MATCHES
-   ".*update_from_version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.[0-9]+(-[a-z]+[0-9]*)?).*"
+   ".*previous_version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.[0-9]+(-[a-z]+[0-9]*)?).*"
 )
-  set(UPDATE_FROM_VERSION ${CMAKE_MATCH_1})
-endif()
-
-if(VERSION_CONFIG
-   MATCHES
-   ".*downgrade_to_version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.[0-9]+(-[a-z]+[0-9]*)?).*"
-)
-  set(DOWNGRADE_TO_VERSION ${CMAKE_MATCH_1})
+  set(PREVIOUS_VERSION ${CMAKE_MATCH_1})
 endif()
 
 # a hack to avoid change of SQL extschema variable
@@ -119,7 +112,7 @@ endif()
 
 message(
   STATUS
-    "TimescaleDB version ${PROJECT_VERSION_MOD}. Can be updated from version ${UPDATE_FROM_VERSION}"
+    "TimescaleDB version ${PROJECT_VERSION_MOD}. Can be updated from version ${PREVIOUS_VERSION}"
 )
 message(STATUS "Build type is ${CMAKE_BUILD_TYPE}")
 
