@@ -3682,7 +3682,7 @@ process_cluster_start(ProcessUtilityArgs *args)
 typedef struct CreateTableInfo
 {
 	bool hypertable;
-	NameData time_column;
+	WithClauseResult *with_clauses;
 } CreateTableInfo;
 
 static CreateTableInfo create_table_info = { 0 };
@@ -3734,19 +3734,36 @@ process_create_table_end(Node *parsetree)
 	if (create_table_info.hypertable)
 	{
 		Oid table_relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+		char *time_column =
+			TextDatumGetCString(create_table_info.with_clauses[CreateTableFlagTimeColumn].parsed);
+		NameData time_column_name;
+		namestrcpy(&time_column_name, time_column);
+
+		Oid interval_type = InvalidOid;
+		Datum interval = -1;
+
+		if (!create_table_info.with_clauses[CreateTableFlagChunkTimeInterval].is_default)
+		{
+			AttrNumber time_attno = get_attnum(table_relid, time_column);
+			Oid time_type = get_atttype(table_relid, time_attno);
+
+			interval = ts_create_table_parse_chunk_time_interval(create_table_info.with_clauses,
+																 time_type,
+																 &interval_type);
+		}
 
 		DimensionInfo *open_dim_info =
 			ts_dimension_info_create_open(table_relid,
-										  &create_table_info.time_column, /* column name */
-										  -1,							  /* interval */
-										  InvalidOid,					  /* interval type */
-										  InvalidOid					  /* partitioning func */
+										  &time_column_name, /* column name */
+										  interval,			 /* interval */
+										  interval_type,	 /* interval type */
+										  InvalidOid		 /* partitioning func */
 			);
 
 		ChunkSizingInfo chunk_sizing_info = {
 			.table_relid = table_relid,
 			.func = get_sizing_func_oid(),
-			.colname = NameStr(create_table_info.time_column),
+			.colname = time_column,
 		};
 
 		ts_hypertable_create_from_info(table_relid,
@@ -3757,7 +3774,6 @@ process_create_table_end(Node *parsetree)
 									   NULL,		  /* associated_schema_name */
 									   NULL,		  /* associated_table_prefix */
 									   &chunk_sizing_info);
-		create_table_info.hypertable = false;
 	}
 }
 
@@ -4984,6 +5000,8 @@ process_create_stmt(ProcessUtilityArgs *args)
 	ts_with_clause_filter(stmt->options, &hypertable_options, &pg_options);
 	stmt->options = pg_options;
 
+	create_table_info.hypertable = false;
+	create_table_info.with_clauses = NULL;
 	/*
 	 * We can only convert the table into a hypertable after postgres has created
 	 * the initial table so we store the information passed in the WITH clause
@@ -4992,12 +5010,11 @@ process_create_stmt(ProcessUtilityArgs *args)
 	 */
 	if (hypertable_options)
 	{
-		WithClauseResult *parsed_with_clauses =
-			ts_create_table_with_clause_parse(hypertable_options);
+		create_table_info.with_clauses = ts_create_table_with_clause_parse(hypertable_options);
 		create_table_info.hypertable =
-			DatumGetBool(parsed_with_clauses[CreateTableFlagHypertable].parsed);
+			DatumGetBool(create_table_info.with_clauses[CreateTableFlagHypertable].parsed);
 
-		if (!parsed_with_clauses[CreateTableFlagHypertable].parsed)
+		if (!create_table_info.with_clauses[CreateTableFlagHypertable].parsed)
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_COLUMN),
 					 errmsg("timescaledb options requires hypertable option"),
@@ -5005,15 +5022,12 @@ process_create_stmt(ProcessUtilityArgs *args)
 
 		if (create_table_info.hypertable)
 		{
-			if (!parsed_with_clauses[CreateTableFlagTimeColumn].parsed)
+			if (!create_table_info.with_clauses[CreateTableFlagTimeColumn].parsed)
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_COLUMN),
 						 errmsg("hypertable option requires time_column"),
 						 errhint("Use \"timescaledb.time_column\" to specify the column to use as "
 								 "partitioning column.")));
-
-			namestrcpy(&create_table_info.time_column,
-					   TextDatumGetCString(parsed_with_clauses[CreateTableFlagTimeColumn].parsed));
 		}
 	}
 
