@@ -18,6 +18,7 @@ set(TEST_FILES
     chunk_column_stats.sql
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
+    compress_bloom_sparse.sql
     compress_default.sql
     compress_dml_copy.sql
     compressed_collation.sql
