@@ -31,3 +31,6 @@ CREATE FUNCTION @extschema@.add_continuous_aggregate_policy(
 RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
 LANGUAGE C VOLATILE;
+
+UPDATE _timescaledb_catalog.hypertable SET chunk_sizing_func_schema = '_timescaledb_functions' WHERE chunk_sizing_func_schema = '_timescaledb_internal' AND chunk_sizing_func_name = 'calculate_chunk_interval';
+
