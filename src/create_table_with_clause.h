@@ -13,6 +13,10 @@ typedef enum CreateTableFlags
 {
 	CreateTableFlagHypertable = 0,
 	CreateTableFlagTimeColumn,
+	CreateTableFlagChunkTimeInterval,
 } CreateTableFlags;
 
 WithClauseResult *ts_create_table_with_clause_parse(const List *defelems);
+
+Datum ts_create_table_parse_chunk_time_interval(WithClauseResult *parsed_options, Oid column_type,
+												Oid *interval_type);
