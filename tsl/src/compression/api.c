@@ -41,6 +41,7 @@
 #include "chunk.h"
 #include "compression.h"
 #include "compression_storage.h"
+#include "compression_with_clause.h"
 #include "create.h"
 #include "debug_point.h"
 #include "error_utils.h"
@@ -241,17 +242,23 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 
 	if (!TS_HYPERTABLE_HAS_COMPRESSION_TABLE(srcht))
 	{
-		NameData cagg_ht_name;
-		get_hypertable_or_cagg_name(srcht, &cagg_ht_name);
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("compression not enabled on \"%s\"", NameStr(cagg_ht_name)),
-				 errdetail("It is not possible to compress chunks on a hypertable or"
-						   " continuous aggregate that does not have compression enabled."),
-				 errhint("Enable compression using ALTER TABLE/MATERIALIZED VIEW with"
-						 " the timescaledb.compress option.")));
+		/* take explicit locks on catalog tables and keep them till end of txn */
+		LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE), RowExclusiveLock);
+
+		Oid ownerid = ts_rel_get_owner(hypertable_relid);
+		Oid tablespace_oid = get_rel_tablespace(hypertable_relid);
+		int compress_htid = compression_hypertable_create(srcht, ownerid, tablespace_oid);
+
+		ts_hypertable_set_compressed(srcht, compress_htid);
+
+		WithClauseResult *with_clause_options = ts_compress_hypertable_set_clause_parse(NIL);
+		tsl_process_compress_table(srcht, with_clause_options);
+		compress_ht = ts_hypertable_get_by_id(compress_htid);
 	}
-	compress_ht = ts_hypertable_get_by_id(srcht->fd.compressed_hypertable_id);
+	else
+	{
+		compress_ht = ts_hypertable_get_by_id(srcht->fd.compressed_hypertable_id);
+	}
 	if (compress_ht == NULL)
 		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing compress hypertable")));
 	/* user has to be the owner of the compression table too */
