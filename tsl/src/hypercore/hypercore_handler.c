@@ -184,7 +184,7 @@ create_compression_relation_size_stats(int32 chunk_id, Oid relid, int32 compress
 									   int64 num_rows_pre, int64 num_rows_post,
 									   int64 num_rows_frozen)
 {
-	RelationSize after_size = ts_relation_size_impl(compress_relid);
+	RelationSize after_size = compression_total_size(relid, compress_relid);
 	compression_chunk_size_catalog_insert(chunk_id,
 										  before_size,
 										  compress_chunk_id,
