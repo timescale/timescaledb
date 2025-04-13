@@ -16,7 +16,6 @@
 
 #include "cache.h"
 #include "compression/create.h"
-#include "compression_with_clause.h"
 #include "continuous_aggs/common.h"
 #include "continuous_aggs/create.h"
 #include "errors.h"
@@ -24,6 +23,7 @@
 #include "options.h"
 #include "scan_iterator.h"
 #include "ts_catalog/continuous_agg.h"
+#include "with_clause/compression_with_clause.h"
 
 static void cagg_update_materialized_only(ContinuousAgg *agg, bool materialized_only);
 static List *cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht);

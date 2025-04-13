@@ -27,7 +27,6 @@
 #include "compat/compat.h"
 
 #include "bgw/job.h"
-#include "compression_with_clause.h"
 #include "cross_module_fn.h"
 #include "errors.h"
 #include "func_cache.h"
@@ -42,6 +41,7 @@
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
 #include "utils.h"
+#include "with_clause/compression_with_clause.h"
 
 #define BUCKET_FUNCTION_SERIALIZE_VERSION 1
 #define CHECK_NAME_MATCH(name1, name2) (namestrcmp(name1, name2) == 0)
