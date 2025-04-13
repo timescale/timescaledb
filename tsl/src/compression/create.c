@@ -21,6 +21,7 @@
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
 #include <common/md5.h>
+#include <executor/spi.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <parser/parse_type.h>
@@ -39,7 +40,6 @@
 #include "chunk_index.h"
 #include "compression.h"
 #include "compression/compression_storage.h"
-#include "compression_with_clause.h"
 #include "create.h"
 #include "custom_type_cache.h"
 #include "guc.h"
@@ -50,7 +50,7 @@
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "utils.h"
-#include <executor/spi.h>
+#include "with_clause/compression_with_clause.h"
 
 static const char *sparse_index_types[] = { "min", "max" };
 

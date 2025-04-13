@@ -9,7 +9,7 @@
 #include <nodes/parsenodes.h>
 
 #include "hypertable.h"
-#include "with_clause_parser.h"
+#include "with_clause/with_clause_parser.h"
 
 #define COMPRESSION_COLUMN_METADATA_PREFIX "_ts_meta_"
 #define COMPRESSION_COLUMN_METADATA_COUNT_NAME COMPRESSION_COLUMN_METADATA_PREFIX "count"

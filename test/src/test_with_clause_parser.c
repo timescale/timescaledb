@@ -21,7 +21,7 @@
 #include "annotations.h"
 #include "export.h"
 #include "test_utils.h"
-#include "with_clause_parser.h"
+#include "with_clause/with_clause_parser.h"
 
 TS_FUNCTION_INFO_V1(ts_sqlstate_raise_in);
 TS_FUNCTION_INFO_V1(ts_sqlstate_raise_out);
