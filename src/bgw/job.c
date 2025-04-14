@@ -786,6 +786,10 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 	bool isnull[Natts_bgw_job] = { 0 };
 	bool doReplace[Natts_bgw_job] = { 0 };
 
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] =
+		NameGetDatum(&updated_job->fd.application_name);
+	doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] = true;
+
 	Datum old_schedule_interval =
 		slot_getattr(ti->slot, Anum_bgw_job_schedule_interval, &isnull[0]);
 	Assert(!isnull[0]);

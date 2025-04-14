@@ -51,7 +51,7 @@ SELECT add_job('custom_proc','1h', config:='{"type":"procedure"}'::jsonb, initia
 SELECT add_job('custom_proc2','1h', config:= '{"type":"procedure"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
 
 SELECT add_job('custom_func', '1h', config:='{"type":"function"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
-SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
+SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ, job_name := 'custom_job_name');
 
 -- exclude internal jobs
 SELECT * FROM timescaledb_information.jobs WHERE job_id >= 1000 ORDER BY 1;
@@ -109,6 +109,10 @@ SELECT job_id FROM alter_job(1000,scheduled:=true);
 SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1000;
 SELECT job_id FROM alter_job(1000,scheduled:=false);
 SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1000;
+
+-- test updating the job name
+SELECT job_id, job_name FROM alter_job(1000,job_name:='custom_name_2');
+SELECT application_name FROM timescaledb_information.jobs WHERE job_id = 1000;
 
 -- Done with job 1000 now, so remove it.
 SELECT delete_job(1000);
