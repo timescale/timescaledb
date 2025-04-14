@@ -6,3 +6,9 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.ts_bloom1_matches(_timescaledb
 RETURNS bool
 AS '@MODULE_PATHNAME@', 'ts_bloom1_matches'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
+
+CREATE OR REPLACE OPERATOR _timescaledb_internal.@> (
+    FUNCTION = _timescaledb_functions.ts_bloom1_matches,
+    LEFTARG = _timescaledb_internal.bloom1,
+    RIGHTARG = anyelement
+);
