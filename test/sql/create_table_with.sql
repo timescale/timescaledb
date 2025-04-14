@@ -17,6 +17,9 @@ CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.time_colu
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (timescaledb.time_column='time');
 CREATE TABLE t2(time timestamptz , device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time',tsdb.chunk_time_interval='foo');
 CREATE TABLE t2(time int2 NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time',tsdb.chunk_time_interval='3 months');
+CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.create_default_indexes='time');
+CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.create_default_indexes=2);
+CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.create_default_indexes=-1);
 \set ON_ERROR_STOP 1
 
 
@@ -76,5 +79,31 @@ ROLLBACK;
 BEGIN;
 CREATE TABLE IF NOT EXISTS t9(time int8 NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time',tsdb.chunk_time_interval=32768);
 SELECT hypertable_name, column_name, column_type, integer_interval FROM timescaledb_information.dimensions;
+ROLLBACK;
+
+-- create_default_indexes
+BEGIN;
+CREATE TABLE t10(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time');
+SELECT indexrelid::regclass from pg_index where indrelid='t10'::regclass ORDER BY indexrelid::regclass::text;
+ROLLBACK;
+
+BEGIN;
+CREATE TABLE t10(time timestamptz NOT NULL PRIMARY KEY, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time');
+SELECT indexrelid::regclass from pg_index where indrelid='t10'::regclass ORDER BY indexrelid::regclass::text;
+ROLLBACK;
+
+BEGIN;
+CREATE TABLE t10(time timestamptz NOT NULL UNIQUE, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time');
+SELECT indexrelid::regclass from pg_index where indrelid='t10'::regclass ORDER BY indexrelid::regclass::text;
+ROLLBACK;
+
+BEGIN;
+CREATE TABLE t10(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time',tsdb.create_default_indexes=true);
+SELECT indexrelid::regclass from pg_index where indrelid='t10'::regclass ORDER BY indexrelid::regclass::text;
+ROLLBACK;
+
+BEGIN;
+CREATE TABLE t10(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time',tsdb.create_default_indexes=false);
+SELECT indexrelid::regclass from pg_index where indrelid='t10'::regclass ORDER BY indexrelid::regclass::text;
 ROLLBACK;
 

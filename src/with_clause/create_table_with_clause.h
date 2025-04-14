@@ -14,6 +14,7 @@ typedef enum CreateTableFlags
 	CreateTableFlagHypertable = 0,
 	CreateTableFlagTimeColumn,
 	CreateTableFlagChunkTimeInterval,
+	CreateTableFlagCreateDefaultIndexes,
 } CreateTableFlags;
 
 WithClauseResult *ts_create_table_with_clause_parse(const List *defelems);
