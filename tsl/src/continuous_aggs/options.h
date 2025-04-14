@@ -8,7 +8,7 @@
 #include <postgres.h>
 
 #include "ts_catalog/continuous_agg.h"
-#include "with_clause_parser.h"
+#include "with_clause/with_clause_parser.h"
 
 extern void continuous_agg_update_options(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);

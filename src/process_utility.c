@@ -56,9 +56,7 @@
 #include "annotations.h"
 #include "chunk.h"
 #include "chunk_index.h"
-#include "compression_with_clause.h"
 #include "copy.h"
-#include "create_table_with_clause.h"
 #include "cross_module_fn.h"
 #include "debug_assert.h"
 #include "debug_point.h"
@@ -86,7 +84,9 @@
 #include "ts_catalog/continuous_aggs_watermark.h"
 #include "tss_callbacks.h"
 #include "utils.h"
-#include "with_clause_parser.h"
+#include "with_clause/compression_with_clause.h"
+#include "with_clause/create_table_with_clause.h"
+#include "with_clause/with_clause_parser.h"
 
 #ifdef USE_TELEMETRY
 #include "telemetry/functions.h"
@@ -110,7 +110,7 @@ get_sizing_func_oid()
 	static Oid sizing_func_arg_types[] = { INT4OID, INT8OID, INT8OID };
 
 	return ts_get_function_oid(sizing_func_name,
-							   INTERNAL_SCHEMA_NAME,
+							   FUNCTIONS_SCHEMA_NAME,
 							   sizing_func_nargs,
 							   sizing_func_arg_types);
 }

@@ -1668,7 +1668,7 @@ get_sizing_func_oid()
 	static Oid sizing_func_arg_types[] = { INT4OID, INT8OID, INT8OID };
 
 	return ts_get_function_oid(sizing_func_name,
-							   INTERNAL_SCHEMA_NAME,
+							   FUNCTIONS_SCHEMA_NAME,
 							   sizing_func_nargs,
 							   sizing_func_arg_types);
 }

@@ -13,7 +13,7 @@
 #include "ts_catalog/catalog.h"
 
 #include "compat/compat.h"
-#include "with_clause_parser.h"
+#include "with_clause/with_clause_parser.h"
 
 #define CAGGINVAL_TRIGGER_NAME "ts_cagg_invalidation_trigger"
 

@@ -19,7 +19,7 @@
 #include "planner/planner.h"
 #include "process_utility.h"
 #include "ts_catalog/continuous_agg.h"
-#include "with_clause_parser.h"
+#include "with_clause/with_clause_parser.h"
 
 /*
  * To define a cross-module function add it to this struct, add a default

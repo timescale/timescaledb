@@ -10,10 +10,8 @@ set(SOURCES
     chunk_index.c
     chunk_scan.c
     constraint.c
-    create_table_with_clause.c
     cross_module_fn.c
     copy.c
-    compression_with_clause.c
     dimension.c
     dimension_slice.c
     dimension_vector.c
@@ -48,7 +46,6 @@ set(SOURCES
     trigger.c
     utils.c
     version.c
-    with_clause_parser.c
     tss_callbacks.c)
 
 # Add test source code in Debug builds
@@ -125,3 +122,4 @@ add_subdirectory(ts_catalog)
 add_subdirectory(import)
 add_subdirectory(nodes)
 add_subdirectory(planner)
+add_subdirectory(with_clause)

@@ -14,11 +14,6 @@
 
 /* Information about functions that we put in the cache */
 static CustomTypeInfo typeinfo[_CUSTOM_TYPE_MAX_INDEX] = {
-	[CUSTOM_TYPE_TS_INTERVAL] = {
-		.schema_name = INTERNAL_SCHEMA_NAME,
-		.type_name = "ts_interval",
-		.type_oid = InvalidOid,
-	},
 	[CUSTOM_TYPE_COMPRESSED_DATA] = {
 		.schema_name = INTERNAL_SCHEMA_NAME,
 		.type_name = "compressed_data",
