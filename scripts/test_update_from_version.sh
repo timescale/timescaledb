@@ -26,12 +26,12 @@ export PGHOST PGPORT PGDATABASE PGDATA
 
 run_sql() {
   local db=${2:-$PGDATABASE}
-  psql -X -q -d "${db}" -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -v WITH_ROLES=true -v WITH_SUPERUSER=true -v WITH_CHUNK=true -c "${1}"
+  psql -X -q --echo-queries -d "${db}" -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -v WITH_ROLES=true -v WITH_SUPERUSER=true -v WITH_CHUNK=true -c "${1}"
 }
 
 run_sql_file() {
   local db=${2:-$PGDATABASE}
-  psql -X -d "${db}" -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -v WITH_ROLES=true -v WITH_SUPERUSER=true -v WITH_CHUNK=true -f "${1}"
+  psql -X -q --echo-queries -d "${db}" -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -v WITH_ROLES=true -v WITH_SUPERUSER=true -v WITH_CHUNK=true -f "${1}"
 }
 
 check_version() {

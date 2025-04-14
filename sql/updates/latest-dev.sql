@@ -16,7 +16,7 @@ RETURNS bool
 AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
 LANGUAGE C IMMUTABLE STRICT;
 
-CREATE OR REPLACE OPERATOR _timescaledb_internal.@> (
+CREATE OPERATOR _timescaledb_internal.@> (
     FUNCTION = _timescaledb_functions.ts_bloom1_matches,
     LEFTARG = _timescaledb_internal.bloom1,
     RIGHTARG = anyelement
