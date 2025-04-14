@@ -59,9 +59,16 @@ SELECT pg_terminate_backend(pid) FROM tsdb_bgw
  WHERE backend_type LIKE '%Launcher%';
 $$ LANGUAGE SQL;
 
--- Show the default scheduler restart time and set it to a lower
--- value.
+-- Show the default scheduler restart time
 SHOW timescaledb.bgw_scheduler_restart_time;
+-- Test that it cannot be set to something between -1 and 10
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+ALTER SYSTEM SET timescaledb.bgw_scheduler_restart_time TO '5s';
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
+-- Set scheduler restart time to a lower value to make the test a
+-- little faster.
 ALTER SYSTEM SET timescaledb.bgw_scheduler_restart_time TO '10s';
 ALTER SYSTEM SET timescaledb.debug_bgw_scheduler_exit_status TO 1;
 SELECT pg_reload_conf();
