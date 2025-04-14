@@ -62,5 +62,5 @@ from generate_series(1, 63) x
 
 select count(compress_chunk(x)) from show_chunks('sparse') x;
 
-explain select * from sparse where Abcdef012345678_Bbcdef012345678_Cbcdef012345678_Dbcdef0 = 1;
+explain (costs off) select * from sparse where Abcdef012345678_Bbcdef012345678_Cbcdef012345678_Dbcdef0 = 1;
 

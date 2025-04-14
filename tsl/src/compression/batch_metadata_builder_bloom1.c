@@ -65,25 +65,22 @@ bloom1_hash64(uint64 x)
 	return x;
 }
 
-static uint64
-bloom1_hash_2(Datum datum)
+static Datum
+bloom1_hash_2(PG_FUNCTION_ARGS)
 {
-	uint64 tmp = DatumGetUInt16(datum);
-	return bloom1_hash64(tmp);
+	PG_RETURN_UINT64(bloom1_hash64(PG_GETARG_UINT16(0)));
 }
 
-static uint64
-bloom1_hash_4(Datum datum)
+static Datum
+bloom1_hash_4(PG_FUNCTION_ARGS)
 {
-	uint64 tmp = DatumGetUInt32(datum);
-	return bloom1_hash64(tmp);
+	PG_RETURN_UINT64(bloom1_hash64(PG_GETARG_UINT32(0)));
 }
 
-static uint64
-bloom1_hash_8(Datum datum)
+static Datum
+bloom1_hash_8(PG_FUNCTION_ARGS)
 {
-	uint64 tmp = DatumGetUInt64(datum);
-	return bloom1_hash64(tmp);
+	PG_RETURN_UINT64(bloom1_hash64(PG_GETARG_INT64(0)));
 }
 
 #ifdef TS_USE_UMASH
@@ -100,26 +97,28 @@ hashing_params()
 	return &params;
 }
 
-static uint64
-bloom1_hash_varlena(Datum datum)
+static Datum
+bloom1_hash_varlena(PG_FUNCTION_ARGS)
 {
+	Datum datum = PG_GETARG_DATUM(0);
 	const int length = VARSIZE_ANY_EXHDR(datum);
 	const char *data = VARDATA_ANY(datum);
-	return umash_full(hashing_params(),
-					  /* seed = */ ~0ULL,
-					  /* which = */ 0,
-					  data,
-					  length);
+	PG_RETURN_UINT64(umash_full(hashing_params(),
+								/* seed = */ ~0ULL,
+								/* which = */ 0,
+								data,
+								length));
 }
 
-static uint64
-bloom1_hash_16(Datum datum)
+static Datum
+bloom1_hash_16(PG_FUNCTION_ARGS)
 {
-	return umash_full(hashing_params(),
-					  /* seed = */ ~0ULL,
-					  /* which = */ 0,
-					  DatumGetPointer(datum),
-					  16);
+	Datum datum = PG_GETARG_DATUM(0);
+	PG_RETURN_UINT64(umash_full(hashing_params(),
+								/* seed = */ ~0ULL,
+								/* which = */ 0,
+								DatumGetPointer(datum),
+								16));
 }
 #endif
 
@@ -150,9 +149,10 @@ bloom1_get_hash_function(Oid type)
 			/* For UUID. */
 			return bloom1_hash_16;
 #endif
-		default:
-			return NULL;
 	}
+
+	TypeCacheEntry *entry = lookup_type_cache(type, TYPECACHE_HASH_EXTENDED_PROC_FINFO);
+	return entry->hash_extended_proc_finfo.fn_addr;
 }
 
 static void
@@ -331,8 +331,12 @@ bloom1_update_val(void *builder_, Datum needle)
 	const uint32 word_mask = num_word_bits - 1;
 	Assert((word_mask >> num_word_bits) == 0);
 
+	LOCAL_FCINFO(fcinfo, 1);
+	fcinfo->args[0].value = needle;
+	fcinfo->args[0].isnull = false;
+	const uint64 datum_hash_1 = DatumGetUInt64(builder->hash_function(fcinfo));
+
 	const uint32 absolute_mask = num_bits - 1;
-	const uint64 datum_hash_1 = builder->hash_function(needle);
 	for (int i = 0; i < BLOOM1_HASHES; i++)
 	{
 		const uint32 absolute_bit_index = bloom1_get_one_hash(datum_hash_1, i) & absolute_mask;
@@ -401,8 +405,12 @@ tsl_bloom1_matches(PG_FUNCTION_ARGS)
 	const uint32 word_mask = num_word_bits - 1;
 	Assert((word_mask >> num_word_bits) == 0);
 
+	LOCAL_FCINFO(hashfcinfo, 1);
+	hashfcinfo->args[0].value = needle;
+	hashfcinfo->args[0].isnull = false;
+	const uint64 datum_hash_1 = DatumGetUInt64(fn(hashfcinfo));
+
 	const uint32 absolute_mask = num_bits - 1;
-	const uint64 datum_hash_1 = fn(needle);
 	for (int i = 0; i < BLOOM1_HASHES; i++)
 	{
 		const uint32 absolute_bit_index = bloom1_get_one_hash(datum_hash_1, i) & absolute_mask;
@@ -561,5 +569,10 @@ ts_bloom1_hash(PG_FUNCTION_ARGS)
 
 	HashFunction fn = bloom1_get_hash_function(type_oid);
 	Ensure(fn != NULL, "cannot find our hash function");
-	PG_RETURN_UINT64(fn(needle));
+
+	LOCAL_FCINFO(hashfcinfo, 1);
+	hashfcinfo->args[0].value = needle;
+	hashfcinfo->args[0].isnull = false;
+
+	PG_RETURN_DATUM(fn(hashfcinfo));
 }
