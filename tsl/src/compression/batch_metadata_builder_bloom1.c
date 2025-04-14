@@ -38,6 +38,20 @@
  */
 #define BLOOM1_BLOCK_BITS 256
 
+/*
+ * Set up the function call info for the extended hash function on stack.
+ */
+#define LOCAL_HASHFCINFO(needle)                                                                   \
+	LOCAL_FCINFO(hashfcinfo, 2);                                                                   \
+	*hashfcinfo = (FunctionCallInfoBaseData){ 0 };                                                 \
+	hashfcinfo->nargs = 2;                                                                         \
+	hashfcinfo->args[0].value = needle;                                                            \
+	hashfcinfo->args[0].isnull = false;                                                            \
+	/* Seed. */                                                                                    \
+	hashfcinfo->args[1].value = 0;                                                                 \
+	hashfcinfo->args[1].isnull = false;                                                            \
+	hashfcinfo->fncollation = C_COLLATION_OID;
+
 typedef struct Bloom1MetadataBuilder
 {
 	BatchMetadataBuilder functions;
@@ -331,10 +345,8 @@ bloom1_update_val(void *builder_, Datum needle)
 	const uint32 word_mask = num_word_bits - 1;
 	Assert((word_mask >> num_word_bits) == 0);
 
-	LOCAL_FCINFO(fcinfo, 1);
-	fcinfo->args[0].value = needle;
-	fcinfo->args[0].isnull = false;
-	const uint64 datum_hash_1 = DatumGetUInt64(builder->hash_function(fcinfo));
+	LOCAL_HASHFCINFO(needle);
+	const uint64 datum_hash_1 = DatumGetUInt64(builder->hash_function(hashfcinfo));
 
 	const uint32 absolute_mask = num_bits - 1;
 	for (int i = 0; i < BLOOM1_HASHES; i++)
@@ -405,9 +417,7 @@ tsl_bloom1_matches(PG_FUNCTION_ARGS)
 	const uint32 word_mask = num_word_bits - 1;
 	Assert((word_mask >> num_word_bits) == 0);
 
-	LOCAL_FCINFO(hashfcinfo, 1);
-	hashfcinfo->args[0].value = needle;
-	hashfcinfo->args[0].isnull = false;
+	LOCAL_HASHFCINFO(needle);
 	const uint64 datum_hash_1 = DatumGetUInt64(fn(hashfcinfo));
 
 	const uint32 absolute_mask = num_bits - 1;
@@ -570,9 +580,6 @@ ts_bloom1_hash(PG_FUNCTION_ARGS)
 	HashFunction fn = bloom1_get_hash_function(type_oid);
 	Ensure(fn != NULL, "cannot find our hash function");
 
-	LOCAL_FCINFO(hashfcinfo, 1);
-	hashfcinfo->args[0].value = needle;
-	hashfcinfo->args[0].isnull = false;
-
+	LOCAL_HASHFCINFO(needle);
 	PG_RETURN_DATUM(fn(hashfcinfo));
 }
