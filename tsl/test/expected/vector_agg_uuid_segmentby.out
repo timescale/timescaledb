@@ -97,3 +97,9 @@ SELECT count(*) FROM (SELECT device FROM plan_plus GROUP BY device) t;
     10
 (1 row)
 
+SELECT count(*) FROM (SELECT device, field FROM plan_plus GROUP BY device, field) t;
+ count 
+-------
+  1000
+(1 row)
+

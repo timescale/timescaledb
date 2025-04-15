@@ -86,3 +86,5 @@ LIMIT 1;
 RESET timescaledb.debug_require_vector_agg;
 
 SELECT count(*) FROM (SELECT device FROM plan_plus GROUP BY device) t;
+
+SELECT count(*) FROM (SELECT device, field FROM plan_plus GROUP BY device, field) t;
