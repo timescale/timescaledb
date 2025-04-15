@@ -253,7 +253,9 @@ tsl_postprocess_plan(PlannedStmt *stmt)
 		 */
 		if ((has_normal_agg || has_vector_agg) && (has_vector_agg != should_have_vector_agg))
 		{
-			elog(ERROR, "vector aggregation inconsistent with debug_require_vector_agg GUC");
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("vector aggregation inconsistent with debug_require_vector_agg GUC")));
 		}
 	}
 #endif

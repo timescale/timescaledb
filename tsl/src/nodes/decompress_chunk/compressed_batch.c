@@ -372,7 +372,9 @@ compressed_batch_get_arrow_array(VectorQualState *vqstate, Expr *expr, bool *is_
 		Assert(column_values->decompression_type != DT_Invalid);
 	}
 
-	Assert(column_values->decompression_type != DT_Iterator);
+	Ensure(column_values->decompression_type != DT_Iterator,
+		   "expected arrow array but got iterator for column index %d",
+		   column_index);
 
 	/*
 	 * Prepare to compute the vector predicate. We have to handle the
