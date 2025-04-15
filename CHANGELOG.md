@@ -8,7 +8,7 @@ accidentally triggering the load of a previous DB version.**
 
 This release contains bug fixes since the 2.19.2 release. We recommend that you upgrade at the next available opportunity.
 
-**Bugfixes**
+**Bug fixes**
 * [#7893](https://github.com/timescale/timescaledb/pull/7893) Don't capture hard errors in with-clause parser
 * [#7903](https://github.com/timescale/timescaledb/pull/7903) Don't capture hard errors for old cagg format
 * [#7912](https://github.com/timescale/timescaledb/pull/7912) Don't capture errors estimating time max spread
