@@ -1,0 +1,42 @@
+name: Prerelease Sanity
+"on":
+  push:
+    branches:
+      - prerelease_test
+  pull_request:
+    branches: "?.*.x"
+    paths:
+      - version.config
+      - .github/workflows/prerelease-sanity.yaml
+  workflow_dispatch:
+
+
+jobs:
+  check_release_commit:
+    name: Check Release Commit
+    runs-on: ubuntu-22.04
+
+    steps:
+    # The combined changelog must reference all changes, and the respective
+    # change files in the .unreleased folder must be deleted.
+    - name: Check that no .unreleased files are left behind
+      run: |
+        ! compgen .unreleased/*
+
+    # The commit and tag message must start with Release <version>.
+    # If this is the release tag, it must point to the release commit
+    # and not something else.
+    - name: Check that the commit message references the respecitve version
+      run: |
+        required_title=$(sed -n "s/^version = /Release /p" version.config)
+        echo $required_title
+
+        tag_title=$(git log --oneline -1 --pretty=format:%s)
+        echo $tag_title
+        grep "$required_title" <<<"$tag_title"
+
+        # Our reference might be a tag, so check the pointed-to commit as well,
+        # using the ^0 git path specification to find it.
+        commit_title=$(git log --oneline -1 --pretty=format:%s @^0)
+        echo $commit_title
+        grep "$required_title" <<<"$commit_title"
