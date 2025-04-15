@@ -118,9 +118,9 @@ static const struct config_enum_entry hypercore_copy_to_options[] = {
 };
 
 static const struct config_enum_entry compress_truncate_behaviour_options[] = {
-	{ "truncate_only", COMPRESS_TRUNCATE_ONLY, false},
-	{"truncate_or_delete", COMPRESS_TRUNCATE_OR_DELETE, false},
-	{"truncate_disabled", COMPRESS_TRUNCATE_DISABLED, false},
+	{ "truncate_only", COMPRESS_TRUNCATE_ONLY, false },
+	{ "truncate_or_delete", COMPRESS_TRUNCATE_OR_DELETE, false },
+	{ "truncate_disabled", COMPRESS_TRUNCATE_DISABLED, false },
 };
 
 bool ts_guc_enable_deprecation_warnings = true;
@@ -1020,8 +1020,11 @@ _guc_init(void)
 
 	DefineCustomEnumVariable(MAKE_EXTOPTION("compress_truncate_behaviour"),
 							 "Define behaviour of truncate after compression",
-							 "Define behaviour of truncate after compression",
-							 (int*)&ts_guc_compress_truncate_behaviour,
+							 "Defines how truncate behaves at the end of compression. "
+							 "'truncate_only' forces truncation. 'truncate_disabled' deletes rows "
+							 "instead of truncate. 'truncate_or_delete' allows falling back to "
+							 "deletion.",
+							 (int *) &ts_guc_compress_truncate_behaviour,
 							 COMPRESS_TRUNCATE_ONLY,
 							 compress_truncate_behaviour_options,
 							 PGC_USERSET,
@@ -1029,7 +1032,6 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
-
 
 #ifdef USE_TELEMETRY
 	DefineCustomEnumVariable(MAKE_EXTOPTION("telemetry_level"),
