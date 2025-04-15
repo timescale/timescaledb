@@ -43,9 +43,10 @@ fields AS (
   select 'field '||f AS field from generate_series(1,100) AS f
 )
 SELECT
-  t, device, field, 10, true, 'value', null, now()
+  t, device, field, 10, true, 'value', null, '2025-04-15 00:00:00'::timestamptz
 FROM
-  generate_series(now() - interval '1 month', now(), interval '12 hour') AS t,
+  generate_series('2025-04-15 00:00:00'::timestamptz - interval '1 month',
+    '2025-04-15 00:00:00'::timestamptz, interval '12 hour') AS t,
   devices, fields;
 
 -- Compress data
