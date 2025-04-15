@@ -10,23 +10,32 @@ name: Prerelease Sanity
       - .github/workflows/prerelease-sanity.yaml
   workflow_dispatch:
 
-
 jobs:
   check_release_commit:
     name: Check Release Commit
-    runs-on: ubuntu-22.04
+    runs-on: timescaledb-runner-arm64
 
     steps:
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v4
+      # GitHub creates an empty merge commit even for fast-fordward merges, which
+      # makes it needlessly difficult to inspect the actual commit title. Since
+      # we require the PRs to release branches to be up to date before merging,
+      # we can just work with the PR head here.
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+        fetch-depth: 2
+
     # The combined changelog must reference all changes, and the respective
     # change files in the .unreleased folder must be deleted.
-    - name: Check that no .unreleased files are left behind
+    - name: No .unreleased files are left behind
       run: |
-        ! compgen .unreleased/*
+        ! compgen -G .unreleased/*
 
-    # The commit and tag message must start with Release <version>.
+    # The messages of the release commit and tag must start with Release <version>.
     # If this is the release tag, it must point to the release commit
     # and not something else.
-    - name: Check that the commit message references the respecitve version
+    - name: The release commit message references the respective version
       run: |
         required_title=$(sed -n "s/^version = /Release /p" version.config)
         echo $required_title
@@ -40,3 +49,10 @@ jobs:
         commit_title=$(git log --oneline -1 --pretty=format:%s @^0)
         echo $commit_title
         grep "$required_title" <<<"$commit_title"
+
+    # The release commit must modify the version.config
+    - name: The release commit modifies the version.config
+      run: |
+        git log --oneline -1 @^0
+        git log --oneline -1 @^0~
+        ! git diff --exit-code @^0~ @^0 -- version.config
