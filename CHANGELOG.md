@@ -4,6 +4,20 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.19.3 (2025-04-15)
+
+This release contains bug fixes since the 2.19.2 release. We recommend that you upgrade at the next available opportunity.
+
+**Bug fixes**
+* [#7893](https://github.com/timescale/timescaledb/pull/7893) Don't capture hard errors in with-clause parser
+* [#7903](https://github.com/timescale/timescaledb/pull/7903) Don't capture hard errors for old cagg format
+* [#7912](https://github.com/timescale/timescaledb/pull/7912) Don't capture errors estimating time max spread
+* [#7910](https://github.com/timescale/timescaledb/pull/7910) Fix not using SkipScan over one chunk
+* [#7913](https://github.com/timescale/timescaledb/pull/7913) Allow TAM chunk creation as non-owner
+* [#7935](https://github.com/timescale/timescaledb/pull/7935) Fix TAM segfault on DELETE using segmentby column
+* [#7954](https://github.com/timescale/timescaledb/pull/7954) Allow scheduler restarts to be disabled
+* [#7964](https://github.com/timescale/timescaledb/pull/7964) Crash when grouping by multiple columns of a compressed table, one of which is a UUID segmentby column.
+
 ## 2.19.2 (2025-04-07)
 
 This release contains bug fixes since the 2.19.1 release. We recommend that you upgrade at the next available opportunity.
