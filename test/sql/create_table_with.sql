@@ -2,6 +2,11 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
+-- our user needs permission to create schema for the schema tests
+\c :TEST_DBNAME :ROLE_SUPERUSER
+GRANT CREATE ON DATABASE :TEST_DBNAME TO :ROLE_DEFAULT_PERM_USER;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
 -- create table with non-tsdb option should not be affected
 CREATE TABLE t1(time timestamptz, device text, value float) WITH (autovacuum_enabled);
 DROP TABLE t1;
@@ -106,4 +111,39 @@ BEGIN;
 CREATE TABLE t10(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time',tsdb.create_default_indexes=false);
 SELECT indexrelid::regclass from pg_index where indrelid='t10'::regclass ORDER BY indexrelid::regclass::text;
 ROLLBACK;
+
+-- associated_schema
+BEGIN;
+CREATE TABLE t11(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time');
+SELECT associated_schema_name FROM _timescaledb_catalog.hypertable WHERE table_name = 't11';
+ROLLBACK;
+
+BEGIN;
+CREATE TABLE t11(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time', tsdb.associated_schema='abc');
+SELECT associated_schema_name FROM _timescaledb_catalog.hypertable WHERE table_name = 't11';
+INSERT INTO t11 SELECT '2025-01-01', 'd1', 0.1;
+SELECT relname from pg_class where relnamespace = 'abc'::regnamespace ORDER BY 1;
+ROLLBACK;
+
+BEGIN;
+CREATE SCHEMA abc2;
+CREATE TABLE t11(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time', tsdb.associated_schema='abc2');
+SELECT associated_schema_name FROM _timescaledb_catalog.hypertable WHERE table_name = 't11';
+INSERT INTO t11 SELECT '2025-01-01', 'd1', 0.1;
+SELECT relname from pg_class where relnamespace = 'abc2'::regnamespace ORDER BY 1;
+ROLLBACK;
+
+-- associated_table_prefix
+BEGIN;
+CREATE TABLE t12(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time');
+SELECT associated_table_prefix FROM _timescaledb_catalog.hypertable WHERE table_name = 't12';
+ROLLBACK;
+
+BEGIN;
+CREATE TABLE t12(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time', tsdb.associated_schema='abc', tsdb.associated_table_prefix='tbl_prefix');
+SELECT associated_table_prefix FROM _timescaledb_catalog.hypertable WHERE table_name = 't12';
+INSERT INTO t12 SELECT '2025-01-01', 'd1', 0.1;
+SELECT relname from pg_class where relnamespace = 'abc'::regnamespace ORDER BY 1;
+ROLLBACK;
+
 

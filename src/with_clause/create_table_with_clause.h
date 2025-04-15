@@ -15,6 +15,8 @@ typedef enum CreateTableFlags
 	CreateTableFlagTimeColumn,
 	CreateTableFlagChunkTimeInterval,
 	CreateTableFlagCreateDefaultIndexes,
+	CreateTableFlagAssociatedSchema,
+	CreateTableFlagAssociatedTablePrefix,
 } CreateTableFlags;
 
 WithClauseResult *ts_create_table_with_clause_parse(const List *defelems);
