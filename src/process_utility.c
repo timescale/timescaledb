@@ -3724,8 +3724,12 @@ process_create_table_end(Node *parsetree)
 		char *time_column =
 			TextDatumGetCString(create_table_info.with_clauses[CreateTableFlagTimeColumn].parsed);
 		NameData time_column_name;
+		NameData associated_schema_name;
+		NameData associated_table_prefix;
 		namestrcpy(&time_column_name, time_column);
 		uint32 flags = 0;
+		bool has_associated_schema = false;
+		bool has_associated_table_prefix = false;
 
 		if (get_attnum(table_relid, time_column) == InvalidAttrNumber)
 			ereport(ERROR,
@@ -3752,6 +3756,23 @@ process_create_table_end(Node *parsetree)
 				flags |= HYPERTABLE_CREATE_DISABLE_DEFAULT_INDEXES;
 		}
 
+		if (!create_table_info.with_clauses[CreateTableFlagAssociatedSchema].is_default)
+		{
+			has_associated_schema = true;
+			namestrcpy(&associated_schema_name,
+					   TextDatumGetCString(
+						   create_table_info.with_clauses[CreateTableFlagAssociatedSchema].parsed));
+		}
+
+		if (!create_table_info.with_clauses[CreateTableFlagAssociatedTablePrefix].is_default)
+		{
+			has_associated_table_prefix = true;
+			namestrcpy(&associated_table_prefix,
+					   TextDatumGetCString(
+						   create_table_info.with_clauses[CreateTableFlagAssociatedTablePrefix]
+							   .parsed));
+		}
+
 		DimensionInfo *open_dim_info =
 			ts_dimension_info_create_open(table_relid,
 										  &time_column_name, /* column name */
@@ -3768,8 +3789,11 @@ process_create_table_end(Node *parsetree)
 									   flags,		  /* flags */
 									   open_dim_info, /* open_dim_info */
 									   NULL,		  /* closed_dim_info */
-									   NULL,		  /* associated_schema_name */
-									   NULL,		  /* associated_table_prefix */
+									   has_associated_schema ? &associated_schema_name :
+															   NULL, /* associated_schema_name */
+									   has_associated_table_prefix ?
+										   &associated_table_prefix :
+										   NULL, /* associated_table_prefix */
 									   csi);
 	}
 }

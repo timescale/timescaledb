@@ -1,6 +1,10 @@
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
+-- our user needs permission to create schema for the schema tests
+\c :TEST_DBNAME :ROLE_SUPERUSER
+GRANT CREATE ON DATABASE :TEST_DBNAME TO :ROLE_DEFAULT_PERM_USER;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 -- create table with non-tsdb option should not be affected
 CREATE TABLE t1(time timestamptz, device text, value float) WITH (autovacuum_enabled);
 DROP TABLE t1;
@@ -175,5 +179,77 @@ SELECT indexrelid::regclass from pg_index where indrelid='t10'::regclass ORDER B
  indexrelid 
 ------------
 (0 rows)
+
+ROLLBACK;
+-- associated_schema
+BEGIN;
+CREATE TABLE t11(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time');
+SELECT associated_schema_name FROM _timescaledb_catalog.hypertable WHERE table_name = 't11';
+ associated_schema_name 
+------------------------
+ _timescaledb_internal
+(1 row)
+
+ROLLBACK;
+BEGIN;
+CREATE TABLE t11(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time', tsdb.associated_schema='abc');
+SELECT associated_schema_name FROM _timescaledb_catalog.hypertable WHERE table_name = 't11';
+ associated_schema_name 
+------------------------
+ abc
+(1 row)
+
+INSERT INTO t11 SELECT '2025-01-01', 'd1', 0.1;
+SELECT relname from pg_class where relnamespace = 'abc'::regnamespace ORDER BY 1;
+            relname             
+--------------------------------
+ _hyper_18_1_chunk
+ _hyper_18_1_chunk_t11_time_idx
+(2 rows)
+
+ROLLBACK;
+BEGIN;
+CREATE SCHEMA abc2;
+CREATE TABLE t11(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time', tsdb.associated_schema='abc2');
+SELECT associated_schema_name FROM _timescaledb_catalog.hypertable WHERE table_name = 't11';
+ associated_schema_name 
+------------------------
+ abc2
+(1 row)
+
+INSERT INTO t11 SELECT '2025-01-01', 'd1', 0.1;
+SELECT relname from pg_class where relnamespace = 'abc2'::regnamespace ORDER BY 1;
+            relname             
+--------------------------------
+ _hyper_19_2_chunk
+ _hyper_19_2_chunk_t11_time_idx
+(2 rows)
+
+ROLLBACK;
+-- associated_table_prefix
+BEGIN;
+CREATE TABLE t12(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time');
+SELECT associated_table_prefix FROM _timescaledb_catalog.hypertable WHERE table_name = 't12';
+ associated_table_prefix 
+-------------------------
+ _hyper_20
+(1 row)
+
+ROLLBACK;
+BEGIN;
+CREATE TABLE t12(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time', tsdb.associated_schema='abc', tsdb.associated_table_prefix='tbl_prefix');
+SELECT associated_table_prefix FROM _timescaledb_catalog.hypertable WHERE table_name = 't12';
+ associated_table_prefix 
+-------------------------
+ tbl_prefix
+(1 row)
+
+INSERT INTO t12 SELECT '2025-01-01', 'd1', 0.1;
+SELECT relname from pg_class where relnamespace = 'abc'::regnamespace ORDER BY 1;
+             relname             
+---------------------------------
+ tbl_prefix_3_chunk
+ tbl_prefix_3_chunk_t12_time_idx
+(2 rows)
 
 ROLLBACK;
