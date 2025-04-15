@@ -88,7 +88,7 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 			if (!*column_values->output_isnull)
 			{
 				const GroupingColumn *def = &params.policy->grouping_columns[column_index];
-				if (def->by_value)
+				if (def->value_bytes > 0)
 				{
 					num_bytes += def->value_bytes;
 				}
@@ -216,6 +216,14 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 				{
 					memcpy(&serialized_key_storage[offset],
 						   column_values->output_value,
+						   def->value_bytes);
+
+					offset += def->value_bytes;
+				}
+				else if (def->value_bytes > 0)
+				{
+					memcpy(&serialized_key_storage[offset],
+						   DatumGetPointer(*column_values->output_value),
 						   def->value_bytes);
 
 					offset += def->value_bytes;
@@ -419,10 +427,18 @@ serialized_emit_key(GroupingPolicyHash *policy, uint32 current_key, TupleTableSl
 		Datum *output = &aggregated_slot->tts_values[col->output_offset];
 		if (col->value_bytes > 0)
 		{
-			Assert(col->by_value);
-			Assert((size_t) col->value_bytes <= sizeof(Datum));
-			*output = 0;
-			memcpy(output, ptr, col->value_bytes);
+			if (col->by_value)
+			{
+				Assert(col->by_value);
+				Assert((size_t) col->value_bytes <= sizeof(Datum));
+				*output = 0;
+				memcpy(output, ptr, col->value_bytes);
+			}
+			else
+			{
+				*output = PointerGetDatum(ptr);
+			}
+
 			ptr += col->value_bytes;
 		}
 		else
