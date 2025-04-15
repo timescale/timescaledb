@@ -43,7 +43,7 @@
 /*
  * Timing parameters for truncate locking heuristics.
  * These are the same as used by Postgres for truncate locking during lazy vacuum.
- *
+ * https://github.com/postgres/postgres/blob/4a0650d359c5981270039eeb634c3b7427aa0af5/src/backend/access/heap/vacuumlazy.c#L82
  */
 #define COMPRESS_TRUNCATE_LOCK_WAIT_INTERVAL 50 /* ms */
 #define COMPRESS_TRUNCATE_LOCK_TIMEOUT 5000		/* ms */

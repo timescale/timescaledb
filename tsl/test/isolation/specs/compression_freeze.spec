@@ -111,4 +111,7 @@ permutation "s2_lock_compression_after_truncate" "s2_select_count_and_stats" "s1
 permutation "s2_lock_compression_after_delete" "s2_select_count_and_stats" "s1_compress_delete" "s2_select_count_and_stats" "s2_unlock_compression_after_delete" "s2_select_count_and_stats"
 
 # Check after TRUNCATE OR DELETE
+# Ideally, we want s2 to be a transaction, so that we can test the spin-lock that is triggered here.
+# However, spin locks don't play well with isolation tests, so that is tesed in a TAP test instead `tsl/test/t/004_truncate_or_delete_spin_lock_test.pl`
+
 permutation "s2_lock_compression_after_truncate_or_delete" "s2_select_count_and_stats" "s1_compress_truncate_or_delete" "s2_unlock_compression_after_truncate_or_delete" "s2_select_count_and_stats"
