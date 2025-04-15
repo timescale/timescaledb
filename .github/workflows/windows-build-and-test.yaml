@@ -67,6 +67,7 @@ jobs:
             vector_agg_groupagg
             vector_agg_grouping
             vector_agg_text
+            vector_agg_uuid_segmentby
             vectorized_aggregation
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
         include:

@@ -249,7 +249,7 @@ follow_uncompressed_output_tlist(const DecompressionMapContext *context)
  * attnos.
  */
 static void
-build_decompression_map(DecompressionMapContext *context, List *compressed_scan_tlist)
+build_decompression_map(DecompressionMapContext *context, List *compressed_output_tlist)
 {
 	DecompressChunkPath *path = context->decompress_path;
 	const CompressionInfo *info = path->info;
@@ -305,7 +305,7 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_scan_
 	 */
 	context->have_bulk_decompression_columns = false;
 	context->decompression_map = NIL;
-	foreach (lc, compressed_scan_tlist)
+	foreach (lc, compressed_output_tlist)
 	{
 		TargetEntry *target = (TargetEntry *) lfirst(lc);
 		if (!IsA(target->expr, Var))
@@ -480,7 +480,7 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_scan_
 	 * into several lists so that it can be passed through the custom path
 	 * settings.
 	 */
-	foreach (lc, compressed_scan_tlist)
+	foreach (lc, compressed_output_tlist)
 	{
 		TargetEntry *target = (TargetEntry *) lfirst(lc);
 		Var *var = castNode(Var, target->expr);
