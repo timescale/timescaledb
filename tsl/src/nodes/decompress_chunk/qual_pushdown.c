@@ -346,7 +346,6 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args
 	Expr *leftop, *rightop;
 	TypeCacheEntry *tce;
 	int strategy;
-	Oid expr_type_id;
 
 	if (list_length(expr_args) != 2)
 		return NULL;
@@ -382,42 +381,42 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args
 	Var *var_with_segment_meta = castNode(Var, leftop);
 	Expr *expr = rightop;
 
-	/* May be able to allow non-strict operations as well.
-	 * Next steps: Think through edge cases, either allow and write tests or figure out why we must
-	 * block strict operations
+	/*
+	 * Play it safe and don't push down if the operator collation doesn't match
+	 * the column collation.
 	 */
-	if (!OidIsValid(op_oid) || !op_strict(op_oid))
-		return NULL;
-
-	/* If the collation to be used by the OP doesn't match the column's collation do not push down
-	 * as the materialized min/max value do not match the semantics of what we need here */
 	if (var_with_segment_meta->varcollid != op_collation)
+	{
 		return NULL;
+	}
 
+	/*
+	 * We cannot use bloom filters for non-deterministic collations.
+	 */
+	if (OidIsValid(op_collation) && !get_collation_isdeterministic(op_collation))
+	{
+		return NULL;
+	}
+
+	/*
+	 * We only support equality operators.
+	 */
 	tce = lookup_type_cache(var_with_segment_meta->vartype, TYPECACHE_BTREE_OPFAMILY);
-
 	strategy = get_op_opfamily_strategy(op_oid, tce->btree_opf);
 	if (strategy != BTEqualStrategyNumber)
 		return NULL;
+	/*
+	 * The btree equality operators ("mergejoinable") are supposed to be strict.
+	 */
+	Assert(op_strict(op_oid));
 
 	expr = get_pushdownsafe_expr(context, expr);
-
 	if (expr == NULL)
 		return NULL;
 
-	expr_type_id = exprType((Node *) expr);
-
-	/* var = expr implies ts_bloom1_match(var_bloom, expr) */
-	Oid opno_le =
-		get_opfamily_member(tce->btree_opf, tce->type_id, expr_type_id, BTLessEqualStrategyNumber);
-	Oid opno_ge = get_opfamily_member(tce->btree_opf,
-									  tce->type_id,
-									  expr_type_id,
-									  BTGreaterEqualStrategyNumber);
-
-	if (!OidIsValid(opno_le) || !OidIsValid(opno_ge))
-		return NULL;
-
+	/*
+	 * var = expr implies bloom1_contains(var_bloom, expr).
+	 */
 	Var *bloom_var = makeVar(context->compressed_rel->relid,
 							 bloom1_attno,
 							 ts_custom_type_cache_get(CUSTOM_TYPE_BLOOM1)->type_oid,
@@ -426,10 +425,11 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args
 							 0);
 
 	Oid func = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
-										 makeString("ts_bloom1_matches")),
+										 makeString("bloom1_contains")),
 							  /* nargs = */ -1,
 							  /* argtypes = */ (void *) -1,
 							  /* missing_ok = */ false);
+
 	return (Expr *) makeFuncExpr(func,
 								 BOOLOID,
 								 list_make2(bloom_var, expr),

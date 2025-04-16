@@ -11,7 +11,7 @@ CREATE TYPE _timescaledb_internal.bloom1 (
     LIKE = bytea
 );
 
-CREATE FUNCTION _timescaledb_functions.ts_bloom1_matches(_timescaledb_internal.bloom1, anyelement)
+CREATE FUNCTION _timescaledb_functions.bloom1_contains(_timescaledb_internal.bloom1, anyelement)
 RETURNS bool
 AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
 LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;

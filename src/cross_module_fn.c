@@ -82,7 +82,7 @@ CROSSMODULE_WRAPPER(bool_compressor_finish);
 CROSSMODULE_WRAPPER(create_compressed_chunk);
 CROSSMODULE_WRAPPER(compress_chunk);
 CROSSMODULE_WRAPPER(decompress_chunk);
-CROSSMODULE_WRAPPER(bloom1_matches);
+CROSSMODULE_WRAPPER(bloom1_contains);
 
 /* continuous aggregate */
 CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
@@ -421,7 +421,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.array_compressor_finish = error_no_default_fn_pg_community,
 	.bool_compressor_append = error_no_default_fn_pg_community,
 	.bool_compressor_finish = error_no_default_fn_pg_community,
-	.bloom1_matches = error_no_default_fn_pg_community,
+	.bloom1_contains = error_no_default_fn_pg_community,
 
 	.show_chunk = error_no_default_fn_pg_community,
 	.create_chunk = error_no_default_fn_pg_community,

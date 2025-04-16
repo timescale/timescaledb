@@ -373,10 +373,10 @@ bloom1_update_val(void *builder_, Datum needle)
 /*
  * Checks whether the given element can be present in the given bloom filter.
  * This is what we use in predicate pushdown. The SQL signature is:
- * _timescaledb_functions.ts_bloom1_matches(bytea, anyelement)
+ * _timescaledb_functions.bloom1_contains(bytea, anyelement)
  */
 Datum
-tsl_bloom1_matches(PG_FUNCTION_ARGS)
+bloom1_contains(PG_FUNCTION_ARGS)
 {
 	/*
 	 * This function is not strict, because if we don't have a bloom filter, this
