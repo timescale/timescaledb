@@ -464,7 +464,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 
 		Assert(!REL_IS_HYPERCORE(in_rel));
 		elog(ts_guc_debug_compression_path_info ? INFO : DEBUG1,
-			 "using index \"%s\" to scan rows for compression",
+			 "using index \"%s\" to scan rows for converting to columnstore",
 			 get_rel_name(matched_index_rel->rd_id));
 
 		index_scan = index_beginscan(in_rel, matched_index_rel, GetTransactionSnapshot(), 0, 0);
@@ -476,7 +476,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 			row_compressor_process_ordered_slot(&row_compressor, slot, mycid);
 			if ((++nrows_processed % report_reltuples) == 0)
 				elog(DEBUG2,
-					 "compressed " INT64_FORMAT " rows from \"%s\"",
+					 "converted " INT64_FORMAT " rows to columnstore from \"%s\"",
 					 nrows_processed,
 					 RelationGetRelationName(in_rel));
 		}
@@ -485,7 +485,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 			row_compressor_flush(&row_compressor, mycid, true);
 
 		elog(DEBUG1,
-			 "finished compressing " INT64_FORMAT " rows from \"%s\"",
+			 "finished converting " INT64_FORMAT " rows to columnstore from \"%s\"",
 			 nrows_processed,
 			 RelationGetRelationName(in_rel));
 
@@ -496,7 +496,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	else
 	{
 		elog(ts_guc_debug_compression_path_info ? INFO : DEBUG1,
-			 "using tuplesort to scan rows from \"%s\" for compression",
+			 "using tuplesort to scan rows from \"%s\" for converting to columnstore",
 			 RelationGetRelationName(in_rel));
 
 		Tuplesortstate *sorted_rel = compress_chunk_sort_relation(settings, in_rel);
@@ -807,7 +807,7 @@ row_compressor_init(const CompressionSettings *settings, RowCompressor *row_comp
 		get_attnum(compressed_table->rd_id, NameStr(*count_metadata_name));
 	if (count_metadata_column_num == InvalidAttrNumber)
 		elog(ERROR,
-			 "missing metadata column '%s' in compressed table",
+			 "missing metadata column '%s' in columnstore table",
 			 COMPRESSION_COLUMN_METADATA_COUNT_NAME);
 
 	*row_compressor = (RowCompressor){

@@ -308,7 +308,7 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			default:
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("operation not supported on hypertables that have compression "
+						 errmsg("operation not supported on hypertables that have columnstore "
 								"enabled")));
 				break;
 		}
@@ -377,7 +377,7 @@ check_altertable_add_column_for_compressed(Hypertable *ht, ColumnDef *col)
 									(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 									 errmsg(
 										 "cannot add column with non-constant default expression "
-										 "to a hypertable that has compression enabled")));
+										 "to a hypertable that has columnstore enabled")));
 					}
 					has_default = true;
 					continue;
@@ -386,7 +386,7 @@ check_altertable_add_column_for_compressed(Hypertable *ht, ColumnDef *col)
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 							 errmsg("cannot add column with constraints "
-									"to a hypertable that has compression enabled")));
+									"to a hypertable that has columnstore enabled")));
 					break;
 			}
 		}
@@ -396,7 +396,7 @@ check_altertable_add_column_for_compressed(Hypertable *ht, ColumnDef *col)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("cannot add column with NOT NULL constraint without default "
-							"to a hypertable that has compression enabled")));
+							"to a hypertable that has columnstore enabled")));
 		}
 	}
 	if (col->is_not_null || col->identitySequence != NULL)
@@ -404,7 +404,7 @@ check_altertable_add_column_for_compressed(Hypertable *ht, ColumnDef *col)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot add column with constraints to a hypertable that has "
-						"compression enabled")));
+						"columnstore enabled")));
 	}
 	/* not possible to get non-null value here this is set when
 	 * ALTER TABLE ALTER COLUMN ... SET TYPE < > USING ...
@@ -1455,10 +1455,9 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 			if (ts_chunk_contains_compressed_data(chunk))
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("dropping compressed chunks not supported"),
-						 errhint(
-							 "Please drop the corresponding chunk on the uncompressed hypertable "
-							 "instead.")));
+						 errmsg("dropping columnstore chunks not supported"),
+						 errhint("Please drop the corresponding chunk on the rowstore hypertable "
+								 "instead.")));
 
 			/* if cascade is enabled, delete the compressed chunk with cascade too. Otherwise
 			 *  it would be blocked if there are dependent objects */
@@ -1521,8 +1520,8 @@ process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 				if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							 errmsg("dropping compressed hypertables not supported"),
-							 errhint("Please drop the corresponding uncompressed hypertable "
+							 errmsg("dropping columnstore hypertables not supported"),
+							 errhint("Please drop the corresponding rowstore hypertable "
 									 "instead.")));
 
 				/*
@@ -2725,9 +2724,10 @@ process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 								 errmsg(
-									 "operation not supported on hypertables that have compressed "
+									 "operation not supported on hypertables that have columnstore "
 									 "data"),
-								 errhint("Decompress the data before retrying the operation.")));
+								 errhint("Convert the data to rowstore before retrying the "
+										 "operation.")));
 			}
 			break;
 			/* Other AT commands might not be allowed on compressed chunks, but
@@ -4088,8 +4088,8 @@ process_altertable_chunk_set_tablespace(AlterTableCmd *cmd, Oid relid)
 	if (ts_chunk_contains_compressed_data(chunk))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("changing tablespace of compressed chunk is not supported"),
-				 errhint("Please use the corresponding chunk on the uncompressed hypertable "
+				 errmsg("changing tablespace of columnstore chunk is not supported"),
+				 errhint("Please use the corresponding chunk on the rowstore hypertable "
 						 "instead.")));
 
 	/* set tablespace for compressed chunk */
@@ -4813,7 +4813,7 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("DELETE triggers with transition tables not supported"),
-				 errdetail("Compressed hypertables not using \"hypercore\" access method are not "
+				 errdetail("Columnstore hypertables not using \"hypercore\" access method are not "
 						   "supported if the trigger use transition tables.")));
 	}
 
@@ -4922,7 +4922,8 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 	if (pg_options != NIL)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("only timescaledb.compress parameters allowed when specifying compression "
+				 errmsg("only timescaledb.enable_columnstore parameters allowed when specifying "
+						"columnstore "
 						"parameters for hypertable")));
 
 	parse_results = ts_alter_table_with_clause_parse(compress_options);
@@ -4965,7 +4966,7 @@ process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 	if (compress_options)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("compression options cannot be reset")));
+				 errmsg("columnstore options cannot be reset")));
 
 	return DDL_CONTINUE;
 }
