@@ -158,18 +158,7 @@ decompress_BOOL_BOOL(const uint8 *Data, size_t Size, bool bulk)
 			const Datum old_value = results[nn].val;
 			const Datum new_value = r.val;
 
-			/*
-			 * Floats can also be NaN/infinite and the comparison doesn't
-			 * work in that case.
-			 */
-			if (VARSIZE_ANY_EXHDR(old_value) != VARSIZE_ANY_EXHDR(new_value))
-			{
-				elog(ERROR, "the repeated decompression result doesn't match");
-			}
-
-			if (strncmp(VARDATA_ANY(old_value),
-						VARDATA_ANY(new_value),
-						VARSIZE_ANY_EXHDR(new_value)) != 0)
+			if (DatumGetBool(old_value) != DatumGetBool(new_value))
 			{
 				elog(ERROR, "the repeated decompression result doesn't match");
 			}
