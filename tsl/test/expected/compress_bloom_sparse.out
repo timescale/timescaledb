@@ -65,7 +65,7 @@ select count(*) from bloom where value = md5(7248::text);
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=1 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
-               Filter: (compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value OPERATOR(_timescaledb_internal.@>) '1f4183315762e30ea441d3caef5e64ad'::text)
+               Filter: _timescaledb_functions.ts_bloom1_matches(compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, '1f4183315762e30ea441d3caef5e64ad'::text)
                Rows Removed by Filter: 9
 (10 rows)
 
@@ -220,7 +220,7 @@ execute p(md5('2345'));
                Bulk Decompression: true
                ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=1 loops=1)
                      Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
-                     Filter: (compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value OPERATOR(_timescaledb_internal.@>) $1)
+                     Filter: _timescaledb_functions.ts_bloom1_matches(compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, $1)
                      Rows Removed by Filter: 9
 (14 rows)
 
@@ -293,7 +293,7 @@ select count(*) from bloom where u = '90ec9e8e-4501-4232-9d03-6d7cf6132815';
          Bulk Decompression: false
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=1 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
-               Filter: (compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u OPERATOR(_timescaledb_internal.@>) '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
+               Filter: _timescaledb_functions.ts_bloom1_matches(compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
                Rows Removed by Filter: 9
 (10 rows)
 
@@ -309,7 +309,7 @@ select count(*) from bloom where u = '6c1d0998-05f3-452c-abd3-45afe72bbcab';
          Bulk Decompression: false
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=10 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
-               Filter: (compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u OPERATOR(_timescaledb_internal.@>) '6c1d0998-05f3-452c-abd3-45afe72bbcab'::uuid)
+               Filter: _timescaledb_functions.ts_bloom1_matches(compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, '6c1d0998-05f3-452c-abd3-45afe72bbcab'::uuid)
 (9 rows)
 
 -- Timestamp uses minmax

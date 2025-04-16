@@ -425,18 +425,17 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args
 							 InvalidOid,
 							 0);
 
-	Oid operator_contains =
-		OpernameGetOprid(list_make2(makeString("_timescaledb_internal"), makeString("@>")),
-						 ts_custom_type_cache_get(CUSTOM_TYPE_BLOOM1)->type_oid,
-						 ANYELEMENTOID);
-	Ensure(OidIsValid(operator_contains), "bloom filter operator @> not found");
-	return (Expr *) make_opclause(operator_contains,
-								  /* opresulttype = */ BOOLOID,
-								  /* opretset = */ false,
-								  &bloom_var->xpr,
-								  expr,
-								  /* funccollid = */ InvalidOid,
-								  /* inputcollid = */ InvalidOid);
+	Oid func = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
+										 makeString("ts_bloom1_matches")),
+							  /* nargs = */ -1,
+							  /* argtypes = */ (void *) -1,
+							  /* missing_ok = */ false);
+	return (Expr *) makeFuncExpr(func,
+								 BOOLOID,
+								 list_make2(bloom_var, expr),
+								 /* funccollid = */ InvalidOid,
+								 /* inputcollid = */ InvalidOid,
+								 COERCE_EXPLICIT_CALL);
 }
 
 static Node *
