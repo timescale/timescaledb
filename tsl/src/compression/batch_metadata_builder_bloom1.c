@@ -315,8 +315,11 @@ calculate_hash(PGFunction hash_function, Datum needle)
 	hashfcinfo->nargs = 2;
 	hashfcinfo->args[0].value = needle;
 	hashfcinfo->args[0].isnull = false;
-	/* Seed. */
-	hashfcinfo->args[1].value = 0;
+	/*
+	 * Seed. Note that on 32-bit systems it is by-reference.
+	 */
+	const int64 seed = 0;
+	hashfcinfo->args[1].value = Int64GetDatumFast(seed);
 	hashfcinfo->args[1].isnull = false;
 
 	return DatumGetUInt64(hash_function(hashfcinfo));
