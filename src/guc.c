@@ -168,6 +168,8 @@ TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 #if PG16_GE
 TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates = true;
 #endif
+TSDLLEXPORT bool ts_guc_enable_compressed_skip_scan = true;
+TSDLLEXPORT double ts_guc_compression_batch_qual_match_ratio = 0.5;
 static char *ts_guc_default_segmentby_fn = NULL;
 static char *ts_guc_default_orderby_fn = NULL;
 TSDLLEXPORT bool ts_guc_enable_job_execution_logging = false;
@@ -668,6 +670,33 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 #endif
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compressed_skipscan"),
+							 "Enable SkipScan for compressed chunks",
+							 "Enable SkipScan for distinct inputs over compressed chunks",
+							 &ts_guc_enable_compressed_skip_scan,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomRealVariable(MAKE_EXTOPTION("compression_batch_qual_match_ratio"),
+							 "Ratio of a compression batch we assume to scan to find first tuple "
+							 "matching the qual",
+							 "Default is 0.5 i.e. half a batch. 0.0 assumes first tuple matches "
+							 "the qual.",
+							 &ts_guc_compression_batch_qual_match_ratio,
+							 0.5,
+							 0.0,
+							 1.0,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compression_wal_markers"),
 							 "Enable WAL markers for compression ops",
 							 "Enable the generation of markers in the WAL stream which mark the "
@@ -804,6 +833,7 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
 	DefineCustomIntVariable(MAKE_EXTOPTION("compression_batch_size_limit"),
 							"The max number of tuples that can be batched together during "
 							"compression",

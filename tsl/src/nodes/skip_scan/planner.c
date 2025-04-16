@@ -29,6 +29,7 @@
 #include "guc.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
+#include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/skip_scan/skip_scan.h"
 #include <import/planner.h>
 
@@ -41,8 +42,20 @@ typedef struct SkipScanPath
 
 	/* Index clause which we'll use to skip past elements we've already seen */
 	RestrictInfo *skip_clause;
-	/* attribute number of the distinct column on the table/chunk */
+
+	/* attribute number of the distinct column on the table/chunk which provides comparison value
+	 * for Skip qual */
 	AttrNumber distinct_attno;
+
+	/* attribute number of the Skip qual comparison column on the indexed table/chunk
+	 * "indexed_column_attno = distinct_attno" for (SkipScan <- Index Scan) scenario,
+	 * it can be different for (SkipScan <- DecompressChunk <- compressed Index Scan) scenario,
+	 * in that case "indexed_column_attno" is the attribute number of the compressed chunk column
+	 * corresponding to the distinct column "distinct_attno" on the decompressed chunk consumed by
+	 * SkipScan
+	 */
+	AttrNumber indexed_column_attno;
+
 	/* The column offset on the index we are calling DISTINCT on */
 	AttrNumber scankey_attno;
 	int distinct_typ_len;
@@ -65,7 +78,7 @@ static bool build_skip_qual(PlannerInfo *root, SkipScanPath *skip_scan_path, Ind
 							Var *var);
 static List *build_subpath(PlannerInfo *root, List *subpaths, DistinctPathInfo *dpinfo,
 						   List *top_pathkeys);
-static Var *get_distinct_var(PlannerInfo *root, DistinctPathInfo *dpinfo, IndexPath *index_path,
+static Var *get_distinct_var(PlannerInfo *root, DistinctPathInfo *dpinfo, Path *child_path,
 							 SkipScanPath *skip_scan_path);
 static TargetEntry *tlist_member_match_var(Var *var, List *targetlist);
 
@@ -85,6 +98,32 @@ _skip_scan_init(void)
 }
 
 static Plan *
+setup_index_plan(CustomScan *skip_plan, Plan *child_plan)
+{
+	Plan *plan = child_plan;
+	if (IsA(child_plan, IndexScan))
+	{
+		skip_plan->scan = castNode(IndexScan, child_plan)->scan;
+	}
+	else if (IsA(child_plan, IndexOnlyScan))
+	{
+		skip_plan->scan = castNode(IndexOnlyScan, child_plan)->scan;
+	}
+	else if (ts_is_decompress_chunk_plan(child_plan))
+	{
+		CustomScan *csplan = castNode(CustomScan, plan);
+		skip_plan->scan = csplan->scan;
+		plan = linitial(csplan->custom_plans);
+	}
+	else
+		elog(ERROR,
+			 "unsupported subplan type for SkipScan: %s",
+			 ts_get_node_name((Node *) child_plan));
+
+	return plan;
+}
+
+static Plan *
 skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_path, List *tlist,
 					  List *clauses, List *custom_plans)
 {
@@ -94,12 +133,12 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 
 	OpExpr *op = fix_indexqual(index_path->indexinfo, path->skip_clause, path->scankey_attno);
 
-	Plan *plan = linitial(custom_plans);
+	Plan *child_plan = linitial(custom_plans);
+	Plan *plan = setup_index_plan(skip_plan, child_plan);
+
 	if (IsA(plan, IndexScan))
 	{
 		IndexScan *idx_plan = castNode(IndexScan, plan);
-		skip_plan->scan = idx_plan->scan;
-
 		/* we prepend skip qual here so sort_indexquals will put it as first qual for that column */
 		idx_plan->indexqual =
 			sort_indexquals(index_path->indexinfo, lcons(op, idx_plan->indexqual));
@@ -107,7 +146,6 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 	else if (IsA(plan, IndexOnlyScan))
 	{
 		IndexOnlyScan *idx_plan = castNode(IndexOnlyScan, plan);
-		skip_plan->scan = idx_plan->scan;
 		/* we prepend skip qual here so sort_indexquals will put it as first qual for that column */
 		idx_plan->indexqual =
 			sort_indexquals(index_path->indexinfo, lcons(op, idx_plan->indexqual));
@@ -121,8 +159,8 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 	skip_plan->scan.plan.type = T_CustomScan;
 	skip_plan->methods = &skip_scan_plan_methods;
 	skip_plan->custom_plans = custom_plans;
-	/* get position of skipped column in tuples produced by child scan */
-	TargetEntry *tle = tlist_member_match_var(path->distinct_var, plan->targetlist);
+	/* get position of distinct column in tuples produced by child scan */
+	TargetEntry *tle = tlist_member_match_var(path->distinct_var, child_plan->targetlist);
 
 	bool nulls_first = index_path->indexinfo->nulls_first[path->scankey_attno - 1];
 	if (index_path->indexscandir == BackwardScanDirection)
@@ -165,6 +203,7 @@ find_aggrefs_walker(Node *node, FindAggrefsContext *context)
 	return expression_tree_walker(node, find_aggrefs_walker, context);
 }
 #endif
+
 /* We can get upper path Distinct expression once for upper path,
  * rather than repeat this check for each child path of an upper path input
  */
@@ -201,7 +240,7 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 	else if (stage == UPPERREL_GROUP_AGG)
 	{
 		/* Find all non-nested Aggrefs in the query target list */
-		FindAggrefsContext agg_ctx = { NULL };
+		FindAggrefsContext agg_ctx = { .aggrefs = NULL };
 		find_aggrefs_walker((Node *) root->parse->targetList, &agg_ctx);
 
 		foreach (lc, agg_ctx.aggrefs)
@@ -369,7 +408,7 @@ obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPa
 	}
 }
 
-static SkipScanPath *skip_scan_path_create(PlannerInfo *root, IndexPath *index_path,
+static SkipScanPath *skip_scan_path_create(PlannerInfo *root, Path *child_path,
 										   DistinctPathInfo *dpinfo);
 
 /*
@@ -407,7 +446,12 @@ void
 tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output_rel,
 						UpperRelationKind stage)
 {
-	DistinctPathInfo dpinfo = { stage, NULL, NULL };
+	DistinctPathInfo dpinfo = {
+		.stage = stage,
+		.unique_path = NULL,
+		.distinct_expr = NULL,
+	};
+
 	obtain_upper_distinct_path(root, output_rel, &dpinfo);
 	if (!dpinfo.unique_path)
 		return;
@@ -463,11 +507,9 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 			has_caa = true;
 		}
 
-		if (IsA(subpath, IndexPath))
+		if (IsA(subpath, IndexPath) || ts_is_decompress_chunk_path(subpath))
 		{
-			IndexPath *index_path = castNode(IndexPath, subpath);
-
-			subpath = (Path *) skip_scan_path_create(root, index_path, &dpinfo);
+			subpath = (Path *) skip_scan_path_create(root, subpath, &dpinfo);
 			if (!subpath)
 				continue;
 		}
@@ -589,12 +631,55 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 	}
 }
 
-static SkipScanPath *
-skip_scan_path_create(PlannerInfo *root, IndexPath *index_path, DistinctPathInfo *dpinfo)
+static IndexPath *
+get_compressed_index_path(DecompressChunkPath *dcpath)
 {
-	double startup = index_path->path.startup_cost;
-	double total = index_path->path.total_cost;
-	double rows = index_path->path.rows;
+	Path *compressed_path = linitial(dcpath->custom_path.custom_paths);
+	if (IsA(compressed_path, IndexPath))
+	{
+		IndexPath *index_path = castNode(IndexPath, compressed_path);
+		if (!pathkeys_contained_in(dcpath->required_compressed_pathkeys, compressed_path->pathkeys))
+			return NULL;
+
+		return index_path;
+	}
+	return NULL;
+}
+
+static SkipScanPath *
+skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpinfo)
+{
+	IndexPath *index_path = NULL;
+	bool do_decompress_cost = false;
+
+	if (IsA(child_path, IndexPath))
+	{
+		index_path = castNode(IndexPath, child_path);
+	}
+	else if (ts_is_decompress_chunk_path(child_path))
+	{
+		if (!ts_guc_enable_compressed_skip_scan)
+			return NULL;
+
+		DecompressChunkPath *dcpath = (DecompressChunkPath *) child_path;
+		index_path = get_compressed_index_path(dcpath);
+
+		/* We need to account for scanning decompressed batches
+		 * when we have predicates not pushed down into compressed index scan.
+		 * For example, "SELECT DISTINCT ON (dev) dev, time, value FROM htc WHERE time>today()"
+		 * where "htc" is compressed with "segmentby='dev'".
+		 * We may need to decompress all 1000 rows for each batch for a value of "dev" to find a
+		 * tuple matching "time>today()". We will use special heuristics to estimate costs in such
+		 * scenarios.
+		 *
+		 * Meanwhile, if there are no predicates which need searching through decompressed batches,
+		 * we can just return 1st row from the 1st batch for a value of "dev", with cost the same as
+		 * direct index scan cost.
+		 */
+		do_decompress_cost = child_path->parent->baserestrictinfo != NULL;
+	}
+	if (!index_path)
+		return NULL;
 
 	/* cannot use SkipScan with non-orderable index or IndexPath without pathkeys */
 	if (!index_path->path.pathkeys || !index_path->indexinfo->sortopfamily)
@@ -607,12 +692,12 @@ skip_scan_path_create(PlannerInfo *root, IndexPath *index_path, DistinctPathInfo
 	SkipScanPath *skip_scan_path = (SkipScanPath *) newNode(sizeof(SkipScanPath), T_CustomPath);
 	int ndistinct = dpinfo->unique_path->rows;
 	skip_scan_path->cpath.path.pathtype = T_CustomScan;
-	skip_scan_path->cpath.path.pathkeys = index_path->path.pathkeys;
-	skip_scan_path->cpath.path.pathtarget = index_path->path.pathtarget;
-	skip_scan_path->cpath.path.param_info = index_path->path.param_info;
-	skip_scan_path->cpath.path.parent = index_path->path.parent;
+	skip_scan_path->cpath.path.pathkeys = child_path->pathkeys;
+	skip_scan_path->cpath.path.pathtarget = child_path->pathtarget;
+	skip_scan_path->cpath.path.param_info = child_path->param_info;
+	skip_scan_path->cpath.path.parent = child_path->parent;
 	skip_scan_path->cpath.path.rows = ndistinct;
-	skip_scan_path->cpath.custom_paths = list_make1(index_path);
+	skip_scan_path->cpath.custom_paths = list_make1(child_path);
 	skip_scan_path->cpath.methods = &skip_scan_path_methods;
 
 	/* We calculate SkipScan cost as ndistinct * startup_cost + (ndistinct/rows) * total_cost
@@ -625,9 +710,30 @@ skip_scan_path_create(PlannerInfo *root, IndexPath *index_path, DistinctPathInfo
 	 * to (ndistinct / rows) * total leading to SkipScan not being chosen for queries on
 	 * hypertables with a lot of excluded chunks.
 	 */
+	double startup = (do_decompress_cost ?
+						  /* If we need to scan decompressed batch to find a tuple passing the qual,
+						   * we assume the GUC-specified fraction of the batch
+						   * needs to be scanned for each distinct value (0.5 by default).
+						   * Startup cost should be capped by at least startup cost of the index
+						   * scan if ratio is too small.
+						   */
+						  Max(child_path->startup_cost * ts_guc_compression_batch_qual_match_ratio,
+							  index_path->path.startup_cost) :
+						  index_path->path.startup_cost);
+	double total = child_path->total_cost;
+	double rows = index_path->path.rows;
+	double uncompressed_rows = child_path->rows;
+
 	skip_scan_path->cpath.path.startup_cost = startup;
 	if (rows > 1)
-		skip_scan_path->cpath.path.total_cost = ndistinct * startup + (ndistinct / rows) * total;
+	{
+		/* For compressed data, we would have decompressed and scanned entire compressed batches
+		 * without SkipScan, so it's fair to compute SkipScan savings in relation to uncompressed
+		 * rows
+		 */
+		skip_scan_path->cpath.path.total_cost =
+			ndistinct * startup + (ndistinct / uncompressed_rows) * total;
+	}
 	else
 		skip_scan_path->cpath.path.total_cost = startup;
 
@@ -636,7 +742,7 @@ skip_scan_path_create(PlannerInfo *root, IndexPath *index_path, DistinctPathInfo
 	 * free so reusing the IndexPath here is safe. */
 	skip_scan_path->index_path = index_path;
 
-	Var *var = get_distinct_var(root, dpinfo, index_path, skip_scan_path);
+	Var *var = get_distinct_var(root, dpinfo, child_path, skip_scan_path);
 
 	if (!var)
 		return NULL;
@@ -652,10 +758,12 @@ skip_scan_path_create(PlannerInfo *root, IndexPath *index_path, DistinctPathInfo
 
 /* Extract the Var to use for the SkipScan and do attno mapping if required. */
 static Var *
-get_distinct_var(PlannerInfo *root, DistinctPathInfo *dpinfo, IndexPath *index_path,
+get_distinct_var(PlannerInfo *root, DistinctPathInfo *dpinfo, Path *child_path,
 				 SkipScanPath *skip_scan_path)
 {
-	RelOptInfo *rel = index_path->path.parent;
+	RelOptInfo *rel = child_path->parent;
+	IndexPath *index_path = skip_scan_path->index_path;
+	RelOptInfo *indexed_rel = index_path->path.parent;
 	Expr *tlexpr = dpinfo->distinct_expr;
 
 	if (!tlexpr || !IsA(tlexpr, Var))
@@ -665,12 +773,18 @@ get_distinct_var(PlannerInfo *root, DistinctPathInfo *dpinfo, IndexPath *index_p
 
 	/* If we are dealing with a hypertable Var extracted from distinctClause will point to
 	 * the parent hypertable while the IndexPath will be on a Chunk.
-	 * For a normal table they point to the same relation and we are done here. */
+	 * For a normal PG table they point to the same relation and we are done here. */
 	if ((Index) var->varno == rel->relid)
+	{
+		/* Get attribute number for distinct column on a normal PG table */
+		skip_scan_path->indexed_column_attno = var->varattno;
 		return var;
+	}
 
 	RangeTblEntry *ht_rte = planner_rt_fetch(var->varno, root);
 	RangeTblEntry *chunk_rte = planner_rt_fetch(rel->relid, root);
+	RangeTblEntry *indexed_rte =
+		(indexed_rel == rel ? chunk_rte : planner_rt_fetch(indexed_rel->relid, root));
 
 	/* Check for hypertable */
 	if (!ts_is_hypertable(ht_rte->relid) || !bms_is_member(var->varno, rel->top_parent_relids))
@@ -678,9 +792,12 @@ get_distinct_var(PlannerInfo *root, DistinctPathInfo *dpinfo, IndexPath *index_p
 
 	Relation ht_rel = table_open(ht_rte->relid, AccessShareLock);
 	Relation chunk_rel = table_open(chunk_rte->relid, AccessShareLock);
+
+	TupleDesc outdesc = RelationGetDescr(ht_rel);
+	TupleDesc indesc = RelationGetDescr(chunk_rel);
+
 	bool found_wholerow;
-	TupleConversionMap *map =
-		convert_tuples_by_name(RelationGetDescr(chunk_rel), RelationGetDescr(ht_rel));
+	TupleConversionMap *map = convert_tuples_by_name(indesc, outdesc);
 
 	/* attno mapping necessary */
 	if (map)
@@ -710,6 +827,29 @@ get_distinct_var(PlannerInfo *root, DistinctPathInfo *dpinfo, IndexPath *index_p
 		var = copyObject(var);
 	}
 
+	/* Get attribute number for distinct column on a compressed chunk */
+	if (ts_is_decompress_chunk_path(child_path))
+	{
+		/* distinct column has to be a segmentby column */
+		DecompressChunkPath *dcpath = (DecompressChunkPath *) child_path;
+		if (!bms_is_member(var->varattno, dcpath->info->chunk_segmentby_attnos))
+		{
+			table_close(ht_rel, NoLock);
+			table_close(chunk_rel, NoLock);
+
+			return NULL;
+		}
+
+		Form_pg_attribute att = TupleDescAttr(indesc, var->varattno - 1);
+		char *attname = NameStr(att->attname);
+		skip_scan_path->indexed_column_attno = get_attnum(indexed_rte->relid, attname);
+	}
+	/* Get attribute number for distinct column on an uncompressed chunk */
+	else
+	{
+		skip_scan_path->indexed_column_attno = var->varattno;
+	}
+
 	table_close(ht_rel, NoLock);
 	table_close(chunk_rel, NoLock);
 
@@ -733,14 +873,12 @@ build_subpath(PlannerInfo *root, List *subpaths, DistinctPathInfo *dpinfo, List 
 	foreach (lc, subpaths)
 	{
 		Path *child = lfirst(lc);
-		if (IsA(child, IndexPath))
+		if (IsA(child, IndexPath) || ts_is_decompress_chunk_path(child))
 		{
-			if (top_pathkeys &&
-				!pathkeys_contained_in(top_pathkeys, castNode(IndexPath, child)->path.pathkeys))
+			if (top_pathkeys && !pathkeys_contained_in(top_pathkeys, child->pathkeys))
 				continue;
 
-			SkipScanPath *skip_path =
-				skip_scan_path_create(root, castNode(IndexPath, child), dpinfo);
+			SkipScanPath *skip_path = skip_scan_path_create(root, child, dpinfo);
 
 			if (skip_path)
 			{
@@ -785,15 +923,16 @@ build_skip_qual(PlannerInfo *root, SkipScanPath *skip_scan_path, IndexPath *inde
 	 * Since a is always 2 due to the WHERE clause we can create the correct ordering for the
 	 * ORDER BY with an index that does not include the a column and only includes the time column.
 	 */
-	int idx_key = get_idx_key(info, var->varattno);
+	int idx_key = get_idx_key(index_path->indexinfo, skip_scan_path->indexed_column_attno);
 	if (idx_key < 0)
 		return false;
+
+	/* sk_attno of the skip qual */
+	skip_scan_path->scankey_attno = idx_key + 1;
 
 	skip_scan_path->distinct_attno = var->varattno;
 	skip_scan_path->distinct_by_val = tce->typbyval;
 	skip_scan_path->distinct_typ_len = tce->typlen;
-	/* sk_attno of the skip qual */
-	skip_scan_path->scankey_attno = idx_key + 1;
 
 	int16 strategy = info->reverse_sort[idx_key] ? BTLessStrategyNumber : BTGreaterStrategyNumber;
 	if (index_path->indexscandir == BackwardScanDirection)
@@ -824,7 +963,7 @@ build_skip_qual(PlannerInfo *root, SkipScanPath *skip_scan_path, IndexPath *inde
 
 	Const *prev_val = makeNullConst(need_coerce ? opcintype : column_type, -1, column_collation);
 	Expr *current_val = (Expr *) makeVar(info->rel->relid /*varno*/,
-										 var->varattno /*varattno*/,
+										 skip_scan_path->indexed_column_attno /*varattno*/,
 										 column_type /*vartype*/,
 										 -1 /*vartypmod*/,
 										 column_collation /*varcollid*/,
