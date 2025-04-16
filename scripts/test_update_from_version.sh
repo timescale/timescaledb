@@ -6,8 +6,7 @@
 # - restored: restore from updated dump
 # - repair: install $FROM_VERSION, update to $TO_VERSION and run integrity tests
 
-set -e
-set -u
+set -xeu
 
 FROM_VERSION=${FROM_VERSION:-$(grep '^previous_version ' version.config | awk '{ print $3 }')}
 TO_VERSION=${TO_VERSION:-$(grep '^version ' version.config | awk '{ print $3 }')}
