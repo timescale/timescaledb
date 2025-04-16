@@ -38,20 +38,6 @@
  */
 #define BLOOM1_BLOCK_BITS 256
 
-/*
- * Set up the function call info for the extended hash function on stack.
- */
-#define LOCAL_HASHFCINFO(needle)                                                                   \
-	LOCAL_FCINFO(hashfcinfo, 2);                                                                   \
-	*hashfcinfo = (FunctionCallInfoBaseData){ 0 };                                                 \
-	hashfcinfo->nargs = 2;                                                                         \
-	hashfcinfo->args[0].value = needle;                                                            \
-	hashfcinfo->args[0].isnull = false;                                                            \
-	/* Seed. */                                                                                    \
-	hashfcinfo->args[1].value = 0;                                                                 \
-	hashfcinfo->args[1].isnull = false;                                                            \
-	hashfcinfo->fncollation = C_COLLATION_OID;
-
 typedef struct Bloom1MetadataBuilder
 {
 	BatchMetadataBuilder functions;
@@ -61,7 +47,7 @@ typedef struct Bloom1MetadataBuilder
 	int allocated_bytea_bytes;
 	bytea *bloom_bytea;
 
-	HashFunction hash_function;
+	PGFunction hash_function;
 } Bloom1MetadataBuilder;
 
 /*
@@ -136,9 +122,23 @@ bloom1_hash_16(PG_FUNCTION_ARGS)
 }
 #endif
 
-HashFunction
+/*
+ * Get the hash function we use for building a bloom filter for a particular
+ * type. Returns NULL if not supported.
+ * The signature of the returned function matches the Postgres extended hashing
+ * functions like hashtextextended().
+ */
+PGFunction
 bloom1_get_hash_function(Oid type)
 {
+	/*
+	 * FIXME
+	 * Fall back to the Postgres extended hashing functions, so that we can use
+	 * bloom filters for any types.
+	 */
+	TypeCacheEntry *entry = lookup_type_cache(type, TYPECACHE_HASH_EXTENDED_PROC_FINFO);
+	return entry->hash_extended_proc_finfo.fn_addr;
+
 #ifdef TS_USE_UMASH
 	if (type == TEXTOID)
 	{
@@ -164,9 +164,6 @@ bloom1_get_hash_function(Oid type)
 			return bloom1_hash_16;
 #endif
 	}
-
-	TypeCacheEntry *entry = lookup_type_cache(type, TYPECACHE_HASH_EXTENDED_PROC_FINFO);
-	return entry->hash_extended_proc_finfo.fn_addr;
 }
 
 static void
@@ -176,18 +173,6 @@ bloom1_update_null(void *builder_)
 	 * A null value cannot match an equality condition that we're optimizing
 	 * with bloom filters, so we don't need to consider them here.
 	 */
-}
-
-static char *
-bloom1_words(bytea *bloom)
-{
-	return VARDATA_ANY(bloom);
-}
-
-static int
-bloom1_num_bits(const bytea *bloom)
-{
-	return 8 * VARSIZE_ANY_EXHDR(bloom);
 }
 
 static void
@@ -203,8 +188,20 @@ bloom1_reset(void *builder_, RowCompressor *compressor)
 	compressor->compressed_values[builder->bloom_attr_offset] = 0;
 }
 
+static char *
+bloom1_words(bytea *bloom)
+{
+	return VARDATA_ANY(bloom);
+}
+
 static int
-pg_attribute_unused() bloom1_estimate_ndistinct(bytea *bloom)
+bloom1_num_bits(const bytea *bloom)
+{
+	return 8 * VARSIZE_ANY_EXHDR(bloom);
+}
+
+static int
+bloom1_estimate_ndistinct(bytea *bloom)
 {
 	const double m = bloom1_num_bits(bloom);
 	const double t = pg_popcount(bloom1_words(bloom), m / 8);
@@ -243,27 +240,37 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 	 * the unique elements is less. The TOAST compression doesn't handle even
 	 * the sparse filters very well. Apply a simple compression technique: split
 	 * the filter in half and bitwise OR the halves. Repeat this until we reach
-	 * the filter size that gives the desired false positive ratio of 0.1%.
+	 * the filter bit length that gives the desired false positive ratio of 0.1%.
+	 * The desired filter bit length is given by m1, we will now estimate it
+	 * based on the estimated current number of elements in the bloom filter (1)
+	 * and the ideal number of elements for a bloom filter of given size (2).
+	 * (1) n = log(1 - t/m0) / (k * log(1 - 1/m0)),
+	 * (2) n = -m1 * log(1 - p ^ (1/k)) / k.
 	 */
 	const double m0 = orig_num_bits;
-	//	const double n = bloom1_estimate_ndistinct(bloom);
 	const double k = BLOOM1_HASHES;
 	const double p = 0.001;
 	const double t = orig_bits_set;
 	const double m1 = -log(1 - t / m0) / (log(1 - 1 / m0) * log(1 - pow(p, 1 / k)));
-	//	fprintf(stderr, "m0 %.2lf t %.2lf m1 %.2lf\n", m0, t, m1);
+
+	/*
+	 * Compute powers of two corresponding to the current and desired filter
+	 * bit length.
+	 */
 	const int starting_pow2 = ceil(log2(m0));
 	Assert(pow(2, starting_pow2) == m0);
 	/* We don't want to go under 64 bytes. */
 	const int final_pow2 = MAX(6, ceil(log2(m1)));
 	Assert(final_pow2 >= 6);
 
+	/*
+	 * Fold filter in half, applying bitwise OR, until we reach the desired
+	 * filter bit length.
+	 */
 	for (int current_pow2 = starting_pow2; current_pow2 > final_pow2; current_pow2--)
 	{
 		const int half_words = 1 << (current_pow2 - 3 /* 8-bit byte */ - 1 /* half */);
 		Assert(half_words > 0);
-		//		fprintf(stderr, "%d -> %d -> %d, half %d\n", starting_pow2, current_pow2,
-		// final_pow2, half_words);
 		const char *words_tail = &words_buf[half_words];
 		for (int i = 0; i < half_words; i++)
 		{
@@ -271,6 +278,10 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 		}
 	}
 
+	/*
+	 * If we have resized the filter, update the nominal size of the varlena
+	 * object.
+	 */
 	if (final_pow2 < starting_pow2)
 	{
 		SET_VARSIZE(bloom,
@@ -283,19 +294,39 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 
 	compressor->compressed_is_null[builder->bloom_attr_offset] = false;
 	compressor->compressed_values[builder->bloom_attr_offset] = PointerGetDatum(bloom);
-
-	fprintf(stderr,
-			"bloom filter %d -> %d (%d) bits %d -> %d set %d estimate\n",
-			orig_num_bits,
-			bloom1_num_bits(bloom),
-			(int) pow(2, ceil(log2(m1))),
-			orig_bits_set,
-			(int) pg_popcount(words_buf, bloom1_num_bits(bloom) / 8),
-			bloom1_estimate_ndistinct(bloom));
 }
 
+/*
+ * Call a hash function that uses a postgres "extended hash" signature.
+ */
+static inline uint64
+calculate_hash(PGFunction hash_function, Datum needle)
+{
+	LOCAL_FCINFO(hashfcinfo, 2);
+	*hashfcinfo = (FunctionCallInfoBaseData){ 0 };
+
+	/*
+	 * Our hashing is not collation-sensitive, but the Postgres hashing functions
+	 * might refuse to work if the collation is not deterministic, so make them
+	 * happy.
+	 */
+	hashfcinfo->fncollation = C_COLLATION_OID;
+
+	hashfcinfo->nargs = 2;
+	hashfcinfo->args[0].value = needle;
+	hashfcinfo->args[0].isnull = false;
+	/* Seed. */
+	hashfcinfo->args[1].value = 0;
+	hashfcinfo->args[1].isnull = false;
+
+	return DatumGetUInt64(hash_function(hashfcinfo));
+}
+
+/*
+ * The offset of nth bit we're going to set.
+ */
 static inline uint32
-bloom1_get_one_hash(uint64 value_hash, uint32 index)
+bloom1_get_one_offset(uint64 value_hash, uint32 index)
 {
 	const uint32 low = value_hash & ~(uint32) 0;
 	const uint32 high = (value_hash >> 32) & ~(uint32) 0;
@@ -306,23 +337,6 @@ bloom1_get_one_hash(uint64 value_hash, uint32 index)
 	 */
 	return low + (index * high + index * index) % BLOOM1_BLOCK_BITS;
 }
-
-// static inline uint32
-// bloom1_get_one_word_mask(uint64 value_hash, uint32 num_bits, uint64 *word_mask)
-//{
-//	const uint32 low = value_hash & ~(uint32) 0;
-//	const uint32 high = (value_hash >> 32) & ~(uint32) 0;
-
-//	uint64 mask = 0;
-//	for (int i = 0; i < BLOOM1_HASHES; i++)
-//	{
-//		const uint32 bit_offset = (low + high * i) % 64;
-//		mask |= 1ULL << bit_offset;
-//	}
-
-//	*word_mask = mask;
-//	return high % (num_bits / (sizeof(mask) * 8));
-//}
 
 static void
 bloom1_update_val(void *builder_, Datum needle)
@@ -345,13 +359,11 @@ bloom1_update_val(void *builder_, Datum needle)
 	const uint32 word_mask = num_word_bits - 1;
 	Assert((word_mask >> num_word_bits) == 0);
 
-	LOCAL_HASHFCINFO(needle);
-	const uint64 datum_hash_1 = DatumGetUInt64(builder->hash_function(hashfcinfo));
-
+	const uint64 datum_hash_1 = calculate_hash(builder->hash_function, needle);
 	const uint32 absolute_mask = num_bits - 1;
 	for (int i = 0; i < BLOOM1_HASHES; i++)
 	{
-		const uint32 absolute_bit_index = bloom1_get_one_hash(datum_hash_1, i) & absolute_mask;
+		const uint32 absolute_bit_index = bloom1_get_one_offset(datum_hash_1, i) & absolute_mask;
 		const uint32 word_index = absolute_bit_index >> log2_word_bits;
 		const uint32 word_bit_index = absolute_bit_index & word_mask;
 		words_buf[word_index] |= 1ULL << word_bit_index;
@@ -397,7 +409,7 @@ tsl_bloom1_matches(PG_FUNCTION_ARGS)
 		needle = PointerGetDatum(PG_DETOAST_DATUM_PACKED(needle));
 	}
 
-	HashFunction fn = bloom1_get_hash_function(type_oid);
+	PGFunction fn = bloom1_get_hash_function(type_oid);
 
 	bytea *bloom = PG_GETARG_VARLENA_P(0);
 	const char *words_buf = bloom1_words(bloom);
@@ -417,13 +429,11 @@ tsl_bloom1_matches(PG_FUNCTION_ARGS)
 	const uint32 word_mask = num_word_bits - 1;
 	Assert((word_mask >> num_word_bits) == 0);
 
-	LOCAL_HASHFCINFO(needle);
-	const uint64 datum_hash_1 = DatumGetUInt64(fn(hashfcinfo));
-
+	const uint64 datum_hash_1 = calculate_hash(fn, needle);
 	const uint32 absolute_mask = num_bits - 1;
 	for (int i = 0; i < BLOOM1_HASHES; i++)
 	{
-		const uint32 absolute_bit_index = bloom1_get_one_hash(datum_hash_1, i) & absolute_mask;
+		const uint32 absolute_bit_index = bloom1_get_one_offset(datum_hash_1, i) & absolute_mask;
 		const uint32 word_index = absolute_bit_index >> log2_word_bits;
 		const uint32 word_bit_index = absolute_bit_index & word_mask;
 		if ((words_buf[word_index] & (1ULL << word_bit_index)) == 0)
@@ -469,9 +479,6 @@ batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
 		.allocated_bytea_bytes = bytea_bytes,
 	};
 
-	//	TypeCacheEntry *type = lookup_type_cache(type_oid, TYPECACHE_HASH_EXTENDED_PROC);
-	//	Ensure(OidIsValid(type->hash_extended_proc), "cannot find the hash function");
-	//	fmgr_info(type->hash_extended_proc, &builder->hash_function);
 	builder->hash_function = bloom1_get_hash_function(type_oid);
 
 	/*
@@ -493,7 +500,9 @@ TS_FUNCTION_INFO_V1(ts_bloom1_debug);
 	((int) VARATT_EXTERNAL_GET_EXTSIZE(toast_pointer) <                                            \
 	 (int) ((toast_pointer).va_rawsize - VARHDRSZ))
 
-/* _timescaledb_functions.ts_bloom1_matches(bytea, anyelement) */
+/*
+ * A function to output various debugging info about a bloom filter.
+ */
 Datum
 ts_bloom1_debug(PG_FUNCTION_ARGS)
 {
@@ -577,9 +586,8 @@ ts_bloom1_hash(PG_FUNCTION_ARGS)
 		needle = PointerGetDatum(PG_DETOAST_DATUM_PACKED(needle));
 	}
 
-	HashFunction fn = bloom1_get_hash_function(type_oid);
+	PGFunction fn = bloom1_get_hash_function(type_oid);
 	Ensure(fn != NULL, "cannot find our hash function");
 
-	LOCAL_HASHFCINFO(needle);
-	PG_RETURN_DATUM(fn(hashfcinfo));
+	PG_RETURN_UINT64(calculate_hash(fn, needle));
 }

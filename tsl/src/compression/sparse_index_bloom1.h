@@ -9,10 +9,4 @@
 
 Datum tsl_bloom1_matches(PG_FUNCTION_ARGS);
 
-/*
- * The signature matches the Postgres hash_extended functions.
- */
-// typedef Datum (*HashFunction)(PG_FUNCTION_ARGS);
-#define HashFunction PGFunction
-
-HashFunction bloom1_get_hash_function(Oid type);
+PGFunction bloom1_get_hash_function(Oid type);
