@@ -53,7 +53,7 @@ env:
   EXTENSIONS: "postgres_fdw test_decoding pageinspect pgstattuple"
 jobs:
   config:
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     outputs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
     steps:
