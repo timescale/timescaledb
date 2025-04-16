@@ -68,6 +68,119 @@ get_compression_algorithm(char *name)
 #undef PG_TYPE_PREFIX
 #undef DATUM_TO_CTYPE
 
+static int
+decompress_BOOL_BOOL(const uint8 *Data, size_t Size, bool bulk)
+{
+	Ensure(!bulk, "not supported");
+
+	StringInfoData si = { .data = (char *) Data, .len = Size };
+
+	const int data_algo = pq_getmsgbyte(&si);
+
+	CheckCompressedData(data_algo > 0 && data_algo < _END_COMPRESSION_ALGORITHMS);
+
+	if (data_algo != COMPRESSION_ALGORITHM_BOOL)
+	{
+		/*
+		 * It's convenient to fuzz only one algorithm at a time. We specialize
+		 * the fuzz target for one algorithm, so that the fuzzer doesn't waste
+		 * time discovering others from scratch.
+		 */
+		return -1;
+	}
+
+	const CompressionAlgorithmDefinition *def = algorithm_definition(data_algo);
+	Datum compressed_data = def->compressed_data_recv(&si);
+
+	/*
+	 * Test row-by-row decompression.
+	 */
+	DecompressionIterator *iter = def->iterator_init_forward(compressed_data, TEXTOID);
+	DecompressResult results[GLOBAL_MAX_ROWS_PER_COMPRESSION];
+	int n = 0;
+	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
+	{
+		if (n >= GLOBAL_MAX_ROWS_PER_COMPRESSION)
+		{
+			elog(ERROR, "too many compressed rows");
+		}
+
+		results[n++] = r;
+	}
+
+	/*
+	 * For row-by-row decompression, check that the result is still the same
+	 * after we compress and decompress back.
+	 * Don't perform this check for other types of tests.
+	 *
+	 * 1) Compress.
+	 */
+	Compressor *compressor = def->compressor_for_type(BOOLOID);
+
+	for (int i = 0; i < n; i++)
+	{
+		if (results[i].is_null)
+		{
+			compressor->append_null(compressor);
+		}
+		else
+		{
+			compressor->append_val(compressor, results[i].val);
+		}
+	}
+
+	compressed_data = (Datum) compressor->finish(compressor);
+	if (compressed_data == 0)
+	{
+		/* Some compressors return NULL when all rows are null. */
+		return n;
+	}
+
+	/*
+	 * 2) Decompress and check that it's the same.
+	 */
+	iter = def->iterator_init_forward(compressed_data, BOOLOID);
+	int nn = 0;
+	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
+	{
+		if (nn >= n)
+		{
+			elog(ERROR, "the repeated recompression result doesn't match");
+		}
+
+		if (r.is_null != results[nn].is_null)
+		{
+			elog(ERROR, "the repeated decompression result doesn't match");
+		}
+
+		if (!r.is_null)
+		{
+			const Datum old_value = results[nn].val;
+			const Datum new_value = r.val;
+
+			/*
+			 * Floats can also be NaN/infinite and the comparison doesn't
+			 * work in that case.
+			 */
+			if (VARSIZE_ANY_EXHDR(old_value) != VARSIZE_ANY_EXHDR(new_value))
+			{
+				elog(ERROR, "the repeated decompression result doesn't match");
+			}
+
+			if (strncmp(VARDATA_ANY(old_value),
+						VARDATA_ANY(new_value),
+						VARSIZE_ANY_EXHDR(new_value)) != 0)
+			{
+				elog(ERROR, "the repeated decompression result doesn't match");
+			}
+		}
+
+		nn++;
+	}
+
+	return n;
+}
+
 /*
  * The table of the supported testing configurations. We use it to generate
  * dispatch tables and specializations of test functions.
@@ -80,7 +193,8 @@ get_compression_algorithm(char *name)
 	X(ARRAY, TEXT, false)                                                                          \
 	X(ARRAY, TEXT, true)                                                                           \
 	X(DICTIONARY, TEXT, false)                                                                     \
-	X(DICTIONARY, TEXT, true)
+	X(DICTIONARY, TEXT, true)                                                                      \
+	X(BOOL, BOOL, false)
 
 static int (*get_decompress_fn(int algo, Oid type))(const uint8 *Data, size_t Size, bool bulk)
 {

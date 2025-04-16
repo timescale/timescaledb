@@ -128,6 +128,7 @@ jobs:
             { algo: array     , pgtype: text  , bulk: true , runs:   10000000 },
             { algo: dictionary, pgtype: text  , bulk: false, runs:  100000000 },
             { algo: dictionary, pgtype: text  , bulk: true , runs:  100000000 },
+            { algo: bool, pgtype: bool  , bulk: false , runs:  100000000 },
             ]
 
     name: Fuzz decompression ${{ matrix.case.algo }} ${{ matrix.case.pgtype }} ${{ matrix.case.bulk && 'bulk' || 'rowbyrow' }}
