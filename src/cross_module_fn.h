@@ -134,6 +134,9 @@ typedef struct CrossModuleFunctions
 	int (*hypercore_decompress_update_segment)(Relation relation, const ItemPointer ctid,
 											   TupleTableSlot *slot, Snapshot snapshot,
 											   ItemPointer new_tid);
+
+	void (*compression_enable)(Hypertable *ht);
+
 	/* The compression functions below are not installed in SQL as part of create extension;
 	 *  They are installed and tested during testing scripts. They are exposed in cross-module
 	 *  functions because they may be very useful for debugging customer problems if the sql

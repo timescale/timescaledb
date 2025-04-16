@@ -442,6 +442,26 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 	tablespace_oid = get_rel_tablespace(src_chunk->table_id);
 	CompressionSettings *settings = ts_compression_settings_get(src_chunk->hypertable_relid);
 
+	/*
+	 * On hypertables created with CREATE TABLE ... WITH we enable compression
+	 * by default but do not create CompressionSettings immediately assuming
+	 * that we have more information available when the first compression
+	 * is actually triggered allowing us to generate better compression
+	 * settings.
+	 */
+	if (!settings)
+	{
+		settings = ts_compression_settings_create(src_chunk->hypertable_relid,
+												  InvalidOid,
+												  NULL,
+												  NULL,
+												  NULL,
+												  NULL);
+
+		Hypertable *ht = ts_hypertable_get_by_id(src_chunk->fd.hypertable_id);
+		compression_settings_update(ht, settings, ts_compress_hypertable_set_clause_parse(NIL));
+	}
+
 	if (OidIsValid(table_id))
 		compress_chunk->table_id = table_id;
 	else
@@ -1250,8 +1270,8 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 
 	CompressionSettings *settings = ts_compression_settings_get(ht->main_table_relid);
 
-	if (ts_array_is_member(settings->fd.segmentby, name) ||
-		ts_array_is_member(settings->fd.orderby, name))
+	if (settings && (ts_array_is_member(settings->fd.segmentby, name) ||
+					 ts_array_is_member(settings->fd.orderby, name)))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot drop orderby or segmentby column from a hypertable with "
@@ -1335,4 +1355,17 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 			ExecRenameStmt(compressed_index_stmt);
 		}
 	}
+}
+
+/*
+ * Enables compression for a hypertable without creating initial configuration
+ */
+void
+tsl_compression_enable(Hypertable *ht)
+{
+	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE), RowExclusiveLock);
+	Oid ownerid = ts_rel_get_owner(ht->main_table_relid);
+	Oid tablespace_oid = get_rel_tablespace(ht->main_table_relid);
+	int compress_htid = compression_hypertable_create(ht, ownerid, tablespace_oid);
+	ts_hypertable_set_compressed(ht, compress_htid);
 }

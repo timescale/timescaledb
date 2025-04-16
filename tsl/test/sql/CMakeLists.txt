@@ -41,6 +41,7 @@ set(TEST_FILES
     compression.sql
     compression_trigger.sql
     compress_sort_transform.sql
+    create_table_with.sql
     custom_hashagg.sql
     decompress_index.sql
     foreign_keys.sql

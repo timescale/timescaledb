@@ -3784,17 +3784,30 @@ process_create_table_end(Node *parsetree)
 		ChunkSizingInfo *csi = ts_chunk_sizing_info_get_default_disabled(table_relid);
 		csi->colname = time_column;
 
-		ts_hypertable_create_from_info(table_relid,
-									   INVALID_HYPERTABLE_ID,
-									   flags,		  /* flags */
-									   open_dim_info, /* open_dim_info */
-									   NULL,		  /* closed_dim_info */
-									   has_associated_schema ? &associated_schema_name :
-															   NULL, /* associated_schema_name */
-									   has_associated_table_prefix ?
-										   &associated_table_prefix :
-										   NULL, /* associated_table_prefix */
-									   csi);
+		CatalogSecurityContext sec_ctx;
+		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+		int32 ht_id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
+		ts_catalog_restore_user(&sec_ctx);
+
+		if (ts_hypertable_create_from_info(table_relid,
+										   ht_id,
+										   flags,		  /* flags */
+										   open_dim_info, /* open_dim_info */
+										   NULL,		  /* closed_dim_info */
+										   has_associated_schema ?
+											   &associated_schema_name :
+											   NULL, /* associated_schema_name */
+										   has_associated_table_prefix ?
+											   &associated_table_prefix :
+											   NULL, /* associated_table_prefix */
+										   csi))
+		{
+			if (ts_cm_functions->compression_enable)
+			{
+				Hypertable *ht = ts_hypertable_get_by_id(ht_id);
+				ts_cm_functions->compression_enable(ht);
+			}
+		}
 	}
 }
 
