@@ -290,8 +290,9 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: PostgreSQL log for ${{ steps.config.outputs.name }}
-        path: postgres.*
-        path: postmaster.log
+        path: |
+          postgres.*
+          postmaster.log
 
     - name: Save fuzzer-generated crash cases
       if: always()
