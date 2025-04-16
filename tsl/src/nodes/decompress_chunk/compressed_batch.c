@@ -1244,6 +1244,10 @@ compressed_batch_advance(DecompressContext *dcontext, DecompressBatchState *batc
 		}
 
 		/* The tuple passed the qual. */
+		if (dcontext->unique_seg_by)
+		{
+			batch_state->next_batch_row = batch_state->total_batch_rows - 1;
+		}
 		batch_state->next_batch_row++;
 		return;
 	}

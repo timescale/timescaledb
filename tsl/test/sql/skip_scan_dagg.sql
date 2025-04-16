@@ -47,3 +47,18 @@ RESET timescaledb.enable_skipscan_for_distinct_aggregates;
 -- compare SkipScan results on hypertable
 :DIFF_CMD
 
+-- run tests on compressed hypertable and diff results
+\set TABLE skip_scan_htc
+\set PREFIX ''
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+
+SET timescaledb.enable_compressed_skipscan TO false;
+\o :TEST_RESULTS_UNOPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+RESET timescaledb.enable_compressed_skipscan;
+
+-- compare SkipScan results on hypertable
+:DIFF_CMD

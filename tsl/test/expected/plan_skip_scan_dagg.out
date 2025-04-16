@@ -34,6 +34,33 @@ INSERT INTO skip_scan_ht(time,dev,dev_name,val) SELECT t, d, 'device_' || d::tex
 INSERT INTO skip_scan_ht(time,dev,dev_name,val) SELECT t, NULL, NULL, NULL FROM generate_series(0, 999, 50) t;
 ANALYZE skip_scan_ht;
 ALTER TABLE skip_scan_ht SET (timescaledb.compress,timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
+-- create compressed hypertable with different physical layouts in the chunks
+CREATE TABLE skip_scan_htc(f1 int, f2 int, f3 int, time int NOT NULL, dev int, dev_name text, val int);
+SELECT create_hypertable('skip_scan_htc', 'time', chunk_time_interval => 250, create_default_indexes => false);
+     create_hypertable      
+----------------------------
+ (3,public,skip_scan_htc,t)
+(1 row)
+
+INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(0, 249) t, generate_series(1, 10) d;
+ALTER TABLE skip_scan_htc DROP COLUMN f1;
+INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(250, 499) t, generate_series(1, 10) d;
+ALTER TABLE skip_scan_htc DROP COLUMN f2;
+INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(500, 749) t, generate_series(1, 10) d;
+ALTER TABLE skip_scan_htc DROP COLUMN f3;
+INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(750, 999) t, generate_series(1, 10) d;
+INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, NULL, NULL, NULL FROM generate_series(0, 999, 50) t;
+ANALYZE skip_scan_htc;
+ALTER TABLE skip_scan_htc SET (timescaledb.compress,timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
+SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_3_5_chunk
+ _timescaledb_internal._hyper_3_6_chunk
+ _timescaledb_internal._hyper_3_7_chunk
+ _timescaledb_internal._hyper_3_8_chunk
+(4 rows)
+
 CREATE TABLE skip_scan_insert(time int, dev int, dev_name text, val int, query text);
 CREATE OR REPLACE FUNCTION int_func_immutable() RETURNS int LANGUAGE SQL IMMUTABLE SECURITY DEFINER AS $$SELECT 1; $$;
 CREATE OR REPLACE FUNCTION int_func_stable() RETURNS int LANGUAGE SQL STABLE SECURITY DEFINER AS $$ SELECT 2; $$;
@@ -46,11 +73,14 @@ UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan
 UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan_nulls'::regclass;
 UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan_ht'::regclass;
 UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid IN (select inhrelid from pg_inherits where inhparent='skip_scan_ht'::regclass);
+UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan_htc'::regclass;
+UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid IN (select inhrelid from pg_inherits where inhparent='skip_scan_htc'::regclass);
 -- Turn off autovacuum to not trigger new vacuums that restores the
 -- adjusted statistics
 alter table skip_scan set (autovacuum_enabled = off);
 alter table skip_scan_nulls set (autovacuum_enabled = off);
 alter table skip_scan_ht set (autovacuum_enabled = off);
+alter table skip_scan_htc set (autovacuum_enabled = off);
 -- we want to run with analyze here so we can see counts in the nodes
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
 \set TABLE skip_scan
@@ -59,10 +89,11 @@ alter table skip_scan_ht set (autovacuum_enabled = off);
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 -- canary for result diff
-SELECT current_setting('timescaledb.enable_skipscan_for_distinct_aggregates') AS enable_skipscan;
- enable_skipscan 
------------------
- on
+SELECT current_setting('timescaledb.enable_skipscan_for_distinct_aggregates') AS enable_dagg_skipscan,
+current_setting('timescaledb.enable_compressed_skipscan') AS enable_compressed_skipscan;
+ enable_dagg_skipscan | enable_compressed_skipscan 
+----------------------+----------------------------
+ on                   | on
 (1 row)
 
 -- test different index configurations
@@ -1090,10 +1121,11 @@ TRUNCATE skip_scan_insert;
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 -- canary for result diff
-SELECT current_setting('timescaledb.enable_skipscan_for_distinct_aggregates') AS enable_skipscan;
- enable_skipscan 
------------------
- on
+SELECT current_setting('timescaledb.enable_skipscan_for_distinct_aggregates') AS enable_dagg_skipscan,
+current_setting('timescaledb.enable_compressed_skipscan') AS enable_compressed_skipscan;
+ enable_dagg_skipscan | enable_compressed_skipscan 
+----------------------+----------------------------
+ on                   | on
 (1 row)
 
 -- test different index configurations
@@ -2976,6 +3008,8 @@ TRUNCATE skip_scan_insert;
 -- LICENSE-TIMESCALE for a copy of the license.
 CREATE INDEX ON :TABLE(dev);
 CREATE INDEX ON :TABLE(time);
+-- To test scenarios with SkipScan/no SkipScan over a mix of uncompressed and compressed chunks
+SET timescaledb.enable_compressed_skipscan TO false;
 -- IndexPath without pathkeys doesnt use SkipScan
 EXPLAIN (costs off, timing off, summary off) SELECT count(DISTINCT 1) FROM pg_rewrite;
                                QUERY PLAN                                
@@ -3050,13 +3084,13 @@ SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
 (1 row)
 
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
-                                                                       QUERY PLAN                                                                       
---------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                        QUERY PLAN                                                                        
+----------------------------------------------------------------------------------------------------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    ->  Merge Append (actual rows=2538 loops=1)
          Sort Key: _hyper_1_1_chunk.dev
          ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=2505 loops=1)
-               ->  Index Scan using compress_hyper_2_5_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_2_5_chunk (actual rows=11 loops=1)
+               ->  Index Scan using compress_hyper_2_13_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_2_13_chunk (actual rows=11 loops=1)
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx1 on _hyper_1_2_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
@@ -3070,13 +3104,13 @@ SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
 
 -- compression on one chunk will prevent skipscan if it's the only chunk remaining
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE time = 100;
-                                                                    QUERY PLAN                                                                    
---------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                     QUERY PLAN                                                                     
+----------------------------------------------------------------------------------------------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=11 loops=1)
          Vectorized Filter: ("time" = 100)
          Rows Removed by Filter: 2494
-         ->  Index Scan using compress_hyper_2_5_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_2_5_chunk (actual rows=11 loops=1)
+         ->  Index Scan using compress_hyper_2_13_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_2_13_chunk (actual rows=11 loops=1)
                Index Cond: ((_ts_meta_min_1 <= 100) AND (_ts_meta_max_1 >= 100))
 (6 rows)
 
@@ -3161,4 +3195,2171 @@ DROP INDEX _timescaledb_internal._hyper_1_1_chunk_skip_scan_ht_dev_time_idx;
                ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx1 on _hyper_1_4_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
 (19 rows)
+
+RESET timescaledb.enable_compressed_skipscan;
+-- For compressed SkipScan, we can only use compressed index on segmentby column "skip_scan_htc.dev",
+-- meaning indexes not matching it in the below tests will not use SkipScan.
+\set TABLE skip_scan_htc
+\ir include/skip_scan_dagg_query.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- canary for result diff
+SELECT current_setting('timescaledb.enable_skipscan_for_distinct_aggregates') AS enable_dagg_skipscan,
+current_setting('timescaledb.enable_compressed_skipscan') AS enable_compressed_skipscan;
+ enable_dagg_skipscan | enable_compressed_skipscan 
+----------------------+----------------------------
+ on                   | on
+(1 row)
+
+-- test different index configurations
+-- no index so we cant do SkipScan
+:PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Merge Append (actual rows=44 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(15 rows)
+
+-- NULLS LAST index on dev
+CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
+:PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Merge Append (actual rows=44 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(15 rows)
+
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC;
+                                                                               QUERY PLAN                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev
+   ->  Merge Append (actual rows=44 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev DESC
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Index Scan Backward using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Index Scan Backward using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Index Scan Backward using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Index Scan Backward using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(16 rows)
+
+DROP INDEX skip_scan_idx_dev_nulls_last;
+-- NULLS FIRST index on dev
+CREATE INDEX skip_scan_idx_dev_nulls_first ON :TABLE(dev NULLS FIRST);
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev NULLS FIRST;
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev
+   ->  Merge Append (actual rows=10020 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev NULLS FIRST
+         ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+               ->  Sort (actual rows=11 loops=1)
+                     Sort Key: compress_hyper_4_9_chunk.dev NULLS FIRST
+                     Sort Method: quicksort 
+                     ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+               ->  Sort (actual rows=11 loops=1)
+                     Sort Key: compress_hyper_4_10_chunk.dev NULLS FIRST
+                     Sort Method: quicksort 
+                     ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+               ->  Sort (actual rows=11 loops=1)
+                     Sort Key: compress_hyper_4_11_chunk.dev NULLS FIRST
+                     Sort Method: quicksort 
+                     ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+               ->  Sort (actual rows=11 loops=1)
+                     Sort Key: compress_hyper_4_12_chunk.dev NULLS FIRST
+                     Sort Method: quicksort 
+                     ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(24 rows)
+
+DROP INDEX skip_scan_idx_dev_nulls_first;
+-- multicolumn index with dev as leading column
+CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
+:PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Merge Append (actual rows=44 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(15 rows)
+
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC;
+                                                                               QUERY PLAN                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev
+   ->  Merge Append (actual rows=44 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev DESC
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Index Scan Backward using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Index Scan Backward using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Index Scan Backward using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Index Scan Backward using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(16 rows)
+
+DROP INDEX skip_scan_idx_dev_time_idx;
+-- multicolumn index with dev as non-leading column
+CREATE INDEX skip_scan_idx_time_dev_idx ON :TABLE(time, dev);
+:PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE time = 100;
+                                                                       QUERY PLAN                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               Vectorized Filter: ("time" = 100)
+               Rows Removed by Filter: 1492
+               ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+                     Index Cond: ((_ts_meta_min_1 <= 100) AND (_ts_meta_max_1 >= 100))
+(7 rows)
+
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time = 100 GROUP BY dev;
+                                                                       QUERY PLAN                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev
+   ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               Vectorized Filter: ("time" = 100)
+               Rows Removed by Filter: 1492
+               ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+                     Index Cond: ((_ts_meta_min_1 <= 100) AND (_ts_meta_max_1 >= 100))
+(8 rows)
+
+DROP INDEX skip_scan_idx_time_dev_idx;
+-- hash index is not ordered so can't use skipscan
+CREATE INDEX skip_scan_idx_hash ON :TABLE USING hash(dev_name);
+:PREFIX SELECT count(DISTINCT dev_name) FROM :TABLE WHERE dev_name IN ('device_1','device_2');
+                                          QUERY PLAN                                           
+-----------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Sort (actual rows=2000 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev_name
+         Sort Method: quicksort 
+         ->  Append (actual rows=2000 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=500 loops=1)
+                     Vectorized Filter: (dev_name = ANY ('{device_1,device_2}'::text[]))
+                     Rows Removed by Filter: 2005
+                     ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=500 loops=1)
+                     Vectorized Filter: (dev_name = ANY ('{device_1,device_2}'::text[]))
+                     Rows Removed by Filter: 2005
+                     ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=500 loops=1)
+                     Vectorized Filter: (dev_name = ANY ('{device_1,device_2}'::text[]))
+                     Rows Removed by Filter: 2005
+                     ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=500 loops=1)
+                     Vectorized Filter: (dev_name = ANY ('{device_1,device_2}'::text[]))
+                     Rows Removed by Filter: 2005
+                     ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(21 rows)
+
+DROP INDEX skip_scan_idx_hash;
+-- expression indexes
+-- currently not supported by skipscan
+CREATE INDEX skip_scan_expr_idx ON :TABLE((dev % 3));
+:PREFIX SELECT count(DISTINCT dev%3) FROM :TABLE;
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Sort (actual rows=10020 loops=1)
+         Sort Key: ((_hyper_3_5_chunk.dev % 3))
+         Sort Method: quicksort 
+         ->  Result (actual rows=10020 loops=1)
+               ->  Append (actual rows=10020 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                           ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                           ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                           ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                           ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(14 rows)
+
+:PREFIX SELECT count(DISTINCT dev%3), dev%3 FROM :TABLE GROUP BY dev%3 ORDER BY dev%3;
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=4 loops=1)
+   Group Key: ((_hyper_3_5_chunk.dev % 3))
+   ->  Sort (actual rows=10020 loops=1)
+         Sort Key: ((_hyper_3_5_chunk.dev % 3))
+         Sort Method: quicksort 
+         ->  Result (actual rows=10020 loops=1)
+               ->  Append (actual rows=10020 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                           ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                           ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                           ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                           ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(15 rows)
+
+DROP INDEX skip_scan_expr_idx;
+CREATE INDEX ON :TABLE(dev_name);
+CREATE INDEX ON :TABLE(dev);
+CREATE INDEX ON :TABLE(dev, time);
+CREATE INDEX ON :TABLE(time,dev);
+CREATE INDEX ON :TABLE(time,dev,val);
+\qecho basic DISTINCT queries on :TABLE
+basic DISTINCT queries on skip_scan_htc
+-- Various distint aggs over same column is OK
+:PREFIX SELECT count(DISTINCT dev), sum(DISTINCT dev), 'q1_1' FROM :TABLE;
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Merge Append (actual rows=44 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(15 rows)
+
+:PREFIX SELECT count(DISTINCT dev_name), max(DISTINCT dev_name), 'q1_2' FROM :TABLE;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Sort (actual rows=10020 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev_name
+         Sort Method: quicksort 
+         ->  Append (actual rows=10020 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(13 rows)
+
+-- Distinct agg over Const is OK
+:PREFIX SELECT count(DISTINCT dev), count(DISTINCT 2), 'q1_3', NULL FROM :TABLE;
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Merge Append (actual rows=44 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(15 rows)
+
+-- DISTINCT over distinct agg is OK
+:PREFIX SELECT DISTINCT count(DISTINCT dev), dev, 'q1_4' FROM :TABLE GROUP BY dev ORDER BY dev;
+                                                                                 QUERY PLAN                                                                                 
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort (actual rows=11 loops=1)
+   Sort Key: _hyper_3_5_chunk.dev
+   Sort Method: quicksort 
+   ->  HashAggregate (actual rows=11 loops=1)
+         Group Key: _hyper_3_5_chunk.dev, count(DISTINCT _hyper_3_5_chunk.dev)
+         Batches: 1 
+         ->  GroupAggregate (actual rows=11 loops=1)
+               Group Key: _hyper_3_5_chunk.dev
+               ->  Merge Append (actual rows=44 loops=1)
+                     Sort Key: _hyper_3_5_chunk.dev
+                     ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                                 ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                                 ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                                 ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                                 ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(22 rows)
+
+\qecho stable expression in targetlist on :TABLE
+stable expression in targetlist on skip_scan_htc
+:PREFIX SELECT count(DISTINCT dev), 'q1_5', length(md5(now()::text)) FROM :TABLE;
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Merge Append (actual rows=44 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(15 rows)
+
+:PREFIX SELECT count(DISTINCT dev_name), 'q1_6', length(md5(now()::text)) FROM :TABLE;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Sort (actual rows=10020 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev_name
+         Sort Method: quicksort 
+         ->  Append (actual rows=10020 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(13 rows)
+
+-- volatile expression in targetlist
+:PREFIX SELECT count(DISTINCT dev), 'q1_7', length(md5(random()::text)) FROM :TABLE;
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Merge Append (actual rows=44 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(15 rows)
+
+:PREFIX SELECT count(DISTINCT dev_name), 'q1_8', length(md5(random()::text)) FROM :TABLE;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Sort (actual rows=10020 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev_name
+         Sort Method: quicksort 
+         ->  Append (actual rows=10020 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(13 rows)
+
+-- Mix of aggregates on different columns and distinct/not distinct
+-- currently not supported by skipscan
+:PREFIX SELECT count(DISTINCT dev), max(DISTINCT dev_name), 'q1_9' FROM :TABLE;
+                                                                        QUERY PLAN                                                                        
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Merge Append (actual rows=10020 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+               ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+               ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+               ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+               ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(11 rows)
+
+:PREFIX SELECT count(DISTINCT dev), sum(dev), 'q1_10' FROM :TABLE;
+                                                                        QUERY PLAN                                                                        
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Merge Append (actual rows=10020 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+               ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+               ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+               ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+               ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(11 rows)
+
+:PREFIX SELECT count(DISTINCT dev), dev_name, 'q1_11' FROM :TABLE GROUP BY dev_name ORDER BY dev_name;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev_name
+   ->  Merge Append (actual rows=10020 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev_name, _hyper_3_5_chunk.dev
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev_name, _hyper_3_5_chunk.dev
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_6_chunk.dev_name, _hyper_3_6_chunk.dev
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_7_chunk.dev_name, _hyper_3_7_chunk.dev
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_8_chunk.dev_name, _hyper_3_8_chunk.dev
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(24 rows)
+
+-- distinct on expressions not supported
+:PREFIX SELECT count(DISTINCT time_bucket(10,time)), 'q1_12' FROM :TABLE;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Merge Append (actual rows=10020 loops=1)
+         Sort Key: (time_bucket(10, _hyper_3_5_chunk."time"))
+         ->  Result (actual rows=2505 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                     ->  Sort (actual rows=11 loops=1)
+                           Sort Key: compress_hyper_4_9_chunk._ts_meta_min_1
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Result (actual rows=2505 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                     ->  Sort (actual rows=11 loops=1)
+                           Sort Key: compress_hyper_4_10_chunk._ts_meta_min_1
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Result (actual rows=2505 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                     ->  Sort (actual rows=11 loops=1)
+                           Sort Key: compress_hyper_4_11_chunk._ts_meta_min_1
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Result (actual rows=2505 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                     ->  Sort (actual rows=11 loops=1)
+                           Sort Key: compress_hyper_4_12_chunk._ts_meta_min_1
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(27 rows)
+
+:PREFIX SELECT count(DISTINCT length(dev_name)), 'q1_13' FROM :TABLE;
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Sort (actual rows=10020 loops=1)
+         Sort Key: (length(_hyper_3_5_chunk.dev_name))
+         Sort Method: quicksort 
+         ->  Result (actual rows=10020 loops=1)
+               ->  Append (actual rows=10020 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                           ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                           ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                           ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                           ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(14 rows)
+
+:PREFIX SELECT count(DISTINCT 3*time), 'q1_14' FROM :TABLE;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Merge Append (actual rows=10020 loops=1)
+         Sort Key: ((3 * _hyper_3_5_chunk."time"))
+         ->  Result (actual rows=2505 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                     ->  Sort (actual rows=11 loops=1)
+                           Sort Key: compress_hyper_4_9_chunk._ts_meta_min_1
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Result (actual rows=2505 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                     ->  Sort (actual rows=11 loops=1)
+                           Sort Key: compress_hyper_4_10_chunk._ts_meta_min_1
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Result (actual rows=2505 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                     ->  Sort (actual rows=11 loops=1)
+                           Sort Key: compress_hyper_4_11_chunk._ts_meta_min_1
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Result (actual rows=2505 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                     ->  Sort (actual rows=11 loops=1)
+                           Sort Key: compress_hyper_4_12_chunk._ts_meta_min_1
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(27 rows)
+
+-- But expressions over distinct aggregates are supported
+:PREFIX SELECT count(DISTINCT dev) + 1, sum(DISTINCT dev)/count(DISTINCT dev), 'q1_15' FROM :TABLE;
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Merge Append (actual rows=44 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(15 rows)
+
+-- DISTINCT aggs grouped on their args
+:PREFIX SELECT count(DISTINCT dev), dev, 'q2_1' FROM :TABLE GROUP BY dev;
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev
+   ->  Merge Append (actual rows=44 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(16 rows)
+
+:PREFIX SELECT count(DISTINCT dev), dev, 'q2_2', NULL FROM :TABLE GROUP BY dev;
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev
+   ->  Merge Append (actual rows=44 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(16 rows)
+
+:PREFIX SELECT count(DISTINCT dev), dev, 'q2_3', length(md5(now()::text)) FROM :TABLE GROUP BY dev;
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev
+   ->  Merge Append (actual rows=44 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(16 rows)
+
+:PREFIX SELECT count(DISTINCT dev), dev, 'q2_4', length(md5(random()::text)) FROM :TABLE GROUP BY dev;
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev
+   ->  Merge Append (actual rows=44 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(16 rows)
+
+:PREFIX SELECT count(DISTINCT dev), dev, int_func_immutable(), 'q2_5' FROM :TABLE GROUP BY dev;
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev
+   ->  Merge Append (actual rows=44 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(16 rows)
+
+:PREFIX SELECT count(DISTINCT dev), dev, int_func_stable(), 'q2_6' FROM :TABLE GROUP BY dev;
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev
+   ->  Merge Append (actual rows=44 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(16 rows)
+
+:PREFIX SELECT count(DISTINCT dev), dev, int_func_volatile(), 'q2_7' FROM :TABLE GROUP BY dev;
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev
+   ->  Merge Append (actual rows=44 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(16 rows)
+
+:PREFIX SELECT count(DISTINCT dev), dev+1, 'q2_8' FROM :TABLE GROUP BY dev ORDER BY 2;
+                                                                              QUERY PLAN                                                                              
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort (actual rows=11 loops=1)
+   Sort Key: ((_hyper_3_5_chunk.dev + 1))
+   Sort Method: quicksort 
+   ->  GroupAggregate (actual rows=11 loops=1)
+         Group Key: _hyper_3_5_chunk.dev
+         ->  Merge Append (actual rows=44 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev
+               ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(19 rows)
+
+:PREFIX SELECT count(DISTINCT dev), dev+1, dev+2, 'q2_9' FROM :TABLE GROUP BY dev, dev;
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev
+   ->  Merge Append (actual rows=44 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(16 rows)
+
+-- Cannot do SkipScan as we group on a column which is not the distinct agg argument
+:PREFIX SELECT time, count(DISTINCT dev), 'q2_10' FROM :TABLE GROUP BY time;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=1000 loops=1)
+   Group Key: _hyper_3_5_chunk."time"
+   ->  Sort (actual rows=10020 loops=1)
+         Sort Key: _hyper_3_5_chunk."time", _hyper_3_5_chunk.dev
+         Sort Method: quicksort 
+         ->  Append (actual rows=10020 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(14 rows)
+
+-- Cannot do SkipScan if we group on 2+ columns
+:PREFIX SELECT count(DISTINCT dev), dev, tableoid::regclass, 'q2_11' FROM :TABLE GROUP BY dev, tableoid ORDER BY dev, tableoid;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=44 loops=1)
+   Group Key: _hyper_3_5_chunk.dev, skip_scan_htc.tableoid
+   ->  Sort (actual rows=10020 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev, skip_scan_htc.tableoid
+         Sort Method: quicksort 
+         ->  Append (actual rows=10020 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(14 rows)
+
+-- DISTINCT aggs grouped on their TEXT args
+:PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_1' FROM :TABLE GROUP BY dev_name;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev_name
+   ->  Merge Append (actual rows=10020 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev_name
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_6_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_7_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_8_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(24 rows)
+
+:PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_2', NULL FROM :TABLE GROUP BY dev_name;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev_name
+   ->  Merge Append (actual rows=10020 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev_name
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_6_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_7_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_8_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(24 rows)
+
+:PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_3', length(md5(now()::text)) FROM :TABLE GROUP BY dev_name;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev_name
+   ->  Merge Append (actual rows=10020 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev_name
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_6_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_7_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_8_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(24 rows)
+
+:PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_4', length(md5(random()::text)) FROM :TABLE GROUP BY dev_name;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev_name
+   ->  Merge Append (actual rows=10020 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev_name
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_6_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_7_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_8_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(24 rows)
+
+:PREFIX SELECT count(DISTINCT dev_name::varchar), dev_name::varchar, 'q3_5' FROM :TABLE GROUP BY dev_name;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev_name
+   ->  Merge Append (actual rows=10020 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev_name
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_6_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_7_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_8_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(24 rows)
+
+:PREFIX SELECT count(DISTINCT dev_name), dev_name, int_func_immutable(), 'q3_6' FROM :TABLE GROUP BY dev_name;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev_name
+   ->  Merge Append (actual rows=10020 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev_name
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_6_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_7_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_8_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(24 rows)
+
+:PREFIX SELECT count(DISTINCT dev_name), dev_name, int_func_stable(), 'q3_7' FROM :TABLE GROUP BY dev_name;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev_name
+   ->  Merge Append (actual rows=10020 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev_name
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_6_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_7_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_8_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(24 rows)
+
+:PREFIX SELECT count(DISTINCT dev_name), dev_name, int_func_volatile(), 'q3_8' FROM :TABLE GROUP BY dev_name;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev_name
+   ->  Merge Append (actual rows=10020 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev_name
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_6_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_7_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_8_chunk.dev_name
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(24 rows)
+
+-- Cannot do SkipScan as we group on a column which is not the distinct agg argument
+:PREFIX SELECT count(DISTINCT dev_name), dev_name, tableoid::regclass, 'q3_9' FROM :TABLE GROUP BY dev_name, tableoid ORDER BY dev_name, tableoid;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=44 loops=1)
+   Group Key: _hyper_3_5_chunk.dev_name, skip_scan_htc.tableoid
+   ->  Merge Append (actual rows=10020 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev_name, skip_scan_htc.tableoid
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev_name, _hyper_3_5_chunk.tableoid
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_6_chunk.dev_name, _hyper_3_6_chunk.tableoid
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_7_chunk.dev_name, _hyper_3_7_chunk.tableoid
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_8_chunk.dev_name, _hyper_3_8_chunk.tableoid
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(24 rows)
+
+-- Can do SkipScan if extra group column is eliminated by pinning to a Const
+-- and when it changes group by ordering
+:PREFIX SELECT count(DISTINCT dev_name), dev, dev_name FROM :TABLE WHERE dev = 1 GROUP BY dev, dev_name ORDER BY dev, dev_name;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=1 loops=1)
+   Group Key: _hyper_3_5_chunk.dev_name
+   ->  Sort (actual rows=1000 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev_name
+         Sort Method: quicksort 
+         ->  Append (actual rows=1000 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=250 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=1 loops=1)
+                           Index Cond: (dev = 1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=250 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=1 loops=1)
+                           Index Cond: (dev = 1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=250 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=1 loops=1)
+                           Index Cond: (dev = 1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=250 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=1 loops=1)
+                           Index Cond: (dev = 1)
+(18 rows)
+
+\qecho LIMIT queries on :TABLE
+LIMIT queries on skip_scan_htc
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev LIMIT 3;
+                                                                             QUERY PLAN                                                                              
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=3 loops=1)
+   ->  GroupAggregate (actual rows=3 loops=1)
+         Group Key: _hyper_3_5_chunk.dev
+         ->  Merge Append (actual rows=13 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev
+               ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=4 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=4 loops=1)
+                           ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=4 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=4 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=4 loops=1)
+                           ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=4 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=4 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=4 loops=1)
+                           ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=4 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=4 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=4 loops=1)
+                           ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=4 loops=1)
+(17 rows)
+
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC LIMIT 3;
+                                                                                  QUERY PLAN                                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=3 loops=1)
+   ->  GroupAggregate (actual rows=3 loops=1)
+         Group Key: _hyper_3_5_chunk.dev
+         ->  Merge Append (actual rows=13 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev DESC
+               ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=4 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=4 loops=1)
+                           ->  Index Scan Backward using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=4 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=4 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=4 loops=1)
+                           ->  Index Scan Backward using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=4 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=4 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=4 loops=1)
+                           ->  Index Scan Backward using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=4 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=4 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=4 loops=1)
+                           ->  Index Scan Backward using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=4 loops=1)
+(17 rows)
+
+\qecho range queries on :TABLE
+range queries on skip_scan_htc
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time BETWEEN 100 AND 300 GROUP BY dev;
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev
+   ->  Merge Append (actual rows=22 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     Vectorized Filter: (("time" >= 100) AND ("time" <= 300))
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+                           Index Cond: ((_ts_meta_min_1 <= 300) AND (_ts_meta_max_1 >= 100))
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     Vectorized Filter: (("time" >= 100) AND ("time" <= 300))
+                     Rows Removed by Filter: 1993
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+                           Index Cond: ((_ts_meta_min_1 <= 300) AND (_ts_meta_max_1 >= 100))
+(15 rows)
+
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time < 200 GROUP BY dev;
+                                                                       QUERY PLAN                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev
+   ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               Vectorized Filter: ("time" < 200)
+               Rows Removed by Filter: 501
+               ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+                     Index Cond: (_ts_meta_min_1 < 200)
+(8 rows)
+
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time > 800 GROUP BY dev;
+                                                                        QUERY PLAN                                                                        
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_8_chunk.dev
+   ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+               Vectorized Filter: ("time" > 800)
+               ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+                     Index Cond: (_ts_meta_max_1 > 800)
+(7 rows)
+
+\qecho ordered append on :TABLE
+ordered append on skip_scan_htc
+:PREFIX SELECT count(DISTINCT time), time FROM :TABLE WHERE time BETWEEN 0 AND 5000  GROUP BY time;
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=1000 loops=1)
+   Group Key: _hyper_3_5_chunk."time"
+   ->  Merge Append (actual rows=10020 loops=1)
+         Sort Key: _hyper_3_5_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+               Filter: (("time" >= 0) AND ("time" <= 5000))
+               ->  Sort (actual rows=11 loops=1)
+                     Sort Key: compress_hyper_4_9_chunk._ts_meta_min_1
+                     Sort Method: quicksort 
+                     ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+                           Filter: ((_ts_meta_max_1 >= 0) AND (_ts_meta_min_1 <= 5000))
+         ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+               Filter: (("time" >= 0) AND ("time" <= 5000))
+               ->  Sort (actual rows=11 loops=1)
+                     Sort Key: compress_hyper_4_10_chunk._ts_meta_min_1
+                     Sort Method: quicksort 
+                     ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+                           Filter: ((_ts_meta_max_1 >= 0) AND (_ts_meta_min_1 <= 5000))
+         ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+               Filter: (("time" >= 0) AND ("time" <= 5000))
+               ->  Sort (actual rows=11 loops=1)
+                     Sort Key: compress_hyper_4_11_chunk._ts_meta_min_1
+                     Sort Method: quicksort 
+                     ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+                           Filter: ((_ts_meta_max_1 >= 0) AND (_ts_meta_min_1 <= 5000))
+         ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+               Filter: (("time" >= 0) AND ("time" <= 5000))
+               ->  Sort (actual rows=11 loops=1)
+                     Sort Key: compress_hyper_4_12_chunk._ts_meta_min_1
+                     Sort Method: quicksort 
+                     ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+                           Filter: ((_ts_meta_max_1 >= 0) AND (_ts_meta_min_1 <= 5000))
+(32 rows)
+
+\qecho SUBSELECTS on :TABLE
+SUBSELECTS on skip_scan_htc
+:PREFIX SELECT c1, c2, 'q4_1' FROM (SELECT count(DISTINCT dev) as c1, sum(DISTINCT dev) as c2 FROM :TABLE) a;
+                                                                              QUERY PLAN                                                                              
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Subquery Scan on a (actual rows=1 loops=1)
+   ->  Aggregate (actual rows=1 loops=1)
+         ->  Merge Append (actual rows=44 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev
+               ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(16 rows)
+
+:PREFIX SELECT NULL, dev, NULL, 'q4_2' FROM (SELECT count(DISTINCT dev) as dev FROM :TABLE) a;
+                                                                              QUERY PLAN                                                                              
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Subquery Scan on a (actual rows=1 loops=1)
+   ->  Aggregate (actual rows=1 loops=1)
+         ->  Merge Append (actual rows=44 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev
+               ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(16 rows)
+
+:PREFIX SELECT NULL, dev, NULL, c1, 2, c3, 'q4_3' FROM (SELECT count(DISTINCT dev) as c1, dev, 1 as c3 FROM :TABLE GROUP BY dev) a;
+                                                                              QUERY PLAN                                                                              
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Subquery Scan on a (actual rows=11 loops=1)
+   ->  GroupAggregate (actual rows=11 loops=1)
+         Group Key: _hyper_3_5_chunk.dev
+         ->  Merge Append (actual rows=44 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev
+               ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(17 rows)
+
+\qecho ORDER BY
+ORDER BY
+:PREFIX SELECT c, dev, 'q5_1' FROM (SELECT count(DISTINCT dev) as c, dev FROM :TABLE GROUP BY dev ORDER BY dev) a;
+                                                                              QUERY PLAN                                                                              
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Subquery Scan on a (actual rows=11 loops=1)
+   ->  GroupAggregate (actual rows=11 loops=1)
+         Group Key: _hyper_3_5_chunk.dev
+         ->  Merge Append (actual rows=44 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev
+               ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(17 rows)
+
+:PREFIX SELECT c, dev, 'q5_2' FROM (SELECT count(DISTINCT dev) as c, dev FROM :TABLE GROUP BY dev ORDER BY dev DESC) a;
+                                                                                  QUERY PLAN                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Subquery Scan on a (actual rows=11 loops=1)
+   ->  GroupAggregate (actual rows=11 loops=1)
+         Group Key: _hyper_3_5_chunk.dev
+         ->  Merge Append (actual rows=44 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev DESC
+               ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                           ->  Index Scan Backward using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                           ->  Index Scan Backward using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                           ->  Index Scan Backward using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                           ->  Index Scan Backward using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(17 rows)
+
+\qecho WHERE CLAUSES
+WHERE CLAUSES
+:PREFIX SELECT c, dev, 'q6_1' FROM (SELECT count(DISTINCT dev) as c, dev FROM :TABLE WHERE dev > 5 GROUP BY dev) a;
+                                                                             QUERY PLAN                                                                              
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Subquery Scan on a (actual rows=5 loops=1)
+   ->  GroupAggregate (actual rows=5 loops=1)
+         Group Key: _hyper_3_5_chunk.dev
+         ->  Merge Append (actual rows=20 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev
+               ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=5 loops=1)
+                                 Index Cond: (dev > 5)
+               ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=5 loops=1)
+                                 Index Cond: (dev > 5)
+               ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=5 loops=1)
+                                 Index Cond: (dev > 5)
+               ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=5 loops=1)
+                                 Index Cond: (dev > 5)
+(21 rows)
+
+:PREFIX SELECT c, dev, 'q6_2' FROM (SELECT sum(DISTINCT dev) as c, dev FROM :TABLE GROUP BY dev HAVING sum(DISTINCT dev)>2) a;
+                                                                              QUERY PLAN                                                                              
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Subquery Scan on a (actual rows=8 loops=1)
+   ->  GroupAggregate (actual rows=8 loops=1)
+         Group Key: _hyper_3_5_chunk.dev
+         Filter: (sum(DISTINCT _hyper_3_5_chunk.dev) > 2)
+         Rows Removed by Filter: 3
+         ->  Merge Append (actual rows=44 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev
+               ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(19 rows)
+
+:PREFIX SELECT c, dev, 'q6_3' FROM (SELECT count(DISTINCT dev) as c, dev FROM :TABLE GROUP BY dev) a WHERE dev > 5;
+                                                                             QUERY PLAN                                                                              
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Subquery Scan on a (actual rows=5 loops=1)
+   ->  GroupAggregate (actual rows=5 loops=1)
+         Group Key: _hyper_3_5_chunk.dev
+         ->  Merge Append (actual rows=20 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev
+               ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=5 loops=1)
+                                 Index Cond: (dev > 5)
+               ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=5 loops=1)
+                                 Index Cond: (dev > 5)
+               ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=5 loops=1)
+                                 Index Cond: (dev > 5)
+               ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=5 loops=1)
+                           ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=5 loops=1)
+                                 Index Cond: (dev > 5)
+(21 rows)
+
+:PREFIX SELECT c, dev, 'q6_4' FROM (SELECT sum(DISTINCT dev) as c, dev FROM :TABLE GROUP BY dev) a WHERE c > 2;
+                                                                              QUERY PLAN                                                                              
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Subquery Scan on a (actual rows=8 loops=1)
+   ->  GroupAggregate (actual rows=8 loops=1)
+         Group Key: _hyper_3_5_chunk.dev
+         Filter: (sum(DISTINCT _hyper_3_5_chunk.dev) > 2)
+         Rows Removed by Filter: 3
+         ->  Merge Append (actual rows=44 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev
+               ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(19 rows)
+
+--\qecho immutable func in WHERE clause on :TABLE
+:PREFIX SELECT count(DISTINCT dev), 'q6_5' FROM :TABLE WHERE dev > int_func_immutable();
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Merge Append (actual rows=36 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=9 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=9 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=9 loops=1)
+                           Index Cond: (dev > 1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=9 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=9 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=9 loops=1)
+                           Index Cond: (dev > 1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=9 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=9 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=9 loops=1)
+                           Index Cond: (dev > 1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=9 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=9 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=9 loops=1)
+                           Index Cond: (dev > 1)
+(19 rows)
+
+--\qecho stable func in WHERE clause on :TABLE
+:PREFIX SELECT count(DISTINCT dev), 'q6_6' FROM :TABLE WHERE dev > int_func_stable();
+                                                                              QUERY PLAN                                                                              
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=32 loops=1)
+         Hypertable: skip_scan_htc
+         Chunks excluded during startup: 0
+         ->  Merge Append (actual rows=32 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev
+               ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=8 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=8 loops=1)
+                           Filter: (dev > int_func_stable())
+                           Rows Removed by Filter: 505
+                           ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=8 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=8 loops=1)
+                           Filter: (dev > int_func_stable())
+                           Rows Removed by Filter: 505
+                           ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=8 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=8 loops=1)
+                           Filter: (dev > int_func_stable())
+                           Rows Removed by Filter: 505
+                           ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=8 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=8 loops=1)
+                           Filter: (dev > int_func_stable())
+                           Rows Removed by Filter: 505
+                           ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(26 rows)
+
+--\qecho volatile func in WHERE clause on :TABLE:PREFIX SELECT count(DISTINCT dev), 'q6_7' FROM :TABLE WHERE dev > int_func_volatile();
+:PREFIX SELECT count(DISTINCT dev), 'q6_8' FROM :TABLE WHERE dev = ANY(inta_func_immutable());
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Merge Append (actual rows=12 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=3 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=3 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=3 loops=1)
+                           Index Cond: (dev = ANY ('{1,2,3}'::integer[]))
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=3 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=3 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=3 loops=1)
+                           Index Cond: (dev = ANY ('{1,2,3}'::integer[]))
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=3 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=3 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=3 loops=1)
+                           Index Cond: (dev = ANY ('{1,2,3}'::integer[]))
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=3 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=3 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=3 loops=1)
+                           Index Cond: (dev = ANY ('{1,2,3}'::integer[]))
+(19 rows)
+
+:PREFIX SELECT count(DISTINCT dev), 'q6_9' FROM :TABLE WHERE dev = ANY(inta_func_stable());
+                                                                              QUERY PLAN                                                                              
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=12 loops=1)
+         Hypertable: skip_scan_htc
+         Chunks excluded during startup: 0
+         ->  Merge Append (actual rows=12 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev
+               ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=3 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=3 loops=1)
+                           Filter: (dev = ANY (inta_func_stable()))
+                           Rows Removed by Filter: 1755
+                           ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=3 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=3 loops=1)
+                           Filter: (dev = ANY (inta_func_stable()))
+                           Rows Removed by Filter: 1755
+                           ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=3 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=3 loops=1)
+                           Filter: (dev = ANY (inta_func_stable()))
+                           Rows Removed by Filter: 1755
+                           ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=3 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=3 loops=1)
+                           Filter: (dev = ANY (inta_func_stable()))
+                           Rows Removed by Filter: 1755
+                           ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(26 rows)
+
+:PREFIX SELECT count(DISTINCT dev), 'q6_10' FROM :TABLE WHERE dev = ANY(inta_func_volatile());
+                                                                              QUERY PLAN                                                                              
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Custom Scan (ConstraintAwareAppend) (actual rows=12 loops=1)
+         Hypertable: skip_scan_htc
+         Chunks excluded during startup: 0
+         ->  Merge Append (actual rows=12 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev
+               ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=3 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=3 loops=1)
+                           Filter: (dev = ANY (inta_func_volatile()))
+                           Rows Removed by Filter: 1755
+                           ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=3 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=3 loops=1)
+                           Filter: (dev = ANY (inta_func_volatile()))
+                           Rows Removed by Filter: 1755
+                           ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=3 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=3 loops=1)
+                           Filter: (dev = ANY (inta_func_volatile()))
+                           Rows Removed by Filter: 1755
+                           ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=3 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=3 loops=1)
+                           Filter: (dev = ANY (inta_func_volatile()))
+                           Rows Removed by Filter: 1755
+                           ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(26 rows)
+
+-- always false expr similar to our initial skip qual
+:PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE dev > NULL;
+                  QUERY PLAN                  
+----------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Sort (actual rows=0 loops=1)
+         Sort Key: dev
+         Sort Method: quicksort 
+         ->  Result (actual rows=0 loops=1)
+               One-Time Filter: false
+(6 rows)
+
+-- no tuples matching
+:PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE dev > 20;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Merge Append (actual rows=0 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=0 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=0 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=0 loops=1)
+                           Index Cond: (dev > 20)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=0 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=0 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=0 loops=1)
+                           Index Cond: (dev > 20)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=0 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=0 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=0 loops=1)
+                           Index Cond: (dev > 20)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=0 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=0 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=0 loops=1)
+                           Index Cond: (dev > 20)
+(19 rows)
+
+-- multiple constraints in WHERE clause
+:PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE dev > 5 AND time = 100;
+                                                                      QUERY PLAN                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=5 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=5 loops=1)
+               Vectorized Filter: ("time" = 100)
+               Rows Removed by Filter: 745
+               ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=5 loops=1)
+                     Index Cond: ((dev > 5) AND (_ts_meta_min_1 <= 100) AND (_ts_meta_max_1 >= 100))
+(7 rows)
+
+:PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE dev > 5 AND time > 200;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Merge Append (actual rows=20 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=5 loops=1)
+                     Vectorized Filter: ("time" > 200)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=5 loops=1)
+                           Index Cond: ((dev > 5) AND (_ts_meta_max_1 > 200))
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=5 loops=1)
+                     Vectorized Filter: ("time" > 200)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=5 loops=1)
+                           Index Cond: ((dev > 5) AND (_ts_meta_max_1 > 200))
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=5 loops=1)
+                     Vectorized Filter: ("time" > 200)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=5 loops=1)
+                           Index Cond: ((dev > 5) AND (_ts_meta_max_1 > 200))
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=5 loops=1)
+                     Vectorized Filter: ("time" > 200)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=5 loops=1)
+                           Index Cond: ((dev > 5) AND (_ts_meta_max_1 > 200))
+(23 rows)
+
+:PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE dev >= 5 AND dev < 7 AND dev >= 2;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Merge Append (actual rows=8 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=2 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=2 loops=1)
+                           Index Cond: ((dev >= 5) AND (dev < 7) AND (dev >= 2))
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=2 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=2 loops=1)
+                           Index Cond: ((dev >= 5) AND (dev < 7) AND (dev >= 2))
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=2 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=2 loops=1)
+                           Index Cond: ((dev >= 5) AND (dev < 7) AND (dev >= 2))
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=2 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=2 loops=1)
+                           Index Cond: ((dev >= 5) AND (dev < 7) AND (dev >= 2))
+(19 rows)
+
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time > 100 AND time < 200 AND val > 10 AND val < 10000 AND dev > 2 AND dev < 7 GROUP BY dev ORDER BY dev;
+                                                                      QUERY PLAN                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=0 loops=1)
+   Group Key: _hyper_3_5_chunk.dev
+   ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=0 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=0 loops=1)
+               Vectorized Filter: (("time" > 100) AND ("time" < 200) AND (val > 10) AND (val < 10000))
+               Rows Removed by Filter: 1000
+               ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=4 loops=1)
+                     Index Cond: ((dev > 2) AND (dev < 7) AND (_ts_meta_min_1 < 200) AND (_ts_meta_max_1 > 100))
+(8 rows)
+
+:PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE dev IS NULL;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Merge Append (actual rows=4 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=1 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=1 loops=1)
+                           Index Cond: (dev IS NULL)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=1 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=1 loops=1)
+                           Index Cond: (dev IS NULL)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=1 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=1 loops=1)
+                           Index Cond: (dev IS NULL)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=1 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=1 loops=1)
+                           Index Cond: (dev IS NULL)
+(19 rows)
+
+:PREFIX SELECT count(DISTINCT dev_name) FROM :TABLE WHERE dev_name IS NULL;
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Sort (actual rows=20 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev_name
+         Sort Method: quicksort 
+         ->  Append (actual rows=20 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=5 loops=1)
+                     Vectorized Filter: (dev_name IS NULL)
+                     Rows Removed by Filter: 2500
+                     ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=5 loops=1)
+                     Vectorized Filter: (dev_name IS NULL)
+                     Rows Removed by Filter: 2500
+                     ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=5 loops=1)
+                     Vectorized Filter: (dev_name IS NULL)
+                     Rows Removed by Filter: 2500
+                     ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=5 loops=1)
+                     Vectorized Filter: (dev_name IS NULL)
+                     Rows Removed by Filter: 2500
+                     ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(21 rows)
+
+-- Distinct aggregate path with no pathkeys because of Const predicate.
+-- PG is smart to add LIMIT 1 to SELECT DISTINCT in this case,
+-- but not smart enough to add LIMIT 1 to distinct aggregate input.
+-- TODO: create an issue for this task, i.e. add LIMIT 1 to distinct aggregate input when input equals to a Const
+:PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE dev = 1;
+                                                                       QUERY PLAN                                                                        
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Append (actual rows=1000 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=250 loops=1)
+               ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=1 loops=1)
+                     Index Cond: (dev = 1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=250 loops=1)
+               ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=1 loops=1)
+                     Index Cond: (dev = 1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=250 loops=1)
+               ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=1 loops=1)
+                     Index Cond: (dev = 1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=250 loops=1)
+               ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=1 loops=1)
+                     Index Cond: (dev = 1)
+(14 rows)
+
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev = 1 GROUP BY dev ORDER BY dev DESC;
+                                                                       QUERY PLAN                                                                        
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=1 loops=1)
+   ->  Append (actual rows=1000 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=250 loops=1)
+               ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=1 loops=1)
+                     Index Cond: (dev = 1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=250 loops=1)
+               ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=1 loops=1)
+                     Index Cond: (dev = 1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=250 loops=1)
+               ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=1 loops=1)
+                     Index Cond: (dev = 1)
+         ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=250 loops=1)
+               ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=1 loops=1)
+                     Index Cond: (dev = 1)
+(14 rows)
+
+-- CTE
+:PREFIX WITH devices AS (
+	SELECT count(DISTINCT dev) FROM :TABLE
+)
+SELECT * FROM devices;
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Merge Append (actual rows=44 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(15 rows)
+
+:PREFIX WITH devices AS (
+	SELECT dev, count(DISTINCT dev) FROM :TABLE GROUP BY dev
+)
+SELECT * FROM devices ORDER BY dev;
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=11 loops=1)
+   Group Key: _hyper_3_5_chunk.dev
+   ->  Merge Append (actual rows=44 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(16 rows)
+
+-- prepared statements
+PREPARE prep AS SELECT count(DISTINCT dev_name) FROM :TABLE;
+:PREFIX EXECUTE prep;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Sort (actual rows=10020 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev_name
+         Sort Method: quicksort 
+         ->  Append (actual rows=10020 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(13 rows)
+
+:PREFIX EXECUTE prep;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Sort (actual rows=10020 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev_name
+         Sort Method: quicksort 
+         ->  Append (actual rows=10020 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(13 rows)
+
+:PREFIX EXECUTE prep;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Sort (actual rows=10020 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev_name
+         Sort Method: quicksort 
+         ->  Append (actual rows=10020 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                     ->  Seq Scan on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(13 rows)
+
+DEALLOCATE prep;
+-- ReScan tests
+:PREFIX SELECT c, 'q7_1' FROM (SELECT count(DISTINCT dev) c FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT * FROM :TABLE WHERE time != a.v) b) a;
+                                                                              QUERY PLAN                                                                              
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Subquery Scan on a (actual rows=1 loops=1)
+   ->  Aggregate (actual rows=1 loops=1)
+         ->  Nested Loop (actual rows=20020 loops=1)
+               Join Filter: (_hyper_3_5_chunk."time" <> "*VALUES*".column1)
+               Rows Removed by Join Filter: 20
+               ->  Merge Append (actual rows=10020 loops=1)
+                     Sort Key: _hyper_3_5_chunk.dev
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
+                           ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
+                           ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
+                           ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
+                           ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+               ->  Materialize (actual rows=2 loops=10020)
+                     ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
+(17 rows)
+
+:PREFIX SELECT c, 'q7_2' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT count(DISTINCT dev) c FROM :TABLE WHERE dev != a.v) b) a;
+                                                                             QUERY PLAN                                                                              
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop (actual rows=2 loops=1)
+   ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
+   ->  Aggregate (actual rows=1 loops=2)
+         ->  Merge Append (actual rows=36 loops=2)
+               Sort Key: _hyper_3_5_chunk.dev
+               ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=9 loops=2)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=9 loops=2)
+                           ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=9 loops=2)
+                                 Filter: (dev <> "*VALUES*".column1)
+                                 Rows Removed by Filter: 2
+               ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=9 loops=2)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=9 loops=2)
+                           ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=9 loops=2)
+                                 Filter: (dev <> "*VALUES*".column1)
+                                 Rows Removed by Filter: 2
+               ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=9 loops=2)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=9 loops=2)
+                           ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=9 loops=2)
+                                 Filter: (dev <> "*VALUES*".column1)
+                                 Rows Removed by Filter: 2
+               ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=9 loops=2)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=9 loops=2)
+                           ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=9 loops=2)
+                                 Filter: (dev <> "*VALUES*".column1)
+                                 Rows Removed by Filter: 2
+(25 rows)
+
+-- RuntimeKeys
+:PREFIX SELECT c, 'q8_1' FROM (SELECT * FROM (VALUES (1), (2)) a(v), LATERAL (SELECT count(DISTINCT dev) c FROM :TABLE WHERE dev >= a.v) b) c;
+                                                                              QUERY PLAN                                                                              
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop (actual rows=2 loops=1)
+   ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
+   ->  Aggregate (actual rows=1 loops=2)
+         ->  Merge Append (actual rows=38 loops=2)
+               Sort Key: _hyper_3_5_chunk.dev
+               ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=10 loops=2)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=10 loops=2)
+                           ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=10 loops=2)
+                                 Index Cond: (dev >= "*VALUES*".column1)
+               ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=10 loops=2)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=10 loops=2)
+                           ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=10 loops=2)
+                                 Index Cond: (dev >= "*VALUES*".column1)
+               ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=10 loops=2)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=10 loops=2)
+                           ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=10 loops=2)
+                                 Index Cond: (dev >= "*VALUES*".column1)
+               ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=10 loops=2)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=10 loops=2)
+                           ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=10 loops=2)
+                                 Index Cond: (dev >= "*VALUES*".column1)
+(21 rows)
+
+--  DISTINCT aggs on different columns in different subqueries
+:PREFIX SELECT count(DISTINCT dev) FROM :TABLE UNION ALL SELECT count(DISTINCT time) FROM :TABLE;
+                                                                              QUERY PLAN                                                                              
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=2 loops=1)
+   ->  Aggregate (actual rows=1 loops=1)
+         ->  Merge Append (actual rows=44 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev
+               ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+   ->  Aggregate (actual rows=1 loops=1)
+         ->  Merge Append (actual rows=10020 loops=1)
+               Sort Key: _hyper_3_5_chunk_1."time"
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk _hyper_3_5_chunk_1 (actual rows=2505 loops=1)
+                     ->  Sort (actual rows=11 loops=1)
+                           Sort Key: compress_hyper_4_9_chunk_1._ts_meta_min_1
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_4_9_chunk compress_hyper_4_9_chunk_1 (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk _hyper_3_6_chunk_1 (actual rows=2505 loops=1)
+                     ->  Sort (actual rows=11 loops=1)
+                           Sort Key: compress_hyper_4_10_chunk_1._ts_meta_min_1
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_4_10_chunk compress_hyper_4_10_chunk_1 (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk _hyper_3_7_chunk_1 (actual rows=2505 loops=1)
+                     ->  Sort (actual rows=11 loops=1)
+                           Sort Key: compress_hyper_4_11_chunk_1._ts_meta_min_1
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_4_11_chunk compress_hyper_4_11_chunk_1 (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk _hyper_3_8_chunk_1 (actual rows=2505 loops=1)
+                     ->  Sort (actual rows=11 loops=1)
+                           Sort Key: compress_hyper_4_12_chunk_1._ts_meta_min_1
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_4_12_chunk compress_hyper_4_12_chunk_1 (actual rows=11 loops=1)
+(39 rows)
+
+:PREFIX SELECT *, 'q9_2' FROM (SELECT count(DISTINCT dev) cd, dev FROM :TABLE GROUP BY dev) a, LATERAL (SELECT count(DISTINCT time) ct FROM :TABLE WHERE dev = a.dev) b;
+                                                                                             QUERY PLAN                                                                                              
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop (actual rows=11 loops=1)
+   ->  GroupAggregate (actual rows=11 loops=1)
+         Group Key: _hyper_3_5_chunk.dev
+         ->  Merge Append (actual rows=44 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev
+               ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+   ->  Aggregate (actual rows=1 loops=11)
+         ->  Merge Append (actual rows=909 loops=11)
+               Sort Key: _hyper_3_5_chunk_1."time"
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk _hyper_3_5_chunk_1 (actual rows=227 loops=11)
+                     ->  Index Scan Backward using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk compress_hyper_4_9_chunk_1 (actual rows=1 loops=11)
+                           Index Cond: (dev = _hyper_3_5_chunk.dev)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk _hyper_3_6_chunk_1 (actual rows=227 loops=11)
+                     ->  Index Scan Backward using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk compress_hyper_4_10_chunk_1 (actual rows=1 loops=11)
+                           Index Cond: (dev = _hyper_3_5_chunk.dev)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk _hyper_3_7_chunk_1 (actual rows=227 loops=11)
+                     ->  Index Scan Backward using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk compress_hyper_4_11_chunk_1 (actual rows=1 loops=11)
+                           Index Cond: (dev = _hyper_3_5_chunk.dev)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk _hyper_3_8_chunk_1 (actual rows=227 loops=11)
+                     ->  Index Scan Backward using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk compress_hyper_4_12_chunk_1 (actual rows=1 loops=11)
+                           Index Cond: (dev = _hyper_3_5_chunk.dev)
+(32 rows)
+
+-- SkipScan into INSERT
+:PREFIX INSERT INTO skip_scan_insert(dev, val, query) SELECT dev, sd, 'q10_1' FROM (SELECT sum(DISTINCT dev) sd, dev FROM :TABLE GROUP BY dev) a;
+                                                                                 QUERY PLAN                                                                                 
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Insert on skip_scan_insert (actual rows=0 loops=1)
+   ->  Subquery Scan on a (actual rows=11 loops=1)
+         ->  GroupAggregate (actual rows=11 loops=1)
+               Group Key: _hyper_3_5_chunk.dev
+               ->  Merge Append (actual rows=44 loops=1)
+                     Sort Key: _hyper_3_5_chunk.dev
+                     ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                                 ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                                 ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                                 ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+                     ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                                 ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(18 rows)
+
+-- parallel query
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+ set_config 
+------------
+ on
+(1 row)
+
+:PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Merge Append (actual rows=44 loops=1)
+         Sort Key: _hyper_3_5_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_9_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_9_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_10_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_11_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_11_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=11 loops=1)
+                     ->  Index Scan using compress_hyper_4_12_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_12_chunk (actual rows=11 loops=1)
+(15 rows)
+
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+ set_config 
+------------
+ off
+(1 row)
+
+TRUNCATE skip_scan_insert;
+-- table with only nulls
+:PREFIX SELECT count(DISTINCT time) FROM skip_scan_nulls;
+                                              QUERY PLAN                                               
+-------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan_nulls (actual rows=1 loops=1)
+         ->  Index Only Scan using skip_scan_nulls_time_idx on skip_scan_nulls (actual rows=1 loops=1)
+               Index Cond: ("time" > NULL::integer)
+(5 rows)
+
+-- no tuples in resultset
+:PREFIX SELECT count(DISTINCT time) FROM skip_scan_nulls WHERE time IS NOT NULL;
+                                              QUERY PLAN                                               
+-------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan_nulls (actual rows=0 loops=1)
+         ->  Index Only Scan using skip_scan_nulls_time_idx on skip_scan_nulls (actual rows=0 loops=1)
+               Index Cond: (("time" > NULL::integer) AND ("time" IS NOT NULL))
+(5 rows)
 

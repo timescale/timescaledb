@@ -3,7 +3,8 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 -- canary for result diff
-SELECT current_setting('timescaledb.enable_skipscan') AS enable_skipscan;
+SELECT current_setting('timescaledb.enable_skipscan') AS enable_skipscan,
+current_setting('timescaledb.enable_compressed_skipscan') AS enable_compressed_skipscan;
 
 -- test different index configurations
 -- no index so we cant do SkipScan
@@ -71,6 +72,7 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT DISTINCT *, 'q1_9' FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT dev, time, 'q1_10' FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT dev, NULL, 'q1_11' FROM :TABLE ORDER BY dev;
+
 -- distinct on expressions not supported
 :PREFIX SELECT DISTINCT time_bucket(10,time), 'q1_12' FROM :TABLE;
 :PREFIX SELECT DISTINCT length(dev_name), 'q1_13' FROM :TABLE;

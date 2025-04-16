@@ -2405,3 +2405,11 @@ ts_is_decompress_chunk_path(Path *path)
 	return IsA(path, CustomPath) &&
 		   castNode(CustomPath, path)->methods == &decompress_chunk_path_methods;
 }
+
+/* Check if the provided plan is a DecompressChunkPlan */
+bool
+ts_is_decompress_chunk_plan(Plan *plan)
+{
+	return (IsA(plan, CustomScan) &&
+			strcmp(castNode(CustomScan, plan)->methods->CustomName, "DecompressChunk") == 0);
+}

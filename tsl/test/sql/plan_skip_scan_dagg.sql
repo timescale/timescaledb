@@ -15,4 +15,9 @@
 \ir include/skip_scan_dagg_query.sql
 \ir include/skip_scan_dagg_query_ht.sql
 
+-- For compressed SkipScan, we can only use compressed index on segmentby column "skip_scan_htc.dev",
+-- meaning indexes not matching it in the below tests will not use SkipScan.
+\set TABLE skip_scan_htc
+\ir include/skip_scan_dagg_query.sql
+
 

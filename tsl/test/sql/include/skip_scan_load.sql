@@ -34,6 +34,25 @@ ANALYZE skip_scan_ht;
 
 ALTER TABLE skip_scan_ht SET (timescaledb.compress,timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
 
+-- create compressed hypertable with different physical layouts in the chunks
+CREATE TABLE skip_scan_htc(f1 int, f2 int, f3 int, time int NOT NULL, dev int, dev_name text, val int);
+SELECT create_hypertable('skip_scan_htc', 'time', chunk_time_interval => 250, create_default_indexes => false);
+
+INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(0, 249) t, generate_series(1, 10) d;
+ALTER TABLE skip_scan_htc DROP COLUMN f1;
+INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(250, 499) t, generate_series(1, 10) d;
+ALTER TABLE skip_scan_htc DROP COLUMN f2;
+INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(500, 749) t, generate_series(1, 10) d;
+ALTER TABLE skip_scan_htc DROP COLUMN f3;
+INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(750, 999) t, generate_series(1, 10) d;
+
+INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, NULL, NULL, NULL FROM generate_series(0, 999, 50) t;
+
+ANALYZE skip_scan_htc;
+
+ALTER TABLE skip_scan_htc SET (timescaledb.compress,timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
+SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+
 CREATE TABLE skip_scan_insert(time int, dev int, dev_name text, val int, query text);
 
 CREATE OR REPLACE FUNCTION int_func_immutable() RETURNS int LANGUAGE SQL IMMUTABLE SECURITY DEFINER AS $$SELECT 1; $$;
@@ -49,9 +68,12 @@ UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan
 UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan_nulls'::regclass;
 UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan_ht'::regclass;
 UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid IN (select inhrelid from pg_inherits where inhparent='skip_scan_ht'::regclass);
+UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan_htc'::regclass;
+UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid IN (select inhrelid from pg_inherits where inhparent='skip_scan_htc'::regclass);
 
 -- Turn off autovacuum to not trigger new vacuums that restores the
 -- adjusted statistics
 alter table skip_scan set (autovacuum_enabled = off);
 alter table skip_scan_nulls set (autovacuum_enabled = off);
 alter table skip_scan_ht set (autovacuum_enabled = off);
+alter table skip_scan_htc set (autovacuum_enabled = off);
