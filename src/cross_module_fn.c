@@ -424,6 +424,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.hypercore_proxy_handler = process_hypercore_proxy_handler,
 	.is_compressed_tid = error_no_default_fn_pg_community,
 
+	.compression_enable = NULL,
+
 	.show_chunk = error_no_default_fn_pg_community,
 	.create_chunk = error_no_default_fn_pg_community,
 	.chunk_freeze_chunk = error_no_default_fn_pg_community,
