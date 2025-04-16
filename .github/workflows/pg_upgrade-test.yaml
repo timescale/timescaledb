@@ -9,7 +9,7 @@ name: pg_upgrade test
 jobs:
   pg_upgrade_test:
     name: pg_upgrade test from PG${{ matrix.pg_version_old }} to PG${{ matrix.pg_version_new }}
-    runs-on: 'ubuntu-latest'
+    runs-on: timescaledb-runner-arm64
     strategy:
       matrix:
         include:

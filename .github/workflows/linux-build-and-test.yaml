@@ -22,7 +22,7 @@ name: Regression
       - NOTICE
 jobs:
   matrixbuilder:
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
