@@ -504,9 +504,9 @@ rollback;
 ---
 -- Decompress all chunks to ensure we only have non-compressed chunks
 select decompress_chunk(ch) from show_chunks('mergeme') ch;
-NOTICE:  chunk "_hyper_1_2_chunk" is not compressed
-NOTICE:  chunk "_hyper_1_4_chunk" is not compressed
-NOTICE:  chunk "_hyper_1_5_chunk" is not compressed
+NOTICE:  chunk "_hyper_1_2_chunk" is not converted to columnstore
+NOTICE:  chunk "_hyper_1_4_chunk" is not converted to columnstore
+NOTICE:  chunk "_hyper_1_5_chunk" is not converted to columnstore
             decompress_chunk            
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk

@@ -156,9 +156,9 @@ SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['devi
 drop index test_idx;
 CREATE INDEX test_idx ON metrics(val, time);
 SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
-                                                                                                    get_segmentby_defaults                                                                                                    
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes", "confidence": 5}
+                                                                                                           get_segmentby_defaults                                                                                                           
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes", "confidence": 5}
 (1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::text[]);
@@ -187,9 +187,9 @@ SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['devi
 drop index test_idx1;
 drop index test_idx2;
 SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
-                                                                                                    get_segmentby_defaults                                                                                                    
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes", "confidence": 5}
+                                                                                                           get_segmentby_defaults                                                                                                           
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes", "confidence": 5}
 (1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::text[]);
@@ -199,7 +199,7 @@ SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::te
 (1 row)
 
 ALTER TABLE metrics SET (timescaledb.compress = true);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "metrics" is set to ""
 NOTICE:  default order by for hypertable "metrics" is set to ""time" DESC"
 SELECT * FROM _timescaledb_catalog.compression_settings;
@@ -226,9 +226,9 @@ SELECT create_hypertable('public.metrics', 'time', create_default_indexes=>false
 
 --no indexes
 SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
-                                                                                                    get_segmentby_defaults                                                                                                    
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes", "confidence": 5}
+                                                                                                           get_segmentby_defaults                                                                                                           
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes", "confidence": 5}
 (1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::text[]);
@@ -240,9 +240,9 @@ SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::te
 --minimum index
 CREATE UNIQUE INDEX test_idx ON metrics(id, time);
 SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
-                                                                                                    get_segmentby_defaults                                                                                                    
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes", "confidence": 5}
+                                                                                                           get_segmentby_defaults                                                                                                           
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes", "confidence": 5}
 (1 row)
 
 --index with device_id
@@ -270,9 +270,9 @@ drop index test_idx2;
 CREATE INDEX test_idx ON metrics(id);
 CREATE INDEX test_idx2 ON metrics(time);
 SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
-                                                                                                    get_segmentby_defaults                                                                                                    
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes", "confidence": 5}
+                                                                                                           get_segmentby_defaults                                                                                                           
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes", "confidence": 5}
 (1 row)
 
 --make sure generated identity also works
@@ -292,9 +292,9 @@ SELECT create_hypertable('public.metrics', 'time', create_default_indexes=>false
 --minimum index
 CREATE UNIQUE INDEX test_idx ON metrics(id, time);
 SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
-                                                                                                    get_segmentby_defaults                                                                                                    
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes", "confidence": 5}
+                                                                                                           get_segmentby_defaults                                                                                                           
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes", "confidence": 5}
 (1 row)
 
 --index with device_id
@@ -321,9 +321,9 @@ SELECT create_hypertable('public.metrics', 'time', create_default_indexes=>true)
 (1 row)
 
 SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
-                                                                                                    get_segmentby_defaults                                                                                                    
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes", "confidence": 5}
+                                                                                                           get_segmentby_defaults                                                                                                           
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes", "confidence": 5}
 (1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::text[]);
@@ -407,7 +407,7 @@ SELECT public.create_hypertable('public.t1', 'time');
 (1 row)
 
 ALTER TABLE public.t1 SET (timescaledb.compress, timescaledb.compress_orderby = 'segment_value');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "t1" is set to ""
 RESET search_path;
 -- test same named objects in different schemas with default orderbys/segmentbys
@@ -465,7 +465,7 @@ ALTER TABLE schema1.page_events2 SET (
  timescaledb.compress,
  timescaledb.compress_orderby = 'time desc, id asc'
 );
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "page_events2" is set to ""
 CREATE TABLE schema2.page_events2 (
  time        TIMESTAMPTZ         NOT NULL UNIQUE,
@@ -482,5 +482,5 @@ ALTER TABLE schema2.page_events2 SET (
  timescaledb.compress,
  timescaledb.compress_orderby = 'time desc'
 );
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "page_events2" is set to ""

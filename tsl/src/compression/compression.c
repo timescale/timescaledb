@@ -464,7 +464,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 
 		Assert(!REL_IS_HYPERCORE(in_rel));
 		elog(ts_guc_debug_compression_path_info ? INFO : DEBUG1,
-			 "using index \"%s\" to scan rows for compression",
+			 "using index \"%s\" to scan rows for converting to columnstore",
 			 get_rel_name(matched_index_rel->rd_id));
 
 		index_scan = index_beginscan(in_rel, matched_index_rel, GetTransactionSnapshot(), 0, 0);
@@ -476,7 +476,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 			row_compressor_process_ordered_slot(&row_compressor, slot, mycid);
 			if ((++nrows_processed % report_reltuples) == 0)
 				elog(DEBUG2,
-					 "compressed " INT64_FORMAT " rows from \"%s\"",
+					 "converted " INT64_FORMAT " rows to columnstore from \"%s\"",
 					 nrows_processed,
 					 RelationGetRelationName(in_rel));
 		}
@@ -485,7 +485,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 			row_compressor_flush(&row_compressor, mycid, true);
 
 		elog(DEBUG1,
-			 "finished compressing " INT64_FORMAT " rows from \"%s\"",
+			 "finished converting " INT64_FORMAT " rows to columnstore from \"%s\"",
 			 nrows_processed,
 			 RelationGetRelationName(in_rel));
 
@@ -496,7 +496,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	else
 	{
 		elog(ts_guc_debug_compression_path_info ? INFO : DEBUG1,
-			 "using tuplesort to scan rows from \"%s\" for compression",
+			 "using tuplesort to scan rows from \"%s\" for converting to columnstore",
 			 RelationGetRelationName(in_rel));
 
 		Tuplesortstate *sorted_rel = compress_chunk_sort_relation(settings, in_rel);
@@ -770,7 +770,7 @@ build_column_map(const CompressionSettings *settings, Relation uncompressed_tabl
 			Ensure(!is_orderby || batch_minmax_builder != NULL,
 				   "orderby columns must have minmax metadata");
 
-			*column = (PerColumn){
+			*column = (PerColumn) {
 				.compressor = compressor_for_type(attr->atttypid),
 				.metadata_builder = batch_minmax_builder,
 				.segmentby_column_index = -1,
@@ -783,7 +783,7 @@ build_column_map(const CompressionSettings *settings, Relation uncompressed_tabl
 					 "expected segment by column \"%s\" to be same type as uncompressed column",
 					 NameStr(attr->attname));
 			int16 index = ts_array_position(settings->fd.segmentby, NameStr(attr->attname));
-			*column = (PerColumn){
+			*column = (PerColumn) {
 				.segment_info = segment_info_new(attr),
 				.segmentby_column_index = index,
 			};
@@ -807,10 +807,10 @@ row_compressor_init(const CompressionSettings *settings, RowCompressor *row_comp
 		get_attnum(compressed_table->rd_id, NameStr(*count_metadata_name));
 	if (count_metadata_column_num == InvalidAttrNumber)
 		elog(ERROR,
-			 "missing metadata column '%s' in compressed table",
+			 "missing metadata column '%s' in columnstore table",
 			 COMPRESSION_COLUMN_METADATA_COUNT_NAME);
 
-	*row_compressor = (RowCompressor){
+	*row_compressor = (RowCompressor) {
 		.per_row_ctx = AllocSetContextCreate(CurrentMemoryContext,
 											 "compress chunk per-row",
 											 ALLOCSET_DEFAULT_SIZES),
@@ -1142,7 +1142,7 @@ segment_info_new(Form_pg_attribute column_attr)
 
 	SegmentInfo *segment_info = palloc(sizeof(*segment_info));
 
-	*segment_info = (SegmentInfo){
+	*segment_info = (SegmentInfo) {
 		.typlen = column_attr->attlen,
 		.typ_by_val = column_attr->attbyval,
 	};
@@ -1363,7 +1363,7 @@ create_per_compressed_column(RowDecompressor *decompressor)
 		AttrNumber decompressed_colnum = get_attnum(decompressor->out_rel->rd_id, col_name);
 		if (!AttributeNumberIsValid(decompressed_colnum))
 		{
-			*per_compressed_col = (PerCompressedColumn){
+			*per_compressed_col = (PerCompressedColumn) {
 				.decompressed_column_offset = -1,
 			};
 			continue;
@@ -1384,7 +1384,7 @@ create_per_compressed_column(RowDecompressor *decompressor)
 				 format_type_be(decompressed_type),
 				 col_name);
 
-		*per_compressed_col = (PerCompressedColumn){
+		*per_compressed_col = (PerCompressedColumn) {
 			.decompressed_column_offset = decompressed_column_offset,
 			.is_compressed = is_compressed,
 			.decompressed_type = decompressed_type,
@@ -1861,7 +1861,7 @@ tsl_compressed_data_in(PG_FUNCTION_ARGS)
 		elog(ERROR, "could not decode base64-encoded compressed data");
 
 	decoded[decoded_len] = '\0';
-	data = (StringInfoData){
+	data = (StringInfoData) {
 		.data = decoded,
 		.len = decoded_len,
 		.maxlen = decoded_len,

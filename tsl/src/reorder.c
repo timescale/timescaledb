@@ -159,12 +159,12 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
 
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot directly move internal compression data"),
-				 errdetail("Chunk \"%s\" contains compressed data for chunk \"%s\" and cannot be "
+				 errmsg("cannot directly move internal columnstore data"),
+				 errdetail("Chunk \"%s\" contains columnstore data for chunk \"%s\" and cannot be "
 						   "moved directly.",
 						   get_rel_name(chunk_id),
 						   get_rel_name(chunk_parent->table_id)),
-				 errhint("Moving chunk \"%s\" will also move the compressed data.",
+				 errhint("Moving chunk \"%s\" will also move the columnstore data.",
 						 get_rel_name(chunk_parent->table_id))));
 	}
 
@@ -180,7 +180,7 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
 			ereport(NOTICE,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("ignoring index parameter"),
-					 errdetail("Chunk will not be reordered as it has compressed data.")));
+					 errdetail("Chunk will not be reordered as it has columnstore data.")));
 
 		ts_alter_table_with_event_trigger(chunk_id, fcinfo->context, list_make1(&cmd), false);
 		ts_alter_table_with_event_trigger(compressed_chunk->table_id,
