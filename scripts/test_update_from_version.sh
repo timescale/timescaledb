@@ -58,7 +58,7 @@ UNIX_SOCKET_DIR=$(readlink -f "${OUTPUT_DIR}")
 
 initdb > "${OUTPUT_DIR}/initdb.log" 2>&1
 pg_ctl -l "${OUTPUT_DIR}/postgres.log" start -o "
-    -c unix_socket_directories='${UNIX_SOCKET_DIR}'
+    -c unix_socket_directories=${UNIX_SOCKET_DIR}
     -c timezone=GMT
     -c client_min_messages=warning
     -c port=${PGPORT}
