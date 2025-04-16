@@ -77,6 +77,8 @@ extern TSDLLEXPORT int ts_guc_compression_batch_size_limit;
 extern TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates;
 #endif
 extern bool ts_guc_enable_event_triggers;
+extern TSDLLEXPORT bool ts_guc_enable_compressed_skip_scan;
+extern TSDLLEXPORT double ts_guc_skip_scan_run_cost_multiplier;
 
 /* Only settable in debug mode for testing */
 extern TSDLLEXPORT bool ts_guc_enable_null_compression;
