@@ -95,7 +95,7 @@ decompress_BOOL_BOOL(const uint8 *Data, size_t Size, bool bulk)
 	/*
 	 * Test row-by-row decompression.
 	 */
-	DecompressionIterator *iter = def->iterator_init_forward(compressed_data, TEXTOID);
+	DecompressionIterator *iter = def->iterator_init_forward(compressed_data, BOOLOID);
 	DecompressResult results[GLOBAL_MAX_ROWS_PER_COMPRESSION];
 	int n = 0;
 	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
