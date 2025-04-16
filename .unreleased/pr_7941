@@ -1,2 +1,0 @@
-Fixes: #7941 Fix column mapping in column stats calculation
-Thanks: @pantonis for reporting the issue with column stats calculation
