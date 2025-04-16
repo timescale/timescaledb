@@ -23,7 +23,7 @@ name: Regression Windows
   workflow_dispatch:
 jobs:
   config:
-    runs-on: timescaledb-runner-arm64
+    runs-on: ubuntu-latest
     outputs:
       build_type: ${{ steps.build_type.outputs.build_type }}
       pg15_latest: ${{ steps.config.outputs.pg15_latest }}

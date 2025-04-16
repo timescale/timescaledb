@@ -16,7 +16,7 @@ name: Libfuzzer
 
 jobs:
   build:
-    runs-on: timescaledb-runner-arm64
+    runs-on: ubuntu-22.04
     name: Build PostgreSQL and TimescaleDB
     env:
       PG_SRC_DIR: pgbuild
