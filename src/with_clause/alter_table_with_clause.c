@@ -25,7 +25,7 @@
 
 static const WithClauseDefinition alter_table_with_clause_def[] = {
 		[AlterTableFlagCompressEnabled] = {
-			.arg_names = {"compress", "enable_columnstore", NULL},
+			.arg_names = {"compress", "columnstore", "enable_columnstore", NULL},
 			.type_id = BOOLOID,
 			.default_val = (Datum)false,
 		},
