@@ -11,6 +11,7 @@
 typedef enum CustomType
 {
 	CUSTOM_TYPE_COMPRESSED_DATA = 0,
+	CUSTOM_TYPE_BLOOM1,
 
 	_CUSTOM_TYPE_MAX_INDEX
 } CustomType;

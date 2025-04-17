@@ -265,7 +265,7 @@ pad_to_multiple(uint64 pad_to, uint64 source_value)
 	return ((source_value + pad_to - 1) / pad_to) * pad_to;
 }
 
-static inline size_t
+static inline int
 arrow_num_valid(const uint64 *bitmap, size_t total_rows)
 {
 	if (bitmap == NULL)
