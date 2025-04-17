@@ -364,8 +364,7 @@ bool_compressed_from_parts(Simple8bRleSerialized *values, Simple8bRleSerialized 
 	uint32 num_values = values != NULL ? values->num_elements : 0;
 	uint32 values_size = values != NULL ? simple8brle_serialized_total_size(values) : 0;
 
-	if (num_values == 0)
-		return NULL;
+	CheckCompressedData(num_values != 0);
 
 	if (validity_bitmap != NULL)
 		validity_bitmap_size = simple8brle_serialized_total_size(validity_bitmap);
