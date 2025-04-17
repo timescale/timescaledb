@@ -43,7 +43,7 @@ jobs:
 
   yaml_checks:
     name: Check YAML code in tree
-    runs-on: timescaledb-runner-arm64
+    runs-on: ubuntu-latest
     steps:
       - name: Install prerequisites
         run: |
@@ -56,7 +56,7 @@ jobs:
 
   spelling_checks:
     name: Check spelling
-    runs-on: timescaledb-runner-arm64
+    runs-on: ubuntu-latest
     steps:
       - name: Install prerequisites
         run: |
@@ -93,7 +93,7 @@ jobs:
 
   python_checks:
     name: Check Python code in tree
-    runs-on: timescaledb-runner-arm64
+    runs-on: ubuntu-latest
     steps:
       - name: Install prerequisites
         run: |
