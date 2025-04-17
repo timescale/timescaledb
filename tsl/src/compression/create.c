@@ -50,7 +50,7 @@
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "utils.h"
-#include "with_clause/compression_with_clause.h"
+#include "with_clause/alter_table_with_clause.h"
 
 static const char *sparse_index_types[] = { "min", "max" };
 
@@ -459,7 +459,7 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 												  NULL);
 
 		Hypertable *ht = ts_hypertable_get_by_id(src_chunk->fd.hypertable_id);
-		compression_settings_update(ht, settings, ts_compress_hypertable_set_clause_parse(NIL));
+		compression_settings_update(ht, settings, ts_alter_table_with_clause_parse(NIL));
 	}
 
 	if (OidIsValid(table_id))
@@ -786,8 +786,9 @@ bool
 tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options)
 {
 	int32 compress_htid;
-	bool compress_disable = !with_clause_options[CompressEnabled].is_default &&
-							!DatumGetBool(with_clause_options[CompressEnabled].parsed);
+	bool compress_disable =
+		!with_clause_options[AlterTableFlagCompressEnabled].is_default &&
+		!DatumGetBool(with_clause_options[AlterTableFlagCompressEnabled].parsed);
 	CompressionSettings *settings;
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
@@ -1191,12 +1192,12 @@ compression_settings_update(Hypertable *ht, CompressionSettings *settings,
 		(settings->fd.orderby && settings->fd.orderby_desc && settings->fd.orderby_nullsfirst) ||
 		(!settings->fd.orderby && !settings->fd.orderby_desc && !settings->fd.orderby_nullsfirst));
 
-	if (!with_clause_options[CompressChunkTimeInterval].is_default)
+	if (!with_clause_options[AlterTableFlagCompressChunkTimeInterval].is_default)
 	{
 		update_compress_chunk_time_interval(ht, with_clause_options);
 	}
 
-	if (!with_clause_options[CompressSegmentBy].is_default)
+	if (!with_clause_options[AlterTableFlagCompressSegmentBy].is_default)
 	{
 		settings->fd.segmentby = ts_compress_hypertable_parse_segment_by(with_clause_options, ht);
 	}
@@ -1205,10 +1206,10 @@ compression_settings_update(Hypertable *ht, CompressionSettings *settings,
 		settings->fd.segmentby = compression_setting_segmentby_get_default(ht);
 	}
 
-	if (!with_clause_options[CompressOrderBy].is_default || !settings->fd.orderby)
+	if (!with_clause_options[AlterTableFlagCompressOrderBy].is_default || !settings->fd.orderby)
 	{
 		OrderBySettings obs;
-		if (with_clause_options[CompressOrderBy].is_default)
+		if (with_clause_options[AlterTableFlagCompressOrderBy].is_default)
 		{
 			obs = compression_setting_orderby_get_default(ht, settings->fd.segmentby);
 		}

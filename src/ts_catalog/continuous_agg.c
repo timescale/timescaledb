@@ -41,7 +41,7 @@
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
 #include "utils.h"
-#include "with_clause/compression_with_clause.h"
+#include "with_clause/alter_table_with_clause.h"
 
 #define BUCKET_FUNCTION_SERIALIZE_VERSION 1
 #define CHECK_NAME_MATCH(name1, name2) (namestrcmp(name1, name2) == 0)
@@ -102,21 +102,21 @@ ts_continuous_agg_get_compression_defelems(const WithClauseResult *with_clauses)
 {
 	List *ret = NIL;
 
-	for (int i = 0; i < CompressOptionMax; i++)
+	for (int i = 0; i < AlterTableFlagsMax; i++)
 	{
 		int option_index = 0;
 		switch (i)
 		{
-			case CompressEnabled:
+			case AlterTableFlagCompressEnabled:
 				option_index = ContinuousViewOptionCompress;
 				break;
-			case CompressSegmentBy:
+			case AlterTableFlagCompressSegmentBy:
 				option_index = ContinuousViewOptionCompressSegmentBy;
 				break;
-			case CompressOrderBy:
+			case AlterTableFlagCompressOrderBy:
 				option_index = ContinuousViewOptionCompressOrderBy;
 				break;
-			case CompressChunkTimeInterval:
+			case AlterTableFlagCompressChunkTimeInterval:
 				option_index = ContinuousViewOptionCompressChunkTimeInterval;
 				break;
 			default:
