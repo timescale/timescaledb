@@ -746,7 +746,7 @@ ts_hypertable_drop(Hypertable *hypertable, DropBehavior behavior)
 	 * clean up the catalog entry. */
 	if (OidIsValid(hypertable->main_table_relid))
 	{
-		ObjectAddress hypertable_addr = (ObjectAddress){
+		ObjectAddress hypertable_addr = (ObjectAddress) {
 			.classId = RelationRelationId,
 			.objectId = hypertable->main_table_relid,
 		};
@@ -2176,7 +2176,7 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(hypertable))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("custom time function not supported on internal compression table")));
+				 errmsg("custom time function not supported on internal columnstore table")));
 
 	/* validate that the open dimension uses numeric type */
 	open_dim = hyperspace_get_open_dimension(hypertable->space, 0);

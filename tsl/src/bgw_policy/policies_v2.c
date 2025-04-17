@@ -96,11 +96,11 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 	BgwJob *orig_ht_reten_job = NULL;
 
 	char *err_gap_refresh = "there are gaps in refresh policy";
-	char *err_refresh_compress_overlap = "refresh and compression policies overlap";
+	char *err_refresh_compress_overlap = "refresh and columnstore policies overlap";
 	char *err_refresh_reten_overlap = "refresh and retention policies overlap";
 	char *err_refresh_reten_ht_overlap = "refresh policy of continuous aggregate and retention "
 										 "policy of underlying hypertable overlap";
-	char *err_compress_reten_overlap = "compression and retention policies overlap";
+	char *err_compress_reten_overlap = "columnstore and retention policies overlap";
 
 	jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_RETENTION_PROC_NAME,
 													 FUNCTIONS_SCHEMA_NAME,

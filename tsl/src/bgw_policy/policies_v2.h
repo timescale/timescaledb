@@ -53,10 +53,7 @@
 #define SHOW_POLICY_KEY_DROP_CREATED_BEFORE POL_RETENTION_CONF_KEY_DROP_CREATED_BEFORE
 #define SHOW_POLICY_KEY_RETENTION_INTERVAL "retention_interval"
 
-#define DEFAULT_RETENTION_SCHEDULE_INTERVAL                                                        \
-	{                                                                                              \
-		.day = 1                                                                                   \
-	}
+#define DEFAULT_RETENTION_SCHEDULE_INTERVAL { .day = 1 }
 /*
  * Default scheduled interval for compress jobs = default chunk length.
  * If this is non-timestamp based hypertable, then default is 1 day

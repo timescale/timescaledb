@@ -195,7 +195,7 @@ NOTICE:  adding not-null constraint to column "created_at"
 (1 row)
 
 alter table copy_test1 set access method hypercore;
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "copy_test1" is set to ""
 NOTICE:  default order by for hypertable "copy_test1" is set to "created_at DESC"
 \copy copy_test1 from 'data/magic.csv' with csv header

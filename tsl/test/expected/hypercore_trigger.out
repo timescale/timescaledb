@@ -408,15 +408,15 @@ select * from saved_rows order by metric_id;
 truncate saved_rows;
 -- Compress the data again to make sure that it is fully compressed.
 select compress_chunk(show_chunks(:'hypertable'), hypercore_use_access_method => true);
-NOTICE:  chunk "_hyper_1_2_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_3_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_4_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_5_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_6_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_13_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_15_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_17_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_19_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_2_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_3_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_4_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_5_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_6_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_13_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_15_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_17_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_19_chunk" is already converted to columnstore
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -458,15 +458,15 @@ select * from saved_rows order by metric_id;
 truncate saved_rows;
 -- Compress the data again to make sure that it is fully compressed.
 select compress_chunk(show_chunks(:'hypertable'), hypercore_use_access_method => true);
-NOTICE:  chunk "_hyper_1_2_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_3_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_4_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_5_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_6_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_13_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_15_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_17_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_19_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_2_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_3_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_4_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_5_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_6_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_13_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_15_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_17_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_19_chunk" is already converted to columnstore
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk

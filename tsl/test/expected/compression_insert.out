@@ -408,7 +408,7 @@ SELECT create_hypertable('test_gen', 'id', chunk_time_interval=>10);
 (1 row)
 
 ALTER TABLE test_gen set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "test_gen" is set to ""
 NOTICE:  default order by for hypertable "test_gen" is set to "id DESC"
 INSERT into test_gen (payload) SELECT generate_series(1,15) ;
@@ -772,7 +772,7 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 ALTER TABLE test_ordering SET (timescaledb.compress,timescaledb.compress_orderby='time desc');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "test_ordering" is set to ""
 INSERT INTO test_ordering VALUES (5),(4),(3);
 -- should be ordered append
@@ -914,7 +914,7 @@ SELECT * FROM cagg_conditions ORDER BY 1;
 (1 row)
 
 ALTER TABLE conditions SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "conditions" is set to ""
 NOTICE:  default order by for hypertable "conditions" is set to "timec DESC"
 SELECT  compress_chunk(ch) FROM show_chunks('conditions') ch;
@@ -961,7 +961,7 @@ SELECT table_name FROM create_hypertable('direct_insert','time');
 (1 row)
 
 ALTER TABLE direct_insert SET(timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "direct_insert" is set to ""
 NOTICE:  default order by for hypertable "direct_insert" is set to ""time" DESC"
 SELECT

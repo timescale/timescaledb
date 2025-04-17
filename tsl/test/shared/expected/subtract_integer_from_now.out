@@ -99,7 +99,7 @@ SELECT _timescaledb_functions.subtract_integer_from_now('subtract_int8', lag) AS
 -- test set_integer_now_func on internal table
 \set ON_ERROR_STOP 0
 SELECT set_integer_now_func(:'TABLENAME', 'sub_int2_now');
-ERROR:  custom time function not supported on internal compression table
+ERROR:  custom time function not supported on internal columnstore table
 \set ON_ERROR_STOP 1
 -- cleanup
 DROP TABLE subtract_int_no_func;

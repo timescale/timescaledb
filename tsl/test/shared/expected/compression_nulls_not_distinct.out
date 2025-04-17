@@ -20,7 +20,7 @@ INSERT INTO nulls_not_distinct VALUES ('2024-01-01 0:00:00.5', NULL, 'l1', 1);
 INSERT INTO nulls_not_distinct VALUES ('2024-01-01 0:00:00.5', 'd2', NULL, 1);
 INSERT INTO nulls_not_distinct VALUES ('2024-01-01 0:00:00.10', 'd2', 'l1', 1);
 SELECT count(compress_chunk(c)) FROM show_chunks('nulls_not_distinct') c;
-INFO:  using tuplesort to scan rows from "_hyper_X_X_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_X_X_chunk" for converting to columnstore
  count 
      1
 (1 row)
