@@ -20,7 +20,7 @@ name: ABI Test
   workflow_dispatch:
 jobs:
   config:
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     outputs:
       pg15_abi_min: ${{ steps.config.outputs.pg15_abi_min }}
       pg16_abi_min: ${{ steps.config.outputs.pg16_abi_min }}
