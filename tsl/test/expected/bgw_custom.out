@@ -68,7 +68,7 @@ SELECT add_job('custom_func', '1h', config:='{"type":"function"}'::jsonb, initia
     1003
 (1 row)
 
-SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
+SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ, job_name := 'custom_job_name');
  add_job 
 ---------
     1004
@@ -82,7 +82,7 @@ SELECT * FROM timescaledb_information.jobs WHERE job_id >= 1000 ORDER BY 1;
    1001 | User-Defined Action [1001] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_proc         | default_perm_user | t         | t              | {"type": "procedure"} | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST |                   |                 |              | 
    1002 | User-Defined Action [1002] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_proc2        | default_perm_user | t         | t              | {"type": "procedure"} | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST |                   |                 |              | 
    1003 | User-Defined Action [1003] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func         | default_perm_user | t         | t              | {"type": "function"}  | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST |                   |                 |              | 
-   1004 | User-Defined Action [1004] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func_definer | default_perm_user | t         | t              | {"type": "function"}  | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST |                   |                 |              | 
+   1004 | custom_job_name [1004]     | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func_definer | default_perm_user | t         | t              | {"type": "function"}  | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST |                   |                 |              | 
 (5 rows)
 
 SELECT count(*) FROM _timescaledb_config.bgw_job WHERE config->>'type' IN ('procedure', 'function');
@@ -228,6 +228,19 @@ SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1000;
  scheduled |      config      
 -----------+------------------
  f         | {"test": "test"}
+(1 row)
+
+-- test updating the job name
+SELECT job_id, job_name FROM alter_job(1000,job_name:='custom_name_2');
+ job_id |       job_name       
+--------+----------------------
+   1000 | custom_name_2 [1000]
+(1 row)
+
+SELECT application_name FROM timescaledb_information.jobs WHERE job_id = 1000;
+   application_name   
+----------------------
+ custom_name_2 [1000]
 (1 row)
 
 -- Done with job 1000 now, so remove it.
@@ -906,9 +919,9 @@ update _timescaledb_catalog.chunk set status=3 where table_name = :'new_uncompre
 SELECT add_compression_policy('sensor_data', INTERVAL '1' minute) AS compressjob_id \gset
 -- set recompress to true
 SELECT alter_job(id,config:=jsonb_set(config,'{recompress}', 'true')) FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
-                                                                                        alter_job                                                                                        
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1014,"@ 12 hours","@ 0",-1,"@ 1 hour",t,"{""recompress"": true, ""hypertable_id"": 4, ""compress_after"": ""@ 1 min""}",-infinity,_timescaledb_functions.policy_compression_check,f,,)
+                                                                                                      alter_job                                                                                                      
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1014,"@ 12 hours","@ 0",-1,"@ 1 hour",t,"{""recompress"": true, ""hypertable_id"": 4, ""compress_after"": ""@ 1 min""}",-infinity,_timescaledb_functions.policy_compression_check,f,,,"Compression Policy [1014]")
 (1 row)
 
 -- verify that there are other uncompressed new chunks that need to be compressed
