@@ -133,7 +133,7 @@ select timescaledb_experimental.add_policies('daily',
 select job_id as cagg_compression_job, materialization_hypertable_name as mathyper
 from timescaledb_information.jobs j
 join timescaledb_information.continuous_aggregates ca
-on (ca.materialization_hypertable_name = j.hypertable_name)
+on (ca.view_name = j.hypertable_name)
 where view_name = 'daily' and proc_name = 'policy_compression' \gset
 
 
