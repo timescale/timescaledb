@@ -84,7 +84,7 @@ jobs:
       TABLESPACE2: D:\tablespace2\
     steps:
     - name: Setup WSL
-      uses: Vampire/setup-wsl@v3.1.4
+      uses: Vampire/setup-wsl@v5.0.0
       with:
         additional-packages:
           cmake
