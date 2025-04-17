@@ -84,7 +84,7 @@
 #include "ts_catalog/continuous_aggs_watermark.h"
 #include "tss_callbacks.h"
 #include "utils.h"
-#include "with_clause/compression_with_clause.h"
+#include "with_clause/alter_table_with_clause.h"
 #include "with_clause/create_table_with_clause.h"
 #include "with_clause/with_clause_parser.h"
 
@@ -4922,7 +4922,7 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 				 errmsg("only timescaledb.compress parameters allowed when specifying compression "
 						"parameters for hypertable")));
 
-	parse_results = ts_compress_hypertable_set_clause_parse(compress_options);
+	parse_results = ts_alter_table_with_clause_parse(compress_options);
 
 	ts_cm_functions->process_compress_table(ht, parse_results);
 	return DDL_DONE;
