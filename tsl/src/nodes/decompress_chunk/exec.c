@@ -81,6 +81,7 @@ decompress_chunk_state_create(CustomScan *cscan)
 		list_nth_int(settings, DCS_BatchSortedMerge);
 	chunk_state->decompress_context.enable_bulk_decompression =
 		list_nth_int(settings, DCS_EnableBulkDecompression);
+	chunk_state->decompress_context.unique_seg_by = list_nth_int(settings, DCS_UniqueSegBy);
 	chunk_state->has_row_marks = list_nth_int(settings, DCS_HasRowMarks);
 
 	Assert(IsA(cscan->custom_exprs, List));

@@ -168,6 +168,7 @@ TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 #if PG16_GE
 TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates = true;
 #endif
+TSDLLEXPORT bool ts_guc_enable_compressed_skip_scan = true;
 static char *ts_guc_default_segmentby_fn = NULL;
 static char *ts_guc_default_orderby_fn = NULL;
 TSDLLEXPORT bool ts_guc_enable_job_execution_logging = false;
@@ -668,6 +669,18 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 #endif
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compressed_skipscan"),
+							 "Enable SkipScan for compressed chunks",
+							 "Enable SkipScan for distinct inputs over compressed chunks",
+							 &ts_guc_enable_compressed_skip_scan,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compression_wal_markers"),
 							 "Enable WAL markers for compression ops",
 							 "Enable the generation of markers in the WAL stream which mark the "
