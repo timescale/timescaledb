@@ -28,7 +28,11 @@ typedef struct tuple_filtering_constraints
 	OnConflictAction on_conflict;
 	Oid index_relid; /* used for better error messages */
 	bool nullsnotdistinct;
+	bool vectorized_filtering;
 } tuple_filtering_constraints;
+
+typedef bool(BatchMatcher)(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
+						   tuple_filtering_constraints *constraints, bool *skip_current_tuple);
 
 bool slot_key_test(TupleTableSlot *slot, ScanKey skey);
 

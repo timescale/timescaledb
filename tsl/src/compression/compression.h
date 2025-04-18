@@ -388,6 +388,8 @@ extern enum CompressionAlgorithms compress_get_default_algorithm(Oid typeoid);
 extern int decompress_batch(RowDecompressor *decompressor);
 extern bool decompress_batch_next_row(RowDecompressor *decompressor, AttrNumber *attnos,
 									  int num_attnos);
+extern ArrowArray *decompress_single_column(RowDecompressor *decompressor, AttrNumber attno,
+											bool *default_value);
 /*
  * A convenience macro to throw an error about the corrupted compressed data, if
  * the argument is false. When fuzzing is enabled, we don't show the message not
