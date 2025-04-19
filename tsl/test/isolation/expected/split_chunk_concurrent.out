@@ -512,7 +512,7 @@ step s3_query_data:
     call show_all_chunks('readings');
 
 
-starting permutation: s3_query_data s4_begin s1_update_in_splitting_chunk s2_split_chunk s3_query_data s4_query s4_commit s4_query s3_query_data
+starting permutation: s3_query_data s4_begin s1_update_splitting_chunk s2_split_chunk s3_query_data s4_query s4_commit s4_query s3_query_data
 s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
 s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
 s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
@@ -532,15 +532,15 @@ step s4_begin:
 t       
 (1 row)
 
-step s1_update_in_splitting_chunk: 
-    update readings set device = 9 where device = 1;
+step s1_update_splitting_chunk: 
+    update readings set device = 1 where device = 2;
 
 step s2_split_chunk: 
     call split_first_chunk('readings');
 
 s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
-s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
 s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
 s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
 s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
 s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)
@@ -565,16 +565,16 @@ step s4_query:
 
 time                        |device|temp
 ----------------------------+------+----
-Thu Jan 04 01:00:00 2024 PST|     9|   1
-Fri Jan 05 02:00:00 2024 PST|     2|   2
+Thu Jan 04 01:00:00 2024 PST|     1|   1
+Fri Jan 05 02:00:00 2024 PST|     1|   2
 Mon Jan 08 02:00:00 2024 PST|     3|   3
 Thu Jan 11 01:01:00 2024 PST|     4|   4
 Mon Jan 15 02:00:00 2024 PST|     5|   5
 (5 rows)
 
 s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Sun Jan 07 04:00:00 2024 PST ]
-s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
-s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",9,1)
+s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
+s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",1,2)
 s3: NOTICE:  ---- chunk 1 [ Wed Jan 10 16:00:00 2024 PST : Wed Jan 17 16:00:00 2024 PST ]
 s3: NOTICE:  ("Thu Jan 11 01:01:00 2024 PST",4,4)
 s3: NOTICE:  ("Mon Jan 15 02:00:00 2024 PST",5,5)

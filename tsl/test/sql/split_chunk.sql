@@ -61,7 +61,7 @@ alter table _timescaledb_internal._hyper_1_1_chunk set access method testam;
 call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
 alter table _timescaledb_internal._hyper_1_1_chunk set access method heap;
 
--- Split an OSM chunk
+-- Split an OSM chunk is not supported
 reset role;
 update _timescaledb_catalog.chunk ch set osm_chunk = true where table_name = '_hyper_1_1_chunk';
 set role :ROLE_DEFAULT_PERM_USER;
@@ -71,16 +71,21 @@ reset role;
 update _timescaledb_catalog.chunk ch set osm_chunk = false where table_name = '_hyper_1_1_chunk';
 set role :ROLE_DEFAULT_PERM_USER;
 
--- Split a frozen chunk
+-- Split a frozen chunk is not supported
 select _timescaledb_functions.freeze_chunk('_timescaledb_internal._hyper_1_1_chunk');
 call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
 select _timescaledb_functions.unfreeze_chunk('_timescaledb_internal._hyper_1_1_chunk');
 
--- Split a compressed/columnstore chunk
+-- Split a compressed/columnstore chunk is not supported
 begin;
 call convert_to_columnstore('_timescaledb_internal._hyper_1_1_chunk');
 call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
 rollback;
+
+-- Split by non-owner is not allowed
+set role :ROLE_1;
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
+set role :ROLE_DEFAULT_PERM_USER;
 \set ON_ERROR_STOP 1
 
 call split_chunk('_timescaledb_internal._hyper_1_1_chunk', split_at => '2024-01-04 00:00');
@@ -193,7 +198,14 @@ select * from chunk_info;
 call split_chunk('_timescaledb_internal._hyper_1_3_chunk');
 select * from chunk_info;
 
+--
 -- Test multi-dimensional hypertable
+--
+-- Currently not supported because the subspace cache cannot handle
+-- tuple routing when there are two overlapping primary dimension
+-- ranges. This can happen when the "time" range is split in one space
+-- partition but not the other.
+--
 create table splitme_md (time timestamptz not null, device int, location int, temp float);
 select create_hypertable('splitme_md', 'time', 'device', 2, chunk_time_interval => interval '1 week');
 insert into splitme_md values
@@ -208,3 +220,15 @@ call split_chunk(:'chunk_md', 'device');
 -- Currently can't split multi-dimensional chunks due to bug/limitation in subspace store.
 call split_chunk(:'chunk_md', 'time');
 \set ON_ERROR_STOP 1
+
+-- Split when insert in progress
+begin;
+insert into splitme values ('2024-01-04 22:00', 20, 20, 20.0);
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
+rollback;
+
+-- Split when delete in progress
+begin;
+delete from splitme where device = 1;
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
+rollback;

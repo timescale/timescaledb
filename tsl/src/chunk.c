@@ -1314,7 +1314,9 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 {
 	Oid relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	const Name colname = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1);
-	Relation splitrel = table_open(relid, AccessExclusiveLock);
+	Relation splitrel;
+
+	splitrel = table_open(relid, AccessExclusiveLock);
 
 	if (splitrel->rd_rel->relkind != RELKIND_RELATION)
 		ereport(ERROR,
@@ -1432,6 +1434,7 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 				default:
 					/* Shouldn't be any time types with other number of args */
 					Ensure(false, "invalid type for split_at");
+					pg_unreachable();
 			}
 			argtype = splitdim_type;
 		}
@@ -1517,6 +1520,10 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 
 	/* Make updated constraints visible */
 	CommandCounterIncrement();
+
+	/* Reread hypertable after constraints changed */
+	ts_cache_release(hcache);
+	ht = ts_hypertable_cache_get_cache_and_entry(chunk->hypertable_relid, CACHE_FLAG_NONE, &hcache);
 	bool created = false;
 	Chunk *new_chunk = ts_chunk_find_or_create_without_cuts(ht,
 															new_cube,
@@ -1524,6 +1531,8 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 															NULL,
 															InvalidOid,
 															&created);
+	ts_cache_release(hcache);
+
 	Ensure(created, "could not create chunk for split");
 	Assert(new_chunk);
 
@@ -1614,14 +1623,11 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 				isdead = false;
 				break;
 			case HEAPTUPLE_INSERT_IN_PROGRESS:
-
 				/*
 				 * Since we hold exclusive lock on the relation, normally the
 				 * only way to see this is if it was inserted earlier in our
-				 * own transaction.  However, it can happen in system
-				 * catalogs, since we tend to release write lock before commit
-				 * there.  Give a warning if neither case applies; but in any
-				 * case we had better copy it.
+				 * own transaction. Give a warning if this case does not
+				 * apply; in any case we better copy it.
 				 */
 				if (!TransactionIdIsCurrentTransactionId(HeapTupleHeaderGetXmin(tuple->t_data)))
 					elog(WARNING,
@@ -1631,7 +1637,6 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 				isdead = false;
 				break;
 			case HEAPTUPLE_DELETE_IN_PROGRESS:
-
 				/*
 				 * Similar situation to INSERT_IN_PROGRESS case.
 				 */
@@ -1709,10 +1714,8 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 		int reindex_flags = REINDEX_REL_SUPPRESS_INDEX_USE;
 		Oid chunkrelid = splitinfos[i]->rel->rd_id;
 
-		if (relpersistence == RELPERSISTENCE_UNLOGGED)
-			reindex_flags |= REINDEX_REL_FORCE_INDEXES_UNLOGGED;
-		else if (relpersistence == RELPERSISTENCE_PERMANENT)
-			reindex_flags |= REINDEX_REL_FORCE_INDEXES_PERMANENT;
+		Ensure(relpersistence == RELPERSISTENCE_PERMANENT, "only permanent chunks can be split");
+		reindex_flags |= REINDEX_REL_FORCE_INDEXES_PERMANENT;
 
 		relation_split_info_free(splitinfos[i], ti_options);
 
@@ -1735,13 +1738,6 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 					 cutoffs.MultiXactCutoff,
 					 relpersistence);
 
-	/* Constraints changed so need to invalidate hypertable cache since it
-	 * also caches chunk constrains for tuple`q routing. */
-	/*Catalog *catalog = ts_catalog_get();
-	Oid catrelid = catalog_get_table_id(catalog, DIMENSION_SLICE);
-	ts_catalog_invalidate_cache(catrelid, CMD_UPDATE);
-	*/
-	ts_cache_release(hcache);
 	DEBUG_WAITPOINT("split_chunk_at_end");
 
 	PG_RETURN_VOID();

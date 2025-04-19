@@ -4,10 +4,12 @@
 
 setup
 {
-    create table readings (time timestamptz, device int, temp float);
+    create extension if not exists pageinspect;
+    create table readings (time timestamptz, device int, temp float) with (fillfactor = 30);
     select create_hypertable('readings', 'time', chunk_time_interval => interval '1 week');
     insert into readings values ('2024-01-04 01:00', 1, 1.0), ('2024-01-05 02:00', 2, 2.0), ('2024-01-08 02:00', 3, 3.0), ('2024-01-11 01:01', 4, 4.0), ('2024-01-15 02:00', 5, 5.0);
     alter table readings set (timescaledb.compress_orderby='time', timescaledb.compress_segmentby='device');
+    create index on readings (device);
 
     create or replace procedure drop_one_chunk(hypertable regclass) as $$
     declare
@@ -96,12 +98,12 @@ step "s1_insert_into_new_chunk" {
     insert into readings values ('2024-01-18 10:00', 13, 13.0);
 }
 
-step "s1_delete_from_splitting_chunk" {
-    delete from readings where device = 1;
+step "s1_update_splitting_chunk" {
+    update readings set device = 1 where device = 2;
 }
 
-step "s1_update_in_splitting_chunk" {
-    update readings set device = 9 where device = 1;
+step "s1_delete_from_splitting_chunk" {
+    delete from readings where device = 1;
 }
 
 session "s2"
@@ -172,4 +174,4 @@ permutation "s4_begin" "s3_query_data" "s1_delete_from_splitting_chunk" "s2_spli
 # repeatable read. The querying process should see the old data after
 # split (including deleted tuple). After commit it sees the update/delete.
 permutation "s3_query_data" "s4_begin" "s1_delete_from_splitting_chunk" "s2_split_chunk" "s3_query_data" "s4_query" "s4_commit" "s4_query" "s3_query_data"
-permutation "s3_query_data" "s4_begin" "s1_update_in_splitting_chunk" "s2_split_chunk" "s3_query_data" "s4_query" "s4_commit" "s4_query" "s3_query_data"
+permutation "s3_query_data" "s4_begin" "s1_update_splitting_chunk" "s2_split_chunk" "s3_query_data" "s4_query" "s4_commit" "s4_query" "s3_query_data"
