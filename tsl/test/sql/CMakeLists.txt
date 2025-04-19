@@ -72,6 +72,7 @@ set(TEST_FILES
     reorder.sql
     size_utils_tsl.sql
     skip_scan.sql
+    split_chunk.sql
     transparent_decompression_join_index.sql
     vector_agg_functions.sql
     vector_agg_groupagg.sql

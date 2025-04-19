@@ -1,6 +1,7 @@
 DROP FUNCTION IF EXISTS _timescaledb_internal.create_chunk_table;
 DROP FUNCTION IF EXISTS _timescaledb_functions.create_chunk_table;
 
+
 -- New option `refresh_newest_first` for incremental cagg refresh policy
 DROP FUNCTION @extschema@.add_continuous_aggregate_policy(
     continuous_aggregate REGCLASS,
@@ -34,3 +35,9 @@ LANGUAGE C VOLATILE;
 
 UPDATE _timescaledb_catalog.hypertable SET chunk_sizing_func_schema = '_timescaledb_functions' WHERE chunk_sizing_func_schema = '_timescaledb_internal' AND chunk_sizing_func_name = 'calculate_chunk_interval';
 
+-- Split chunk
+CREATE PROCEDURE @extschema@.split_chunk(
+    chunk REGCLASS,
+    column_name NAME = NULL,
+    split_at "any" = NULL
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';

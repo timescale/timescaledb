@@ -31,3 +31,7 @@ CREATE FUNCTION @extschema@.add_continuous_aggregate_policy(
 RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
 LANGUAGE C VOLATILE;
+
+-- Split chunk
+DROP PROCEDURE IF EXISTS @extschema@.split_chunk(chunk REGCLASS, column_name NAME, split_at "any");
+
