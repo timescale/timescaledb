@@ -1393,6 +1393,11 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 						colname ? NameStr(*colname) : "null",
 						get_rel_name(relid))));
 
+	if (ht->fd.num_dimensions > 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot split chunk in multi-dimensional hypertable")));
+
 	AttrNumber splitdim_attnum = get_attnum(relid, NameStr(dim->fd.column_name));
 	Oid splitdim_type = get_atttype(relid, splitdim_attnum);
 	Datum split_at;

@@ -6,8 +6,17 @@
 CREATE ACCESS METHOD testam TYPE TABLE HANDLER heap_tableam_handler;
 set role :ROLE_DEFAULT_PERM_USER;
 
+create view chunk_slices as
+select h.table_name as hypertable_name, c.table_name as chunk_name, ds.range_start, ds.range_end
+from _timescaledb_catalog.chunk c
+join _timescaledb_catalog.chunk_constraint cc on (cc.chunk_id = c.id)
+join _timescaledb_catalog.dimension_slice ds on (ds.id = cc.dimension_slice_id)
+join _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
+order by range_start, range_end;
+
+
 create table splitme (time timestamptz not null, device int, location int, temp float, comment text);
-select create_hypertable('splitme', 'time', 'device', 2, chunk_time_interval => interval '1 week');
+select create_hypertable('splitme', 'time', chunk_time_interval => interval '1 week');
 alter table splitme set (timescaledb.compress_orderby='time', timescaledb.compress_segmentby='device');
 
 --
@@ -35,7 +44,6 @@ order by id, range_start, range_end;
 
 \set ON_ERROR_STOP 0
 call split_chunk('_timescaledb_internal._hyper_1_1_chunk', 'foo');
-call split_chunk('_timescaledb_internal._hyper_1_1_chunk', 'device');
 call split_chunk('_timescaledb_internal._hyper_1_1_chunk', 'time', split_at => 1);
 call split_chunk('_timescaledb_internal._hyper_1_1_chunk', 'time', split_at => 1::int);
 call split_chunk('_timescaledb_internal._hyper_1_1_chunk', 'time', split_at => '2024-01-04 00:00'::timestamp);
@@ -124,7 +132,7 @@ order by chunk_name, range_start, range_end;
 -- same across the partitions.
 with counts as (
     select (select count(*) from _timescaledb_internal._hyper_1_3_chunk) count1,
-            (select count(*) from _timescaledb_internal._hyper_1_6_chunk) count2
+            (select count(*) from _timescaledb_internal._hyper_1_4_chunk) count2
 ) select
   c.count1, c.count2,
   c.count1 + c.count2 as total_count,
@@ -134,7 +142,7 @@ from counts c;
 -- Check that both rels return proper data and no columns are messed
 -- up
 select time, device, location, temp from _timescaledb_internal._hyper_1_3_chunk order by time, device limit 3;
-select time, device, location, temp from _timescaledb_internal._hyper_1_6_chunk order by time, device limit 3;
+select time, device, location, temp from _timescaledb_internal._hyper_1_4_chunk order by time, device limit 3;
 
 --
 -- Test split with integer time
@@ -144,14 +152,6 @@ select create_hypertable('splitme_int', 'time', chunk_time_interval => 10::int);
 
 insert into splitme_int values (1, 1, 1.0), (8, 8, 8.0);
 select ch as int_chunk from show_chunks('splitme_int') ch limit 1 \gset
-
-create view chunk_slices as
-select h.table_name as hypertable_name, c.table_name as chunk_name, ds.range_start, ds.range_end
-from _timescaledb_catalog.chunk c
-join _timescaledb_catalog.chunk_constraint cc on (cc.chunk_id = c.id)
-join _timescaledb_catalog.dimension_slice ds on (ds.id = cc.dimension_slice_id)
-join _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
-order by range_start, range_end;
 
 select * from chunk_slices;
 
@@ -164,7 +164,7 @@ select * from splitme_int order by time;
 
 
 --
--- Try split with more data
+-- Try with more data after split
 --
 
 create view chunk_info as
@@ -179,48 +179,32 @@ order by 1,2,3 desc;
 -- Remove comment column to generate dropped column
 alter table splitme drop column comment;
 
--- Set seed to consistently generate same data and same set of chunks
-
-
 select * from chunk_info;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 set role :ROLE_DEFAULT_PERM_USER;
 
 select * from chunk_slices where hypertable_name = 'splitme';
 
-\d+ _timescaledb_internal._hyper_1_1_chunk
-
-\d+ _timescaledb_internal._hyper_1_3_chunk
-
-\d+ _timescaledb_internal._hyper_1_4_chunk
-
-\d+ _timescaledb_internal._hyper_1_5_chunk
-
-\d+ _timescaledb_internal._hyper_1_6_chunk
-
-\set VERBOSITY verbose
-
-select setseed(0.2);
-
---insert into splitme (time, device, location, temp) values ('Sun Jan 07 08:00:00 2024 PST', 5, 2.98879254108163, 16);
-
---select * from _timescaledb_internal._hyper_1_3_chunk;
-
--- Test split with bigger data set
 insert into splitme (time, device, location, temp)
 select t, ceil(random()*10), ceil(random()*20), random()*40
 from generate_series('2024-01-03'::timestamptz, '2024-01-10', '10s') t;
 
-select chunk_name, range_start, range_end
-from timescaledb_information.chunks
-order by chunk_name, range_start, range_end;
-
 select * from chunk_info;
-
 call split_chunk('_timescaledb_internal._hyper_1_3_chunk');
-
 select * from chunk_info;
 
-select chunk_name, range_start, range_end
-from timescaledb_information.chunks
-order by chunk_name, range_start, range_end;
+-- Test multi-dimensional hypertable
+create table splitme_md (time timestamptz not null, device int, location int, temp float);
+select create_hypertable('splitme_md', 'time', 'device', 2, chunk_time_interval => interval '1 week');
+insert into splitme_md values
+       ('2024-01-03 22:00', 1, 1, 1.0),
+       ('2024-01-09 15:00', 1, 2, 2.0);
+
+select ch as chunk_md from show_chunks('splitme_md') ch limit 1 \gset
+select * from chunk_slices where hypertable_name = 'splitme_md';
+\set ON_ERROR_STOP 0
+-- Should only split on primary dimension
+call split_chunk(:'chunk_md', 'device');
+-- Currently can't split multi-dimensional chunks due to bug/limitation in subspace store.
+call split_chunk(:'chunk_md', 'time');
+\set ON_ERROR_STOP 1
