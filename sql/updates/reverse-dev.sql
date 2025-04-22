@@ -1,5 +1,9 @@
 CREATE FUNCTION _timescaledb_internal.create_chunk_table(hypertable REGCLASS, slices JSONB, schema_name NAME, table_name NAME) RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE;
 CREATE FUNCTION _timescaledb_functions.create_chunk_table(hypertable REGCLASS, slices JSONB, schema_name NAME, table_name NAME) RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE;
+DROP FUNCTION _timescaledb_functions.get_hypertable_id(REGCLASS, REGTYPE);
+DROP FUNCTION _timescaledb_functions.get_hypertable_invalidations(REGCLASS, TIMESTAMPTZ, INTERVAL[]);
+DROP FUNCTION _timescaledb_functions.get_hypertable_invalidations(REGCLASS, TIMESTAMP, INTERVAL[]);
+DROP PROCEDURE _timescaledb_functions.accept_hypertable_invalidations(REGCLASS, TEXT);
 
 -- Revert new option `refresh_newest_first` from incremental cagg refresh policy
 DROP FUNCTION @extschema@.add_continuous_aggregate_policy(

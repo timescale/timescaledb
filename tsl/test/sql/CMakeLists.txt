@@ -7,13 +7,13 @@ set(TEST_FILES
     bgw_job_ddl.sql
     bgw_policy.sql
     bgw_security.sql
+    cagg_api.sql
     cagg_deprecated_bucket_ng.sql
     cagg_errors.sql
     cagg_invalidation.sql
     cagg_policy.sql
     cagg_refresh.sql
     cagg_refresh_using_merge.sql
-    cagg_api.sql
     cagg_utils.sql
     cagg_watermark.sql
     chunk_column_stats.sql
