@@ -423,6 +423,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.bool_compressor_finish = error_no_default_fn_pg_community,
 	.bloom1_contains = error_no_default_fn_pg_community,
 
+	.compression_enable = NULL,
+
 	.show_chunk = error_no_default_fn_pg_community,
 	.create_chunk = error_no_default_fn_pg_community,
 	.chunk_freeze_chunk = error_no_default_fn_pg_community,

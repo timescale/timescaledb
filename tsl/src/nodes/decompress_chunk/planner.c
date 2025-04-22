@@ -965,36 +965,16 @@ ts_label_sort_with_costsize(PlannerInfo *root, Sort *plan, double limit_tuples)
 static Var *
 find_var_subexpression(void *expr, Index varno)
 {
-	if (IsA(expr, Var))
+	List *varlist = pull_var_clause((Node *) expr, 0);
+	if (list_length(varlist) == 1)
 	{
-		Var *var = castNode(Var, expr);
+		Var *var = (Var *) linitial(varlist);
 		if ((Index) var->varno == (Index) varno)
 		{
 			return var;
 		}
 
 		return NULL;
-	}
-
-	if (IsA(expr, List))
-	{
-		List *list = castNode(List, expr);
-		ListCell *lc;
-		foreach (lc, list)
-		{
-			Var *var = find_var_subexpression(lfirst(lc), varno);
-			if (var != NULL)
-			{
-				return var;
-			}
-		}
-
-		return NULL;
-	}
-
-	if (IsA(expr, FuncExpr))
-	{
-		return find_var_subexpression(castNode(FuncExpr, expr)->args, varno);
 	}
 
 	return NULL;

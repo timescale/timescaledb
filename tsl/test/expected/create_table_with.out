@@ -1,6 +1,6 @@
--- This file and its contents are licensed under the Apache License 2.0.
+-- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
--- LICENSE-APACHE for a copy of the license.
+-- LICENSE-TIMESCALE for a copy of the license.
 -- our user needs permission to create schema for the schema tests
 \c :TEST_DBNAME :ROLE_SUPERUSER
 GRANT CREATE ON DATABASE :TEST_DBNAME TO :ROLE_DEFAULT_PERM_USER;
@@ -201,8 +201,8 @@ INSERT INTO t11 SELECT '2025-01-01', 'd1', 0.1;
 SELECT relname from pg_class where relnamespace = 'abc'::regnamespace ORDER BY 1;
             relname             
 --------------------------------
- _hyper_18_1_chunk
- _hyper_18_1_chunk_t11_time_idx
+ _hyper_35_1_chunk
+ _hyper_35_1_chunk_t11_time_idx
 (2 rows)
 
 ROLLBACK;
@@ -219,8 +219,8 @@ INSERT INTO t11 SELECT '2025-01-01', 'd1', 0.1;
 SELECT relname from pg_class where relnamespace = 'abc2'::regnamespace ORDER BY 1;
             relname             
 --------------------------------
- _hyper_19_2_chunk
- _hyper_19_2_chunk_t11_time_idx
+ _hyper_37_2_chunk
+ _hyper_37_2_chunk_t11_time_idx
 (2 rows)
 
 ROLLBACK;
@@ -230,7 +230,7 @@ CREATE TABLE t12(time timestamptz NOT NULL, device text, value float) WITH (tsdb
 SELECT associated_table_prefix FROM _timescaledb_catalog.hypertable WHERE table_name = 't12';
  associated_table_prefix 
 -------------------------
- _hyper_20
+ _hyper_39
 (1 row)
 
 ROLLBACK;
@@ -249,5 +249,42 @@ SELECT relname from pg_class where relnamespace = 'abc'::regnamespace ORDER BY 1
  tbl_prefix_3_chunk
  tbl_prefix_3_chunk_t12_time_idx
 (2 rows)
+
+ROLLBACK;
+-- verify compression
+BEGIN;
+CREATE TABLE t13(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time');
+SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables;
+ hypertable_name | compression_enabled 
+-----------------+---------------------
+ t13             | t
+(1 row)
+
+INSERT INTO t13 SELECT '2025-01-01','d1',0.1;
+SELECT compress_chunk(show_chunks('t13'));
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "t13" is set to ""
+NOTICE:  default order by for hypertable "t13" is set to ""time" DESC"
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_43_4_chunk
+(1 row)
+
+ROLLBACK;
+BEGIN;
+CREATE TABLE t13(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time');
+SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables;
+ hypertable_name | compression_enabled 
+-----------------+---------------------
+ t13             | t
+(1 row)
+
+ALTER TABLE t13 SET (tsdb.compress_segmentby='device',tsdb.compress_orderby='time DESC');
+INSERT INTO t13 SELECT '2025-01-01','d1',0.1;
+SELECT compress_chunk(show_chunks('t13'));
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_45_6_chunk
+(1 row)
 
 ROLLBACK;

@@ -18,13 +18,13 @@ jobs:
 
   assign-pr:
     name: Assign PR to author
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     steps:
       - uses: toshimaru/auto-author-assign@v2.1.0
 
   ask-review:
     name: Run pull-review
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     if: ${{ !github.event.pull_request.draft && github.event.pull_request.base.ref == 'main' }}
     steps:
       - uses: actions/checkout@v4

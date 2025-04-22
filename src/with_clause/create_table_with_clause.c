@@ -17,6 +17,8 @@ static const WithClauseDefinition create_table_with_clauses_def[] = {
 	[CreateTableFlagTimeColumn] = {.arg_names = {"time_column", NULL}, .type_id = TEXTOID,},
 	[CreateTableFlagChunkTimeInterval] = {.arg_names = {"chunk_time_interval", NULL}, .type_id = TEXTOID,},
 	[CreateTableFlagCreateDefaultIndexes] = {.arg_names = {"create_default_indexes", NULL}, .type_id = BOOLOID, .default_val = (Datum) true,},
+	[CreateTableFlagAssociatedSchema] = {.arg_names = {"associated_schema", NULL}, .type_id = TEXTOID,},
+	[CreateTableFlagAssociatedTablePrefix] = {.arg_names = {"associated_table_prefix", NULL}, .type_id = TEXTOID,},
 };
 
 WithClauseResult *

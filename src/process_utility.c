@@ -84,7 +84,7 @@
 #include "ts_catalog/continuous_aggs_watermark.h"
 #include "tss_callbacks.h"
 #include "utils.h"
-#include "with_clause/compression_with_clause.h"
+#include "with_clause/alter_table_with_clause.h"
 #include "with_clause/create_table_with_clause.h"
 #include "with_clause/with_clause_parser.h"
 
@@ -3724,8 +3724,12 @@ process_create_table_end(Node *parsetree)
 		char *time_column =
 			TextDatumGetCString(create_table_info.with_clauses[CreateTableFlagTimeColumn].parsed);
 		NameData time_column_name;
+		NameData associated_schema_name;
+		NameData associated_table_prefix;
 		namestrcpy(&time_column_name, time_column);
 		uint32 flags = 0;
+		bool has_associated_schema = false;
+		bool has_associated_table_prefix = false;
 
 		if (get_attnum(table_relid, time_column) == InvalidAttrNumber)
 			ereport(ERROR,
@@ -3752,6 +3756,23 @@ process_create_table_end(Node *parsetree)
 				flags |= HYPERTABLE_CREATE_DISABLE_DEFAULT_INDEXES;
 		}
 
+		if (!create_table_info.with_clauses[CreateTableFlagAssociatedSchema].is_default)
+		{
+			has_associated_schema = true;
+			namestrcpy(&associated_schema_name,
+					   TextDatumGetCString(
+						   create_table_info.with_clauses[CreateTableFlagAssociatedSchema].parsed));
+		}
+
+		if (!create_table_info.with_clauses[CreateTableFlagAssociatedTablePrefix].is_default)
+		{
+			has_associated_table_prefix = true;
+			namestrcpy(&associated_table_prefix,
+					   TextDatumGetCString(
+						   create_table_info.with_clauses[CreateTableFlagAssociatedTablePrefix]
+							   .parsed));
+		}
+
 		DimensionInfo *open_dim_info =
 			ts_dimension_info_create_open(table_relid,
 										  &time_column_name, /* column name */
@@ -3763,14 +3784,30 @@ process_create_table_end(Node *parsetree)
 		ChunkSizingInfo *csi = ts_chunk_sizing_info_get_default_disabled(table_relid);
 		csi->colname = time_column;
 
-		ts_hypertable_create_from_info(table_relid,
-									   INVALID_HYPERTABLE_ID,
-									   flags,		  /* flags */
-									   open_dim_info, /* open_dim_info */
-									   NULL,		  /* closed_dim_info */
-									   NULL,		  /* associated_schema_name */
-									   NULL,		  /* associated_table_prefix */
-									   csi);
+		CatalogSecurityContext sec_ctx;
+		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+		int32 ht_id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
+		ts_catalog_restore_user(&sec_ctx);
+
+		if (ts_hypertable_create_from_info(table_relid,
+										   ht_id,
+										   flags,		  /* flags */
+										   open_dim_info, /* open_dim_info */
+										   NULL,		  /* closed_dim_info */
+										   has_associated_schema ?
+											   &associated_schema_name :
+											   NULL, /* associated_schema_name */
+										   has_associated_table_prefix ?
+											   &associated_table_prefix :
+											   NULL, /* associated_table_prefix */
+										   csi))
+		{
+			if (ts_cm_functions->compression_enable)
+			{
+				Hypertable *ht = ts_hypertable_get_by_id(ht_id);
+				ts_cm_functions->compression_enable(ht);
+			}
+		}
 	}
 }
 
@@ -4885,7 +4922,7 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 				 errmsg("only timescaledb.compress parameters allowed when specifying compression "
 						"parameters for hypertable")));
 
-	parse_results = ts_compress_hypertable_set_clause_parse(compress_options);
+	parse_results = ts_alter_table_with_clause_parse(compress_options);
 
 	ts_cm_functions->process_compress_table(ht, parse_results);
 	return DDL_DONE;
