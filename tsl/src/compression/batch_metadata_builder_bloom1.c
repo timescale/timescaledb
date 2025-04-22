@@ -131,14 +131,6 @@ bloom1_hash_16(PG_FUNCTION_ARGS)
 PGFunction
 bloom1_get_hash_function(Oid type)
 {
-	/*
-	 * FIXME
-	 * Fall back to the Postgres extended hashing functions, so that we can use
-	 * bloom filters for any types.
-	 */
-	TypeCacheEntry *entry = lookup_type_cache(type, TYPECACHE_HASH_EXTENDED_PROC_FINFO);
-	return entry->hash_extended_proc_finfo.fn_addr;
-
 #ifdef TS_USE_UMASH
 	if (type == TEXTOID)
 	{
@@ -164,6 +156,13 @@ bloom1_get_hash_function(Oid type)
 			return bloom1_hash_16;
 #endif
 	}
+
+	/*
+	 * Fall back to the Postgres extended hashing functions, so that we can use
+	 * bloom filters for any types.
+	 */
+	TypeCacheEntry *entry = lookup_type_cache(type, TYPECACHE_HASH_EXTENDED_PROC_FINFO);
+	return entry->hash_extended_proc_finfo.fn_addr;
 }
 
 static void
@@ -315,6 +314,7 @@ calculate_hash(PGFunction hash_function, Datum needle)
 	hashfcinfo->nargs = 2;
 	hashfcinfo->args[0].value = needle;
 	hashfcinfo->args[0].isnull = false;
+
 	/*
 	 * Seed. Note that on 32-bit systems it is by-reference.
 	 */
