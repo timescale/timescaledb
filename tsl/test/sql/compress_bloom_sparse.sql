@@ -129,7 +129,53 @@ select count(*) from bloom where u = '90ec9e8e-4501-4232-9d03-6d7cf6132815';
 explain (analyze, verbose, costs off, timing off, summary off)
 select count(*) from bloom where u = '6c1d0998-05f3-452c-abd3-45afe72bbcab';
 
+explain (analyze, verbose, costs off, timing off, summary off)
+select count(*) from bloom where u = '6c1d0998-05f3-452c-abd3-45afe72bbcac';
+
 
 -- Timestamp uses minmax
 explain (analyze, verbose, costs off, timing off, summary off)
 select count(*) from bloom where ts between '2021-01-07' and '2021-01-14';
+
+
+-- Test some corner cases
+create table corner(ts int, s text, c text);
+select create_hypertable('corner', 'ts');
+alter table corner set (timescaledb.compress, timescaledb.compress_segmentby = 's',
+    timescaledb.compress_orderby = 'ts');
+
+-- This is to test detoasting the second argument of "bloom filter contains"
+-- function.
+insert into corner values (1, repeat('long', 100), 'short');
+
+-- This is to test the null bloom filter.
+insert into corner values(2, 'normal', null);
+
+-- This is to test the match and also the short varlena header in the bloom
+-- filter.
+insert into corner values(3, 'match', 'match');
+
+-- This is to test the long varlena header in the bloom filter.
+insert into corner select 4, 'longheader', generate_series(1, 1000)::text;
+
+create index on corner(c);
+
+select count(compress_chunk(x)) from show_chunks('corner') x;
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from corner where c = 'short';
+
+-- Test a cross-type equality operator.
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from corner where c = 'short'::name;
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from corner where c = s;
+
+
+
+-- Cleanup
+drop table bloom;
+drop table corner;
+
+

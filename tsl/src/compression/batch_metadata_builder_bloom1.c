@@ -27,10 +27,23 @@
 #endif
 
 /*
- * Our filters go down to 64 bits and we want to have 0.1% false positives, hence
- * this value.
+ * There is a tradeoff between making the bloom filters selective enough but
+ * not too big. Testing on some real words datasets, the optimal value seems to
+ * be about 2% false positives. We also want to be able to reduce the filter to
+ * up to 64 bits, so that it fits in the main table. Hence the optimal number of
+ * hashes. This number actually gives a slightly different false positive rate,
+ * so this is what we ultimately use.
+ * Calculator: https://hur.st/bloomfilter/?p=0.02&m=64
  */
-#define BLOOM1_HASHES 8
+
+//#define BLOOM1_FALSE_POSITIVES 0.05
+//#define BLOOM1_HASHES 4
+
+#define BLOOM1_FALSE_POSITIVES 0.022
+#define BLOOM1_HASHES 6
+
+//#define BLOOM1_FALSE_POSITIVES 0.001
+//#define BLOOM1_HASHES 8
 
 /*
  * Limit the bits belonging to the particular elements to a small contiguous
@@ -100,9 +113,9 @@ hashing_params()
 static Datum
 bloom1_hash_varlena(PG_FUNCTION_ARGS)
 {
-	Datum datum = PG_GETARG_DATUM(0);
-	const int length = VARSIZE_ANY_EXHDR(datum);
-	const char *data = VARDATA_ANY(datum);
+	struct varlena *needle = PG_DETOAST_DATUM_PACKED(PG_GETARG_DATUM(0));
+	const int length = VARSIZE_ANY_EXHDR(needle);
+	const char *data = VARDATA_ANY(needle);
 	PG_RETURN_UINT64(umash_full(hashing_params(),
 								/* seed = */ ~0ULL,
 								/* which = */ 0,
@@ -188,7 +201,7 @@ bloom1_reset(void *builder_, RowCompressor *compressor)
 }
 
 static char *
-bloom1_words(bytea *bloom)
+bloom1_words_buf(bytea *bloom)
 {
 	return VARDATA_ANY(bloom);
 }
@@ -199,21 +212,12 @@ bloom1_num_bits(const bytea *bloom)
 	return 8 * VARSIZE_ANY_EXHDR(bloom);
 }
 
-static int
-bloom1_estimate_ndistinct(bytea *bloom)
-{
-	const double m = bloom1_num_bits(bloom);
-	const double t = pg_popcount(bloom1_words(bloom), m / 8);
-	const double k = BLOOM1_HASHES;
-	return log(1 - t / m) / (k * log(1 - 1 / m));
-}
-
 static void
 bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 {
 	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
 	bytea *bloom = builder->bloom_bytea;
-	char *restrict words_buf = bloom1_words(bloom);
+	char *restrict words_buf = bloom1_words_buf(bloom);
 
 	const int orig_num_bits = bloom1_num_bits(bloom);
 	Assert(orig_num_bits % 8 == 0);
@@ -239,7 +243,7 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 	 * the unique elements is less. The TOAST compression doesn't handle even
 	 * the sparse filters very well. Apply a simple compression technique: split
 	 * the filter in half and bitwise OR the halves. Repeat this until we reach
-	 * the filter bit length that gives the desired false positive ratio of 0.1%.
+	 * the filter bit length that gives the desired false positive ratio.
 	 * The desired filter bit length is given by m1, we will now estimate it
 	 * based on the estimated current number of elements in the bloom filter (1)
 	 * and the ideal number of elements for a bloom filter of given size (2).
@@ -248,7 +252,7 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 	 */
 	const double m0 = orig_num_bits;
 	const double k = BLOOM1_HASHES;
-	const double p = 0.001;
+	const double p = BLOOM1_FALSE_POSITIVES;
 	const double t = orig_bits_set;
 	const double m1 = -log(1 - t / m0) / (log(1 - 1 / m0) * log(1 - pow(p, 1 / k)));
 
@@ -284,7 +288,7 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 	if (final_pow2 < starting_pow2)
 	{
 		SET_VARSIZE(bloom,
-					(char *) bloom1_words(bloom) + (1 << (final_pow2 - 3 /* 8-bit byte */)) -
+					(char *) bloom1_words_buf(bloom) + (1 << (final_pow2 - 3 /* 8-bit byte */)) -
 						(char *) bloom);
 	}
 
@@ -346,7 +350,7 @@ bloom1_update_val(void *builder_, Datum needle)
 {
 	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
 
-	char *restrict words_buf = bloom1_words(builder->bloom_bytea);
+	char *restrict words_buf = bloom1_words_buf(builder->bloom_bytea);
 	const uint32 num_bits = bloom1_num_bits(builder->bloom_bytea);
 
 	/*
@@ -400,22 +404,22 @@ bloom1_contains(PG_FUNCTION_ARGS)
 	}
 
 	Oid type_oid = get_fn_expr_argtype(fcinfo->flinfo, 1);
-	TypeCacheEntry *type_entry = lookup_type_cache(type_oid, TYPECACHE_HASH_EXTENDED_PROC);
-	Ensure(OidIsValid(type_entry->hash_extended_proc), "cannot find the hash function");
-	Datum needle = PG_GETARG_DATUM(1);
-	if (type_entry->typlen == -1)
+	PGFunction fn = bloom1_get_hash_function(type_oid);
+	/*
+	 * Technically this function is callable by user with arbitrary argument
+	 * that might not have an extended hash function, so report this error
+	 * gracefully.
+	 */
+	if (fn == NULL)
 	{
-		/*
-		 * Detoast the varlena type once to not accidentally detoast it in
-		 * several places.
-		 */
-		needle = PointerGetDatum(PG_DETOAST_DATUM_PACKED(needle));
+		ereport(ERROR,
+				(errcode(ERRCODE_DATA_EXCEPTION),
+				 errmsg("the argument type %s lacks an extended hash function",
+						format_type_be(type_oid))));
 	}
 
-	PGFunction fn = bloom1_get_hash_function(type_oid);
-
 	bytea *bloom = PG_GETARG_VARLENA_P(0);
-	const char *words_buf = bloom1_words(bloom);
+	const char *words_buf = bloom1_words_buf(bloom);
 	const uint32 num_bits = bloom1_num_bits(bloom);
 
 	/* Must be a power of two. */
@@ -432,6 +436,7 @@ bloom1_contains(PG_FUNCTION_ARGS)
 	const uint32 word_mask = num_word_bits - 1;
 	Assert((word_mask >> num_word_bits) == 0);
 
+	Datum needle = PG_GETARG_DATUM(1);
 	const uint64 datum_hash_1 = calculate_hash(fn, needle);
 	const uint32 absolute_mask = num_bits - 1;
 	for (int i = 0; i < BLOOM1_HASHES; i++)
@@ -493,7 +498,14 @@ batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
 	return &builder->functions;
 }
 
-TS_FUNCTION_INFO_V1(ts_bloom1_debug);
+static int
+bloom1_estimate_ndistinct(bytea *bloom)
+{
+	const double m = bloom1_num_bits(bloom);
+	const double t = pg_popcount(bloom1_words_buf(bloom), m / 8);
+	const double k = BLOOM1_HASHES;
+	return log(1 - t / m) / (k * log(1 - 1 / m));
+}
 
 /*
  * We're slightly modifying this Postgres macro to avoid a warning about signed
@@ -505,9 +517,15 @@ TS_FUNCTION_INFO_V1(ts_bloom1_debug);
 
 /*
  * A function to output various debugging info about a bloom filter.
+ *
+ * Usage hints in the tests.
+ *
+ * FIXME put under NDEBUG
  */
+TS_FUNCTION_INFO_V1(bloom1_debug_info);
+
 Datum
-ts_bloom1_debug(PG_FUNCTION_ARGS)
+bloom1_debug_info(PG_FUNCTION_ARGS)
 {
 	/* Build a tuple descriptor for our result type */
 	TupleDesc tuple_desc;
@@ -542,7 +560,7 @@ ts_bloom1_debug(PG_FUNCTION_ARGS)
 	const int bits_total = bloom1_num_bits(detoasted);
 	values[out_bits_total] = Int32GetDatum(bits_total);
 
-	const char *words = bloom1_words(detoasted);
+	const char *words = bloom1_words_buf(detoasted);
 
 	values[out_bits_set] = Int32GetDatum(pg_popcount(words, bits_total / 8));
 
@@ -580,17 +598,10 @@ Datum
 ts_bloom1_hash(PG_FUNCTION_ARGS)
 {
 	Oid type_oid = get_fn_expr_argtype(fcinfo->flinfo, 0);
-	TypeCacheEntry *type_entry = lookup_type_cache(type_oid, TYPECACHE_HASH_EXTENDED_PROC);
-	Ensure(OidIsValid(type_entry->hash_extended_proc), "cannot find postgres hash function");
-	Assert(!PG_ARGISNULL(0));
-	Datum needle = PG_GETARG_DATUM(0);
-	if (type_entry->typlen == -1)
-	{
-		needle = PointerGetDatum(PG_DETOAST_DATUM_PACKED(needle));
-	}
-
 	PGFunction fn = bloom1_get_hash_function(type_oid);
 	Ensure(fn != NULL, "cannot find our hash function");
 
+	Assert(!PG_ARGISNULL(0));
+	Datum needle = PG_GETARG_DATUM(0);
 	PG_RETURN_UINT64(calculate_hash(fn, needle));
 }

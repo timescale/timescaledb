@@ -312,6 +312,21 @@ select count(*) from bloom where u = '6c1d0998-05f3-452c-abd3-45afe72bbcab';
                Filter: _timescaledb_functions.bloom1_contains(compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, '6c1d0998-05f3-452c-abd3-45afe72bbcab'::uuid)
 (9 rows)
 
+explain (analyze, verbose, costs off, timing off, summary off)
+select count(*) from bloom where u = '6c1d0998-05f3-452c-abd3-45afe72bbcac';
+                                                                                                                                                                                                                            QUERY PLAN                                                                                                                                                                                                                            
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   Output: count(*)
+   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=0 loops=1)
+         Filter: (_hyper_1_1_chunk.u = '6c1d0998-05f3-452c-abd3-45afe72bbcac'::uuid)
+         Bulk Decompression: false
+         ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=0 loops=1)
+               Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
+               Filter: _timescaledb_functions.bloom1_contains(compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, '6c1d0998-05f3-452c-abd3-45afe72bbcac'::uuid)
+               Rows Removed by Filter: 10
+(9 rows)
+
 -- Timestamp uses minmax
 explain (analyze, verbose, costs off, timing off, summary off)
 select count(*) from bloom where ts between '2021-01-07' and '2021-01-14';
@@ -329,3 +344,129 @@ select count(*) from bloom where ts between '2021-01-07' and '2021-01-14';
                Rows Removed by Filter: 9
 (10 rows)
 
+-- Test some corner cases
+create table corner(ts int, s text, c text);
+select create_hypertable('corner', 'ts');
+NOTICE:  adding not-null constraint to column "ts"
+  create_hypertable  
+---------------------
+ (3,public,corner,t)
+(1 row)
+
+alter table corner set (timescaledb.compress, timescaledb.compress_segmentby = 's',
+    timescaledb.compress_orderby = 'ts');
+-- This is to test detoasting the second argument of "bloom filter contains"
+-- function.
+insert into corner values (1, repeat('long', 100), 'short');
+-- This is to test the null bloom filter.
+insert into corner values(2, 'normal', null);
+-- This is to test the match and also the short varlena header in the bloom
+-- filter.
+insert into corner values(3, 'match', 'match');
+-- This is to test the long varlena header in the bloom filter.
+insert into corner select 4, 'longheader', generate_series(1, 1000)::text;
+create index on corner(c);
+select count(compress_chunk(x)) from show_chunks('corner') x;
+ count 
+-------
+     1
+(1 row)
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from corner where c = 'short';
+                                                                                                                                  QUERY PLAN                                                                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_3_chunk (actual rows=1 loops=1)
+   Output: _hyper_3_3_chunk.ts, _hyper_3_3_chunk.s, _hyper_3_3_chunk.c
+   Vectorized Filter: (_hyper_3_3_chunk.c = 'short'::text)
+   Bulk Decompression: true
+   ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=1 loops=1)
+         Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.s, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk.ts, compress_hyper_4_4_chunk._ts_meta_v2_bloom1_c, compress_hyper_4_4_chunk.c
+         Filter: _timescaledb_functions.bloom1_contains(compress_hyper_4_4_chunk._ts_meta_v2_bloom1_c, 'short'::text)
+         Rows Removed by Filter: 3
+(8 rows)
+
+-- Test a cross-type equality operator.
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from corner where c = 'short'::name;
+                                                                                                                                  QUERY PLAN                                                                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_3_chunk (actual rows=1 loops=1)
+   Output: _hyper_3_3_chunk.ts, _hyper_3_3_chunk.s, _hyper_3_3_chunk.c
+   Filter: (_hyper_3_3_chunk.c = 'short'::name)
+   Rows Removed by Filter: 1002
+   Bulk Decompression: true
+   ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=4 loops=1)
+         Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.s, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk.ts, compress_hyper_4_4_chunk._ts_meta_v2_bloom1_c, compress_hyper_4_4_chunk.c
+(7 rows)
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from corner where c = s;
+                                                                                                                                  QUERY PLAN                                                                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_3_chunk (actual rows=1 loops=1)
+   Output: _hyper_3_3_chunk.ts, _hyper_3_3_chunk.s, _hyper_3_3_chunk.c
+   Filter: (_hyper_3_3_chunk.c = _hyper_3_3_chunk.s)
+   Bulk Decompression: true
+   ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=1 loops=1)
+         Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.s, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk.ts, compress_hyper_4_4_chunk._ts_meta_v2_bloom1_c, compress_hyper_4_4_chunk.c
+         Filter: _timescaledb_functions.bloom1_contains(compress_hyper_4_4_chunk._ts_meta_v2_bloom1_c, compress_hyper_4_4_chunk.s)
+         Rows Removed by Filter: 3
+(8 rows)
+
+-- Test the debug function
+create or replace function bloom1_debug_info(in _timescaledb_internal.bloom1,
+    out toast_header int, out toasted_bytes int, out compressed_bytes int,
+    out detoasted_bytes int, out bits_total int, out bits_set int,
+    out estimated_elements int)
+as :TSL_MODULE_PATHNAME, 'bloom1_debug_info' language c immutable parallel safe;
+select schema_name || '.' || table_name chunk, 'c' column from _timescaledb_catalog.chunk
+    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
+        where hypertable_id = (select id from _timescaledb_catalog.hypertable
+            where table_name = 'corner') limit 1)
+\gset
+with col as (
+    select _ts_meta_count rows, _ts_meta_v2_bloom1_:column f, :column cc
+    from :chunk),
+blooms as (
+    select *, (bloom1_debug_info(f)).*, pg_column_compression(f) filter_column_compression,
+        pg_column_size(f) filter_column_size
+    from col)
+select (toast_header::bit(16), bits_total, filter_column_compression) kind,
+    avg(rows)::int rows,
+    count(*),
+    count(*) filter (where _timescaledb_functions.bloom1_contains(f, 'match'::text)) h,
+    array_agg(distinct bits_total) filter_bit_sizes,
+    array_agg(distinct filter_column_compression) filter_compression_algorithms,
+    round(avg(detoasted_bytes / compressed_bytes::numeric), 2) filter_compression_ratio,
+    avg(estimated_elements)::int estimated_elements,
+    avg(bits_set)::int bits_set,
+    round(avg(pg_column_size(cc)) / (any_value(bits_total) / 8.), 2) column_to_filter_ratio
+from blooms
+group by 1 order by min(bits_total);
+           kind           | rows | count | h | filter_bit_sizes | filter_compression_algorithms | filter_compression_ratio | estimated_elements | bits_set | column_to_filter_ratio 
+--------------------------+------+-------+---+------------------+-------------------------------+--------------------------+--------------------+----------+------------------------
+ (0000000000010011,64,)   |    1 |     3 | 1 | {64}             | {NULL}                        |                          |                  1 |        4 |                   3.67
+ (0000000000000001,8192,) | 1000 |     1 | 0 | {8192}           | {NULL}                        |                          |                981 |     4199 |                   3.85
+(2 rows)
+
+-- One way to inspect the IO efficiency: ratio of bytes that would have been
+-- read w/o the index to the sum of bytes read by the bloom filter check
+-- and the actual column check.
+with col as (
+    select _ts_meta_count b, _ts_meta_v2_bloom1_:column f, :column cc
+    from :chunk)
+select
+    round(
+        sum(pg_column_size(cc))::numeric / (sum(pg_column_size(f))
+            + sum(pg_column_size(cc)) filter (where _timescaledb_functions.bloom1_contains(f, 'match'::text))),
+        2)
+from col;
+ round 
+-------
+  3.69
+(1 row)
+
+-- Cleanup
+drop table bloom;
+drop table corner;
