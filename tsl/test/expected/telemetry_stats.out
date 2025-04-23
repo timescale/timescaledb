@@ -271,8 +271,7 @@ SELECT (SELECT count(*) FROM normal) num_inserted_rows,
 
 -- Add compression
 ALTER TABLE hyper SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "hyper" is set to ""
+NOTICE:  default segment by for hypertable "hyper" is set to "device"
 NOTICE:  default order by for hypertable "hyper" is set to ""time" DESC"
 SELECT compress_chunk(c)
 FROM show_chunks('hyper') c ORDER BY c LIMIT 4;
@@ -323,7 +322,7 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "toast_size": 40960,                             +
          "compression": {                                 +
              "compressed_heap_size": 114688,              +
-             "compressed_row_count": 14,                  +
+             "compressed_row_count": 49,                  +
              "compressed_toast_size": 40960,              +
              "num_compressed_chunks": 5,                  +
              "uncompressed_heap_size": 221184,            +
@@ -332,7 +331,7 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
              "uncompressed_toast_size": 0,                +
              "uncompressed_indexes_size": 131072,         +
              "num_compressed_hypertables": 2,             +
-             "compressed_row_count_frozen_immediately": 14+
+             "compressed_row_count_frozen_immediately": 49+
          },                                               +
          "indexes_size": 270336,                          +
          "num_children": 11,                              +
