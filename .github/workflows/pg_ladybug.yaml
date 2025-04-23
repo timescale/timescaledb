@@ -18,8 +18,8 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get purge llvm-16 llvm-18 clang-16 clang-18
-        sudo apt-get install llvm-19 llvm-19-dev clang-19 libclang-19-dev clang-tidy-19 libcurl4-openssl-dev postgresql-server-dev-16
+        sudo apt-get purge llvm-16 llvm-17 llvm-18 clang-16 clang-17 clang-18
+        sudo apt-get install llvm-19 llvm-19-dev clang-19 libclang-19-dev clang-tidy-19 libcurl4-openssl-dev
         sudo ln -sf /usr/bin/clang-tidy-19 /usr/bin/clang-tidy
 
     - name: Checkout timescaledb
@@ -35,7 +35,7 @@ jobs:
     - name: build pg_ladybug
       run:  |
         cd pg_ladybug
-        cmake -S . -B build
+        cmake -S . -B build -DLLVM_ROOT=/usr/lib/llvm-19
         make -C build
         sudo make -C build install
 
@@ -45,6 +45,8 @@ jobs:
 
     - name: Configure timescaledb
       run: |
+        # installing postgres headers pulls in llvm-17 which confuses pg_ladybug build process so we install this here instead of at beginning
+        sudo apt-get install postgresql-server-dev-16
         ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DLINTER=ON -DCLANG_TIDY_EXTRA_OPTS=",-*,postgres-*;--load=/usr/local/lib/libPostgresCheck.so"
 
     - name: Build timescaledb
