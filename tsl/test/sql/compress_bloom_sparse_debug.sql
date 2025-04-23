@@ -73,3 +73,12 @@ select
             + sum(pg_column_size(cc)) filter (where _timescaledb_functions.bloom1_contains(f, 'match'::text))),
         2)
 from col;
+
+-- Compressed bytes-per-value vs bloom filter bytes-per-value.
+with col as (
+    select _ts_meta_count rows, _ts_meta_v2_bloom1_:column f, :column cc
+    from :chunk)
+select
+    round(sum(pg_column_size(cc))::numeric / sum(rows), 2) compressed_bytes_per_row,
+    round(sum(pg_column_size(f))::numeric / sum(rows), 2) filter_bytes_per_row
+from col;
