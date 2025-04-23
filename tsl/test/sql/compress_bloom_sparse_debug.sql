@@ -29,11 +29,11 @@ select count(compress_chunk(x)) from show_chunks('test') x;
 
 
 -- Test the debug function
-create or replace function bloom1_debug_info(in _timescaledb_internal.bloom1,
+create or replace function ts_bloom1_debug_info(in _timescaledb_internal.bloom1,
     out toast_header int, out toasted_bytes int, out compressed_bytes int,
     out detoasted_bytes int, out bits_total int, out bits_set int,
     out estimated_elements int)
-as :TSL_MODULE_PATHNAME, 'bloom1_debug_info' language c immutable parallel safe;
+as :TSL_MODULE_PATHNAME, 'ts_bloom1_debug_info' language c immutable parallel safe;
 
 select schema_name || '.' || table_name chunk, 'c' column from _timescaledb_catalog.chunk
     where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
@@ -45,7 +45,7 @@ with col as (
     select _ts_meta_count rows, _ts_meta_v2_bloom1_:column f, :column cc
     from :chunk),
 blooms as (
-    select *, (bloom1_debug_info(f)).*, pg_column_compression(f) filter_column_compression,
+    select *, (ts_bloom1_debug_info(f)).*, pg_column_compression(f) filter_column_compression,
         pg_column_size(f) filter_column_size
     from col)
 select (toast_header::bit(16), bits_total, filter_column_compression) kind,

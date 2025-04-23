@@ -522,10 +522,10 @@ bloom1_estimate_ndistinct(bytea *bloom)
  *
  * FIXME put under NDEBUG
  */
-TS_FUNCTION_INFO_V1(bloom1_debug_info);
+TS_FUNCTION_INFO_V1(ts_bloom1_debug_info);
 
 Datum
-bloom1_debug_info(PG_FUNCTION_ARGS)
+ts_bloom1_debug_info(PG_FUNCTION_ARGS)
 {
 	/* Build a tuple descriptor for our result type */
 	TupleDesc tuple_desc;
