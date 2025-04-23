@@ -85,6 +85,7 @@
 #include "tss_callbacks.h"
 #include "utils.h"
 #include "with_clause/alter_table_with_clause.h"
+#include "with_clause/create_materialized_view_with_clause.h"
 #include "with_clause/create_table_with_clause.h"
 #include "with_clause/with_clause_parser.h"
 
@@ -4297,7 +4298,7 @@ process_altercontinuousagg_set_with(ContinuousAgg *cagg, Oid view_relid, const L
 
 	if (list_length(cagg_options) > 0)
 	{
-		parse_results = ts_continuous_agg_with_clause_parse(cagg_options);
+		parse_results = ts_create_materialized_view_with_clause_parse(cagg_options);
 		ts_cm_functions->continuous_agg_update_options(cagg, parse_results);
 	}
 }
@@ -4978,8 +4979,8 @@ process_create_table_as(ProcessUtilityArgs *args)
 
 		if (cagg_options)
 		{
-			parse_results = ts_continuous_agg_with_clause_parse(cagg_options);
-			is_cagg = DatumGetBool(parse_results[ContinuousEnabled].parsed);
+			parse_results = ts_create_materialized_view_with_clause_parse(cagg_options);
+			is_cagg = DatumGetBool(parse_results[CreateMaterializedViewFlagContinuous].parsed);
 		}
 
 		if (!is_cagg)
