@@ -306,13 +306,13 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 								  attr->atttypmod,
 								  attr->attcollation);
 				compressed_column_defs = lappend(compressed_column_defs, def);
-				def->storage = TYPSTORAGE_PLAIN;
+				def->storage = TYPSTORAGE_MAIN;
 				def =
 					makeColumnDef(compressed_column_metadata_name_v2("max", NameStr(attr->attname)),
 								  attr->atttypid,
 								  attr->atttypmod,
 								  attr->attcollation);
-				def->storage = TYPSTORAGE_PLAIN;
+				def->storage = TYPSTORAGE_MAIN;
 				compressed_column_defs = lappend(compressed_column_defs, def);
 			}
 		}
