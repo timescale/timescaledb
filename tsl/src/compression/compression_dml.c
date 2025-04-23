@@ -57,7 +57,7 @@ static void report_error(TM_Result result);
 
 static bool key_column_is_null(tuple_filtering_constraints *constraints, Relation chunk_rel,
 							   Oid ht_relid, TupleTableSlot *slot);
-static bool can_delete_without_decompression(HypertableModifyState *ht_state,
+static bool can_delete_without_decompression(ModifyHypertableState *ht_state,
 											 CompressionSettings *settings, Chunk *chunk,
 											 List *predicates);
 
@@ -215,7 +215,7 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
  *  Returns true if it decompresses any data.
  */
 static bool
-decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chunk,
+decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chunk,
 									 List *predicates, EState *estate, bool has_joins)
 {
 	/* process each chunk with its corresponding predicates */
@@ -657,7 +657,7 @@ batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scan
 struct decompress_chunk_context
 {
 	List *relids;
-	HypertableModifyState *ht_state;
+	ModifyHypertableState *ht_state;
 	/* indicates decompression actually occurred */
 	bool batches_decompressed;
 	bool has_joins;
@@ -666,7 +666,7 @@ struct decompress_chunk_context
 static bool decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx);
 
 bool
-decompress_target_segments(HypertableModifyState *ht_state)
+decompress_target_segments(ModifyHypertableState *ht_state)
 {
 	ModifyTableState *ps =
 		linitial_node(ModifyTableState, castNode(CustomScanState, ht_state)->custom_ps);
@@ -1434,7 +1434,7 @@ key_column_is_null(tuple_filtering_constraints *constraints, Relation chunk_rel,
 }
 
 static bool
-can_delete_without_decompression(HypertableModifyState *ht_state, CompressionSettings *settings,
+can_delete_without_decompression(ModifyHypertableState *ht_state, CompressionSettings *settings,
 								 Chunk *chunk, List *predicates)
 {
 	ListCell *lc;

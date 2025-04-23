@@ -83,7 +83,7 @@ SET series_1 = 8
 WHERE series_1 IN (SELECT series_1 FROM "one_Partition" WHERE series_1 > series_val());
                                                                      QUERY PLAN                                                                      
 -----------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Update on "one_Partition"
          Update on _hyper_1_1_chunk "one_Partition_2"
          Update on _hyper_1_2_chunk "one_Partition_3"

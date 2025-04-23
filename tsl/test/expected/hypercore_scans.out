@@ -368,7 +368,7 @@ from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') t
 on conflict (location, device, time) do nothing;
                                       QUERY PLAN                                       
 ---------------------------------------------------------------------------------------
- Custom Scan (HypertableModify) (actual rows=0 loops=1)
+ Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
    ->  Insert on readings (actual rows=0 loops=1)
          Conflict Resolution: NOTHING
          Conflict Arbiter Indexes: readings_device_location_time_key

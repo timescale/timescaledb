@@ -471,7 +471,7 @@ SET timescaledb.enable_chunk_skipping to ON;
 :PREFIX UPDATE sample_table set sensor_id = 10 WHERE sensor_id > length(substring(version(),1,9));
                                       QUERY PLAN                                      
 --------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Update on sample_table
          Update on _hyper_1_1_chunk sample_table
          Update on _hyper_1_2_chunk sample_table_1
@@ -485,7 +485,7 @@ SET timescaledb.enable_chunk_skipping to ON;
 :PREFIX DELETE FROM sample_table  WHERE sensor_id > length(substring(version(),1,10));
                                    QUERY PLAN                                    
 ---------------------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Delete on sample_table
          Delete on _hyper_1_1_chunk sample_table
          Delete on _hyper_1_2_chunk sample_table_1
@@ -522,7 +522,7 @@ RESET timescaledb.enable_chunk_skipping;
 :PREFIX UPDATE sample_table set sensor_id = 10 WHERE sensor_id > length(substring(version(),1,9));
                                       QUERY PLAN                                      
 --------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Update on sample_table
          Update on _hyper_1_1_chunk sample_table_1
          Update on _hyper_1_2_chunk sample_table_2
