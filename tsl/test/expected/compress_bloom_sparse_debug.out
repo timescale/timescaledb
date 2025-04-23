@@ -56,7 +56,7 @@ select (toast_header::bit(16), bits_total, filter_column_compression) kind,
     round(avg(detoasted_bytes / compressed_bytes::numeric), 2) filter_compression_ratio,
     avg(estimated_elements)::int estimated_elements,
     avg(bits_set)::int bits_set,
-    round(avg(pg_column_size(cc)) / (any_value(bits_total) / 8.), 2) column_to_filter_ratio
+    round(avg(pg_column_size(cc)) / (avg(bits_total) / 8.), 2) column_to_filter_ratio
 from blooms
 group by 1 order by min(bits_total);
            kind           | rows | count | h | filter_bit_sizes | filter_compression_algorithms | filter_compression_ratio | estimated_elements | bits_set | column_to_filter_ratio 
