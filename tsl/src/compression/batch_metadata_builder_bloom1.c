@@ -79,18 +79,6 @@ bloom1_hash64(uint64 x)
 }
 
 static Datum
-bloom1_hash_2(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_UINT64(bloom1_hash64(PG_GETARG_UINT16(0)));
-}
-
-static Datum
-bloom1_hash_4(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_UINT64(bloom1_hash64(PG_GETARG_UINT32(0)));
-}
-
-static Datum
 bloom1_hash_8(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_UINT64(bloom1_hash64(PG_GETARG_INT64(0)));
@@ -157,10 +145,6 @@ bloom1_get_hash_function(Oid type)
 
 	switch (typlen)
 	{
-		case 2:
-			return bloom1_hash_2;
-		case 4:
-			return bloom1_hash_4;
 		case 8:
 			return bloom1_hash_8;
 #ifdef TS_USE_UMASH

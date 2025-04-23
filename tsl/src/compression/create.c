@@ -309,8 +309,7 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 
 			if (attr->atttypid == TIMESTAMPTZOID || attr->atttypid == TIMESTAMPOID ||
 				attr->atttypid == TIMEOID || attr->atttypid == TIMETZOID ||
-				attr->atttypid == DATEOID || attr->atttypid == FLOAT4OID ||
-				attr->atttypid == FLOAT8OID || attr->atttypid == NUMERICOID)
+				attr->atttypid == DATEOID)
 			{
 				/*
 				 * For time types, we expect:
@@ -318,9 +317,26 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 				 * 2) correlation with the orderby columns, e.g. creation time
 				 *    correlates with the update time that is used as orderby.
 				 * This makes minmax indexes more suitable than bloom filters.
-				 *
-				 * For fractional arithmetic types, equality queries are unlikely
-				 * as well.
+				 */
+				can_use_bloom1 = false;
+			}
+
+			if (attr->atttypid == FLOAT4OID || attr->atttypid == FLOAT8OID ||
+				attr->atttypid == NUMERICOID)
+			{
+				/*
+				 * For fractional arithmetic types, equality queries are unlikely.
+				 */
+				can_use_bloom1 = false;
+			}
+
+			if (type->typlen > 0 && type->typlen <= 4)
+			{
+				/*
+				 * Bloom filters for 1k elements with 2% false positive rate
+				 * require about one byte per element, so there's no point in
+				 * using them for smaller data types that typically compress to
+				 * less than that.
 				 */
 				can_use_bloom1 = false;
 			}
@@ -329,7 +345,7 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 			{
 				/*
 				 * Bloom filter pushdown is not implemented for TAM at the moment,
-				 * so keep the old behavior with minmax filters.
+				 * so keep the old behavior with minmax sparse indexes.
 				 */
 				can_use_bloom1 = false;
 			}
@@ -337,8 +353,7 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 			if (ts_guc_enable_sparse_index_bloom1 && can_use_bloom1)
 			{
 				/*
-				 * Add bloom filter metadata for columns that are not a part of
-				 * orderby, but a part of some other btree index.
+				 * Add bloom filter sparse index for this column.
 				 */
 				ColumnDef *bloom_column_def =
 					makeColumnDef(compressed_column_metadata_name_v2("bloom1",
@@ -348,7 +363,7 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 								  /* collation = */ 0);
 
 				/*
-				 * We have our internal compression for bloom filters, and the
+				 * We have our custom compression for bloom filters, and the
 				 * result is almost incompressible with lz4 (~2%), so disable it.
 				 */
 				bloom_column_def->storage = TYPSTORAGE_EXTERNAL;
@@ -358,15 +373,7 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 			else if (can_use_minmax)
 			{
 				/*
-				 * Here we create minmax metadata for the columns for which
-				 * we have btree indexes and the bloom sparse index is not
-				 * suitable.
-				 * to have a btree index for a column and at the same time
-				 * not have a "less" operator for it. Still, we can have
-				 * various unusual user-defined types, and the minmax metadata
-				 * for the rest of the columns are not required for correctness,
-				 * so play it safe and just don't create the metadata if we don't
-				 * have an operator.
+				 * Add minmax sparse index for this column.
 				 */
 				compressed_column_defs =
 					lappend(compressed_column_defs,
