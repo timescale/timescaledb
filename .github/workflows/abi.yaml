@@ -22,11 +22,9 @@ jobs:
   config:
     runs-on: ubuntu-latest
     outputs:
-      pg14_abi_min: ${{ steps.config.outputs.pg14_abi_min }}
       pg15_abi_min: ${{ steps.config.outputs.pg15_abi_min }}
       pg16_abi_min: ${{ steps.config.outputs.pg16_abi_min }}
       pg17_abi_min: ${{ steps.config.outputs.pg17_abi_min }}
-      pg14_latest: ${{ steps.config.outputs.pg14_latest }}
       pg15_latest: ${{ steps.config.outputs.pg15_latest }}
       pg16_latest: ${{ steps.config.outputs.pg16_latest }}
       pg17_latest: ${{ steps.config.outputs.pg17_latest }}
@@ -45,20 +43,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ 14, 15, 16, 17 ]
+        pg: [ 15, 16, 17 ]
         include:
-          - pg: 14
-            builder: ${{ fromJson(needs.config.outputs.pg14_abi_min) }}-alpine
-            tester: ${{ fromJson(needs.config.outputs.pg14_latest) }}-alpine3.19
           - pg: 15
-            builder: ${{ fromJson(needs.config.outputs.pg15_abi_min) }}-alpine
-            tester: ${{ fromJson(needs.config.outputs.pg15_latest) }}-alpine3.19
+            builder: ${{ fromJson(needs.config.outputs.pg15_abi_min) }}
+            tester: ${{ fromJson(needs.config.outputs.pg15_latest) }}
           - pg: 16
-            builder: ${{ fromJson(needs.config.outputs.pg16_abi_min) }}-alpine
-            tester: ${{ fromJson(needs.config.outputs.pg16_latest) }}-alpine3.19
+            builder: ${{ fromJson(needs.config.outputs.pg16_abi_min) }}
+            tester: ${{ fromJson(needs.config.outputs.pg16_latest) }}
           - pg: 17
-            builder: ${{ fromJson(needs.config.outputs.pg17_abi_min) }}-alpine
-            tester: ${{ fromJson(needs.config.outputs.pg17_latest) }}-alpine3.19
+            builder: ${{ fromJson(needs.config.outputs.pg17_abi_min) }}
+            tester: ${{ fromJson(needs.config.outputs.pg17_latest) }}
 
     steps:
 
@@ -67,7 +62,7 @@ jobs:
 
     - name: Build extension with ${{ matrix.builder }}
       run: |
-        BUILDER_IMAGE="postgres:${{matrix.builder}}"
+        BUILDER_IMAGE="postgres:${{matrix.builder}}-alpine"
 
         docker pull ${BUILDER_IMAGE}
         docker buildx imagetools inspect ${BUILDER_IMAGE}
@@ -91,7 +86,7 @@ jobs:
 
     - name: Run tests on server ${{ matrix.tester }}
       run: |
-        TEST_IMAGE="postgres:${{ matrix.tester }}"
+        TEST_IMAGE="postgres:${{ matrix.tester }}-alpine"
 
         docker pull ${TEST_IMAGE}
         docker buildx imagetools inspect ${TEST_IMAGE}

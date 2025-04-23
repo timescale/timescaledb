@@ -181,6 +181,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.hypercore_proxy_handler = hypercore_proxy_handler,
 	.hypercore_decompress_update_segment = hypercore_decompress_update_segment,
 	.is_compressed_tid = tsl_is_compressed_tid,
+	.compression_enable = tsl_compression_enable,
 	.ddl_command_start = tsl_ddl_command_start,
 	.ddl_command_end = tsl_ddl_command_end,
 	.show_chunk = chunk_show,
@@ -188,7 +189,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.create_chunk = chunk_create,
 	.chunk_freeze_chunk = chunk_freeze_chunk,
 	.chunk_unfreeze_chunk = chunk_unfreeze_chunk,
-	.chunk_create_empty_table = chunk_create_empty_table,
 	.recompress_chunk_segmentwise = tsl_recompress_chunk_segmentwise,
 	.get_compressed_chunk_index_for_recompression =
 		tsl_get_compressed_chunk_index_for_recompression,

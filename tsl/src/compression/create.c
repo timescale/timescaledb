@@ -21,6 +21,7 @@
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
 #include <common/md5.h>
+#include <executor/spi.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <parser/parse_type.h>
@@ -39,7 +40,6 @@
 #include "chunk_index.h"
 #include "compression.h"
 #include "compression/compression_storage.h"
-#include "compression_with_clause.h"
 #include "create.h"
 #include "custom_type_cache.h"
 #include "guc.h"
@@ -50,7 +50,7 @@
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "utils.h"
-#include <executor/spi.h>
+#include "with_clause/alter_table_with_clause.h"
 
 static const char *sparse_index_types[] = { "min", "max" };
 
@@ -132,7 +132,7 @@ compressed_column_metadata_name_v2(const char *metadata_type, const char *column
 	{
 		const char *errstr = NULL;
 		char hash[33];
-		Ensure(pg_md5_hash_compat(column_name, len, hash, &errstr), "md5 computation failure");
+		Ensure(pg_md5_hash(column_name, len, hash, &errstr), "md5 computation failure");
 
 		result = psprintf("_ts_meta_v2_%.6s_%.4s_%.39s", metadata_type, hash, column_name);
 	}
@@ -145,7 +145,7 @@ compressed_column_metadata_name_v2(const char *metadata_type, const char *column
 }
 
 int
-compressed_column_metadata_attno(CompressionSettings *settings, Oid chunk_reloid,
+compressed_column_metadata_attno(const CompressionSettings *settings, Oid chunk_reloid,
 								 AttrNumber chunk_attno, Oid compressed_reloid, char *metadata_type)
 {
 	Assert(is_sparse_index_type(metadata_type));
@@ -440,12 +440,32 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 	 * for now.
 	 */
 	tablespace_oid = get_rel_tablespace(src_chunk->table_id);
+	CompressionSettings *settings = ts_compression_settings_get(src_chunk->hypertable_relid);
+
+	/*
+	 * On hypertables created with CREATE TABLE ... WITH we enable compression
+	 * by default but do not create CompressionSettings immediately assuming
+	 * that we have more information available when the first compression
+	 * is actually triggered allowing us to generate better compression
+	 * settings.
+	 */
+	if (!settings)
+	{
+		settings = ts_compression_settings_create(src_chunk->hypertable_relid,
+												  InvalidOid,
+												  NULL,
+												  NULL,
+												  NULL,
+												  NULL);
+
+		Hypertable *ht = ts_hypertable_get_by_id(src_chunk->fd.hypertable_id);
+		compression_settings_update(ht, settings, ts_alter_table_with_clause_parse(NIL));
+	}
 
 	if (OidIsValid(table_id))
 		compress_chunk->table_id = table_id;
 	else
 	{
-		CompressionSettings *settings = ts_compression_settings_get(src_chunk->hypertable_relid);
 		List *column_defs = build_columndefs(settings, src_chunk->table_id);
 		compress_chunk->table_id =
 			compression_chunk_create(src_chunk, compress_chunk, column_defs, tablespace_oid);
@@ -455,7 +475,7 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 		elog(ERROR, "could not create compressed chunk table");
 
 	/* Materialize current compression settings for this chunk */
-	ts_compression_settings_materialize(src_chunk->hypertable_relid, compress_chunk->table_id);
+	ts_compression_settings_materialize(settings, src_chunk->table_id, compress_chunk->table_id);
 
 	/* if the src chunk is not in the default tablespace, the compressed indexes
 	 * should also be in a non-default tablespace. IN the usual case, this is inferred
@@ -516,6 +536,7 @@ validate_existing_constraints(Hypertable *ht, CompressionSettings *settings)
 
 	ArrayType *arr;
 
+	Assert(ht->main_table_relid == settings->fd.relid);
 	pg_constr = table_open(ConstraintRelationId, AccessShareLock);
 
 	ScanKeyInit(&scankey,
@@ -762,12 +783,12 @@ update_compress_chunk_time_interval(Hypertable *ht, WithClauseResult *with_claus
  * 4. Copy constraints to internal compression table
  */
 bool
-tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
-						   WithClauseResult *with_clause_options)
+tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options)
 {
 	int32 compress_htid;
-	bool compress_disable = !with_clause_options[CompressEnabled].is_default &&
-							!DatumGetBool(with_clause_options[CompressEnabled].parsed);
+	bool compress_disable =
+		!with_clause_options[AlterTableFlagCompressEnabled].is_default &&
+		!DatumGetBool(with_clause_options[AlterTableFlagCompressEnabled].parsed);
 	CompressionSettings *settings;
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
@@ -788,7 +809,12 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	settings = ts_compression_settings_get(ht->main_table_relid);
 	if (!settings)
 	{
-		settings = ts_compression_settings_create(ht->main_table_relid, NULL, NULL, NULL, NULL);
+		settings = ts_compression_settings_create(ht->main_table_relid,
+												  InvalidOid,
+												  NULL,
+												  NULL,
+												  NULL,
+												  NULL);
 	}
 
 	compression_settings_update(ht, settings, with_clause_options);
@@ -807,6 +833,25 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 		Oid tablespace_oid = get_rel_tablespace(ht->main_table_relid);
 		compress_htid = compression_hypertable_create(ht, ownerid, tablespace_oid);
 		ts_hypertable_set_compressed(ht, compress_htid);
+	}
+
+	/*
+	 * Check for suboptimal compressed chunk merging configuration
+	 *
+	 * When compress_chunk_time_interval is configured to merge chunks during compression the
+	 * primary dimension should be the first compress_orderby column otherwise chunk merging will
+	 * require decompression.
+	 */
+	Dimension *dim = ts_hyperspace_get_mutable_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
+	if (dim && dim->fd.compress_interval_length &&
+		ts_array_position(settings->fd.orderby, NameStr(dim->fd.column_name)) != 1)
+	{
+		ereport(WARNING,
+				(errcode(ERRCODE_WARNING),
+				 errmsg("compress_chunk_time_interval configured and primary dimension not "
+						"first column in compress_orderby"),
+				 errhint("consider setting \"%s\" as first compress_orderby column",
+						 NameStr(dim->fd.column_name))));
 	}
 
 	/* do not release any locks, will get released by xact end */
@@ -1117,10 +1162,16 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 	else
 		orderby = "";
 
-	elog(NOTICE,
-		 "default order by for hypertable \"%s\" is set to \"%s\"",
-		 get_rel_name(ht->main_table_relid),
-		 orderby);
+	if (*orderby == '\0')
+		ereport(NOTICE,
+				(errmsg("default order by for hypertable \"%s\" is set to \"\"",
+						get_rel_name(ht->main_table_relid))),
+				errdetail("Segmentwise recompression will be disabled"));
+	else
+		elog(NOTICE,
+			 "default order by for hypertable \"%s\" is set to \"%s\"",
+			 get_rel_name(ht->main_table_relid),
+			 orderby);
 
 	elog(LOG_SERVER_ONLY,
 		 "order_by default: hypertable=\"%s\" clauses=\"%s\" function=\"%s.%s\" confidence=%d",
@@ -1141,12 +1192,12 @@ compression_settings_update(Hypertable *ht, CompressionSettings *settings,
 		(settings->fd.orderby && settings->fd.orderby_desc && settings->fd.orderby_nullsfirst) ||
 		(!settings->fd.orderby && !settings->fd.orderby_desc && !settings->fd.orderby_nullsfirst));
 
-	if (!with_clause_options[CompressChunkTimeInterval].is_default)
+	if (!with_clause_options[AlterTableFlagCompressChunkTimeInterval].is_default)
 	{
 		update_compress_chunk_time_interval(ht, with_clause_options);
 	}
 
-	if (!with_clause_options[CompressSegmentBy].is_default)
+	if (!with_clause_options[AlterTableFlagCompressSegmentBy].is_default)
 	{
 		settings->fd.segmentby = ts_compress_hypertable_parse_segment_by(with_clause_options, ht);
 	}
@@ -1155,10 +1206,10 @@ compression_settings_update(Hypertable *ht, CompressionSettings *settings,
 		settings->fd.segmentby = compression_setting_segmentby_get_default(ht);
 	}
 
-	if (!with_clause_options[CompressOrderBy].is_default || !settings->fd.orderby)
+	if (!with_clause_options[AlterTableFlagCompressOrderBy].is_default || !settings->fd.orderby)
 	{
 		OrderBySettings obs;
-		if (with_clause_options[CompressOrderBy].is_default)
+		if (with_clause_options[AlterTableFlagCompressOrderBy].is_default)
 		{
 			obs = compression_setting_orderby_get_default(ht, settings->fd.segmentby);
 		}
@@ -1200,7 +1251,8 @@ tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def)
 			return;
 		}
 		ColumnDef *coldef = build_columndef_singlecolumn(orig_def->colname, coloid);
-		CompressionSettings *settings = ts_compression_settings_get(chunk->table_id);
+		CompressionSettings *settings =
+			ts_compression_settings_get_by_compress_relid(chunk->table_id);
 		add_column_to_compression_table(chunk->table_id, settings, coldef);
 	}
 }
@@ -1219,8 +1271,8 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 
 	CompressionSettings *settings = ts_compression_settings_get(ht->main_table_relid);
 
-	if (ts_array_is_member(settings->fd.segmentby, name) ||
-		ts_array_is_member(settings->fd.orderby, name))
+	if (settings && (ts_array_is_member(settings->fd.segmentby, name) ||
+					 ts_array_is_member(settings->fd.orderby, name)))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot drop orderby or segmentby column from a hypertable with "
@@ -1231,7 +1283,8 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 	foreach (lc, chunks)
 	{
 		Chunk *chunk = lfirst(lc);
-		CompressionSettings *settings = ts_compression_settings_get(chunk->table_id);
+		CompressionSettings *settings =
+			ts_compression_settings_get_by_compress_relid(chunk->table_id);
 		if (ts_array_is_member(settings->fd.segmentby, name) ||
 			ts_array_is_member(settings->fd.orderby, name))
 			ereport(ERROR,
@@ -1303,4 +1356,17 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 			ExecRenameStmt(compressed_index_stmt);
 		}
 	}
+}
+
+/*
+ * Enables compression for a hypertable without creating initial configuration
+ */
+void
+tsl_compression_enable(Hypertable *ht)
+{
+	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE), RowExclusiveLock);
+	Oid ownerid = ts_rel_get_owner(ht->main_table_relid);
+	Oid tablespace_oid = get_rel_tablespace(ht->main_table_relid);
+	int compress_htid = compression_hypertable_create(ht, ownerid, tablespace_oid);
+	ts_hypertable_set_compressed(ht, compress_htid);
 }

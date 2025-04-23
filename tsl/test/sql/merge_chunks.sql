@@ -25,11 +25,22 @@ select ds.id, cc.constraint_name from _timescaledb_catalog.dimension_slice ds
 left join _timescaledb_catalog.chunk_constraint cc on (ds.id = cc.dimension_slice_id)
 where cc.constraint_name is null;
 
+
 -----------------
 -- Setup table --
 -----------------
 create table mergeme (time timestamptz not null, device int, temp float);
 select create_hypertable('mergeme', 'time', 'device', 3, chunk_time_interval => interval '1 day');
+
+-- Create helper view for chunk information
+create view chunk_info as
+select relname as chunk, amname as tam, pg_get_expr(conbin, ch) checkconstraint
+from pg_class cl
+join pg_am am on (cl.relam = am.oid)
+join show_chunks('mergeme') ch on (cl.oid = ch)
+join pg_constraint con on (con.conrelid = ch)
+where con.contype = 'c'
+order by 1,2,3 desc;
 
 --
 -- Insert data to create two chunks with same time ranges like this:
@@ -43,8 +54,8 @@ select create_hypertable('mergeme', 'time', 'device', 3, chunk_time_interval => 
 ---
 insert into mergeme values ('2024-01-01', 1, 1.0), ('2024-01-01', 2, 2.0);
 
-
-select "Constraint", "Columns", "Expr" from test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
+-- Show chunks and check constraints
+select * from chunk_info;
 
 -- Show partition layout
 select * from partitions;
@@ -55,9 +66,8 @@ call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_intern
 select * from _timescaledb_internal._hyper_1_1_chunk;
 select reltuples from pg_class where oid='_timescaledb_internal._hyper_1_1_chunk'::regclass;
 select * from partitions;
-select "Constraint", "Columns", "Expr" from test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
 select count(*) as num_orphaned_slices from orphaned_slices;
-select * from show_chunks('mergeme');
+select * from chunk_info;
 select * from mergeme;
 rollback;
 
@@ -107,9 +117,8 @@ call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_
 select * from partitions;
 -- Note that no space partition CHECK constraint is added because it
 -- now covers the entire range from -inf to +inf.
-select "Constraint", "Columns", "Expr" from test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
 select count(*) as num_orphaned_slices from orphaned_slices;
-select * from show_chunks('mergeme');
+select * from chunk_info;
 select * from mergeme;
 rollback;
 
@@ -155,24 +164,65 @@ alter table mergeme set (timescaledb.compress_orderby='time', timescaledb.compre
 select compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
 select compress_chunk('_timescaledb_internal._hyper_1_3_chunk');
 
-\set ON_ERROR_STOP 0
--- Currently cannot merge compressed chunks
-call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_2_chunk');
-call merge_chunks('_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_3_chunk');
-\set ON_ERROR_STOP 1
+-- Test merging compressed chunks
+begin;
+select * from chunk_info;
+call merge_chunks('{_timescaledb_internal._hyper_1_1_chunk, _timescaledb_internal._hyper_1_2_chunk, _timescaledb_internal._hyper_1_3_chunk}');
+select * from chunk_info;
+select count(*) as num_orphaned_slices from orphaned_slices;
+select * from mergeme;
+rollback;
 
--- Currently cannot merge chunks using Hypercore TAM
+-- Test mixing hypercore TAM with compression without TAM
 alter table _timescaledb_internal._hyper_1_1_chunk set access method hypercore;
+select * from chunk_info;
+
+begin;
+select sum(temp) from mergeme;
+call merge_chunks('{_timescaledb_internal._hyper_1_1_chunk, _timescaledb_internal._hyper_1_2_chunk, _timescaledb_internal._hyper_1_3_chunk}');
+select * from chunk_info;
+select count(*) as num_orphaned_slices from orphaned_slices;
+select sum(temp) from mergeme;
+rollback;
+
+
+select * from chunk_info;
+
+-- Only Hypercore TAM and non-compressed chunks
 alter table _timescaledb_internal._hyper_1_3_chunk set access method hypercore;
 
-select relname, amname from pg_class cl
-join pg_am am on (cl.relam = am.oid)
-where cl.oid in ('_timescaledb_internal._hyper_1_1_chunk'::regclass, '_timescaledb_internal._hyper_1_3_chunk'::regclass);
+begin;
+select sum(temp) from mergeme;
+call merge_chunks('{_timescaledb_internal._hyper_1_1_chunk, _timescaledb_internal._hyper_1_2_chunk, _timescaledb_internal._hyper_1_3_chunk}');
+select * from chunk_info;
+select count(*) as num_orphaned_slices from orphaned_slices;
+select sum(temp) from mergeme;
 
-\set ON_ERROR_STOP 0
-call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_2_chunk');
-call merge_chunks('_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_3_chunk');
-\set ON_ERROR_STOP 1
+-- Test that indexes work after merge
+set timescaledb.enable_columnarscan = false;
+set enable_seqscan = false;
+analyze mergeme;
+explain (costs off)
+select * from mergeme where device = 1;
+select * from mergeme where device = 1;
+select * from _timescaledb_internal._hyper_1_1_chunk where device = 1;
+reset timescaledb.enable_columnarscan;
+reset enable_seqscan;
+rollback;
+
+---
+--- Merge hypercore TAM into compressed chunk without TAM
+---
+begin;
+select * from chunk_info;
+select compress_chunk('_timescaledb_internal._hyper_1_2_chunk');
+
+select sum(temp) from mergeme;
+call merge_chunks('{_timescaledb_internal._hyper_1_2_chunk, _timescaledb_internal._hyper_1_3_chunk}');
+select * from chunk_info;
+select count(*) as num_orphaned_slices from orphaned_slices;
+select sum(temp) from mergeme;
+rollback;
 
 ---
 -- Test some error cases when merging chunks with non-chunks or chunks
@@ -201,7 +251,7 @@ call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', 'mergeme_regular');
 call merge_chunks('mergeme_regular', '_timescaledb_internal._hyper_1_1_chunk');
 call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', 'mergeme_mat');
 -- Merge chunks from different hypertables
-call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_3_8_chunk');
+call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_3_9_chunk');
 
 -- Merge with unsupported access method
 alter table _timescaledb_internal._hyper_1_1_chunk set access method testam;
@@ -234,20 +284,25 @@ insert into mergeme (time, device, temp)
 select t, ceil(random()*10), random()*40
 from generate_series('2024-01-01'::timestamptz, '2024-01-04', '0.5s') t;
 
+-- Compress two chunks, one using access method
+select compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+alter table _timescaledb_internal._hyper_1_2_chunk set access method hypercore;
+
 -- Show partitions before merge
 select * from partitions;
 
 -- Merge all chunks until only 1 remains
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
-call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_11_chunk']);
+call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_12_chunk']);
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
 select * from partitions;
-call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_9_chunk','_timescaledb_internal._hyper_1_12_chunk', '_timescaledb_internal._hyper_1_14_chunk']);
+call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_10_chunk','_timescaledb_internal._hyper_1_13_chunk', '_timescaledb_internal._hyper_1_15_chunk']);
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
 select * from partitions;
-call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_10_chunk','_timescaledb_internal._hyper_1_13_chunk', '_timescaledb_internal._hyper_1_15_chunk']);
+call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_11_chunk','_timescaledb_internal._hyper_1_14_chunk', '_timescaledb_internal._hyper_1_16_chunk']);
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
 select * from partitions;
 call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_2_chunk']);
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
 select * from partitions;
+select * from chunk_info;

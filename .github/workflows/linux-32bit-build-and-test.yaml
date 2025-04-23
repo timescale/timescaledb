@@ -51,10 +51,20 @@ jobs:
         # vector_agg_text and vector_agg_groupagg use the UMASH hashing library
         # that we can't compile on i386.
         IGNORES: >-
-          append-* transparent_decompression-*
-          transparent_decompress_chunk-* pg_dump telemetry bgw_db_scheduler*
-          hypercore_vacuum vectorized_aggregation vector_agg_text
-          vector_agg_groupagg hypercore_parallel hypercore_vectoragg
+          append-*
+          bgw_db_scheduler*
+          hypercore_parallel
+          hypercore_vacuum
+          hypercore_vectoragg
+          pg_dump
+          telemetry
+          transparent_decompress_chunk-*
+          transparent_decompression-*
+          vector_agg_groupagg
+          vector_agg_grouping
+          vector_agg_text
+          vector_agg_uuid_segmentby
+          vectorized_aggregation
         SKIPS: chunk_adaptive histogram_test-*
         EXTENSIONS: "postgres_fdw test_decoding pageinspect pgstattuple"
     strategy:

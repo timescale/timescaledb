@@ -1,6 +1,6 @@
 Parsed test spec with 3 sessions
 
-starting permutation: s1_begin s1_recompress_chunk s2_select_from_compressed_chunk s2_wait_for_select_to_finish s1_rollback
+starting permutation: s1_begin s1_recompress_chunk s2_select_from_compressed_chunk s2_wait_for_finish s1_rollback
 step s1_begin: 
    BEGIN;
 
@@ -22,13 +22,13 @@ step s2_select_from_compressed_chunk:
 t       
 (1 row)
 
-step s2_wait_for_select_to_finish: 
+step s2_wait_for_finish: 
 
 step s1_rollback: 
 	ROLLBACK;
 
 
-starting permutation: s1_compress s3_block_chunk_insert s2_insert s1_decompress s1_compress s3_release_chunk_insert
+starting permutation: s1_compress s3_block_chunk_insert s2_insert_do_nothing s1_decompress s1_compress s3_release_chunk_insert
 step s1_compress: 
    SELECT compression_status FROM chunk_compression_stats('sensor_data');
    SELECT count(*) FROM (SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('sensor_data') i) i;
@@ -63,8 +63,10 @@ debug_waitpoint_enable
                       
 (1 row)
 
-step s2_insert: 
-   INSERT INTO sensor_data VALUES ('2022-01-01 20:00'::timestamptz, 1, 1.0, 1.0), ('2022-01-01 21:00'::timestamptz, 2, 2.0, 2.0) ON CONFLICT (time, sensor_id) DO NOTHING;
+step s2_insert_do_nothing: 
+   INSERT INTO sensor_data
+   VALUES ('2022-01-01 20:00'::timestamptz, 1, 1.0, 1.0), ('2022-01-01 21:00'::timestamptz, 2, 2.0, 2.0) 
+   ON CONFLICT (time, sensor_id) DO NOTHING;
  <waiting ...>
 step s1_decompress: 
    SELECT count(*) FROM (SELECT decompress_chunk(i) FROM show_chunks('sensor_data') i) i;
@@ -120,4 +122,1944 @@ debug_waitpoint_release
                        
 (1 row)
 
-step s2_insert: <... completed>
+step s2_insert_do_nothing: <... completed>
+
+starting permutation: s1_show_chunk_state s2_begin s2_insert_do_nothing s1_begin s1_recompress_chunk s2_insert_do_nothing s2_wait_for_finish s2_commit s1_commit s1_show_chunk_state
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s2_begin: 
+	BEGIN;
+
+step s2_insert_do_nothing: 
+   INSERT INTO sensor_data
+   VALUES ('2022-01-01 20:00'::timestamptz, 1, 1.0, 1.0), ('2022-01-01 21:00'::timestamptz, 2, 2.0, 2.0) 
+   ON CONFLICT (time, sensor_id) DO NOTHING;
+
+step s1_begin: 
+   BEGIN;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step s2_insert_do_nothing: 
+   INSERT INTO sensor_data
+   VALUES ('2022-01-01 20:00'::timestamptz, 1, 1.0, 1.0), ('2022-01-01 21:00'::timestamptz, 2, 2.0, 2.0) 
+   ON CONFLICT (time, sensor_id) DO NOTHING;
+
+step s2_wait_for_finish: 
+
+step s2_commit: 
+	COMMIT;
+
+step s1_commit: 
+	COMMIT;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15842
+(1 row)
+
+
+starting permutation: s1_show_chunk_state s2_begin s2_insert_do_nothing s1_begin s1_recompress_chunk s2_insert_existing_do_nothing s2_wait_for_finish s2_commit s1_commit s1_show_chunk_state
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s2_begin: 
+	BEGIN;
+
+step s2_insert_do_nothing: 
+   INSERT INTO sensor_data
+   VALUES ('2022-01-01 20:00'::timestamptz, 1, 1.0, 1.0), ('2022-01-01 21:00'::timestamptz, 2, 2.0, 2.0) 
+   ON CONFLICT (time, sensor_id) DO NOTHING;
+
+step s1_begin: 
+   BEGIN;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step s2_insert_existing_do_nothing: 
+   INSERT INTO sensor_data 
+   SELECT time, sensor_id, 1.0, 1.0 FROM sensor_data
+   WHERE sensor_id = 4
+   LIMIT 1
+   ON CONFLICT (time, sensor_id) DO NOTHING;
+
+step s2_wait_for_finish: 
+
+step s2_commit: 
+	COMMIT;
+
+step s1_commit: 
+	COMMIT;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15842
+(1 row)
+
+
+starting permutation: s1_show_chunk_state s2_begin s2_insert_do_nothing s1_recompress_chunk s2_wait_for_finish s2_commit s1_show_chunk_state
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s2_begin: 
+	BEGIN;
+
+step s2_insert_do_nothing: 
+   INSERT INTO sensor_data
+   VALUES ('2022-01-01 20:00'::timestamptz, 1, 1.0, 1.0), ('2022-01-01 21:00'::timestamptz, 2, 2.0, 2.0) 
+   ON CONFLICT (time, sensor_id) DO NOTHING;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step s2_wait_for_finish: 
+
+step s2_commit: 
+	COMMIT;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15842
+(1 row)
+
+
+starting permutation: s1_show_chunk_state s2_begin s2_insert_existing_do_nothing s1_recompress_chunk s2_wait_for_finish s2_commit s1_show_chunk_state
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s2_begin: 
+	BEGIN;
+
+step s2_insert_existing_do_nothing: 
+   INSERT INTO sensor_data 
+   SELECT time, sensor_id, 1.0, 1.0 FROM sensor_data
+   WHERE sensor_id = 4
+   LIMIT 1
+   ON CONFLICT (time, sensor_id) DO NOTHING;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step s2_wait_for_finish: 
+
+step s2_commit: 
+	COMMIT;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+
+starting permutation: s1_recompress_chunk s1_show_chunk_state s1_insert_for_recompression s1_show_chunk_state s2_begin s2_insert_existing_do_nothing s1_recompress_chunk s2_wait_for_finish s2_commit s1_show_chunk_state
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+recompress
+----------
+         1
+(1 row)
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     1
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s1_insert_for_recompression: 
+   INSERT INTO sensor_data
+   SELECT time + (INTERVAL '1 minute' * random()) AS time, 
+   5 as sensor_id,
+   random() AS cpu,
+   random()* 100 AS temperature
+   FROM
+   generate_series('2022-01-01 00:00:00', '2022-01-01 00:59:59', INTERVAL '1 minute') AS g1(time)
+   ORDER BY time;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15900
+(1 row)
+
+step s2_begin: 
+	BEGIN;
+
+step s2_insert_existing_do_nothing: 
+   INSERT INTO sensor_data 
+   SELECT time, sensor_id, 1.0, 1.0 FROM sensor_data
+   WHERE sensor_id = 4
+   LIMIT 1
+   ON CONFLICT (time, sensor_id) DO NOTHING;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step s2_wait_for_finish: 
+
+step s2_commit: 
+	COMMIT;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15900
+(1 row)
+
+
+starting permutation: s1_show_chunk_state s1_begin s1_recompress_chunk s2_upsert s1_commit s1_show_chunk_state s2_show_updated_count
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s1_begin: 
+   BEGIN;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+recompress
+----------
+         1
+(1 row)
+
+step s2_upsert: 
+   INSERT INTO sensor_data 
+   VALUES ('2022-01-01 20:00'::timestamptz, 100, 9999, 9999), ('2022-01-01 21:00'::timestamptz, 101, 9999, 9999) 
+   ON CONFLICT (time, sensor_id) DO UPDATE SET cpu = EXCLUDED.cpu, temperature = EXCLUDED.temperature;
+ <waiting ...>
+step s1_commit: 
+	COMMIT;
+
+step s2_upsert: <... completed>
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15842
+(1 row)
+
+step s2_show_updated_count: 
+	SELECT COUNT(*) FROM sensor_data WHERE cpu = 9999;
+
+count
+-----
+    2
+(1 row)
+
+
+starting permutation: s1_show_chunk_state s1_begin s1_recompress_chunk s2_upsert_existing s1_commit s1_show_chunk_state s2_show_updated_count
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s1_begin: 
+   BEGIN;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+recompress
+----------
+         1
+(1 row)
+
+step s2_upsert_existing: 
+   INSERT INTO sensor_data 
+   SELECT time, sensor_id, 9999, 9999 FROM sensor_data
+   WHERE sensor_id = 4
+   LIMIT 1
+   ON CONFLICT (time, sensor_id) DO UPDATE SET cpu = EXCLUDED.cpu, temperature = EXCLUDED.temperature;
+ <waiting ...>
+step s1_commit: 
+	COMMIT;
+
+step s2_upsert_existing: <... completed>
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s2_show_updated_count: 
+	SELECT COUNT(*) FROM sensor_data WHERE cpu = 9999;
+
+count
+-----
+    1
+(1 row)
+
+
+starting permutation: s1_show_chunk_state s3_block_exclusive_lock s1_begin s1_recompress_chunk s2_upsert s2_wait_for_finish s1_commit s1_show_chunk_state s2_show_updated_count s3_release_exclusive_lock
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s3_block_exclusive_lock: 
+	BEGIN;
+	LOCK TABLE sensor_data IN ROW EXCLUSIVE MODE;
+
+step s1_begin: 
+   BEGIN;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step s2_upsert: 
+   INSERT INTO sensor_data 
+   VALUES ('2022-01-01 20:00'::timestamptz, 100, 9999, 9999), ('2022-01-01 21:00'::timestamptz, 101, 9999, 9999) 
+   ON CONFLICT (time, sensor_id) DO UPDATE SET cpu = EXCLUDED.cpu, temperature = EXCLUDED.temperature;
+
+step s2_wait_for_finish: 
+
+step s1_commit: 
+	COMMIT;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15842
+(1 row)
+
+step s2_show_updated_count: 
+	SELECT COUNT(*) FROM sensor_data WHERE cpu = 9999;
+
+count
+-----
+    2
+(1 row)
+
+step s3_release_exclusive_lock: 
+	ROLLBACK;
+
+
+starting permutation: s1_show_chunk_state s3_block_exclusive_lock s1_begin s1_recompress_chunk s2_upsert_existing s2_wait_for_finish s1_commit s1_show_chunk_state s2_show_updated_count s3_release_exclusive_lock
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s3_block_exclusive_lock: 
+	BEGIN;
+	LOCK TABLE sensor_data IN ROW EXCLUSIVE MODE;
+
+step s1_begin: 
+   BEGIN;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step s2_upsert_existing: 
+   INSERT INTO sensor_data 
+   SELECT time, sensor_id, 9999, 9999 FROM sensor_data
+   WHERE sensor_id = 4
+   LIMIT 1
+   ON CONFLICT (time, sensor_id) DO UPDATE SET cpu = EXCLUDED.cpu, temperature = EXCLUDED.temperature;
+
+step s2_wait_for_finish: 
+
+step s1_commit: 
+	COMMIT;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s2_show_updated_count: 
+	SELECT COUNT(*) FROM sensor_data WHERE cpu = 9999;
+
+count
+-----
+    1
+(1 row)
+
+step s3_release_exclusive_lock: 
+	ROLLBACK;
+
+
+starting permutation: s1_show_chunk_state s2_begin s2_upsert s1_recompress_chunk s2_wait_for_finish s2_commit s1_show_chunk_state s2_show_updated_count
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s2_begin: 
+	BEGIN;
+
+step s2_upsert: 
+   INSERT INTO sensor_data 
+   VALUES ('2022-01-01 20:00'::timestamptz, 100, 9999, 9999), ('2022-01-01 21:00'::timestamptz, 101, 9999, 9999) 
+   ON CONFLICT (time, sensor_id) DO UPDATE SET cpu = EXCLUDED.cpu, temperature = EXCLUDED.temperature;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step s2_wait_for_finish: 
+
+step s2_commit: 
+	COMMIT;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15842
+(1 row)
+
+step s2_show_updated_count: 
+	SELECT COUNT(*) FROM sensor_data WHERE cpu = 9999;
+
+count
+-----
+    2
+(1 row)
+
+
+starting permutation: s1_show_chunk_state s2_begin s2_upsert_existing s1_recompress_chunk s2_wait_for_finish s2_commit s1_show_chunk_state s2_show_updated_count
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s2_begin: 
+	BEGIN;
+
+step s2_upsert_existing: 
+   INSERT INTO sensor_data 
+   SELECT time, sensor_id, 9999, 9999 FROM sensor_data
+   WHERE sensor_id = 4
+   LIMIT 1
+   ON CONFLICT (time, sensor_id) DO UPDATE SET cpu = EXCLUDED.cpu, temperature = EXCLUDED.temperature;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step s2_wait_for_finish: 
+
+step s2_commit: 
+	COMMIT;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s2_show_updated_count: 
+	SELECT COUNT(*) FROM sensor_data WHERE cpu = 9999;
+
+count
+-----
+    1
+(1 row)
+
+
+starting permutation: s1_recompress_chunk s1_insert_for_recompression s1_show_chunk_state s2_begin s2_upsert_existing s1_recompress_chunk s2_wait_for_finish s2_commit s1_show_chunk_state s2_show_updated_count
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+recompress
+----------
+         1
+(1 row)
+
+step s1_insert_for_recompression: 
+   INSERT INTO sensor_data
+   SELECT time + (INTERVAL '1 minute' * random()) AS time, 
+   5 as sensor_id,
+   random() AS cpu,
+   random()* 100 AS temperature
+   FROM
+   generate_series('2022-01-01 00:00:00', '2022-01-01 00:59:59', INTERVAL '1 minute') AS g1(time)
+   ORDER BY time;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15900
+(1 row)
+
+step s2_begin: 
+	BEGIN;
+
+step s2_upsert_existing: 
+   INSERT INTO sensor_data 
+   SELECT time, sensor_id, 9999, 9999 FROM sensor_data
+   WHERE sensor_id = 4
+   LIMIT 1
+   ON CONFLICT (time, sensor_id) DO UPDATE SET cpu = EXCLUDED.cpu, temperature = EXCLUDED.temperature;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step s2_wait_for_finish: 
+
+step s2_commit: 
+	COMMIT;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15900
+(1 row)
+
+step s2_show_updated_count: 
+	SELECT COUNT(*) FROM sensor_data WHERE cpu = 9999;
+
+count
+-----
+    1
+(1 row)
+
+
+starting permutation: s1_show_chunk_state s3_begin s1_begin s3_delete_uncompressed s1_recompress_chunk s2_insert_do_nothing s3_rollback s1_commit s1_show_chunk_state
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s3_begin: 
+	BEGIN;
+
+step s1_begin: 
+   BEGIN;
+
+step s3_delete_uncompressed: 
+	DELETE FROM sensor_data WHERE sensor_id = 11;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+ <waiting ...>
+step s2_insert_do_nothing: 
+   INSERT INTO sensor_data
+   VALUES ('2022-01-01 20:00'::timestamptz, 1, 1.0, 1.0), ('2022-01-01 21:00'::timestamptz, 2, 2.0, 2.0) 
+   ON CONFLICT (time, sensor_id) DO NOTHING;
+
+step s3_rollback: 
+	ROLLBACK;
+
+step s1_recompress_chunk: <... completed>
+recompress
+----------
+         1
+(1 row)
+
+step s1_commit: 
+	COMMIT;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15842
+(1 row)
+
+
+starting permutation: s1_show_chunk_state s1_begin s1_recompress_chunk s2_delete_compressed s1_commit s1_show_chunk_state
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s1_begin: 
+   BEGIN;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+recompress
+----------
+         1
+(1 row)
+
+step s2_delete_compressed: 
+	DELETE FROM sensor_data WHERE sensor_id = 1;
+ <waiting ...>
+step s1_commit: 
+	COMMIT;
+
+step s2_delete_compressed: <... completed>
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     1
+(1 row)
+
+count
+-----
+14400
+(1 row)
+
+
+starting permutation: s1_show_chunk_state s1_begin s1_recompress_chunk s2_delete_uncompressed s1_commit s1_show_chunk_state
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s1_begin: 
+   BEGIN;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+recompress
+----------
+         1
+(1 row)
+
+step s2_delete_uncompressed: 
+	DELETE FROM sensor_data WHERE sensor_id = 11;
+ <waiting ...>
+step s1_commit: 
+	COMMIT;
+
+step s2_delete_uncompressed: <... completed>
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     1
+(1 row)
+
+count
+-----
+14400
+(1 row)
+
+
+starting permutation: s1_recompress_chunk s1_insert_for_recompression s1_show_chunk_state s1_begin s1_recompress_chunk s2_delete_recompressed s1_commit s1_show_chunk_state
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+recompress
+----------
+         1
+(1 row)
+
+step s1_insert_for_recompression: 
+   INSERT INTO sensor_data
+   SELECT time + (INTERVAL '1 minute' * random()) AS time, 
+   5 as sensor_id,
+   random() AS cpu,
+   random()* 100 AS temperature
+   FROM
+   generate_series('2022-01-01 00:00:00', '2022-01-01 00:59:59', INTERVAL '1 minute') AS g1(time)
+   ORDER BY time;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15900
+(1 row)
+
+step s1_begin: 
+   BEGIN;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+recompress
+----------
+         1
+(1 row)
+
+step s2_delete_recompressed: 
+	DELETE FROM sensor_data WHERE sensor_id = 5 AND time > '2022-01-01 01:00'::timestamptz;
+ <waiting ...>
+step s1_commit: 
+	COMMIT;
+
+step s2_delete_recompressed: <... completed>
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+14520
+(1 row)
+
+
+starting permutation: s1_show_chunk_state s3_block_exclusive_lock s1_begin s1_recompress_chunk s2_delete_compressed s2_wait_for_finish s1_commit s1_show_chunk_state s3_release_exclusive_lock
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s3_block_exclusive_lock: 
+	BEGIN;
+	LOCK TABLE sensor_data IN ROW EXCLUSIVE MODE;
+
+step s1_begin: 
+   BEGIN;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step s2_delete_compressed: 
+	DELETE FROM sensor_data WHERE sensor_id = 1;
+
+step s2_wait_for_finish: 
+
+step s1_commit: 
+	COMMIT;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+14400
+(1 row)
+
+step s3_release_exclusive_lock: 
+	ROLLBACK;
+
+
+starting permutation: s1_show_chunk_state s3_block_exclusive_lock s1_begin s1_recompress_chunk s2_delete_uncompressed s1_commit s1_show_chunk_state s3_release_exclusive_lock
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s3_block_exclusive_lock: 
+	BEGIN;
+	LOCK TABLE sensor_data IN ROW EXCLUSIVE MODE;
+
+step s1_begin: 
+   BEGIN;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step s2_delete_uncompressed: 
+	DELETE FROM sensor_data WHERE sensor_id = 11;
+
+step s1_commit: 
+	COMMIT;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+14400
+(1 row)
+
+step s3_release_exclusive_lock: 
+	ROLLBACK;
+
+
+starting permutation: s1_recompress_chunk s3_block_exclusive_lock s1_insert_for_recompression s1_show_chunk_state s1_begin s1_recompress_chunk s2_delete_recompressed s1_commit s1_show_chunk_state s3_release_exclusive_lock
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+recompress
+----------
+         1
+(1 row)
+
+step s3_block_exclusive_lock: 
+	BEGIN;
+	LOCK TABLE sensor_data IN ROW EXCLUSIVE MODE;
+
+step s1_insert_for_recompression: 
+   INSERT INTO sensor_data
+   SELECT time + (INTERVAL '1 minute' * random()) AS time, 
+   5 as sensor_id,
+   random() AS cpu,
+   random()* 100 AS temperature
+   FROM
+   generate_series('2022-01-01 00:00:00', '2022-01-01 00:59:59', INTERVAL '1 minute') AS g1(time)
+   ORDER BY time;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15900
+(1 row)
+
+step s1_begin: 
+   BEGIN;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step s2_delete_recompressed: 
+	DELETE FROM sensor_data WHERE sensor_id = 5 AND time > '2022-01-01 01:00'::timestamptz;
+
+step s1_commit: 
+	COMMIT;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+14520
+(1 row)
+
+step s3_release_exclusive_lock: 
+	ROLLBACK;
+
+
+starting permutation: s1_show_chunk_state s2_begin s2_delete_uncompressed s1_recompress_chunk s2_commit s1_show_chunk_state
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s2_begin: 
+	BEGIN;
+
+step s2_delete_uncompressed: 
+	DELETE FROM sensor_data WHERE sensor_id = 11;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+ <waiting ...>
+step s2_commit: 
+	COMMIT;
+
+step s1_recompress_chunk: <... completed>
+ERROR:  aborting recompression due to concurrent updates on uncompressed data, retrying with next policy run
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+14400
+(1 row)
+
+
+starting permutation: s1_show_chunk_state s2_begin s2_delete_compressed s1_recompress_chunk s2_commit s1_show_chunk_state
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s2_begin: 
+	BEGIN;
+
+step s2_delete_compressed: 
+	DELETE FROM sensor_data WHERE sensor_id = 1;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step s2_commit: 
+	COMMIT;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+14400
+(1 row)
+
+
+starting permutation: s1_recompress_chunk s1_insert_for_recompression s1_show_chunk_state s2_begin s2_delete_recompressed s1_recompress_chunk s2_commit s1_show_chunk_state
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+recompress
+----------
+         1
+(1 row)
+
+step s1_insert_for_recompression: 
+   INSERT INTO sensor_data
+   SELECT time + (INTERVAL '1 minute' * random()) AS time, 
+   5 as sensor_id,
+   random() AS cpu,
+   random()* 100 AS temperature
+   FROM
+   generate_series('2022-01-01 00:00:00', '2022-01-01 00:59:59', INTERVAL '1 minute') AS g1(time)
+   ORDER BY time;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15900
+(1 row)
+
+step s2_begin: 
+	BEGIN;
+
+step s2_delete_recompressed: 
+	DELETE FROM sensor_data WHERE sensor_id = 5 AND time > '2022-01-01 01:00'::timestamptz;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+ <waiting ...>
+step s2_commit: 
+	COMMIT;
+
+step s1_recompress_chunk: <... completed>
+ERROR:  aborting recompression due to concurrent updates on compressed data, retrying with next policy run
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+14520
+(1 row)
+
+
+starting permutation: s1_show_chunk_state s1_begin s1_recompress_chunk s2_update_compressed s1_commit s1_show_chunk_state s2_show_updated_count
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s1_begin: 
+   BEGIN;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+recompress
+----------
+         1
+(1 row)
+
+step s2_update_compressed: 
+	UPDATE sensor_data SET cpu = 9999 WHERE sensor_id = 1;
+ <waiting ...>
+step s1_commit: 
+	COMMIT;
+
+step s2_update_compressed: <... completed>
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s2_show_updated_count: 
+	SELECT COUNT(*) FROM sensor_data WHERE cpu = 9999;
+
+count
+-----
+ 1440
+(1 row)
+
+
+starting permutation: s1_show_chunk_state s1_begin s1_recompress_chunk s2_update_uncompressed s1_commit s1_show_chunk_state s2_show_updated_count
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s1_begin: 
+   BEGIN;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+recompress
+----------
+         1
+(1 row)
+
+step s2_update_uncompressed: 
+	UPDATE sensor_data SET cpu = 9999 WHERE sensor_id = 11;
+ <waiting ...>
+step s1_commit: 
+	COMMIT;
+
+step s2_update_uncompressed: <... completed>
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s2_show_updated_count: 
+	SELECT COUNT(*) FROM sensor_data WHERE cpu = 9999;
+
+count
+-----
+ 1440
+(1 row)
+
+
+starting permutation: s1_recompress_chunk s1_insert_for_recompression s1_begin s1_recompress_chunk s2_update_recompressed s1_commit s1_show_chunk_state s2_show_updated_count
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+recompress
+----------
+         1
+(1 row)
+
+step s1_insert_for_recompression: 
+   INSERT INTO sensor_data
+   SELECT time + (INTERVAL '1 minute' * random()) AS time, 
+   5 as sensor_id,
+   random() AS cpu,
+   random()* 100 AS temperature
+   FROM
+   generate_series('2022-01-01 00:00:00', '2022-01-01 00:59:59', INTERVAL '1 minute') AS g1(time)
+   ORDER BY time;
+
+step s1_begin: 
+   BEGIN;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+recompress
+----------
+         1
+(1 row)
+
+step s2_update_recompressed: 
+	UPDATE sensor_data SET cpu = 9999 WHERE sensor_id = 5 AND time > '2022-01-01 01:00'::timestamptz;
+ <waiting ...>
+step s1_commit: 
+	COMMIT;
+
+step s2_update_recompressed: <... completed>
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15900
+(1 row)
+
+step s2_show_updated_count: 
+	SELECT COUNT(*) FROM sensor_data WHERE cpu = 9999;
+
+count
+-----
+ 1380
+(1 row)
+
+
+starting permutation: s1_show_chunk_state s3_block_exclusive_lock s1_begin s1_recompress_chunk s2_update_compressed s2_wait_for_finish s1_commit s1_show_chunk_state s2_show_updated_count s3_release_exclusive_lock
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s3_block_exclusive_lock: 
+	BEGIN;
+	LOCK TABLE sensor_data IN ROW EXCLUSIVE MODE;
+
+step s1_begin: 
+   BEGIN;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step s2_update_compressed: 
+	UPDATE sensor_data SET cpu = 9999 WHERE sensor_id = 1;
+
+step s2_wait_for_finish: 
+
+step s1_commit: 
+	COMMIT;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s2_show_updated_count: 
+	SELECT COUNT(*) FROM sensor_data WHERE cpu = 9999;
+
+count
+-----
+ 1440
+(1 row)
+
+step s3_release_exclusive_lock: 
+	ROLLBACK;
+
+
+starting permutation: s1_show_chunk_state s3_block_exclusive_lock s1_begin s1_recompress_chunk s2_update_uncompressed s1_commit s1_show_chunk_state s2_show_updated_count s3_release_exclusive_lock
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s3_block_exclusive_lock: 
+	BEGIN;
+	LOCK TABLE sensor_data IN ROW EXCLUSIVE MODE;
+
+step s1_begin: 
+   BEGIN;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step s2_update_uncompressed: 
+	UPDATE sensor_data SET cpu = 9999 WHERE sensor_id = 11;
+
+step s1_commit: 
+	COMMIT;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s2_show_updated_count: 
+	SELECT COUNT(*) FROM sensor_data WHERE cpu = 9999;
+
+count
+-----
+ 1440
+(1 row)
+
+step s3_release_exclusive_lock: 
+	ROLLBACK;
+
+
+starting permutation: s1_recompress_chunk s1_insert_for_recompression s3_block_exclusive_lock s1_begin s1_recompress_chunk s2_update_recompressed s1_commit s1_show_chunk_state s2_show_updated_count s3_release_exclusive_lock
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+recompress
+----------
+         1
+(1 row)
+
+step s1_insert_for_recompression: 
+   INSERT INTO sensor_data
+   SELECT time + (INTERVAL '1 minute' * random()) AS time, 
+   5 as sensor_id,
+   random() AS cpu,
+   random()* 100 AS temperature
+   FROM
+   generate_series('2022-01-01 00:00:00', '2022-01-01 00:59:59', INTERVAL '1 minute') AS g1(time)
+   ORDER BY time;
+
+step s3_block_exclusive_lock: 
+	BEGIN;
+	LOCK TABLE sensor_data IN ROW EXCLUSIVE MODE;
+
+step s1_begin: 
+   BEGIN;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step s2_update_recompressed: 
+	UPDATE sensor_data SET cpu = 9999 WHERE sensor_id = 5 AND time > '2022-01-01 01:00'::timestamptz;
+
+step s1_commit: 
+	COMMIT;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15900
+(1 row)
+
+step s2_show_updated_count: 
+	SELECT COUNT(*) FROM sensor_data WHERE cpu = 9999;
+
+count
+-----
+ 1380
+(1 row)
+
+step s3_release_exclusive_lock: 
+	ROLLBACK;
+
+
+starting permutation: s1_show_chunk_state s2_begin s2_update_uncompressed s1_recompress_chunk s2_commit s1_show_chunk_state s2_show_updated_count
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s2_begin: 
+	BEGIN;
+
+step s2_update_uncompressed: 
+	UPDATE sensor_data SET cpu = 9999 WHERE sensor_id = 11;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+ <waiting ...>
+step s2_commit: 
+	COMMIT;
+
+step s1_recompress_chunk: <... completed>
+ERROR:  aborting recompression due to concurrent updates on uncompressed data, retrying with next policy run
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s2_show_updated_count: 
+	SELECT COUNT(*) FROM sensor_data WHERE cpu = 9999;
+
+count
+-----
+ 1440
+(1 row)
+
+
+starting permutation: s1_show_chunk_state s2_begin s2_update_compressed s1_recompress_chunk s2_commit s1_show_chunk_state s2_show_updated_count
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s2_begin: 
+	BEGIN;
+
+step s2_update_compressed: 
+	UPDATE sensor_data SET cpu = 9999 WHERE sensor_id = 1;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step s2_commit: 
+	COMMIT;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s2_show_updated_count: 
+	SELECT COUNT(*) FROM sensor_data WHERE cpu = 9999;
+
+count
+-----
+ 1440
+(1 row)
+
+
+starting permutation: s1_recompress_chunk s1_insert_for_recompression s1_show_chunk_state s2_begin s2_update_recompressed s1_recompress_chunk s2_commit s1_show_chunk_state s2_show_updated_count
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+recompress
+----------
+         1
+(1 row)
+
+step s1_insert_for_recompression: 
+   INSERT INTO sensor_data
+   SELECT time + (INTERVAL '1 minute' * random()) AS time, 
+   5 as sensor_id,
+   random() AS cpu,
+   random()* 100 AS temperature
+   FROM
+   generate_series('2022-01-01 00:00:00', '2022-01-01 00:59:59', INTERVAL '1 minute') AS g1(time)
+   ORDER BY time;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15900
+(1 row)
+
+step s2_begin: 
+	BEGIN;
+
+step s2_update_recompressed: 
+	UPDATE sensor_data SET cpu = 9999 WHERE sensor_id = 5 AND time > '2022-01-01 01:00'::timestamptz;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+ <waiting ...>
+step s2_commit: 
+	COMMIT;
+
+step s1_recompress_chunk: <... completed>
+ERROR:  aborting recompression due to concurrent updates on compressed data, retrying with next policy run
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15900
+(1 row)
+
+step s2_show_updated_count: 
+	SELECT COUNT(*) FROM sensor_data WHERE cpu = 9999;
+
+count
+-----
+ 1380
+(1 row)
+
+
+starting permutation: s1_show_chunk_state s1_begin s3_begin s1_recompress_chunk s3_recompress_chunk s1_commit s3_commit s1_show_chunk_state s2_show_updated_count
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     9
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s1_begin: 
+   BEGIN;
+
+step s3_begin: 
+	BEGIN;
+
+step s1_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+
+recompress
+----------
+         1
+(1 row)
+
+step s3_recompress_chunk: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+ <waiting ...>
+step s1_commit: 
+	COMMIT;
+
+step s3_recompress_chunk: <... completed>
+recompress
+----------
+         1
+(1 row)
+
+step s3_commit: 
+	COMMIT;
+
+step s1_show_chunk_state: 
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+
+status
+------
+     1
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s2_show_updated_count: 
+	SELECT COUNT(*) FROM sensor_data WHERE cpu = 9999;
+
+count
+-----
+    0
+(1 row)
+

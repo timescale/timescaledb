@@ -970,64 +970,6 @@ chunk_create_only_table_after_lock(const Hypertable *ht, Hypercube *cube, const 
 	return chunk;
 }
 
-static void
-chunk_table_drop_inherit(const Chunk *chunk, Hypertable *ht)
-{
-	AlterTableCmd drop_inh_cmd = {
-		.type = T_AlterTableCmd,
-		.subtype = AT_DropInherit,
-		.def = (Node *) makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), -1),
-		.missing_ok = false
-	};
-
-	ts_alter_table_with_event_trigger(chunk->table_id, NULL, list_make1(&drop_inh_cmd), false);
-}
-
-/*
- * Checks that given hypercube does not collide with existing chunks and
- * creates an empty table for a chunk without any metadata modifications.
- */
-Chunk *
-ts_chunk_create_only_table(Hypertable *ht, Hypercube *cube, const char *schema_name,
-						   const char *table_name)
-{
-	ChunkStub *stub;
-	Chunk *chunk;
-	ScanTupLock tuplock = {
-		.lockmode = LockTupleKeyShare,
-		.waitpolicy = LockWaitBlock,
-	};
-
-	/*
-	 * Chunk table can be created if no chunk collides with the dimension slices.
-	 */
-	stub = chunk_collides(ht, cube);
-	if (stub != NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_CHUNK_COLLISION),
-				 errmsg("chunk table creation failed due to dimension slice collision")));
-
-	/*
-	 * Serialize chunk creation around a lock on the "main table" to avoid
-	 * multiple processes trying to create the same chunk. We use a
-	 * ShareUpdateExclusiveLock, which is the weakest lock possible that
-	 * conflicts with itself. The lock needs to be held until transaction end.
-	 */
-	LockRelationOid(ht->main_table_relid, ShareUpdateExclusiveLock);
-
-	ts_hypercube_find_existing_slices(cube, &tuplock);
-
-	chunk = chunk_create_only_table_after_lock(ht,
-											   cube,
-											   schema_name,
-											   table_name,
-											   NULL,
-											   INVALID_CHUNK_ID);
-	chunk_table_drop_inherit(chunk, ht);
-
-	return chunk;
-}
-
 static Chunk *
 chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 									   const char *schema_name, const char *table_name,
@@ -2806,6 +2748,10 @@ typedef enum ChunkDeleteResult
 
 /* Delete the chunk tuple.
  *
+ * relid: Required when deleting via an event trigger hook, because at that
+ * point the relation is gone and it is no longer possible to resolve the Oid
+ * from the PG catalog.
+ *
  * preserve_chunk_catalog_row - instead of deleting the row, mark it as dropped.
  * this is used when we need to preserve catalog information about the chunk
  * after dropping it. Currently only used when preserving continuous aggregates
@@ -2822,7 +2768,7 @@ typedef enum ChunkDeleteResult
  * of tuples to process.
  */
 static ChunkDeleteResult
-chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_catalog_row)
+chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool preserve_chunk_catalog_row)
 {
 	FormData_chunk form;
 	CatalogSecurityContext sec_ctx;
@@ -2908,18 +2854,38 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 	/* Delete any rows in _timescaledb_catalog.chunk_column_stats corresponding to this chunk */
 	ts_chunk_column_stats_delete_by_chunk_id(form.id);
 
+	if (!OidIsValid(relid))
+	{
+		/*
+		 * If the chunk is deleted as a result of deleting the Hypertable, and
+		 * it is cleaned up in the DROP eventtrigger hook, it might not be
+		 * possible to resolve the relid because the relation is already gone
+		 * in pg_catalog. But that's OK, because compression settings will be
+		 * cleaned up when processing the eventtrigger.
+		 */
+		relid = ts_get_relation_relid(NameStr(form.schema_name), NameStr(form.table_name), true);
+	}
+
 	if (form.compressed_chunk_id != INVALID_CHUNK_ID)
 	{
 		Chunk *compressed_chunk = ts_chunk_get_by_id(form.compressed_chunk_id, false);
 
-		/* The chunk may have been delete by a CASCADE */
+		if (OidIsValid(relid))
+			ts_compression_settings_delete(relid);
+
+		/* The chunk may have been deleted by a CASCADE */
 		if (compressed_chunk != NULL)
 		{
 			/* Plain drop without preserving catalog row because this is the compressed
 			 * chunk */
-			ts_compression_settings_delete(compressed_chunk->table_id);
 			ts_chunk_drop(compressed_chunk, behavior, DEBUG1);
 		}
+	}
+	else if (OidIsValid(relid))
+	{
+		/* If there is no compressed chunk ID, this might be the actual
+		 * compressed chunk */
+		ts_compression_settings_delete_by_compress_relid(relid);
 	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
@@ -2971,7 +2937,8 @@ init_scan_by_qualified_table_name(ScanIterator *iterator, const char *schema_nam
 }
 
 static int
-chunk_delete(ScanIterator *iterator, DropBehavior behavior, bool preserve_chunk_catalog_row)
+chunk_delete(ScanIterator *iterator, Oid relid, DropBehavior behavior,
+			 bool preserve_chunk_catalog_row)
 {
 	int count = 0;
 
@@ -2980,6 +2947,7 @@ chunk_delete(ScanIterator *iterator, DropBehavior behavior, bool preserve_chunk_
 		ChunkDeleteResult res;
 
 		res = chunk_tuple_delete(ts_scan_iterator_tuple_info(iterator),
+								 relid,
 								 behavior,
 								 preserve_chunk_catalog_row);
 
@@ -2999,14 +2967,14 @@ chunk_delete(ScanIterator *iterator, DropBehavior behavior, bool preserve_chunk_
 }
 
 static int
-ts_chunk_delete_by_name_internal(const char *schema, const char *table, DropBehavior behavior,
-								 bool preserve_chunk_catalog_row)
+ts_chunk_delete_by_name_internal(const char *schema, const char *table, Oid relid,
+								 DropBehavior behavior, bool preserve_chunk_catalog_row)
 {
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowExclusiveLock, CurrentMemoryContext);
 	int count;
 
 	init_scan_by_qualified_table_name(&iterator, schema, table);
-	count = chunk_delete(&iterator, behavior, preserve_chunk_catalog_row);
+	count = chunk_delete(&iterator, relid, behavior, preserve_chunk_catalog_row);
 
 	/* (schema,table) names and (hypertable_id) are unique so should only have
 	 * dropped one chunk or none (if not found) */
@@ -3018,17 +2986,20 @@ ts_chunk_delete_by_name_internal(const char *schema, const char *table, DropBeha
 int
 ts_chunk_delete_by_name(const char *schema, const char *table, DropBehavior behavior)
 {
-	return ts_chunk_delete_by_name_internal(schema, table, behavior, false);
+	Oid relid = ts_get_relation_relid(schema, table, false);
+	return ts_chunk_delete_by_name_internal(schema, table, relid, behavior, false);
 }
 
-static int
-ts_chunk_delete_by_relid(Oid relid, DropBehavior behavior, bool preserve_chunk_catalog_row)
+int
+ts_chunk_delete_by_relid_and_relname(Oid relid, const char *schemaname, const char *tablename,
+									 DropBehavior behavior, bool preserve_chunk_catalog_row)
 {
 	if (!OidIsValid(relid))
 		return 0;
 
-	return ts_chunk_delete_by_name_internal(get_namespace_name(get_rel_namespace(relid)),
-											get_rel_name(relid),
+	return ts_chunk_delete_by_name_internal(schemaname,
+											tablename,
+											relid,
 											behavior,
 											preserve_chunk_catalog_row);
 }
@@ -3051,7 +3022,7 @@ ts_chunk_delete_by_hypertable_id(int32 hypertable_id)
 
 	init_scan_by_hypertable_id(&iterator, hypertable_id);
 
-	return chunk_delete(&iterator, DROP_RESTRICT, false);
+	return chunk_delete(&iterator, InvalidOid, DROP_RESTRICT, false);
 }
 
 bool
@@ -3736,7 +3707,11 @@ ts_chunk_drop_internal(const Chunk *chunk, DropBehavior behavior, int32 log_leve
 			 NameStr(chunk->fd.table_name));
 
 	/* Remove the chunk from the chunk table */
-	ts_chunk_delete_by_relid(chunk->table_id, behavior, preserve_catalog_row);
+	ts_chunk_delete_by_relid_and_relname(chunk->table_id,
+										 NameStr(chunk->fd.schema_name),
+										 NameStr(chunk->fd.table_name),
+										 behavior,
+										 preserve_catalog_row);
 
 	/* Drop the table */
 	performDeletion(&objaddr, behavior, 0);
@@ -3866,9 +3841,9 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		ErrorData *edata;
 		MemoryContextSwitchTo(oldcontext);
 		edata = CopyErrorData();
+		FlushErrorState();
 		if (edata->sqlerrcode == ERRCODE_LOCK_NOT_AVAILABLE)
 		{
-			FlushErrorState();
 			edata->detail = edata->message;
 			edata->message =
 				psprintf("some chunks could not be read since they are being concurrently updated");

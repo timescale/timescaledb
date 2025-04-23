@@ -752,6 +752,7 @@ ts_hypertable_drop(Hypertable *hypertable, DropBehavior behavior)
 		};
 
 		/* Drop the postgres table */
+		ts_compression_settings_delete(hypertable->main_table_relid);
 		performDeletion(&hypertable_addr, behavior, 0);
 	}
 
@@ -1608,7 +1609,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	int16 num_partitions = PG_ARGISNULL(3) ? -1 : PG_GETARG_INT16(3);
 	Name associated_schema_name = PG_ARGISNULL(4) ? NULL : PG_GETARG_NAME(4);
 	Name associated_table_prefix = PG_ARGISNULL(5) ? NULL : PG_GETARG_NAME(5);
-	Datum default_interval = PG_ARGISNULL(6) ? Int64GetDatum(-1) : PG_GETARG_DATUM(6);
+	Datum default_interval = PG_ARGISNULL(6) ? UnassignedDatum : PG_GETARG_DATUM(6);
 	Oid interval_type = PG_ARGISNULL(6) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 6);
 	bool create_default_indexes =
 		PG_ARGISNULL(7) ? false : PG_GETARG_BOOL(7); /* Defaults to true in the sql code */
@@ -1667,7 +1668,7 @@ get_sizing_func_oid()
 	static Oid sizing_func_arg_types[] = { INT4OID, INT8OID, INT8OID };
 
 	return ts_get_function_oid(sizing_func_name,
-							   INTERNAL_SCHEMA_NAME,
+							   FUNCTIONS_SCHEMA_NAME,
 							   sizing_func_nargs,
 							   sizing_func_arg_types);
 }
@@ -1861,6 +1862,18 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 
 		default:
 			ereport(ERROR, (errcode(ERRCODE_WRONG_OBJECT_TYPE), errmsg("invalid relation type")));
+	}
+
+	/*
+	 * Check that the table is not part of any publication
+	 */
+	if (GetRelationPublications(table_relid) != NIL || GetAllTablesPublications() != NIL)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+				 errmsg("cannot create hypertable for table \"%s\" because it is part of a "
+						"publication",
+						get_rel_name(table_relid))));
 	}
 
 	/* Check that the table doesn't have any unsupported constraints */
@@ -2083,13 +2096,6 @@ ts_hypertables_rename_schema_name(const char *old_name, const char *new_name)
 
 	ts_scanner_scan(&scanctx);
 }
-
-typedef struct AccumHypertable
-{
-	List *ht_oids;
-	Name schema_name;
-	Name table_name;
-} AccumHypertable;
 
 bool
 ts_is_partitioning_column(const Hypertable *ht, AttrNumber column_attno)

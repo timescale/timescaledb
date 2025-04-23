@@ -30,6 +30,15 @@ select create_hypertable('mergeme', 'time', 'device', 3, chunk_time_interval => 
  (1,public,mergeme,t)
 (1 row)
 
+-- Create helper view for chunk information
+create view chunk_info as
+select relname as chunk, amname as tam, pg_get_expr(conbin, ch) checkconstraint
+from pg_class cl
+join pg_am am on (cl.relam = am.oid)
+join show_chunks('mergeme') ch on (cl.oid = ch)
+join pg_constraint con on (con.conrelid = ch)
+where con.contype = 'c'
+order by 1,2,3 desc;
 --
 -- Insert data to create two chunks with same time ranges like this:
 -- _______
@@ -41,12 +50,15 @@ select create_hypertable('mergeme', 'time', 'device', 3, chunk_time_interval => 
 -- |_____|
 ---
 insert into mergeme values ('2024-01-01', 1, 1.0), ('2024-01-01', 2, 2.0);
-select "Constraint", "Columns", "Expr" from test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
-  Constraint  | Columns  |                                                                      Expr                                                                      
---------------+----------+------------------------------------------------------------------------------------------------------------------------------------------------
- constraint_1 | {time}   | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
- constraint_2 | {device} | (_timescaledb_functions.get_partition_hash(device) < 715827882)
-(2 rows)
+-- Show chunks and check constraints
+select * from chunk_info;
+      chunk       | tam  |                                                                checkconstraint                                                                 
+------------------+------+------------------------------------------------------------------------------------------------------------------------------------------------
+ _hyper_1_1_chunk | heap | (_timescaledb_functions.get_partition_hash(device) < 715827882)
+ _hyper_1_1_chunk | heap | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_2_chunk | heap | ((_timescaledb_functions.get_partition_hash(device) >= 715827882) AND (_timescaledb_functions.get_partition_hash(device) < 1431655764))
+ _hyper_1_2_chunk | heap | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
+(4 rows)
 
 -- Show partition layout
 select * from partitions;
@@ -81,24 +93,18 @@ select * from partitions;
  _hyper_1_1_chunk | device      | -9223372036854775808 |       1431655764
 (2 rows)
 
-select "Constraint", "Columns", "Expr" from test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
-  Constraint  | Columns  |                                                                      Expr                                                                      
---------------+----------+------------------------------------------------------------------------------------------------------------------------------------------------
- constraint_1 | {time}   | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
- constraint_2 | {device} | (_timescaledb_functions.get_partition_hash(device) < 1431655764)
-(2 rows)
-
 select count(*) as num_orphaned_slices from orphaned_slices;
  num_orphaned_slices 
 ---------------------
                    0
 (1 row)
 
-select * from show_chunks('mergeme');
-              show_chunks               
-----------------------------------------
- _timescaledb_internal._hyper_1_1_chunk
-(1 row)
+select * from chunk_info;
+      chunk       | tam  |                                                                checkconstraint                                                                 
+------------------+------+------------------------------------------------------------------------------------------------------------------------------------------------
+ _hyper_1_1_chunk | heap | (_timescaledb_functions.get_partition_hash(device) < 1431655764)
+ _hyper_1_1_chunk | heap | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
+(2 rows)
 
 select * from mergeme;
              time             | device | temp 
@@ -172,22 +178,16 @@ select * from partitions;
 
 -- Note that no space partition CHECK constraint is added because it
 -- now covers the entire range from -inf to +inf.
-select "Constraint", "Columns", "Expr" from test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
-  Constraint  | Columns |                                                                      Expr                                                                      
---------------+---------+------------------------------------------------------------------------------------------------------------------------------------------------
- constraint_1 | {time}  | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
-(1 row)
-
 select count(*) as num_orphaned_slices from orphaned_slices;
  num_orphaned_slices 
 ---------------------
                    0
 (1 row)
 
-select * from show_chunks('mergeme');
-              show_chunks               
-----------------------------------------
- _timescaledb_internal._hyper_1_1_chunk
+select * from chunk_info;
+      chunk       | tam  |                                                                checkconstraint                                                                 
+------------------+------+------------------------------------------------------------------------------------------------------------------------------------------------
+ _hyper_1_1_chunk | heap | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
 (1 row)
 
 select * from mergeme;
@@ -266,31 +266,238 @@ select compress_chunk('_timescaledb_internal._hyper_1_3_chunk');
  _timescaledb_internal._hyper_1_3_chunk
 (1 row)
 
-\set ON_ERROR_STOP 0
--- Currently cannot merge compressed chunks
-call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_2_chunk');
-ERROR:  merging compressed chunks is not yet supported
-call merge_chunks('_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_3_chunk');
-ERROR:  merging compressed chunks is not yet supported
-\set ON_ERROR_STOP 1
--- Currently cannot merge chunks using Hypercore TAM
-alter table _timescaledb_internal._hyper_1_1_chunk set access method hypercore;
-alter table _timescaledb_internal._hyper_1_3_chunk set access method hypercore;
-select relname, amname from pg_class cl
-join pg_am am on (cl.relam = am.oid)
-where cl.oid in ('_timescaledb_internal._hyper_1_1_chunk'::regclass, '_timescaledb_internal._hyper_1_3_chunk'::regclass);
-     relname      |  amname   
-------------------+-----------
- _hyper_1_1_chunk | hypercore
- _hyper_1_3_chunk | hypercore
-(2 rows)
+-- Test merging compressed chunks
+begin;
+select * from chunk_info;
+      chunk       | tam  |                                                                checkconstraint                                                                 
+------------------+------+------------------------------------------------------------------------------------------------------------------------------------------------
+ _hyper_1_1_chunk | heap | (_timescaledb_functions.get_partition_hash(device) < 715827882)
+ _hyper_1_1_chunk | heap | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_2_chunk | heap | ((_timescaledb_functions.get_partition_hash(device) >= 715827882) AND (_timescaledb_functions.get_partition_hash(device) < 1431655764))
+ _hyper_1_2_chunk | heap | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_3_chunk | heap | (_timescaledb_functions.get_partition_hash(device) >= 1431655764)
+ _hyper_1_3_chunk | heap | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_4_chunk | heap | (_timescaledb_functions.get_partition_hash(device) < 715827882)
+ _hyper_1_4_chunk | heap | (("time" >= 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Tue Jan 02 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_5_chunk | heap | (_timescaledb_functions.get_partition_hash(device) < 715827882)
+ _hyper_1_5_chunk | heap | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 16:00:00 2024 PST'::timestamp with time zone))
+(10 rows)
 
-\set ON_ERROR_STOP 0
-call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_2_chunk');
-ERROR:  merging compressed chunks is not yet supported
-call merge_chunks('_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_3_chunk');
-ERROR:  merging compressed chunks is not yet supported
-\set ON_ERROR_STOP 1
+call merge_chunks('{_timescaledb_internal._hyper_1_1_chunk, _timescaledb_internal._hyper_1_2_chunk, _timescaledb_internal._hyper_1_3_chunk}');
+select * from chunk_info;
+      chunk       | tam  |                                                                checkconstraint                                                                 
+------------------+------+------------------------------------------------------------------------------------------------------------------------------------------------
+ _hyper_1_1_chunk | heap | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_4_chunk | heap | (_timescaledb_functions.get_partition_hash(device) < 715827882)
+ _hyper_1_4_chunk | heap | (("time" >= 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Tue Jan 02 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_5_chunk | heap | (_timescaledb_functions.get_partition_hash(device) < 715827882)
+ _hyper_1_5_chunk | heap | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 16:00:00 2024 PST'::timestamp with time zone))
+(5 rows)
+
+select count(*) as num_orphaned_slices from orphaned_slices;
+ num_orphaned_slices 
+---------------------
+                   0
+(1 row)
+
+select * from mergeme;
+             time             | device | temp 
+------------------------------+--------+------
+ Mon Jan 01 00:00:00 2024 PST |      1 |    1
+ Mon Jan 01 00:00:00 2024 PST |      3 |    3
+ Mon Jan 01 00:00:00 2024 PST |      2 |    2
+ Tue Jan 02 00:00:00 2024 PST |      1 |    4
+ Thu Jan 04 00:00:00 2024 PST |      1 |    5
+(5 rows)
+
+rollback;
+-- Test mixing hypercore TAM with compression without TAM
+alter table _timescaledb_internal._hyper_1_1_chunk set access method hypercore;
+select * from chunk_info;
+      chunk       |    tam    |                                                                checkconstraint                                                                 
+------------------+-----------+------------------------------------------------------------------------------------------------------------------------------------------------
+ _hyper_1_1_chunk | hypercore | (_timescaledb_functions.get_partition_hash(device) < 715827882)
+ _hyper_1_1_chunk | hypercore | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_2_chunk | heap      | ((_timescaledb_functions.get_partition_hash(device) >= 715827882) AND (_timescaledb_functions.get_partition_hash(device) < 1431655764))
+ _hyper_1_2_chunk | heap      | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_3_chunk | heap      | (_timescaledb_functions.get_partition_hash(device) >= 1431655764)
+ _hyper_1_3_chunk | heap      | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_4_chunk | heap      | (_timescaledb_functions.get_partition_hash(device) < 715827882)
+ _hyper_1_4_chunk | heap      | (("time" >= 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Tue Jan 02 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_5_chunk | heap      | (_timescaledb_functions.get_partition_hash(device) < 715827882)
+ _hyper_1_5_chunk | heap      | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 16:00:00 2024 PST'::timestamp with time zone))
+(10 rows)
+
+begin;
+select sum(temp) from mergeme;
+ sum 
+-----
+  15
+(1 row)
+
+call merge_chunks('{_timescaledb_internal._hyper_1_1_chunk, _timescaledb_internal._hyper_1_2_chunk, _timescaledb_internal._hyper_1_3_chunk}');
+select * from chunk_info;
+      chunk       |    tam    |                                                                checkconstraint                                                                 
+------------------+-----------+------------------------------------------------------------------------------------------------------------------------------------------------
+ _hyper_1_1_chunk | hypercore | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_4_chunk | heap      | (_timescaledb_functions.get_partition_hash(device) < 715827882)
+ _hyper_1_4_chunk | heap      | (("time" >= 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Tue Jan 02 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_5_chunk | heap      | (_timescaledb_functions.get_partition_hash(device) < 715827882)
+ _hyper_1_5_chunk | heap      | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 16:00:00 2024 PST'::timestamp with time zone))
+(5 rows)
+
+select count(*) as num_orphaned_slices from orphaned_slices;
+ num_orphaned_slices 
+---------------------
+                   0
+(1 row)
+
+select sum(temp) from mergeme;
+ sum 
+-----
+  15
+(1 row)
+
+rollback;
+select * from chunk_info;
+      chunk       |    tam    |                                                                checkconstraint                                                                 
+------------------+-----------+------------------------------------------------------------------------------------------------------------------------------------------------
+ _hyper_1_1_chunk | hypercore | (_timescaledb_functions.get_partition_hash(device) < 715827882)
+ _hyper_1_1_chunk | hypercore | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_2_chunk | heap      | ((_timescaledb_functions.get_partition_hash(device) >= 715827882) AND (_timescaledb_functions.get_partition_hash(device) < 1431655764))
+ _hyper_1_2_chunk | heap      | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_3_chunk | heap      | (_timescaledb_functions.get_partition_hash(device) >= 1431655764)
+ _hyper_1_3_chunk | heap      | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_4_chunk | heap      | (_timescaledb_functions.get_partition_hash(device) < 715827882)
+ _hyper_1_4_chunk | heap      | (("time" >= 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Tue Jan 02 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_5_chunk | heap      | (_timescaledb_functions.get_partition_hash(device) < 715827882)
+ _hyper_1_5_chunk | heap      | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 16:00:00 2024 PST'::timestamp with time zone))
+(10 rows)
+
+-- Only Hypercore TAM and non-compressed chunks
+alter table _timescaledb_internal._hyper_1_3_chunk set access method hypercore;
+begin;
+select sum(temp) from mergeme;
+ sum 
+-----
+  15
+(1 row)
+
+call merge_chunks('{_timescaledb_internal._hyper_1_1_chunk, _timescaledb_internal._hyper_1_2_chunk, _timescaledb_internal._hyper_1_3_chunk}');
+select * from chunk_info;
+      chunk       |    tam    |                                                                checkconstraint                                                                 
+------------------+-----------+------------------------------------------------------------------------------------------------------------------------------------------------
+ _hyper_1_1_chunk | hypercore | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_4_chunk | heap      | (_timescaledb_functions.get_partition_hash(device) < 715827882)
+ _hyper_1_4_chunk | heap      | (("time" >= 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Tue Jan 02 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_5_chunk | heap      | (_timescaledb_functions.get_partition_hash(device) < 715827882)
+ _hyper_1_5_chunk | heap      | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 16:00:00 2024 PST'::timestamp with time zone))
+(5 rows)
+
+select count(*) as num_orphaned_slices from orphaned_slices;
+ num_orphaned_slices 
+---------------------
+                   0
+(1 row)
+
+select sum(temp) from mergeme;
+ sum 
+-----
+  15
+(1 row)
+
+-- Test that indexes work after merge
+set timescaledb.enable_columnarscan = false;
+set enable_seqscan = false;
+analyze mergeme;
+explain (costs off)
+select * from mergeme where device = 1;
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
+ Append
+   ->  Index Scan using _hyper_1_1_chunk_mergeme_device_time_idx on _hyper_1_1_chunk
+         Index Cond: (device = 1)
+   ->  Index Scan using _hyper_1_4_chunk_mergeme_device_time_idx on _hyper_1_4_chunk
+         Index Cond: (device = 1)
+   ->  Index Scan using _hyper_1_5_chunk_mergeme_device_time_idx on _hyper_1_5_chunk
+         Index Cond: (device = 1)
+(7 rows)
+
+select * from mergeme where device = 1;
+             time             | device | temp 
+------------------------------+--------+------
+ Mon Jan 01 00:00:00 2024 PST |      1 |    1
+ Tue Jan 02 00:00:00 2024 PST |      1 |    4
+ Thu Jan 04 00:00:00 2024 PST |      1 |    5
+(3 rows)
+
+select * from _timescaledb_internal._hyper_1_1_chunk where device = 1;
+             time             | device | temp 
+------------------------------+--------+------
+ Mon Jan 01 00:00:00 2024 PST |      1 |    1
+(1 row)
+
+reset timescaledb.enable_columnarscan;
+reset enable_seqscan;
+rollback;
+---
+--- Merge hypercore TAM into compressed chunk without TAM
+---
+begin;
+select * from chunk_info;
+      chunk       |    tam    |                                                                checkconstraint                                                                 
+------------------+-----------+------------------------------------------------------------------------------------------------------------------------------------------------
+ _hyper_1_1_chunk | hypercore | (_timescaledb_functions.get_partition_hash(device) < 715827882)
+ _hyper_1_1_chunk | hypercore | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_2_chunk | heap      | ((_timescaledb_functions.get_partition_hash(device) >= 715827882) AND (_timescaledb_functions.get_partition_hash(device) < 1431655764))
+ _hyper_1_2_chunk | heap      | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_3_chunk | hypercore | (_timescaledb_functions.get_partition_hash(device) >= 1431655764)
+ _hyper_1_3_chunk | hypercore | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_4_chunk | heap      | (_timescaledb_functions.get_partition_hash(device) < 715827882)
+ _hyper_1_4_chunk | heap      | (("time" >= 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Tue Jan 02 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_5_chunk | heap      | (_timescaledb_functions.get_partition_hash(device) < 715827882)
+ _hyper_1_5_chunk | heap      | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 16:00:00 2024 PST'::timestamp with time zone))
+(10 rows)
+
+select compress_chunk('_timescaledb_internal._hyper_1_2_chunk');
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_2_chunk
+(1 row)
+
+select sum(temp) from mergeme;
+ sum 
+-----
+  15
+(1 row)
+
+call merge_chunks('{_timescaledb_internal._hyper_1_2_chunk, _timescaledb_internal._hyper_1_3_chunk}');
+select * from chunk_info;
+      chunk       |    tam    |                                                                checkconstraint                                                                 
+------------------+-----------+------------------------------------------------------------------------------------------------------------------------------------------------
+ _hyper_1_1_chunk | hypercore | (_timescaledb_functions.get_partition_hash(device) < 715827882)
+ _hyper_1_1_chunk | hypercore | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_2_chunk | heap      | (_timescaledb_functions.get_partition_hash(device) >= 715827882)
+ _hyper_1_2_chunk | heap      | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_4_chunk | heap      | (_timescaledb_functions.get_partition_hash(device) < 715827882)
+ _hyper_1_4_chunk | heap      | (("time" >= 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Tue Jan 02 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_5_chunk | heap      | (_timescaledb_functions.get_partition_hash(device) < 715827882)
+ _hyper_1_5_chunk | heap      | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 16:00:00 2024 PST'::timestamp with time zone))
+(8 rows)
+
+select count(*) as num_orphaned_slices from orphaned_slices;
+ num_orphaned_slices 
+---------------------
+                   0
+(1 row)
+
+select sum(temp) from mergeme;
+ sum 
+-----
+  15
+(1 row)
+
+rollback;
 ---
 -- Test some error cases when merging chunks with non-chunks or chunks
 -- from other hypertables
@@ -325,7 +532,7 @@ select * from mergeme_too where device=1;
 select * from show_chunks('mergeme_too');
               show_chunks               
 ----------------------------------------
- _timescaledb_internal._hyper_3_8_chunk
+ _timescaledb_internal._hyper_3_9_chunk
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -337,7 +544,7 @@ ERROR:  can only merge hypertable chunks
 call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', 'mergeme_mat');
 ERROR:  cannot merge non-table relations
 -- Merge chunks from different hypertables
-call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_3_8_chunk');
+call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_3_9_chunk');
 ERROR:  cannot merge chunks across different hypertables
 -- Merge with unsupported access method
 alter table _timescaledb_internal._hyper_1_1_chunk set access method testam;
@@ -382,6 +589,14 @@ select setseed(0.2);
 insert into mergeme (time, device, temp)
 select t, ceil(random()*10), random()*40
 from generate_series('2024-01-01'::timestamptz, '2024-01-04', '0.5s') t;
+-- Compress two chunks, one using access method
+select compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+alter table _timescaledb_internal._hyper_1_2_chunk set access method hypercore;
 -- Show partitions before merge
 select * from partitions;
     table_name     | column_name |     range_start      |      range_end      
@@ -389,27 +604,27 @@ select * from partitions;
  _hyper_1_1_chunk  | time        |     1704067200000000 |    1704153600000000
  _hyper_1_3_chunk  | time        |     1704067200000000 |    1704153600000000
  _hyper_1_2_chunk  | time        |     1704067200000000 |    1704153600000000
+ _hyper_1_11_chunk | time        |     1704153600000000 |    1704240000000000
  _hyper_1_10_chunk | time        |     1704153600000000 |    1704240000000000
- _hyper_1_9_chunk  | time        |     1704153600000000 |    1704240000000000
  _hyper_1_4_chunk  | time        |     1704153600000000 |    1704240000000000
- _hyper_1_11_chunk | time        |     1704240000000000 |    1704326400000000
- _hyper_1_13_chunk | time        |     1704240000000000 |    1704326400000000
  _hyper_1_12_chunk | time        |     1704240000000000 |    1704326400000000
- _hyper_1_15_chunk | time        |     1704326400000000 |    1704412800000000
+ _hyper_1_14_chunk | time        |     1704240000000000 |    1704326400000000
+ _hyper_1_13_chunk | time        |     1704240000000000 |    1704326400000000
+ _hyper_1_16_chunk | time        |     1704326400000000 |    1704412800000000
  _hyper_1_5_chunk  | time        |     1704326400000000 |    1704412800000000
- _hyper_1_14_chunk | time        |     1704326400000000 |    1704412800000000
+ _hyper_1_15_chunk | time        |     1704326400000000 |    1704412800000000
  _hyper_1_4_chunk  | device      | -9223372036854775808 |           715827882
  _hyper_1_1_chunk  | device      | -9223372036854775808 |           715827882
  _hyper_1_5_chunk  | device      | -9223372036854775808 |           715827882
- _hyper_1_11_chunk | device      | -9223372036854775808 |           715827882
- _hyper_1_9_chunk  | device      |            715827882 |          1431655764
+ _hyper_1_12_chunk | device      | -9223372036854775808 |           715827882
+ _hyper_1_10_chunk | device      |            715827882 |          1431655764
  _hyper_1_2_chunk  | device      |            715827882 |          1431655764
- _hyper_1_14_chunk | device      |            715827882 |          1431655764
- _hyper_1_12_chunk | device      |            715827882 |          1431655764
- _hyper_1_15_chunk | device      |           1431655764 | 9223372036854775807
- _hyper_1_10_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_15_chunk | device      |            715827882 |          1431655764
+ _hyper_1_13_chunk | device      |            715827882 |          1431655764
+ _hyper_1_16_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_11_chunk | device      |           1431655764 | 9223372036854775807
  _hyper_1_3_chunk  | device      |           1431655764 | 9223372036854775807
- _hyper_1_13_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_14_chunk | device      |           1431655764 | 9223372036854775807
 (24 rows)
 
 -- Merge all chunks until only 1 remains
@@ -419,7 +634,7 @@ select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
  518406 | 2854401 | 10373952.7510
 (1 row)
 
-call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_11_chunk']);
+call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_12_chunk']);
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
  count  |   sum   |     round     
 --------+---------+---------------
@@ -432,24 +647,24 @@ select * from partitions;
  _hyper_1_2_chunk  | time        |     1704067200000000 |    1704153600000000
  _hyper_1_3_chunk  | time        |     1704067200000000 |    1704153600000000
  _hyper_1_1_chunk  | time        |     1704067200000000 |    1704412800000000
+ _hyper_1_11_chunk | time        |     1704153600000000 |    1704240000000000
  _hyper_1_10_chunk | time        |     1704153600000000 |    1704240000000000
- _hyper_1_9_chunk  | time        |     1704153600000000 |    1704240000000000
- _hyper_1_12_chunk | time        |     1704240000000000 |    1704326400000000
  _hyper_1_13_chunk | time        |     1704240000000000 |    1704326400000000
+ _hyper_1_14_chunk | time        |     1704240000000000 |    1704326400000000
+ _hyper_1_16_chunk | time        |     1704326400000000 |    1704412800000000
  _hyper_1_15_chunk | time        |     1704326400000000 |    1704412800000000
- _hyper_1_14_chunk | time        |     1704326400000000 |    1704412800000000
  _hyper_1_1_chunk  | device      | -9223372036854775808 |           715827882
- _hyper_1_12_chunk | device      |            715827882 |          1431655764
- _hyper_1_14_chunk | device      |            715827882 |          1431655764
- _hyper_1_9_chunk  | device      |            715827882 |          1431655764
+ _hyper_1_13_chunk | device      |            715827882 |          1431655764
+ _hyper_1_15_chunk | device      |            715827882 |          1431655764
+ _hyper_1_10_chunk | device      |            715827882 |          1431655764
  _hyper_1_2_chunk  | device      |            715827882 |          1431655764
  _hyper_1_3_chunk  | device      |           1431655764 | 9223372036854775807
- _hyper_1_15_chunk | device      |           1431655764 | 9223372036854775807
- _hyper_1_10_chunk | device      |           1431655764 | 9223372036854775807
- _hyper_1_13_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_16_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_11_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_14_chunk | device      |           1431655764 | 9223372036854775807
 (18 rows)
 
-call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_9_chunk','_timescaledb_internal._hyper_1_12_chunk', '_timescaledb_internal._hyper_1_14_chunk']);
+call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_10_chunk','_timescaledb_internal._hyper_1_13_chunk', '_timescaledb_internal._hyper_1_15_chunk']);
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
  count  |   sum   |     round     
 --------+---------+---------------
@@ -462,18 +677,18 @@ select * from partitions;
  _hyper_1_3_chunk  | time        |     1704067200000000 |    1704153600000000
  _hyper_1_1_chunk  | time        |     1704067200000000 |    1704412800000000
  _hyper_1_2_chunk  | time        |     1704067200000000 |    1704412800000000
- _hyper_1_10_chunk | time        |     1704153600000000 |    1704240000000000
- _hyper_1_13_chunk | time        |     1704240000000000 |    1704326400000000
- _hyper_1_15_chunk | time        |     1704326400000000 |    1704412800000000
+ _hyper_1_11_chunk | time        |     1704153600000000 |    1704240000000000
+ _hyper_1_14_chunk | time        |     1704240000000000 |    1704326400000000
+ _hyper_1_16_chunk | time        |     1704326400000000 |    1704412800000000
  _hyper_1_1_chunk  | device      | -9223372036854775808 |           715827882
  _hyper_1_2_chunk  | device      |            715827882 |          1431655764
- _hyper_1_15_chunk | device      |           1431655764 | 9223372036854775807
- _hyper_1_13_chunk | device      |           1431655764 | 9223372036854775807
- _hyper_1_10_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_16_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_14_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_11_chunk | device      |           1431655764 | 9223372036854775807
  _hyper_1_3_chunk  | device      |           1431655764 | 9223372036854775807
 (12 rows)
 
-call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_10_chunk','_timescaledb_internal._hyper_1_13_chunk', '_timescaledb_internal._hyper_1_15_chunk']);
+call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_11_chunk','_timescaledb_internal._hyper_1_14_chunk', '_timescaledb_internal._hyper_1_16_chunk']);
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
  count  |   sum   |     round     
 --------+---------+---------------
@@ -504,4 +719,10 @@ select * from partitions;
  _hyper_1_1_chunk | time        |     1704067200000000 |    1704412800000000
  _hyper_1_1_chunk | device      | -9223372036854775808 | 9223372036854775807
 (2 rows)
+
+select * from chunk_info;
+      chunk       | tam  |                                                                checkconstraint                                                                 
+------------------+------+------------------------------------------------------------------------------------------------------------------------------------------------
+ _hyper_1_1_chunk | heap | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 16:00:00 2024 PST'::timestamp with time zone))
+(1 row)
 

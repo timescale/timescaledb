@@ -1563,6 +1563,7 @@ step I1:
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step RC: <... completed>
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step I1: <... completed>
 step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
@@ -1651,6 +1652,7 @@ step I1:
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step RC: <... completed>
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step I1: <... completed>
 step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
@@ -1739,6 +1741,7 @@ step I1:
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step RC: <... completed>
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step I1: <... completed>
 step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
@@ -1827,6 +1830,7 @@ step Iu1:
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step RC: <... completed>
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step Iu1: <... completed>
 step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
@@ -1915,6 +1919,7 @@ step Iu1:
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step RC: <... completed>
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step Iu1: <... completed>
 step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
@@ -2009,6 +2014,7 @@ step Iu1:
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step RC: <... completed>
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step Iu1: <... completed>
 step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
@@ -2100,6 +2106,7 @@ step RC:
 step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100) ON CONFLICT DO NOTHING; <waiting ...>
 step UnlockChunk: ROLLBACK;
 step RC: <... completed>
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step IN1: <... completed>
 step INc: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
@@ -2185,6 +2192,7 @@ step RC:
 step INu1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 100, 99) ON CONFLICT(time, device) DO UPDATE SET value = 99; <waiting ...>
 step UnlockChunk: ROLLBACK;
 step RC: <... completed>
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step INu1: <... completed>
 step INc: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
@@ -2279,8 +2287,9 @@ step RC:
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step I1: <... completed>
-step Ic: COMMIT;
 step RC: <... completed>
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
@@ -2306,7 +2315,7 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
-     1
+     9
 (1 row)
 
 
@@ -2367,8 +2376,9 @@ step RC:
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step I1: <... completed>
-step Ic: COMMIT;
 step RC: <... completed>
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
@@ -2394,7 +2404,7 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
-     1
+     9
 (1 row)
 
 
@@ -2455,8 +2465,9 @@ step RC:
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step I1: <... completed>
-step Ic: COMMIT;
 step RC: <... completed>
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
@@ -2482,7 +2493,7 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
-     1
+     9
 (1 row)
 
 
@@ -2543,8 +2554,9 @@ step RC:
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step Iu1: <... completed>
-step Ic: COMMIT;
 step RC: <... completed>
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
@@ -2555,7 +2567,6 @@ step SA: SELECT * FROM ts_device_table;
 time|device|location|value
 ----+------+--------+-----
    0|     1|     100|   20
-   1|     1|     100|   98
    2|     1|     100|   20
    3|     1|     100|   20
    4|     1|     100|   20
@@ -2564,13 +2575,14 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
+   1|     1|     100|   98
 (10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
-     1
+     9
 (1 row)
 
 step SU: SELECT * FROM ts_device_table WHERE value IN (98,99);
@@ -2637,8 +2649,9 @@ step RC:
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step Iu1: <... completed>
-step Ic: COMMIT;
 step RC: <... completed>
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
@@ -2649,7 +2662,6 @@ step SA: SELECT * FROM ts_device_table;
 time|device|location|value
 ----+------+--------+-----
    0|     1|     100|   20
-   1|     1|     100|   98
    2|     1|     100|   20
    3|     1|     100|   20
    4|     1|     100|   20
@@ -2658,13 +2670,14 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
+   1|     1|     100|   98
 (10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
-     1
+     9
 (1 row)
 
 step SU: SELECT * FROM ts_device_table WHERE value IN (98,99);
@@ -2731,8 +2744,9 @@ step RC:
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step Iu1: <... completed>
-step Ic: COMMIT;
 step RC: <... completed>
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
@@ -2743,7 +2757,6 @@ step SA: SELECT * FROM ts_device_table;
 time|device|location|value
 ----+------+--------+-----
    0|     1|     100|   20
-   1|     1|     100|   98
    2|     1|     100|   20
    3|     1|     100|   20
    4|     1|     100|   20
@@ -2752,13 +2765,14 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
+   1|     1|     100|   98
 (10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
-     1
+     9
 (1 row)
 
 step SU: SELECT * FROM ts_device_table WHERE value IN (98,99);
@@ -2822,8 +2836,9 @@ step RC:
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step IN1: <... completed>
-step INc: COMMIT;
 step RC: <... completed>
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step INc: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
@@ -2849,7 +2864,7 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
-     1
+     9
 (1 row)
 
 
@@ -2907,8 +2922,9 @@ step RC:
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step INu1: <... completed>
-step INc: COMMIT;
 step RC: <... completed>
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
+step INc: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------
@@ -2919,7 +2935,6 @@ step SA: SELECT * FROM ts_device_table;
 time|device|location|value
 ----+------+--------+-----
    0|     1|     100|   20
-   1|     1|     100|   99
    2|     1|     100|   20
    3|     1|     100|   20
    4|     1|     100|   20
@@ -2928,13 +2943,14 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
+   1|     1|     100|   99
 (10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
-     1
+     9
 (1 row)
 
 step SU: SELECT * FROM ts_device_table WHERE value IN (98,99);

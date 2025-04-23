@@ -13,7 +13,7 @@
 #include "ts_catalog/catalog.h"
 
 #include "compat/compat.h"
-#include "with_clause_parser.h"
+#include "with_clause/with_clause_parser.h"
 
 #define CAGGINVAL_TRIGGER_NAME "ts_cagg_invalidation_trigger"
 
@@ -53,6 +53,7 @@ typedef enum ContinuousAggViewOption
 	ContinuousViewOptionMaterializedOnly,
 	ContinuousViewOptionCompress,
 	ContinuousViewOptionFinalized,
+	ContinuousViewOptionChunkTimeInterval,
 	ContinuousViewOptionCompressSegmentBy,
 	ContinuousViewOptionCompressOrderBy,
 	ContinuousViewOptionCompressChunkTimeInterval,
@@ -215,3 +216,5 @@ extern TSDLLEXPORT Query *ts_continuous_agg_get_query(ContinuousAgg *cagg);
 
 extern TSDLLEXPORT int64
 ts_continuous_agg_fixed_bucket_width(const ContinuousAggsBucketFunction *bucket_function);
+extern TSDLLEXPORT int64
+ts_continuous_agg_bucket_width(const ContinuousAggsBucketFunction *bucket_function);

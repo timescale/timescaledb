@@ -50,9 +50,9 @@ INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
 SELECT compressed_chunk_schema || '.' || compressed_chunk_name as compressed_chunk_name_1
 from compressed_chunk_info_view where hypertable_name = 'mytab_oneseg' \gset
 SELECT ctid, * FROM :compressed_chunk_name_1;
- ctid  | _ts_meta_count | a | c |           _ts_meta_min_1            |           _ts_meta_max_1            |                                 time                                 | b 
--------+----------------+---+---+-------------------------------------+-------------------------------------+----------------------------------------------------------------------+---
- (0,1) |              2 | 2 | 2 | Sun Jan 01 11:56:10.048355 2023 PST | Sun Jan 01 11:56:20.048355 2023 PST | BAAAApQ3/qlnY///////Z2mAAAAAAgAAAAIAAAAAAAAA7gAFKG/+g/vGAAUob/+1KMU= | 
+ ctid  | _ts_meta_count | a | c |           _ts_meta_min_1            |           _ts_meta_max_1            |                                 time                                 |  b   
+-------+----------------+---+---+-------------------------------------+-------------------------------------+----------------------------------------------------------------------+------
+ (0,1) |              2 | 2 | 2 | Sun Jan 01 11:56:10.048355 2023 PST | Sun Jan 01 11:56:20.048355 2023 PST | BAAAApQ3/qlnY///////Z2mAAAAAAgAAAAIAAAAAAAAA7gAFKG/+g/vGAAUob/+1KMU= | Bg==
 (1 row)
 
 -- after compressing the chunk
@@ -79,10 +79,10 @@ INFO:  Using index "compress_hyper_2_2_chunk_a_c__ts_meta_min_1__ts_meta_max_1_i
 
 -- check the ctid of the rows in the recompressed chunk to verify that we've written new data
 SELECT ctid, * FROM :compressed_chunk_name_1;
- ctid  | _ts_meta_count | a | c |           _ts_meta_min_1            |           _ts_meta_max_1            |                                 time                                 | b 
--------+----------------+---+---+-------------------------------------+-------------------------------------+----------------------------------------------------------------------+---
- (0,1) |              2 | 2 | 2 | Sun Jan 01 11:56:10.048355 2023 PST | Sun Jan 01 11:56:20.048355 2023 PST | BAAAApQ3/qlnY///////Z2mAAAAAAgAAAAIAAAAAAAAA7gAFKG/+g/vGAAUob/+1KMU= | 
- (0,2) |              1 | 2 | 2 | Sun Jan 01 09:56:20.048355 2023 PST | Sun Jan 01 09:56:20.048355 2023 PST | BAAAApQ2Uhq14wAClDZSGrXjAAAAAQAAAAEAAAAAAAAADgAFKGykNWvG             | 
+ ctid  | _ts_meta_count | a | c |           _ts_meta_min_1            |           _ts_meta_max_1            |                                 time                                 |  b   
+-------+----------------+---+---+-------------------------------------+-------------------------------------+----------------------------------------------------------------------+------
+ (0,1) |              2 | 2 | 2 | Sun Jan 01 11:56:10.048355 2023 PST | Sun Jan 01 11:56:20.048355 2023 PST | BAAAApQ3/qlnY///////Z2mAAAAAAgAAAAIAAAAAAAAA7gAFKG/+g/vGAAUob/+1KMU= | Bg==
+ (0,2) |              1 | 2 | 2 | Sun Jan 01 09:56:20.048355 2023 PST | Sun Jan 01 09:56:20.048355 2023 PST | BAAAApQ2Uhq14wAClDZSGrXjAAAAAQAAAAEAAAAAAAAADgAFKGykNWvG             | Bg==
 (2 rows)
 
 -- after recompressing chunk
@@ -136,18 +136,18 @@ select * from :chunk_to_compress_2 ORDER BY a, c, time DESC;
                 time                 | a | b | c 
 -------------------------------------+---+---+---
  Sun Jan 01 11:56:20.048355 2023 PST | 2 |   | 2
+ Sun Jan 01 09:56:20.048355 2023 PST | 2 |   | 2
  Sun Jan 01 11:57:20.048355 2023 PST | 3 |   | 3
  Sun Jan 01 11:56:20.048355 2023 PST | 3 |   | 3
- Sun Jan 01 09:56:20.048355 2023 PST | 2 |   | 2
 (4 rows)
 
 SELECT compressed_chunk_schema || '.' || compressed_chunk_name as compressed_chunk_name_2
 from compressed_chunk_info_view where hypertable_name = 'mytab_twoseg' \gset
 select ctid, * from :compressed_chunk_name_2;
- ctid  | _ts_meta_count | a | c |           _ts_meta_min_1            |           _ts_meta_max_1            |                                 time                                 | b 
--------+----------------+---+---+-------------------------------------+-------------------------------------+----------------------------------------------------------------------+---
- (0,1) |              1 | 2 | 2 | Sun Jan 01 11:56:20.048355 2023 PST | Sun Jan 01 11:56:20.048355 2023 PST | BAAAApQ3/0H94wAClDf/Qf3jAAAAAQAAAAEAAAAAAAAADgAFKG/+g/vG             | 
- (0,2) |              2 | 3 | 3 | Sun Jan 01 11:56:20.048355 2023 PST | Sun Jan 01 11:57:20.048355 2023 PST | BAAAApQ3/0H94//////8bHkAAAAAAgAAAAIAAAAAAAAA7gAFKHAFqwnGAAUocAzSF8U= | 
+ ctid  | _ts_meta_count | a | c |           _ts_meta_min_1            |           _ts_meta_max_1            |                                 time                                 |  b   
+-------+----------------+---+---+-------------------------------------+-------------------------------------+----------------------------------------------------------------------+------
+ (0,1) |              1 | 2 | 2 | Sun Jan 01 11:56:20.048355 2023 PST | Sun Jan 01 11:56:20.048355 2023 PST | BAAAApQ3/0H94wAClDf/Qf3jAAAAAQAAAAEAAAAAAAAADgAFKG/+g/vG             | Bg==
+ (0,2) |              2 | 3 | 3 | Sun Jan 01 11:56:20.048355 2023 PST | Sun Jan 01 11:57:20.048355 2023 PST | BAAAApQ3/0H94//////8bHkAAAAAAgAAAAIAAAAAAAAA7gAFKHAFqwnGAAUocAzSF8U= | Bg==
 (2 rows)
 
 select _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress_2');
@@ -159,11 +159,11 @@ INFO:  Using index "compress_hyper_4_4_chunk_a_c__ts_meta_min_1__ts_meta_max_1_i
 
 -- verify that metadata count looks good
 select ctid, * from :compressed_chunk_name_2;
- ctid  | _ts_meta_count | a | c |           _ts_meta_min_1            |           _ts_meta_max_1            |                                 time                                 | b 
--------+----------------+---+---+-------------------------------------+-------------------------------------+----------------------------------------------------------------------+---
- (0,1) |              1 | 2 | 2 | Sun Jan 01 11:56:20.048355 2023 PST | Sun Jan 01 11:56:20.048355 2023 PST | BAAAApQ3/0H94wAClDf/Qf3jAAAAAQAAAAEAAAAAAAAADgAFKG/+g/vG             | 
- (0,2) |              2 | 3 | 3 | Sun Jan 01 11:56:20.048355 2023 PST | Sun Jan 01 11:57:20.048355 2023 PST | BAAAApQ3/0H94//////8bHkAAAAAAgAAAAIAAAAAAAAA7gAFKHAFqwnGAAUocAzSF8U= | 
- (0,3) |              1 | 2 | 2 | Sun Jan 01 09:56:20.048355 2023 PST | Sun Jan 01 09:56:20.048355 2023 PST | BAAAApQ2Uhq14wAClDZSGrXjAAAAAQAAAAEAAAAAAAAADgAFKGykNWvG             | 
+ ctid  | _ts_meta_count | a | c |           _ts_meta_min_1            |           _ts_meta_max_1            |                                 time                                 |  b   
+-------+----------------+---+---+-------------------------------------+-------------------------------------+----------------------------------------------------------------------+------
+ (0,1) |              1 | 2 | 2 | Sun Jan 01 11:56:20.048355 2023 PST | Sun Jan 01 11:56:20.048355 2023 PST | BAAAApQ3/0H94wAClDf/Qf3jAAAAAQAAAAEAAAAAAAAADgAFKG/+g/vG             | Bg==
+ (0,2) |              2 | 3 | 3 | Sun Jan 01 11:56:20.048355 2023 PST | Sun Jan 01 11:57:20.048355 2023 PST | BAAAApQ3/0H94//////8bHkAAAAAAgAAAAIAAAAAAAAA7gAFKHAFqwnGAAUocAzSF8U= | Bg==
+ (0,3) |              1 | 2 | 2 | Sun Jan 01 09:56:20.048355 2023 PST | Sun Jan 01 09:56:20.048355 2023 PST | BAAAApQ2Uhq14wAClDZSGrXjAAAAAQAAAAEAAAAAAAAADgAFKGykNWvG             | Bg==
 (3 rows)
 
 -- verify that initial data is returned as expected
@@ -209,17 +209,17 @@ and compressed_chunk_name is not null limit 1 \gset
 insert into mytab2 values ('2023-01-01 00:00:02+00'::timestamptz, 0, NULL, 0); -- goes into the uncompressed chunk
 select show_chunks('mytab2') as chunk_to_compress_2 \gset
 select ctid, * from :compressed_chunk_name_2;
- ctid  | _ts_meta_count | a | c |        _ts_meta_min_1        |        _ts_meta_max_1        |                                       time                                       | b 
--------+----------------+---+---+------------------------------+------------------------------+----------------------------------------------------------------------------------+---
- (0,1) |           1000 | 0 | 0 | Sun Jan 01 07:40:30 2023 PST | Sun Jan 01 16:00:00 2023 PST | BAAAApQ0bFLXgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKHbNWYAAAAUodtDtBv8AAD5gAAAAAA== | 
- (0,2) |           1000 | 0 | 0 | Sat Dec 31 23:20:30 2022 PST | Sun Jan 01 07:40:00 2023 PST | BAAAApQtcC8rgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKGjVEigAAAUoaNilrv8AAD5gAAAAAA== | 
- (0,3) |            881 | 0 | 0 | Sat Dec 31 16:00:00 2022 PST | Sat Dec 31 23:20:00 2022 PST | BAAAApQnSNVgAP/////+NjyAAAADcQAAAAMAAAAAAAAP7gAFKFrcytAAAAUoWuBeVv8AADbwAAAAAA== | 
- (0,4) |           1000 | 1 | 1 | Sun Jan 01 07:40:30 2023 PST | Sun Jan 01 16:00:00 2023 PST | BAAAApQ0bFLXgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKHbNWYAAAAUodtDtBv8AAD5gAAAAAA== | 
- (0,5) |           1000 | 1 | 1 | Sat Dec 31 23:20:30 2022 PST | Sun Jan 01 07:40:00 2023 PST | BAAAApQtcC8rgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKGjVEigAAAUoaNilrv8AAD5gAAAAAA== | 
- (0,6) |            881 | 1 | 1 | Sat Dec 31 16:00:00 2022 PST | Sat Dec 31 23:20:00 2022 PST | BAAAApQnSNVgAP/////+NjyAAAADcQAAAAMAAAAAAAAP7gAFKFrcytAAAAUoWuBeVv8AADbwAAAAAA== | 
- (0,7) |           1000 | 2 | 2 | Sun Jan 01 07:40:30 2023 PST | Sun Jan 01 16:00:00 2023 PST | BAAAApQ0bFLXgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKHbNWYAAAAUodtDtBv8AAD5gAAAAAA== | 
- (0,8) |           1000 | 2 | 2 | Sat Dec 31 23:20:30 2022 PST | Sun Jan 01 07:40:00 2023 PST | BAAAApQtcC8rgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKGjVEigAAAUoaNilrv8AAD5gAAAAAA== | 
- (0,9) |            881 | 2 | 2 | Sat Dec 31 16:00:00 2022 PST | Sat Dec 31 23:20:00 2022 PST | BAAAApQnSNVgAP/////+NjyAAAADcQAAAAMAAAAAAAAP7gAFKFrcytAAAAUoWuBeVv8AADbwAAAAAA== | 
+ ctid  | _ts_meta_count | a | c |        _ts_meta_min_1        |        _ts_meta_max_1        |                                       time                                       |  b   
+-------+----------------+---+---+------------------------------+------------------------------+----------------------------------------------------------------------------------+------
+ (0,1) |           1000 | 0 | 0 | Sun Jan 01 07:40:30 2023 PST | Sun Jan 01 16:00:00 2023 PST | BAAAApQ0bFLXgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKHbNWYAAAAUodtDtBv8AAD5gAAAAAA== | Bg==
+ (0,2) |           1000 | 0 | 0 | Sat Dec 31 23:20:30 2022 PST | Sun Jan 01 07:40:00 2023 PST | BAAAApQtcC8rgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKGjVEigAAAUoaNilrv8AAD5gAAAAAA== | Bg==
+ (0,3) |            881 | 0 | 0 | Sat Dec 31 16:00:00 2022 PST | Sat Dec 31 23:20:00 2022 PST | BAAAApQnSNVgAP/////+NjyAAAADcQAAAAMAAAAAAAAP7gAFKFrcytAAAAUoWuBeVv8AADbwAAAAAA== | Bg==
+ (0,4) |           1000 | 1 | 1 | Sun Jan 01 07:40:30 2023 PST | Sun Jan 01 16:00:00 2023 PST | BAAAApQ0bFLXgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKHbNWYAAAAUodtDtBv8AAD5gAAAAAA== | Bg==
+ (0,5) |           1000 | 1 | 1 | Sat Dec 31 23:20:30 2022 PST | Sun Jan 01 07:40:00 2023 PST | BAAAApQtcC8rgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKGjVEigAAAUoaNilrv8AAD5gAAAAAA== | Bg==
+ (0,6) |            881 | 1 | 1 | Sat Dec 31 16:00:00 2022 PST | Sat Dec 31 23:20:00 2022 PST | BAAAApQnSNVgAP/////+NjyAAAADcQAAAAMAAAAAAAAP7gAFKFrcytAAAAUoWuBeVv8AADbwAAAAAA== | Bg==
+ (0,7) |           1000 | 2 | 2 | Sun Jan 01 07:40:30 2023 PST | Sun Jan 01 16:00:00 2023 PST | BAAAApQ0bFLXgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKHbNWYAAAAUodtDtBv8AAD5gAAAAAA== | Bg==
+ (0,8) |           1000 | 2 | 2 | Sat Dec 31 23:20:30 2022 PST | Sun Jan 01 07:40:00 2023 PST | BAAAApQtcC8rgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKGjVEigAAAUoaNilrv8AAD5gAAAAAA== | Bg==
+ (0,9) |            881 | 2 | 2 | Sat Dec 31 16:00:00 2022 PST | Sat Dec 31 23:20:00 2022 PST | BAAAApQnSNVgAP/////+NjyAAAADcQAAAAMAAAAAAAAP7gAFKFrcytAAAAUoWuBeVv8AADbwAAAAAA== | Bg==
 (9 rows)
 
 -- after compression
@@ -238,17 +238,17 @@ INFO:  Using index "compress_hyper_6_6_chunk_a_c__ts_meta_min_1__ts_meta_max_1_i
 (1 row)
 
 select ctid, * from :compressed_chunk_name_2;
-  ctid  | _ts_meta_count | a | c |        _ts_meta_min_1        |        _ts_meta_max_1        |                                           time                                           | b 
---------+----------------+---+---+------------------------------+------------------------------+------------------------------------------------------------------------------------------+---
- (0,1)  |           1000 | 0 | 0 | Sun Jan 01 07:40:30 2023 PST | Sun Jan 01 16:00:00 2023 PST | BAAAApQ0bFLXgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKHbNWYAAAAUodtDtBv8AAD5gAAAAAA==         | 
- (0,2)  |           1000 | 0 | 0 | Sat Dec 31 23:20:30 2022 PST | Sun Jan 01 07:40:00 2023 PST | BAAAApQtcC8rgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKGjVEigAAAUoaNilrv8AAD5gAAAAAA==         | 
- (0,4)  |           1000 | 1 | 1 | Sun Jan 01 07:40:30 2023 PST | Sun Jan 01 16:00:00 2023 PST | BAAAApQ0bFLXgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKHbNWYAAAAUodtDtBv8AAD5gAAAAAA==         | 
- (0,5)  |           1000 | 1 | 1 | Sat Dec 31 23:20:30 2022 PST | Sun Jan 01 07:40:00 2023 PST | BAAAApQtcC8rgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKGjVEigAAAUoaNilrv8AAD5gAAAAAA==         | 
- (0,6)  |            881 | 1 | 1 | Sat Dec 31 16:00:00 2022 PST | Sat Dec 31 23:20:00 2022 PST | BAAAApQnSNVgAP/////+NjyAAAADcQAAAAMAAAAAAAAP7gAFKFrcytAAAAUoWuBeVv8AADbwAAAAAA==         | 
- (0,7)  |           1000 | 2 | 2 | Sun Jan 01 07:40:30 2023 PST | Sun Jan 01 16:00:00 2023 PST | BAAAApQ0bFLXgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKHbNWYAAAAUodtDtBv8AAD5gAAAAAA==         | 
- (0,8)  |           1000 | 2 | 2 | Sat Dec 31 23:20:30 2022 PST | Sun Jan 01 07:40:00 2023 PST | BAAAApQtcC8rgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKGjVEigAAAUoaNilrv8AAD5gAAAAAA==         | 
- (0,9)  |            881 | 2 | 2 | Sat Dec 31 16:00:00 2022 PST | Sat Dec 31 23:20:00 2022 PST | BAAAApQnSNVgAP/////+NjyAAAADcQAAAAMAAAAAAAAP7gAFKFrcytAAAAUoWuBeVv8AADbwAAAAAA==         | 
- (0,10) |            882 | 0 | 0 | Sat Dec 31 16:00:00 2022 PST | Sat Dec 31 23:20:00 2022 PST | BAAAApQnSNVgAP//////4XuAAAADcgAAAAQAAAAAAADf7gAFKFrcytAAAAUoWuBeVv8AADbgAAAAAAMZdQAAPQkA | 
+  ctid  | _ts_meta_count | a | c |        _ts_meta_min_1        |        _ts_meta_max_1        |                                           time                                           |  b   
+--------+----------------+---+---+------------------------------+------------------------------+------------------------------------------------------------------------------------------+------
+ (0,1)  |           1000 | 0 | 0 | Sun Jan 01 07:40:30 2023 PST | Sun Jan 01 16:00:00 2023 PST | BAAAApQ0bFLXgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKHbNWYAAAAUodtDtBv8AAD5gAAAAAA==         | Bg==
+ (0,2)  |           1000 | 0 | 0 | Sat Dec 31 23:20:30 2022 PST | Sun Jan 01 07:40:00 2023 PST | BAAAApQtcC8rgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKGjVEigAAAUoaNilrv8AAD5gAAAAAA==         | Bg==
+ (0,4)  |           1000 | 1 | 1 | Sun Jan 01 07:40:30 2023 PST | Sun Jan 01 16:00:00 2023 PST | BAAAApQ0bFLXgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKHbNWYAAAAUodtDtBv8AAD5gAAAAAA==         | Bg==
+ (0,5)  |           1000 | 1 | 1 | Sat Dec 31 23:20:30 2022 PST | Sun Jan 01 07:40:00 2023 PST | BAAAApQtcC8rgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKGjVEigAAAUoaNilrv8AAD5gAAAAAA==         | Bg==
+ (0,6)  |            881 | 1 | 1 | Sat Dec 31 16:00:00 2022 PST | Sat Dec 31 23:20:00 2022 PST | BAAAApQnSNVgAP/////+NjyAAAADcQAAAAMAAAAAAAAP7gAFKFrcytAAAAUoWuBeVv8AADbwAAAAAA==         | Bg==
+ (0,7)  |           1000 | 2 | 2 | Sun Jan 01 07:40:30 2023 PST | Sun Jan 01 16:00:00 2023 PST | BAAAApQ0bFLXgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKHbNWYAAAAUodtDtBv8AAD5gAAAAAA==         | Bg==
+ (0,8)  |           1000 | 2 | 2 | Sat Dec 31 23:20:30 2022 PST | Sun Jan 01 07:40:00 2023 PST | BAAAApQtcC8rgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKGjVEigAAAUoaNilrv8AAD5gAAAAAA==         | Bg==
+ (0,9)  |            881 | 2 | 2 | Sat Dec 31 16:00:00 2022 PST | Sat Dec 31 23:20:00 2022 PST | BAAAApQnSNVgAP/////+NjyAAAADcQAAAAMAAAAAAAAP7gAFKFrcytAAAAUoWuBeVv8AADbwAAAAAA==         | Bg==
+ (0,10) |            882 | 0 | 0 | Sat Dec 31 16:00:00 2022 PST | Sat Dec 31 23:20:00 2022 PST | BAAAApQnSNVgAP//////4XuAAAADcgAAAAQAAAAAAADf7gAFKFrcytAAAAUoWuBeVv8AADbgAAAAAAMZdQAAPQkA | Bg==
 (9 rows)
 
 -- stats are no longer updated during segmentwise recompression
@@ -647,13 +647,51 @@ INFO:  Using index "compress_hyper_19_20_chunk__ts_meta_min_1__ts_meta_max_1_idx
  _timescaledb_internal._hyper_18_19_chunk
 (1 row)
 
+-- Test behaviour when default order by is empty: should not segmentwise-recompress in this case
+CREATE TABLE no_oby(ts int, c1 int);
+SELECT create_hypertable('no_oby','ts');
+NOTICE:  adding not-null constraint to column "ts"
+  create_hypertable   
+----------------------
+ (20,public,no_oby,t)
+(1 row)
+
+\set VERBOSITY default
+ALTER TABLE no_oby SET (timescaledb.compress, timescaledb.compress_segmentby = 'ts');
+NOTICE:  default order by for hypertable "no_oby" is set to ""
+DETAIL:  Segmentwise recompression will be disabled
+\set VERBOSITY terse
+INSERT INTO no_oby (ts,c1) VALUES (6,6);
+SELECT show_chunks as chunk_to_compress FROM show_chunks('no_oby') LIMIT 1 \gset
+SELECT compress_chunk(:'chunk_to_compress');
+INFO:  using tuplesort to scan rows from "_hyper_20_21_chunk" for compression
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_20_21_chunk
+(1 row)
+
+INSERT INTO no_oby (ts,c1) VALUES (7,7);
+-- Direct segmentwise-recompress request: throw an error
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress');
+ERROR:  segmentwise recompression cannot be applied for compression with no order by
+\set ON_ERROR_STOP 1
+-- Compress wrapper: do full recompress instead of by segment
+SELECT compress_chunk(:'chunk_to_compress');
+NOTICE:  segmentwise recompression is disabled due to no order by, performing full recompression on chunk "_timescaledb_internal._hyper_20_21_chunk"
+INFO:  using tuplesort to scan rows from "_hyper_20_21_chunk" for compression
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_20_21_chunk
+(1 row)
+
 RESET timescaledb.debug_compression_path_info;
 --- Test behaviour when enable_segmentwise_recompression GUC if OFF
 CREATE TABLE guc_test(time timestamptz not null, a int, b int, c int);
 SELECT create_hypertable('guc_test', by_range('time', INTERVAL '1 day'));
  create_hypertable 
 -------------------
- (20,t)
+ (22,t)
 (1 row)
 
 ALTER TABLE guc_test set (timescaledb.compress, timescaledb.compress_segmentby = 'a, b');
@@ -663,7 +701,7 @@ SELECT show_chunks as chunk_to_compress FROM show_chunks('guc_test') LIMIT 1 \gs
 SELECT compress_chunk(:'chunk_to_compress');
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_20_21_chunk
+ _timescaledb_internal._hyper_22_24_chunk
 (1 row)
 
 INSERT INTO guc_test VALUES ('2024-10-30 14:14:00.501519-06'::timestamptz, 1, 1, 2);
@@ -675,9 +713,73 @@ ERROR:  segmentwise recompression functionality disabled, enable it by first set
 \set ON_ERROR_STOP 1
 -- When GUC is OFF, entire chunk should be fully uncompressed and compressed instead
 SELECT compress_chunk(:'chunk_to_compress');
-NOTICE:  segmentwise recompression is disabled, performing full recompression on chunk "_timescaledb_internal._hyper_20_21_chunk"
+NOTICE:  segmentwise recompression is disabled, performing full recompression on chunk "_timescaledb_internal._hyper_22_24_chunk"
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_20_21_chunk
+ _timescaledb_internal._hyper_22_24_chunk
 (1 row)
 
+RESET timescaledb.enable_segmentwise_recompression;
+--- Test behaviour of enable_exclusive_locking_recompression GUC
+CREATE TABLE exclusive_test(time timestamptz not null, a int, b int, c int);
+SELECT create_hypertable('exclusive_test', by_range('time', INTERVAL '1 day'));
+ create_hypertable 
+-------------------
+ (24,t)
+(1 row)
+
+ALTER TABLE guc_test set (timescaledb.compress, timescaledb.compress_segmentby = 'a, b');
+INSERT INTO guc_test VALUES ('2024-10-30 14:04:00.501519-06'::timestamptz, 1, 1, 1);
+SELECT show_chunks as chunk_to_compress FROM show_chunks('guc_test') LIMIT 1 \gset
+SELECT compress_chunk(:'chunk_to_compress');
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_22_24_chunk
+(1 row)
+
+INSERT INTO guc_test VALUES ('2024-10-30 14:14:00.501519-06'::timestamptz, 1, 1, 2);
+-- Default behavior will try to get exclusive lock at the end of operation
+-- in order to change the chunk status. Here it will succeed since there
+-- isn't any concurrent operations.
+RESET timescaledb.enable_exclusive_locking_recompression;
+BEGIN;
+SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress');
+       recompress_chunk_segmentwise       
+------------------------------------------
+ _timescaledb_internal._hyper_22_24_chunk
+(1 row)
+
+SELECT c.relname FROM pg_locks l
+INNER JOIN pg_class c ON c.oid = l.relation
+WHERE locktype = 'relation' AND mode = 'ExclusiveLock'
+ORDER BY 1;
+      relname       
+--------------------
+ _hyper_22_24_chunk
+(1 row)
+
+ROLLBACK;
+-- If we enable this GUC, it should get exclusive locks on 3 relations:
+-- uncompressed chunk table, compressed chunk table, and compressed chunk index.
+-- This is done so that we keep locking consistency to legacy way of locking.
+SET timescaledb.enable_exclusive_locking_recompression TO ON;
+BEGIN;
+SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress');
+       recompress_chunk_segmentwise       
+------------------------------------------
+ _timescaledb_internal._hyper_22_24_chunk
+(1 row)
+
+SELECT c.relname FROM pg_locks l
+INNER JOIN pg_class c ON c.oid = l.relation
+WHERE locktype = 'relation' AND mode = 'ExclusiveLock'
+ORDER BY 1;
+                             relname                             
+-----------------------------------------------------------------
+ _hyper_22_24_chunk
+ compress_hyper_23_26_chunk
+ compress_hyper_23_26_chunk_a_b__ts_meta_min_1__ts_meta_max__idx
+(3 rows)
+
+ROLLBACK;
+RESET timescaledb.enable_exclusive_locking_recompression;

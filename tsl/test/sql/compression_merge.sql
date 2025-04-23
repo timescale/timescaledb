@@ -43,8 +43,31 @@ SELECT t, i, gen_rand_minstd()
 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-03 0:59', '1 minute') t
 CROSS JOIN generate_series(1, 5, 1) i;
 
+-- Setting compression with time DESC to confirm we are don't have to recompress due to DESC order
+-- This is made possible by removal of sequence numbers
+\set VERBOSITY default
+ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby='i', timescaledb.compress_orderby='"Time" DESC', timescaledb.compress_chunk_time_interval='10 hours');
+\set VERBOSITY terse
+
+-- Verify we are not generating unordered chunks
+BEGIN;
+  SELECT count(compress_chunk(chunk,  true)) FROM show_chunks('test2') chunk;
+  SELECT format('%I.%I',ch.schema_name,ch.table_name) AS "CHUNK"
+    FROM _timescaledb_catalog.chunk ch
+    JOIN _timescaledb_catalog.hypertable ht ON ht.id=ch.hypertable_id
+    JOIN _timescaledb_catalog.hypertable ht2 ON ht.id=ht2.compressed_hypertable_id AND ht2.table_name='test2' LIMIT 1 \gset
+
+  -- We want to sure we are not fully recompressing them which will make
+  -- the chunk contain multiple batches per segment group
+  SELECT count(*)
+  FROM :CHUNK
+  WHERE i = 1;
+ROLLBACK;
+
 -- Compression is set to merge those 24 chunks into 3 chunks, two 10 hour chunks and a single 4 hour chunk.
+\set VERBOSITY default
 ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby='i', timescaledb.compress_orderby='loc,"Time"', timescaledb.compress_chunk_time_interval='10 hours');
+\set VERBOSITY terse
 
 -- Verify we are fully recompressing unordered chunks
 BEGIN;
@@ -87,7 +110,9 @@ INSERT INTO test3 SELECT t, 2, gen_rand_minstd(), gen_rand_minstd() FROM generat
 INSERT INTO test3 SELECT t, 3, gen_rand_minstd(), gen_rand_minstd() FROM generate_series('2018-03-02 2:00'::TIMESTAMPTZ, '2018-03-02 2:01', '1 minute') t;
 
 -- Compression is set to merge those 25 chunks into 12 2 hour chunks and a single 1 hour chunks on a different space dimensions.
+\set VERBOSITY default
 ALTER TABLE test3 set (timescaledb.compress, timescaledb.compress_orderby='loc,"Time"', timescaledb.compress_chunk_time_interval='2 hours');
+\set VERBOSITY terse
 
 SELECT
   $$
@@ -108,7 +133,9 @@ DROP TABLE test3;
 CREATE TABLE test4 ("Time" timestamptz, i integer, loc integer, value integer);
 SELECT table_name from create_hypertable('test4', 'Time', chunk_time_interval=> INTERVAL '1 hour');
 -- Setting compress_chunk_time_interval to non-multiple of chunk_time_interval should emit a warning.
+\set VERBOSITY default
 ALTER TABLE test4 set (timescaledb.compress, timescaledb.compress_orderby='loc,"Time"', timescaledb.compress_chunk_time_interval='90 minutes');
+\set VERBOSITY terse
 
 DROP TABLE test4;
 

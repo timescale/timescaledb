@@ -36,6 +36,15 @@
 #define TS_DEBUG_LOG(FMT, ...)
 #endif
 
+#define UnassignedDatum (Datum) 0
+
+static inline int64
+interval_to_usec(Interval *interval)
+{
+	return (interval->month * DAYS_PER_MONTH * USECS_PER_DAY) + (interval->day * USECS_PER_DAY) +
+		   interval->time;
+}
+
 #ifdef TS_DEBUG
 
 static inline const char *
@@ -164,9 +173,7 @@ extern TSDLLEXPORT void *ts_create_struct_from_slot(TupleTableSlot *slot, Memory
 extern TSDLLEXPORT AppendRelInfo *ts_get_appendrelinfo(PlannerInfo *root, Index rti,
 													   bool missing_ok);
 
-#if PG15_GE
 extern TSDLLEXPORT Expr *ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel);
-#endif
 
 extern TSDLLEXPORT bool ts_has_row_security(Oid relid);
 

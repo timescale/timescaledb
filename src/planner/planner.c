@@ -1035,7 +1035,7 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 				 * Ordered Append transformation because the RelOptInfo may
 				 * be used for multiple Paths.
 				 */
-				Expr *em_expr = find_em_expr_for_rel(pk->pk_eclass, rel);
+				Expr *em_expr = ts_find_em_expr_for_rel(pk->pk_eclass, rel);
 
 				/*
 				 * If this is a join the ordering information might not be
@@ -1353,7 +1353,6 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 					ts_cm_functions->set_rel_pathlist_dml(root, rel, rti, rte, ht);
 				break;
 			}
-#if PG15_GE
 			/*
 			 * For MERGE command if there is an UPDATE or DELETE action, then
 			 * do not allow this to succeed on compressed chunks
@@ -1372,9 +1371,21 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 				}
 				break;
 			}
-#endif
 			TS_FALLTHROUGH;
 		default:
+			/*
+			 * Set the indexlist for a hypertable parent to NIL since we
+			 * should not try to do any index scans on hypertable parents,
+			 * similar to how it works for partitioned tables.
+			 *
+			 * This can happen when building a merge join path and computing
+			 * cost for it. See get_actual_variable_range().
+			 *
+			 * This has to be after the hypertable is expanded, since the
+			 * indexlist is used during hypertable expansion.
+			 */
+			if (reltype == TS_REL_HYPERTABLE)
+				rel->indexlist = NIL;
 			apply_optimizations(root, reltype, rel, rte, ht);
 			break;
 	}
@@ -1595,7 +1606,6 @@ replace_hypertable_modify_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 					path = ts_hypertable_modify_path_create(root, mt, ht, input_rel);
 				}
 			}
-#if PG15_GE
 			if (ht && mt->operation == CMD_MERGE)
 			{
 				List *firstMergeActionList = linitial(mt->mergeActionLists);
@@ -1614,7 +1624,6 @@ replace_hypertable_modify_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 					}
 				}
 			}
-#endif
 		}
 
 		new_pathlist = lappend(new_pathlist, path);

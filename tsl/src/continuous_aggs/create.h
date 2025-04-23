@@ -8,7 +8,7 @@
 #include <postgres.h>
 
 #include "ts_catalog/continuous_agg.h"
-#include "with_clause_parser.h"
+#include "with_clause/with_clause_parser.h"
 #include <process_utility.h>
 
 DDLResult tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *pstmt,

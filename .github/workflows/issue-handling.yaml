@@ -13,7 +13,7 @@ jobs:
     # pull requests. To avoid adding pull requests to the bug board,
     # filter out pull requests
     if: ${{ !github.event.issue.pull_request }}
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     steps:
       - name: Add to bugs board
         uses: actions/add-to-project@v0.5.0
@@ -31,7 +31,7 @@ jobs:
 
   notify-sec:
     name: Notify security channel
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     if: >-
       github.event_name == 'issues' &&
       github.event.action != 'closed' &&
@@ -60,7 +60,7 @@ jobs:
 
   close-issue:
     name: Issue is closed
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     if: github.event_name == 'issues' && github.event.action == 'closed' && contains(github.event.issues.issue.labels.*.name, 'bug')
     steps:
       - uses: leonsteinhaeuser/project-beta-automations@v2.0.0
@@ -78,7 +78,7 @@ jobs:
 
   waiting-for-author:
     name: Waiting for Author
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     if: github.event_name == 'issues' && github.event.action == 'labeled'
       && github.event.label.name == 'waiting-for-author'
     steps:
@@ -92,7 +92,7 @@ jobs:
 
   waiting-for-engineering:
     name: Waiting for Engineering
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     if: github.event_name == 'issue_comment' && !github.event.issue.pull_request
     steps:
       - name: Install dependencies

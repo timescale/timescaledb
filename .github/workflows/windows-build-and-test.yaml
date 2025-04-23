@@ -26,7 +26,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       build_type: ${{ steps.build_type.outputs.build_type }}
-      pg14_latest: ${{ steps.config.outputs.pg14_latest }}
       pg15_latest: ${{ steps.config.outputs.pg15_latest }}
       pg16_latest: ${{ steps.config.outputs.pg16_latest }}
       pg17_latest: ${{ steps.config.outputs.pg17_latest }}
@@ -54,16 +53,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ 14, 15, 16, 17 ]
+        pg: [ 15, 16, 17 ]
         os: [ windows-2022 ]
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
-        ignores: ["chunk_adaptive metadata telemetry"]
+        ignores: ["bgw_launcher chunk_adaptive metadata telemetry"]
         tsl_ignores: ["compression_algos"]
-        tsl_skips: ["vector_agg_text vector_agg_groupagg bgw_db_scheduler bgw_db_scheduler_fixed"]
+        tsl_skips:
+          - >-
+            bgw_db_scheduler
+            bgw_db_scheduler_fixed
+            hypercore_vectoragg
+            vector_agg_groupagg
+            vector_agg_grouping
+            vector_agg_text
+            vector_agg_uuid_segmentby
+            vectorized_aggregation
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
         include:
-          - pg: 14
-            pg_version: ${{ needs.config.outputs.pg14_latest }}
           - pg: 15
             pg_version: ${{ needs.config.outputs.pg15_latest }}
           - pg: 16

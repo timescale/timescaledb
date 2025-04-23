@@ -2,6 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+\c :TEST_DBNAME :ROLE_SUPERUSER
+set role :ROLE_1; -- Run test with role_1 because it has CREATEROLE
+                  -- privileges that is needed further down
+
 \ir include/hypercore_helpers.sql
 select setseed(0.3);
 
@@ -252,6 +256,12 @@ select decompress_chunk(rel)
 -- All stats should be removed
 select count(*) as orphaned_stats
 from compressed_rel_size_stats;
+
+-- Compression settings should be removed except for parent
+-- hypertables
+select cs.relid, cl.relname
+from _timescaledb_catalog.compression_settings cs
+left join pg_class cl on (cs.relid = cl.oid);
 
 -- Create hypercores again and check that compression size stats are
 -- updated showing compressed data
@@ -512,3 +522,85 @@ select ch as chunk from show_chunks('test5') ch limit 1 \gset
 alter table test5 set (timescaledb.compress);
 select compress_chunk(:'chunk');
 select * from amrels where relparent = 'test5'::regclass;
+
+-- Check that operations that rewrite the relation are blocked with
+-- invalid setting of transparent decompression GUC
+\set ON_ERROR_STOP 0
+select count(*) from :chunk;
+set timescaledb.enable_transparent_decompression='hypercore';
+select decompress_chunk(:'chunk');
+alter table :chunk set access method heap;
+vacuum full :chunk;
+select count(*) from :chunk;
+\set ON_ERROR_STOP 1
+
+set timescaledb.enable_transparent_decompression=true;
+
+-- Test chunk creation with non-owner user
+CREATE TABLE conditions (	-- create a regular table
+    time        timestamptz not null,
+    location    text not null,
+    temperature double precision null
+);
+
+select create_hypertable('conditions', 'time');	-- turn it into a hypertable
+
+alter table conditions set (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'location,temperature',
+  timescaledb.compress_orderby = 'time'
+);
+
+-------------------------------------------------------------------------------
+-- Set hypercore access method on the hypertable
+-------------------------------------------------------------------------------
+alter table conditions set access method hypercore;
+
+-----------------------
+-- Create a new user
+-----------------------
+create role testuser;
+
+-- Switch to testuser and show that it can't insert into conditions
+set role testuser;
+\set ON_ERROR_STOP 0
+insert into conditions values ('2024-01-02', 'school', 99.5);
+\set ON_ERROR_STOP 1
+
+--
+-- Now grant privileges to work on conditions
+--
+reset role;
+grant select,insert,update,delete on conditions to testuser;
+set role testuser;
+select current_user;
+select * from show_chunks('conditions') ch
+join _timescaledb_catalog.compression_settings cs on (cs.relid = ch);
+
+-- An insert should create a new hypercore chunk, including the compressed chunk
+insert into conditions values ('2024-01-02', 'school', 99.5);
+
+-- Show hypertable owner
+select relname, relowner::regrole
+from pg_class
+where relname = 'conditions';
+
+-- Show that the new chunk has same owner as hypertable, although
+-- testuser did the insert.
+select chunk, am.amname, cs.compress_relid, cl.relowner::regrole as chunk_owner, ccl.relowner::regrole as compress_chunk_owner
+  from show_chunks('conditions') as chunk
+  join _timescaledb_catalog.compression_settings cs on (cs.relid = chunk)
+  join pg_class cl on (cl.oid = chunk)
+  join pg_class ccl on (ccl.oid = cs.compress_relid)
+  join pg_am am on (cl.relam = am.oid);
+
+-- Data is not compressed
+select _timescaledb_debug.is_compressed_tid(ctid), * from conditions;
+select compress_chunk(ch) from show_chunks('conditions') ch;
+-- Now the data is compressed
+select _timescaledb_debug.is_compressed_tid(ctid), * from conditions;
+reset role;
+
+-- Need to revoke privileges to drop user
+revoke all on conditions from testuser;
+drop role testuser;

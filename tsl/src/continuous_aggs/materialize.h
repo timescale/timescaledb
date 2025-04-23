@@ -33,6 +33,8 @@ typedef struct InternalTimeRange
 	Oid type;
 	int64 start; /* inclusive */
 	int64 end;	 /* exclusive */
+	bool start_isnull;
+	bool end_isnull;
 } InternalTimeRange;
 
 void continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *cagg,

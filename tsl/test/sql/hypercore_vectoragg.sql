@@ -110,16 +110,12 @@ select location, count(*) from aggdata where location=1 group by location;
 --
 -- Test ordering/grouping on segmentby, orderby columns
 --
--- This grouping is currently NOT supported by VectorAgg
---
 set timescaledb.enable_vectorized_aggregation=true;
 explain (verbose, costs off)
 select time, device, sum(temp) from aggdata where device is not null group by time, device order by time, device limit 10;
-set timescaledb.debug_require_vector_agg to 'forbid';
 select time, device, sum(temp) from aggdata where device is not null group by time, device order by time, device limit 10;
 
 set timecaledb.enable_vectorized_aggregation=false;
-reset timescaledb.debug_require_vector_agg;
 explain (verbose, costs off)
 select time, device, sum(temp) from aggdata where device is not null group by time, device order by time, device limit 10;
 select time, device, sum(temp) from aggdata where device is not null group by time, device order by time, device limit 10;
@@ -127,11 +123,9 @@ select time, device, sum(temp) from aggdata where device is not null group by ti
 set timescaledb.enable_vectorized_aggregation=true;
 explain (verbose, costs off)
 select time, device, sum(temp) filter (where device is not null) from aggdata group by time, device order by time, device desc limit 10;
-set timescaledb.debug_require_vector_agg to 'forbid';
 select time, device, sum(temp) filter (where device is not null) from aggdata group by time, device order by time, device desc limit 10;
 
 set timescaledb.enable_vectorized_aggregation=false;
-reset timescaledb.debug_require_vector_agg;
 explain (verbose, costs off)
 select time, device, sum(temp) filter (where device is not null) from aggdata group by time, device order by time, device desc limit 10;
 select time, device, sum(temp) filter (where device is not null) from aggdata group by time, device order by time, device desc limit 10;

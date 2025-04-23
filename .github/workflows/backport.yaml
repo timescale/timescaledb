@@ -18,28 +18,32 @@ on:
 # The workflow needs the permission to push branches
 permissions:
   contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+  statuses: write
 
 jobs:
   backport:
     name: Backport Bug Fixes
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
 
     steps:
-      - name: Install Linux Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install pip
-
       - name: Install Python Dependencies
         run: |
           pip install PyGithub requests
 
       - name: Checkout TimescaleDB
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
 
       - name: Run the Backport Script
         env:
-          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          ORG_AUTOMATION_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           git remote --verbose
-          scripts/backport.py
+
+          scripts/backport.py 2>&1
+
+          git remote --verbose

@@ -194,6 +194,7 @@ typedef enum CompressionAlgorithm
 	COMPRESSION_ALGORITHM_GORILLA,
 	COMPRESSION_ALGORITHM_DELTADELTA,
 	COMPRESSION_ALGORITHM_BOOL,
+	COMPRESSION_ALGORITHM_NULL,
 
 	/* When adding an algorithm also add a static assert statement below */
 	/* end of real values */
@@ -317,13 +318,14 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 	StaticAssertStmt(COMPRESSION_ALGORITHM_GORILLA == 3, "algorithm index has changed");
 	StaticAssertStmt(COMPRESSION_ALGORITHM_DELTADELTA == 4, "algorithm index has changed");
 	StaticAssertStmt(COMPRESSION_ALGORITHM_BOOL == 5, "algorithm index has changed");
+	StaticAssertStmt(COMPRESSION_ALGORITHM_NULL == 6, "algorithm index has changed");
 
 	/*
 	 * This should change when adding a new algorithm after adding the new
 	 * algorithm to the assert list above. This statement prevents adding a
 	 * new algorithm without updating the asserts above
 	 */
-	StaticAssertStmt(_END_COMPRESSION_ALGORITHMS == 6,
+	StaticAssertStmt(_END_COMPRESSION_ALGORITHMS == 7,
 					 "number of algorithms have changed, the asserts should be updated");
 }
 
@@ -358,13 +360,13 @@ extern void compress_row_destroy(CompressSingleRowState *cr);
 extern int row_decompressor_decompress_row_to_table(RowDecompressor *row_decompressor);
 extern void row_decompressor_decompress_row_to_tuplesort(RowDecompressor *row_decompressor,
 														 Tuplesortstate *tuplesortstate);
-extern void compress_chunk_populate_sort_info_for_column(CompressionSettings *settings, Oid table,
-														 const char *attname, AttrNumber *att_nums,
-														 Oid *sort_operator, Oid *collation,
-														 bool *nulls_first);
+extern void compress_chunk_populate_sort_info_for_column(const CompressionSettings *settings,
+														 Oid table, const char *attname,
+														 AttrNumber *att_nums, Oid *sort_operator,
+														 Oid *collation, bool *nulls_first);
 extern Tuplesortstate *compression_create_tuplesort_state(CompressionSettings *settings,
 														  Relation rel);
-extern void row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor,
+extern void row_compressor_init(const CompressionSettings *settings, RowCompressor *row_compressor,
 								Relation uncompressed_table, Relation compressed_table,
 								int16 num_columns_in_compressed_table, bool need_bistate,
 								int insert_options);
@@ -373,7 +375,8 @@ extern void row_compressor_close(RowCompressor *row_compressor);
 extern void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
 											  Tuplesortstate *sorted_rel, TupleDesc sorted_desc,
 											  Relation in_rel);
-extern Oid get_compressed_chunk_index(ResultRelInfo *resultRelInfo, CompressionSettings *settings);
+extern Oid get_compressed_chunk_index(ResultRelInfo *resultRelInfo,
+									  const CompressionSettings *settings);
 
 extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_null);
 
@@ -383,6 +386,8 @@ extern void row_decompressor_reset(RowDecompressor *decompressor);
 extern void row_decompressor_close(RowDecompressor *decompressor);
 extern enum CompressionAlgorithms compress_get_default_algorithm(Oid typeoid);
 extern int decompress_batch(RowDecompressor *decompressor);
+extern bool decompress_batch_next_row(RowDecompressor *decompressor, AttrNumber *attnos,
+									  int num_attnos);
 /*
  * A convenience macro to throw an error about the corrupted compressed data, if
  * the argument is false. When fuzzing is enabled, we don't show the message not

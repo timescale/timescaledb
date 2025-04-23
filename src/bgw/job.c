@@ -56,6 +56,25 @@
 static scheduler_test_hook_type scheduler_test_hook = NULL;
 static char *job_entrypoint_function_name = "ts_bgw_job_entrypoint";
 
+/*
+ * Get the mem_guard callbacks.
+ *
+ * You might get a NULL pointer back if there are no mem_guard installed, so
+ * check before using.
+ */
+MGCallbacks *
+ts_get_mem_guard_callbacks(void)
+{
+	static MGCallbacks **mem_guard_callback_ptr = NULL;
+
+	if (mem_guard_callback_ptr)
+		return *mem_guard_callback_ptr;
+
+	mem_guard_callback_ptr = (MGCallbacks **) find_rendezvous_variable(MG_CALLBACKS_VAR_NAME);
+
+	return *mem_guard_callback_ptr;
+}
+
 typedef enum JobLockLifetime
 {
 	SESSION_LOCK = 0,
@@ -1141,6 +1160,16 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	pqsignal(SIGTERM, die);
 	BackgroundWorkerUnblockSignals();
 
+	/*
+	 * Set up mem_guard before starting to allocate (any significant amounts
+	 * of) memory but after we have unblocked signals since we have no control
+	 * over how the callback behaves.
+	 */
+	MGCallbacks *callbacks = ts_get_mem_guard_callbacks();
+	if (callbacks && callbacks->version_num == MG_CALLBACKS_VERSION &&
+		callbacks->toggle_allocation_blocking && !callbacks->enabled)
+		callbacks->toggle_allocation_blocking(/*enable=*/true);
+
 	BackgroundWorkerInitializeConnectionByOid(db_oid, params.user_oid, 0);
 
 	log_min_messages = ts_guc_bgw_log_level;
@@ -1222,6 +1251,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		MemoryContextSwitchTo(oldcontext);
 		job_failed = true;
 		edata = CopyErrorData();
+		FlushErrorState();
 
 		/*
 		 * Note that the mark_start happens in the scheduler right before the
@@ -1257,7 +1287,6 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		elog(LOG, "job %d threw an error", params.job_id);
 
 		CommitTransactionCommand();
-		FlushErrorState();
 		ReThrowError(edata);
 	}
 	PG_END_TRY();

@@ -3,6 +3,21 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+-- We have support for a dedicated type whos only purpose is to
+-- generate error. You pass in the error code you want and it will be
+-- raised from inside the input function.
+CREATE TYPE sqlstate_raise;
+CREATE FUNCTION ts_sqlstate_raise_in(cstring)
+    RETURNS sqlstate_raise
+    AS :MODULE_PATHNAME LANGUAGE C STABLE STRICT;
+CREATE FUNCTION ts_sqlstate_raise_out(sqlstate_raise)
+    RETURNS cstring
+    AS :MODULE_PATHNAME LANGUAGE C STABLE STRICT;
+CREATE TYPE sqlstate_raise (
+    input = ts_sqlstate_raise_in,
+    output = ts_sqlstate_raise_out
+);
+
 CREATE OR REPLACE FUNCTION test_with_clause_filter(with_clauses TEXT[][])
     RETURNS TABLE(namespace TEXT, name TEXT, value TEXT, filtered BOOLEAN)
     AS :MODULE_PATHNAME, 'ts_test_with_clause_filter' LANGUAGE C VOLATILE STRICT;
@@ -18,7 +33,9 @@ SELECT * FROM test_with_clause_filter(
             {"baz", "bar", "foo"},
             {"timescaledb", "bar", "baz"},
             {"bar", "timescaledb", "baz"},
-            {"timescaledb", "baz", "bar"}
+            {"timescaledb", "baz", "bar"},
+            {"tsdb", "qux", "bar"},
+            {"tsdb", "quux", "bar"}
         }');
 
 SELECT * FROM test_with_clause_filter(
@@ -94,6 +111,14 @@ SELECT * FROM test_with_clause_parse('{{"timescaledb", "regclass", "bar"}}');
 SELECT * FROM test_with_clause_parse('{{"timescaledb", "regclass"}}');
 \set ON_ERROR_STOP 1
 
+-- Test errors generated from inside the input function
+\set ON_ERROR_STOP 0
+-- Out of memory, "hard" error.
+SELECT * FROM test_with_clause_parse('{{"timescaledb", "sqlstate_raise", "53200"}}');
+-- Division by zero, "soft" error. Shows invalid value message (with a
+-- strange message in this case).
+SELECT * FROM test_with_clause_parse('{{"timescaledb", "sqlstate_raise", "22012"}}');
+\set ON_ERROR_STOP 1
 
 -- defaults get overridden
 SELECT * FROM test_with_clause_parse('{{"timescaledb", "default", "1"}}');
@@ -118,3 +143,6 @@ SELECT * FROM test_with_clause_parse('{
     {"c", "name", "bar"},
     {"d", "regclass", "pg_type"}
 }');
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP TYPE sqlstate_raise CASCADE;

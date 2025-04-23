@@ -330,16 +330,15 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 		compressed_chunk_interval + current_chunk_interval > max_chunk_interval)
 		return NULL;
 
-	/* Get reloid of the previous compressed chunk */
-	Oid prev_comp_reloid = ts_chunk_get_relid(previous_chunk->fd.compressed_chunk_id, false);
-	CompressionSettings *prev_comp_settings = ts_compression_settings_get(prev_comp_reloid);
+	/* Get reloid of the previous compressed chunk via settings */
+	CompressionSettings *prev_comp_settings = ts_compression_settings_get(previous_chunk->table_id);
 	CompressionSettings *ht_comp_settings = ts_compression_settings_get(ht->main_table_relid);
 	if (!ts_compression_settings_equal(ht_comp_settings, prev_comp_settings))
 		return NULL;
 
 	/* We don't support merging chunks with sequence numbers */
-	if (get_attnum(prev_comp_reloid, COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME) !=
-		InvalidAttrNumber)
+	if (get_attnum(prev_comp_settings->fd.compress_relid,
+				   COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME) != InvalidAttrNumber)
 		return NULL;
 
 	return previous_chunk;
@@ -351,6 +350,9 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
  * after the existing data according to the compression order. This is true if the data being merged
  * in has timestamps greater than the existing data and the first column in the order by is time
  * ASC.
+ *
+ * The CompressChunkCxt references the chunk we are merging and mergable_chunk is the chunk we
+ * are merging into.
  */
 static bool
 check_is_chunk_order_violated_by_merge(CompressChunkCxt *cxt, const Dimension *time_dim,
@@ -364,13 +366,12 @@ check_is_chunk_order_violated_by_merge(CompressChunkCxt *cxt, const Dimension *t
 		ts_hypercube_get_slice_by_dimension_id(cxt->srcht_chunk->cube, time_dim->fd.id);
 	if (!compressed_slice)
 		elog(ERROR, "compressed chunk has no time dimension slice");
-
-	if (mergable_slice->fd.range_start > compressed_slice->fd.range_start &&
-		mergable_slice->fd.range_end > compressed_slice->fd.range_start)
-	{
-		return true;
-	}
-
+	/*
+	 * Ensure the compressed chunk is AFTER the chunk that
+	 * it is being merged into. This is already guaranteed by previous checks.
+	 */
+	Ensure(mergable_slice->fd.range_end == compressed_slice->fd.range_start,
+		   "chunk being merged is not after the chunk that is being merged into");
 	CompressionSettings *ht_settings =
 		ts_compression_settings_get(mergable_chunk->hypertable_relid);
 
@@ -379,14 +380,6 @@ check_is_chunk_order_violated_by_merge(CompressChunkCxt *cxt, const Dimension *t
 
 	/* Primary dimension column should be first compress_orderby column. */
 	if (index != 1)
-		return true;
-
-	/*
-	 * Sort order must not be DESC for merge. We don't need to check
-	 * NULLS FIRST/LAST here because partitioning columns have NOT NULL
-	 * constraint.
-	 */
-	if (ts_array_get_element_bool(ht_settings->fd.orderby_desc, index))
 		return true;
 
 	return false;
@@ -665,7 +658,7 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	/* Delete the compressed chunk */
 	ts_compression_chunk_size_delete(uncompressed_chunk->fd.id);
 	ts_chunk_clear_compressed_chunk(uncompressed_chunk);
-	ts_compression_settings_delete(compressed_chunk->table_id);
+	ts_compression_settings_delete(uncompressed_chunk->table_id);
 
 	/*
 	 * Lock the compressed chunk that is going to be deleted. At this point,
@@ -768,7 +761,6 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 static Oid
 set_access_method(Oid relid, const char *amname)
 {
-#if PG15_GE
 	AlterTableCmd cmd = {
 		.type = T_AlterTableCmd,
 		.subtype = AT_SetAccessMethod,
@@ -813,11 +805,6 @@ set_access_method(Oid relid, const char *amname)
 #endif
 	hypercore_alter_access_method_finish(relid, !to_hypercore);
 
-#else
-	ereport(ERROR,
-			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("compression using hypercore is not supported")));
-#endif
 	return relid;
 }
 
@@ -941,14 +928,14 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 
 	if (ts_chunk_is_compressed(chunk))
 	{
+		CompressionSettings *chunk_settings = ts_compression_settings_get(chunk->table_id);
+		bool valid_orderby_settings = chunk_settings && chunk_settings->fd.orderby;
 		if (recompress)
 		{
 			CompressionSettings *ht_settings = ts_compression_settings_get(chunk->hypertable_relid);
-			Oid compressed_chunk_relid = ts_chunk_get_relid(chunk->fd.compressed_chunk_id, true);
-			CompressionSettings *chunk_settings =
-				ts_compression_settings_get(compressed_chunk_relid);
 
-			if (!ts_compression_settings_equal(ht_settings, chunk_settings))
+			if (!valid_orderby_settings ||
+				!ts_compression_settings_equal(ht_settings, chunk_settings))
 			{
 				decompress_chunk_impl(chunk, false);
 				compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
@@ -965,17 +952,21 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 			return uncompressed_chunk_id;
 		}
 
-		if (ts_guc_enable_segmentwise_recompression && ts_chunk_is_partial(chunk) &&
-			get_compressed_chunk_index_for_recompression(chunk))
+		if (ts_guc_enable_segmentwise_recompression && valid_orderby_settings &&
+			ts_chunk_is_partial(chunk) && get_compressed_chunk_index_for_recompression(chunk))
 		{
 			uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk);
 		}
 		else
 		{
-			if (!ts_guc_enable_segmentwise_recompression)
+			if (!ts_guc_enable_segmentwise_recompression || !valid_orderby_settings)
 				elog(NOTICE,
-					 "segmentwise recompression is disabled, performing full recompression on "
+					 "segmentwise recompression is disabled%s, performing full "
+					 "recompression on "
 					 "chunk \"%s.%s\"",
+					 (ts_guc_enable_segmentwise_recompression && !valid_orderby_settings ?
+						  " due to no order by" :
+						  ""),
 					 NameStr(chunk->fd.schema_name),
 					 NameStr(chunk->fd.table_name));
 			decompress_chunk_impl(chunk, false);
@@ -1060,11 +1051,10 @@ static Oid
 get_compressed_chunk_index_for_recompression(Chunk *uncompressed_chunk)
 {
 	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
+	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, AccessShareLock);
+	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, AccessShareLock);
 
-	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, ShareLock);
-	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, ShareLock);
-
-	CompressionSettings *settings = ts_compression_settings_get(compressed_chunk->table_id);
+	CompressionSettings *settings = ts_compression_settings_get(uncompressed_chunk->table_id);
 
 	CatalogIndexState indstate = CatalogOpenIndexes(compressed_chunk_rel);
 	Oid index_oid = get_compressed_chunk_index(indstate, settings);

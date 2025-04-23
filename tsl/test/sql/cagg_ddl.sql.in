@@ -1347,3 +1347,74 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('cagg1') ch;
 DROP MATERIALIZED VIEW cagg1;
 SELECT * FROM _timescaledb_catalog.compression_settings;
 
+-- test WITH namespace alias
+CREATE TABLE with_alias(time timestamptz not null);
+CREATE MATERIALIZED VIEW cagg_alias
+WITH (tsdb.continuous, tsdb.materialized_only=false) AS
+SELECT time_bucket(INTERVAL '1 day', time) FROM conditions GROUP BY 1 WITH NO DATA;
+
+ALTER MATERIALIZED VIEW cagg_alias SET (timescaledb.materialized_only=false);
+ALTER MATERIALIZED VIEW cagg_alias SET (tsdb.materialized_only=false);
+
+DROP MATERIALIZED VIEW cagg_alias;
+
+-- test SET chunk_time_interval
+CREATE MATERIALIZED VIEW cagg_set
+WITH (tsdb.continuous, tsdb.chunk_time_interval='1day') AS
+SELECT time_bucket(INTERVAL '1 day', time) AS cagg_interval_setter FROM conditions GROUP BY 1 WITH NO DATA;
+
+SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE column_name='cagg_interval_setter';
+
+ALTER MATERIALIZED VIEW cagg_set SET (tsdb.chunk_time_interval='23 day');
+SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE column_name='cagg_interval_setter';
+
+ALTER MATERIALIZED VIEW cagg_set SET (tsdb.chunk_time_interval='6 month');
+SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE column_name='cagg_interval_setter';
+
+ALTER MATERIALIZED VIEW cagg_set SET (tsdb.chunk_time_interval='1 year');
+SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE column_name='cagg_interval_setter';
+
+-- test cagg with stable functions
+CREATE MATERIALIZED VIEW cagg_stable WITH (tsdb.continuous) AS
+SELECT sum(temperature), max(time + INTERVAL '1h')
+FROM conditions
+GROUP BY time_bucket('1week', time), location;
+
+SELECT * FROM cagg_stable t ORDER BY t;
+
+--aggregate without combine function but stable function
+CREATE MATERIALIZED VIEW cagg_json_agg WITH (tsdb.continuous, tsdb.materialized_only=false)
+AS SELECT json_agg(location) from conditions group by time_bucket('1week', time), location WITH NO DATA;
+
+CREATE FUNCTION test_stablefunc(int) RETURNS int LANGUAGE 'sql' STABLE AS 'SELECT $1 + 10';
+
+CREATE MATERIALIZED VIEW cagg_stable2 WITH (tsdb.continuous) AS
+SELECT sum(test_stablefunc(temperature::int)), min(location)
+FROM conditions
+GROUP BY time_bucket('1week', time) WITH NO DATA;
+
+CREATE MATERIALIZED VIEW cagg_stable3 WITH (tsdb.continuous) AS
+SELECT sum(temperature), min(location)
+FROM conditions
+GROUP BY time_bucket('1week', time), test_stablefunc(temperature::int) WITH NO DATA;
+
+-- test window functions in caggs
+-- first do sanity check that we error without the GUC
+\set ON_ERROR_STOP 0
+CREATE MATERIALIZED VIEW cagg_window WITH (tsdb.continuous)
+AS SELECT time_bucket('1week', time), rank() OVER (PARTITION BY time_bucket('1 week',time)) FROM conditions GROUP BY 1;
+\set ON_ERROR_STOP 1
+
+SET timescaledb.enable_cagg_window_functions TO on;
+CREATE MATERIALIZED VIEW cagg_window_1 WITH (tsdb.continuous)
+AS SELECT time_bucket('1week', time), rank() OVER (PARTITION BY time_bucket('1 week',time)) FROM conditions GROUP BY 1;
+
+CREATE MATERIALIZED VIEW cagg_window_2 WITH (tsdb.continuous)
+AS SELECT time_bucket('1week', time), rank() OVER (PARTITION BY time_bucket('1 week',time), location) FROM conditions GROUP BY 1, location;
+
+CREATE MATERIALIZED VIEW cagg_window_3 WITH (tsdb.continuous)
+AS SELECT time_bucket('1week', time), rank() OVER (PARTITION BY time_bucket('1 week',time)) FROM conditions GROUP BY 1, location;
+
+CREATE MATERIALIZED VIEW cagg_window_4 WITH (tsdb.continuous)
+AS SELECT time_bucket('1week', time), rank() OVER w FROM conditions GROUP BY 1, location WINDOW w AS (PARTITION BY time_bucket('1 week',time));
+
