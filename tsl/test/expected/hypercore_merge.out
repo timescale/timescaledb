@@ -168,7 +168,7 @@ select explain_analyze_anonymize(format($$
 $$, :'hypertable'));
                                                    explain_analyze_anonymize                                                   
 -------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableModify) (actual rows=N loops=N)
+ Custom Scan (ModifyHypertable) (actual rows=N loops=N)
    ->  Merge on readings ht (actual rows=N loops=N)
          Merge on readings ht_1
          Merge on _hyper_I_N_chunk ht_2
@@ -255,7 +255,7 @@ select explain_analyze_anonymize(format($$
 $$, :'hypertable'));
                                                    explain_analyze_anonymize                                                   
 -------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableModify) (actual rows=N loops=N)
+ Custom Scan (ModifyHypertable) (actual rows=N loops=N)
    ->  Merge on readings ht (actual rows=N loops=N)
          Merge on readings ht_1
          Merge on _hyper_I_N_chunk ht_2

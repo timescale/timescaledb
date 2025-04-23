@@ -92,9 +92,9 @@ get_chunk_dispatch_state(PlanState *substate)
  * the ModifyTableState node whenever it inserts into a new chunk.
  */
 static void
-hypertable_modify_begin(CustomScanState *node, EState *estate, int eflags)
+modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 {
-	HypertableModifyState *state = (HypertableModifyState *) node;
+	ModifyHypertableState *state = (ModifyHypertableState *) node;
 	ModifyTableState *mtstate;
 	PlanState *ps;
 
@@ -116,7 +116,7 @@ hypertable_modify_begin(CustomScanState *node, EState *estate, int eflags)
 	 * Unfortunately that strips off the HypertableInsert node leading to
 	 * tuple routing not working in INSERTs inside CTEs. To make INSERTs
 	 * inside CTEs work we have to fix es_auxmodifytables and add back the
-	 * HypertableModifyState.
+	 * ModifyHypertableState.
 	 */
 	if (estate->es_auxmodifytables && linitial(estate->es_auxmodifytables) == mtstate)
 		linitial(estate->es_auxmodifytables) = node;
@@ -140,28 +140,28 @@ hypertable_modify_begin(CustomScanState *node, EState *estate, int eflags)
 }
 
 static TupleTableSlot *
-hypertable_modify_exec(CustomScanState *node)
+modify_hypertable_exec(CustomScanState *node)
 {
 	ModifyTableState *mtstate = linitial_node(ModifyTableState, node->custom_ps);
 	return ExecModifyTable(node, &mtstate->ps);
 }
 
 static void
-hypertable_modify_end(CustomScanState *node)
+modify_hypertable_end(CustomScanState *node)
 {
 	ExecEndNode(linitial(node->custom_ps));
 }
 
 static void
-hypertable_modify_rescan(CustomScanState *node)
+modify_hypertable_rescan(CustomScanState *node)
 {
 	ExecReScan(linitial(node->custom_ps));
 }
 
 static void
-hypertable_modify_explain(CustomScanState *node, List *ancestors, ExplainState *es)
+modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
-	HypertableModifyState *state = (HypertableModifyState *) node;
+	ModifyHypertableState *state = (ModifyHypertableState *) node;
 	ModifyTableState *mtstate = linitial_node(ModifyTableState, node->custom_ps);
 
 	/*
@@ -183,13 +183,13 @@ hypertable_modify_explain(CustomScanState *node, List *ancestors, ExplainState *
 	}
 	/*
 	 * Since we hijack the ModifyTable node, instrumentation on ModifyTable will
-	 * be missing so we set it to instrumentation of HypertableModify node.
+	 * be missing so we set it to instrumentation of ModifyHypertable node.
 	 */
 	if (mtstate->ps.instrument)
 	{
 		/*
 		 * INSERT .. ON CONFLICT statements record few metrics in the ModifyTable node.
-		 * So, copy them into HypertableModify node before replacing them.
+		 * So, copy them into ModifyHypertable node before replacing them.
 		 */
 		node->ss.ps.instrument->ntuples2 = mtstate->ps.instrument->ntuples2;
 		node->ss.ps.instrument->nfiltered1 = mtstate->ps.instrument->nfiltered1;
@@ -220,32 +220,32 @@ hypertable_modify_explain(CustomScanState *node, List *ancestors, ExplainState *
 		ExplainPropertyInteger("Batches deleted", NULL, state->batches_deleted, es);
 }
 
-static CustomExecMethods hypertable_modify_state_methods = {
-	.CustomName = "HypertableModifyState",
-	.BeginCustomScan = hypertable_modify_begin,
-	.EndCustomScan = hypertable_modify_end,
-	.ExecCustomScan = hypertable_modify_exec,
-	.ReScanCustomScan = hypertable_modify_rescan,
-	.ExplainCustomScan = hypertable_modify_explain,
+static CustomExecMethods modify_hypertable_state_methods = {
+	.CustomName = "ModifyHypertableState",
+	.BeginCustomScan = modify_hypertable_begin,
+	.EndCustomScan = modify_hypertable_end,
+	.ExecCustomScan = modify_hypertable_exec,
+	.ReScanCustomScan = modify_hypertable_rescan,
+	.ExplainCustomScan = modify_hypertable_explain,
 };
 
 static Node *
-hypertable_modify_state_create(CustomScan *cscan)
+modify_hypertable_state_create(CustomScan *cscan)
 {
-	HypertableModifyState *state;
+	ModifyHypertableState *state;
 	ModifyTable *mt = castNode(ModifyTable, linitial(cscan->custom_plans));
 
-	state = (HypertableModifyState *) newNode(sizeof(HypertableModifyState), T_CustomScanState);
-	state->cscan_state.methods = &hypertable_modify_state_methods;
+	state = (ModifyHypertableState *) newNode(sizeof(ModifyHypertableState), T_CustomScanState);
+	state->cscan_state.methods = &modify_hypertable_state_methods;
 	state->mt = mt;
 	state->mt->arbiterIndexes = linitial(cscan->custom_private);
 
 	return (Node *) state;
 }
 
-static CustomScanMethods hypertable_modify_plan_methods = {
-	.CustomName = "HypertableModify",
-	.CreateCustomScanState = hypertable_modify_state_create,
+static CustomScanMethods modify_hypertable_plan_methods = {
+	.CustomName = "ModifyHypertable",
+	.CreateCustomScanState = modify_hypertable_state_create,
 };
 
 /*
@@ -290,13 +290,13 @@ make_var_targetlist(const List *tlist)
  * set_plan_references().
  */
 void
-ts_hypertable_modify_fixup_tlist(Plan *plan)
+ts_modify_hypertable_fixup_tlist(Plan *plan)
 {
 	if (IsA(plan, CustomScan))
 	{
 		CustomScan *cscan = (CustomScan *) plan;
 
-		if (cscan->methods == &hypertable_modify_plan_methods)
+		if (cscan->methods == &modify_hypertable_plan_methods)
 		{
 			ModifyTable *mt = linitial_node(ModifyTable, cscan->custom_plans);
 
@@ -344,13 +344,13 @@ ts_replace_rowid_vars(PlannerInfo *root, List *tlist, int varno)
 }
 
 static Plan *
-hypertable_modify_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_path,
+modify_hypertable_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_path,
 							  List *tlist, List *clauses, List *custom_plans)
 {
 	CustomScan *cscan = makeNode(CustomScan);
 	ModifyTable *mt = linitial_node(ModifyTable, custom_plans);
 
-	cscan->methods = &hypertable_modify_plan_methods;
+	cscan->methods = &modify_hypertable_plan_methods;
 	cscan->custom_plans = custom_plans;
 	cscan->scan.scanrelid = 0;
 
@@ -427,19 +427,19 @@ hypertable_modify_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 	return &cscan->scan.plan;
 }
 
-static CustomPathMethods hypertable_modify_path_methods = {
-	.CustomName = "HypertableModifyPath",
-	.PlanCustomPath = hypertable_modify_plan_create,
+static CustomPathMethods modify_hypertable_path_methods = {
+	.CustomName = "ModifyHypertablePath",
+	.PlanCustomPath = modify_hypertable_plan_create,
 };
 
 Path *
-ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hypertable *ht,
+ts_modify_hypertable_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hypertable *ht,
 								 RelOptInfo *rel)
 {
 	Path *path = &mtpath->path;
 	Path *subpath = NULL;
 	Cache *hcache = ts_hypertable_cache_pin();
-	HypertableModifyPath *hmpath;
+	ModifyHypertablePath *hmpath;
 	int i = 0;
 
 	/* PG14 only copies child rows and width if returningLists is not
@@ -459,14 +459,14 @@ ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hyp
 		subpath = ts_chunk_dispatch_path_create(root, mtpath, rti, i);
 	}
 
-	hmpath = palloc0(sizeof(HypertableModifyPath));
+	hmpath = palloc0(sizeof(ModifyHypertablePath));
 
 	/* Copy costs, etc. */
 	memcpy(&hmpath->cpath.path, path, sizeof(Path));
 	hmpath->cpath.path.type = T_CustomPath;
 	hmpath->cpath.path.pathtype = T_CustomScan;
 	hmpath->cpath.custom_paths = list_make1(mtpath);
-	hmpath->cpath.methods = &hypertable_modify_path_methods;
+	hmpath->cpath.methods = &modify_hypertable_path_methods;
 	path = &hmpath->cpath.path;
 	if (subpath)
 		mtpath->subpath = subpath;
@@ -474,22 +474,6 @@ ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hyp
 	ts_cache_release(hcache);
 
 	return path;
-}
-
-/*
- * Callback for ModifyTableState->GetUpdateNewTuple for use by regular UPDATE.
- */
-static TupleTableSlot *
-internalGetUpdateNewTuple(ResultRelInfo *relinfo, TupleTableSlot *planSlot, TupleTableSlot *oldSlot,
-						  MergeActionState *relaction)
-{
-	ProjectionInfo *newProj = relinfo->ri_projectNew;
-	ExprContext *econtext;
-
-	econtext = newProj->pi_exprContext;
-	econtext->ecxt_outertuple = planSlot;
-	econtext->ecxt_scantuple = oldSlot;
-	return ExecProject(newProj);
 }
 
 /* ----------------------------------------------------------------
@@ -504,7 +488,7 @@ internalGetUpdateNewTuple(ResultRelInfo *relinfo, TupleTableSlot *planSlot, Tupl
 static TupleTableSlot *
 ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 {
-	HypertableModifyState *ht_state = (HypertableModifyState *) cs_node;
+	ModifyHypertableState *ht_state = (ModifyHypertableState *) cs_node;
 	ModifyTableState *node = castNode(ModifyTableState, pstate);
 	ModifyTableContext context;
 	EState *estate = node->ps.state;
@@ -893,8 +877,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 					if (!table_tuple_fetch_row_version(relation, tupleid, SnapshotAny, oldSlot))
 						elog(ERROR, "failed to fetch tuple being updated");
 				}
-				slot = internalGetUpdateNewTuple(resultRelInfo, context.planSlot, oldSlot, NULL);
-				context.GetUpdateNewTuple = internalGetUpdateNewTuple;
+				slot = ExecGetUpdateNewTuple(resultRelInfo, context.planSlot, oldSlot);
 				context.relaction = NULL;
 				/* Now apply the update. */
 				slot =
@@ -1318,26 +1301,6 @@ ExecGetInsertNewTuple(ResultRelInfo *relinfo, TupleTableSlot *planSlot)
 	econtext = newProj->pi_exprContext;
 	econtext->ecxt_outertuple = planSlot;
 	return ExecProject(newProj);
-}
-
-/*
- * ExecGetUpdateNewTuple
- *		This prepares a "new" tuple by combining an UPDATE subplan's output
- *		tuple (which contains values of changed columns) with unchanged
- *		columns taken from the old tuple.
- *
- * The subplan tuple might also contain junk columns, which are ignored.
- * Note that the projection also ensures we have a slot of the right type.
- */
-TupleTableSlot *
-ExecGetUpdateNewTuple(ResultRelInfo *relinfo, TupleTableSlot *planSlot, TupleTableSlot *oldSlot)
-{
-	/* Use a few extra Asserts to protect against outside callers */
-	Assert(relinfo->ri_projectNewInfoValid);
-	Assert(planSlot != NULL && !TTS_EMPTY(planSlot));
-	Assert(oldSlot != NULL && !TTS_EMPTY(oldSlot));
-
-	return internalGetUpdateNewTuple(relinfo, planSlot, oldSlot, NULL);
 }
 
 /* ----------------------------------------------------------------
