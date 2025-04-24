@@ -18,7 +18,9 @@ SELECT * FROM test_with_clause_filter(
             {"baz", "bar", "foo"},
             {"timescaledb", "bar", "baz"},
             {"bar", "timescaledb", "baz"},
-            {"timescaledb", "baz", "bar"}
+            {"timescaledb", "baz", "bar"},
+            {"tsdb", "qux", "bar"},
+            {"tsdb", "quux", "bar"}
         }');
 
 SELECT * FROM test_with_clause_filter(

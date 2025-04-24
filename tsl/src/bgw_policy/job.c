@@ -389,12 +389,48 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 						PGC_S_SESSION);
 	}
 
-	continuous_agg_refresh_internal(policy_data.cagg,
-									&policy_data.refresh_window,
-									CAGG_REFRESH_POLICY,
-									policy_data.start_is_null,
-									policy_data.end_is_null,
-									false);
+	CaggRefreshContext context = { .callctx = CAGG_REFRESH_POLICY };
+
+	/* Try to split window range into a list of ranges */
+	List *refresh_window_list = continuous_agg_split_refresh_window(policy_data.cagg,
+																	&policy_data.refresh_window,
+																	policy_data.buckets_per_batch);
+	if (refresh_window_list == NIL)
+		refresh_window_list = lappend(refresh_window_list, &policy_data.refresh_window);
+	else
+		context.callctx = CAGG_REFRESH_POLICY_BATCHED;
+
+	context.number_of_batches = list_length(refresh_window_list);
+
+	ListCell *lc;
+	int32 processing_batch = 0;
+	foreach (lc, refresh_window_list)
+	{
+		InternalTimeRange *refresh_window = (InternalTimeRange *) lfirst(lc);
+		elog(DEBUG1,
+			 "refreshing continuous aggregate \"%s\" from %s to %s",
+			 NameStr(policy_data.cagg->data.user_view_name),
+			 ts_internal_to_time_string(refresh_window->start, refresh_window->type),
+			 ts_internal_to_time_string(refresh_window->end, refresh_window->type));
+
+		context.processing_batch = ++processing_batch;
+		continuous_agg_refresh_internal(policy_data.cagg,
+										refresh_window,
+										context,
+										refresh_window->start_isnull,
+										refresh_window->end_isnull,
+										false);
+		if (processing_batch >= policy_data.max_batches_per_execution &&
+			processing_batch < context.number_of_batches &&
+			policy_data.max_batches_per_execution > 0)
+		{
+			elog(LOG,
+				 "reached maximum number of batches per execution (%d), batches not processed (%d)",
+				 policy_data.max_batches_per_execution,
+				 context.number_of_batches - processing_batch);
+			break;
+		}
+	}
 
 	if (!policy_data.include_tiered_data_isnull)
 	{
@@ -415,6 +451,7 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 	const Dimension *open_dim;
 	Oid dim_type;
 	int64 refresh_start, refresh_end;
+	int32 buckets_per_batch, max_batches_per_execution;
 	bool start_isnull, end_isnull;
 	bool include_tiered_data, include_tiered_data_isnull;
 
@@ -446,16 +483,37 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 	include_tiered_data =
 		policy_refresh_cagg_get_include_tiered_data(config, &include_tiered_data_isnull);
 
+	buckets_per_batch = policy_refresh_cagg_get_buckets_per_batch(config);
+
+	if (buckets_per_batch < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid buckets per batch"),
+				 errdetail("buckets_per_batch: %d", buckets_per_batch),
+				 errhint("The buckets per batch should be greater than or equal to zero.")));
+
+	max_batches_per_execution = policy_refresh_cagg_get_max_batches_per_execution(config);
+
+	if (max_batches_per_execution < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid max batches per execution"),
+				 errdetail("max_batches_per_execution: %d", max_batches_per_execution),
+				 errhint(
+					 "The max batches per execution should be greater than or equal to zero.")));
+
 	if (policy_data)
 	{
 		policy_data->refresh_window.type = dim_type;
 		policy_data->refresh_window.start = refresh_start;
+		policy_data->refresh_window.start_isnull = start_isnull;
 		policy_data->refresh_window.end = refresh_end;
+		policy_data->refresh_window.end_isnull = end_isnull;
 		policy_data->cagg = cagg;
-		policy_data->start_is_null = start_isnull;
-		policy_data->end_is_null = end_isnull;
 		policy_data->include_tiered_data = include_tiered_data;
 		policy_data->include_tiered_data_isnull = include_tiered_data_isnull;
+		policy_data->buckets_per_batch = buckets_per_batch;
+		policy_data->max_batches_per_execution = max_batches_per_execution;
 	}
 }
 

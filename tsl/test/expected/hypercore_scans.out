@@ -444,10 +444,11 @@ order by time desc;
    Sort Key: "time" DESC
    Sort Method: quicksort 
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=88 loops=1)
+         Scankey: (location = '1'::text)
          Vectorized Filter: (location = '1'::text)
-         Rows Removed by Filter: 319
- Array: cache misses=30, decompress count=84 calls=242
-(7 rows)
+         Rows Removed by Filter: 113
+ Array: cache misses=27, decompress count=81 calls=239
+(8 rows)
 
 --  Save the data for comparison with seqscan
 create temp table chunk_saved as
@@ -522,10 +523,11 @@ select count(*) from :chunk where location = 1::text;
 -------------------------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=89 loops=1)
+         Scankey: (location = '1'::text)
          Vectorized Filter: (location = '1'::text)
-         Rows Removed by Filter: 320
- Array: cache misses=30, decompress count=30 calls=30
-(5 rows)
+         Rows Removed by Filter: 113
+ Array: cache misses=27, decompress count=27 calls=27
+(6 rows)
 
 -- Testing same thing with SeqScan. It still decompresses in the
 -- count(*) case, although it shouldn't have to. So, probably an
@@ -796,6 +798,44 @@ where time = '2022-06-01' and 4 < device;
        sum        
 ------------------
  115.397092269175
+(1 row)
+
+set timescaledb.enable_hypercore_scankey_pushdown=true;
+--
+-- Test scankey push down on non-orderby min/max column
+--
+explain (costs off)
+select * from readings
+where time = '2022-06-01' and '5' = location;
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+   Scankey: (("time" = 'Wed Jun 01 00:00:00 2022 PDT'::timestamp with time zone) AND ('5'::text = location))
+   Vectorized Filter: (("time" = 'Wed Jun 01 00:00:00 2022 PDT'::timestamp with time zone) AND (location = '5'::text))
+(3 rows)
+
+select sum(humidity) from readings
+where time = '2022-06-01' and '5' = location;
+ sum 
+-----
+    
+(1 row)
+
+set timescaledb.enable_hypercore_scankey_pushdown=false;
+explain (costs off)
+select * from readings
+where time = '2022-06-01' and '5' = location;
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+   Vectorized Filter: (("time" = 'Wed Jun 01 00:00:00 2022 PDT'::timestamp with time zone) AND (location = '5'::text))
+(2 rows)
+
+select sum(humidity) from readings
+where time = '2022-06-01' and '4' = location;
+ sum 
+-----
+    
 (1 row)
 
 set timescaledb.enable_hypercore_scankey_pushdown=true;

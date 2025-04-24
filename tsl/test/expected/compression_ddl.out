@@ -722,9 +722,9 @@ WARNING:  there was some uncertainty picking the default segment by for the hype
 NOTICE:  default segment by for hypertable "i2844" is set to ""
 NOTICE:  default order by for hypertable "i2844" is set to "created_at DESC"
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='i2844'::regclass;
- relid | segmentby |   orderby    | orderby_desc | orderby_nullsfirst 
--------+-----------+--------------+--------------+--------------------
- i2844 |           | {created_at} | {t}          | {t}
+ relid | compress_relid | segmentby |   orderby    | orderby_desc | orderby_nullsfirst 
+-------+----------------+-----------+--------------+--------------+--------------------
+ i2844 |                |           | {created_at} | {t}          | {t}
 (1 row)
 
 SELECT compress_chunk(show_chunks) AS compressed_chunk FROM show_chunks('i2844');
@@ -887,9 +887,9 @@ SELECT * from _timescaledb_catalog.hypertable WHERE table_name = 'test1';
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='test1'::regclass;
- relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
--------+-----------+---------+--------------+--------------------
- test1 | {bntcol}  | {Time}  | {t}          | {t}
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+----------------+-----------+---------+--------------+--------------------
+ test1 |                | {bntcol}  | {Time}  | {t}          | {t}
 (1 row)
 
 ALTER TABLE test1 RENAME new_coli TO coli;
@@ -900,9 +900,9 @@ SELECT * from _timescaledb_catalog.hypertable WHERE table_name = 'test1';
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='test1'::regclass;
- relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
--------+-----------+---------+--------------+--------------------
- test1 | {bntcol}  | {Time}  | {t}          | {t}
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+----------------+-----------+---------+--------------+--------------------
+ test1 |                | {bntcol}  | {Time}  | {t}          | {t}
 (1 row)
 
 SELECT count(*) from test1 where coli  = 100;
@@ -914,9 +914,9 @@ SELECT count(*) from test1 where coli  = 100;
 --rename segment by column name
 ALTER TABLE test1 RENAME bntcol TO  bigintcol  ;
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='test1'::regclass;
- relid |  segmentby  | orderby | orderby_desc | orderby_nullsfirst 
--------+-------------+---------+--------------+--------------------
- test1 | {bigintcol} | {Time}  | {t}          | {t}
+ relid | compress_relid |  segmentby  | orderby | orderby_desc | orderby_nullsfirst 
+-------+----------------+-------------+---------+--------------+--------------------
+ test1 |                | {bigintcol} | {Time}  | {t}          | {t}
 (1 row)
 
 --query by segment by column name
@@ -986,9 +986,9 @@ ALTER TABLE test1 RENAME  bigintcol TO
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccabdeeeeeeccccccccccccc;
 psql:include/compression_alter.sql:97: NOTICE:  identifier "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccabdeeeeeeccccccccccccc" will be truncated to "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccca"
 SELECT * from _timescaledb_catalog.compression_settings WHERE relid = 'test1'::regclass;
- relid |                             segmentby                             | orderby | orderby_desc | orderby_nullsfirst 
--------+-------------------------------------------------------------------+---------+--------------+--------------------
- test1 | {cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccca} | {Time}  | {t}          | {t}
+ relid | compress_relid |                             segmentby                             | orderby | orderby_desc | orderby_nullsfirst 
+-------+----------------+-------------------------------------------------------------------+---------+--------------+--------------------
+ test1 |                | {cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccca} | {Time}  | {t}          | {t}
 (1 row)
 
 SELECT * from timescaledb_information.compression_settings
@@ -1212,9 +1212,9 @@ SELECT * FROM _timescaledb_catalog.hypertable WHERE table_name = 'test_drop';
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'test_drop'::regclass;
-   relid   | segmentby |   orderby    | orderby_desc | orderby_nullsfirst 
------------+-----------+--------------+--------------+--------------------
- test_drop | {device}  | {o1,o2,time} | {f,f,t}      | {f,f,t}
+   relid   | compress_relid | segmentby |   orderby    | orderby_desc | orderby_nullsfirst 
+-----------+----------------+-----------+--------------+--------------+--------------------
+ test_drop |                | {device}  | {o1,o2,time} | {f,f,t}      | {f,f,t}
 (1 row)
 
 --TEST tablespaces for compressed chunks with attach_tablespace interface --
@@ -2653,5 +2653,23 @@ SELECT compress_chunk(show_chunks('test_notnull'));
  _timescaledb_internal._hyper_46_237_chunk
 (1 row)
 
--- broken atm due to bug in default handling in compression
+\set ON_ERROR_STOP 0
 ALTER TABLE test_notnull ALTER COLUMN c2 SET NOT NULL;
+ERROR:  column "c2" of relation "_hyper_46_237_chunk" contains null values
+\set ON_ERROR_STOP 1
+-- test alias in parameter name
+CREATE TABLE alias(time timestamptz NOT NULL);
+SELECT create_hypertable('alias','time');
+  create_hypertable  
+---------------------
+ (48,public,alias,t)
+(1 row)
+
+ALTER TABLE alias SET (tsdb.compress, tsdb.compress_orderby='time DESC',tsdb.compress_segmentby='');
+INSERT INTO alias SELECT '2025-01-01';
+SELECT count(compress_chunk(ch)) FROM show_chunks('alias') ch;
+ count 
+-------
+     1
+(1 row)
+

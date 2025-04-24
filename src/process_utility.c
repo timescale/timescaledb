@@ -1413,6 +1413,7 @@ process_drop_table_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 		.objectId = chunk_relid,
 	};
 
+	ts_compression_settings_delete(chunk_relid);
 	performDeletion(&objaddr, stmt->behavior, 0);
 }
 
@@ -2244,7 +2245,9 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 	 * */
 	if (ht)
 	{
-		ts_compression_settings_rename_column_hypertable(ht, stmt->subname, stmt->newname);
+		ts_compression_settings_rename_column_cascade(ht->main_table_relid,
+													  stmt->subname,
+													  stmt->newname);
 		add_hypertable_to_process_args(args, ht);
 		dim = ts_hyperspace_get_mutable_dimension_by_name(ht->space,
 														  DIMENSION_TYPE_ANY,
@@ -2580,15 +2583,15 @@ validate_set_not_null(Hypertable *ht, Oid chunk_relid, void *arg)
 	{
 		StringInfoData command;
 		AlterTableCmd *cmd = (AlterTableCmd *) arg;
-		Chunk *comp_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
+		const CompressionSettings *settings = ts_compression_settings_get(chunk->table_id);
+		Oid nspcid = get_rel_namespace(settings->fd.compress_relid);
 
 		initStringInfo(&command);
 		appendStringInfo(&command,
 						 "SELECT EXISTS(SELECT FROM %s.%s WHERE ",
-						 quote_identifier(NameStr(comp_chunk->fd.schema_name)),
-						 quote_identifier(NameStr(comp_chunk->fd.table_name)));
+						 quote_identifier(get_namespace_name(nspcid)),
+						 quote_identifier(get_rel_name(settings->fd.compress_relid)));
 
-		CompressionSettings *settings = ts_compression_settings_get(comp_chunk->table_id);
 		if (ts_array_is_member(settings->fd.segmentby, cmd->name))
 		{
 			/* For segmentby we can check directly whether NULLS are present */
@@ -3832,7 +3835,7 @@ process_set_access_method(AlterTableCmd *cmd, ProcessUtilityArgs *args)
 	Oid relid = AlterTableLookupRelation(stmt, NoLock);
 	Cache *hcache;
 	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
-	if (ht && (strcmp(cmd->name, TS_HYPERCORE_TAM_NAME) == 0))
+	if (ht && cmd->name && (strcmp(cmd->name, TS_HYPERCORE_TAM_NAME) == 0))
 	{
 		/* For hypertables, we automatically add command to set the
 		 * compression flag if we are setting the access method to be a
@@ -4998,9 +5001,22 @@ process_drop_table(EventTriggerDropObject *obj)
 	EventTriggerDropRelation *table = (EventTriggerDropRelation *) obj;
 
 	Assert(obj->type == EVENT_TRIGGER_DROP_TABLE || obj->type == EVENT_TRIGGER_DROP_FOREIGN_TABLE);
+	ts_chunk_delete_by_relid_and_relname(table->relid,
+										 table->schema,
+										 table->name,
+										 DROP_RESTRICT,
+										 false);
 	ts_hypertable_delete_by_name(table->schema, table->name);
-	ts_chunk_delete_by_name(table->schema, table->name, DROP_RESTRICT);
-	ts_compression_settings_delete(table->relid);
+	/*
+	 * Normally, compression settings are cleaned up when deleting the
+	 * hypertable or chunk. However, in some cases, e.g., when a hypertable
+	 * delete cascades to chunks, the chunk relids cannot be resolved from the
+	 * schema and name because the chunk relations are already dropped by
+	 * PostgreSQL when the "drop eventtrigger" is called. Therefore, also try
+	 * to delete compression settings here since the eventtrigger gives us the
+	 * relid of dropped objects.
+	 */
+	ts_compression_settings_delete_any(table->relid);
 }
 
 static void

@@ -330,16 +330,15 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 		compressed_chunk_interval + current_chunk_interval > max_chunk_interval)
 		return NULL;
 
-	/* Get reloid of the previous compressed chunk */
-	Oid prev_comp_reloid = ts_chunk_get_relid(previous_chunk->fd.compressed_chunk_id, false);
-	CompressionSettings *prev_comp_settings = ts_compression_settings_get(prev_comp_reloid);
+	/* Get reloid of the previous compressed chunk via settings */
+	CompressionSettings *prev_comp_settings = ts_compression_settings_get(previous_chunk->table_id);
 	CompressionSettings *ht_comp_settings = ts_compression_settings_get(ht->main_table_relid);
 	if (!ts_compression_settings_equal(ht_comp_settings, prev_comp_settings))
 		return NULL;
 
 	/* We don't support merging chunks with sequence numbers */
-	if (get_attnum(prev_comp_reloid, COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME) !=
-		InvalidAttrNumber)
+	if (get_attnum(prev_comp_settings->fd.compress_relid,
+				   COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME) != InvalidAttrNumber)
 		return NULL;
 
 	return previous_chunk;
@@ -665,7 +664,7 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	/* Delete the compressed chunk */
 	ts_compression_chunk_size_delete(uncompressed_chunk->fd.id);
 	ts_chunk_clear_compressed_chunk(uncompressed_chunk);
-	ts_compression_settings_delete(compressed_chunk->table_id);
+	ts_compression_settings_delete(uncompressed_chunk->table_id);
 
 	/*
 	 * Lock the compressed chunk that is going to be deleted. At this point,
@@ -941,14 +940,14 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 
 	if (ts_chunk_is_compressed(chunk))
 	{
+		CompressionSettings *chunk_settings = ts_compression_settings_get(chunk->table_id);
+		bool valid_orderby_settings = chunk_settings->fd.orderby;
 		if (recompress)
 		{
 			CompressionSettings *ht_settings = ts_compression_settings_get(chunk->hypertable_relid);
-			Oid compressed_chunk_relid = ts_chunk_get_relid(chunk->fd.compressed_chunk_id, true);
-			CompressionSettings *chunk_settings =
-				ts_compression_settings_get(compressed_chunk_relid);
 
-			if (!ts_compression_settings_equal(ht_settings, chunk_settings))
+			if (!valid_orderby_settings ||
+				!ts_compression_settings_equal(ht_settings, chunk_settings))
 			{
 				decompress_chunk_impl(chunk, false);
 				compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
@@ -965,17 +964,21 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 			return uncompressed_chunk_id;
 		}
 
-		if (ts_guc_enable_segmentwise_recompression && ts_chunk_is_partial(chunk) &&
-			get_compressed_chunk_index_for_recompression(chunk))
+		if (ts_guc_enable_segmentwise_recompression && valid_orderby_settings &&
+			ts_chunk_is_partial(chunk) && get_compressed_chunk_index_for_recompression(chunk))
 		{
 			uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk);
 		}
 		else
 		{
-			if (!ts_guc_enable_segmentwise_recompression)
+			if (!ts_guc_enable_segmentwise_recompression || !valid_orderby_settings)
 				elog(NOTICE,
-					 "segmentwise recompression is disabled, performing full recompression on "
+					 "segmentwise recompression is disabled%s, performing full "
+					 "recompression on "
 					 "chunk \"%s.%s\"",
+					 (ts_guc_enable_segmentwise_recompression && !valid_orderby_settings ?
+						  " due to no order by" :
+						  ""),
 					 NameStr(chunk->fd.schema_name),
 					 NameStr(chunk->fd.table_name));
 			decompress_chunk_impl(chunk, false);
@@ -1060,11 +1063,10 @@ static Oid
 get_compressed_chunk_index_for_recompression(Chunk *uncompressed_chunk)
 {
 	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
+	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, AccessShareLock);
+	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, AccessShareLock);
 
-	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, ShareLock);
-	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, ShareLock);
-
-	CompressionSettings *settings = ts_compression_settings_get(compressed_chunk->table_id);
+	CompressionSettings *settings = ts_compression_settings_get(uncompressed_chunk->table_id);
 
 	CatalogIndexState indstate = CatalogOpenIndexes(compressed_chunk_rel);
 	Oid index_oid = get_compressed_chunk_index(indstate, settings);

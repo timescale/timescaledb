@@ -98,13 +98,16 @@ static const struct config_enum_entry loglevel_options[] = {
  *
  * (2) = hypercore, enabled for compressed tables and those using Hypercore
  *       TAM. This is useful mostly for debugging/testing and as a fallback.
+ *       Only available in debug builds.
  */
 static const struct config_enum_entry transparent_decompression_options[] = {
 	{ "on", 1, false },
 	{ "true", 1, false },
 	{ "off", 0, false },
 	{ "false", 0, false },
+#ifdef TS_DEBUG
 	{ TS_HYPERCORE_TAM_NAME, 2, false },
+#endif
 	{ NULL, 0, false }
 };
 
@@ -150,6 +153,9 @@ TSDLLEXPORT bool ts_guc_default_hypercore_use_access_method = false;
 bool ts_guc_enable_chunk_skipping = false;
 TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
 TSDLLEXPORT bool ts_guc_enable_bool_compression = false;
+
+/* Only settable in debug mode for testing */
+TSDLLEXPORT bool ts_guc_enable_null_compression = true;
 
 /* Enable of disable columnar scans for columnar-oriented storage engines. If
  * disabled, regular sequence scans will be used instead. */
@@ -757,6 +763,19 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
+#ifdef TS_DEBUG
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_null_compression"),
+							 "Debug only flag to enable NULL compression",
+							 "Enable null compression",
+							 &ts_guc_enable_null_compression,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+#endif
 
 	/*
 	 * Define the limit on number of invalidation-based refreshes we allow per

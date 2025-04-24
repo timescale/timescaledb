@@ -120,3 +120,22 @@ SELECT * FROM chunk_settings;
 
 SELECT * FROM metrics WHERE d1 = 'foo';
 
+SELECT * FROM settings;
+
+
+-- Check that TRUNCATE <hypertable> also cleans up compression
+-- settings for chunks that are dropped when truncating.
+TRUNCATE metrics;
+SELECT * FROM settings;
+SELECT * FROM chunk_settings;
+
+-- Recreate chunks
+INSERT INTO metrics VALUES ('2000-01-01'), ('2001-01-01');
+SELECT compress_chunk(ch) FROM show_chunks('metrics') ch;
+
+SELECT * FROM settings;
+
+-- DROP TABLE with CASCADE uses a different code path for dropping
+-- hypertable so needs to be tested separately.
+DROP TABLE metrics CASCADE;
+SELECT * FROM settings;

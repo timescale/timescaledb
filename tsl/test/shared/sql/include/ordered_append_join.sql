@@ -11,6 +11,8 @@
 
 SET timescaledb.enable_decompression_sorted_merge = 0;
 
+SET enable_nestloop TO on;
+
 -- test LATERAL with ordered append in the outer query
 :PREFIX
 SELECT time,
@@ -37,6 +39,7 @@ FROM (
     ORDER BY time DESC
     LIMIT 2) l;
 
+SET enable_nestloop TO off;
 
 -- test plan with best index is chosen
 -- this should use device_id, time index
@@ -55,6 +58,8 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time DESC
 LIMIT 1;
+
+SET enable_nestloop TO on;
 
 -- test LATERAL with correlated query
 -- only last chunk should be executed
@@ -129,8 +134,6 @@ WHERE o1.time < '2000-02-01'
   AND o2.device_id = 2
 ORDER BY o1.time;
 
-RESET enable_nestloop;
-
 -- test JOIN
 -- last chunk of o2 should not be executed
 :PREFIX
@@ -148,7 +151,6 @@ LIMIT 10;
 -- test join against max query
 -- not ChunkAppend so no chunk exclusion
 SET enable_hashjoin = FALSE;
-SET enable_nestloop = FALSE;
 SET enable_hashagg = FALSE;
 
 :PREFIX
@@ -162,7 +164,6 @@ WHERE o1.device_id = 1
 ORDER BY time;
 
 RESET enable_hashjoin;
-RESET enable_nestloop;
 RESET enable_hashagg;
 
 SET enable_seqscan TO false;

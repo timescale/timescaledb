@@ -8,6 +8,9 @@ CREATE OR REPLACE FUNCTION mix(x anyelement) RETURNS float8 AS $$
     SELECT hashfloat8(x::float8) / pow(2, 32)
 $$ LANGUAGE SQL;
 
+-- To not confuse null with empty strings in the test reference
+\pset null $
+
 \set CHUNKS 2::int
 \set CHUNK_ROWS 100000::int
 \set GROUPING_CARDINALITY 10::int
@@ -59,8 +62,8 @@ vacuum freeze analyze agggroup;
 
 
 set timescaledb.debug_require_vector_agg = 'require';
----- Uncomment to generate reference. Note that there are minor discrepancies
----- on float4 due to different numeric stability in our and PG implementations.
+-- Uncomment to generate reference. Note that there are minor discrepancies
+-- on float4 due to different numeric stability in our and PG implementations.
 --set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
 
 select
@@ -88,11 +91,9 @@ from
         'cint2 is null',
         'cint2 is null and x is null']) with ordinality as condition(condition, n),
     unnest(array[
-        null,
-        'cint2',
-        'cint4',
+        'cint4, cint2',
         'cint4, cint8',
-        'cint8',
+        'cint2, cint4, cint8',
         's, cint2',
         's, ss',
         's, x',
@@ -127,7 +128,7 @@ alter table long set (timescaledb.compress, timescaledb.compress_segmentby = 'a'
 select count(compress_chunk(x)) from show_chunks('long') x;
 
 set timescaledb.debug_require_vector_agg = 'require';
----- Uncomment to generate reference.
+-- Uncomment to generate reference.
 --set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
 
 -- Various placements of long scalar column
@@ -155,10 +156,28 @@ alter table keylength set (timescaledb.compress, timescaledb.compress_segmentby 
 select count(compress_chunk(x)) from show_chunks('keylength') x;
 
 set timescaledb.debug_require_vector_agg = 'require';
----- Uncomment to generate reference.
+-- Uncomment to generate reference.
 --set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
 
 select sum(t) from keylength group by a, b order by 1 desc limit 10;
 select sum(t) from keylength group by b, a order by 1 desc limit 10;
 
+reset timescaledb.debug_require_vector_agg;
+
+
+-- Add a very simple test for NULLs. We also have some null values in the general
+-- grouping test above.
+create table groupnull(t int, a text, b text);
+select create_hypertable('groupnull', 't');
+insert into groupnull values (1, '1', null), (2, null, '2'), (3000000, '3', '3');
+alter table groupnull set (timescaledb.compress, timescaledb.compress_segmentby = '',
+    timescaledb.compress_orderby = 't desc');
+select count(compress_chunk(x)) from show_chunks('groupnull') x;
+
+set timescaledb.debug_require_vector_agg = 'require';
+-- Uncomment to generate reference.
+--set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
+
+select sum(t), a, b from groupnull group by a, b order by 1;
+select sum(t), a, b from groupnull group by b, a order by 1;
 reset timescaledb.debug_require_vector_agg;
