@@ -2215,3 +2215,18 @@ CREATE MATERIALIZED VIEW cagg_window_4 WITH (tsdb.continuous)
 AS SELECT time_bucket('1week', time), rank() OVER w FROM conditions GROUP BY 1, location WINDOW w AS (PARTITION BY time_bucket('1 week',time));
 WARNING:  window function support is experimental and may result in unexpected results depending on the functions used.
 NOTICE:  refreshing continuous aggregate "cagg_window_4"
+-- test setting chunk_time_interval on a cagg
+CREATE MATERIALIZED VIEW cagg_chunk_time_interval WITH (tsdb.continuous, tsdb.chunk_time_interval='1000 day') AS SELECT time_bucket('1 week', time) FROM conditions GROUP BY 1 WITH NO DATA;
+SELECT time_interval from timescaledb_information.continuous_aggregates cagg INNER JOIN timescaledb_information.dimensions dim ON cagg.materialization_hypertable_name = dim.hypertable_name  WHERE view_name='cagg_chunk_time_interval';
+ time_interval 
+---------------
+ @ 1000 days
+(1 row)
+
+ALTER MATERIALIZED VIEW cagg_chunk_time_interval SET (tsdb.chunk_time_interval='110 day');
+SELECT time_interval from timescaledb_information.continuous_aggregates cagg INNER JOIN timescaledb_information.dimensions dim ON cagg.materialization_hypertable_name = dim.hypertable_name  WHERE view_name='cagg_chunk_time_interval';
+ time_interval 
+---------------
+ @ 110 days
+(1 row)
+

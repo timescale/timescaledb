@@ -79,6 +79,9 @@ ts_continuous_agg_get_compression_defelems(const WithClauseResult *with_clauses)
 		int option_index = 0;
 		switch (i)
 		{
+			case AlterTableFlagChunkTimeInterval:
+				continue;
+				break;
 			case AlterTableFlagCompressEnabled:
 				option_index = CreateMaterializedViewFlagCompress;
 				break;

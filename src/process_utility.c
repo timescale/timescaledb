@@ -3745,9 +3745,11 @@ process_create_table_end(Node *parsetree)
 			AttrNumber time_attno = get_attnum(table_relid, time_column);
 			Oid time_type = get_atttype(table_relid, time_attno);
 
-			interval = ts_create_table_parse_chunk_time_interval(create_table_info.with_clauses,
-																 time_type,
-																 &interval_type);
+			interval =
+				ts_create_table_parse_chunk_time_interval(create_table_info.with_clauses
+															  [CreateTableFlagChunkTimeInterval],
+														  time_type,
+														  &interval_type);
 		}
 
 		if (!create_table_info.with_clauses[CreateTableFlagCreateDefaultIndexes].is_default)
@@ -4925,7 +4927,28 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 
 	parse_results = ts_alter_table_with_clause_parse(compress_options);
 
-	ts_cm_functions->process_compress_table(ht, parse_results);
+	if (ht && !parse_results[AlterTableFlagChunkTimeInterval].is_default)
+	{
+		Dimension *dim = ts_hyperspace_get_mutable_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
+		Ensure(dim, "hypertable without open dimension");
+		Oid time_type = get_atttype(dim->main_table_relid, dim->column_attno);
+		Oid interval_type = InvalidOid;
+		Datum interval =
+			ts_create_table_parse_chunk_time_interval(parse_results
+														  [AlterTableFlagChunkTimeInterval],
+													  time_type,
+													  &interval_type);
+
+		int64 chunk_interval = ts_interval_value_to_internal(interval, interval_type);
+		ts_dimension_set_chunk_interval(dim, chunk_interval);
+	}
+
+	if (!parse_results[AlterTableFlagCompressEnabled].is_default ||
+		!parse_results[AlterTableFlagCompressOrderBy].is_default ||
+		!parse_results[AlterTableFlagCompressSegmentBy].is_default ||
+		!parse_results[AlterTableFlagCompressChunkTimeInterval].is_default)
+		ts_cm_functions->process_compress_table(ht, parse_results);
+
 	return DDL_DONE;
 }
 
