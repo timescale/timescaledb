@@ -466,22 +466,26 @@ pg_size_pretty | 112 kB
 select * from timescaledb_information.hypertables
 where hypertable_name like 'foo' or hypertable_name like 'conditions'
 order by hypertable_name;
--[ RECORD 1 ]-------+------------------
-hypertable_schema   | public
-hypertable_name     | conditions
-owner               | default_perm_user
-num_dimensions      | 1
-num_chunks          | 2
-compression_enabled | t
-tablespaces         | 
--[ RECORD 2 ]-------+------------------
-hypertable_schema   | public
-hypertable_name     | foo
-owner               | default_perm_user
-num_dimensions      | 1
-num_chunks          | 4
-compression_enabled | t
-tablespaces         | 
+-[ RECORD 1 ]----------+-------------------------
+hypertable_schema      | public
+hypertable_name        | conditions
+owner                  | default_perm_user
+num_dimensions         | 1
+num_chunks             | 2
+compression_enabled    | t
+tablespaces            | 
+primary_dimension      | time
+primary_dimension_type | timestamp with time zone
+-[ RECORD 2 ]----------+-------------------------
+hypertable_schema      | public
+hypertable_name        | foo
+owner                  | default_perm_user
+num_dimensions         | 1
+num_chunks             | 4
+compression_enabled    | t
+tablespaces            | 
+primary_dimension      | a
+primary_dimension_type | integer
 
 \x
 SELECT count(decompress_chunk(ch)) FROM show_chunks('conditions') ch;
