@@ -771,6 +771,96 @@ LIMIT 1;
  69 |      1
 (1 row)
 
+--TEST 8
+--compression policy errors
+CREATE TABLE test_compression_policy_errors(time TIMESTAMPTZ, val SMALLINT);
+SELECT create_hypertable('test_compression_policy_errors', 'time', chunk_time_interval => '1 day'::interval);
+NOTICE:  adding not-null constraint to column "time"
+              create_hypertable               
+----------------------------------------------
+ (20,public,test_compression_policy_errors,t)
+(1 row)
+
+ALTER TABLE test_compression_policy_errors SET (timescaledb.compress, timescaledb.compress_segmentby = 'val', timescaledb.compress_orderby = 'time');
+INSERT INTO test_compression_policy_errors SELECT time, (random()*10)::smallint
+FROM generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '10 min') AS time;
+SELECT
+  add_compression_policy(
+    'test_compression_policy_errors',
+    compress_after=> '1 day'::interval,
+    initial_start => now() - interval '1 day'
+  ) as compressjob_id \gset
+SELECT config AS compressjob_config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id \gset
+SELECT FROM alter_job(:compressjob_id, config => jsonb_set(:'compressjob_config'::jsonb, '{recompress}', 'true'));
+--
+(1 row)
+
+-- 31 uncompressed chunks (0 - uncompressed, 1 - compressed)
+SELECT c.status, count(*)
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
+WHERE h.table_name = 'test_compression_policy_errors'
+GROUP BY c.status
+ORDER BY 2 DESC;
+ status | count 
+--------+-------
+      0 |    31
+(1 row)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- Let's mess with the chunk status to for an error when executing the job
+WITH chunks AS (
+  SELECT c.id, c.status
+  FROM _timescaledb_catalog.chunk c
+  INNER JOIN _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
+  WHERE h.table_name = 'test_compression_policy_errors'
+  ORDER BY c.id LIMIT 20
+)
+UPDATE _timescaledb_catalog.chunk
+SET status = 3
+FROM chunks
+WHERE chunk.id = chunks.id
+  AND chunk.status = 0;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+-- After the mess 20 = status 3 and 11 = status 0
+SELECT c.status, count(*)
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
+WHERE h.table_name = 'test_compression_policy_errors'
+GROUP BY c.status
+ORDER BY 2 DESC;
+ status | count 
+--------+-------
+      3 |    20
+      0 |    11
+(2 rows)
+
+\set ON_ERROR_STOP 0
+SET client_min_messages TO ERROR;
+\set VERBOSITY default
+-- This should fail with
+-- 20 chunks failed to compress and 11 chunks compressed successfully
+CALL run_job(:compressjob_id);
+ERROR:  columnstore policy failure
+DETAIL:  Failed to convert '20' chunks to columnstore. Successfully converted '11' chunks.
+CONTEXT:  PL/pgSQL function _timescaledb_functions.policy_compression_execute(integer,integer,anyelement,integer,boolean,boolean,boolean,boolean) line 90 at RAISE
+SQL statement "CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::INTERVAL, maxchunks, verbose_log, recompress_enabled, use_creation_time, hypercore_use_access_method)"
+PL/pgSQL function _timescaledb_functions.policy_compression(integer,jsonb) line 63 at CALL
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
+-- 31 uncompressed chunks (0 - uncompressed, 1 - compressed)
+SELECT c.status, count(*)
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
+WHERE h.table_name = 'test_compression_policy_errors'
+GROUP BY c.status
+ORDER BY 2 DESC;
+ status | count 
+--------+-------
+      3 |    20
+      1 |    11
+(2 rows)
+
 -- Teardown test
 \c :TEST_DBNAME :ROLE_SUPERUSER
 REVOKE CREATE ON SCHEMA public FROM NOLOGIN_ROLE;
