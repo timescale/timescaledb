@@ -1146,7 +1146,7 @@ COPY compressed_table (time,a,b,c) FROM stdin;
 2024-02-29 15:02:03.87313+01	20	3	3
 \.
 
-SELECT * FROM compressed_table;
+SELECT * FROM compressed_table ORDER BY time, a;
 SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('compressed_table') i;
 
 -- Check DML decompression limit
