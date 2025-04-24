@@ -2,8 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 SELECT * FROM timescaledb_information.hypertables;
- hypertable_schema | hypertable_name | owner | num_dimensions | num_chunks | compression_enabled | tablespaces 
--------------------+-----------------+-------+----------------+------------+---------------------+-------------
+ hypertable_schema | hypertable_name | owner | num_dimensions | num_chunks | compression_enabled | tablespaces | primary_dimension | primary_dimension_type 
+-------------------+-----------------+-------+----------------+------------+---------------------+-------------+-------------------+------------------------
 (0 rows)
 
 -- create simple hypertable with 1 chunk
@@ -26,10 +26,10 @@ SELECT create_hypertable('ht2','time');
 INSERT INTO ht2 SELECT '2000-01-01'::TIMESTAMPTZ, repeat('8k',4096);
 SELECT * FROM timescaledb_information.hypertables
 ORDER BY hypertable_schema, hypertable_name;
- hypertable_schema | hypertable_name |       owner       | num_dimensions | num_chunks | compression_enabled | tablespaces 
--------------------+-----------------+-------------------+----------------+------------+---------------------+-------------
- public            | ht1             | default_perm_user |              1 |          1 | f                   | 
- public            | ht2             | default_perm_user |              1 |          1 | f                   | 
+ hypertable_schema | hypertable_name |       owner       | num_dimensions | num_chunks | compression_enabled | tablespaces | primary_dimension |  primary_dimension_type  
+-------------------+-----------------+-------------------+----------------+------------+---------------------+-------------+-------------------+--------------------------
+ public            | ht1             | default_perm_user |              1 |          1 | f                   |             | time              | timestamp with time zone
+ public            | ht2             | default_perm_user |              1 |          1 | f                   |             | time              | timestamp with time zone
 (2 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -58,12 +58,12 @@ SELECT create_hypertable('closed.closed_ht','time');
 INSERT INTO closed.closed_ht SELECT '2000-01-01'::TIMESTAMPTZ;
 SELECT * FROM timescaledb_information.hypertables
 ORDER BY hypertable_schema, hypertable_name;
- hypertable_schema | hypertable_name |       owner       | num_dimensions | num_chunks | compression_enabled | tablespaces 
--------------------+-----------------+-------------------+----------------+------------+---------------------+-------------
- closed            | closed_ht       | super_user        |              1 |          1 | f                   | 
- open              | open_ht         | super_user        |              1 |          3 | f                   | 
- public            | ht1             | default_perm_user |              1 |          1 | f                   | 
- public            | ht2             | default_perm_user |              1 |          1 | f                   | 
+ hypertable_schema | hypertable_name |       owner       | num_dimensions | num_chunks | compression_enabled | tablespaces | primary_dimension |  primary_dimension_type  
+-------------------+-----------------+-------------------+----------------+------------+---------------------+-------------+-------------------+--------------------------
+ closed            | closed_ht       | super_user        |              1 |          1 | f                   |             | time              | timestamp with time zone
+ open              | open_ht         | super_user        |              1 |          3 | f                   |             | time              | timestamp with time zone
+ public            | ht1             | default_perm_user |              1 |          1 | f                   |             | time              | timestamp with time zone
+ public            | ht2             | default_perm_user |              1 |          1 | f                   |             | time              | timestamp with time zone
 (4 rows)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -71,85 +71,101 @@ ORDER BY hypertable_schema, hypertable_name;
 \x
 SELECT * FROM timescaledb_information.hypertables
 ORDER BY hypertable_schema, hypertable_name;
--[ RECORD 1 ]-------+------------------
-hypertable_schema   | closed
-hypertable_name     | closed_ht
-owner               | super_user
-num_dimensions      | 1
-num_chunks          | 1
-compression_enabled | f
-tablespaces         | 
--[ RECORD 2 ]-------+------------------
-hypertable_schema   | open
-hypertable_name     | open_ht
-owner               | super_user
-num_dimensions      | 1
-num_chunks          | 3
-compression_enabled | f
-tablespaces         | 
--[ RECORD 3 ]-------+------------------
-hypertable_schema   | public
-hypertable_name     | ht1
-owner               | default_perm_user
-num_dimensions      | 1
-num_chunks          | 1
-compression_enabled | f
-tablespaces         | 
--[ RECORD 4 ]-------+------------------
-hypertable_schema   | public
-hypertable_name     | ht2
-owner               | default_perm_user
-num_dimensions      | 1
-num_chunks          | 1
-compression_enabled | f
-tablespaces         | 
+-[ RECORD 1 ]----------+-------------------------
+hypertable_schema      | closed
+hypertable_name        | closed_ht
+owner                  | super_user
+num_dimensions         | 1
+num_chunks             | 1
+compression_enabled    | f
+tablespaces            | 
+primary_dimension      | time
+primary_dimension_type | timestamp with time zone
+-[ RECORD 2 ]----------+-------------------------
+hypertable_schema      | open
+hypertable_name        | open_ht
+owner                  | super_user
+num_dimensions         | 1
+num_chunks             | 3
+compression_enabled    | f
+tablespaces            | 
+primary_dimension      | time
+primary_dimension_type | timestamp with time zone
+-[ RECORD 3 ]----------+-------------------------
+hypertable_schema      | public
+hypertable_name        | ht1
+owner                  | default_perm_user
+num_dimensions         | 1
+num_chunks             | 1
+compression_enabled    | f
+tablespaces            | 
+primary_dimension      | time
+primary_dimension_type | timestamp with time zone
+-[ RECORD 4 ]----------+-------------------------
+hypertable_schema      | public
+hypertable_name        | ht2
+owner                  | default_perm_user
+num_dimensions         | 1
+num_chunks             | 1
+compression_enabled    | f
+tablespaces            | 
+primary_dimension      | time
+primary_dimension_type | timestamp with time zone
 
 -- filter by schema
 SELECT * FROM timescaledb_information.hypertables
 WHERE hypertable_schema = 'closed'
 ORDER BY hypertable_schema, hypertable_name;
--[ RECORD 1 ]-------+-----------
-hypertable_schema   | closed
-hypertable_name     | closed_ht
-owner               | super_user
-num_dimensions      | 1
-num_chunks          | 1
-compression_enabled | f
-tablespaces         | 
+-[ RECORD 1 ]----------+-------------------------
+hypertable_schema      | closed
+hypertable_name        | closed_ht
+owner                  | super_user
+num_dimensions         | 1
+num_chunks             | 1
+compression_enabled    | f
+tablespaces            | 
+primary_dimension      | time
+primary_dimension_type | timestamp with time zone
 
 -- filter by table name
 SELECT * FROM timescaledb_information.hypertables
 WHERE hypertable_name = 'ht1'
 ORDER BY hypertable_schema, hypertable_name;
--[ RECORD 1 ]-------+------------------
-hypertable_schema   | public
-hypertable_name     | ht1
-owner               | default_perm_user
-num_dimensions      | 1
-num_chunks          | 1
-compression_enabled | f
-tablespaces         | 
+-[ RECORD 1 ]----------+-------------------------
+hypertable_schema      | public
+hypertable_name        | ht1
+owner                  | default_perm_user
+num_dimensions         | 1
+num_chunks             | 1
+compression_enabled    | f
+tablespaces            | 
+primary_dimension      | time
+primary_dimension_type | timestamp with time zone
 
 -- filter by owner
 SELECT * FROM timescaledb_information.hypertables
 WHERE owner = 'super_user'
 ORDER BY hypertable_schema, hypertable_name;
--[ RECORD 1 ]-------+-----------
-hypertable_schema   | closed
-hypertable_name     | closed_ht
-owner               | super_user
-num_dimensions      | 1
-num_chunks          | 1
-compression_enabled | f
-tablespaces         | 
--[ RECORD 2 ]-------+-----------
-hypertable_schema   | open
-hypertable_name     | open_ht
-owner               | super_user
-num_dimensions      | 1
-num_chunks          | 3
-compression_enabled | f
-tablespaces         | 
+-[ RECORD 1 ]----------+-------------------------
+hypertable_schema      | closed
+hypertable_name        | closed_ht
+owner                  | super_user
+num_dimensions         | 1
+num_chunks             | 1
+compression_enabled    | f
+tablespaces            | 
+primary_dimension      | time
+primary_dimension_type | timestamp with time zone
+-[ RECORD 2 ]----------+-------------------------
+hypertable_schema      | open
+hypertable_name        | open_ht
+owner                  | super_user
+num_dimensions         | 1
+num_chunks             | 3
+compression_enabled    | f
+tablespaces            | 
+primary_dimension      | time
+primary_dimension_type | timestamp with time zone
 
 \x
 ---Add integer table --

@@ -31,3 +31,5 @@ CREATE FUNCTION @extschema@.add_continuous_aggregate_policy(
 RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
 LANGUAGE C VOLATILE;
+
+DROP VIEW IF EXISTS timescaledb_information.hypertables;

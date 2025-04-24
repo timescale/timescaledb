@@ -4,32 +4,44 @@
 
 -- Convenience view to list all hypertables
 CREATE OR REPLACE VIEW timescaledb_information.hypertables AS
-SELECT ht.schema_name AS hypertable_schema,
+WITH
+  hypertable_info AS (
+    SELECT hypertable_id, schema_name, table_name,
+           num_dimensions, compression_state, column_name,
+           column_type, interval_length,
+           (compression_state = 1) AS compression_enabled,
+           row_number() OVER (PARTITION BY hypertable_id ORDER BY di.id) AS dimension_num
+      FROM _timescaledb_catalog.hypertable ht
+      JOIN _timescaledb_catalog.dimension di ON ht.id = di.hypertable_id
+  )
+SELECT
+  ht.schema_name AS hypertable_schema,
   ht.table_name AS hypertable_name,
   t.tableowner AS owner,
   ht.num_dimensions,
   (
     SELECT count(1)
     FROM _timescaledb_catalog.chunk ch
-    WHERE ch.hypertable_id = ht.id AND ch.dropped IS FALSE AND ch.osm_chunk IS FALSE) AS num_chunks,
-  (
-    CASE WHEN compression_state = 1 THEN
-      TRUE
-    ELSE
-      FALSE
-    END) AS compression_enabled,
-  srchtbs.tablespace_list AS tablespaces
-FROM _timescaledb_catalog.hypertable ht
-  INNER JOIN pg_tables t ON ht.table_name = t.tablename
-    AND ht.schema_name = t.schemaname
-  LEFT OUTER JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = ht.id
-  LEFT OUTER JOIN (
+    WHERE ch.hypertable_id = ht.hypertable_id
+      AND ch.dropped IS FALSE
+      AND ch.osm_chunk IS FALSE
+  ) AS num_chunks,
+  ht.compression_enabled,
+  srchtbs.tablespace_list AS tablespaces,
+  ht.column_name AS primary_dimension,
+  ht.column_type AS primary_dimension_type
+FROM hypertable_info ht
+JOIN pg_tables t ON ht.table_name = t.tablename AND ht.schema_name = t.schemaname
+LEFT JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = ht.hypertable_id
+LEFT JOIN (
     SELECT hypertable_id,
       array_agg(tablespace_name ORDER BY id) AS tablespace_list
     FROM _timescaledb_catalog.tablespace
-    GROUP BY hypertable_id) srchtbs ON ht.id = srchtbs.hypertable_id
+    GROUP BY hypertable_id) srchtbs ON ht.hypertable_id = srchtbs.hypertable_id
 WHERE ht.compression_state != 2 --> no internal compression tables
-  AND ca.mat_hypertable_id IS NULL;
+  AND ca.mat_hypertable_id IS NULL
+  AND ht.interval_length IS NOT NULL
+  AND ht.dimension_num = 1;
 
 CREATE OR REPLACE VIEW timescaledb_information.job_stats AS
 SELECT ht.schema_name AS hypertable_schema,
@@ -409,4 +421,3 @@ CREATE OR REPLACE VIEW timescaledb_information.chunk_columnstore_settings AS
 SELECT * FROM timescaledb_information.chunk_compression_settings;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA timescaledb_information TO PUBLIC;
-
