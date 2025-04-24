@@ -57,11 +57,15 @@ jobs:
         os: [ windows-2022 ]
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
         ignores: ["bgw_launcher chunk_adaptive metadata telemetry"]
-        tsl_ignores: ["compression_algos"]
+        tsl_ignores:
+          - >-
+            compression_algos
+            compress_bloom_sparse_debug
         tsl_skips:
           - >-
             bgw_db_scheduler
             bgw_db_scheduler_fixed
+            compress_bloom_sparse_debug
             hypercore_vectoragg
             vector_agg_groupagg
             vector_agg_grouping

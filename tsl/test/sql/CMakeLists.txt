@@ -113,6 +113,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     chunk_merge.sql
     chunk_utils_compression.sql
     chunk_utils_internal.sql
+    compress_bloom_sparse_debug.sql
     compression_algos.sql
     compression_bgw.sql
     compression_bools.sql
@@ -175,10 +176,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 
   if(USE_TELEMETRY)
     list(APPEND TEST_FILES telemetry_stats.sql)
-  endif()
-
-  if(USE_UMASH)
-    list(APPEND TEST_FILES compress_bloom_sparse_debug.sql)
   endif()
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
