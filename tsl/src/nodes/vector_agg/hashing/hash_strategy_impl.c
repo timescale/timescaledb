@@ -18,8 +18,6 @@ typedef struct FUNCTION_NAME(entry)
 	/* Key index 0 is invalid. */
 	uint32 key_index;
 
-	uint8 status;
-
 	HASH_TABLE_KEY_TYPE hash_table_key;
 } FUNCTION_NAME(entry);
 
@@ -32,7 +30,8 @@ typedef struct FUNCTION_NAME(entry)
 #define SH_SCOPE static inline
 #define SH_DECLARE
 #define SH_DEFINE
-#include <lib/simplehash.h>
+#define SH_ENTRY_EMPTY(entry) ((entry)->key_index == 0)
+#include "import/ts_simplehash.h"
 
 struct FUNCTION_NAME(hash);
 
