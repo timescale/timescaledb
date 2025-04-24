@@ -325,7 +325,8 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 				agg_def->func.state_bytes * (last_initialized_key_index + 1) +
 				(char *) policy->per_agg_per_key_states[i];
 			agg_def->func.agg_init(first_uninitialized_state,
-								   params.hashing->last_used_key_index - last_initialized_key_index);
+								   params.hashing->last_used_key_index -
+									   last_initialized_key_index);
 		}
 
 		/*
