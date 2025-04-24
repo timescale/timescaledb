@@ -9,7 +9,7 @@
  * the PostgreSQL database, which is licensed under the open-source
  * PostgreSQL License. Please see the NOTICE at the top level
  * directory for a copy of the PostgreSQL License.
- * 
+ *
  * PostgreSQL 17.4 f8554dee417ffc4540c94cf357f7bf7d4b6e5d80
  */
 
