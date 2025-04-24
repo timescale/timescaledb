@@ -11,7 +11,7 @@ name: Trigger the Backport Workflow
 
 jobs:
   backport_trigger:
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     steps:
       - name: Checkout TimescaleDB
         uses: actions/checkout@v4

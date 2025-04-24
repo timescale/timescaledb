@@ -381,7 +381,9 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 
 	if (ts_guc_debug_require_batch_sorted_merge && !dcontext->batch_sorted_merge)
 	{
-		elog(ERROR, "debug: batch sorted merge is required but not used");
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("debug: batch sorted merge is required but not used")));
 	}
 
 	/* Constify stable expressions in vectorized predicates. */

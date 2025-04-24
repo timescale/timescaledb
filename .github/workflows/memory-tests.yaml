@@ -9,7 +9,7 @@ name: Memory tests
 jobs:
   memory_leak:
     name: Memory leak on insert PG${{ matrix.pg }}
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         pg: [15, 16, 17]

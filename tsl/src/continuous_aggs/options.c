@@ -23,7 +23,7 @@
 #include "options.h"
 #include "scan_iterator.h"
 #include "ts_catalog/continuous_agg.h"
-#include "with_clause/compression_with_clause.h"
+#include "with_clause/alter_table_with_clause.h"
 
 static void cagg_update_materialized_only(ContinuousAgg *agg, bool materialized_only);
 static List *cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht);
@@ -126,16 +126,15 @@ static void
 cagg_alter_compression(ContinuousAgg *agg, Hypertable *mat_ht, List *compress_defelems)
 {
 	Assert(mat_ht != NULL);
-	WithClauseResult *with_clause_options =
-		ts_compress_hypertable_set_clause_parse(compress_defelems);
+	WithClauseResult *with_clause_options = ts_alter_table_with_clause_parse(compress_defelems);
 
-	if (with_clause_options[CompressEnabled].parsed)
+	if (with_clause_options[AlterTableFlagCompressEnabled].parsed)
 	{
 		List *default_compress_defelems = cagg_get_compression_params(agg, mat_ht);
 		WithClauseResult *default_with_clause_options =
-			ts_compress_hypertable_set_clause_parse(default_compress_defelems);
+			ts_alter_table_with_clause_parse(default_compress_defelems);
 		/* Merge defaults if there's any. */
-		for (int i = 0; i < CompressOptionMax; i++)
+		for (int i = 0; i < AlterTableFlagsMax; i++)
 		{
 			if (with_clause_options[i].is_default && !default_with_clause_options[i].is_default)
 			{

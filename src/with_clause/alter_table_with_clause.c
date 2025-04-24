@@ -21,34 +21,34 @@
 #include "compat/compat.h"
 #include "ts_catalog/array_utils.h"
 
-#include "compression_with_clause.h"
+#include "alter_table_with_clause.h"
 
-static const WithClauseDefinition compress_hypertable_with_clause_def[] = {
-		[CompressEnabled] = {
-			.arg_names = {"compress", "enable_columnstore", NULL},
+static const WithClauseDefinition alter_table_with_clause_def[] = {
+		[AlterTableFlagCompressEnabled] = {
+			.arg_names = {"compress", "columnstore", "enable_columnstore", NULL},
 			.type_id = BOOLOID,
 			.default_val = (Datum)false,
 		},
-		[CompressSegmentBy] = {
+		[AlterTableFlagCompressSegmentBy] = {
 			.arg_names = {"compress_segmentby", "segmentby", NULL},
 			 .type_id = TEXTOID,
 		},
-		[CompressOrderBy] = {
+		[AlterTableFlagCompressOrderBy] = {
 			.arg_names = {"compress_orderby", "orderby", NULL},
 			 .type_id = TEXTOID,
 		},
-		[CompressChunkTimeInterval] = {
+		[AlterTableFlagCompressChunkTimeInterval] = {
 			.arg_names = {"compress_chunk_time_interval", NULL},
 			 .type_id = INTERVALOID,
 		},
 };
 
 WithClauseResult *
-ts_compress_hypertable_set_clause_parse(const List *defelems)
+ts_alter_table_with_clause_parse(const List *defelems)
 {
 	return ts_with_clauses_parse(defelems,
-								 compress_hypertable_with_clause_def,
-								 TS_ARRAY_LEN(compress_hypertable_with_clause_def));
+								 alter_table_with_clause_def,
+								 TS_ARRAY_LEN(alter_table_with_clause_def));
 }
 
 static inline void
@@ -307,9 +307,9 @@ ts_compress_parse_order_collist(char *inpstr, Hypertable *hypertable)
 ArrayType *
 ts_compress_hypertable_parse_segment_by(WithClauseResult *parsed_options, Hypertable *hypertable)
 {
-	if (parsed_options[CompressSegmentBy].is_default == false)
+	if (parsed_options[AlterTableFlagCompressSegmentBy].is_default == false)
 	{
-		Datum textarg = parsed_options[CompressSegmentBy].parsed;
+		Datum textarg = parsed_options[AlterTableFlagCompressSegmentBy].parsed;
 		return parse_segment_collist(TextDatumGetCString(textarg), hypertable);
 	}
 	else
@@ -322,8 +322,9 @@ ts_compress_hypertable_parse_segment_by(WithClauseResult *parsed_options, Hypert
 OrderBySettings
 ts_compress_hypertable_parse_order_by(WithClauseResult *parsed_options, Hypertable *hypertable)
 {
-	Ensure(parsed_options[CompressOrderBy].is_default == false, "with clause is not default");
-	Datum textarg = parsed_options[CompressOrderBy].parsed;
+	Ensure(parsed_options[AlterTableFlagCompressOrderBy].is_default == false,
+		   "with clause is not default");
+	Datum textarg = parsed_options[AlterTableFlagCompressOrderBy].parsed;
 	return ts_compress_parse_order_collist(TextDatumGetCString(textarg), hypertable);
 }
 
@@ -334,9 +335,9 @@ Interval *
 ts_compress_hypertable_parse_chunk_time_interval(WithClauseResult *parsed_options,
 												 Hypertable *hypertable)
 {
-	if (parsed_options[CompressChunkTimeInterval].is_default == false)
+	if (parsed_options[AlterTableFlagCompressChunkTimeInterval].is_default == false)
 	{
-		Datum textarg = parsed_options[CompressChunkTimeInterval].parsed;
+		Datum textarg = parsed_options[AlterTableFlagCompressChunkTimeInterval].parsed;
 		return DatumGetIntervalP(textarg);
 	}
 	else

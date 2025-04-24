@@ -13,14 +13,14 @@
 
 #include "with_clause_parser.h"
 
-typedef enum CompressHypertableOption
+typedef enum AlterTableFlags
 {
-	CompressEnabled = 0,
-	CompressSegmentBy,
-	CompressOrderBy,
-	CompressChunkTimeInterval,
-	CompressOptionMax
-} CompressHypertableOption;
+	AlterTableFlagCompressEnabled = 0,
+	AlterTableFlagCompressSegmentBy,
+	AlterTableFlagCompressOrderBy,
+	AlterTableFlagCompressChunkTimeInterval,
+	AlterTableFlagsMax
+} AlterTableFlags;
 
 typedef struct
 {
@@ -36,7 +36,7 @@ typedef struct
 	ArrayType *orderby_nullsfirst;
 } OrderBySettings;
 
-extern TSDLLEXPORT WithClauseResult *ts_compress_hypertable_set_clause_parse(const List *defelems);
+extern TSDLLEXPORT WithClauseResult *ts_alter_table_with_clause_parse(const List *defelems);
 extern TSDLLEXPORT ArrayType *
 ts_compress_hypertable_parse_segment_by(WithClauseResult *parsed_options, Hypertable *hypertable);
 extern TSDLLEXPORT OrderBySettings

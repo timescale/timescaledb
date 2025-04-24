@@ -36,11 +36,11 @@ set(TEST_FILES
     compression_sequence_num_removal.sql
     compression_settings.sql
     compression_sorted_merge.sql
-    compression_sorted_merge_columns.sql
     compression_sorted_merge_distinct.sql
     compression.sql
     compression_trigger.sql
     compress_sort_transform.sql
+    create_table_with.sql
     custom_hashagg.sql
     decompress_index.sql
     foreign_keys.sql
@@ -121,6 +121,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compression_merge.sql
     compression_indexscan.sql
     compression_segment_meta.sql
+    compression_sorted_merge_columns.sql
     compression_sorted_merge_filter.sql
     cagg_bgw_drop_chunks.sql
     cagg_drop_chunks.sql

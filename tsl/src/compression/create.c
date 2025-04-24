@@ -50,7 +50,7 @@
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "utils.h"
-#include "with_clause/compression_with_clause.h"
+#include "with_clause/alter_table_with_clause.h"
 
 static const char *sparse_index_types[] = { "min", "max" };
 
@@ -442,6 +442,26 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 	tablespace_oid = get_rel_tablespace(src_chunk->table_id);
 	CompressionSettings *settings = ts_compression_settings_get(src_chunk->hypertable_relid);
 
+	/*
+	 * On hypertables created with CREATE TABLE ... WITH we enable compression
+	 * by default but do not create CompressionSettings immediately assuming
+	 * that we have more information available when the first compression
+	 * is actually triggered allowing us to generate better compression
+	 * settings.
+	 */
+	if (!settings)
+	{
+		settings = ts_compression_settings_create(src_chunk->hypertable_relid,
+												  InvalidOid,
+												  NULL,
+												  NULL,
+												  NULL,
+												  NULL);
+
+		Hypertable *ht = ts_hypertable_get_by_id(src_chunk->fd.hypertable_id);
+		compression_settings_update(ht, settings, ts_alter_table_with_clause_parse(NIL));
+	}
+
 	if (OidIsValid(table_id))
 		compress_chunk->table_id = table_id;
 	else
@@ -766,8 +786,9 @@ bool
 tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options)
 {
 	int32 compress_htid;
-	bool compress_disable = !with_clause_options[CompressEnabled].is_default &&
-							!DatumGetBool(with_clause_options[CompressEnabled].parsed);
+	bool compress_disable =
+		!with_clause_options[AlterTableFlagCompressEnabled].is_default &&
+		!DatumGetBool(with_clause_options[AlterTableFlagCompressEnabled].parsed);
 	CompressionSettings *settings;
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
@@ -1171,12 +1192,12 @@ compression_settings_update(Hypertable *ht, CompressionSettings *settings,
 		(settings->fd.orderby && settings->fd.orderby_desc && settings->fd.orderby_nullsfirst) ||
 		(!settings->fd.orderby && !settings->fd.orderby_desc && !settings->fd.orderby_nullsfirst));
 
-	if (!with_clause_options[CompressChunkTimeInterval].is_default)
+	if (!with_clause_options[AlterTableFlagCompressChunkTimeInterval].is_default)
 	{
 		update_compress_chunk_time_interval(ht, with_clause_options);
 	}
 
-	if (!with_clause_options[CompressSegmentBy].is_default)
+	if (!with_clause_options[AlterTableFlagCompressSegmentBy].is_default)
 	{
 		settings->fd.segmentby = ts_compress_hypertable_parse_segment_by(with_clause_options, ht);
 	}
@@ -1185,10 +1206,10 @@ compression_settings_update(Hypertable *ht, CompressionSettings *settings,
 		settings->fd.segmentby = compression_setting_segmentby_get_default(ht);
 	}
 
-	if (!with_clause_options[CompressOrderBy].is_default || !settings->fd.orderby)
+	if (!with_clause_options[AlterTableFlagCompressOrderBy].is_default || !settings->fd.orderby)
 	{
 		OrderBySettings obs;
-		if (with_clause_options[CompressOrderBy].is_default)
+		if (with_clause_options[AlterTableFlagCompressOrderBy].is_default)
 		{
 			obs = compression_setting_orderby_get_default(ht, settings->fd.segmentby);
 		}
@@ -1250,8 +1271,8 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 
 	CompressionSettings *settings = ts_compression_settings_get(ht->main_table_relid);
 
-	if (ts_array_is_member(settings->fd.segmentby, name) ||
-		ts_array_is_member(settings->fd.orderby, name))
+	if (settings && (ts_array_is_member(settings->fd.segmentby, name) ||
+					 ts_array_is_member(settings->fd.orderby, name)))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot drop orderby or segmentby column from a hypertable with "
@@ -1335,4 +1356,17 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 			ExecRenameStmt(compressed_index_stmt);
 		}
 	}
+}
+
+/*
+ * Enables compression for a hypertable without creating initial configuration
+ */
+void
+tsl_compression_enable(Hypertable *ht)
+{
+	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE), RowExclusiveLock);
+	Oid ownerid = ts_rel_get_owner(ht->main_table_relid);
+	Oid tablespace_oid = get_rel_tablespace(ht->main_table_relid);
+	int compress_htid = compression_hypertable_create(ht, ownerid, tablespace_oid);
+	ts_hypertable_set_compressed(ht, compress_htid);
 }
