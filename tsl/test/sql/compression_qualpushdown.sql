@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+set max_parallel_workers_per_gather = 0;
+
 -- qual pushdown tests for decompresschunk ---
 -- Test qual pushdown with ints
 CREATE TABLE meta (device_id INT PRIMARY KEY);
@@ -119,6 +121,7 @@ EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar';
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_c = 'char';
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar' AND dev_c = 'char';
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar'::char(10) AND dev_c = 'char'::varchar;
+RESET enable_seqscan;
 
 -- github issue #5286
 CREATE TABLE deleteme AS
@@ -134,6 +137,7 @@ ALTER TABLE deleteme SET (
 );
 
 SELECT compress_chunk(i) FROM show_chunks('deleteme') i;
+VACUUM ANALYZE deleteme;
 EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE segment::text like '%4%';
 EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE '4' = segment::text;
 
@@ -161,6 +165,7 @@ ALTER TABLE svf_pushdown SET (timescaledb.compress,timescaledb.compress_segmentb
 
 INSERT INTO svf_pushdown SELECT '2020-01-01';
 SELECT compress_chunk(show_chunks('svf_pushdown'));
+VACUUM ANALYZE svf_pushdown;
 
 -- constraints should be pushed down into scan below decompresschunk in all cases
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_date = CURRENT_DATE;
@@ -196,3 +201,4 @@ LATERAL(
     EXISTS (SELECT FROM meta) LIMIT 1
 ) l;
 
+DROP TABLE svf_pushdown;
