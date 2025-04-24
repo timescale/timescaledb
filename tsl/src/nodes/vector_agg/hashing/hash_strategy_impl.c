@@ -15,10 +15,10 @@
  */
 typedef struct FUNCTION_NAME(entry)
 {
+	HASH_TABLE_KEY_TYPE hash_table_key;
+
 	/* Key index 0 is invalid. */
 	uint32 key_index;
-
-	HASH_TABLE_KEY_TYPE hash_table_key;
 } FUNCTION_NAME(entry);
 
 #define SH_PREFIX KEY_VARIANT
