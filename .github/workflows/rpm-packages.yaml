@@ -24,7 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         image: [ "rockylinux:8", "rockylinux:9" ]
-        pg: [ 14, 15, 16, 17 ]
+        pg: [ 15, 16, 17 ]
         license: [ "TSL", "Apache"]
         include:
           - license: Apache
@@ -71,12 +71,12 @@ jobs:
       id: versions
       run: |
         # read expected version from version.config
-        # version will only be a proper version in a release branch so we use update_from_version
+        # version will only be a proper version in a release branch so we use previous_version
         # as fallback for main
         if grep '^version = [0-9.]\+$' version.config; then
           version=$(grep '^version = ' version.config | sed -e 's!^version = !!')
         else
-          version=$(grep '^update_from_version = ' version.config | sed -e 's!^update_from_version = !!')
+          version=$(grep '^previous_version = ' version.config | sed -e 's!^previous_version = !!')
         fi
         echo "version=${version}" >>$GITHUB_OUTPUT
 

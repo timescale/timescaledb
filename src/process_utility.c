@@ -27,10 +27,13 @@
 #include <commands/trigger.h>
 #include <commands/user.h>
 #include <commands/vacuum.h>
+#include <executor/spi.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodes.h>
 #include <nodes/parsenodes.h>
+#include <parser/parse_expr.h>
+#include <parser/parse_relation.h>
 #include <parser/parse_type.h>
 #include <parser/parse_utilcmd.h>
 #include <storage/lmgr.h>
@@ -45,6 +48,7 @@
 #include <utils/palloc.h>
 #include <utils/regproc.h>
 #include <utils/rel.h>
+#include <utils/ruleutils.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
 
@@ -52,7 +56,6 @@
 #include "annotations.h"
 #include "chunk.h"
 #include "chunk_index.h"
-#include "compression_with_clause.h"
 #include "copy.h"
 #include "cross_module_fn.h"
 #include "debug_assert.h"
@@ -81,7 +84,9 @@
 #include "ts_catalog/continuous_aggs_watermark.h"
 #include "tss_callbacks.h"
 #include "utils.h"
-#include "with_clause_parser.h"
+#include "with_clause/alter_table_with_clause.h"
+#include "with_clause/create_table_with_clause.h"
+#include "with_clause/with_clause_parser.h"
 
 #ifdef USE_TELEMETRY
 #include "telemetry/functions.h"
@@ -157,10 +162,7 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 				case AT_SetTableSpace:
 				case AT_ReAddStatistics:
 				case AT_SetCompression:
-#if PG15_GE
-
 				case AT_SetAccessMethod:
-#endif
 					/* allowed on chunks */
 					break;
 				case AT_AddConstraint:
@@ -290,9 +292,7 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			case AT_SetCompression:
 			case AT_DropNotNull:
 			case AT_SetNotNull:
-#if PG15_GE
 			case AT_SetAccessMethod:
-#endif
 				continue;
 				/*
 				 * BLOCKED:
@@ -329,6 +329,14 @@ check_altertable_add_column_for_compressed(Hypertable *ht, ColumnDef *col)
 			switch (constraint->contype)
 			{
 				/*
+				 * These will fail in combination with ADD COLUMN because this will
+				 * be a single column constraint and we require all partitioning
+				 * columns to be part if the unique/primary key constraint.
+				 */
+				case CONSTR_PRIMARY:
+				case CONSTR_UNIQUE:
+					break;
+				/*
 				 * We can safelly ignore NULL constraints because it does nothing
 				 * and according to Postgres docs is useless and exist just for
 				 * compatibility with other database systems
@@ -338,6 +346,12 @@ check_altertable_add_column_for_compressed(Hypertable *ht, ColumnDef *col)
 					continue;
 				case CONSTR_NOTNULL:
 					has_notnull = true;
+					continue;
+					/*
+					 * check constraints are validated at end of alter table command
+					 * in validate_check_constraint
+					 */
+				case CONSTR_CHECK:
 					continue;
 				case CONSTR_DEFAULT:
 					/*
@@ -513,11 +527,7 @@ process_drop_schema_start(DropStmt *stmt)
 		Ensure(!schema_isnull, "corrupt job entry: schema for job %d is null", job_id);
 		foreach (cell, stmt->objects)
 		{
-#if PG15_GE
 			String *object = lfirst_node(String, cell);
-#else
-			Value *object = lfirst(cell);
-#endif
 			if (namestrcmp(proc_schema, strVal(object)) == 0)
 			{
 				CatalogSecurityContext sec_ctx;
@@ -1305,7 +1315,7 @@ process_truncate(ProcessUtilityArgs *args)
 						 * the truncated region. */
 						if (ts_continuous_agg_hypertable_status(ht->fd.id) == HypertableIsRawTable)
 							ts_continuous_agg_invalidate_chunk(ht, chunk);
-						/* Truncate the compressed chunk too, unless it is a hypercore table. */
+						/* Truncate the compressed chunk too, unless the chunk is using TAM. */
 						if (!ts_is_hypercore_am(chunk->amoid) &&
 							chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
 						{
@@ -1412,6 +1422,7 @@ process_drop_table_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 		.objectId = chunk_relid,
 	};
 
+	ts_compression_settings_delete(chunk_relid);
 	performDeletion(&objaddr, stmt->behavior, 0);
 }
 
@@ -2243,7 +2254,9 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 	 * */
 	if (ht)
 	{
-		ts_compression_settings_rename_column_hypertable(ht, stmt->subname, stmt->newname);
+		ts_compression_settings_rename_column_cascade(ht->main_table_relid,
+													  stmt->subname,
+													  stmt->newname);
 		add_hypertable_to_process_args(args, ht);
 		dim = ts_hyperspace_get_mutable_dimension_by_name(ht->space,
 														  DIMENSION_TYPE_ANY,
@@ -2513,6 +2526,160 @@ typedef struct ChunkConstraintInfo
 	Oid hypertable_constraint_oid;
 } ChunkConstraintInfo;
 
+/*
+ * Unique constraints are validated by postgres during creation
+ * but the postgres process does not cover data present in compressed
+ * chunks or data split between compressed and uncompressed chunks.
+ * When adding unique constraints to chunks with compressed data we
+ * have to check for constraint violation ourself.
+ */
+static void
+validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
+{
+	if ((stmt->primary || stmt->unique) && ts_chunk_is_compressed(chunk) &&
+		!ts_is_hypercore_am(chunk->amoid))
+	{
+		StringInfoData command;
+		Oid nspcid = get_rel_namespace(chunk->table_id);
+		ListCell *lc;
+
+		initStringInfo(&command);
+		appendStringInfo(&command,
+						 "SELECT EXISTS(SELECT FROM %s.%s",
+						 quote_identifier(get_namespace_name(nspcid)),
+						 quote_identifier(get_rel_name(chunk->table_id)));
+
+		/*
+		 * Before PG15 NULLs were always considered distinct, with
+		 * PG15 the behaviour became configurable.
+		 */
+		if (!stmt->nulls_not_distinct)
+		{
+			int i = 0;
+			appendStringInfo(&command, " WHERE ");
+			foreach (lc, stmt->indexParams)
+			{
+				i++;
+				IndexElem *elem = lfirst_node(IndexElem, lc);
+				appendStringInfo(&command, "%s IS NOT NULL", quote_identifier(elem->name));
+				if (i < list_length(stmt->indexParams))
+					appendStringInfo(&command, " AND ");
+			}
+			Assert(i > 0);
+		}
+
+		appendStringInfo(&command, " GROUP BY ");
+		int j = 0;
+		foreach (lc, stmt->indexParams)
+		{
+			j++;
+			IndexElem *elem = lfirst_node(IndexElem, lc);
+			appendStringInfo(&command, "%s", quote_identifier(elem->name));
+			if (j < list_length(stmt->indexParams))
+				appendStringInfo(&command, ",");
+		}
+		Assert(j > 0);
+
+		appendStringInfo(&command, " HAVING count(*) > 1");
+
+		appendStringInfo(&command, ")");
+
+		if (SPI_connect() != SPI_OK_CONNECT)
+			elog(ERROR, "could not connect to SPI");
+
+		/* Lock down search_path */
+		int save_nestlevel = NewGUCNestLevel();
+		RestrictSearchPath();
+
+		int res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
+
+		if (res < 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_INTERNAL_ERROR),
+					 (errmsg("could not verify unique constraint on \"%s\"",
+							 get_rel_name(chunk->table_id)))));
+
+		bool isnull;
+		Datum has_conflicts =
+			SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+		Assert(!isnull);
+
+		if (isnull || DatumGetBool(has_conflicts))
+			ereport(ERROR,
+					(errcode(ERRCODE_UNIQUE_VIOLATION),
+					 (errmsg("duplicate key value violates unique constraint"))));
+
+		/* Restore search_path */
+		AtEOXact_GUC(false, save_nestlevel);
+
+		res = SPI_finish();
+		if (res != SPI_OK_FINISH)
+			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+	}
+}
+
+static void
+validate_check_constraint(Chunk *chunk, Constraint *con)
+{
+	if (ts_chunk_is_compressed(chunk) && !ts_is_hypercore_am(chunk->amoid))
+	{
+		StringInfoData command;
+		Oid nspcid = get_rel_namespace(chunk->table_id);
+
+		ParseState *pstate = make_parsestate(NULL);
+		Relation rel = table_open(chunk->table_id, AccessExclusiveLock);
+		ParseNamespaceItem *nsitem =
+			addRangeTableEntryForRelation(pstate, rel, AccessShareLock, NULL, false, true);
+		addNSItemToQuery(pstate, nsitem, true, true, true);
+		List *context = deparse_context_for(get_rel_name(chunk->table_id), chunk->table_id);
+		Node *tf = transformExpr(pstate, con->raw_expr, EXPR_KIND_CHECK_CONSTRAINT);
+		char *deparsed = deparse_expression(tf, context, false, false);
+
+		initStringInfo(&command);
+		appendStringInfo(&command,
+						 "SELECT EXISTS(SELECT FROM %s.%s WHERE NOT (%s))",
+						 quote_identifier(get_namespace_name(nspcid)),
+						 quote_identifier(RelationGetRelationName(rel)),
+						 deparsed);
+
+		if (SPI_connect() != SPI_OK_CONNECT)
+			elog(ERROR, "could not connect to SPI");
+
+		/* Lock down search_path */
+		int save_nestlevel = NewGUCNestLevel();
+		RestrictSearchPath();
+
+		int res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
+
+		if (res < 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_INTERNAL_ERROR),
+					 (errmsg("could not verify check constraint on \"%s\"",
+							 get_rel_name(chunk->table_id)))));
+
+		bool isnull;
+		Datum has_conflicts =
+			SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+		Assert(!isnull);
+
+		if (isnull || DatumGetBool(has_conflicts))
+			ereport(ERROR,
+					(errcode(ERRCODE_CHECK_VIOLATION),
+					 errmsg("check constraint \"%s\" of relation \"%s\" is violated by some row",
+							con->conname,
+							RelationGetRelationName(rel)),
+					 errtableconstraint(rel, con->conname)));
+
+		table_close(rel, NoLock);
+		/* Restore search_path */
+		AtEOXact_GUC(false, save_nestlevel);
+
+		res = SPI_finish();
+		if (res != SPI_OK_FINISH)
+			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+	}
+}
+
 static void
 process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
@@ -2522,19 +2689,49 @@ process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	switch (info->cmd->subtype)
 	{
 		case AT_AddIndex:
+			if (ts_chunk_is_compressed(chunk) && !ts_is_hypercore_am(chunk->amoid))
+				validate_index_constraints(chunk, castNode(IndexStmt, info->cmd->def));
+
+			break;
 		case AT_AddConstraint:
 #if PG16_LT
 		case AT_AddConstraintRecurse:
 #endif
-			if (ts_chunk_is_compressed(chunk) && !ts_is_hypercore_am(chunk->amoid))
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("operation not supported on hypertables that have compressed "
-								"data"),
-						 errhint("Decompress the data before retrying the operation.")));
+		{
+			Constraint *con = castNode(Constraint, info->cmd->def);
+			switch (con->contype)
+			{
+					/*
+					 * Unique and primary key constraints are checked as part of
+					 * creation of the index enforcing it so nothing to do here.
+					 */
+				case CONSTR_UNIQUE:
+				case CONSTR_PRIMARY:
+					/*
+					 * Foreign key constraints are checked by postgres since
+					 * the check happens through SPI and we adjust those queries
+					 * to include compressed data.
+					 */
+				case CONSTR_FOREIGN:
+					break;
+				case CONSTR_CHECK:
+				{
+					validate_check_constraint(chunk, con);
+					break;
+				}
+				default:
+					if (ts_chunk_is_compressed(chunk) && !ts_is_hypercore_am(chunk->amoid))
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								 errmsg(
+									 "operation not supported on hypertables that have compressed "
+									 "data"),
+								 errhint("Decompress the data before retrying the operation.")));
+			}
 			break;
 			/* Other AT commands might not be allowed on compressed chunks, but
 			 * they are checked at hypertable level in that case */
+		}
 		default:
 			break;
 	}
@@ -2570,10 +2767,6 @@ process_altertable_validate_constraint_end(Hypertable *ht, AlterTableCmd *cmd)
 
 /*
  * Validate that SET NOT NULL is ok for this chunk.
- *
- * Throws an error if SET NOT NULL on this chunk is not allowed, right now,
- * SET NOT NULL is allowed on chunks that are either a fully decompressed, or
- * are using the Hypercore table access method.
  */
 static void
 validate_set_not_null(Hypertable *ht, Oid chunk_relid, void *arg)
@@ -2581,46 +2774,95 @@ validate_set_not_null(Hypertable *ht, Oid chunk_relid, void *arg)
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 	if (ts_chunk_is_compressed(chunk) && !ts_is_hypercore_am(chunk->amoid))
 	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("operation not supported on compressed chunks not using the "
-						"\"hypercore\" table access method"),
-				 errdetail("Chunk %s.%s is using the heap table access method and has compressed "
-						   "data.",
-						   NameStr(chunk->fd.schema_name),
-						   NameStr(chunk->fd.table_name)),
-				 errhint("Either decompress all chunks of the hypertable or use \"ALTER TABLE "
-						 "%s.%s SET ACCESS METHOD hypercore\" on all chunks to change access "
-						 "method.",
-						 NameStr(chunk->fd.schema_name),
-						 NameStr(chunk->fd.table_name))));
+		StringInfoData command;
+		AlterTableCmd *cmd = (AlterTableCmd *) arg;
+		const CompressionSettings *settings = ts_compression_settings_get(chunk->table_id);
+		Oid nspcid = get_rel_namespace(settings->fd.compress_relid);
+
+		initStringInfo(&command);
+		appendStringInfo(&command,
+						 "SELECT EXISTS(SELECT FROM %s.%s WHERE ",
+						 quote_identifier(get_namespace_name(nspcid)),
+						 quote_identifier(get_rel_name(settings->fd.compress_relid)));
+
+		if (ts_array_is_member(settings->fd.segmentby, cmd->name))
+		{
+			/* For segmentby we can check directly whether NULLS are present */
+			appendStringInfo(&command, "%s IS NULL", quote_identifier(cmd->name));
+		}
+		else
+		{
+			/* For other columns we need to check whether we have a DEFAULT in which
+			 * case NULL as column value would be fine.
+			 * */
+			HeapTuple atttuple = SearchSysCacheAttName(ht->main_table_relid, cmd->name);
+			Form_pg_attribute attform = ((Form_pg_attribute) GETSTRUCT(atttuple));
+
+			if (attform->atthasdef)
+				appendStringInfo(&command,
+								 "%s IS NOT NULL AND "
+								 "_timescaledb_functions.compressed_data_has_nulls(%s)",
+								 quote_identifier(cmd->name),
+								 quote_identifier(cmd->name));
+			else
+				appendStringInfo(&command,
+								 "%s IS NULL OR "
+								 "_timescaledb_functions.compressed_data_has_nulls(%s)",
+								 quote_identifier(cmd->name),
+								 quote_identifier(cmd->name));
+			ReleaseSysCache(atttuple);
+		}
+		appendStringInfo(&command, ")");
+
+		if (SPI_connect() != SPI_OK_CONNECT)
+			elog(ERROR, "could not connect to SPI");
+
+		int res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
+
+		if (res < 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_INTERNAL_ERROR),
+					 (errmsg("could not verify presence of NULL values on \"%s\"",
+							 get_rel_name(chunk_relid)))));
+
+		bool isnull;
+		Datum has_nulls = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+
+		if (isnull || DatumGetBool(has_nulls))
+			ereport(ERROR,
+					(errcode(ERRCODE_NOT_NULL_VIOLATION),
+					 (errmsg("column \"%s\" of relation \"%s\" contains null values",
+							 cmd->name,
+							 get_rel_name(chunk_relid)))));
+
+		res = SPI_finish();
+		if (res != SPI_OK_FINISH)
+			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
 	}
 }
 
 /*
- * This function checks that we are not dropping NOT NULL from bad columns and
- * that all chunks support the modification.
+ * This function checks that we are not dropping NOT NULL from partitioning columns and
+ * that no NULL data is present when adding NOT NULL constraint.
  */
 static void
-process_altertable_alter_not_null_start(Hypertable *ht, AlterTableCmd *cmd)
+process_altertable_alter_not_null(Hypertable *ht, AlterTableCmd *cmd)
 {
-	int i;
-
 	if (cmd->subtype == AT_SetNotNull)
 		foreach_chunk(ht, validate_set_not_null, cmd);
 
-	if (cmd->subtype != AT_DropNotNull)
-		return;
-
-	for (i = 0; i < ht->space->num_dimensions; i++)
+	if (cmd->subtype == AT_DropNotNull)
 	{
-		Dimension *dim = &ht->space->dimensions[i];
+		for (int i = 0; i < ht->space->num_dimensions; i++)
+		{
+			Dimension *dim = &ht->space->dimensions[i];
 
-		if (IS_OPEN_DIMENSION(dim) &&
-			strncmp(NameStr(dim->fd.column_name), cmd->name, NAMEDATALEN) == 0)
-			ereport(ERROR,
-					(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
-					 errmsg("cannot drop not-null constraint from a time-partitioned column")));
+			if (IS_OPEN_DIMENSION(dim) &&
+				strncmp(NameStr(dim->fd.column_name), cmd->name, NAMEDATALEN) == 0)
+				ereport(ERROR,
+						(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+						 errmsg("cannot drop not-null constraint from a time-partitioned column")));
+		}
 	}
 }
 
@@ -2778,22 +3020,6 @@ typedef struct CreateIndexInfo
 	MemoryContext mctx;
 } CreateIndexInfo;
 
-static inline void
-raise_error_if_creating_index_on_compressed(const Chunk *chunk, const IndexStmt *stmt)
-{
-	if (ts_chunk_is_compressed(chunk) && !ts_is_hypercore_am(chunk->amoid))
-	{
-		/* unique indexes are not allowed on compressed hypertables*/
-		if (stmt->unique || stmt->primary || stmt->isconstraint)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("operation not supported on hypertables that have compression "
-							"enabled")));
-		}
-	}
-}
-
 /*
  * Create index on a chunk.
  *
@@ -2816,7 +3042,7 @@ process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 		return;
 	}
 
-	raise_error_if_creating_index_on_compressed(chunk, info->stmt);
+	validate_index_constraints(chunk, info->stmt);
 
 	chunk_rel = table_open(chunk_relid, ShareLock);
 	hypertable_index_rel = index_open(info->obj.objectId, AccessShareLock);
@@ -2944,7 +3170,7 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 		ereport(NOTICE, (errmsg("skipping index creation for tiered data")));
 	}
 
-	raise_error_if_creating_index_on_compressed(chunk, info->stmt);
+	validate_index_constraints(chunk, info->stmt);
 
 	table_close(chunk_rel, NoLock);
 
@@ -3440,6 +3666,13 @@ process_cluster_start(ProcessUtilityArgs *args)
 	return result;
 }
 
+typedef struct CreateTableInfo
+{
+	bool hypertable;
+	WithClauseResult *with_clauses;
+} CreateTableInfo;
+
+static CreateTableInfo create_table_info = { 0 };
 /*
  * Process create table statements.
  *
@@ -3482,6 +3715,98 @@ process_create_table_end(Node *parsetree)
 				break;
 			default:
 				break;
+		}
+	}
+
+	if (create_table_info.hypertable)
+	{
+		Oid table_relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+		char *time_column =
+			TextDatumGetCString(create_table_info.with_clauses[CreateTableFlagTimeColumn].parsed);
+		NameData time_column_name;
+		NameData associated_schema_name;
+		NameData associated_table_prefix;
+		namestrcpy(&time_column_name, time_column);
+		uint32 flags = 0;
+		bool has_associated_schema = false;
+		bool has_associated_table_prefix = false;
+
+		if (get_attnum(table_relid, time_column) == InvalidAttrNumber)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_COLUMN),
+					 errmsg("column \"%s\" does not exist", time_column)));
+
+		Oid interval_type = InvalidOid;
+		Datum interval = UnassignedDatum;
+
+		if (!create_table_info.with_clauses[CreateTableFlagChunkTimeInterval].is_default)
+		{
+			AttrNumber time_attno = get_attnum(table_relid, time_column);
+			Oid time_type = get_atttype(table_relid, time_attno);
+
+			interval = ts_create_table_parse_chunk_time_interval(create_table_info.with_clauses,
+																 time_type,
+																 &interval_type);
+		}
+
+		if (!create_table_info.with_clauses[CreateTableFlagCreateDefaultIndexes].is_default)
+		{
+			if (!DatumGetBool(
+					create_table_info.with_clauses[CreateTableFlagCreateDefaultIndexes].parsed))
+				flags |= HYPERTABLE_CREATE_DISABLE_DEFAULT_INDEXES;
+		}
+
+		if (!create_table_info.with_clauses[CreateTableFlagAssociatedSchema].is_default)
+		{
+			has_associated_schema = true;
+			namestrcpy(&associated_schema_name,
+					   TextDatumGetCString(
+						   create_table_info.with_clauses[CreateTableFlagAssociatedSchema].parsed));
+		}
+
+		if (!create_table_info.with_clauses[CreateTableFlagAssociatedTablePrefix].is_default)
+		{
+			has_associated_table_prefix = true;
+			namestrcpy(&associated_table_prefix,
+					   TextDatumGetCString(
+						   create_table_info.with_clauses[CreateTableFlagAssociatedTablePrefix]
+							   .parsed));
+		}
+
+		DimensionInfo *open_dim_info =
+			ts_dimension_info_create_open(table_relid,
+										  &time_column_name, /* column name */
+										  interval,			 /* interval */
+										  interval_type,	 /* interval type */
+										  InvalidOid		 /* partitioning func */
+			);
+
+		ChunkSizingInfo *csi = ts_chunk_sizing_info_get_default_disabled(table_relid);
+		csi->colname = time_column;
+
+		CatalogSecurityContext sec_ctx;
+		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+		int32 ht_id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
+		ts_catalog_restore_user(&sec_ctx);
+
+		if (ts_hypertable_create_from_info(table_relid,
+										   ht_id,
+										   flags,		  /* flags */
+										   open_dim_info, /* open_dim_info */
+										   NULL,		  /* closed_dim_info */
+										   has_associated_schema ?
+											   &associated_schema_name :
+											   NULL, /* associated_schema_name */
+										   has_associated_table_prefix ?
+											   &associated_table_prefix :
+											   NULL, /* associated_table_prefix */
+										   csi))
+		{
+			if (ts_cm_functions->compression_enable)
+			{
+				Hypertable *ht = ts_hypertable_get_by_id(ht_id);
+				ts_cm_functions->compression_enable(ht);
+			}
 		}
 	}
 }
@@ -3779,7 +4104,6 @@ process_altertable_chunk_set_tablespace(AlterTableCmd *cmd, Oid relid)
  * If called on a hypertable, this will set the compression flag on the
  * hypertable in addition to running the set access method code.
  */
-#if PG15_GE
 static void
 process_set_access_method(AlterTableCmd *cmd, ProcessUtilityArgs *args)
 {
@@ -3787,7 +4111,7 @@ process_set_access_method(AlterTableCmd *cmd, ProcessUtilityArgs *args)
 	Oid relid = AlterTableLookupRelation(stmt, NoLock);
 	Cache *hcache;
 	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
-	if (ht && (strcmp(cmd->name, TS_HYPERCORE_TAM_NAME) == 0))
+	if (ht && cmd->name && (strcmp(cmd->name, TS_HYPERCORE_TAM_NAME) == 0))
 	{
 		/* For hypertables, we automatically add command to set the
 		 * compression flag if we are setting the access method to be a
@@ -3806,7 +4130,6 @@ process_set_access_method(AlterTableCmd *cmd, ProcessUtilityArgs *args)
 	}
 	ts_cache_release(hcache);
 }
-#endif
 
 static DDLResult
 process_altertable_start_table(ProcessUtilityArgs *args)
@@ -3849,8 +4172,8 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 			break;
 			case AT_SetNotNull:
 			case AT_DropNotNull:
-				if (ht != NULL)
-					process_altertable_alter_not_null_start(ht, cmd);
+				if (ht)
+					process_altertable_alter_not_null(ht, cmd);
 				break;
 			case AT_AddColumn:
 #if PG16_LT
@@ -3931,11 +4254,9 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				if (NULL == ht)
 					process_altertable_chunk_set_tablespace(cmd, relid);
 				break;
-#if PG15_GE
 			case AT_SetAccessMethod:
 				process_set_access_method(cmd, args);
 				break;
-#endif
 			default:
 				break;
 		}
@@ -4326,15 +4647,6 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 }
 
 static void
-process_altertable_end_simple_cmd(Hypertable *ht, CollectedCommand *cmd)
-{
-	AlterTableStmt *stmt = (AlterTableStmt *) cmd->parsetree;
-
-	Assert(IsA(stmt, AlterTableStmt));
-	process_altertable_end_subcmd(ht, linitial(stmt->cmds), &cmd->d.simple.secondaryObject);
-}
-
-static void
 process_altertable_end_subcmds(Hypertable *ht, List *cmds)
 {
 	ListCell *lc;
@@ -4369,7 +4681,9 @@ process_altertable_end_table(Node *parsetree, CollectedCommand *cmd)
 		switch (cmd->type)
 		{
 			case SCT_Simple:
-				process_altertable_end_simple_cmd(ht, cmd);
+				process_altertable_end_subcmd(ht,
+											  linitial(stmt->cmds),
+											  &cmd->d.simple.secondaryObject);
 				break;
 			case SCT_AlterTable:
 				process_altertable_end_subcmds(ht, cmd->d.alterTable.subcmds);
@@ -4608,9 +4922,9 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 				 errmsg("only timescaledb.compress parameters allowed when specifying compression "
 						"parameters for hypertable")));
 
-	parse_results = ts_compress_hypertable_set_clause_parse(compress_options);
+	parse_results = ts_alter_table_with_clause_parse(compress_options);
 
-	ts_cm_functions->process_compress_table(cmd, ht, parse_results);
+	ts_cm_functions->process_compress_table(ht, parse_results);
 	return DDL_DONE;
 }
 
@@ -4693,7 +5007,6 @@ process_create_table_as(ProcessUtilityArgs *args)
 	return DDL_CONTINUE;
 }
 
-#if PG15_GE
 static DDLResult
 process_create_stmt(ProcessUtilityArgs *args)
 {
@@ -4717,9 +5030,43 @@ process_create_stmt(ProcessUtilityArgs *args)
 						"tables to \"%s\" since it is only supported for hypertables.",
 						TS_HYPERCORE_TAM_NAME));
 
+	List *pg_options = NIL, *hypertable_options = NIL;
+	ts_with_clause_filter(stmt->options, &hypertable_options, &pg_options);
+	stmt->options = pg_options;
+
+	create_table_info.hypertable = false;
+	create_table_info.with_clauses = NULL;
+	/*
+	 * We can only convert the table into a hypertable after postgres has created
+	 * the initial table so we store the information passed in the WITH clause
+	 * and do some initial sanity check and do the actual work of creating the hypertable
+	 * in process_create_table_end.
+	 */
+	if (hypertable_options)
+	{
+		create_table_info.with_clauses = ts_create_table_with_clause_parse(hypertable_options);
+		create_table_info.hypertable =
+			DatumGetBool(create_table_info.with_clauses[CreateTableFlagHypertable].parsed);
+
+		if (!create_table_info.with_clauses[CreateTableFlagHypertable].parsed)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_COLUMN),
+					 errmsg("timescaledb options requires hypertable option"),
+					 errhint("Use \"timescaledb.hypertable\" to enable creating a hypertable.")));
+
+		if (create_table_info.hypertable)
+		{
+			if (!create_table_info.with_clauses[CreateTableFlagTimeColumn].parsed)
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_COLUMN),
+						 errmsg("hypertable option requires time_column"),
+						 errhint("Use \"timescaledb.time_column\" to specify the column to use as "
+								 "partitioning column.")));
+		}
+	}
+
 	return DDL_CONTINUE;
 }
-#endif
 
 static DDLResult
 process_refresh_mat_view_start(ProcessUtilityArgs *args)
@@ -4841,11 +5188,9 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 		case T_CreateTableAsStmt:
 			handler = process_create_table_as;
 			break;
-#if PG15_GE
 		case T_CreateStmt:
 			handler = process_create_stmt;
 			break;
-#endif
 
 		case T_ExecuteStmt:
 			check_read_only = false;
@@ -4953,9 +5298,22 @@ process_drop_table(EventTriggerDropObject *obj)
 	EventTriggerDropRelation *table = (EventTriggerDropRelation *) obj;
 
 	Assert(obj->type == EVENT_TRIGGER_DROP_TABLE || obj->type == EVENT_TRIGGER_DROP_FOREIGN_TABLE);
+	ts_chunk_delete_by_relid_and_relname(table->relid,
+										 table->schema,
+										 table->name,
+										 DROP_RESTRICT,
+										 false);
 	ts_hypertable_delete_by_name(table->schema, table->name);
-	ts_chunk_delete_by_name(table->schema, table->name, DROP_RESTRICT);
-	ts_compression_settings_delete(table->relid);
+	/*
+	 * Normally, compression settings are cleaned up when deleting the
+	 * hypertable or chunk. However, in some cases, e.g., when a hypertable
+	 * delete cascades to chunks, the chunk relids cannot be resolved from the
+	 * schema and name because the chunk relations are already dropped by
+	 * PostgreSQL when the "drop eventtrigger" is called. Therefore, also try
+	 * to delete compression settings here since the eventtrigger gives us the
+	 * relid of dropped objects.
+	 */
+	ts_compression_settings_delete_any(table->relid);
 }
 
 static void

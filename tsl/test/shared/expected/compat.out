@@ -59,8 +59,7 @@ SELECT _timescaledb_internal.create_chunk(0,NULL,NULL,NULL,0);
 WARNING:  function _timescaledb_internal.create_chunk(regclass,jsonb,name,name,regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  invalid Oid
 SELECT _timescaledb_internal.create_chunk_table(0,NULL,NULL,NULL);
-WARNING:  function _timescaledb_internal.create_chunk_table(regclass,jsonb,name,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  hypertable cannot be NULL
+ERROR:  function _timescaledb_internal.create_chunk_table(integer, unknown, unknown, unknown) does not exist at character 8
 SELECT _timescaledb_internal.create_compressed_chunk(0,0,0,0,0,0,0,0,0,0);
 WARNING:  function _timescaledb_internal.create_compressed_chunk(regclass,regclass,bigint,bigint,bigint,bigint,bigint,bigint,bigint,bigint) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  invalid Oid

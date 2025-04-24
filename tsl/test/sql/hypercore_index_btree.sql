@@ -428,11 +428,6 @@ where c.oid = :'unique_chunk'::regclass;
 
 insert into uniquetable values ('2024-01-01 01:00', 3);
 
--- Unique index creation on compressed chunk not supported
-\set ON_ERROR_STOP 0
-create unique index time_key on uniquetable (time);
-\set ON_ERROR_STOP 1
-
 -- Convert the chunk to using Hypercore TAM
 alter table :unique_chunk set access method hypercore;
 

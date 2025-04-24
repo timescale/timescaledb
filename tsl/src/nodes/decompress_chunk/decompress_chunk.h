@@ -21,11 +21,6 @@ typedef struct CompressionInfo
 	RangeTblEntry *chunk_rte;
 	RangeTblEntry *compressed_rte;
 	RangeTblEntry *ht_rte;
-
-	FormData_chunk compressed_fd;
-	Oid compressed_reloid;
-	Oid compression_hypertable_reloid;
-
 	Oid compresseddata_oid;
 
 	CompressionSettings *settings;

@@ -10,6 +10,7 @@
 #include <access/htup_details.h>
 #include <catalog/pg_type.h>
 #include <fmgr.h>
+#include <guc.h>
 #include <lib/stringinfo.h>
 #include <libpq/pqformat.h>
 #include <utils/array.h>
@@ -24,10 +25,12 @@
 #include <export.h>
 
 #include "compression/algorithms/array.h"
+#include "compression/algorithms/bool_compress.h"
 #include "compression/algorithms/deltadelta.h"
 #include "compression/algorithms/dictionary.h"
 #include "compression/algorithms/float_utils.h"
 #include "compression/algorithms/gorilla.h"
+#include "compression/algorithms/null.h"
 #include "compression/arrow_c_data_interface.h"
 #include "compression/batch_metadata_builder_minmax.h"
 
@@ -617,6 +620,282 @@ test_delta4(const int32 *values, int n)
 	TestAssertTrue(i == n);
 }
 
+static void
+test_bool_rle(bool nulls, int run_length, int expected_size)
+{
+	Compressor *compressor = bool_compressor_for_type(BOOLOID);
+	int rlen = run_length;
+	bool val = true;
+	for (int i = 0; i < TEST_ELEMENTS; ++i)
+	{
+		if (rlen == 0)
+		{
+			if (nulls)
+				compressor->append_null(compressor);
+			else
+				compressor->append_val(compressor, BoolGetDatum(val));
+			rlen = run_length;
+			val = !val;
+		}
+		else
+		{
+			compressor->append_val(compressor, BoolGetDatum(val));
+			--rlen;
+		}
+	}
+
+	Datum compressed = (Datum) compressor->finish(compressor);
+	TestAssertTrue(DatumGetPointer(compressed) != NULL);
+	TestAssertInt64Eq(VARSIZE(DatumGetPointer(compressed)), expected_size);
+
+	rlen = run_length;
+	val = true;
+	DecompressionIterator *iter =
+		bool_decompression_iterator_from_datum_forward(compressed, BOOLOID);
+
+	for (int i = 0; i < TEST_ELEMENTS; ++i)
+	{
+		DecompressResult r = bool_decompression_iterator_try_next_forward(iter);
+		TestAssertTrue(!r.is_done);
+		if (rlen == 0)
+		{
+			if (nulls)
+				TestAssertTrue(r.is_null);
+			else
+				TestAssertTrue(DatumGetBool(r.val) == val);
+			rlen = run_length;
+			val = !val;
+		}
+		else
+		{
+			TestAssertTrue(r.is_null == false);
+			TestAssertTrue(DatumGetBool(r.val) == val);
+			--rlen;
+		}
+	}
+
+	DecompressResult r = bool_decompression_iterator_try_next_forward(iter);
+	TestAssertTrue(r.is_done);
+}
+
+static void
+test_bool_array(bool nulls, int run_length, int expected_size)
+{
+	Compressor *compressor = array_compressor_for_type(BOOLOID);
+	int rlen = run_length;
+	bool val = true;
+	for (int i = 0; i < TEST_ELEMENTS; ++i)
+	{
+		if (rlen == 0)
+		{
+			if (nulls)
+				compressor->append_null(compressor);
+			else
+				compressor->append_val(compressor, BoolGetDatum(val));
+			rlen = run_length;
+			val = !val;
+		}
+		else
+		{
+			compressor->append_val(compressor, BoolGetDatum(val));
+			--rlen;
+		}
+	}
+
+	Datum compressed = (Datum) compressor->finish(compressor);
+	TestAssertTrue(DatumGetPointer(compressed) != NULL);
+	TestAssertInt64Eq(VARSIZE(DatumGetPointer(compressed)), expected_size);
+
+	rlen = run_length;
+	val = true;
+	DecompressionIterator *iter =
+		tsl_array_decompression_iterator_from_datum_forward(compressed, BOOLOID);
+
+	for (int i = 0; i < TEST_ELEMENTS; ++i)
+	{
+		DecompressResult r = array_decompression_iterator_try_next_forward(iter);
+		TestAssertTrue(!r.is_done);
+		if (rlen == 0)
+		{
+			if (nulls)
+				TestAssertTrue(r.is_null);
+			else
+				TestAssertTrue(DatumGetBool(r.val) == val);
+			rlen = run_length;
+			val = !val;
+		}
+		else
+		{
+			TestAssertTrue(r.is_null == false);
+			TestAssertTrue(DatumGetBool(r.val) == val);
+			--rlen;
+		}
+	}
+
+	DecompressResult r = array_decompression_iterator_try_next_forward(iter);
+	TestAssertTrue(r.is_done);
+}
+
+static void
+test_empty_bool_compressor()
+{
+	/* This returns an ExtendedCompressor from bool_compress.c */
+	Compressor *compressor = bool_compressor_for_type(BOOLOID);
+	Datum compressed = (Datum) compressor->finish(compressor);
+	TestAssertTrue(DatumGetPointer(compressed) == NULL);
+
+	/* further abusing finish: */
+	compressed = (Datum) compressor->finish(NULL);
+	TestAssertTrue(DatumGetPointer(compressed) == NULL);
+
+	/* make codecov happy */
+	TestAssertTrue(bool_compressor_finish(NULL) == NULL);
+
+	/* Passing a NULL pointer returns NULL. */
+	TestEnsureError(DirectFunctionCall1(tsl_bool_compressor_finish, PointerGetDatum(NULL)));
+
+	TestEnsureError(bool_compressor_for_type(FLOAT4OID));
+
+	bool old_val = ts_guc_enable_bool_compression;
+	ts_guc_enable_bool_compression = true;
+	TestAssertTrue(compression_get_default_algorithm(BOOLOID) == COMPRESSION_ALGORITHM_BOOL);
+	ts_guc_enable_bool_compression = false;
+	TestAssertTrue(compression_get_default_algorithm(BOOLOID) == COMPRESSION_ALGORITHM_ARRAY);
+	ts_guc_enable_bool_compression = old_val;
+}
+
+static void
+test_bool_compressor_extended()
+{
+	Compressor *compressor = bool_compressor_for_type(BOOLOID);
+	void *finished = compressor->finish(compressor);
+	TestAssertTrue(finished == NULL);
+
+	/* adding a null value should reinitialize the compressor */
+	compressor->append_null(compressor);
+	finished = compressor->finish(compressor);
+	TestAssertTrue(finished != NULL &&
+				   "having only nulls should return compressed data because of fake values");
+
+	/* finishing a finished compressor should return NULL */
+	finished = compressor->finish(compressor);
+	TestAssertTrue(finished == NULL && "finishing a finished compressor should return NULL");
+
+	/* adding a non-null value should reinitialize the compressor */
+	compressor->append_val(compressor, BoolGetDatum(true));
+	finished = compressor->finish(compressor);
+	TestAssertTrue(finished != NULL);
+}
+
+static uint32
+bool_compressed_size(int num_values, int flip_nth)
+{
+	Compressor *compressor = bool_compressor_for_type(BOOLOID);
+	for (int i = 1; i < (num_values + 1); ++i)
+	{
+		if (i % flip_nth == 0)
+			compressor->append_val(compressor, BoolGetDatum(false));
+		else
+			compressor->append_val(compressor, BoolGetDatum(true));
+	}
+
+	Datum compressed = (Datum) compressor->finish(compressor);
+	TestAssertTrue(DatumGetPointer(compressed) != NULL);
+	return VARSIZE(DatumGetPointer(compressed));
+}
+
+static void
+test_bool()
+{
+	/* code covareage and simple tests */
+	test_empty_bool_compressor();
+	test_bool_compressor_extended();
+
+	/* testing a few RLE configurations with or without nulls: */
+	test_bool_rle(/* nulls = */ false, /* run_length = */ 1, /* expected_size = */ 152);
+	test_bool_rle(/* nulls = */ false, /* run_length = */ 5, /* expected_size = */ 152);
+	test_bool_rle(/* nulls = */ true, /* run_length = */ 19, /* expected_size = */ 296);
+	test_bool_rle(/* nulls = */ false, /* run_length = */ 27, /* expected_size = */ 152);
+	test_bool_rle(/* nulls = */ true, /* run_length = */ 43, /* expected_size = */ 296);
+	test_bool_rle(/* nulls = */ false, /* run_length = */ 61, /* expected_size = */ 152);
+	test_bool_rle(/* nulls = */ false, /* run_length = */ 65, /* expected_size = */ 152);
+	test_bool_rle(/* nulls = */ false, /* run_length = */ 100, /* expected_size = */ 112);
+	test_bool_rle(/* nulls = */ true, /* run_length = */ 97, /* expected_size = */ 256);
+	test_bool_rle(/* nulls = */ false, /* run_length = */ 191, /* expected_size = */ 72);
+	test_bool_rle(/* nulls = */ true, /* run_length = */ 237, /* expected_size = */ 144);
+	test_bool_rle(/* nulls = */ false, /* run_length = */ 600, /* expected_size = */ 40);
+	test_bool_rle(/* nulls = */ true, /* run_length = */ 720, /* expected_size = */ 80);
+	test_bool_rle(/* nulls = */ false,
+				  /* run_length = */ TEST_ELEMENTS + 1,
+				  /* expected_size = */ 32);
+	/* few select cases for comparison against bool compression: */
+	test_bool_array(/* nulls = */ false, /* run_length = */ 1, /* expected_size = */ 1055);
+	test_bool_array(/* nulls = */ true, /* run_length = */ 19, /* expected_size = */ 1149);
+	test_bool_array(/* nulls = */ false, /* run_length = */ 600, /* expected_size = */ 1055);
+	test_bool_array(/* nulls = */ true, /* run_length = */ 720, /* expected_size = */ 1094);
+	test_bool_array(/* nulls = */ false,
+					/* run_length = */ TEST_ELEMENTS + 1,
+					/* expected_size = */ 1055);
+
+	int baseline = bool_compressed_size(1, 1);
+	int no_rle = bool_compressed_size(64, 2);
+	/* verify that we can pack 64 bits into the same size */
+	TestAssertTrue(no_rle == baseline);
+	int rle_size = bool_compressed_size(65, 66);
+	/* verify that we can RLE 65 bits into the same size */
+	TestAssertTrue(rle_size == baseline);
+}
+
+static void
+test_null()
+{
+	/* pointless tests to make codecov happy */
+	StringInfoData buffer = (StringInfoData){
+		.data = NULL,
+		.len = 0,
+		.maxlen = 0,
+	};
+	TestEnsureError(null_decompression_iterator_from_datum_forward((Datum) 0, INT2OID));
+	TestEnsureError(null_decompression_iterator_from_datum_reverse((Datum) 0, BOOLOID));
+	TestEnsureError(null_compressed_send(NULL, &buffer));
+	TestEnsureError(null_compressed_recv(&buffer));
+	TestEnsureError(null_compressor_for_type(BOOLOID));
+
+	{
+		StringInfoData buffer;
+
+		void *compressed = null_compressor_get_dummy_block();
+		Datum sent_datum = DirectFunctionCall2(tsl_compressed_data_send,
+											   PointerGetDatum(compressed),
+											   PointerGetDatum(&buffer));
+
+		bytea *sent = (bytea *) DatumGetPointer(sent_datum);
+		StringInfoData transmission = (StringInfoData){
+			.data = VARDATA(sent),
+			.len = VARSIZE(sent),
+			.maxlen = VARSIZE(sent),
+		};
+
+		TestAssertTrue(transmission.len > 0);
+		TestAssertTrue(transmission.data != NULL);
+
+		LOCAL_FCINFO(local_fcinfo, 1);
+		local_fcinfo->args[0] =
+			(NullableDatum){ .value = PointerGetDatum(&transmission), .isnull = false };
+
+		// Call the function directly
+		tsl_compressed_data_recv(local_fcinfo);
+
+		TestAssertTrue(local_fcinfo->isnull);
+	}
+	{
+		void *compressed = null_compressor_get_dummy_block();
+		Datum has_nulls =
+			DirectFunctionCall1(tsl_compressed_data_has_nulls, PointerGetDatum(compressed));
+		TestAssertTrue(DatumGetBool(has_nulls));
+	}
+}
+
 Datum
 ts_test_compression(PG_FUNCTION_ARGS)
 {
@@ -636,6 +915,8 @@ ts_test_compression(PG_FUNCTION_ARGS)
 	test_delta3(/* have_nulls = */ false, /* have_random = */ true);
 	test_delta3(/* have_nulls = */ true, /* have_random = */ false);
 	test_delta3(/* have_nulls = */ true, /* have_random = */ true);
+	test_bool();
+	test_null();
 
 	/* Some tests for zig-zag encoding overflowing the original element width. */
 	test_delta4(test_delta4_case1, sizeof(test_delta4_case1) / sizeof(*test_delta4_case1));

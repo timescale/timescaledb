@@ -3,6 +3,10 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+
+-- Uncomment to run this test with hypercore TAM
+--set timescaledb.default_hypercore_use_access_method=true;
+
 -- helper function: float -> pseudorandom float [-0.5..0.5]
 CREATE OR REPLACE FUNCTION mix(x anyelement) RETURNS float8 AS $$
     SELECT hashfloat8(x::float8) / pow(2, 32)
@@ -66,6 +70,17 @@ select *, ss::text as x from (
     from source where s != 1
 ) t
 ;
+
+-- print some reference results before compression
+select ss, count(*) from aggfns group by ss having (ss=11 or ss is null) order by count(*), ss limit 10;
+select ss, min(cdate) from aggfns group by ss having (ss is null) order by min(cdate), ss limit 10;
+select ss, avg(cfloat4) from aggfns group by ss having (ss is null) order by avg(cfloat4), ss limit 10;
+select ss, max(cfloat4) from aggfns group by ss having (ss=11 or ss is null) order by max(cfloat4), ss limit 10;
+select ss, min(cfloat4) from aggfns group by ss having (ss=11 or ss is null) order by min(cfloat4), ss limit 10;
+select ss, stddev(cfloat4) from aggfns group by ss having (ss is null) order by stddev(cfloat4), ss limit 10;
+select ss, avg(cfloat8) from aggfns group by ss having (ss is null or ss=11) order by avg(cfloat8), ss limit 10;
+select ss, max(cfloat8) from aggfns group by ss having (ss is null or ss=11) order by max(cfloat8), ss limit 10;
+
 select count(compress_chunk(x)) from show_chunks('aggfns') x;
 vacuum freeze analyze aggfns;
 

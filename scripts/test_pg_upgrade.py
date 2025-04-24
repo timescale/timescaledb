@@ -47,8 +47,8 @@ pg_version_new = getenv_or_error("PGVERSIONNEW")
 pg_node_old = f"pg{pg_version_old}"
 pg_node_new = f"pg{pg_version_new}"
 
-pg_port_old = getenv_or_default("PGPORTOLD", "54321")
-pg_port_new = getenv_or_default("PGPORTNEW", "54322")
+pg_port_old = int(getenv_or_default("PGPORTOLD", "54321"))
+pg_port_new = int(getenv_or_default("PGPORTNEW", "54322"))
 
 test_version = getenv_or_default("TEST_VERSION", "v8")
 
@@ -94,12 +94,10 @@ node_old.safe_psql(
 node_old.safe_psql(dbname=pg_database_test, query="CHECKPOINT")
 node_old.safe_psql(dbname=pg_database_test, filename="test/sql/updates/setup.check.sql")
 
-# Run new psql over the old node to have the same psql output
-node_new.port = pg_port_old
-(code, old_out, old_err) = node_new.psql(
+# Run over the old node to check the output
+(code, old_out, old_err) = node_old.psql(
     dbname=pg_database_test, filename="test/sql/updates/post.pg_upgrade.sql"
 )
-node_new.port = pg_port_new
 
 # Save output to log
 write_bytes_to_file(f"{working_dir}/post.{pg_node_old}.log", old_out)

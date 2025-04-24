@@ -4,6 +4,10 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
+-- Uncomment to run this test with hypercore TAM
+--set timescaledb.default_hypercore_use_access_method=true;
+--set enable_indexscan=false;
+
 -- Helper function that returns the amount of memory currently allocated in a
 -- given memory context.
 create or replace function ts_debug_allocated_bytes(text = 'PortalContext') returns bigint
@@ -32,7 +36,6 @@ vacuum analyze mvagg;
 -- We are going to log memory usage as a function of number of aggregated elements
 -- here.
 create table log(n int, bytes int, a bigint, b bigint, c bigint, d bigint, e bigint, f bigint);
-
 
 -- First, ensure that the underlying decompression has constant memory usage.
 explain (costs off) select distinct on (s0, s1) ts_debug_allocated_bytes() bytes,

@@ -36,7 +36,7 @@ See [other installation options](https://docs.timescale.com/self-hosted/latest/i
 
 ## Create a hypertable
 
-You create a regular table and then convert it into a hypertable. A hypertable automatically partitions data into chunks based on your configuration.
+You create a regular table and then convert it into a hypertable. A hypertable automatically partitions data into chunks to accelerate your queries.
 
 ```sql
 -- Create timescaledb extension
@@ -61,7 +61,7 @@ See more:
 
 ## Enable columnstore
 
-TimescaleDB's hypercore is a hybrid row-columnar store that boosts analytical query performance on your time-series and event data, while reducing data size by more than 90%. This keeps your queries operating at lightning speed and ensures low storage costs as you scale. Data is inserted in row format in the rowstore and converted to columnar format in the columnstore based on your configuration.
+TimescaleDB's hypercore is a hybrid row-columnar store that boosts analytical query performance on your time-series and event data, while reducing data size by more than 90%. This keeps your analytics operating at lightning speed and ensures low storage costs as you scale. Data is inserted in row format in the rowstore and converted to columnar format in the columnstore based on your configuration.
 
 - Configure the columnstore on a hypertable:
 
@@ -141,7 +141,7 @@ See more:
 
 ## Create continuous aggregates
 
-Continuous aggregates are designed to make queries on very large datasets run faster. They continuously and incrementally refresh a query in the background, so that when you run such query, only the data that has changed needs to be computed, not the entire dataset. This is what makes them different from regular PostgreSQL [materialized views](https://www.postgresql.org/docs/current/rules-materializedviews.html), which cannot be incrementally materialized and have to be rebuilt from scratch every time you want to refresh it.
+Continuous aggregates make real-time analytics run faster on very large datasets. They continuously and incrementally refresh a query in the background, so that when you run such query, only the data that has changed needs to be computed, not the entire dataset. This is what makes them different from regular PostgreSQL [materialized views](https://www.postgresql.org/docs/current/rules-materializedviews.html), which cannot be incrementally materialized and have to be rebuilt from scratch every time you want to refresh it.
 
 For example, create a continuous aggregate view for daily weather data in two simple steps:
 
@@ -181,9 +181,11 @@ See more:
 
 ## Want TimescaleDB hosted and managed for you? Try Timescale Cloud
 
-[Timescale Cloud](https://docs.timescale.com/getting-started/latest/) is a cloud-based PostgreSQL platform for resource-intensive workloads. We help you build faster, scale further, and stay under budget. A Timescale Cloud service is a single optimized 100% PostgreSQL database instance that you use as is, or extend with capabilities specific to your business needs. The available capabilities are:
+[Timescale Cloud](https://docs.timescale.com/getting-started/latest/) is the modern PostgreSQL data platform for all your applications. It enhances PostgreSQL to handle time series, events, real-time analytics, and vector search—all in a single database alongside transactional workloads. You get one system that handles live data ingestion, late and out-of-order updates, and low latency queries, with the performance, reliability, and scalability your app needs. Ideal for IoT, crypto, finance, SaaS, and a myriad other domains, Timescale Cloud allows you to build data-heavy, mission-critical apps while retaining the familiarity and reliability of PostgreSQL. See [our whitepaper](https://docs.timescale.com/about/latest/whitepaper/) for a deep dive into Timescale's architecture and how it meets the needs of even the most demanding applications.
 
-- **Time-series and analytics**: PostgreSQL with TimescaleDB. The PostgreSQL you know and love, supercharged with functionality for storing and querying time-series data at scale for analytics and other use cases. Get faster time-based queries with hypertables, continuous aggregates, and columnar storage. Save on storage with native compression, data retention policies, and bottomless data tiering to Amazon S3.
+A Timescale Cloud service is a single optimized 100% PostgreSQL database instance that you use as is, or extend with capabilities specific to your business needs. The available capabilities are:
+
+- **Time-series and analytics**: PostgreSQL with TimescaleDB. The PostgreSQL you know and love, supercharged with functionality for storing and querying time-series data at scale for real-time analytics and other use cases. Get faster time-based queries with hypertables, continuous aggregates, and columnar storage. Save on storage with native compression, data retention policies, and bottomless data tiering to Amazon S3.
 - **AI and vector**: PostgreSQL with vector extensions. Use PostgreSQL as a vector database with purpose built extensions for building AI applications from start to scale. Get fast and accurate similarity search with the pgvector and pgvectorscale extensions. Create vector embeddings and perform LLM reasoning on your data with the pgai extension.
 - **PostgreSQL**: the trusted industry-standard RDBMS. Ideal for applications requiring strong data consistency, complex relationships, and advanced querying capabilities. Get ACID compliance, extensive SQL support, JSON handling, and extensibility through custom functions, data types, and extensions.
 All services include all the cloud tooling you'd expect for production use: [automatic backups](https://docs.timescale.com/use-timescale/latest/backup-restore/backup-restore-cloud/), [high availability](https://docs.timescale.com/use-timescale/latest/ha-replicas/), [read replicas](https://docs.timescale.com/use-timescale/latest/ha-replicas/read-scaling/), [data forking](https://docs.timescale.com/use-timescale/latest/services/service-management/#fork-a-service), [connection pooling](https://docs.timescale.com/use-timescale/latest/services/connection-pooling/), [tiered storage](https://docs.timescale.com/use-timescale/latest/data-tiering/), [usage-based storage](https://docs.timescale.com/about/latest/pricing-and-account-management/), and much more.

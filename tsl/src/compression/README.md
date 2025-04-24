@@ -67,6 +67,15 @@ structure and does not actually compress it (though TOAST-based compression
 can be applied on top). It is the compression mechanism used when no other
 compression mechanism works. It can store any type of data.
 
+### Bool Compressor
+
+The bool compressor is a simple compression algorithm that stores boolean values
+using the simple8b_rle algorithm only, without any additional processing. During
+decompression it decompresses the data and stores it in memory as a bitmap. The
+row based iterators then walk through the bitmap. The bool compressor differs from
+the other compressors in that it stores the last non-value as a place holder for
+the null values. This is done to make vectorization easier.
+
 # Merging chunks while compressing #
 
 ## Setup ##

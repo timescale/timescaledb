@@ -102,16 +102,8 @@ Select avg(temperature) over( order by humidity)
 from conditions
  WITH NO DATA;
 ERROR:  invalid continuous aggregate query
-DETAIL:  Window functions are not supported by continuous aggregates.
---aggregate without combine function but stable function
-CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
-AS
-Select json_agg(location)
-from conditions
- group by time_bucket('1week', timec) , location WITH NO DATA;
-ERROR:  only immutable functions supported in continuous aggregate view
-HINT:  Make sure all functions in the continuous aggregate definition have IMMUTABLE volatility. Note that functions or expressions may be IMMUTABLE for one data type, but STABLE or VOLATILE for another.
-;
+DETAIL:  Window function support not enabled.
+HINT:  Enable experimental window function support by setting timescaledb.enable_cagg_window_functions.
 -- using subqueries
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
@@ -223,30 +215,6 @@ group by rollup(time_bucket('1week', timec) , location )  WITH NO DATA;
 ERROR:  invalid continuous aggregate query
 DETAIL:  GROUP BY GROUPING SETS, ROLLUP and CUBE are not supported by continuous aggregates
 HINT:  Define multiple continuous aggregates with different grouping levels.
---NO immutable functions -- check all clauses
-CREATE FUNCTION test_stablefunc(int) RETURNS int LANGUAGE 'sql'
-       STABLE AS 'SELECT $1 + 10';
-CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
-AS
-Select sum(humidity), max(timec + INTERVAL '1h')
-from conditions
-group by time_bucket('1week', timec) , location   WITH NO DATA;
-ERROR:  only immutable functions supported in continuous aggregate view
-HINT:  Make sure all functions in the continuous aggregate definition have IMMUTABLE volatility. Note that functions or expressions may be IMMUTABLE for one data type, but STABLE or VOLATILE for another.
-CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
-AS
-Select sum( test_stablefunc(humidity::int) ), min(location)
-from conditions
-group by time_bucket('1week', timec) WITH NO DATA;
-ERROR:  only immutable functions supported in continuous aggregate view
-HINT:  Make sure all functions in the continuous aggregate definition have IMMUTABLE volatility. Note that functions or expressions may be IMMUTABLE for one data type, but STABLE or VOLATILE for another.
-CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
-AS
-Select sum( temperature ), min(location)
-from conditions
-group by time_bucket('1week', timec), test_stablefunc(humidity::int) WITH NO DATA;
-ERROR:  only immutable functions supported in continuous aggregate view
-HINT:  Make sure all functions in the continuous aggregate definition have IMMUTABLE volatility. Note that functions or expressions may be IMMUTABLE for one data type, but STABLE or VOLATILE for another.
 -- Should use CREATE MATERIALIZED VIEW to create continuous aggregates
 CREATE VIEW continuous_aggs_errors_tbl1 WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket('1 week', timec)

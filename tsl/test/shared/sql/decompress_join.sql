@@ -2,8 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
--- disable memoize on PG14+
-SELECT CASE WHEN current_setting('server_version_num')::int/10000 >= 14 THEN set_config('enable_memoize','off',false) ELSE 'off' END AS enable_memoize;
+SET enable_memoize TO false;
 SET enable_indexscan TO false;
 
 -- test join on compressed time column

@@ -33,6 +33,7 @@
 #include <utils/timestamp.h>
 
 #include "compat/compat.h"
+#include "bgw/job_stat_history.h"
 #include "bgw/scheduler.h"
 #include "bgw_policy/chunk_stats.h"
 #include "bgw_policy/policy.h"
@@ -54,6 +55,25 @@
 
 static scheduler_test_hook_type scheduler_test_hook = NULL;
 static char *job_entrypoint_function_name = "ts_bgw_job_entrypoint";
+
+/*
+ * Get the mem_guard callbacks.
+ *
+ * You might get a NULL pointer back if there are no mem_guard installed, so
+ * check before using.
+ */
+MGCallbacks *
+ts_get_mem_guard_callbacks(void)
+{
+	static MGCallbacks **mem_guard_callback_ptr = NULL;
+
+	if (mem_guard_callback_ptr)
+		return *mem_guard_callback_ptr;
+
+	mem_guard_callback_ptr = (MGCallbacks **) find_rendezvous_variable(MG_CALLBACKS_VAR_NAME);
+
+	return *mem_guard_callback_ptr;
+}
 
 typedef enum JobLockLifetime
 {
@@ -1140,6 +1160,16 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	pqsignal(SIGTERM, die);
 	BackgroundWorkerUnblockSignals();
 
+	/*
+	 * Set up mem_guard before starting to allocate (any significant amounts
+	 * of) memory but after we have unblocked signals since we have no control
+	 * over how the callback behaves.
+	 */
+	MGCallbacks *callbacks = ts_get_mem_guard_callbacks();
+	if (callbacks && callbacks->version_num == MG_CALLBACKS_VERSION &&
+		callbacks->toggle_allocation_blocking && !callbacks->enabled)
+		callbacks->toggle_allocation_blocking(/*enable=*/true);
+
 	BackgroundWorkerInitializeConnectionByOid(db_oid, params.user_oid, 0);
 
 	log_min_messages = ts_guc_bgw_log_level;
@@ -1151,6 +1181,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	INSTR_TIME_SET_CURRENT(start);
 
 	StartTransactionCommand();
+
 	/* Grab a session lock on the job row to prevent concurrent deletes. Lock is released
 	 * when the job process exits */
 	job = ts_bgw_job_find_with_lock(params.job_id,
@@ -1159,14 +1190,16 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 									SESSION_LOCK,
 									/* block */ true,
 									&got_lock);
-	CommitTransactionCommand();
-
 	if (job == NULL)
+		/* If the job is not found, we can't proceed */
 		elog(ERROR, "job %d not found when running the background worker", params.job_id);
 
 	/* get parameters from bgworker */
 	job->job_history.id = params.job_history_id;
 	job->job_history.execution_start = params.job_history_execution_start;
+	ts_bgw_job_stat_history_update(JOB_STAT_HISTORY_UPDATE_PID, job, JOB_SUCCESS, NULL);
+
+	CommitTransactionCommand();
 
 	elog(DEBUG2, "job %d (%s) found", params.job_id, NameStr(job->fd.application_name));
 
@@ -1218,6 +1251,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		MemoryContextSwitchTo(oldcontext);
 		job_failed = true;
 		edata = CopyErrorData();
+		FlushErrorState();
 
 		/*
 		 * Note that the mark_start happens in the scheduler right before the
@@ -1253,7 +1287,6 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		elog(LOG, "job %d threw an error", params.job_id);
 
 		CommitTransactionCommand();
-		FlushErrorState();
 		ReThrowError(edata);
 	}
 	PG_END_TRY();

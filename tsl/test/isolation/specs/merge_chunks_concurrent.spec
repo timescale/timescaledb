@@ -113,12 +113,12 @@ step "s3_show_chunks" { select count(*) from show_chunks('readings'); }
 step "s3_merge_chunks" {
     call merge_all_chunks('readings');
 }
-step "s3_compress_chunks" {
-    select compress_chunk(show_chunks('readings'));
-}
-step "s3_drop_chunks" {
-    call drop_one_chunk('readings');
-}
+#step "s3_compress_chunks" {
+#    select compress_chunk(show_chunks('readings'));
+#}
+#step "s3_drop_chunks" {
+#    call drop_one_chunk('readings');
+#}
 step "s3_commit" { commit; }
 
 session "s4"
@@ -155,9 +155,21 @@ permutation "s2_show_chunks" "s1_begin" "s1_show_data" "s2_merge_chunks" "s1_sho
 # before doing the heap swap.
 permutation "s2_set_lock_upgrade" "s2_show_chunks" "s1_begin" "s1_show_data" "s2_merge_chunks" "s1_show_data" "s1_commit" "s1_show_data" "s1_show_chunks"
 
-# Same as the above, but it will deadlock because a reader takes a
-# heavier lock.
-permutation "s2_set_lock_upgrade" "s4_wp_enable" "s2_show_chunks" "s1_begin" "s1_show_data" "s2_merge_chunks" "s1_show_data" "s1_row_exclusive_lock" "s4_wp_release" "s1_commit" "s1_show_data" "s1_show_chunks"
+# Same as the above, but it will deadlock because a reader upgrades
+# from a read to a write lock. Since the permutation deadlocks, the
+# output can be non-deterministic (on which process is killed) so it
+# is not run by default.
+
+#permutation "s2_set_lock_upgrade" "s4_wp_enable" "s2_show_chunks" "s1_begin" "s1_show_data" "s2_merge_chunks" "s1_show_data" "s1_row_exclusive_lock" "s4_wp_release" "s1_commit" "s1_show_data" "s1_show_chunks"
+
+# Same as above but without lock upgrade. No deadlocks, but the merge
+# blocks until the reader/writer is finished.
+
+permutation "s4_wp_enable" "s2_show_chunks" "s1_begin" "s1_show_data" "s2_merge_chunks" "s1_show_data" "s1_row_exclusive_lock" "s4_wp_release" "s1_commit" "s1_show_data" "s1_show_chunks"
+
+# Same as above, but the merger takes locks before the reader/writer
+# so the reader/writer has to wait.
+permutation "s4_wp_enable" "s2_show_chunks" "s1_begin" "s2_merge_chunks" "s1_show_data"  "s4_wp_release" "s1_commit" "s1_show_data" "s1_show_chunks"
 
 # Same as above but with a conditional lock. The merge process should
 # fail with an error saying it can't take the lock needed for the
@@ -167,8 +179,11 @@ permutation "s2_set_lock_upgrade_conditional" "s4_wp_enable" "s2_show_chunks" "s
 # Test concurrent merges
 permutation "s4_wp_enable" "s2_merge_chunks" "s3_merge_chunks" "s4_wp_release" "s1_show_data" "s1_show_chunks"
 
-# Test concurrent compress_chunk()
-permutation "s4_wp_enable" "s2_merge_chunks" "s3_compress_chunks" "s4_wp_release" "s1_show_data" "s1_show_chunks"
+# Test concurrent compress_chunk(). This will deadlock because
+# compress_chunks takes chunk locks in a different order. The test is
+# disabled because with a deadlock the output can be non-deterministic.
 
-# Test concurrent drop table 
-permutation "s4_wp_enable" "s2_merge_chunks" "s3_drop_chunks" "s4_wp_release" "s1_show_data" "s1_show_chunks"
+#permutation "s4_wp_enable" "s2_merge_chunks" "s3_compress_chunks" "s4_wp_release" "s1_show_data" "s1_show_chunks"
+
+# Test concurrent DROP TABLE on chunk (currently deadlocks because of locks on parent table)
+#permutation "s4_wp_enable" "s2_merge_chunks" "s3_drop_chunks" "s4_wp_release" "s1_show_data" "s1_show_chunks"

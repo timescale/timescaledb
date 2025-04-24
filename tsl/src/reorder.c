@@ -438,7 +438,7 @@ reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id, Oid destinati
 	CheckTableNotInUse(OldHeap, "CLUSTER");
 
 	/* Check heap and index are valid to cluster on */
-	check_index_is_clusterable_compat(OldHeap, indexOid, ExclusiveLock);
+	check_index_is_clusterable(OldHeap, indexOid, ExclusiveLock);
 
 	/* rebuild_relation does all the dirty work */
 	rebuild_relation(OldHeap, indexOid, verbose, wait_id, destination_tablespace, index_tablespace);
@@ -479,11 +479,8 @@ rebuild_relation(Relation OldHeap, Oid indexOid, bool verbose, Oid wait_id,
 	table_close(OldHeap, NoLock);
 
 	/* Create the transient table that will receive the re-ordered data */
-	OIDNewHeap = make_new_heap_compat(tableOid,
-									  tableSpace,
-									  OldHeap->rd_rel->relam,
-									  relpersistence,
-									  ExclusiveLock);
+	OIDNewHeap =
+		make_new_heap(tableOid, tableSpace, OldHeap->rd_rel->relam, relpersistence, ExclusiveLock);
 
 	/* Copy the heap data into the new table in the desired order */
 	copy_heap_data(OIDNewHeap,

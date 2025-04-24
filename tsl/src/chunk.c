@@ -50,11 +50,11 @@
 #include <utils/lsyscache.h>
 #include <utils/memutils.h>
 #include <utils/palloc.h>
+#include <utils/rel.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
 #include <utils/tuplestore.h>
 
-#include "annotations.h"
 #include "cache.h"
 #include "chunk.h"
 #include "debug_point.h"
@@ -212,8 +212,11 @@ typedef struct RelationMergeInfo
 {
 	Oid relid;
 	struct VacuumCutoffs cutoffs;
-	const Chunk *chunk;
+	Chunk *chunk;
 	Relation rel;
+	char relpersistence;
+	bool isresult;
+	bool iscompressed_rel;
 } RelationMergeInfo;
 
 typedef enum MergeLockUpgrade
@@ -246,9 +249,10 @@ compute_rel_vacuum_cutoffs(Relation rel, struct VacuumCutoffs *cutoffs)
 
 static void
 merge_chunks_finish(Oid new_relid, RelationMergeInfo *relinfos, int nrelids,
-					TransactionId freeze_limit, MultiXactId multi_cutoff, char relpersistence,
 					MergeLockUpgrade lock_upgrade)
 {
+	RelationMergeInfo *result_minfo = NULL;
+
 	/*
 	 * The relations being merged are currently locked in ExclusiveLock, which
 	 * means other readers can have locks. To delete the relations, we first
@@ -258,6 +262,13 @@ merge_chunks_finish(Oid new_relid, RelationMergeInfo *relinfos, int nrelids,
 	for (int i = 0; i < nrelids; i++)
 	{
 		Oid relid = relinfos[i].relid;
+
+		if (relinfos[i].isresult)
+			result_minfo = &relinfos[i];
+
+		/* If merging internal compressed relations, not all chunks have one */
+		if (!OidIsValid(relid))
+			continue;
 
 		switch (lock_upgrade)
 		{
@@ -279,29 +290,43 @@ merge_chunks_finish(Oid new_relid, RelationMergeInfo *relinfos, int nrelids,
 		}
 	}
 
-	finish_heap_swap(relinfos[0].relid,
+	Ensure(result_minfo != NULL, "no chunk to merge into found");
+	struct VacuumCutoffs *cutoffs = &result_minfo->cutoffs;
+
+	finish_heap_swap(result_minfo->relid,
 					 new_relid,
 					 false, /* system catalog */
 					 false /* swap toast by content */,
 					 false, /* check constraints */
 					 true,	/* internal? */
-					 freeze_limit,
-					 multi_cutoff,
-					 relpersistence);
+					 cutoffs->FreezeLimit,
+					 cutoffs->MultiXactCutoff,
+					 result_minfo->relpersistence);
+
+	/* Don't need to drop objects for internal compressed relations, they are
+	 * dropped when the main chunk is dropped. */
+	if (result_minfo->iscompressed_rel)
+		return;
+
+	if (ts_chunk_is_compressed(result_minfo->chunk))
+		ts_chunk_set_partial(result_minfo->chunk);
 
 	/*
-	 * Delete all the merged relations except the first one, since we are
+	 * Delete all the merged relations except the result one, since we are
 	 * keeping it for the heap swap.
 	 */
 	ObjectAddresses *objects = new_object_addresses();
 
-	for (int i = 1; i < nrelids; i++)
+	for (int i = 0; i < nrelids; i++)
 	{
 		Oid relid = relinfos[i].relid;
 		ObjectAddress object = {
 			.classId = RelationRelationId,
 			.objectId = relid,
 		};
+
+		if (!OidIsValid(relid) || relinfos[i].isresult)
+			continue;
 
 		/* Cannot drop if relation is still open */
 		Assert(relinfos[i].rel == NULL);
@@ -481,10 +506,6 @@ chunk_update_constraints(const Chunk *chunk, const Hypercube *new_cube)
 			.waitpolicy = LockWaitBlock,
 			.lockmode = LockTupleShare,
 		};
-
-		/* The new slice has merged range, but still old ID. Should match with
-		 * the old slice. */
-		Assert(old_slice->fd.id == new_slice->fd.id);
 
 		/* If nothing changed in this dimension, move on to the next */
 		if (ts_dimension_slices_equal(old_slice, new_slice))
@@ -682,11 +703,15 @@ pg17_workaround_init(Relation rel, RelationMergeInfo *relinfos, int nrelids)
 	for (int i = 0; i < nrelids; i++)
 	{
 		blockoff[i] = (BlockNumber) totalblocks;
-		totalblocks += RelationGetNumberOfBlocks(relinfos[i].rel);
 
-		/* Ensure the offsets don't overflow. For the merge itself, it is
-		 * assumed that the write will fail when writing too many blocks */
-		Ensure(totalblocks <= MaxBlockNumber, "max number of blocks exceeded for merge");
+		if (relinfos[i].rel)
+		{
+			totalblocks += smgrnblocks(RelationGetSmgr(relinfos[i].rel), MAIN_FORKNUM);
+
+			/* Ensure the offsets don't overflow. For the merge itself, it is
+			 * assumed that the write will fail when writing too many blocks */
+			Ensure(totalblocks <= MaxBlockNumber, "max number of blocks exceeded for merge");
+		}
 	}
 }
 
@@ -708,8 +733,124 @@ get_relmergeinfo(RelationMergeInfo *relinfos, int nrelids, int i)
 #else
 #define pg17_workaround_init(rel, relinfos, nrelids)
 #define pg17_workaround_cleanup(rel)
-#define get_relmergeinfo(relinfos, nrelids, i) &relinfos[i]
+#define get_relmergeinfo(relinfos, nrelids, i) &(relinfos)[i]
 #endif
+
+/* Update table stats */
+
+static void
+update_relstats(Relation catrel, Relation rel, double ntuples)
+{
+	HeapTuple reltup = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(RelationGetRelid(rel)));
+	if (!HeapTupleIsValid(reltup))
+		elog(ERROR, "cache lookup failed for relation %u", RelationGetRelid(rel));
+	Form_pg_class relform = (Form_pg_class) GETSTRUCT(reltup);
+	BlockNumber num_pages = RelationGetNumberOfBlocks(rel);
+	relform->relpages = num_pages;
+	relform->reltuples = ntuples;
+
+	CatalogTupleUpdate(catrel, &reltup->t_self, reltup);
+	heap_freetuple(reltup);
+}
+
+static double
+copy_table_data(Relation fromrel, Relation torel, struct VacuumCutoffs *cutoffs,
+				struct VacuumCutoffs *merged_cutoffs)
+{
+	const TableAmRoutine *tableam = NULL;
+	double num_tuples = 0.0;
+	double tups_vacuumed = 0.0;
+	double tups_recently_dead = 0.0;
+
+	if (ts_is_hypercore_am(fromrel->rd_rel->relam))
+	{
+		tableam = fromrel->rd_tableam;
+		fromrel->rd_tableam = GetHeapamTableAmRoutine();
+	}
+
+	table_relation_copy_for_cluster(fromrel,
+									torel,
+									NULL,
+									false,
+									cutoffs->OldestXmin,
+									&cutoffs->FreezeLimit,
+									&cutoffs->MultiXactCutoff,
+									&num_tuples,
+									&tups_vacuumed,
+									&tups_recently_dead);
+
+	elog(LOG,
+		 "merged rows from \"%s\" into \"%s\": tuples %lf vacuumed %lf recently dead %lf",
+		 RelationGetRelationName(fromrel),
+		 RelationGetRelationName(torel),
+		 num_tuples,
+		 tups_vacuumed,
+		 tups_recently_dead);
+
+	if (TransactionIdPrecedes(merged_cutoffs->FreezeLimit, cutoffs->FreezeLimit))
+		merged_cutoffs->FreezeLimit = cutoffs->FreezeLimit;
+
+	if (MultiXactIdPrecedes(merged_cutoffs->MultiXactCutoff, cutoffs->MultiXactCutoff))
+		merged_cutoffs->MultiXactCutoff = cutoffs->MultiXactCutoff;
+
+	if (tableam != NULL)
+		fromrel->rd_tableam = tableam;
+
+	/* Close the relations before the heap swap, but keep the locks until
+	 * end of transaction. */
+	table_close(fromrel, NoLock);
+
+	return num_tuples;
+}
+
+static Oid
+merge_relinfos(RelationMergeInfo *relinfos, int nrelids, int mergeindex)
+{
+	RelationMergeInfo *result_minfo = &relinfos[mergeindex];
+	Relation result_rel = result_minfo->rel;
+
+	if (result_rel == NULL)
+		return InvalidOid;
+
+	Oid tablespace = result_rel->rd_rel->reltablespace;
+	struct VacuumCutoffs *merged_cutoffs = &result_minfo->cutoffs;
+
+	/* Create the transient heap that will receive the re-ordered data */
+	Oid new_relid = make_new_heap(RelationGetRelid(result_rel),
+								  tablespace,
+								  result_rel->rd_rel->relam,
+								  result_minfo->relpersistence,
+								  ExclusiveLock);
+	Relation new_rel = table_open(new_relid, AccessExclusiveLock);
+	double total_num_tuples = 0.0;
+
+	pg17_workaround_init(new_rel, relinfos, nrelids);
+
+	/* Step 3: write the data from all the rels into a new merged heap */
+	for (int i = 0; i < nrelids; i++)
+	{
+		RelationMergeInfo *relinfo = get_relmergeinfo(relinfos, nrelids, i);
+		struct VacuumCutoffs *cutoffs_i = &relinfo->cutoffs;
+		double num_tuples = 0.0;
+
+		if (relinfo->rel)
+		{
+			num_tuples = copy_table_data(relinfo->rel, new_rel, cutoffs_i, merged_cutoffs);
+			total_num_tuples += num_tuples;
+			relinfo->rel = NULL;
+		}
+	}
+
+	pg17_workaround_cleanup(new_rel);
+
+	/* Update table stats */
+	Relation relRelation = table_open(RelationRelationId, RowExclusiveLock);
+	update_relstats(relRelation, new_rel, total_num_tuples);
+	table_close(new_rel, NoLock);
+	table_close(relRelation, RowExclusiveLock);
+
+	return new_relid;
+}
 
 /*
  * Merge N chunk relations into one chunk based on Oids.
@@ -759,10 +900,12 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 	bool *nulls;
 	int nrelids;
 	RelationMergeInfo *relinfos;
+	RelationMergeInfo *crelinfos; /* For compressed relations */
 	int32 hypertable_id = INVALID_HYPERTABLE_ID;
 	Hypercube *merged_cube = NULL;
 	const Hypercube *prev_cube = NULL;
 	const MergeLockUpgrade lock_upgrade = merge_chunks_lock_upgrade_mode();
+	int mergeindex = -1;
 
 	PreventCommandIfReadOnly("merge_chunks");
 
@@ -785,6 +928,7 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 				 errmsg("must specify at least two chunks to merge")));
 
 	relinfos = palloc0(sizeof(struct RelationMergeInfo) * nrelids);
+	crelinfos = palloc0(sizeof(struct RelationMergeInfo) * nrelids);
 
 	/* Sort relids array in order to find duplicates and lock relations in
 	 * consistent order to avoid deadlocks. It doesn't matter that we don't
@@ -796,9 +940,9 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 	for (int i = 0; i < nrelids; i++)
 	{
 		Oid relid = DatumGetObjectId(relids[i]);
-		const Chunk *chunk;
+		RelationMergeInfo *relinfo = &relinfos[i];
+		Chunk *chunk;
 		Relation rel;
-		Oid amoid;
 
 		if (nulls[i] || !OidIsValid(relid))
 			ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid relation")));
@@ -886,11 +1030,21 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("cannot merge OSM chunks")));
 
+		/*
+		 * Lock also internal compressed relation, if it exists.
+		 *
+		 * Don't fill in its MergeRelInfo until we sort relations in partition
+		 * order below, because the compressed relations need to be in the
+		 * same order.
+		 */
 		if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("merging compressed chunks is not yet supported"),
-					 errhint("Decompress the chunks before merging.")));
+		{
+			Oid crelid = ts_chunk_get_relid(chunk->fd.compressed_chunk_id, false);
+			LockRelationOid(crelid, AccessExclusiveLock);
+
+			if (mergeindex == -1)
+				mergeindex = i;
+		}
 
 		if (ts_chunk_is_frozen(chunk))
 			ereport(ERROR,
@@ -921,18 +1075,25 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 		 * It might not be possible to merge two chunks with different
 		 * storage, so better safe than sorry for now.
 		 */
-		amoid = rel->rd_rel->relam;
+		Oid amoid = rel->rd_rel->relam;
 
-		if (amoid != HEAP_TABLE_AM_OID)
+		if (amoid != HEAP_TABLE_AM_OID && !ts_is_hypercore_am(amoid))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("access method \"%s\" is not supported for merge",
 							get_am_name(amoid))));
 
-		relinfos[i].relid = relid;
-		relinfos[i].rel = rel;
-		relinfos[i].chunk = chunk;
+		relinfo->relid = relid;
+		relinfo->rel = rel;
+		relinfo->chunk = chunk;
+		relinfo->relpersistence = rel->rd_rel->relpersistence;
 	}
+
+	/* No compressed chunk found, so use index 0 for resulting merged chunk */
+	if (mergeindex == -1)
+		mergeindex = 0;
+
+	relinfos[mergeindex].isresult = true;
 
 	/* Sort rels in partition order (in case of chunks). This is necessary to
 	 * validate that a merge is possible. */
@@ -961,118 +1122,61 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 
 		prev_cube = chunk->cube;
 		compute_rel_vacuum_cutoffs(relinfos[i].rel, &relinfos[i].cutoffs);
+
+		/*
+		 * Fill in the compressed mergerelinfo array here after final sort of
+		 * rels so that the two arrays have the same order.
+		 */
+		if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+		{
+			RelationMergeInfo *crelinfo = &crelinfos[i];
+
+			crelinfo->chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
+			crelinfo->relid = crelinfo->chunk->table_id;
+			crelinfo->rel = table_open(crelinfo->relid, AccessExclusiveLock);
+			crelinfo->isresult = relinfos[i].isresult;
+			crelinfo->iscompressed_rel = true;
+			crelinfo->relpersistence = crelinfo->rel->rd_rel->relpersistence;
+			compute_rel_vacuum_cutoffs(crelinfos[i].rel, &crelinfos[i].cutoffs);
+		}
+
+		/* Need to update the index of the result (merged) relation after
+		 * resort */
+		if (relinfos[i].isresult)
+			mergeindex = i;
 	}
 
 	/*
-	 * Keep the first of the ordered relations. It will receive a heap
-	 * swap.
+	 * Now merge all the data into a new temporary heap relation. Do it
+	 * separately for the non-compressed and compressed relations.
 	 */
-	Relation result_rel = relinfos[0].rel;
-	/* These will be our final cutoffs for the merged relation */
-	struct VacuumCutoffs *cutoffs = &relinfos[0].cutoffs;
+	Oid new_relid = merge_relinfos(relinfos, nrelids, mergeindex);
+	Oid new_crelid = merge_relinfos(crelinfos, nrelids, mergeindex);
 
-	Oid tablespace = result_rel->rd_rel->reltablespace;
-	char relpersistence = result_rel->rd_rel->relpersistence;
-
-	/* Create the transient heap that will receive the re-ordered data */
-	Oid new_relid = make_new_heap_compat(RelationGetRelid(result_rel),
-										 tablespace,
-										 result_rel->rd_rel->relam,
-										 relpersistence,
-										 ExclusiveLock);
-	Relation new_rel = table_open(new_relid, AccessExclusiveLock);
-	double total_num_tuples = 0.0;
-
-	pg17_workaround_init(new_rel, relinfos, nrelids);
-
-	/* Step 3: write the data from all the rels into a new merged heap */
-	for (int i = 0; i < nrelids; i++)
-	{
-		RelationMergeInfo *relinfo = get_relmergeinfo(relinfos, nrelids, i);
-		struct VacuumCutoffs *cutoffs_i = &relinfo->cutoffs;
-		Relation rel = relinfo->rel;
-
-		double num_tuples = 0.0;
-		double tups_vacuumed = 0.0;
-		double tups_recently_dead = 0.0;
-
-		table_relation_copy_for_cluster(rel,
-										new_rel,
-										NULL,
-										false,
-										cutoffs_i->OldestXmin,
-										&cutoffs_i->FreezeLimit,
-										&cutoffs_i->MultiXactCutoff,
-										&num_tuples,
-										&tups_vacuumed,
-										&tups_recently_dead);
-
-		elog(LOG,
-			 "merged rows from \"%s\" into \"%s\": tuples %lf vacuumed %lf recently dead %lf",
-			 RelationGetRelationName(rel),
-			 RelationGetRelationName(result_rel),
-			 num_tuples,
-			 tups_vacuumed,
-			 tups_recently_dead);
-
-		total_num_tuples += num_tuples;
-
-		if (TransactionIdPrecedes(cutoffs->FreezeLimit, cutoffs_i->FreezeLimit))
-			cutoffs->FreezeLimit = cutoffs_i->FreezeLimit;
-
-		if (MultiXactIdPrecedes(cutoffs->MultiXactCutoff, cutoffs_i->MultiXactCutoff))
-			cutoffs->MultiXactCutoff = cutoffs_i->MultiXactCutoff;
-
-		/* Close the relations before the heap swap, but keep the locks until
-		 * end of transaction. */
-		table_close(rel, NoLock);
-		relinfo->rel = NULL;
-	}
-
-	pg17_workaround_cleanup(new_rel);
-
-	/* Update table stats */
-	Relation relRelation = table_open(RelationRelationId, RowExclusiveLock);
-	HeapTuple reltup = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(new_relid));
-	if (!HeapTupleIsValid(reltup))
-		elog(ERROR, "cache lookup failed for relation %u", new_relid);
-	Form_pg_class relform = (Form_pg_class) GETSTRUCT(reltup);
-	BlockNumber num_pages = RelationGetNumberOfBlocks(new_rel);
-	relform->relpages = num_pages;
-	relform->reltuples = total_num_tuples;
-
-	CatalogTupleUpdate(relRelation, &reltup->t_self, reltup);
-	heap_freetuple(reltup);
-	table_close(relRelation, RowExclusiveLock);
+	/* Make new table stats visible */
 	CommandCounterIncrement();
-
-	table_close(new_rel, NoLock);
 
 	DEBUG_WAITPOINT("merge_chunks_before_heap_swap");
 
-	/* Step 4: Keep one of the original rels but transplant the merged heap
-	 * into it using a heap swap. Then close and delete the remaining merged
-	 * rels. */
-	merge_chunks_finish(new_relid,
-						relinfos,
-						nrelids,
-						cutoffs->FreezeLimit,
-						cutoffs->MultiXactCutoff,
-						relpersistence,
-						lock_upgrade);
+	merge_chunks_finish(new_relid, relinfos, nrelids, lock_upgrade);
+
+	if (OidIsValid(new_crelid))
+		merge_chunks_finish(new_crelid, crelinfos, nrelids, lock_upgrade);
 
 	/* Step 5: Update the dimensional metadata and constraints for the chunk
 	 * we are keeping. */
 	if (merged_cube)
 	{
-		Assert(relinfos[0].chunk);
-		chunk_update_constraints(relinfos[0].chunk, merged_cube);
+		RelationMergeInfo *result_minfo = &relinfos[mergeindex];
+		Assert(result_minfo->chunk);
+		chunk_update_constraints(result_minfo->chunk, merged_cube);
 		ts_hypercube_free(merged_cube);
 	}
 
 	pfree(relids);
 	pfree(nulls);
 	pfree(relinfos);
+	pfree(crelinfos);
 
 	PG_RETURN_VOID();
 }

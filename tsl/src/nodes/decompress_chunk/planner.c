@@ -249,7 +249,7 @@ follow_uncompressed_output_tlist(const DecompressionMapContext *context)
  * attnos.
  */
 static void
-build_decompression_map(DecompressionMapContext *context, List *compressed_scan_tlist)
+build_decompression_map(DecompressionMapContext *context, List *compressed_output_tlist)
 {
 	DecompressChunkPath *path = context->decompress_path;
 	const CompressionInfo *info = path->info;
@@ -305,7 +305,7 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_scan_
 	 */
 	context->have_bulk_decompression_columns = false;
 	context->decompression_map = NIL;
-	foreach (lc, compressed_scan_tlist)
+	foreach (lc, compressed_output_tlist)
 	{
 		TargetEntry *target = (TargetEntry *) lfirst(lc);
 		if (!IsA(target->expr, Var))
@@ -480,7 +480,7 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_scan_
 	 * into several lists so that it can be passed through the custom path
 	 * settings.
 	 */
-	foreach (lc, compressed_scan_tlist)
+	foreach (lc, compressed_output_tlist)
 	{
 		TargetEntry *target = (TargetEntry *) lfirst(lc);
 		Var *var = castNode(Var, target->expr);
@@ -884,6 +884,7 @@ find_vectorized_quals(DecompressionMapContext *context, DecompressChunkPath *pat
 					  List **vectorized, List **nonvectorized)
 {
 	VectorQualInfo vqi = {
+		.maxattno = path->info->chunk_rel->max_attr,
 		.vector_attrs = build_vector_attrs_array(context->uncompressed_attno_info, path->info),
 		.rti = path->info->chunk_rel->relid,
 	};
@@ -964,36 +965,16 @@ ts_label_sort_with_costsize(PlannerInfo *root, Sort *plan, double limit_tuples)
 static Var *
 find_var_subexpression(void *expr, Index varno)
 {
-	if (IsA(expr, Var))
+	List *varlist = pull_var_clause((Node *) expr, 0);
+	if (list_length(varlist) == 1)
 	{
-		Var *var = castNode(Var, expr);
+		Var *var = (Var *) linitial(varlist);
 		if ((Index) var->varno == (Index) varno)
 		{
 			return var;
 		}
 
 		return NULL;
-	}
-
-	if (IsA(expr, List))
-	{
-		List *list = castNode(List, expr);
-		ListCell *lc;
-		foreach (lc, list)
-		{
-			Var *var = find_var_subexpression(lfirst(lc), varno);
-			if (var != NULL)
-			{
-				return var;
-			}
-		}
-
-		return NULL;
-	}
-
-	if (IsA(expr, FuncExpr))
-	{
-		return find_var_subexpression(castNode(FuncExpr, expr)->args, varno);
 	}
 
 	return NULL;

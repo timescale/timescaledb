@@ -19,9 +19,11 @@
 #include "compat/compat.h"
 
 #include "algorithms/array.h"
+#include "algorithms/bool_compress.h"
 #include "algorithms/deltadelta.h"
 #include "algorithms/dictionary.h"
 #include "algorithms/gorilla.h"
+#include "algorithms/null.h"
 #include "batch_metadata_builder.h"
 #include "chunk.h"
 #include "compression.h"
@@ -47,6 +49,8 @@ static const CompressionAlgorithmDefinition definitions[_END_COMPRESSION_ALGORIT
 	[COMPRESSION_ALGORITHM_DICTIONARY] = DICTIONARY_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_GORILLA] = GORILLA_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_DELTADELTA] = DELTA_DELTA_ALGORITHM_DEFINITION,
+	[COMPRESSION_ALGORITHM_BOOL] = BOOL_COMPRESS_ALGORITHM_DEFINITION,
+	[COMPRESSION_ALGORITHM_NULL] = NULL_COMPRESS_ALGORITHM_DEFINITION,
 };
 
 static NameData compression_algorithm_name[] = {
@@ -55,6 +59,8 @@ static NameData compression_algorithm_name[] = {
 	[COMPRESSION_ALGORITHM_DICTIONARY] = { "DICTIONARY" },
 	[COMPRESSION_ALGORITHM_GORILLA] = { "GORILLA" },
 	[COMPRESSION_ALGORITHM_DELTADELTA] = { "DELTADELTA" },
+	[COMPRESSION_ALGORITHM_BOOL] = { "BOOL" },
+	[COMPRESSION_ALGORITHM_NULL] = { "NULL" },
 };
 
 Name
@@ -257,7 +263,10 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	HeapTuple in_table_tp = NULL, index_tp = NULL;
 	Form_pg_attribute in_table_attr_tp, index_attr_tp;
 	CompressionStats cstat;
-	CompressionSettings *settings = ts_compression_settings_get(out_table);
+	/* Might be merging into an existing chunk, so get compression settings
+	 * from that chunk */
+	CompressionSettings *settings = ts_compression_settings_get_by_compress_relid(out_table);
+
 	int64 report_reltuples;
 
 	/* We want to prevent other compressors from compressing this table,
@@ -287,6 +296,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 
 	TupleDesc in_desc = RelationGetDescr(in_rel);
 	TupleDesc out_desc = RelationGetDescr(out_rel);
+
 	/* Before calling row compressor relation should be segmented and sorted as configured
 	 * by compress_segmentby and compress_orderby.
 	 * Cost of sorting can be mitigated if we find an existing BTREE index defined for
@@ -603,7 +613,7 @@ compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
 }
 
 void
-compress_chunk_populate_sort_info_for_column(CompressionSettings *settings, Oid table,
+compress_chunk_populate_sort_info_for_column(const CompressionSettings *settings, Oid table,
 											 const char *attname, AttrNumber *att_nums,
 											 Oid *sort_operator, Oid *collation, bool *nulls_first)
 {
@@ -655,7 +665,7 @@ compress_chunk_populate_sort_info_for_column(CompressionSettings *settings, Oid 
  * over compressed data
  */
 Oid
-get_compressed_chunk_index(ResultRelInfo *resultRelInfo, CompressionSettings *settings)
+get_compressed_chunk_index(ResultRelInfo *resultRelInfo, const CompressionSettings *settings)
 {
 	int num_segmentby_columns = ts_array_length(settings->fd.segmentby);
 	int num_orderby_columns = ts_array_length(settings->fd.orderby);
@@ -694,7 +704,7 @@ get_compressed_chunk_index(ResultRelInfo *resultRelInfo, CompressionSettings *se
 }
 
 static void
-build_column_map(CompressionSettings *settings, Relation uncompressed_table,
+build_column_map(const CompressionSettings *settings, Relation uncompressed_table,
 				 Relation compressed_table, PerColumn **pcolumns, int16 **pmap)
 {
 	Oid compressed_data_type_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
@@ -787,7 +797,7 @@ build_column_map(CompressionSettings *settings, Relation uncompressed_table,
  ** row_compressor **
  ********************/
 void
-row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor,
+row_compressor_init(const CompressionSettings *settings, RowCompressor *row_compressor,
 					Relation uncompressed_table, Relation compressed_table,
 					int16 num_columns_in_compressed_table, bool need_bistate, int insert_options)
 {
@@ -884,8 +894,8 @@ row_compressor_process_ordered_slot(RowCompressor *row_compressor, TupleTableSlo
 		row_compressor->first_iteration = false;
 	}
 	bool changed_groups = row_compressor_new_row_is_in_new_group(row_compressor, slot);
-	bool compressed_row_is_full =
-		row_compressor->rows_compressed_into_current_value >= TARGET_COMPRESSED_BATCH_SIZE;
+	bool compressed_row_is_full = row_compressor->rows_compressed_into_current_value >=
+								  (uint32) ts_guc_compression_batch_size_limit;
 	if (compressed_row_is_full || changed_groups)
 	{
 		if (row_compressor->rows_compressed_into_current_value > 0)
@@ -1018,9 +1028,14 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 			Assert(column->segment_info == NULL);
 
 			compressed_data = compressor->finish(compressor);
-
-			/* non-segment columns are NULL iff all the values are NULL */
+			if (compressed_data == NULL)
+			{
+				if (ts_guc_enable_null_compression &&
+					row_compressor->rows_compressed_into_current_value > 0)
+					compressed_data = null_compressor_get_dummy_block();
+			}
 			row_compressor->compressed_is_null[compressed_col] = compressed_data == NULL;
+
 			if (compressed_data != NULL)
 				row_compressor->compressed_values[compressed_col] =
 					PointerGetDatum(compressed_data);
@@ -1377,18 +1392,31 @@ create_per_compressed_column(RowDecompressor *decompressor)
 	}
 }
 
-/*
- * Decompresses the current compressed batch into decompressed_slots, and returns
- * the number of rows in batch.
- */
-int
-decompress_batch(RowDecompressor *decompressor)
+static void
+init_iterator(RowDecompressor *decompressor, CompressedDataHeader *header, int input_column)
 {
-	if (decompressor->unprocessed_tuples)
-		return decompressor->unprocessed_tuples;
+	Assert(decompressor->num_compressed_columns > input_column);
+	PerCompressedColumn *column_info = &decompressor->per_compressed_cols[input_column];
 
-	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
+	/* Special compression block with the NULL compression algorithm,
+	 * tells that all values in the compressed block are NULLs.
+	 */
+	if (header->compression_algorithm == COMPRESSION_ALGORITHM_NULL)
+	{
+		column_info->iterator = NULL;
+		decompressor->compressed_is_nulls[input_column] = true;
+		decompressor->decompressed_is_nulls[column_info->decompressed_column_offset] = true;
+		return;
+	}
 
+	column_info->iterator =
+		definitions[header->compression_algorithm]
+			.iterator_init_forward(PointerGetDatum(header), column_info->decompressed_type);
+}
+
+static void
+init_batch(RowDecompressor *decompressor, AttrNumber *attnos, int num_attnos)
+{
 	/*
 	 * Set segmentbys and compressed columns with default value.
 	 */
@@ -1425,6 +1453,23 @@ decompress_batch(RowDecompressor *decompressor)
 			continue;
 		}
 
+		/* Only initialize required columns if specified. */
+		bool found = num_attnos == 0;
+		for (int i = 0; i < num_attnos; i++)
+		{
+			if (output_index == AttrNumberGetAttrOffset(attnos[i]))
+			{
+				found = true;
+				break;
+			}
+		}
+
+		if (!found)
+		{
+			column_info->iterator = NULL;
+			continue;
+		}
+
 		/* Normal compressed column. */
 		Datum compressed_datum = PointerGetDatum(
 			detoaster_detoast_attr_copy((struct varlena *) DatumGetPointer(
@@ -1432,10 +1477,24 @@ decompress_batch(RowDecompressor *decompressor)
 										&decompressor->detoaster,
 										CurrentMemoryContext));
 		CompressedDataHeader *header = get_compressed_data_header(compressed_datum);
-		column_info->iterator =
-			definitions[header->compression_algorithm]
-				.iterator_init_forward(PointerGetDatum(header), column_info->decompressed_type);
+
+		init_iterator(decompressor, header, input_column);
 	}
+}
+
+/*
+ * Decompresses the current compressed batch into decompressed_slots, and returns
+ * the number of rows in batch.
+ */
+int
+decompress_batch(RowDecompressor *decompressor)
+{
+	if (decompressor->unprocessed_tuples)
+		return decompressor->unprocessed_tuples;
+
+	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
+
+	init_batch(decompressor, NULL, 0);
 
 	/*
 	 * Set the number of batch rows from count metadata column.
@@ -1515,6 +1574,64 @@ decompress_batch(RowDecompressor *decompressor)
 	decompressor->unprocessed_tuples = n_batch_rows;
 
 	return n_batch_rows;
+}
+
+/*
+ * Decompresses a single row from current compressed batch
+ * into decompressed_values and decompressed_is_nulls based on the
+ * attnos provided.
+ *
+ * Returns true if the row was decompressed or false if it finished the batch.
+ */
+bool
+decompress_batch_next_row(RowDecompressor *decompressor, AttrNumber *attnos, int num_attnos)
+{
+	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
+
+	if (decompressor->unprocessed_tuples > 0)
+	{
+		decompressor->unprocessed_tuples--;
+		if (decompressor->unprocessed_tuples == 0)
+		{
+			MemoryContextSwitchTo(old_ctx);
+			return false;
+		}
+	}
+	else
+	{
+		decompressor->batches_decompressed++;
+		init_batch(decompressor, attnos, num_attnos);
+
+		/*
+		 * Set the number of batch rows from count metadata column.
+		 */
+		decompressor->unprocessed_tuples =
+			DatumGetInt32(decompressor->compressed_datums[decompressor->count_compressed_attindex]);
+		CheckCompressedData(decompressor->unprocessed_tuples > 0);
+		CheckCompressedData(decompressor->unprocessed_tuples <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+	}
+
+	for (int16 col = 0; col < decompressor->num_compressed_columns; col++)
+	{
+		PerCompressedColumn *column_info = &decompressor->per_compressed_cols[col];
+		if (column_info->iterator == NULL)
+		{
+			continue;
+		}
+		Assert(column_info->is_compressed);
+
+		const int output_index = column_info->decompressed_column_offset;
+		const DecompressResult value = column_info->iterator->try_next(column_info->iterator);
+		Assert(!value.is_done);
+		decompressor->decompressed_datums[output_index] = value.val;
+		decompressor->decompressed_is_nulls[output_index] = value.is_null;
+	}
+
+	decompressor->tuples_decompressed++;
+
+	MemoryContextSwitchTo(old_ctx);
+
+	return true;
 }
 
 int
@@ -1694,7 +1811,10 @@ tsl_compressed_data_send(PG_FUNCTION_ARGS)
 	pq_begintypsend(&buf);
 	pq_sendbyte(&buf, header->compression_algorithm);
 
-	definitions[header->compression_algorithm].compressed_data_send(header, &buf);
+	if (header->compression_algorithm != COMPRESSION_ALGORITHM_NULL)
+	{
+		definitions[header->compression_algorithm].compressed_data_send(header, &buf);
+	}
 
 	PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
 }
@@ -1710,7 +1830,14 @@ tsl_compressed_data_recv(PG_FUNCTION_ARGS)
 	if (header.compression_algorithm >= _END_COMPRESSION_ALGORITHMS)
 		elog(ERROR, "invalid compression algorithm %d", header.compression_algorithm);
 
-	return definitions[header.compression_algorithm].compressed_data_recv(buf);
+	if (header.compression_algorithm == COMPRESSION_ALGORITHM_NULL)
+	{
+		PG_RETURN_NULL();
+	}
+	else
+	{
+		return definitions[header.compression_algorithm].compressed_data_recv(buf);
+	}
 }
 
 extern Datum
@@ -1802,6 +1929,12 @@ tsl_compressed_data_info(PG_FUNCTION_ARGS)
 		case COMPRESSION_ALGORITHM_ARRAY:
 			has_nulls = array_compressed_has_nulls(header);
 			break;
+		case COMPRESSION_ALGORITHM_BOOL:
+			has_nulls = bool_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_NULL:
+			has_nulls = true;
+			break;
 		default:
 			elog(ERROR, "unknown compression algorithm %d", header->compression_algorithm);
 			break;
@@ -1818,6 +1951,40 @@ tsl_compressed_data_info(PG_FUNCTION_ARGS)
 	tuple = heap_form_tuple(tupdesc, values, nulls);
 
 	return HeapTupleGetDatum(tuple);
+}
+
+extern Datum
+tsl_compressed_data_has_nulls(PG_FUNCTION_ARGS)
+{
+	const CompressedDataHeader *header = get_compressed_data_header(PG_GETARG_DATUM(0));
+	bool has_nulls = false;
+
+	switch (header->compression_algorithm)
+	{
+		case COMPRESSION_ALGORITHM_GORILLA:
+			has_nulls = gorilla_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_DICTIONARY:
+			has_nulls = dictionary_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_DELTADELTA:
+			has_nulls = deltadelta_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_ARRAY:
+			has_nulls = array_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_BOOL:
+			has_nulls = bool_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_NULL:
+			has_nulls = true;
+			break;
+		default:
+			elog(ERROR, "unknown compression algorithm %d", header->compression_algorithm);
+			break;
+	}
+
+	return BoolGetDatum(has_nulls);
 }
 
 extern CompressionStorage
@@ -1855,6 +2022,12 @@ compression_get_default_algorithm(Oid typeoid)
 
 		case NUMERICOID:
 			return COMPRESSION_ALGORITHM_ARRAY;
+
+		case BOOLOID:
+			if (ts_guc_enable_bool_compression)
+				return COMPRESSION_ALGORITHM_BOOL;
+			else
+				return COMPRESSION_ALGORITHM_ARRAY;
 
 		default:
 		{

@@ -29,6 +29,11 @@ SELECT sum(segment_by_value), sum(int_value), sum(float_value) FROM testtable;
  304695 | 304695 | 304695
 (1 row)
 
+--
+-- Enable this GUC to run this test with Hypercore TAM. The EXPLAINs
+-- will differ, but the results should not.
+--
+--SET timescaledb.default_hypercore_use_access_method = true;
 ---
 -- Tests with some chunks compressed
 ---
@@ -516,7 +521,7 @@ SELECT sum(segment_by_value) FROM testtable GROUP BY int_value;
                      Output: _hyper_1_10_chunk.int_value, _hyper_1_10_chunk.segment_by_value
 (60 rows)
 
--- Vectorization not possible with grouping by multiple columns
+-- Vectorization possible with grouping by multiple columns
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable GROUP BY int_value, float_value;
                                                                                                                                                         QUERY PLAN                                                                                                                                                        
@@ -525,23 +530,23 @@ SELECT sum(segment_by_value) FROM testtable GROUP BY int_value, float_value;
    Output: sum(_hyper_1_1_chunk.segment_by_value), _hyper_1_1_chunk.int_value, _hyper_1_1_chunk.float_value
    Group Key: _hyper_1_1_chunk.int_value, _hyper_1_1_chunk.float_value
    ->  Append
-         ->  Partial HashAggregate
-               Output: _hyper_1_1_chunk.int_value, _hyper_1_1_chunk.float_value, PARTIAL sum(_hyper_1_1_chunk.segment_by_value)
-               Group Key: _hyper_1_1_chunk.int_value, _hyper_1_1_chunk.float_value
+         ->  Custom Scan (VectorAgg)
+               Output: _hyper_1_1_chunk.int_value, _hyper_1_1_chunk.float_value, (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+               Grouping Policy: hashed with serialized key
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
                      Output: _hyper_1_1_chunk.int_value, _hyper_1_1_chunk.float_value, _hyper_1_1_chunk.segment_by_value
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
                            Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
-         ->  Partial HashAggregate
-               Output: _hyper_1_2_chunk.int_value, _hyper_1_2_chunk.float_value, PARTIAL sum(_hyper_1_2_chunk.segment_by_value)
-               Group Key: _hyper_1_2_chunk.int_value, _hyper_1_2_chunk.float_value
+         ->  Custom Scan (VectorAgg)
+               Output: _hyper_1_2_chunk.int_value, _hyper_1_2_chunk.float_value, (PARTIAL sum(_hyper_1_2_chunk.segment_by_value))
+               Grouping Policy: hashed with serialized key
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk
                      Output: _hyper_1_2_chunk.int_value, _hyper_1_2_chunk.float_value, _hyper_1_2_chunk.segment_by_value
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_12_chunk
                            Output: compress_hyper_2_12_chunk._ts_meta_count, compress_hyper_2_12_chunk.segment_by_value, compress_hyper_2_12_chunk._ts_meta_min_1, compress_hyper_2_12_chunk._ts_meta_max_1, compress_hyper_2_12_chunk."time", compress_hyper_2_12_chunk.int_value, compress_hyper_2_12_chunk.float_value
-         ->  Partial HashAggregate
-               Output: _hyper_1_3_chunk.int_value, _hyper_1_3_chunk.float_value, PARTIAL sum(_hyper_1_3_chunk.segment_by_value)
-               Group Key: _hyper_1_3_chunk.int_value, _hyper_1_3_chunk.float_value
+         ->  Custom Scan (VectorAgg)
+               Output: _hyper_1_3_chunk.int_value, _hyper_1_3_chunk.float_value, (PARTIAL sum(_hyper_1_3_chunk.segment_by_value))
+               Grouping Policy: hashed with serialized key
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_3_chunk
                      Output: _hyper_1_3_chunk.int_value, _hyper_1_3_chunk.float_value, _hyper_1_3_chunk.segment_by_value
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_13_chunk
@@ -3560,3 +3565,42 @@ SELECT sum(float_value), int_value FROM testtable2 WHERE int_value = 1 GROUP BY 
  3162 |         1
 (1 row)
 
+--
+-- Test handling of Agg on top of ChunkAppend. This reproduces a crash
+-- in the vector agg planning code introduced in commit 947f7f400.
+--
+CREATE TABLE testtable3 (time timestamptz, location_id int, device_id int, sensor_id int);
+SELECT create_hypertable('testtable3', 'time');
+NOTICE:  adding not-null constraint to column "time"
+    create_hypertable    
+-------------------------
+ (5,public,testtable3,t)
+(1 row)
+
+ALTER TABLE testtable3 SET (timescaledb.compress_orderby='time', timescaledb.compress_segmentby='location_id');
+INSERT INTO testtable3 SELECT t, ceil(random() * 20)::int, ceil(random() * 30)::int, ceil(random() * 20)::int FROM generate_series('2024-01-01'::timestamptz, '2024-01-10'::timestamptz, '1h') AS t;
+SELECT count(compress_chunk(ch)) FROM show_chunks('testtable3') ch;
+ count 
+-------
+     2
+(1 row)
+
+EXPLAIN (costs off) SELECT (date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour')::timestamp as time, TT.location_id as location_id, TT.device_id as device_id, 0 as sensor_id, date_trunc('day', current_timestamp) as discovered_date FROM testtable3 TT WHERE time >= date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour' GROUP BY TT.location_id, TT.device_id;
+                                                                                 QUERY PLAN                                                                                 
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Group
+   Group Key: tt.location_id, tt.device_id
+   ->  Gather Merge
+         Workers Planned: 2
+         ->  Sort
+               Sort Key: tt.location_id, tt.device_id
+               ->  Partial HashAggregate
+                     Group Key: tt.location_id, tt.device_id
+                     ->  Parallel Custom Scan (ChunkAppend) on testtable3 tt
+                           Chunks excluded during startup: 1
+                           ->  Custom Scan (DecompressChunk) on _hyper_5_120_chunk tt_1
+                                 Vectorized Filter: ("time" >= (date_trunc('hour'::text, 'Tue Jan 09 00:00:00 2024 PST'::timestamp with time zone) - '@ 1 hour'::interval))
+                                 ->  Parallel Seq Scan on compress_hyper_6_122_chunk
+(13 rows)
+
+SELECT (date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour')::timestamp as time, TT.location_id as location_id, TT.device_id as device_id, 0 as sensor_id, date_trunc('day', current_timestamp) as discovered_date FROM testtable3 TT WHERE time >= date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour' GROUP BY TT.location_id, TT.device_id \g :TEST_OUTPUT_DIR/vectorized_aggregation_query_result.out

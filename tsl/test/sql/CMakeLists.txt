@@ -12,33 +12,62 @@ set(TEST_FILES
     cagg_invalidation.sql
     cagg_policy.sql
     cagg_refresh.sql
+    cagg_refresh_using_merge.sql
     cagg_utils.sql
     cagg_watermark.sql
+    chunk_column_stats.sql
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
     compress_default.sql
     compress_dml_copy.sql
-    compress_float8_corrupt.sql
     compressed_collation.sql
     compressed_detoaster.sql
-    compression.sql
+    compress_float8_corrupt.sql
     compression_conflicts.sql
+    compression_constraints.sql
     compression_create_compressed_table.sql
     compression_defaults.sql
     compression_fks.sql
-    compression_insert.sql
     compression_indexcreate.sql
+    compression_insert.sql
+    compression_nulls_and_defaults.sql
     compression_policy.sql
     compression_qualpushdown.sql
     compression_sequence_num_removal.sql
     compression_settings.sql
-    compression_sorted_merge_columns.sql
+    compression_sorted_merge.sql
     compression_sorted_merge_distinct.sql
+    compression.sql
     compression_trigger.sql
+    compress_sort_transform.sql
+    create_table_with.sql
+    custom_hashagg.sql
     decompress_index.sql
     foreign_keys.sql
+    hypercore_columnar.sql
+    hypercore_constraints.sql
+    hypercore_copy.sql
+    hypercore_cursor.sql
+    hypercore_ddl.sql
+    hypercore_delete.sql
+    hypercore_dump_restore.sql
+    hypercore_index_btree.sql
+    hypercore_index_hash.sql
+    hypercore_insert.sql
+    hypercore_join.sql
+    hypercore_merge.sql
+    hypercore_policy.sql
+    hypercore_stats.sql
+    hypercore_trigger.sql
+    hypercore_types.sql
+    hypercore_update.sql
+    hypercore_vacuum_full.sql
+    hypercore_vacuum.sql
+    merge_append_partially_compressed.sql
+    merge_chunks.sql
+    merge_compress.sql
+    modify_exclusion.sql
     move.sql
-    partialize_finalize.sql
     policy_generalization.sql
     reorder.sql
     size_utils_tsl.sql
@@ -51,13 +80,10 @@ set(TEST_FILES
 
 set(TEST_TEMPLATES
     cagg_query.sql.in
+    cagg_query_using_merge.sql.in
     cagg_union_view.sql.in
     cagg_permissions.sql.in
-    chunk_column_stats.sql.in
     compression_permissions.sql.in
-    compression_sorted_merge.sql.in
-    merge_append_partially_compressed.sql.in
-    modify_exclusion.sql.in
     plan_skip_scan.sql.in
     transparent_decompression.sql.in
     transparent_decompression_ordered_index.sql.in)
@@ -76,9 +102,11 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     bgw_job_stat_history_errors.sql
     bgw_job_stat_history_errors_permissions.sql
     bgw_db_scheduler_fixed.sql
+    bgw_scheduler_control.sql
     bgw_scheduler_restart.sql
     bgw_reorder_drop_chunks.sql
     scheduler_fixed.sql
+    cagg_refresh_policy_incremental.sql
     compress_bgw_reorder_drop_chunks.sql
     chunk_api.sql
     chunk_merge.sql
@@ -86,11 +114,14 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     chunk_utils_internal.sql
     compression_algos.sql
     compression_bgw.sql
+    compression_bools.sql
     compression_ddl.sql
+    compression_errors.sql
     compression_hypertable.sql
     compression_merge.sql
     compression_indexscan.sql
     compression_segment_meta.sql
+    compression_sorted_merge_columns.sql
     compression_sorted_merge_filter.sql
     cagg_bgw_drop_chunks.sql
     cagg_drop_chunks.sql
@@ -108,6 +139,9 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     exp_cagg_next_gen.sql
     exp_cagg_origin.sql
     exp_cagg_timezone.sql
+    hypercore.sql
+    hypercore_create.sql
+    hypercore_scans.sql
     hypertable_generalization.sql
     insert_memory_usage.sql
     information_view_chunk_count.sql
@@ -116,12 +150,16 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     tsl_tables.sql
     license_tsl.sql
     fixed_schedules.sql
+    partialize_finalize.sql
     recompress_chunk_segmentwise.sql
     feature_flags.sql
     vector_agg_default.sql
     vector_agg_filter.sql
+    vector_agg_grouping.sql
+    vector_agg_text.sql
     vector_agg_memory.sql
-    vector_agg_segmentby.sql)
+    vector_agg_segmentby.sql
+    vector_agg_uuid_segmentby.sql)
 
   list(
     APPEND
@@ -131,7 +169,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_migrate_function.sql.in
     cagg_repair.sql.in
     cagg_usage.sql.in
-    compression_errors.sql.in
     compression_update_delete.sql.in
     continuous_aggs.sql.in)
 
@@ -140,46 +177,15 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
   endif()
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
-if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
-  if(CMAKE_BUILD_TYPE MATCHES Debug)
-    list(APPEND TEST_FILES bgw_scheduler_control.sql hypercore.sql)
-  endif()
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
   list(
     APPEND
     TEST_FILES
-    merge_chunks.sql
-    cagg_refresh_using_merge.sql
-    compress_sort_transform.sql
-    hypercore_columnar.sql
-    hypercore_constraints.sql
-    hypercore_copy.sql
-    hypercore_create.sql
-    hypercore_cursor.sql
-    hypercore_ddl.sql
-    hypercore_delete.sql
-    hypercore_dump_restore.sql
-    hypercore_index_btree.sql
-    hypercore_index_hash.sql
-    hypercore_insert.sql
-    hypercore_join.sql
-    hypercore_merge.sql
-    hypercore_policy.sql
-    hypercore_scans.sql
-    hypercore_stats.sql
-    hypercore_trigger.sql
-    hypercore_types.sql
-    hypercore_update.sql
-    hypercore_vacuum.sql
-    hypercore_vacuum_full.sql
-    merge_compress.sql)
-endif()
-
-if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
-  list(APPEND TEST_TEMPLATES cagg_query_using_merge.sql.in)
-endif()
-
-if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
-  list(APPEND TEST_FILES cagg_planning.sql hypercore_parallel.sql)
+    cagg_planning.sql
+    hypercore_parallel.sql
+    hypercore_vectoragg.sql
+    skip_scan_dagg.sql
+    plan_skip_scan_dagg.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
@@ -205,6 +211,8 @@ set(SOLO_TESTS
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
     cagg_invalidation
+    cagg_refresh_policy_incremental
+    hypercore
     move
     reorder
     telemetry_stats)

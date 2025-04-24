@@ -36,6 +36,10 @@
 extern HashingStrategy single_fixed_2_strategy;
 extern HashingStrategy single_fixed_4_strategy;
 extern HashingStrategy single_fixed_8_strategy;
+#ifdef TS_USE_UMASH
+extern HashingStrategy single_text_strategy;
+extern HashingStrategy serialized_strategy;
+#endif
 
 static const GroupingPolicy grouping_policy_hash_functions;
 
@@ -70,6 +74,14 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 
 	switch (grouping_type)
 	{
+#ifdef TS_USE_UMASH
+		case VAGT_HashSerialized:
+			policy->hashing = serialized_strategy;
+			break;
+		case VAGT_HashSingleText:
+			policy->hashing = single_text_strategy;
+			break;
+#endif
 		case VAGT_HashSingleFixed8:
 			policy->hashing = single_fixed_8_strategy;
 			break;
@@ -83,6 +95,8 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 			Ensure(false, "failed to determine the hashing strategy");
 			break;
 	}
+
+	policy->hashing.key_body_mctx = policy->agg_extra_mctx;
 
 	policy->hashing.init(&policy->hashing, policy);
 
@@ -99,8 +113,6 @@ gp_hash_reset(GroupingPolicy *obj)
 	policy->returning_results = false;
 
 	policy->hashing.reset(&policy->hashing);
-
-	policy->last_used_key_index = 0;
 
 	policy->stat_input_valid_rows = 0;
 	policy->stat_input_total_rows = 0;
@@ -132,7 +144,9 @@ compute_single_aggregate(GroupingPolicyHash *policy, TupleTableSlot *vector_slot
 			vector_slot_get_compressed_column_values(vector_slot, attnum);
 
 		Assert(values->decompression_type != DT_Invalid);
-		Assert(values->decompression_type != DT_Iterator);
+		Ensure(values->decompression_type != DT_Iterator,
+			   "expected arrow array but got iterator for attnum %d",
+			   attnum);
 
 		if (values->arrow != NULL)
 		{
@@ -215,7 +229,7 @@ add_one_range(GroupingPolicyHash *policy, TupleTableSlot *vector_slot, const int
 	 * Remember which aggregation states have already existed, and which we
 	 * have to initialize. State index zero is invalid.
 	 */
-	const uint32 last_initialized_key_index = policy->last_used_key_index;
+	const uint32 last_initialized_key_index = policy->hashing.last_used_key_index;
 	Assert(last_initialized_key_index <= policy->num_allocated_per_key_agg_states);
 
 	/*
@@ -236,13 +250,13 @@ add_one_range(GroupingPolicyHash *policy, TupleTableSlot *vector_slot, const int
 		 * If we added new keys, initialize the aggregate function states for
 		 * them.
 		 */
-		if (policy->last_used_key_index > last_initialized_key_index)
+		if (policy->hashing.last_used_key_index > last_initialized_key_index)
 		{
 			/*
 			 * If the aggregate function states don't fit into the existing
 			 * storage, reallocate it.
 			 */
-			if (policy->last_used_key_index >= policy->num_allocated_per_key_agg_states)
+			if (policy->hashing.last_used_key_index >= policy->num_allocated_per_key_agg_states)
 			{
 				policy->per_agg_per_key_states[agg_index] =
 					repalloc(policy->per_agg_per_key_states[agg_index],
@@ -253,7 +267,8 @@ add_one_range(GroupingPolicyHash *policy, TupleTableSlot *vector_slot, const int
 				agg_def->func.state_bytes * (last_initialized_key_index + 1) +
 				(char *) policy->per_agg_per_key_states[agg_index];
 			agg_def->func.agg_init(first_uninitialized_state,
-								   policy->last_used_key_index - last_initialized_key_index);
+								   policy->hashing.last_used_key_index -
+									   last_initialized_key_index);
 		}
 
 		/*
@@ -271,7 +286,7 @@ add_one_range(GroupingPolicyHash *policy, TupleTableSlot *vector_slot, const int
 	 * Record the newly allocated number of aggregate function states in case we
 	 * had to reallocate.
 	 */
-	if (policy->last_used_key_index >= policy->num_allocated_per_key_agg_states)
+	if (policy->hashing.last_used_key_index >= policy->num_allocated_per_key_agg_states)
 	{
 		Assert(new_aggstate_rows > policy->num_allocated_per_key_agg_states);
 		policy->num_allocated_per_key_agg_states = new_aggstate_rows;
@@ -411,7 +426,7 @@ gp_hash_should_emit(GroupingPolicy *gp)
 {
 	GroupingPolicyHash *policy = (GroupingPolicyHash *) gp;
 
-	if (policy->last_used_key_index > UINT32_MAX - GLOBAL_MAX_ROWS_PER_COMPRESSION)
+	if (policy->hashing.last_used_key_index > UINT32_MAX - GLOBAL_MAX_ROWS_PER_COMPRESSION)
 	{
 		/*
 		 * The max valid key index is UINT32_MAX, so we have to spill if the next
@@ -440,7 +455,7 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 		policy->returning_results = true;
 		policy->last_returned_key = 1;
 
-		const float keys = policy->last_used_key_index;
+		const float keys = policy->hashing.last_used_key_index;
 		if (keys > 0)
 		{
 			DEBUG_LOG("spill after %ld input, %ld valid, %ld bulk filtered, %ld cons, %.0f keys, "
@@ -461,7 +476,7 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 	}
 
 	const uint32 current_key = policy->last_returned_key;
-	const uint32 keys_end = policy->last_used_key_index + 1;
+	const uint32 keys_end = policy->hashing.last_used_key_index + 1;
 	if (current_key >= keys_end)
 	{
 		policy->returning_results = false;

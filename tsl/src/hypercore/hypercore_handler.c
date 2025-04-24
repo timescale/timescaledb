@@ -94,6 +94,20 @@ static List *partially_compressed_relids = NIL; /* Relids that needs to have
  */
 static Oid hypercore_skip_compressed_data_relid = InvalidOid;
 
+/*
+ * Open the compressed relation for a chunk.
+ *
+ * Note that opening a table can invalidate the rd_amcache field of the
+ * RelationData structure (even for relations that are not opened) if an
+ * invalidation occurs, which means that after using table_open(), we cannot
+ * trust that the HypercoreInfo is valid any more.
+ */
+static Relation
+hypercore_open_compressed(Relation relation, LOCKMODE mode)
+{
+	return table_open(RelationGetHypercoreInfo(relation)->compressed_relid, mode);
+}
+
 void
 hypercore_skip_compressed_data_for_relation(Oid relid)
 {
@@ -125,24 +139,15 @@ hypercore_set_truncate_compressed(bool onoff)
 #define HYPERCORE_AM_INFO_SIZE(natts)                                                              \
 	(sizeof(HypercoreInfo) + (sizeof(ColumnCompressionSettings) * (natts)))
 
-static int32
-get_chunk_id_from_relid(Oid relid)
+static void
+check_guc_setting_compatible_with_scan()
 {
-	int32 chunk_id;
-	Oid nspid = get_rel_namespace(relid);
-	const char *schema = get_namespace_name(nspid);
-	const char *relname = get_rel_name(relid);
-	ts_chunk_get_id(schema, relname, &chunk_id, false);
-	return chunk_id;
-}
-
-static int32
-chunk_get_compressed_chunk_relid(Oid relid)
-{
-	FormData_chunk fd;
-	if (!ts_chunk_simple_scan_by_reloid(relid, &fd, true))
-		return InvalidOid;
-	return ts_chunk_get_relid(fd.compressed_chunk_id, true);
+	if (ts_guc_enable_transparent_decompression == 2)
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("operation not compatible with current setting of %s",
+						MAKE_EXTOPTION("enable_transparent_decompression")),
+				 errhint("Set the GUC to true or false.")));
 }
 
 static const TableAmRoutine *
@@ -209,28 +214,26 @@ lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 {
 	Assert(OidIsValid(rel->rd_id) && (!ts_extension_is_loaded() || !ts_is_hypertable(rel->rd_id)));
 
-	HypercoreInfo *hsinfo;
-	CompressionSettings *settings;
+	const CompressionSettings *settings;
+	HypercoreInfo *hcinfo;
 	TupleDesc tupdesc = RelationGetDescr(rel);
+	Oid relid = RelationGetRelid(rel);
 
 	/* Anything put in rel->rd_amcache must be a single memory chunk
 	 * palloc'd in CacheMemoryContext since PostgreSQL expects to be able
 	 * to free it with a single pfree(). */
-	hsinfo = MemoryContextAllocZero(CacheMemoryContext, HYPERCORE_AM_INFO_SIZE(tupdesc->natts));
-	hsinfo->relation_id = get_chunk_id_from_relid(rel->rd_id);
-	hsinfo->compressed_relid = InvalidOid;
-	hsinfo->num_columns = tupdesc->natts;
-	hsinfo->hypertable_id = ts_chunk_get_hypertable_id_by_reloid(rel->rd_id);
+	hcinfo = MemoryContextAllocZero(CacheMemoryContext, HYPERCORE_AM_INFO_SIZE(tupdesc->natts));
+	hcinfo->compressed_relid = InvalidOid;
+	hcinfo->num_columns = tupdesc->natts;
 
-	FormData_chunk form = ts_chunk_get_formdata(hsinfo->relation_id);
-	hsinfo->compressed_relation_id = form.compressed_chunk_id;
+	settings = ts_compression_settings_get(relid);
 
 	/* Create compressed chunk and set the created flag if it does not
 	 * exist. */
 	if (compressed_relation_created)
-		*compressed_relation_created = (hsinfo->compressed_relation_id == INVALID_CHUNK_ID);
+		*compressed_relation_created = (settings == NULL);
 
-	if (hsinfo->compressed_relation_id == INVALID_CHUNK_ID)
+	if (settings == NULL)
 	{
 		/* Consider if we want to make it simpler to create the compressed
 		 * table by just considering a normal side-relation with no strong
@@ -250,7 +253,6 @@ lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 
 		Chunk *c_chunk = create_compress_chunk(ht_compressed, chunk, InvalidOid);
 
-		hsinfo->compressed_relation_id = c_chunk->fd.id;
 		ts_chunk_set_compressed_chunk(chunk, c_chunk->fd.id);
 
 		if (create_chunk_constraints)
@@ -259,33 +261,33 @@ lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 			ts_trigger_create_all_on_chunk(c_chunk);
 			create_proxy_vacuum_index(rel, c_chunk->table_id);
 			RelationSize before_size = ts_relation_size_impl(RelationGetRelid(rel));
-			create_compression_relation_size_stats(hsinfo->relation_id,
+			create_compression_relation_size_stats(chunk->fd.id,
 												   RelationGetRelid(rel),
-												   hsinfo->compressed_relation_id,
+												   c_chunk->fd.id,
 												   c_chunk->table_id,
 												   &before_size,
 												   0,
 												   0,
 												   0);
 		}
+
+		settings = ts_compression_settings_get(relid);
 	}
-
-	hsinfo->compressed_relid = ts_chunk_get_relid(hsinfo->compressed_relation_id, false);
-	hsinfo->count_cattno =
-		get_attnum(hsinfo->compressed_relid, COMPRESSION_COLUMN_METADATA_COUNT_NAME);
-
-	Assert(hsinfo->compressed_relation_id > 0 && OidIsValid(hsinfo->compressed_relid));
-	Assert(hsinfo->count_cattno != InvalidAttrNumber);
-	settings = ts_compression_settings_get(hsinfo->compressed_relid);
 
 	Ensure(settings,
 		   "no compression settings for relation %s",
 		   get_rel_name(RelationGetRelid(rel)));
 
-	for (int i = 0; i < hsinfo->num_columns; i++)
+	hcinfo->compressed_relid = settings->fd.compress_relid;
+	hcinfo->count_cattno =
+		get_attnum(hcinfo->compressed_relid, COMPRESSION_COLUMN_METADATA_COUNT_NAME);
+
+	Assert(hcinfo->count_cattno != InvalidAttrNumber);
+
+	for (int i = 0; i < hcinfo->num_columns; i++)
 	{
 		const Form_pg_attribute attr = &tupdesc->attrs[i];
-		ColumnCompressionSettings *colsettings = &hsinfo->columns[i];
+		ColumnCompressionSettings *colsettings = &hcinfo->columns[i];
 
 		if (attr->attisdropped)
 		{
@@ -305,8 +307,8 @@ lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 		colsettings->is_segmentby = segmentby_pos > 0;
 		colsettings->is_orderby = orderby_pos > 0;
 
-		if (OidIsValid(hsinfo->compressed_relid))
-			colsettings->cattnum = get_attnum(hsinfo->compressed_relid, attname);
+		if (OidIsValid(hcinfo->compressed_relid))
+			colsettings->cattnum = get_attnum(hcinfo->compressed_relid, attname);
 		else
 			colsettings->cattnum = InvalidAttrNumber;
 
@@ -314,45 +316,48 @@ lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 		{
 			const char *min_attname = column_segment_min_name(orderby_pos);
 			const char *max_attname = column_segment_max_name(orderby_pos);
-			colsettings->cattnum_min = get_attnum(hsinfo->compressed_relid, min_attname);
-			colsettings->cattnum_max = get_attnum(hsinfo->compressed_relid, max_attname);
+			colsettings->cattnum_min = get_attnum(hcinfo->compressed_relid, min_attname);
+			colsettings->cattnum_max = get_attnum(hcinfo->compressed_relid, max_attname);
 		}
 		else
 		{
-			colsettings->cattnum_min = InvalidAttrNumber;
-			colsettings->cattnum_max = InvalidAttrNumber;
+			const char *min_attname = compressed_column_metadata_name_v2("min", attname);
+			const char *max_attname = compressed_column_metadata_name_v2("max", attname);
+			colsettings->cattnum_min = get_attnum(hcinfo->compressed_relid, min_attname);
+			colsettings->cattnum_max = get_attnum(hcinfo->compressed_relid, max_attname);
 		}
 	}
 
-	Ensure(hsinfo->relation_id > 0, "invalid chunk ID");
-
-	return hsinfo;
+	return hcinfo;
 }
 
+/*
+ * Get hypercore info for relation.
+ *
+ * Note that the hypercore info can be freed unexpectedly and hence you cannot
+ * rely on this over any PostgreSQL calls. In particular, table_open() can
+ * invalidate rd_amcache, meaning that the data will be invalid.
+ */
 HypercoreInfo *
 RelationGetHypercoreInfo(Relation rel)
 {
-	/*coverity[tainted_data_downcast : FALSE]*/
-	HypercoreInfo *info = rel->rd_amcache;
+	if (NULL == rel->rd_amcache)
+		rel->rd_amcache = lazy_build_hypercore_info_cache(rel, true, NULL);
 
-	if (NULL == info)
-		info = rel->rd_amcache = lazy_build_hypercore_info_cache(rel, true, NULL);
-
-	Assert(info && OidIsValid(info->compressed_relid));
-
-	return info;
+	Assert(rel->rd_amcache && OidIsValid(((HypercoreInfo *) rel->rd_amcache)->compressed_relid));
+	return (HypercoreInfo *) rel->rd_amcache;
 }
 
 static void
-build_segment_and_orderby_bms(const HypercoreInfo *hsinfo, Bitmapset **segmentby,
+build_segment_and_orderby_bms(const HypercoreInfo *hcinfo, Bitmapset **segmentby,
 							  Bitmapset **orderby)
 {
 	*segmentby = NULL;
 	*orderby = NULL;
 
-	for (int i = 0; i < hsinfo->num_columns; i++)
+	for (int i = 0; i < hcinfo->num_columns; i++)
 	{
-		const ColumnCompressionSettings *colsettings = &hsinfo->columns[i];
+		const ColumnCompressionSettings *colsettings = &hcinfo->columns[i];
 
 		if (colsettings->is_segmentby)
 			*segmentby = bms_add_member(*segmentby, colsettings->attnum);
@@ -519,15 +524,15 @@ initscan(HypercoreScanDesc scan, ScanKey keys, int nkeys)
 	 */
 	if (NULL != keys && nkeys > 0)
 	{
-		const HypercoreInfo *hsinfo = RelationGetHypercoreInfo(scan->rs_base.rs_rd);
+		const HypercoreInfo *hcinfo = RelationGetHypercoreInfo(scan->rs_base.rs_rd);
 
 		for (int i = 0; i < nkeys; i++)
 		{
 			const ScanKey key = &keys[i];
 
-			for (int j = 0; j < hsinfo->num_columns; j++)
+			for (int j = 0; j < hcinfo->num_columns; j++)
 			{
-				const ColumnCompressionSettings *column = &hsinfo->columns[j];
+				const ColumnCompressionSettings *column = &hcinfo->columns[j];
 
 				if (column->is_segmentby && key->sk_attno == column->attnum)
 				{
@@ -631,10 +636,8 @@ get_scan_type(uint32 flags)
 {
 	if (flags & SO_TYPE_TIDSCAN)
 		return "TID";
-#if PG14_GE
 	if (flags & SO_TYPE_TIDRANGESCAN)
 		return "TID range";
-#endif
 	if (flags & SO_TYPE_BITMAPSCAN)
 		return "bitmap";
 	if (flags & SO_TYPE_SAMPLESCAN)
@@ -704,8 +707,7 @@ hypercore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey key
 		return &scan->rs_base;
 	}
 
-	HypercoreInfo *hcinfo = RelationGetHypercoreInfo(relation);
-	scan->compressed_rel = table_open(hcinfo->compressed_relid, AccessShareLock);
+	scan->compressed_rel = hypercore_open_compressed(relation, AccessShareLock);
 
 	if (should_skip_compressed_data(&scan->rs_base))
 	{
@@ -961,13 +963,12 @@ static Size
 hypercore_parallelscan_initialize(Relation rel, ParallelTableScanDesc pscan)
 {
 	HypercoreParallelScanDesc cpscan = (HypercoreParallelScanDesc) pscan;
-	HypercoreInfo *hsinfo = RelationGetHypercoreInfo(rel);
 
 	const TableAmRoutine *oldtam = switch_to_heapam(rel);
 	table_block_parallelscan_initialize(rel, (ParallelTableScanDesc) &cpscan->pscandesc);
 	rel->rd_tableam = oldtam;
 
-	Relation crel = table_open(hsinfo->compressed_relid, AccessShareLock);
+	Relation crel = hypercore_open_compressed(rel, AccessShareLock);
 	table_block_parallelscan_initialize(crel, (ParallelTableScanDesc) &cpscan->cpscandesc);
 	table_close(crel, NoLock);
 
@@ -982,13 +983,12 @@ static void
 hypercore_parallelscan_reinitialize(Relation rel, ParallelTableScanDesc pscan)
 {
 	HypercoreParallelScanDesc cpscan = (HypercoreParallelScanDesc) pscan;
-	HypercoreInfo *hsinfo = RelationGetHypercoreInfo(rel);
 
 	const TableAmRoutine *oldtam = switch_to_heapam(rel);
 	table_block_parallelscan_reinitialize(rel, (ParallelTableScanDesc) &cpscan->pscandesc);
 	rel->rd_tableam = oldtam;
 
-	Relation crel = table_open(hsinfo->compressed_relid, AccessShareLock);
+	Relation crel = hypercore_open_compressed(rel, AccessShareLock);
 	table_block_parallelscan_reinitialize(crel, (ParallelTableScanDesc) &cpscan->cpscandesc);
 	table_close(crel, NoLock);
 }
@@ -1060,9 +1060,7 @@ static IndexFetchTableData *
 hypercore_index_fetch_begin(Relation rel)
 {
 	IndexFetchComprData *cscan = palloc0(sizeof(IndexFetchComprData));
-	HypercoreInfo *hsinfo = RelationGetHypercoreInfo(rel);
-
-	Relation crel = table_open(hsinfo->compressed_relid, AccessShareLock);
+	Relation crel = hypercore_open_compressed(rel, AccessShareLock);
 	cscan->segindex = SEGMENTBY_INDEX_UNKNOWN;
 	cscan->return_count = 0;
 	cscan->h_base.rel = rel;
@@ -1137,7 +1135,7 @@ is_segmentby_index_scan(IndexFetchComprData *cscan, TupleTableSlot *slot)
 	if (segindex == SEGMENTBY_INDEX_UNKNOWN)
 	{
 		ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
-		const HypercoreInfo *hsinfo = RelationGetHypercoreInfo(cscan->h_base.rel);
+		const HypercoreInfo *hcinfo = RelationGetHypercoreInfo(cscan->h_base.rel);
 		int16 attno = -1;
 
 		if (bms_is_empty(aslot->index_attrs))
@@ -1148,7 +1146,7 @@ is_segmentby_index_scan(IndexFetchComprData *cscan, TupleTableSlot *slot)
 			 * that is not on a segment-by */
 			segindex = SEGMENTBY_INDEX_TRUE;
 			while ((attno = bms_next_member(aslot->index_attrs, attno)) >= 0)
-				if (!hsinfo->columns[AttrNumberGetAttrOffset(attno)].is_segmentby)
+				if (!hcinfo->columns[AttrNumberGetAttrOffset(attno)].is_segmentby)
 				{
 					segindex = SEGMENTBY_INDEX_FALSE;
 					break;
@@ -1316,8 +1314,7 @@ hypercore_fetch_row_version(Relation relation, ItemPointer tid, Snapshot snapsho
 	else
 	{
 		ItemPointerData decoded_tid;
-		HypercoreInfo *hsinfo = RelationGetHypercoreInfo(relation);
-		Relation child_rel = table_open(hsinfo->compressed_relid, AccessShareLock);
+		Relation child_rel = hypercore_open_compressed(relation, AccessShareLock);
 		TupleTableSlot *child_slot =
 			arrow_slot_get_compressed_slot(slot, RelationGetDescr(child_rel));
 
@@ -1357,12 +1354,11 @@ hypercore_tuple_tid_valid(TableScanDesc scan, ItemPointer tid)
 static bool
 hypercore_tuple_satisfies_snapshot(Relation rel, TupleTableSlot *slot, Snapshot snapshot)
 {
-	HypercoreInfo *hsinfo = RelationGetHypercoreInfo(rel);
 	bool result;
 
 	if (is_compressed_tid(&slot->tts_tid))
 	{
-		Relation crel = table_open(hsinfo->compressed_relid, AccessShareLock);
+		Relation crel = hypercore_open_compressed(rel, AccessShareLock);
 		TupleTableSlot *child_slot = arrow_slot_get_compressed_slot(slot, NULL);
 		result = crel->rd_tableam->tuple_satisfies_snapshot(crel, child_slot, snapshot);
 		table_close(crel, AccessShareLock);
@@ -1407,7 +1403,6 @@ hypercore_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 {
 	TM_IndexDeleteOp noncompr_delstate = *delstate;
 	TM_IndexDeleteOp compr_delstate = *delstate;
-	HypercoreInfo *hsinfo = RelationGetHypercoreInfo(rel);
 	/* Hash table setup for TID deduplication */
 	typedef struct TidEntry
 	{
@@ -1551,7 +1546,7 @@ hypercore_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 	if (compr_delstate.ndeltids > 0 && (total_knowndeletable_compressed > 0 || delstate->bottomup))
 	{
 		/* Assume RowExclusivelock since this involves deleting tuples */
-		Relation compr_rel = table_open(hsinfo->compressed_relid, RowExclusiveLock);
+		Relation compr_rel = hypercore_open_compressed(rel, RowExclusiveLock);
 
 		xid_compr = compr_rel->rd_tableam->index_delete_tuples(compr_rel, &compr_delstate);
 
@@ -1741,8 +1736,7 @@ whole_segment_delete_callback(void *arg)
  * which is a good point to check that delete invariants hold.
  */
 static WholeSegmentDeleteState *
-whole_segment_delete_state_create(const HypercoreInfo *hinfo, Relation crel, CommandId cid,
-								  ItemPointer ctid)
+whole_segment_delete_state_create(Relation rel, Relation crel, CommandId cid, ItemPointer ctid)
 {
 	WholeSegmentDeleteState *state;
 	HeapTupleData tp;
@@ -1776,7 +1770,10 @@ whole_segment_delete_state_create(const HypercoreInfo *hinfo, Relation crel, Com
 	tp.t_len = ItemIdGetLength(lp);
 	tp.t_self = *ctid;
 
-	d = heap_getattr(&tp, hinfo->count_cattno, RelationGetDescr(crel), &isnull);
+	d = heap_getattr(&tp,
+					 RelationGetHypercoreInfo(rel)->count_cattno,
+					 RelationGetDescr(crel),
+					 &isnull);
 	state->count = DatumGetInt32(d);
 	UnlockReleaseBuffer(buffer);
 
@@ -1806,11 +1803,11 @@ whole_segment_delete_state_add_row(WholeSegmentDeleteState *state, uint16 tuple_
  * Returns true if the whole segment has been deleted, otherwise false.
  */
 static bool
-is_whole_segment_delete(const HypercoreInfo *hinfo, Relation crel, CommandId cid, ItemPointer ctid,
+is_whole_segment_delete(Relation rel, Relation crel, CommandId cid, ItemPointer ctid,
 						uint16 tuple_index)
 {
 	if (delete_state == NULL)
-		delete_state = whole_segment_delete_state_create(hinfo, crel, cid, ctid);
+		delete_state = whole_segment_delete_state_create(rel, crel, cid, ctid);
 
 	/* Check if any invariant is violated */
 	if (delete_state->cid != cid || !ItemPointerEquals(&delete_state->ctid, ctid))
@@ -1858,16 +1855,16 @@ hypercore_tuple_delete(Relation relation, ItemPointer tid, CommandId cid, Snapsh
 
 	if (is_compressed_tid(tid) && hypercore_truncate_compressed)
 	{
-		HypercoreInfo *caminfo = RelationGetHypercoreInfo(relation);
-		Relation crel = table_open(caminfo->compressed_relid, RowExclusiveLock);
+		Relation crel = hypercore_open_compressed(relation, RowExclusiveLock);
 		ItemPointerData decoded_tid;
 		uint16 tuple_index = hypercore_tid_decode(&decoded_tid, tid);
 
 		/*
 		 * It is only possible to delete the compressed segment if all rows in
-		 * it are deleted.
+		 * it are deleted. Note that we need to fetch the caminfo again here
+		 * since it could have been invalidated by a table_open() call.
 		 */
-		if (is_whole_segment_delete(caminfo, crel, cid, &decoded_tid, tuple_index))
+		if (is_whole_segment_delete(relation, crel, cid, &decoded_tid, tuple_index))
 		{
 			result = crel->rd_tableam->tuple_delete(crel,
 													&decoded_tid,
@@ -1923,7 +1920,6 @@ int
 hypercore_decompress_update_segment(Relation relation, const ItemPointer ctid, TupleTableSlot *slot,
 									Snapshot snapshot, ItemPointer new_ctid)
 {
-	HypercoreInfo *hcinfo;
 	Relation crel;
 	TupleTableSlot *cslot;
 	ItemPointerData decoded_tid;
@@ -1941,8 +1937,7 @@ hypercore_decompress_update_segment(Relation relation, const ItemPointer ctid, T
 	Assert(!TTS_EMPTY(slot));
 	Assert(ItemPointerEquals(ctid, &slot->tts_tid));
 
-	hcinfo = RelationGetHypercoreInfo(relation);
-	crel = table_open(hcinfo->compressed_relid, RowExclusiveLock);
+	crel = hypercore_open_compressed(relation, RowExclusiveLock);
 	tuple_index = hypercore_tid_decode(&decoded_tid, ctid);
 	cslot = arrow_slot_get_compressed_slot(slot, NULL);
 	HeapTuple tuple = ExecFetchSlotHeapTuple(cslot, false, &should_free);
@@ -2025,11 +2020,10 @@ hypercore_tuple_lock(Relation relation, ItemPointer tid, Snapshot snapshot, Tupl
 
 	if (is_compressed_tid(tid))
 	{
-		HypercoreInfo *hsinfo = RelationGetHypercoreInfo(relation);
 		/* SELECT FOR UPDATE takes RowShareLock, so assume this
 		 * lockmode. Another option to consider is take same lock as currently
 		 * held on the non-compressed relation */
-		Relation crel = table_open(hsinfo->compressed_relid, RowShareLock);
+		Relation crel = hypercore_open_compressed(relation, RowShareLock);
 		TupleTableSlot *child_slot = arrow_slot_get_compressed_slot(slot, RelationGetDescr(crel));
 		ItemPointerData decoded_tid;
 
@@ -2115,10 +2109,11 @@ hypercore_relation_set_new_filelocator(Relation rel, const RelFileLocator *newrl
 	/* If the chunk has a compressed chunk associated with it, then we need to
 	 * change the rel file number for it as well. This can happen if you, for
 	 * example, execute a transactional TRUNCATE. */
-	Oid compressed_relid = chunk_get_compressed_chunk_relid(RelationGetRelid(rel));
-	if (OidIsValid(compressed_relid) && hypercore_truncate_compressed)
+	const CompressionSettings *settings = ts_compression_settings_get(RelationGetRelid(rel));
+
+	if (settings && OidIsValid(settings->fd.compress_relid) && hypercore_truncate_compressed)
 	{
-		Relation compressed_rel = table_open(compressed_relid, AccessExclusiveLock);
+		Relation compressed_rel = table_open(settings->fd.compress_relid, AccessExclusiveLock);
 #if PG16_GE
 		RelationSetNewRelfilenumber(compressed_rel, compressed_rel->rd_rel->relpersistence);
 #else
@@ -2132,13 +2127,14 @@ static void
 hypercore_relation_nontransactional_truncate(Relation rel)
 {
 	const TableAmRoutine *oldtam = switch_to_heapam(rel);
+	const CompressionSettings *settings = ts_compression_settings_get(RelationGetRelid(rel));
+
 	rel->rd_tableam->relation_nontransactional_truncate(rel);
 	rel->rd_tableam = oldtam;
 
-	Oid compressed_relid = chunk_get_compressed_chunk_relid(RelationGetRelid(rel));
-	if (OidIsValid(compressed_relid) && hypercore_truncate_compressed)
+	if (settings && OidIsValid(settings->fd.compress_relid) && hypercore_truncate_compressed)
 	{
-		Relation crel = table_open(compressed_relid, AccessShareLock);
+		Relation crel = table_open(settings->fd.compress_relid, AccessShareLock);
 		crel->rd_tableam->relation_nontransactional_truncate(crel);
 		table_close(crel, NoLock);
 	}
@@ -2170,21 +2166,16 @@ static Oid
 compress_and_swap_heap(Relation rel, Tuplesortstate *tuplesort, TransactionId *xid_cutoff,
 					   MultiXactId *multi_cutoff)
 {
-	const HypercoreInfo *hsinfo = RelationGetHypercoreInfo(rel);
 	TupleDesc tupdesc = RelationGetDescr(rel);
-	Oid old_compressed_relid = hsinfo->compressed_relid;
-	CompressionSettings *settings = ts_compression_settings_get(old_compressed_relid);
-	Relation old_compressed_rel = table_open(old_compressed_relid, AccessExclusiveLock);
-#if PG15_GE
+	Oid old_compressed_relid = RelationGetHypercoreInfo(rel)->compressed_relid;
+	const CompressionSettings *settings = ts_compression_settings_get(RelationGetRelid(rel));
+	Relation old_compressed_rel = hypercore_open_compressed(rel, AccessExclusiveLock);
 	Oid accessMethod = old_compressed_rel->rd_rel->relam;
-#endif
 	Oid tableSpace = old_compressed_rel->rd_rel->reltablespace;
 	char relpersistence = old_compressed_rel->rd_rel->relpersistence;
 	Oid new_compressed_relid = make_new_heap(old_compressed_relid,
 											 tableSpace,
-#if PG15_GE
 											 accessMethod,
-#endif
 											 relpersistence,
 											 AccessExclusiveLock);
 	Relation new_compressed_rel = table_open(new_compressed_relid, AccessExclusiveLock);
@@ -2287,7 +2278,6 @@ hypercore_relation_copy_for_cluster(Relation OldHypercore, Relation NewCompressi
 									double *num_tuples, double *tups_vacuumed,
 									double *tups_recently_dead)
 {
-	const HypercoreInfo *hsinfo = RelationGetHypercoreInfo(OldHypercore);
 	HypercoreScanDesc cscan;
 	HeapScanDesc chscan;
 	HeapScanDesc uhscan;
@@ -2303,6 +2293,8 @@ hypercore_relation_copy_for_cluster(Relation OldHypercore, Relation NewCompressi
 	if (ts_is_hypertable(RelationGetRelid(OldHypercore)))
 		return;
 
+	check_guc_setting_compatible_with_scan();
+
 	/* Error out if this is a CLUSTER. It would be possible to CLUSTER only
 	 * the non-compressed relation, but utility of this is questionable as
 	 * most of the data should be compressed (and ordered) anyway. */
@@ -2312,7 +2304,7 @@ hypercore_relation_copy_for_cluster(Relation OldHypercore, Relation NewCompressi
 				 errmsg("cannot cluster a hypercore table"),
 				 errdetail("A hypercore table is already ordered by compression.")));
 
-	CompressionSettings *settings = ts_compression_settings_get(hsinfo->compressed_relid);
+	CompressionSettings *settings = ts_compression_settings_get(RelationGetRelid(OldHypercore));
 	tuplesort = compression_create_tuplesort_state(settings, OldHypercore);
 
 	/* In scan-and-sort mode and also VACUUM FULL, set phase */
@@ -2503,20 +2495,18 @@ static void
 hypercore_vacuum_rel(Relation rel, VacuumParams *params, BufferAccessStrategy bstrategy)
 {
 	Oid relid = RelationGetRelid(rel);
-	HypercoreInfo *hsinfo;
 	RelStats relstats;
 
 	if (ts_is_hypertable(relid))
 		return;
 
 	relstats_fetch(relid, &relstats);
-	hsinfo = RelationGetHypercoreInfo(rel);
 
 	LOCKMODE lmode =
 		(params->options & VACOPT_FULL) ? AccessExclusiveLock : ShareUpdateExclusiveLock;
 
 	/* Vacuum the compressed relation */
-	Relation crel = vacuum_open_relation(hsinfo->compressed_relid,
+	Relation crel = vacuum_open_relation(RelationGetHypercoreInfo(rel)->compressed_relid,
 										 NULL,
 										 params->options,
 										 params->log_min_duration >= 0,
@@ -2801,6 +2791,7 @@ typedef struct IndexBuildCallbackState
 	Bitmapset *orderby_cols;
 	bool is_segmentby_index;
 	MemoryContext decompression_mcxt;
+	MemoryContext batch_mcxt;
 	ArrowArray **arrow_columns;
 } IndexBuildCallbackState;
 
@@ -2839,6 +2830,9 @@ hypercore_index_build_callback(Relation index, ItemPointer tid, Datum *values, b
 									   * indexes, we might change this from
 									   * the actual number of rows to indexing
 									   * only one row per segment. */
+
+	MemoryContext old_mcxt = MemoryContextSwitchTo(icstate->batch_mcxt);
+	MemoryContextReset(icstate->batch_mcxt);
 
 	/* Update ntuples for accurate statistics. When building the index, the
 	 * relation's reltuples is updated based on this count. */
@@ -2889,13 +2883,17 @@ hypercore_index_build_callback(Relation index, ItemPointer tid, Datum *values, b
 					TupleDescAttr(tupdesc, AttrNumberGetAttrOffset(attno));
 				icstate->arrow_columns[i] = arrow_from_compressed(values[i],
 																  attr->atttypid,
-																  CurrentMemoryContext,
+																  icstate->batch_mcxt,
 																  icstate->decompression_mcxt);
 
 				/* The number of elements in the arrow array should be the
 				 * same as the number of rows in the segment (count
-				 * column). */
-				Assert(num_rows == icstate->arrow_columns[i]->length);
+				 * column), except when we use the NULL compression method
+				 * to signify all values are NULLs. In this case the
+				 * arrow_column value is NULL.
+				 */
+				Assert(icstate->arrow_columns[i] == NULL ||
+					   num_rows == icstate->arrow_columns[i]->length);
 			}
 			else
 			{
@@ -2922,7 +2920,7 @@ hypercore_index_build_callback(Relation index, ItemPointer tid, Datum *values, b
 		/* The slot is a table slot, not index slot. But we only fill in the
 		 * columns needed for the index and predicate checks. Therefore, make sure
 		 * other columns are initialized to "null" */
-		memset(slot->tts_isnull, true, sizeof(bool) * slot->tts_tupleDescriptor->natts);
+		MemSet(slot->tts_isnull, true, sizeof(bool) * slot->tts_tupleDescriptor->natts);
 		ExecClearTuple(slot);
 
 		for (int colnum = 0; colnum < natts; colnum++)
@@ -2961,6 +2959,9 @@ hypercore_index_build_callback(Relation index, ItemPointer tid, Datum *values, b
 		hypercore_tid_encode(&index_tid, tid, rownum + 1);
 		Assert(!icstate->is_segmentby_index || rownum == 0);
 
+		/* Reset memory for predicate checks */
+		MemoryContextReset(icstate->econtext->ecxt_per_tuple_memory);
+
 		/*
 		 * In a partial index, discard tuples that don't satisfy the
 		 * predicate.
@@ -2974,8 +2975,13 @@ hypercore_index_build_callback(Relation index, ItemPointer tid, Datum *values, b
 				continue;
 		}
 
+		/* Call the original callback on the original memory context */
+		MemoryContextSwitchTo(old_mcxt);
 		icstate->callback(index, &index_tid, values, isnull, tupleIsAlive, icstate->orig_state);
+		MemoryContextSwitchTo(icstate->batch_mcxt);
 	}
+
+	MemoryContextSwitchTo(old_mcxt);
 }
 
 /*
@@ -3011,7 +3017,7 @@ hypercore_index_build_range_scan(Relation relation, Relation indexRelation, Inde
 								 IndexBuildCallback callback, void *callback_state,
 								 TableScanDesc scan)
 {
-	HypercoreInfo *hsinfo;
+	HypercoreInfo *hcinfo;
 	TransactionId OldestXmin;
 	bool need_unregister_snapshot = false;
 	Snapshot snapshot;
@@ -3059,7 +3065,7 @@ hypercore_index_build_range_scan(Relation relation, Relation indexRelation, Inde
 		}
 	}
 
-	hsinfo = RelationGetHypercoreInfo(relation);
+	hcinfo = RelationGetHypercoreInfo(relation);
 
 	/*
 	 * In accordance with the heapam implementation, setup the scan
@@ -3080,11 +3086,7 @@ hypercore_index_build_range_scan(Relation relation, Relation indexRelation, Inde
 	/* okay to ignore lazy VACUUMs here */
 	if (!indexInfo->ii_Concurrent)
 	{
-#if PG14_LT
-		OldestXmin = GetOldestXmin(relation, PROCARRAY_FLAGS_VACUUM);
-#else
 		OldestXmin = GetOldestNonRemovableTransactionId(relation);
-#endif
 	}
 
 	if (!scan)
@@ -3136,8 +3138,11 @@ hypercore_index_build_range_scan(Relation relation, Relation indexRelation, Inde
 		.index_info = indexInfo,
 		.tuple_index = -1,
 		.ntuples = 0,
+		.batch_mcxt = AllocSetContextCreate(CurrentMemoryContext,
+											"Compressed batch for index build",
+											ALLOCSET_DEFAULT_SIZES),
 		.decompression_mcxt = AllocSetContextCreate(CurrentMemoryContext,
-													"bulk decompression",
+													"Bulk decompression for index build",
 													/* minContextSize = */ 0,
 													/* initBlockSize = */ 64 * 1024,
 													/* maxBlockSize = */ 64 * 1024),
@@ -3155,13 +3160,13 @@ hypercore_index_build_range_scan(Relation relation, Relation indexRelation, Inde
 	 * compressed tuples, e.g., predicate checks (see below). */
 	IndexInfo compress_iinfo = *indexInfo;
 
-	build_segment_and_orderby_bms(hsinfo, &icstate.segmentby_cols, &icstate.orderby_cols);
+	build_segment_and_orderby_bms(hcinfo, &icstate.segmentby_cols, &icstate.orderby_cols);
 
 	/* Translate index attribute numbers for the compressed relation */
 	for (int i = 0; i < indexInfo->ii_NumIndexAttrs; i++)
 	{
 		const AttrNumber attno = indexInfo->ii_IndexAttrNumbers[i];
-		const AttrNumber cattno = hsinfo->columns[AttrNumberGetAttrOffset(attno)].cattnum;
+		const AttrNumber cattno = hcinfo->columns[AttrNumberGetAttrOffset(attno)].cattnum;
 
 		compress_iinfo.ii_IndexAttrNumbers[i] = cattno;
 		icstate.arrow_columns[i] = NULL;
@@ -3206,7 +3211,7 @@ hypercore_index_build_range_scan(Relation relation, Relation indexRelation, Inde
 			{
 				/* Need to translate attribute number for compressed rel */
 				const int offset = AttrNumberGetAttrOffset(v->varattno);
-				const AttrNumber cattno = hsinfo->columns[offset].cattnum;
+				const AttrNumber cattno = hcinfo->columns[offset].cattnum;
 				const int num_index_attrs =
 					compress_iinfo.ii_NumIndexAttrs + icstate.num_non_index_predicates;
 
@@ -3249,7 +3254,7 @@ hypercore_index_build_range_scan(Relation relation, Relation indexRelation, Inde
 	 * column. */
 	Ensure(compress_iinfo.ii_NumIndexAttrs < INDEX_MAX_KEYS,
 		   "too many predicate attributes in index");
-	compress_iinfo.ii_IndexAttrNumbers[compress_iinfo.ii_NumIndexAttrs++] = hsinfo->count_cattno;
+	compress_iinfo.ii_IndexAttrNumbers[compress_iinfo.ii_NumIndexAttrs++] = hcinfo->count_cattno;
 
 	/* Call heap's index_build_range_scan() on the compressed relation. The
 	 * custom callback we give it will "unwrap" the compressed segments into
@@ -3276,6 +3281,7 @@ hypercore_index_build_range_scan(Relation relation, Relation indexRelation, Inde
 	FreeExecutorState(icstate.estate);
 	ExecDropSingleTupleTableSlot(icstate.slot);
 	MemoryContextDelete(icstate.decompression_mcxt);
+	MemoryContextDelete(icstate.batch_mcxt);
 	pfree((void *) icstate.arrow_columns);
 	bms_free(icstate.segmentby_cols);
 	bms_free(icstate.orderby_cols);
@@ -3364,10 +3370,9 @@ hypercore_relation_size(Relation rel, ForkNumber forkNumber)
 	if (hyper_id == INVALID_HYPERTABLE_ID)
 		return ubytes;
 
-	HypercoreInfo *hsinfo = RelationGetHypercoreInfo(rel);
-
 	/* For ANALYZE, need to return sum for both relations. */
-	Relation crel = try_relation_open(hsinfo->compressed_relid, AccessShareLock);
+	Relation crel =
+		try_relation_open(RelationGetHypercoreInfo(rel)->compressed_relid, AccessShareLock);
 
 	if (crel == NULL)
 		return ubytes;
@@ -3481,10 +3486,9 @@ hypercore_relation_estimate_size(Relation rel, int32 *attr_widths, BlockNumber *
 		return;
 	}
 
-	const HypercoreInfo *hsinfo = RelationGetHypercoreInfo(rel);
 	const Form_pg_class form = RelationGetForm(rel);
 	Size overhead_bytes_per_tuples = HEAP_OVERHEAD_BYTES_PER_TUPLE;
-	Relation crel = table_open(hsinfo->compressed_relid, AccessShareLock);
+	Relation crel = hypercore_open_compressed(rel, AccessShareLock);
 	BlockNumber nblocks = relation_number_of_disk_blocks(rel);
 	BlockNumber cnblocks = relation_number_of_disk_blocks(crel);
 
@@ -3624,7 +3628,7 @@ conversionstate_cleanup(void *arg)
 static ConversionState *
 conversionstate_create(const HypercoreInfo *hcinfo, const Relation rel)
 {
-	CompressionSettings *settings = ts_compression_settings_get(hcinfo->compressed_relid);
+	CompressionSettings *settings = ts_compression_settings_get(RelationGetRelid(rel));
 	Tuplesortstate *tuplesortstate;
 	MemoryContext mcxt;
 	MemoryContext oldmcxt;
@@ -3691,36 +3695,6 @@ convert_to_hypercore(Oid relid)
 	table_close(relation, NoLock);
 }
 
-/*
- * List of relation IDs used to clean up the compressed relation when
- * converting from Hypercore to another TAM (typically heap).
- */
-static List *cleanup_relids = NIL;
-
-static void
-cleanup_compression_relations(void)
-{
-	if (cleanup_relids != NIL)
-	{
-		ListCell *lc;
-
-		foreach (lc, cleanup_relids)
-		{
-			Oid relid = lfirst_oid(lc);
-			Chunk *chunk = ts_chunk_get_by_relid(relid, true);
-			Chunk *compress_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
-
-			ts_chunk_clear_compressed_chunk(chunk);
-
-			if (compress_chunk)
-				ts_chunk_drop(compress_chunk, DROP_RESTRICT, -1);
-		}
-
-		list_free(cleanup_relids);
-		cleanup_relids = NIL;
-	}
-}
-
 void
 hypercore_xact_event(XactEvent event, void *arg)
 {
@@ -3738,8 +3712,7 @@ hypercore_xact_event(XactEvent event, void *arg)
 				Relation rel = table_open(relid, AccessShareLock);
 				/* Calling RelationGetHypercoreInfo() here will create the
 				 * compressed relation if not already created. */
-				HypercoreInfo *hsinfo = RelationGetHypercoreInfo(rel);
-				Ensure(OidIsValid(hsinfo->compressed_relid),
+				Ensure(OidIsValid(RelationGetHypercoreInfo(rel)->compressed_relid),
 					   "hypercore \"%s\" has no compressed data relation",
 					   get_rel_name(relid));
 
@@ -3757,16 +3730,6 @@ hypercore_xact_event(XactEvent event, void *arg)
 	{
 		list_free(partially_compressed_relids);
 		partially_compressed_relids = NIL;
-	}
-
-	/*
-	 * Cleanup in case of aborted transaction. Need not explicitly check for
-	 * abort since the states should only exist if it is an abort.
-	 */
-	if (cleanup_relids != NIL)
-	{
-		list_free(cleanup_relids);
-		cleanup_relids = NIL;
 	}
 }
 
@@ -3810,7 +3773,7 @@ convert_to_hypercore_finish(Oid relid)
 	 */
 	Chunk *c_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
 	Relation compressed_rel = table_open(c_chunk->table_id, RowExclusiveLock);
-	CompressionSettings *settings = ts_compression_settings_get(RelationGetRelid(compressed_rel));
+	const CompressionSettings *settings = ts_compression_settings_get(conversionstate->relid);
 	RowCompressor row_compressor;
 
 	row_compressor_init(settings,
@@ -3859,27 +3822,11 @@ convert_to_hypercore_finish(Oid relid)
 	Assert(conversionstate == NULL);
 }
 
-/*
- * Convert the chunk away from Hypercore to another table access method.
- * When this happens it is necessary to cleanup metadata.
- */
-static void
-convert_from_hypercore(Oid relid)
-{
-	int32 chunk_id = get_chunk_id_from_relid(relid);
-	ts_compression_chunk_size_delete(chunk_id);
-
-	/* Need to truncate the compressed relation after converting from Hypercore */
-	MemoryContext oldmcxt = MemoryContextSwitchTo(CurTransactionContext);
-	cleanup_relids = lappend_oid(cleanup_relids, relid);
-	MemoryContextSwitchTo(oldmcxt);
-}
-
 void
 hypercore_alter_access_method_begin(Oid relid, bool to_other_am)
 {
 	if (to_other_am)
-		convert_from_hypercore(relid);
+		check_guc_setting_compatible_with_scan();
 	else
 		convert_to_hypercore(relid);
 }
@@ -3890,8 +3837,25 @@ hypercore_alter_access_method_begin(Oid relid, bool to_other_am)
 void
 hypercore_alter_access_method_finish(Oid relid, bool to_other_am)
 {
+	Chunk *chunk = ts_chunk_get_by_relid(relid, false);
+
+	/* If this is not a chunk, we just abort since there is nothing to do */
+	if (!chunk)
+		return;
+
 	if (to_other_am)
-		cleanup_compression_relations();
+	{
+		Chunk *compress_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
+
+		ts_compression_chunk_size_delete(chunk->fd.id);
+		ts_chunk_clear_compressed_chunk(chunk);
+
+		if (compress_chunk)
+		{
+			ts_compression_settings_delete(relid);
+			ts_chunk_drop(compress_chunk, DROP_RESTRICT, -1);
+		}
+	}
 
 	/* Finishing the conversion to Hypercore is handled in the
 	 * finish_bulk_insert callback */
@@ -3910,7 +3874,7 @@ hypercore_alter_access_method_finish(Oid relid, bool to_other_am)
  * regular IndexScans on segmentby indexes.
  */
 static void
-convert_index_only_scans(const HypercoreInfo *hsinfo, List *pathlist)
+convert_index_only_scans(Relation rel, List *pathlist)
 {
 	ListCell *lc;
 
@@ -3928,8 +3892,8 @@ convert_index_only_scans(const HypercoreInfo *hsinfo, List *pathlist)
 			for (int i = 0; i < indkeys->dim1; i++)
 			{
 				const AttrNumber attno = indkeys->values[i];
-
-				if (!hsinfo->columns[AttrNumberGetAttrOffset(attno)].is_segmentby)
+				const HypercoreInfo *hcinfo = RelationGetHypercoreInfo(rel);
+				if (!hcinfo->columns[AttrNumberGetAttrOffset(attno)].is_segmentby)
 				{
 					is_segmentby_index = false;
 					break;
@@ -3951,9 +3915,8 @@ hypercore_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht)
 {
 	const RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
 	Relation relation = table_open(rte->relid, AccessShareLock);
-	const HypercoreInfo *hsinfo = RelationGetHypercoreInfo(relation);
-	convert_index_only_scans(hsinfo, rel->pathlist);
-	convert_index_only_scans(hsinfo, rel->partial_pathlist);
+	convert_index_only_scans(relation, rel->pathlist);
+	convert_index_only_scans(relation, rel->partial_pathlist);
 	table_close(relation, AccessShareLock);
 }
 
@@ -3971,7 +3934,6 @@ static const TableAmRoutine hypercore_methods = {
 	.scan_end = hypercore_endscan,
 	.scan_rescan = hypercore_rescan,
 	.scan_getnextslot = hypercore_getnextslot,
-#if PG14_GE
 	/*-----------
 	 * Optional functions to provide scanning for ranges of ItemPointers.
 	 * Implementations must either provide both of these functions, or neither
@@ -3979,7 +3941,6 @@ static const TableAmRoutine hypercore_methods = {
 	 */
 	.scan_set_tidrange = NULL,
 	.scan_getnextslot_tidrange = NULL,
-#endif
 	/* ------------------------------------------------------------------------
 	 * Parallel table scan related functions.
 	 * ------------------------------------------------------------------------
@@ -4020,9 +3981,7 @@ static const TableAmRoutine hypercore_methods = {
 	.tuple_get_latest_tid = hypercore_get_latest_tid,
 	.tuple_tid_valid = hypercore_tuple_tid_valid,
 	.tuple_satisfies_snapshot = hypercore_tuple_satisfies_snapshot,
-#if PG14_GE
 	.index_delete_tuples = hypercore_index_delete_tuples,
-#endif
 
 /* ------------------------------------------------------------------------
  * DDL related functionality.

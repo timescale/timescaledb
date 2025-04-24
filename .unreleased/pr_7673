@@ -1,2 +1,0 @@
-Fixes: #7673 Don't abort additional INSERTs when hitting first conflict
-Thanks: @bjornuppeke for reporting a problem with INSERT INTO ... ON CONFLICT DO NOTHING on compressed chunks
