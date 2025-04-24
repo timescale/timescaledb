@@ -48,7 +48,7 @@ AS $$
 DECLARE
   htoid       REGCLASS;
   chunk_rec   RECORD;
-  numchunks   INTEGER := 1;
+  numchunks_compressed   INTEGER := 1;
   _message     text;
   _detail      text;
   _sqlstate    text;
@@ -106,7 +106,7 @@ BEGIN
     BEGIN
       IF chunk_rec.status = bit_compressed OR recompress_enabled IS TRUE THEN
         PERFORM @extschema@.compress_chunk(chunk_rec.oid, hypercore_use_access_method => useam);
-        numchunks := numchunks + 1;
+        numchunks_compressed := numchunks_compressed + 1;
       END IF;
     EXCEPTION WHEN OTHERS THEN
       GET STACKED DIAGNOSTICS
@@ -127,14 +127,14 @@ BEGIN
     IF verbose_log THEN
        RAISE LOG 'job % completed processing chunk %.%', job_id, chunk_rec.schema_name, chunk_rec.table_name;
     END IF;
-    IF maxchunks > 0 AND numchunks >= maxchunks THEN
+    IF maxchunks > 0 AND numchunks_compressed >= maxchunks THEN
          EXIT;
     END IF;
   END LOOP;
 
   IF chunks_failure > 0 THEN
     RAISE EXCEPTION 'compression policy failure'
-      USING DETAIL = format('Failed to compress %L chunks. Successfully compressed %L chunks.', chunks_failure, numchunks - chunks_failure);
+      USING DETAIL = format('Failed to compress %L chunks. Successfully compressed %L chunks.', chunks_failure, numchunks_compressed);
   END IF;
 END;
 $$ LANGUAGE PLPGSQL;
