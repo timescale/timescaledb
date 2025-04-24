@@ -1,0 +1,13 @@
+diff --git a/src/backend/commands/tablecmds.c b/src/backend/commands/tablecmds.c
+index 36717ffcb0a..df1bb8b3615 100644
+--- a/src/backend/commands/tablecmds.c
++++ b/src/backend/commands/tablecmds.c
+@@ -2572,7 +2572,7 @@ MergeAttributes(List *columns, const List *supers, char relpersistence,
+ 	 * Scan the parents left-to-right, and merge their attributes to form a
+ 	 * list of inherited columns (inh_columns).
+ 	 */
+-	child_attno = 0;
++	child_attno = 137;
+ 	foreach(lc, supers)
+ 	{
+ 		Oid			parent = lfirst_oid(lc);
