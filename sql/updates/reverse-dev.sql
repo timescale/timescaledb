@@ -237,3 +237,9 @@ DROP FUNCTION _timescaledb_functions.make_multirange_from_internal_time(TSRANGE,
 DROP FUNCTION _timescaledb_functions.make_range_from_internal_time(ANYRANGE, ANYELEMENT, ANYELEMENT);
 DROP FUNCTION _timescaledb_functions.get_internal_time_min(REGTYPE);
 DROP FUNCTION _timescaledb_functions.get_internal_time_max(REGTYPE);
+DROP PROCEDURE _timescaledb_functions.add_materialization_invalidations(REGCLASS,TSRANGE);
+DROP PROCEDURE _timescaledb_functions.add_materialization_invalidations(REGCLASS,TSTZRANGE);
+DROP FUNCTION _timescaledb_functions.get_raw_materialization_ranges(REGTYPE);
+DROP FUNCTION _timescaledb_functions.get_materialization_invalidations(REGCLASS, TSTZRANGE);
+DROP FUNCTION _timescaledb_functions.get_materialization_invalidations(REGCLASS, TSRANGE);
+DROP FUNCTION _timescaledb_functions.get_materialization_info(REGCLASS);
