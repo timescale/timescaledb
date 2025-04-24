@@ -84,7 +84,7 @@ typedef enum SchedulerState
 
 static volatile sig_atomic_t got_SIGHUP = false;
 
-int ts_guc_bgw_scheduler_restart_time_sec = BGW_DEFAULT_RESTART_INTERVAL;
+int ts_guc_bgw_scheduler_restart_time_sec = BGW_NEVER_RESTART;
 
 static void
 launcher_sighup(SIGNAL_ARGS)
@@ -239,22 +239,33 @@ terminate_background_worker(BackgroundWorkerHandle *handle)
 		TerminateBackgroundWorker(handle);
 }
 
+static bool
+check_scheduler_restart_time(int *newval, void **extra, GucSource source)
+{
+	if (*newval == -1 || *newval >= 10)
+		return true;
+	GUC_check_errdetail("Scheduler restart time must be be either -1 or at least 10 seconds.");
+	return false;
+}
+
 extern void
 ts_bgw_cluster_launcher_init(void)
 {
 	BackgroundWorker worker;
 
 	DefineCustomIntVariable(/* name= */ MAKE_EXTOPTION("bgw_scheduler_restart_time"),
-							/* short_desc= */ "Restart time for scheduler in seconds",
+							/* short_desc= */
+							"Restart time for scheduler in seconds",
 							/* long_desc= */
-							"The number of seconds until the scheduler restart on failure.",
+							"The number of seconds until the scheduler restart on failure, or zero "
+							"if it should never restart.",
 							/* valueAddr= */ &ts_guc_bgw_scheduler_restart_time_sec,
-							/* bootValue= */ BGW_DEFAULT_RESTART_INTERVAL,
-							/* minValue= */ 1,
+							/* bootValue= */ BGW_NEVER_RESTART,
+							/* minValue= */ -1,
 							/* maxValue= */ 3600,
 							/* context= */ PGC_SIGHUP,
 							/* flags= */ GUC_UNIT_S,
-							/* check_hook= */ NULL,
+							/* check_hook= */ check_scheduler_restart_time,
 							/* assign_hook= */ NULL,
 							/* show_hook= */ NULL);
 
@@ -288,12 +299,19 @@ static bool
 register_entrypoint_for_db(Oid db_id, VirtualTransactionId vxid, BackgroundWorkerHandle **handle)
 {
 	BackgroundWorker worker;
+	int restart_time_sec = ts_guc_bgw_scheduler_restart_time_sec;
+
+	/* BGW_NEVER_RESTART is typically -1, but we check that explicitly here in
+	 * case PostgreSQL changes it. Compiler should optimize this away if they
+	 * are the same. */
+	if (restart_time_sec == -1)
+		restart_time_sec = BGW_NEVER_RESTART;
 
 	memset(&worker, 0, sizeof(worker));
 	snprintf(worker.bgw_type, BGW_MAXLEN, TS_BGW_TYPE_SCHEDULER);
 	snprintf(worker.bgw_name, BGW_MAXLEN, "%s for database %d", TS_BGW_TYPE_SCHEDULER, db_id);
 	worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION;
-	worker.bgw_restart_time = ts_guc_bgw_scheduler_restart_time_sec,
+	worker.bgw_restart_time = restart_time_sec;
 	worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
 	snprintf(worker.bgw_library_name, BGW_MAXLEN, EXTENSION_NAME);
 	snprintf(worker.bgw_function_name, BGW_MAXLEN, BGW_ENTRYPOINT_FUNCNAME);
