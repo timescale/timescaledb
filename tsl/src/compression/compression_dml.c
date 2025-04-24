@@ -512,6 +512,8 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 			continue;
 		}
 
+		row_decompressor_reset(&decompressor);
+
 		if (skip_current_tuple && *skip_current_tuple)
 		{
 			row_decompressor_close(&decompressor);
@@ -572,33 +574,54 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 }
 
 static bool
-slot_keys_test(TupleTableSlot *slot, int nkeys, ScanKey keys)
-{
-	int cur_nkeys = nkeys;
-	ScanKey cur_key = keys;
-
-	for (; cur_nkeys--; cur_key++)
-	{
-		if (!slot_key_test(slot, cur_key))
-			return false;
-	}
-
-	return true;
-}
-
-static bool
 batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
 			  tuple_filtering_constraints *constraints, bool *skip_current_tuple)
 {
-	int num_tuples = decompress_batch(decompressor);
-
-	bool valid = false;
-
-	for (int row = 0; row < num_tuples; row++)
+	AttrNumber *attnos = palloc0(sizeof(AttrNumber) * num_scankeys);
+	for (int i = 0; i < num_scankeys; i++)
 	{
-		TupleTableSlot *decompressed_slot = decompressor->decompressed_slots[row];
-		valid = slot_keys_test(decompressed_slot, num_scankeys, scankeys);
-		if (valid)
+		attnos[i] = scankeys[i].sk_attno;
+	}
+
+	bool next_tuple = decompress_batch_next_row(decompressor, attnos, num_scankeys);
+	ScanKey key;
+	bool match;
+
+	while (next_tuple)
+	{
+		match = true;
+		for (int i = 0; i < num_scankeys; i++)
+		{
+			key = &scankeys[i];
+
+			if (key->sk_flags & SK_ISNULL)
+			{
+				if (!decompressor->decompressed_is_nulls[AttrNumberGetAttrOffset(key->sk_attno)])
+				{
+					match = false;
+					break;
+				}
+				continue;
+			}
+			else if (decompressor->decompressed_is_nulls[AttrNumberGetAttrOffset(key->sk_attno)])
+			{
+				match = false;
+				break;
+			}
+
+			if (!DatumGetBool(
+					FunctionCall2Coll(&key->sk_func,
+									  key->sk_collation,
+									  decompressor->decompressed_datums[AttrNumberGetAttrOffset(
+										  key->sk_attno)],
+									  key->sk_argument)))
+			{
+				match = false;
+				break;
+			}
+		}
+
+		if (match)
 		{
 			if (constraints)
 			{
@@ -618,6 +641,8 @@ batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scan
 			}
 			return true;
 		}
+
+		next_tuple = decompress_batch_next_row(decompressor, attnos, num_scankeys);
 	}
 
 	return false;
@@ -842,11 +867,9 @@ get_batch_keys_for_unique_constraints(const ChunkInsertState *cis, Relation rela
 			constraints->covered = false;
 		}
 
-#if PG15_GE
 		/* If any of the unique indexes have NULLS NOT DISTINCT set, we proceed
 		 * with checking the constraints with decompression */
 		constraints->nullsnotdistinct |= indexDesc->rd_index->indnullsnotdistinct;
-#endif
 
 		/* When multiple unique indexes are present, in theory there could be no shared
 		 * columns even though that is very unlikely as they will probably at least share

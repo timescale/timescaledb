@@ -350,6 +350,9 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
  * after the existing data according to the compression order. This is true if the data being merged
  * in has timestamps greater than the existing data and the first column in the order by is time
  * ASC.
+ *
+ * The CompressChunkCxt references the chunk we are merging and mergable_chunk is the chunk we
+ * are merging into.
  */
 static bool
 check_is_chunk_order_violated_by_merge(CompressChunkCxt *cxt, const Dimension *time_dim,
@@ -363,13 +366,12 @@ check_is_chunk_order_violated_by_merge(CompressChunkCxt *cxt, const Dimension *t
 		ts_hypercube_get_slice_by_dimension_id(cxt->srcht_chunk->cube, time_dim->fd.id);
 	if (!compressed_slice)
 		elog(ERROR, "compressed chunk has no time dimension slice");
-
-	if (mergable_slice->fd.range_start > compressed_slice->fd.range_start &&
-		mergable_slice->fd.range_end > compressed_slice->fd.range_start)
-	{
-		return true;
-	}
-
+	/*
+	 * Ensure the compressed chunk is AFTER the chunk that
+	 * it is being merged into. This is already guaranteed by previous checks.
+	 */
+	Ensure(mergable_slice->fd.range_end == compressed_slice->fd.range_start,
+		   "chunk being merged is not after the chunk that is being merged into");
 	CompressionSettings *ht_settings =
 		ts_compression_settings_get(mergable_chunk->hypertable_relid);
 
@@ -378,14 +380,6 @@ check_is_chunk_order_violated_by_merge(CompressChunkCxt *cxt, const Dimension *t
 
 	/* Primary dimension column should be first compress_orderby column. */
 	if (index != 1)
-		return true;
-
-	/*
-	 * Sort order must not be DESC for merge. We don't need to check
-	 * NULLS FIRST/LAST here because partitioning columns have NOT NULL
-	 * constraint.
-	 */
-	if (ts_array_get_element_bool(ht_settings->fd.orderby_desc, index))
 		return true;
 
 	return false;
@@ -767,7 +761,6 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 static Oid
 set_access_method(Oid relid, const char *amname)
 {
-#if PG15_GE
 	AlterTableCmd cmd = {
 		.type = T_AlterTableCmd,
 		.subtype = AT_SetAccessMethod,
@@ -812,11 +805,6 @@ set_access_method(Oid relid, const char *amname)
 #endif
 	hypercore_alter_access_method_finish(relid, !to_hypercore);
 
-#else
-	ereport(ERROR,
-			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("compression using hypercore is not supported")));
-#endif
 	return relid;
 }
 
@@ -941,7 +929,7 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 	if (ts_chunk_is_compressed(chunk))
 	{
 		CompressionSettings *chunk_settings = ts_compression_settings_get(chunk->table_id);
-		bool valid_orderby_settings = chunk_settings->fd.orderby;
+		bool valid_orderby_settings = chunk_settings && chunk_settings->fd.orderby;
 		if (recompress)
 		{
 			CompressionSettings *ht_settings = ts_compression_settings_get(chunk->hypertable_relid);

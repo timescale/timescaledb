@@ -9,7 +9,7 @@
 set -e
 set -u
 
-FROM_VERSION=${FROM_VERSION:-$(grep '^downgrade_to_version ' version.config | awk '{ print $3 }')}
+FROM_VERSION=${FROM_VERSION:-$(grep '^previous_version ' version.config | awk '{ print $3 }')}
 TO_VERSION=${TO_VERSION:-$(grep '^version ' version.config | awk '{ print $3 }')}
 
 TEST_REPAIR=${TEST_REPAIR:-false}

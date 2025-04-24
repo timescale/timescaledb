@@ -1198,3 +1198,44 @@ SELECT relpages, reltuples::int AS reltuples FROM pg_catalog.pg_class WHERE oid 
 SELECT count(*) FROM :CHUNK;
 
 RESET timescaledb.enable_delete_after_compression;
+
+-- Test batch size limiting GUC
+CREATE TABLE hyper_85 (time timestamptz, device int8, location int8, temp float8);
+SELECT create_hypertable('hyper_85', 'time', create_default_indexes => false);
+INSERT INTO hyper_85
+SELECT t, 1, 1, 1.0
+FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '20 sec'::interval) t;
+ALTER TABLE hyper_85 SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+
+-- first without the limit
+BEGIN;
+SELECT compress_chunk(ch) FROM show_chunks('hyper_85') ch;
+
+SELECT ch1.id "CHUNK_ID"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'hyper_85'
+ORDER BY ch1.id
+LIMIT 1 \gset
+
+select  compressed.schema_name|| '.' || compressed.table_name as "COMPRESSED_CHUNK_NAME"
+from _timescaledb_catalog.chunk uncompressed, _timescaledb_catalog.chunk compressed
+where uncompressed.compressed_chunk_id = compressed.id AND uncompressed.id = :'CHUNK_ID' \gset
+
+SELECT _ts_meta_count FROM :COMPRESSED_CHUNK_NAME ORDER BY device, _ts_meta_min_1 DESC;
+ROLLBACK;
+
+-- now lets set the limit
+SET timescaledb.compression_batch_size_limit = 505;
+BEGIN;
+SELECT compress_chunk(ch) FROM show_chunks('hyper_85') ch;
+
+SELECT ch1.id "CHUNK_ID"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'hyper_85'
+ORDER BY ch1.id
+LIMIT 1 \gset
+
+select  compressed.schema_name|| '.' || compressed.table_name as "COMPRESSED_CHUNK_NAME"
+from _timescaledb_catalog.chunk uncompressed, _timescaledb_catalog.chunk compressed
+where uncompressed.compressed_chunk_id = compressed.id AND uncompressed.id = :'CHUNK_ID' \gset
+
+SELECT _ts_meta_count FROM :COMPRESSED_CHUNK_NAME ORDER BY device, _ts_meta_min_1 DESC;
+ROLLBACK;

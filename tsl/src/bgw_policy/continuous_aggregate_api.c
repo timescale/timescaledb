@@ -168,6 +168,18 @@ policy_refresh_cagg_get_max_batches_per_execution(const Jsonb *config)
 	return res;
 }
 
+bool
+policy_refresh_cagg_get_refresh_newest_first(const Jsonb *config)
+{
+	bool found;
+	bool res = ts_jsonb_get_bool_field(config, POL_REFRESH_CONF_KEY_REFRESH_NEWEST_FIRST, &found);
+
+	if (!found)
+		res = true; /* default value */
+
+	return res;
+}
+
 /* returns false if a policy could not be found */
 bool
 policy_refresh_cagg_exists(int32 materialization_id)
@@ -261,7 +273,8 @@ policy_refresh_cagg_check(PG_FUNCTION_ARGS)
 {
 	if (PG_ARGISNULL(0))
 	{
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("config must not be NULL")));
+		ereport(ERROR,
+				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), errmsg("config must not be NULL")));
 	}
 
 	policy_refresh_cagg_read_and_validate_config(PG_GETARG_JSONB_P(0), NULL);
@@ -521,7 +534,8 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 								 Interval refresh_interval, bool if_not_exists, bool fixed_schedule,
 								 TimestampTz initial_start, const char *timezone,
 								 NullableDatum include_tiered_data, NullableDatum buckets_per_batch,
-								 NullableDatum max_batches_per_execution)
+								 NullableDatum max_batches_per_execution,
+								 NullableDatum refresh_newest_first)
 {
 	NameData application_name;
 	NameData proc_name, proc_schema, check_name, check_schema, owner;
@@ -650,6 +664,11 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 						   POL_REFRESH_CONF_KEY_MAX_BATCHES_PER_EXECUTION,
 						   max_batches_per_execution.value);
 
+	if (!refresh_newest_first.isnull)
+		ts_jsonb_add_bool(parse_state,
+						  POL_REFRESH_CONF_KEY_REFRESH_NEWEST_FIRST,
+						  refresh_newest_first.value);
+
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	Jsonb *config = JsonbValueToJsonb(result);
 
@@ -683,6 +702,7 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	NullableDatum include_tiered_data;
 	NullableDatum buckets_per_batch;
 	NullableDatum max_batches_per_execution;
+	NullableDatum refresh_newest_first;
 
 	ts_feature_flag_check(FEATURE_POLICY);
 
@@ -711,6 +731,8 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	buckets_per_batch.isnull = PG_ARGISNULL(8);
 	max_batches_per_execution.value = PG_GETARG_DATUM(9);
 	max_batches_per_execution.isnull = PG_ARGISNULL(9);
+	refresh_newest_first.value = PG_GETARG_DATUM(10);
+	refresh_newest_first.isnull = PG_ARGISNULL(10);
 
 	Datum retval;
 	/* if users pass in -infinity for initial_start, then use the current_timestamp instead */
@@ -736,7 +758,8 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 											  valid_timezone,
 											  include_tiered_data,
 											  buckets_per_batch,
-											  max_batches_per_execution);
+											  max_batches_per_execution,
+											  refresh_newest_first);
 	if (!TIMESTAMP_NOT_FINITE(initial_start))
 	{
 		int32 job_id = DatumGetInt32(retval);

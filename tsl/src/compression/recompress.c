@@ -133,11 +133,13 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 			(errmsg("acquiring locks for recompression: \"%s.%s\"",
 					NameStr(uncompressed_chunk->fd.schema_name),
 					NameStr(uncompressed_chunk->fd.table_name))));
+
+	LOCKMODE recompression_lockmode =
+		ts_guc_enable_exclusive_locking_recompression ? ExclusiveLock : ShareUpdateExclusiveLock;
 	/* lock both chunks, compressed and uncompressed */
 	Relation uncompressed_chunk_rel =
-		table_open(uncompressed_chunk->table_id, ShareUpdateExclusiveLock);
-	Relation compressed_chunk_rel =
-		table_open(compressed_chunk->table_id, ShareUpdateExclusiveLock);
+		table_open(uncompressed_chunk->table_id, recompression_lockmode);
+	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, recompression_lockmode);
 
 	bool has_unique_constraints =
 		ts_indexing_relation_has_primary_or_unique_index(uncompressed_chunk_rel);
@@ -256,7 +258,9 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 		 "Using index \"%s\" for recompression",
 		 get_rel_name(row_compressor.index_oid));
 
-	Relation index_rel = index_open(row_compressor.index_oid, ExclusiveLock);
+	LOCKMODE index_lockmode =
+		ts_guc_enable_exclusive_locking_recompression ? ExclusiveLock : RowExclusiveLock;
+	Relation index_rel = index_open(row_compressor.index_oid, index_lockmode);
 	ereport(DEBUG1,
 			(errmsg("locks acquired for recompression: \"%s.%s\"",
 					NameStr(uncompressed_chunk->fd.schema_name),
@@ -424,9 +428,8 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 													snapshot))
 					ereport(ERROR,
 							(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
-							 errmsg(
-								 "cannot proceed with recompression due to concurrent updates on "
-								 "compressed data")));
+							 errmsg("aborting recompression due to concurrent updates on "
+									"compressed data, retrying with next policy run")));
 				CommandCounterIncrement();
 
 				if (should_free)
@@ -577,8 +580,8 @@ finish:
 		 */
 		ereport(ERROR,
 				(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
-				 errmsg("cannot proceed with recompression due to concurrent DML on uncompressed "
-						"data")));
+				 errmsg("aborting recompression due to concurrent DML on uncompressed "
+						"data, retrying with next policy run")));
 	}
 
 	table_close(uncompressed_chunk_rel, NoLock);
@@ -672,9 +675,8 @@ fetch_uncompressed_chunk_into_tuplesort(Tuplesortstate *tuplesortstate,
 		if (!delete_tuple_for_recompression(uncompressed_chunk_rel, &slot->tts_tid, snapshot))
 			ereport(ERROR,
 					(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
-					 errmsg("cannot proceed with recompression due to concurrent updates on "
-							"uncompressed "
-							"data")));
+					 errmsg("aborting recompression due to concurrent updates on "
+							"uncompressed data, retrying with next policy run")));
 	}
 	ExecDropSingleTupleTableSlot(slot);
 	table_endscan(scan);

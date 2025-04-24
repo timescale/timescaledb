@@ -1,0 +1,53 @@
+name: pg_ladybug
+"on":
+  pull_request:
+  push:
+    branches:
+      - main
+      - prerelease_test
+jobs:
+  pg_ladybug:
+    runs-on: ubuntu-latest
+    env:
+      CC: clang-19
+      CXX: clang++-19
+      LLVM_CONFIG: llvm-config-19
+
+    steps:
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get purge llvm-16 llvm-18 clang-16 clang-18
+        sudo apt-get install llvm-19 llvm-19-dev clang-19 libclang-19-dev clang-tidy-19 libcurl4-openssl-dev postgresql-server-dev-16
+        sudo ln -sf /usr/bin/clang-tidy-19 /usr/bin/clang-tidy
+
+    - name: Checkout timescaledb
+      uses: actions/checkout@v4
+
+    - name: Checkout pg_ladybug
+      uses: actions/checkout@v4
+      with:
+        repository: 'timescale/pg_ladybug'
+        path: 'pg_ladybug'
+        ref: '0.1.0'
+
+    - name: build pg_ladybug
+      run:  |
+        cd pg_ladybug
+        cmake -S . -B build
+        make -C build
+        sudo make -C build install
+
+    - name: Verify pg_ladybug
+      run: |
+        clang-tidy --load /usr/local/lib/libPostgresCheck.so --checks='-*,postgres-*' --list-checks | grep postgres
+
+    - name: Configure timescaledb
+      run: |
+        ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DLINTER=ON -DCLANG_TIDY_EXTRA_OPTS=",-*,postgres-*;--load=/usr/local/lib/libPostgresCheck.so"
+
+    - name: Build timescaledb
+      run: |
+        make -C build
+

@@ -9,16 +9,6 @@ include(ScriptFiles)
 # There still needs to be an entry here to build an update script for that
 # version. Thus, for every new release, an entry should be added here.
 set(MOD_FILES
-    updates/2.5.0--2.5.1.sql
-    updates/2.5.1--2.5.2.sql
-    updates/2.5.2--2.6.0.sql
-    updates/2.6.0--2.6.1.sql
-    updates/2.6.1--2.7.0.sql
-    updates/2.7.0--2.7.1.sql
-    updates/2.7.1--2.7.2.sql
-    updates/2.7.2--2.8.0.sql
-    updates/2.8.0--2.8.1.sql
-    updates/2.8.1--2.9.0.sql
     updates/2.9.0--2.9.1.sql
     updates/2.9.1--2.9.2.sql
     updates/2.9.2--2.9.3.sql
@@ -48,7 +38,10 @@ set(MOD_FILES
     updates/2.17.1--2.17.2.sql
     updates/2.17.2--2.18.0.sql
     updates/2.18.0--2.18.1.sql
-    updates/2.18.1--2.18.2.sql)
+    updates/2.18.1--2.18.2.sql
+    updates/2.18.2--2.19.0.sql
+    updates/2.19.0--2.19.1.sql
+    updates/2.19.1--2.19.2.sql)
 
 # The downgrade file to generate a downgrade script for the current version, as
 # specified in version.config
@@ -57,16 +50,6 @@ set(CURRENT_REV_FILE reverse-dev.sql)
 # downgrade from one version to its previous version since we do not support
 # skipping versions when downgrading.
 set(OLD_REV_FILES
-    2.5.1--2.5.0.sql
-    2.5.2--2.5.1.sql
-    2.6.0--2.5.2.sql
-    2.6.1--2.6.0.sql
-    2.7.0--2.6.1.sql
-    2.7.1--2.7.0.sql
-    2.7.2--2.7.1.sql
-    2.8.0--2.7.2.sql
-    2.8.1--2.8.0.sql
-    2.9.0--2.8.1.sql
     2.9.1--2.9.0.sql
     2.9.2--2.9.1.sql
     2.9.3--2.9.2.sql
@@ -96,7 +79,10 @@ set(OLD_REV_FILES
     2.17.2--2.17.1.sql
     2.18.0--2.17.2.sql
     2.18.1--2.18.0.sql
-    2.18.2--2.18.1.sql)
+    2.18.2--2.18.1.sql
+    2.19.0--2.18.2.sql
+    2.19.1--2.19.0.sql
+    2.19.2--2.19.1.sql)
 
 set(MODULE_PATHNAME "$libdir/timescaledb-${PROJECT_VERSION_MOD}")
 set(LOADER_PATHNAME "$libdir/timescaledb")
@@ -119,7 +105,7 @@ else()
     SOURCE_VERSION
     ${PROJECT_VERSION_MOD}
     TARGET_VERSION
-    ${DOWNGRADE_TO_VERSION}
+    ${PREVIOUS_VERSION}
     INPUT_DIRECTORY
     ${CMAKE_CURRENT_SOURCE_DIR}/updates
     FILES
@@ -249,12 +235,12 @@ set(MOD_FILE_REGEX
 
 # We'd like to process the updates in reverse (descending) order
 if(EXISTS
-   "${CMAKE_CURRENT_SOURCE_DIR}/updates/${UPDATE_FROM_VERSION}--${PROJECT_VERSION_MOD}.sql"
+   "${CMAKE_CURRENT_SOURCE_DIR}/updates/${PREVIOUS_VERSION}--${PROJECT_VERSION_MOD}.sql"
 )
   set(MOD_FILES_LIST ${MOD_FILES_VERSIONED})
 else()
   set(MOD_FILES_LIST
-      "${MOD_FILES_VERSIONED};updates/${UPDATE_FROM_VERSION}--${PROJECT_VERSION_MOD}.sql"
+      "${MOD_FILES_VERSIONED};updates/${PREVIOUS_VERSION}--${PROJECT_VERSION_MOD}.sql"
   )
 endif()
 
@@ -273,7 +259,7 @@ set(CURR_MOD_FILES "${LASTEST_MOD_VERSIONED}")
 foreach(transition_mod_file ${MOD_FILES_LIST})
 
   if(NOT (${transition_mod_file} MATCHES ${MOD_FILE_REGEX}))
-    message(FATAL_ERROR "Cannot parse update file name ${mod_file}")
+    message(FATAL_ERROR "Cannot parse update file name ${transition_mod_file}")
   endif()
 
   set(START_VERSION ${CMAKE_MATCH_1})

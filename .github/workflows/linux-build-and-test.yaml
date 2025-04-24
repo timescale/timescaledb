@@ -52,6 +52,16 @@ jobs:
       CLANG: ${{ matrix.clang }}
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
+
+      # For some reason, on PG <= 15 with faketime the client backends get the
+      # modified time, and the background workers the unmodified time, so it
+      # doesn't work.
+      FAKETIME: |
+        ${{ (contains(matrix.os, 'ubuntu')
+               && !startsWith(matrix.pg, '14.')
+               && !startsWith(matrix.pg, '15.')
+            ) && 'faketime -f +379d' || '' }}
+
     strategy:
       matrix: ${{ fromJson(needs.matrixbuilder.outputs.matrix) }}
       fail-fast: false
@@ -64,7 +74,7 @@ jobs:
         # If needed, install them before opening the core dump.
         sudo apt-get update
         sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl \
-          libtest-most-perl pkgconf icu-devtools ${{ matrix.extra_packages }}
+          libtest-most-perl pkgconf icu-devtools faketime ${{ matrix.extra_packages }}
 
     - name: Install macOS Dependencies
       if: runner.os == 'macOS'
@@ -149,7 +159,7 @@ jobs:
       if: github.event_name != 'pull_request' && runner.os == 'Linux' && matrix.build_type == 'Debug'
       run: |
         BUILD_DIR=nossl ./bootstrap -DCMAKE_BUILD_TYPE=Debug \
-          -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
+          -DPG_SOURCE_DIR=$HOME/$PG_SRC_DIR -DPG_PATH=$HOME/$PG_INSTALL_DIR \
           ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} -DUSE_OPENSSL=OFF \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         make -j $(nproc) -C nossl
@@ -162,7 +172,7 @@ jobs:
         "$CC" -march=native -E -v - </dev/null 2>&1 | grep cc1
 
         ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" \
-          -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
+          -DPG_SOURCE_DIR=$HOME/$PG_SRC_DIR -DPG_PATH=$HOME/$PG_INSTALL_DIR \
           ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         make -j $(nproc) -C build
@@ -298,6 +308,20 @@ jobs:
         path: |
           build/test/tmp_check/log
           build/tsl/test/tmp_check/log
+
+    - name: Check that no new internal program errors are introduced
+      # We collect the same messages when uploading to the CI checks database,
+      # but it runs on different conditions (not on forks and not on flaky check),
+      # and requires different data (job date), so we do it separately here.
+      # The jq --exit-code option is broken with select() on jq-1.6 which we see
+      # on some machines, so we use grep instead (see https://github.com/jqlang/jq/issues/1139).
+      if: always() && contains(matrix.name, 'Flaky')
+      run: |
+        ! jq 'select(
+                (.state_code == "XX000" and .error_severity != "LOG")
+                or (.message | test("resource was not closed"))
+            ) | [.message, .func_name,  .statement] | @tsv
+        ' -r postmaster.json | grep .
 
     - name: Upload test results to the database
       # Don't upload the results of the flaky check, because the db schema only

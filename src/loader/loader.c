@@ -8,6 +8,7 @@
 #include <access/heapam.h>
 #include <access/parallel.h>
 #include <access/xact.h>
+#include <catalog/pg_database.h>
 #include <commands/dbcommands.h>
 #include <commands/defrem.h>
 #include <commands/user.h>
@@ -112,9 +113,7 @@ int ts_guc_bgw_launcher_poll_time = BGW_LAUNCHER_POLL_TIME_MS;
 /* This is the hook that existed before the loader was installed */
 static post_parse_analyze_hook_type prev_post_parse_analyze_hook;
 static shmem_startup_hook_type prev_shmem_startup_hook;
-#if PG15_GE
 static shmem_request_hook_type prev_shmem_request_hook;
-#endif
 
 typedef struct TsExtension
 {
@@ -392,6 +391,39 @@ stop_workers_on_db_drop(DropdbStmt *drop_db_statement)
 	}
 }
 
+static bool
+database_allowconn(const Oid db_oid)
+{
+	Relation pg_database;
+	ScanKeyData entry[1];
+	SysScanDesc scan;
+	HeapTuple dbtuple;
+	bool allowconn = false;
+
+	pg_database = table_open(DatabaseRelationId, AccessShareLock);
+	ScanKeyInit(&entry[0],
+				Anum_pg_database_oid,
+				BTEqualStrategyNumber,
+				F_OIDEQ,
+				ObjectIdGetDatum(db_oid));
+	scan = systable_beginscan(pg_database, DatabaseOidIndexId, true, NULL, 1, entry);
+
+	dbtuple = systable_getnext(scan);
+
+	/* We assume that there can be at most one matching tuple */
+	if (!HeapTupleIsValid(dbtuple))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_DATABASE),
+				 errmsg("database with OID \"%u\" does not exist", db_oid)));
+
+	allowconn = ((Form_pg_database) GETSTRUCT(dbtuple))->datallowconn;
+
+	systable_endscan(scan);
+	table_close(pg_database, AccessShareLock);
+
+	return allowconn;
+}
+
 static void
 post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 {
@@ -442,7 +474,7 @@ post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 					{
 						Oid db_oid = get_database_oid(defGetString(option), false);
 
-						if (OidIsValid(db_oid))
+						if (OidIsValid(db_oid) && database_allowconn(db_oid))
 							ts_bgw_message_send_and_wait(RESTART, db_oid);
 					}
 				}
@@ -557,10 +589,8 @@ timescaledb_shmem_startup_hook(void)
 static void
 timescaledb_shmem_request_hook(void)
 {
-#if PG15_GE
 	if (prev_shmem_request_hook)
 		prev_shmem_request_hook();
-#endif
 
 	ts_bgw_counter_shmem_alloc();
 	ts_bgw_message_queue_alloc();
@@ -586,10 +616,6 @@ _PG_init(void)
 	extension_mark_loader_present();
 
 	elog(INFO, "timescaledb loaded");
-
-#if PG15_LT
-	timescaledb_shmem_request_hook();
-#endif
 
 	ts_bgw_cluster_launcher_init();
 	ts_bgw_counter_setup_gucs();
@@ -638,10 +664,8 @@ _PG_init(void)
 	post_parse_analyze_hook = post_analyze_hook;
 	shmem_startup_hook = timescaledb_shmem_startup_hook;
 
-#if PG15_GE
 	prev_shmem_request_hook = shmem_request_hook;
 	shmem_request_hook = timescaledb_shmem_request_hook;
-#endif
 }
 
 inline static void

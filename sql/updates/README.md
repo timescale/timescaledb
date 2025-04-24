@@ -82,7 +82,7 @@ not to any other preceeding versions.
 
 The source and target versions are found in be found in the file
 `version.config` file in the root of the source tree, where `version`
-is the source version and `downgrade_to_version` is the target
+is the source version and `previous_version` is the target
 version. Note that we have a separate field for the downgrade.
 
 A downgrade file consists of:
@@ -122,7 +122,7 @@ script to the immediately preceeding version.
 ### When releasing a new version
 
 When releasing a new version, please rename the file `reverse-dev.sql`
-to `<version>--<downgrade_to_version>.sql` and add that name to
+to `<version>--<previous_version>.sql` and add that name to
 `REV_FILES` variable in the `sql/CMakeLists.txt`. This will allow
 generation of downgrade scripts for any version in that list, but it
 is currently not added.

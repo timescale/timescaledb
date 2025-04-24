@@ -9,7 +9,7 @@
 #include <nodes/parsenodes.h>
 
 #include "hypertable.h"
-#include "with_clause_parser.h"
+#include "with_clause/with_clause_parser.h"
 
 #define COMPRESSION_COLUMN_METADATA_PREFIX "_ts_meta_"
 #define COMPRESSION_COLUMN_METADATA_COUNT_NAME COMPRESSION_COLUMN_METADATA_PREFIX "count"
@@ -18,8 +18,7 @@
 
 #define COMPRESSION_COLUMN_METADATA_PATTERN_V1 "_ts_meta_%s_%d"
 
-bool tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
-								WithClauseResult *with_clause_options);
+bool tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options);
 void tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def);
 void tsl_process_compress_table_drop_column(Hypertable *ht, char *name);
 void tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt);

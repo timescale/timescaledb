@@ -219,7 +219,7 @@ ht_ExecUpdateEpilogue(ModifyTableContext * context, UpdateContext * updateCxt,
 													 onlySummarizing);
 
 	/* AFTER ROW UPDATE Triggers */
-	ExecARUpdateTriggersCompat(context->estate,
+	ExecARUpdateTriggers(context->estate,
 				   resultRelInfo,
 				   NULL,
 				   NULL,
@@ -318,7 +318,7 @@ ht_ExecDeleteEpilogue(ModifyTableContext * context, ResultRelInfo * resultRelInf
 	ar_delete_trig_tcs = mtstate->mt_transition_capture;
 	if (mtstate->operation == CMD_UPDATE && mtstate->mt_transition_capture &&
 	    mtstate->mt_transition_capture->tcs_update_old_table) {
-		ExecARUpdateTriggersCompat(estate,
+		ExecARUpdateTriggers(estate,
 					   resultRelInfo,
 					   NULL,
 					   NULL,
@@ -337,7 +337,7 @@ ht_ExecDeleteEpilogue(ModifyTableContext * context, ResultRelInfo * resultRelInf
 	}
 
 	/* AFTER ROW DELETE Triggers */
-	ExecARDeleteTriggersCompat(estate, resultRelInfo, tupleid, oldtuple, ar_delete_trig_tcs, false);
+	ExecARDeleteTriggers(estate, resultRelInfo, tupleid, oldtuple, ar_delete_trig_tcs, false);
 }
 
 #if PG17_GE
@@ -377,8 +377,6 @@ ExecProcessReturning(ResultRelInfo *resultRelInfo, TupleTableSlot *tupleSlot,
 	return ExecProject(projectReturning);
 }
 #endif
-
-#if PG15_GE
 
 TupleTableSlot *ExecInsert(ModifyTableContext * context, ResultRelInfo * resultRelInfo,
 						   ChunkDispatchState* cds,
@@ -1079,4 +1077,3 @@ mergeGetUpdateNewTuple(ResultRelInfo * relinfo, TupleTableSlot * planSlot, Tuple
 	return ExecProject(relaction->mas_proj);
 }
 
-#endif

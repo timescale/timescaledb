@@ -1,4 +1,4 @@
-set(PERL_FILES AccessNode.pm DataNode.pm TimescaleNode.pm)
+set(PERL_FILES TimescaleNode.pm)
 
 # Check if PostgreSQL was compiled with --enable-tap-tests
 if(TAP_CHECKS AND EXISTS "${PG_PKGLIBDIR}/pgxs/src/test/perl")

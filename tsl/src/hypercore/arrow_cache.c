@@ -45,31 +45,6 @@ typedef struct ArrowColumnCacheEntry
 	int16 num_arrays; /* Number of entries in arrow_arrays */
 } ArrowColumnCacheEntry;
 
-/*
- * The function dlist_move_tail only exists for PG14 and above, so provide it
- * for PG13 here.
- */
-#if PG14_LT
-/*
- * Move element from its current position in the list to the tail position in
- * the same list.
- *
- * Undefined behaviour if 'node' is not already part of the list.
- */
-static inline void
-dlist_move_tail(dlist_head *head, dlist_node *node)
-{
-	/* fast path if it's already at the tail */
-	if (head->head.prev == node)
-		return;
-
-	dlist_delete(node);
-	dlist_push_tail(head, node);
-
-	dlist_check(head);
-}
-#endif
-
 void
 arrow_column_cache_init(ArrowColumnCache *acache, MemoryContext mcxt)
 {

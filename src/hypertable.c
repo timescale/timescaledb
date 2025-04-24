@@ -1668,7 +1668,7 @@ get_sizing_func_oid()
 	static Oid sizing_func_arg_types[] = { INT4OID, INT8OID, INT8OID };
 
 	return ts_get_function_oid(sizing_func_name,
-							   INTERNAL_SCHEMA_NAME,
+							   FUNCTIONS_SCHEMA_NAME,
 							   sizing_func_nargs,
 							   sizing_func_arg_types);
 }
@@ -1862,6 +1862,18 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 
 		default:
 			ereport(ERROR, (errcode(ERRCODE_WRONG_OBJECT_TYPE), errmsg("invalid relation type")));
+	}
+
+	/*
+	 * Check that the table is not part of any publication
+	 */
+	if (GetRelationPublications(table_relid) != NIL || GetAllTablesPublications() != NIL)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+				 errmsg("cannot create hypertable for table \"%s\" because it is part of a "
+						"publication",
+						get_rel_name(table_relid))));
 	}
 
 	/* Check that the table doesn't have any unsupported constraints */
@@ -2084,13 +2096,6 @@ ts_hypertables_rename_schema_name(const char *old_name, const char *new_name)
 
 	ts_scanner_scan(&scanctx);
 }
-
-typedef struct AccumHypertable
-{
-	List *ht_oids;
-	Name schema_name;
-	Name table_name;
-} AccumHypertable;
 
 bool
 ts_is_partitioning_column(const Hypertable *ht, AttrNumber column_attno)

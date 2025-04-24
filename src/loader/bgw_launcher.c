@@ -899,7 +899,7 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
  * Modelled on autovacuum.c -> do_autovacuum.
  */
 static void
-database_is_template_check(void)
+database_checks(void)
 {
 	Form_pg_database pgdb;
 	HeapTuple tuple;
@@ -911,9 +911,17 @@ database_is_template_check(void)
 						"syscache")));
 
 	pgdb = (Form_pg_database) GETSTRUCT(tuple);
+
+	if (!pgdb->datallowconn)
+		ereport(ERROR,
+				(errmsg("background worker \"%s\" trying to connect to database that does not "
+						"allow connections, exiting",
+						MyBgworkerEntry->bgw_name)));
+
 	if (pgdb->datistemplate)
 		ereport(ERROR,
-				(errmsg("TimescaleDB background worker connected to template database, exiting")));
+				(errmsg("background worker \"%s\" trying to connect to template database, exiting",
+						MyBgworkerEntry->bgw_name)));
 
 	ReleaseSysCache(tuple);
 }
@@ -952,6 +960,63 @@ process_settings(Oid databaseid)
 }
 
 /*
+ * Get the versioned scheduler for the database.
+ *
+ * This captures any errors generated while fetching information and print
+ * them out, but does not propagate the error further since that might trigger
+ * a restart.
+ */
+static PGFunction
+get_versioned_scheduler()
+{
+	volatile PGFunction versioned_scheduler_main = NULL;
+	PG_TRY();
+	{
+		bool ts_installed = false;
+		char version[MAX_VERSION_LEN];
+
+		/*
+		 * now we can start our transaction and get the version currently
+		 * installed
+		 */
+		StartTransactionCommand();
+		(void) GetTransactionSnapshot();
+
+		/*
+		 * Check whether a database is a template database and raise an error if
+		 * so, as we don't want to run in template dbs.
+		 */
+		database_checks();
+		/*  Process any config changes caused by an ALTER DATABASE */
+		process_settings(MyDatabaseId);
+		ts_installed = ts_loader_extension_exists();
+		if (ts_installed)
+			strlcpy(version, ts_loader_extension_version(), MAX_VERSION_LEN);
+
+		ts_loader_extension_check();
+		CommitTransactionCommand();
+		if (ts_installed)
+		{
+			char soname[MAX_SO_NAME_LEN];
+			snprintf(soname, MAX_SO_NAME_LEN, "%s-%s", EXTENSION_SO, version);
+			versioned_scheduler_main =
+				load_external_function(soname, BGW_DB_SCHEDULER_FUNCNAME, false, NULL);
+			if (versioned_scheduler_main == NULL)
+				ereport(ERROR,
+						(errmsg("TimescaleDB version %s does not have a background worker, exiting",
+								soname)));
+		}
+	}
+	PG_CATCH();
+	{
+		EmitErrorReport();
+		FlushErrorState();
+	}
+	PG_END_TRY();
+	return versioned_scheduler_main;
+}
+
+/*
  * This can be run either from the cluster launcher at db_startup time, or
  * in the case of an install/uninstall/update of the extension, in the
  * first case, we have no vxid that we're waiting on. In the second case,
@@ -964,14 +1029,18 @@ extern Datum
 ts_bgw_db_scheduler_entrypoint(PG_FUNCTION_ARGS)
 {
 	Oid db_id = DatumGetObjectId(MyBgworkerEntry->bgw_main_arg);
-	bool ts_installed = false;
-	char version[MAX_VERSION_LEN];
 	VirtualTransactionId vxid;
 
 	pqsignal(SIGINT, StatementCancelHandler);
 	pqsignal(SIGTERM, die);
 	BackgroundWorkerUnblockSignals();
-	BackgroundWorkerInitializeConnectionByOid(db_id, InvalidOid, 0);
+
+	/*
+	 * Connecting to a database that does not allow connections will generate
+	 * a FATAL error, which might trigger restarts, so we override this check
+	 * and do it ourselves.
+	 */
+	BackgroundWorkerInitializeConnectionByOid(db_id, InvalidOid, BGWORKER_BYPASS_ALLOWCONN);
 	pgstat_report_appname(MyBgworkerEntry->bgw_name);
 
 	/*
@@ -988,40 +1057,13 @@ ts_bgw_db_scheduler_entrypoint(PG_FUNCTION_ARGS)
 	CommitTransactionCommand();
 
 	/*
-	 * now we can start our transaction and get the version currently
-	 * installed
+	 * Essentially we morph into the versioned worker here, if there is one.
+	 *
+	 * If an error is generated here, we should trigger a restart (if the
+	 * scheduler is configured for that).
 	 */
-	StartTransactionCommand();
-	(void) GetTransactionSnapshot();
-
-	/*
-	 * Check whether a database is a template database and raise an error if
-	 * so, as we don't want to run in template dbs.
-	 */
-	database_is_template_check();
-	/*  Process any config changes caused by an ALTER DATABASE */
-	process_settings(MyDatabaseId);
-	ts_installed = ts_loader_extension_exists();
-	if (ts_installed)
-		strlcpy(version, ts_loader_extension_version(), MAX_VERSION_LEN);
-
-	ts_loader_extension_check();
-	CommitTransactionCommand();
-	if (ts_installed)
-	{
-		char soname[MAX_SO_NAME_LEN];
-		PGFunction versioned_scheduler_main;
-
-		snprintf(soname, MAX_SO_NAME_LEN, "%s-%s", EXTENSION_SO, version);
-		versioned_scheduler_main =
-			load_external_function(soname, BGW_DB_SCHEDULER_FUNCNAME, false, NULL);
-		if (versioned_scheduler_main == NULL)
-			ereport(LOG,
-					(errmsg("TimescaleDB version %s does not have a background worker, exiting",
-							soname)));
-		else /* essentially we morph into the versioned
-			  * worker here */
-			DirectFunctionCall1(versioned_scheduler_main, ObjectIdGetDatum(InvalidOid));
-	}
+	PGFunction versioned_scheduler_main = get_versioned_scheduler();
+	if (versioned_scheduler_main)
+		DirectFunctionCall1(versioned_scheduler_main, ObjectIdGetDatum(InvalidOid));
 	PG_RETURN_VOID();
 }

@@ -83,7 +83,7 @@ body:
     attributes:
       label: PostgreSQL version used
       description: Let us know what version of PostgreSQL you are running.
-      placeholder: "14.1"
+      placeholder: "17.4"
     validations:
       required: true
       

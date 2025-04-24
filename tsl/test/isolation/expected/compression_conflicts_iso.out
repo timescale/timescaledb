@@ -1563,7 +1563,7 @@ step I1:
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step RC: <... completed>
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step I1: <... completed>
 step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
@@ -1652,7 +1652,7 @@ step I1:
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step RC: <... completed>
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step I1: <... completed>
 step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
@@ -1741,7 +1741,7 @@ step I1:
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step RC: <... completed>
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step I1: <... completed>
 step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
@@ -1830,7 +1830,7 @@ step Iu1:
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step RC: <... completed>
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step Iu1: <... completed>
 step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
@@ -1919,7 +1919,7 @@ step Iu1:
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step RC: <... completed>
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step Iu1: <... completed>
 step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
@@ -2014,7 +2014,7 @@ step Iu1:
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step RC: <... completed>
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step Iu1: <... completed>
 step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
@@ -2106,7 +2106,7 @@ step RC:
 step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100) ON CONFLICT DO NOTHING; <waiting ...>
 step UnlockChunk: ROLLBACK;
 step RC: <... completed>
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step IN1: <... completed>
 step INc: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
@@ -2192,7 +2192,7 @@ step RC:
 step INu1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 100, 99) ON CONFLICT(time, device) DO UPDATE SET value = 99; <waiting ...>
 step UnlockChunk: ROLLBACK;
 step RC: <... completed>
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step INu1: <... completed>
 step INc: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
@@ -2288,7 +2288,7 @@ step RC:
 step UnlockChunk: ROLLBACK;
 step I1: <... completed>
 step RC: <... completed>
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
@@ -2377,7 +2377,7 @@ step RC:
 step UnlockChunk: ROLLBACK;
 step I1: <... completed>
 step RC: <... completed>
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
@@ -2466,7 +2466,7 @@ step RC:
 step UnlockChunk: ROLLBACK;
 step I1: <... completed>
 step RC: <... completed>
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
@@ -2555,7 +2555,7 @@ step RC:
 step UnlockChunk: ROLLBACK;
 step Iu1: <... completed>
 step RC: <... completed>
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
@@ -2650,7 +2650,7 @@ step RC:
 step UnlockChunk: ROLLBACK;
 step Iu1: <... completed>
 step RC: <... completed>
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
@@ -2745,7 +2745,7 @@ step RC:
 step UnlockChunk: ROLLBACK;
 step Iu1: <... completed>
 step RC: <... completed>
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step Ic: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
@@ -2837,7 +2837,7 @@ step RC:
 step UnlockChunk: ROLLBACK;
 step IN1: <... completed>
 step RC: <... completed>
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step INc: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
@@ -2923,7 +2923,7 @@ step RC:
 step UnlockChunk: ROLLBACK;
 step INu1: <... completed>
 step RC: <... completed>
-ERROR:  cannot proceed with recompression due to concurrent DML on uncompressed data
+ERROR:  aborting recompression due to concurrent DML on uncompressed data, retrying with next policy run
 step INc: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks

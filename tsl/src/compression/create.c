@@ -21,6 +21,7 @@
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
 #include <common/md5.h>
+#include <executor/spi.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <parser/parse_type.h>
@@ -39,7 +40,6 @@
 #include "chunk_index.h"
 #include "compression.h"
 #include "compression/compression_storage.h"
-#include "compression_with_clause.h"
 #include "create.h"
 #include "custom_type_cache.h"
 #include "guc.h"
@@ -50,7 +50,7 @@
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "utils.h"
-#include <executor/spi.h>
+#include "with_clause/compression_with_clause.h"
 
 static const char *sparse_index_types[] = { "min", "max" };
 
@@ -132,7 +132,7 @@ compressed_column_metadata_name_v2(const char *metadata_type, const char *column
 	{
 		const char *errstr = NULL;
 		char hash[33];
-		Ensure(pg_md5_hash_compat(column_name, len, hash, &errstr), "md5 computation failure");
+		Ensure(pg_md5_hash(column_name, len, hash, &errstr), "md5 computation failure");
 
 		result = psprintf("_ts_meta_v2_%.6s_%.4s_%.39s", metadata_type, hash, column_name);
 	}
@@ -763,8 +763,7 @@ update_compress_chunk_time_interval(Hypertable *ht, WithClauseResult *with_claus
  * 4. Copy constraints to internal compression table
  */
 bool
-tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
-						   WithClauseResult *with_clause_options)
+tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options)
 {
 	int32 compress_htid;
 	bool compress_disable = !with_clause_options[CompressEnabled].is_default &&

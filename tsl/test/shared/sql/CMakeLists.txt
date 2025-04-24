@@ -3,12 +3,17 @@ set(TEST_FILES_SHARED
     chunkwise_agg_gather_sort.sql
     classify_relation.sql
     compat.sql
+    compress_unique_index.sql
+    compression_dml.sql
+    compression_nulls_not_distinct.sql
     constify_timestamptz_op_interval.sql
     constraint_aware_append.sql
     constraint_exclusion_prepared.sql
     decompress_join.sql
     decompress_placeholdervar.sql
+    decompress_tracking.sql
     generated_columns.sql
+    memoize.sql
     security_barrier.sql
     space_constraint.sql
     subtract_integer_from_now.sql)
@@ -17,17 +22,7 @@ set(TEST_TEMPLATES_SHARED
     gapfill.sql.in ordered_append.sql.in ordered_append_join.sql.in
     transparent_decompress_chunk.sql.in)
 
-if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
-  list(APPEND TEST_FILES_SHARED compress_unique_index.sql compression_dml.sql
-       decompress_tracking.sql memoize.sql)
-endif()
-
-# this test was changing the contents of tables in shared_setup.sql thus causing
-# other dependent tests to fail. Hence running this test in solo
-if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
-  list(APPEND SOLO_TESTS merge_dml.sql)
-  list(APPEND TEST_FILES_SHARED compression_nulls_not_distinct.sql)
-endif()
+set(SOLO_TESTS merge_dml.sql)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES_SHARED extension.sql timestamp_limits.sql

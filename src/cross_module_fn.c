@@ -97,8 +97,6 @@ CROSSMODULE_WRAPPER(cagg_try_repair);
 CROSSMODULE_WRAPPER(chunk_freeze_chunk);
 CROSSMODULE_WRAPPER(chunk_unfreeze_chunk);
 
-CROSSMODULE_WRAPPER(chunk_create_empty_table);
-
 CROSSMODULE_WRAPPER(recompress_chunk_segmentwise);
 CROSSMODULE_WRAPPER(get_compressed_chunk_index_for_recompression);
 CROSSMODULE_WRAPPER(merge_chunks);
@@ -174,8 +172,7 @@ tsl_postprocess_plan_stub(PlannedStmt *stmt)
 }
 
 static bool
-process_compress_table_default(AlterTableCmd *cmd, Hypertable *ht,
-							   WithClauseResult *with_clause_options)
+process_compress_table_default(Hypertable *ht, WithClauseResult *with_clause_options)
 {
 	error_no_default_fn_community();
 	pg_unreachable();
@@ -431,7 +428,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.create_chunk = error_no_default_fn_pg_community,
 	.chunk_freeze_chunk = error_no_default_fn_pg_community,
 	.chunk_unfreeze_chunk = error_no_default_fn_pg_community,
-	.chunk_create_empty_table = error_no_default_fn_pg_community,
 	.recompress_chunk_segmentwise = error_no_default_fn_pg_community,
 	.get_compressed_chunk_index_for_recompression = error_no_default_fn_pg_community,
 	.preprocess_query_tsl = preprocess_query_tsl_default_fn_community,
