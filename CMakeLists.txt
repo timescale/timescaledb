@@ -120,9 +120,9 @@ endif()
 # a hack to avoid change of SQL extschema variable
 set(extschema "@extschema@")
 
-# Try to use the same compiler as Postgres to avoid mismatches and simplify
-# configuration.
-if(NOT DEFINED CMAKE_C_COMPILER)
+# If not explicitly specified, try to use the same compiler as Postgres to avoid
+# mismatches and simplify configuration.
+if((NOT DEFINED CMAKE_C_COMPILER) AND (NOT DEFINED ENV{CC}))
   get_pg_config(PG_CC --cc)
 
   # The first word might be ccache or similar, so handle this.
