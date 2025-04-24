@@ -9,6 +9,8 @@
  * the PostgreSQL database, which is licensed under the open-source
  * PostgreSQL License. Please see the NOTICE at the top level
  * directory for a copy of the PostgreSQL License.
+ * 
+ * PostgreSQL 17.4 f8554dee417ffc4540c94cf357f7bf7d4b6e5d80
  */
 
 /*
@@ -63,6 +65,10 @@
  *	  - SH_HASH_KEY(table, key) - generate hash for the key
  *	  - SH_STORE_HASH - if defined the hash is stored in the elements
  *	  - SH_GET_HASH(tb, a) - return the field to store the hash in
+ *
+ *    In contrast to the Postgres implementation, we don't use the separate status
+ *    flag, instead requiring the client to use an invalid key value and define
+ *    the SH_ENTRY_EMPTY macro to check for it.
  *
  *	  While SH_STORE_HASH (and subsequently SH_GET_HASH) are optional, because
  *	  the hash table implementation needs to compare hashes to move elements
@@ -133,7 +139,8 @@
 #define SH_STAT SH_MAKE_NAME(stat)
 
 /* internal helper functions (no externally visible prototypes) */
-#define SH_COMPUTE_PARAMETERS SH_MAKE_NAME(compute_parameters)
+#define SH_COMPUTE_SIZE SH_MAKE_NAME(compute_size)
+#define SH_UPDATE_PARAMETERS SH_MAKE_NAME(update_parameters)
 #define SH_NEXT SH_MAKE_NAME(next)
 #define SH_PREV SH_MAKE_NAME(prev)
 #define SH_DISTANCE_FROM_OPTIMAL SH_MAKE_NAME(distance)
@@ -229,15 +236,16 @@ SH_SCOPE void SH_START_ITERATE(SH_TYPE * tb, SH_ITERATOR * iter);
  * void <prefix>_start_iterate_at(<prefix>_hash *tb, <prefix>_iterator *iter,
  *								  uint32 at)
  */
-SH_SCOPE void SH_START_ITERATE_AT(SH_TYPE *tb, SH_ITERATOR *iter, uint32 at);
+SH_SCOPE void SH_START_ITERATE_AT(SH_TYPE * tb, SH_ITERATOR * iter, uint32 at);
 
 /* <element> *<prefix>_iterate(<prefix>_hash *tb, <prefix>_iterator *iter) */
-SH_SCOPE SH_ELEMENT_TYPE *SH_ITERATE(SH_TYPE *tb, SH_ITERATOR *iter);
+SH_SCOPE	SH_ELEMENT_TYPE *SH_ITERATE(SH_TYPE * tb, SH_ITERATOR * iter);
 
 /* void <prefix>_stat(<prefix>_hash *tb */
-SH_SCOPE void SH_STAT(SH_TYPE *tb);
+SH_SCOPE void SH_STAT(SH_TYPE * tb);
 
-#endif /* SH_DECLARE */
+#endif							/* SH_DECLARE */
+
 
 /* generate implementation of the hash table */
 #ifdef SH_DEFINE
@@ -295,13 +303,13 @@ SH_SCOPE void SH_STAT(SH_TYPE *tb);
 #endif
 
 /*
- * Compute sizing parameters for hashtable. Called when creating and growing
- * the hashtable.
+ * Compute allocation size for hashtable. Result can be passed to
+ * SH_UPDATE_PARAMETERS.
  */
-static inline void
-SH_COMPUTE_PARAMETERS(SH_TYPE *tb, uint64 newsize)
+static inline uint64
+SH_COMPUTE_SIZE(uint64 newsize)
 {
-	uint64 size;
+	uint64		size;
 
 	/* supporting zero sized hashes would complicate matters */
 	size = Max(newsize, 2);
@@ -316,6 +324,18 @@ SH_COMPUTE_PARAMETERS(SH_TYPE *tb, uint64 newsize)
 	 */
 	if (unlikely((((uint64) sizeof(SH_ELEMENT_TYPE)) * size) >= SIZE_MAX / 2))
 		sh_error("hash table too large");
+
+	return size;
+}
+
+/*
+ * Update sizing parameters for hashtable. Called when creating and growing
+ * the hashtable.
+ */
+static inline void
+SH_UPDATE_PARAMETERS(SH_TYPE * tb, uint64 newsize)
+{
+	uint64		size = SH_COMPUTE_SIZE(newsize);
 
 	/* now set size */
 	tb->size = size;
@@ -438,10 +458,11 @@ SH_CREATE(MemoryContext ctx, uint32 nelements, void *private_data)
 	/* increase nelements by fillfactor, want to store nelements elements */
 	size = Min((double) SH_MAX_SIZE, ((double) nelements) / SH_FILLFACTOR);
 
-	SH_COMPUTE_PARAMETERS(tb, size);
+	size = SH_COMPUTE_SIZE(size);
 
-	tb->data = (SH_ELEMENT_TYPE *) SH_ALLOCATE(tb, sizeof(SH_ELEMENT_TYPE) * tb->size);
+	tb->data = (SH_ELEMENT_TYPE *) SH_ALLOCATE(tb, sizeof(SH_ELEMENT_TYPE) * size);
 
+	SH_UPDATE_PARAMETERS(tb, size);
 	return tb;
 }
 
@@ -482,10 +503,15 @@ SH_GROW(SH_TYPE * tb, uint64 newsize)
 	Assert(oldsize != SH_MAX_SIZE);
 	Assert(oldsize < newsize);
 
-	/* compute parameters for new table */
-	SH_COMPUTE_PARAMETERS(tb, newsize);
+	newsize = SH_COMPUTE_SIZE(newsize);
 
-	tb->data = (SH_ELEMENT_TYPE *) SH_ALLOCATE(tb, sizeof(SH_ELEMENT_TYPE) * tb->size);
+	tb->data = (SH_ELEMENT_TYPE *) SH_ALLOCATE(tb, sizeof(SH_ELEMENT_TYPE) * newsize);
+
+	/*
+	 * Update parameters for new table after allocation succeeds to avoid
+	 * inconsistent state on OOM.
+	 */
+	SH_UPDATE_PARAMETERS(tb, newsize);
 
 	newdata = tb->data;
 
@@ -577,6 +603,9 @@ SH_GROW(SH_TYPE * tb, uint64 newsize)
 /*
  * This is a separate static inline function, so it can be reliably be inlined
  * into its wrapper functions even if SH_SCOPE is extern.
+ *
+ * Compared to the Postgres implementation, this is rewritten to use tail
+ * recursion for slow path, to allow the fast path to be inlined.
  */
 static pg_attribute_always_inline SH_ELEMENT_TYPE *
 SH_INSERT_HASH_INTERNAL(SH_TYPE *restrict tb, SH_KEY_TYPE key, uint32 hash, bool *found)
