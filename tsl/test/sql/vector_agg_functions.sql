@@ -171,9 +171,6 @@ where
     and (explain is null /* or condition is null and grouping = 's' */)
     and (variable != '*' or function = 'count')
     and (variable not in ('t', 'cts', 'ctstz', 'cdate') or function in ('min', 'max'))
-    -- For minmax w/o grouping we can get the ORDER BY LIMIT 1 InitPlan instead
-    -- of vectorized aggregation, with no easy way to disable it.
-    and (grouping is not null or function not in ('min', 'max'))
     -- This is not vectorized yet
     and (variable != 'cint8' or function != 'stddev')
     and (function != 'count' or variable in ('cint2', 's', '*'))
