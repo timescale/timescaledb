@@ -1,59 +1,33 @@
--- Hypercore AM
-DROP ACCESS METHOD IF EXISTS hypercore_proxy;
-DROP FUNCTION IF EXISTS ts_hypercore_proxy_handler;
-DROP ACCESS METHOD IF EXISTS hypercore;
-DROP FUNCTION IF EXISTS ts_hypercore_handler;
-DROP FUNCTION IF EXISTS _timescaledb_debug.is_compressed_tid;
+CREATE FUNCTION _timescaledb_internal.create_chunk_table(hypertable REGCLASS, slices JSONB, schema_name NAME, table_name NAME) RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE;
+CREATE FUNCTION _timescaledb_functions.create_chunk_table(hypertable REGCLASS, slices JSONB, schema_name NAME, table_name NAME) RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE;
 
-DROP FUNCTION IF EXISTS @extschema@.compress_chunk(uncompressed_chunk REGCLASS,	if_not_compressed BOOLEAN, recompress BOOLEAN, hypercore_use_access_method BOOL);
+-- Revert new option `refresh_newest_first` from incremental cagg refresh policy
+DROP FUNCTION @extschema@.add_continuous_aggregate_policy(
+    continuous_aggregate REGCLASS,
+    start_offset "any",
+    end_offset "any",
+    schedule_interval INTERVAL,
+    if_not_exists BOOL,
+    initial_start TIMESTAMPTZ,
+    timezone TEXT,
+    include_tiered_data BOOL,
+    buckets_per_batch INTEGER,
+    max_batches_per_execution INTEGER,
+    refresh_newest_first BOOL
+);
 
-CREATE FUNCTION @extschema@.compress_chunk(
-    uncompressed_chunk REGCLASS,
-    if_not_compressed BOOLEAN = true,
-    recompress BOOLEAN = false
-) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_compress_chunk' LANGUAGE C STRICT VOLATILE;
-
-DROP FUNCTION IF EXISTS @extschema@.add_compression_policy(hypertable REGCLASS, compress_after "any", if_not_exists BOOL, schedule_interval INTERVAL, initial_start TIMESTAMPTZ, timezone TEXT, compress_created_before INTERVAL, hypercore_use_access_method BOOL);
-
-CREATE FUNCTION @extschema@.add_compression_policy(
-    hypertable REGCLASS,
-    compress_after "any" = NULL,
+CREATE FUNCTION @extschema@.add_continuous_aggregate_policy(
+    continuous_aggregate REGCLASS,
+    start_offset "any",
+    end_offset "any",
+    schedule_interval INTERVAL,
     if_not_exists BOOL = false,
-    schedule_interval INTERVAL = NULL,
     initial_start TIMESTAMPTZ = NULL,
     timezone TEXT = NULL,
-    compress_created_before INTERVAL = NULL
+    include_tiered_data BOOL = NULL,
+    buckets_per_batch INTEGER = NULL,
+    max_batches_per_execution INTEGER = NULL
 )
 RETURNS INTEGER
-AS '@MODULE_PATHNAME@', 'ts_policy_compression_add'
+AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
 LANGUAGE C VOLATILE;
-
-DROP FUNCTION IF EXISTS timescaledb_experimental.add_policies(relation REGCLASS, if_not_exists BOOL, refresh_start_offset "any", refresh_end_offset "any", compress_after "any", drop_after "any", hypercore_use_access_method BOOL);
-
-CREATE FUNCTION timescaledb_experimental.add_policies(
-    relation REGCLASS,
-    if_not_exists BOOL = false,
-    refresh_start_offset "any" = NULL,
-    refresh_end_offset "any" = NULL,
-    compress_after "any" = NULL,
-    drop_after "any" = NULL)
-RETURNS BOOL
-AS '@MODULE_PATHNAME@', 'ts_policies_add'
-LANGUAGE C VOLATILE;
-
-DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression_execute(job_id INTEGER, htid INTEGER, lag ANYELEMENT, maxchunks INTEGER, verbose_log BOOLEAN, recompress_enabled  BOOLEAN, use_creation_time BOOLEAN, useam BOOLEAN);
-
-DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression(job_id INTEGER, config JSONB);
-DROP PROCEDURE IF EXISTS @extschema@.convert_to_columnstore(REGCLASS, BOOLEAN, BOOLEAN, BOOLEAN);
-DROP PROCEDURE IF EXISTS @extschema@.convert_to_rowstore(REGCLASS, BOOLEAN);
-DROP PROCEDURE IF EXISTS @extschema@.add_columnstore_policy(REGCLASS, "any", BOOL, INTERVAL, TIMESTAMPTZ, TEXT, INTERVAL, BOOL);
-DROP PROCEDURE IF EXISTS @extschema@.remove_columnstore_policy(REGCLASS, BOOL);
-DROP FUNCTION IF EXISTS @extschema@.hypertable_columnstore_stats(REGCLASS);
-DROP FUNCTION IF EXISTS @extschema@.chunk_columnstore_stats(REGCLASS);
-
-ALTER EXTENSION timescaledb DROP VIEW timescaledb_information.hypertable_columnstore_settings;
-ALTER EXTENSION timescaledb DROP VIEW timescaledb_information.chunk_columnstore_settings;
-
-DROP VIEW timescaledb_information.hypertable_columnstore_settings;
-DROP VIEW timescaledb_information.chunk_columnstore_settings;
-

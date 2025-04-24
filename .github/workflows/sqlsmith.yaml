@@ -8,6 +8,7 @@ name: SQLsmith
     branches:
       - sqlsmith
       - main
+      - prerelease_test
   pull_request:
     paths: .github/workflows/sqlsmith.yaml
 
@@ -81,6 +82,7 @@ jobs:
         psql -h /tmp postgres -c 'CREATE DATABASE smith;'
         psql -h /tmp smith -c 'CREATE EXTENSION timescaledb;'
         psql -h /tmp smith -c '\i ${{ github.workspace }}/tsl/test/shared/sql/include/shared_setup.sql'
+        psql -h /tmp smith -c '\i ${{ github.workspace }}/tsl/test/shared/sql/include/cagg_compression_setup.sql'
 
     # we run these in a loop to reinitialize the random number generator
     # 10000 queries seems to take roughly 4 minutes in CI

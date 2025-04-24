@@ -26,10 +26,7 @@ my $backup_name = 'my_backup';
 $node_primary->backup($backup_name);
 
 # Create streaming standby linking to primary
-my $node_standby =
-  ($ENV{PG_VERSION_MAJOR} >= 15)
-  ? PostgreSQL::Test::Cluster->new('standby_1')
-  : PostgresNode->get_new_node('standby_1');
+my $node_standby = PostgreSQL::Test::Cluster->new('standby_1');
 $node_standby->init_from_backup($node_primary, $backup_name,
 	has_streaming => 1);
 $node_standby->start;

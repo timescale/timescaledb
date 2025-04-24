@@ -249,10 +249,10 @@ follow_uncompressed_output_tlist(const DecompressionMapContext *context)
  * attnos.
  */
 static void
-build_decompression_map(DecompressionMapContext *context, List *compressed_scan_tlist)
+build_decompression_map(DecompressionMapContext *context, List *compressed_output_tlist)
 {
 	DecompressChunkPath *path = context->decompress_path;
-	CompressionInfo *info = path->info;
+	const CompressionInfo *info = path->info;
 	/*
 	 * Track which normal and metadata columns we were able to find in the
 	 * targetlist.
@@ -305,7 +305,7 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_scan_
 	 */
 	context->have_bulk_decompression_columns = false;
 	context->decompression_map = NIL;
-	foreach (lc, compressed_scan_tlist)
+	foreach (lc, compressed_output_tlist)
 	{
 		TargetEntry *target = (TargetEntry *) lfirst(lc);
 		if (!IsA(target->expr, Var))
@@ -480,7 +480,7 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_scan_
 	 * into several lists so that it can be passed through the custom path
 	 * settings.
 	 */
-	foreach (lc, compressed_scan_tlist)
+	foreach (lc, compressed_output_tlist)
 	{
 		TargetEntry *target = (TargetEntry *) lfirst(lc);
 		Var *var = castNode(Var, target->expr);
@@ -522,7 +522,7 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_scan_
  * uncompressed one. Based on replace_nestloop_params
  */
 static Node *
-replace_compressed_vars(Node *node, CompressionInfo *info)
+replace_compressed_vars(Node *node, const CompressionInfo *info)
 {
 	if (node == NULL)
 		return NULL;
@@ -884,6 +884,7 @@ find_vectorized_quals(DecompressionMapContext *context, DecompressChunkPath *pat
 					  List **vectorized, List **nonvectorized)
 {
 	VectorQualInfo vqi = {
+		.maxattno = path->info->chunk_rel->max_attr,
 		.vector_attrs = build_vector_attrs_array(context->uncompressed_attno_info, path->info),
 		.rti = path->info->chunk_rel->relid,
 	};
@@ -953,6 +954,30 @@ ts_label_sort_with_costsize(PlannerInfo *root, Sort *plan, double limit_tuples)
 	plan->plan.plan_width = lefttree->plan_width;
 	plan->plan.parallel_aware = false;
 	plan->plan.parallel_safe = lefttree->parallel_safe;
+}
+
+/*
+ * Find a variable of the given relation somewhere in the expression tree.
+ * Currently we use this to find the Var argument of time_bucket, when we prepare
+ * the batch sorted merge parameters after using the monotonous sorting transform
+ * optimization.
+ */
+static Var *
+find_var_subexpression(void *expr, Index varno)
+{
+	List *varlist = pull_var_clause((Node *) expr, 0);
+	if (list_length(varlist) == 1)
+	{
+		Var *var = (Var *) linitial(varlist);
+		if ((Index) var->varno == (Index) varno)
+		{
+			return var;
+		}
+
+		return NULL;
+	}
+
+	return NULL;
 }
 
 Plan *
@@ -1130,18 +1155,22 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 					continue;
 				}
 
-				Ensure(IsA(em->em_expr, Var),
+				/*
+				 * The equivalence member expression might be a monotonous
+				 * expression of the decompressed relation Var, so recurse to
+				 * find it.
+				 */
+				Var *var = find_var_subexpression(em->em_expr, em_relid);
+				Ensure(var != NULL,
 					   "non-Var pathkey not expected for compressed batch sorted merge");
 
-				/*
-				 * We found a Var equivalence member that belongs to the
-				 * decompressed relation. We have to convert its varattno which
-				 * is the varattno of the uncompressed chunk tuple, to the
-				 * decompressed scan tuple varattno.
-				 */
-				Var *var = castNode(Var, em->em_expr);
 				Assert((Index) var->varno == (Index) em_relid);
 
+				/*
+				 * Convert its varattno which is the varattno of the
+				 * uncompressed chunk tuple, to the decompressed scan tuple
+				 * varattno.
+				 */
 				const int decompressed_scan_attno =
 					context.uncompressed_attno_info[var->varattno].custom_scan_attno;
 				Assert(decompressed_scan_attno > 0);

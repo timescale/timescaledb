@@ -4,6 +4,8 @@
 
 -- Test parameterized vector aggregation plans.
 
+-- Uncomment to run this test with hypercore TAM
+--set timescaledb.default_hypercore_use_access_method=true;
 
 create table pvagg(s int, a int);
 

@@ -24,6 +24,7 @@
 #include "arrow_cache.h"
 #include "compression/arrow_c_data_interface.h"
 #include "debug_assert.h"
+#include "nodes/decompress_chunk/compressed_batch.h"
 
 #include <limits.h>
 
@@ -79,6 +80,19 @@ typedef struct ArrowTupleTableSlot
 	int16 *attrs_offset_map; /* Offset number mappings between the
 							  * non-compressed and compressed
 							  * relation */
+
+	/* Per-segment data. The following data is allocated on the per-segment
+	 * memory context which is reset for every new segment stored and
+	 * processed in the slot. */
+	MemoryContext per_segment_mcxt;
+
+	const uint64 *arrow_qual_result; /* Bitmap with result of qual
+									  * filtering over arrow_array. NULL if
+									  * no filtering has been applied. */
+
+	/* Struct to hold values for one column. Necessary for compatibility with
+	 * vector aggs. */
+	struct CompressedColumnValues ccvalues;
 } ArrowTupleTableSlot;
 
 extern const TupleTableSlotOps TTSOpsArrowTuple;
@@ -197,9 +211,9 @@ arrow_slot_get_noncompressed_slot(TupleTableSlot *slot)
 }
 
 static inline uint16
-arrow_slot_total_row_count(TupleTableSlot *slot)
+arrow_slot_total_row_count(const TupleTableSlot *slot)
 {
-	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
+	const ArrowTupleTableSlot *aslot = (const ArrowTupleTableSlot *) slot;
 
 	Assert(TTS_IS_ARROWTUPLE(slot));
 	Assert(aslot->total_row_count > 0);
@@ -262,6 +276,16 @@ arrow_slot_is_consumed(const TupleTableSlot *slot)
 }
 
 static inline bool
+arrow_slot_is_first(const TupleTableSlot *slot)
+{
+	const ArrowTupleTableSlot *aslot = (const ArrowTupleTableSlot *) slot;
+
+	Assert(TTS_IS_ARROWTUPLE(slot));
+
+	return aslot->tuple_index == InvalidTupleIndex || aslot->tuple_index == 1;
+}
+
+static inline bool
 arrow_slot_is_last(const TupleTableSlot *slot)
 {
 	const ArrowTupleTableSlot *aslot = (const ArrowTupleTableSlot *) slot;
@@ -269,6 +293,23 @@ arrow_slot_is_last(const TupleTableSlot *slot)
 	Assert(TTS_IS_ARROWTUPLE(slot));
 
 	return aslot->tuple_index == InvalidTupleIndex || aslot->tuple_index == aslot->total_row_count;
+}
+
+static inline void
+arrow_slot_set_qual_result(TupleTableSlot *slot, const uint64 *qual_result)
+{
+	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
+
+	Assert(TTS_IS_ARROWTUPLE(slot));
+	aslot->arrow_qual_result = qual_result;
+}
+
+static inline const uint64 *
+arrow_slot_get_qual_result(const TupleTableSlot *slot)
+{
+	const ArrowTupleTableSlot *aslot = (const ArrowTupleTableSlot *) slot;
+
+	return aslot->arrow_qual_result;
 }
 
 /*
@@ -347,18 +388,19 @@ arrow_slot_try_getnext(TupleTableSlot *slot, ScanDirection direction)
 	Assert(direction == ForwardScanDirection || direction == BackwardScanDirection);
 
 	/* If empty or not containing a compressed tuple, there is nothing to do */
-	if (unlikely(TTS_EMPTY(slot)) || aslot->tuple_index == InvalidTupleIndex)
+	if (unlikely(TTS_EMPTY(slot)) || aslot->tuple_index == InvalidTupleIndex ||
+		arrow_slot_is_consumed(slot))
 		return false;
 
-	if (direction == ForwardScanDirection)
+	if (likely(direction == ForwardScanDirection))
 	{
-		if (aslot->tuple_index < aslot->total_row_count)
+		if (!arrow_slot_is_last(slot))
 		{
 			ExecStoreNextArrowTuple(slot);
 			return true;
 		}
 	}
-	else if (aslot->tuple_index > 1)
+	else if (!arrow_slot_is_first(slot))
 	{
 		Assert(direction == BackwardScanDirection);
 		ExecStorePreviousArrowTuple(slot);
@@ -368,8 +410,17 @@ arrow_slot_try_getnext(TupleTableSlot *slot, ScanDirection direction)
 	return false;
 }
 
-extern bool is_compressed_col(const TupleDesc tupdesc, AttrNumber attno);
+static inline MemoryContext
+arrow_slot_per_segment_memory_context(const TupleTableSlot *slot)
+{
+	const ArrowTupleTableSlot *aslot = (const ArrowTupleTableSlot *) slot;
+	Assert(TTS_IS_ARROWTUPLE(slot));
+	return aslot->per_segment_mcxt;
+}
+
 extern const ArrowArray *arrow_slot_get_array(TupleTableSlot *slot, AttrNumber attno);
+
+extern bool is_compressed_col(const TupleDesc tupdesc, AttrNumber attno);
 extern void arrow_slot_set_referenced_attrs(TupleTableSlot *slot, Bitmapset *attrs);
 extern void arrow_slot_set_index_attrs(TupleTableSlot *slot, Bitmapset *attrs);
 

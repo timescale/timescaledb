@@ -518,3 +518,21 @@ VALUES
   (41, 1609478100000, 'val1')
 ON CONFLICT DO NOTHING;
 
+RESET timescaledb.debug_compression_path_info;
+
+-- gh issue #7672
+-- check additional INSERTS after hitting ON CONFLICT clause still go through
+CREATE TABLE test_i7672(time timestamptz, device text, primary key(time,device));
+SELECT create_hypertable('test_i7672', 'time');
+ALTER TABLE test_i7672 SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device');
+INSERT INTO test_i7672 VALUES ('2025-01-01','d1');
+
+SELECT count(*) FROM (SELECT compress_chunk(show_chunks('test_i7672'))) c;
+
+INSERT INTO test_i7672 VALUES
+('2025-01-01','d1'),
+('2025-01-01','d2')
+ON CONFLICT DO NOTHING;
+
+SELECT * FROM test_i7672 t ORDER BY t;
+

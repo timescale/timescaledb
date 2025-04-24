@@ -18,7 +18,7 @@ VERSIONS=""
 FAILED_VERSIONS=""
 
 ALL_VERSIONS=$(git tag --sort=taggerdate | grep -P '^[2]\.[0-9]+\.[0-9]+$')
-MAX_VERSION=$(grep '^downgrade_to_version ' version.config | awk '{ print $3 }')
+MAX_VERSION=$(grep '^previous_version ' version.config | awk '{ print $3 }')
 
 # major version is always 2 atm
 max_minor_version=$(echo "${MAX_VERSION}" | awk -F. '{print $2}')
@@ -43,13 +43,9 @@ for version in ${ALL_VERSIONS}; do
     continue
   fi
 
-  if [ "${minor_version}" -le 4 ]; then
+  if [ "${minor_version}" -le 8 ]; then
     # not part of any valid update path
     continue
-  elif [ "${minor_version}" -le 8 ]; then
-    if [ "${PG_MAJOR_VERSION}" -le 14 ]; then
-        VERSIONS="${VERSIONS} ${version}"
-    fi
   elif [ "${minor_version}" -le 12 ]; then
     if [ "${PG_MAJOR_VERSION}" -le 15 ]; then
         VERSIONS="${VERSIONS} ${version}"

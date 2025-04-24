@@ -15,11 +15,11 @@
  * allocations in the hot loop that fills the hash table.
  */
 void
-hash_strategy_output_key_alloc(GroupingPolicyHash *policy, DecompressBatchState *batch_state)
+hash_strategy_output_key_alloc(GroupingPolicyHash *policy, uint16 nrows)
 {
 	HashingStrategy *hashing = &policy->hashing;
-	const int n = batch_state->total_batch_rows;
-	const uint32 num_possible_keys = policy->last_used_key_index + 1 + n;
+	const uint32 num_possible_keys = hashing->last_used_key_index + 1 + nrows;
+
 	if (num_possible_keys > hashing->num_allocated_output_keys)
 	{
 		hashing->num_allocated_output_keys = num_possible_keys * 2 + 1;

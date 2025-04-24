@@ -27,6 +27,9 @@ insert into custom_log values (0, 0, 'msg0');
 ALTER SYSTEM SET DEFAULT_TRANSACTION_ISOLATION TO 'serializable';
 SELECT pg_reload_conf();
 
+-- Reconnect to make sure the GUC is set
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
 -- test a concurrent update
 CREATE OR REPLACE PROCEDURE custom_proc1(jobid int, config jsonb) LANGUAGE PLPGSQL AS
 $$
@@ -65,6 +68,9 @@ from _timescaledb_internal.bgw_job_stat_history WHERE job_id >= 1000 and succeed
 ALTER SYSTEM RESET DEFAULT_TRANSACTION_ISOLATION;
 SELECT pg_reload_conf();
 
+-- Reconnect to make sure the GUC is set
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
 -- test the retention job
 SELECT next_start FROM alter_job(3, next_start => '2060-01-01 00:00:00+00'::timestamptz);
 DELETE FROM _timescaledb_internal.bgw_job_stat_history;
@@ -89,6 +95,22 @@ WHERE succeeded IS FALSE;
 -- test failure when starting jobs
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT _timescaledb_functions.stop_background_workers();
+
+-- Job didn't finish yet and Crash detected
+DELETE FROM _timescaledb_internal.bgw_job_stat_history;
+INSERT INTO _timescaledb_internal.bgw_job_stat_history(job_id, pid, succeeded, execution_start, execution_finish, data)
+VALUES (1, NULL, NULL, '2000-01-01 00:00:00+00'::timestamptz, NULL, '{}'), -- Crash server detected
+(2, 2222, false, '2000-01-01 00:00:00+00'::timestamptz, NULL, '{}'), -- Didn't finished yet
+(3, 3333, false, '2000-01-01 00:00:00+00'::timestamptz, '2000-01-01 01:00:00+00'::timestamptz, '{}'), -- Finish with ERROR
+(4, 4444, true, '2000-01-01 00:00:00+00'::timestamptz, '2000-01-01 01:00:00+00'::timestamptz, '{}'); -- Finish with SUCCESS
+
+SELECT job_id, pid, succeeded, start_time, finish_time, config, err_message
+FROM timescaledb_information.job_history
+ORDER BY job_id;
+
+SELECT job_id, pid, start_time, finish_time, err_message
+FROM timescaledb_information.job_errors
+ORDER BY job_id;
 
 DELETE FROM _timescaledb_internal.bgw_job_stat;
 DELETE FROM _timescaledb_internal.bgw_job_stat_history;
@@ -130,6 +152,7 @@ END;
 $TEST$;
 
 SELECT count(*) > 0 FROM timescaledb_information.job_history WHERE succeeded IS FALSE AND err_message ~ 'failed to start job';
+SELECT count(*) > 0 FROM timescaledb_information.job_errors WHERE err_message ~ 'failed to start job';
 \set VERBOSITY terse
 
 \c :TEST_DBNAME :ROLE_SUPERUSER

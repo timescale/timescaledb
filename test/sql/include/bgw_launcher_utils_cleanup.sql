@@ -5,4 +5,5 @@
 DROP FUNCTION wait_worker_counts(integer, integer, integer, integer);
 DROP VIEW worker_counts;
 DROP FUNCTION wait_for_bgw_scheduler(name,int,int);
+DROP PROCEDURE kill_database_backends(name);
 

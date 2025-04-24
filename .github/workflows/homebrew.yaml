@@ -11,6 +11,7 @@ name: Homebrew
     - release_test
     - trigger/package_test
     - trigger/homebrew_test
+  workflow_dispatch:
 
 jobs:
   homebrew:
@@ -51,7 +52,7 @@ jobs:
         if grep '^version = [0-9.]\+$' version.config; then
           version=$(grep '^version = ' version.config | sed -e 's!^version = !!')
         else
-          version=$(grep '^update_from_version = ' version.config | sed -e 's!^update_from_version = !!')
+          version=$(grep '^previous_version = ' version.config | sed -e 's!^previous_version = !!')
         fi
         installed_version=$(psql -X -t \
             -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" \

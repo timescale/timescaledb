@@ -59,8 +59,7 @@ SELECT _timescaledb_internal.create_chunk(0,NULL,NULL,NULL,0);
 WARNING:  function _timescaledb_internal.create_chunk(regclass,jsonb,name,name,regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  invalid Oid
 SELECT _timescaledb_internal.create_chunk_table(0,NULL,NULL,NULL);
-WARNING:  function _timescaledb_internal.create_chunk_table(regclass,jsonb,name,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  hypertable cannot be NULL
+ERROR:  function _timescaledb_internal.create_chunk_table(integer, unknown, unknown, unknown) does not exist at character 8
 SELECT _timescaledb_internal.create_compressed_chunk(0,0,0,0,0,0,0,0,0,0);
 WARNING:  function _timescaledb_internal.create_compressed_chunk(regclass,regclass,bigint,bigint,bigint,bigint,bigint,bigint,bigint,bigint) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  invalid Oid
@@ -249,7 +248,7 @@ CALL _timescaledb_internal.cagg_migrate_execute_plan(NULL);
 WARNING:  procedure _timescaledb_internal.cagg_migrate_execute_plan(_timescaledb_catalog.continuous_agg) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 CALL _timescaledb_internal.cagg_migrate_execute_refresh_new_cagg(NULL,NULL);
 WARNING:  procedure _timescaledb_internal.cagg_migrate_execute_refresh_new_cagg(_timescaledb_catalog.continuous_agg,_timescaledb_catalog.continuous_agg_migrate_plan_step) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  null values cannot be formatted as an SQL identifier
+ERROR:  null value in column "mat_hypertable_id" of relation "continuous_aggs_watermark" violates not-null constraint
 CALL _timescaledb_internal.policy_compression(0,NULL);
 WARNING:  procedure _timescaledb_internal.policy_compression(integer,jsonb) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  job 0 has null config

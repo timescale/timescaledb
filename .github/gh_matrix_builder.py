@@ -27,8 +27,6 @@ import os
 import random
 import subprocess
 from ci_settings import (
-    PG14_EARLIEST,
-    PG14_LATEST,
     PG15_EARLIEST,
     PG15_LATEST,
     PG16_EARLIEST,
@@ -50,8 +48,19 @@ m = {
 default_ignored_tests = {
     "bgw_db_scheduler",
     "bgw_db_scheduler_fixed",
+    "bgw_launcher",
     "telemetry",
     "memoize",
+}
+
+# Tests that we do not run as part of a Flake tests
+flaky_exclude_tests = {
+    # Not executed as a flake test since it easily exhausts available
+    # background worker slots.
+    "bgw_launcher",
+    # Not executed as a flake test since it takes a very long time and
+    # easily interferes with other tests.
+    "bgw_scheduler_restart",
 }
 
 
@@ -158,13 +167,26 @@ def macos_config(overrides):
 
 
 # always test debug build on latest of all supported pg versions
-m["include"].append(build_debug_config({"pg": PG14_LATEST}))
-
 m["include"].append(build_debug_config({"pg": PG15_LATEST}))
 
 m["include"].append(build_debug_config({"pg": PG16_LATEST}))
 
 m["include"].append(build_debug_config({"pg": PG17_LATEST}))
+
+# Also test on ARM. See the available runners here:
+# https://github.com/timescale/timescaledb/actions/runners
+m["include"].append(
+    build_debug_config(
+        {
+            "pg": PG17_LATEST,
+            "os": "timescaledb-runner-arm64",
+            # We need to enable ARM crypto extensions to build the vectorized grouping
+            # code. The actual architecture for our ARM CI runner is reported as:
+            # -imultiarch aarch64-linux-gnu - -mlittle-endian -mabi=lp64 -march=armv8.2-a+crypto+fp16+rcpc+dotprod
+            "pg_extra_args": "--enable-debug --enable-cassert --without-llvm CFLAGS=-march=armv8.2-a+crypto",
+        }
+    )
+)
 
 # test timescaledb with release config on latest postgres release in MacOS
 m["include"].append(build_release_config(macos_config({"pg": PG17_LATEST})))
@@ -186,16 +208,6 @@ m["include"].append(
 # to a specific branch like prerelease_test we add additional
 # entries to the matrix
 if not pull_request:
-    m["include"].append(
-        build_debug_config(
-            {
-                "pg": PG14_EARLIEST,
-                # The early releases don't build with llvm 14.
-                "pg_extra_args": "--enable-debug --enable-cassert --without-llvm",
-            }
-        )
-    )
-
     # add debug test for first supported PG15 version
     m["include"].append(build_debug_config({"pg": PG15_EARLIEST}))
 
@@ -214,7 +226,6 @@ if not pull_request:
     m["include"].append(build_debug_config(macos_config({"pg": PG17_LATEST})))
 
     # add release test for latest pg releases
-    m["include"].append(build_release_config({"pg": PG14_LATEST}))
     m["include"].append(build_release_config({"pg": PG15_LATEST}))
     m["include"].append(build_release_config({"pg": PG16_LATEST}))
     m["include"].append(build_release_config({"pg": PG17_LATEST}))
@@ -225,14 +236,6 @@ if not pull_request:
 
     # to discover issues with upcoming releases we run CI against
     # the stable branches of supported PG releases
-    m["include"].append(
-        build_debug_config(
-            {
-                "pg": 14,
-                "snapshot": "snapshot",
-            }
-        )
-    )
     m["include"].append(
         build_debug_config(
             {
@@ -306,24 +309,14 @@ elif len(sys.argv) > 2:
             sys.exit(1)
 
     if tests:
-        to_run = list(tests) * 20
+        to_run = [t for t in list(tests) if t not in flaky_exclude_tests] * 20
         random.shuffle(to_run)
+        installcheck_args = f'TESTS="{" ".join(to_run)}"'
         m["include"].append(
             build_debug_config(
                 {
                     "coverage": False,
-                    "installcheck_args": f'TESTS="{" ".join(to_run)}"',
-                    "name": "Flaky Check Debug",
-                    "pg": PG16_LATEST,
-                    "pginstallcheck": False,
-                }
-            )
-        )
-        m["include"].append(
-            build_debug_config(
-                {
-                    "coverage": False,
-                    "installcheck_args": f'TESTS="{" ".join(to_run)}"',
+                    "installcheck_args": installcheck_args,
                     "name": "Flaky Check Debug",
                     "pg": PG17_LATEST,
                     "pginstallcheck": False,

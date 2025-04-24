@@ -25,7 +25,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
-      pg17_latest: ${{ steps.setter.outputs.PG17_LATEST }}
     steps:
     - name: Checkout source code
       uses: actions/checkout@v4
@@ -49,16 +48,29 @@ jobs:
         DEBIAN_FRONTEND: noninteractive
         # vectorized_aggregation has different output on i386 because int8 is by
         # reference and currently it cannot be used for vectorized hash grouping.
-        IGNORES: "append-* transparent_decompression-* transparent_decompress_chunk-* pg_dump telemetry bgw_db_scheduler* hypercore_vacuum vectorized_aggregation"
+        # vector_agg_text and vector_agg_groupagg use the UMASH hashing library
+        # that we can't compile on i386.
+        IGNORES: >-
+          append-*
+          bgw_db_scheduler*
+          hypercore_parallel
+          hypercore_vacuum
+          hypercore_vectoragg
+          pg_dump
+          telemetry
+          transparent_decompress_chunk-*
+          transparent_decompression-*
+          vector_agg_groupagg
+          vector_agg_grouping
+          vector_agg_text
+          vector_agg_uuid_segmentby
+          vectorized_aggregation
         SKIPS: chunk_adaptive histogram_test-*
         EXTENSIONS: "postgres_fdw test_decoding pageinspect pgstattuple"
     strategy:
       matrix:
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
         build_type: [ Debug ]
-        include:
-          - pg: ${{ fromJson(needs.config.outputs.pg17_latest) }}
-            build_type: Debug
       fail-fast: false
 
     steps:
@@ -132,7 +144,7 @@ jobs:
       if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
       uses: actions/upload-artifact@v4
       with:
-        name: config.log for i386 PostgreSQL ${{ matrix.pg }}
+        name: config.log linux-i386 PG${{ matrix.pg }}
         path: ~/${{ env.PG_SRC_DIR }}/config.log
 
     - name: Build TimescaleDB
@@ -148,6 +160,18 @@ jobs:
         make -j $(nproc) -C build
         make -C build install
         chown -R postgres:postgres .
+
+    - name: Upload CMake Logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: CMake Logs linux-i386 PG${{ matrix.pg }}
+        path: |
+            build/CMakeCache.txt
+            build/CMakeFiles/CMakeConfigureLog.yaml
+            build/CMakeFiles/CMakeError.log
+            build/CMakeFiles/CMakeOutput.log
+            build/compile_commands.json
 
     - name: make installcheck
       id: installcheck

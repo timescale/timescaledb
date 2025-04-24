@@ -1465,20 +1465,22 @@ DROP INDEX skip_scan_idx_dev_time_idx;
 -- multicolumn index with dev as non-leading column
 CREATE INDEX skip_scan_idx_time_dev_idx ON :TABLE(time, dev);
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE time = 100 ORDER BY dev;
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
-   ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_idx_time_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
-         Index Cond: ("time" = 100)
-(4 rows)
+   ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
+         ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_idx_time_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
+               Index Cond: (("time" = 100) AND (dev > NULL::integer))
+(5 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time = 100;
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
-   ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_idx_time_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
-         Index Cond: ("time" = 100)
-(4 rows)
+   ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
+         ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_idx_time_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
+               Index Cond: (("time" = 100) AND (dev > NULL::integer))
+(5 rows)
 
 DROP INDEX skip_scan_idx_time_dev_idx;
 -- hash index is not ordered so can't use skipscan
@@ -2929,12 +2931,13 @@ WHERE CLAUSES
 
 -- multiple constraints in WHERE clause
 :PREFIX SELECT DISTINCT ON (dev) dev,time FROM :TABLE WHERE dev > 5 AND time = 100;
-                                                       QUERY PLAN                                                       
-------------------------------------------------------------------------------------------------------------------------
+                                                          QUERY PLAN                                                          
+------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=5 loops=1)
-   ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_time_dev_val_idx on _hyper_1_1_chunk (actual rows=5 loops=1)
-         Index Cond: (("time" = 100) AND (dev > 5))
-(4 rows)
+   ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=5 loops=1)
+         ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_time_dev_val_idx on _hyper_1_1_chunk (actual rows=5 loops=1)
+               Index Cond: (("time" = 100) AND (dev > NULL::integer) AND (dev > 5))
+(5 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) dev,time FROM :TABLE WHERE dev > 5 AND time > 200;
                                                            QUERY PLAN                                                           

@@ -41,10 +41,11 @@ extern bool ts_guc_enable_qual_propagation;
 extern bool ts_guc_enable_runtime_exclusion;
 extern bool ts_guc_enable_constraint_exclusion;
 extern bool ts_guc_enable_cagg_reorder_groupby;
+extern TSDLLEXPORT bool ts_guc_enable_cagg_window_functions;
 extern TSDLLEXPORT int ts_guc_cagg_max_individual_materializations;
 extern bool ts_guc_enable_now_constify;
 extern bool ts_guc_enable_foreign_key_propagation;
-extern bool ts_guc_enable_osm_reads;
+extern TSDLLEXPORT bool ts_guc_enable_osm_reads;
 #if PG16_GE
 extern TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown;
 #endif
@@ -69,6 +70,15 @@ extern TSDLLEXPORT bool ts_guc_enable_delete_after_compression;
 extern TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh;
 extern bool ts_guc_enable_chunk_skipping;
 extern TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression;
+extern TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression;
+extern TSDLLEXPORT bool ts_guc_enable_bool_compression;
+extern TSDLLEXPORT int ts_guc_compression_batch_size_limit;
+#if PG16_GE
+extern TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates;
+#endif
+
+/* Only settable in debug mode for testing */
+extern TSDLLEXPORT bool ts_guc_enable_null_compression;
 
 #ifdef USE_TELEMETRY
 typedef enum TelemetryLevel
@@ -92,6 +102,12 @@ extern TSDLLEXPORT bool ts_guc_auto_sparse_indexes;
 extern TSDLLEXPORT bool ts_guc_enable_columnarscan;
 extern TSDLLEXPORT int ts_guc_bgw_log_level;
 
+/*
+ * Exit code to use when scheduler exits.
+ *
+ * Used for debugging.
+ */
+extern TSDLLEXPORT int ts_debug_bgw_scheduler_exit_status;
 #ifdef TS_DEBUG
 extern bool ts_shutdown_bgw;
 extern char *ts_current_timestamp_mock;
@@ -142,6 +158,8 @@ typedef enum HypercoreCopyToBehavior
 } HypercoreCopyToBehavior;
 
 extern TSDLLEXPORT HypercoreCopyToBehavior ts_guc_hypercore_copy_to_behavior;
+extern TSDLLEXPORT bool ts_guc_enable_hypercore_scankey_pushdown;
+extern TSDLLEXPORT int ts_guc_hypercore_arrow_cache_max_entries;
 
 void _guc_init(void);
 

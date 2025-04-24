@@ -4,12 +4,10 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+
 #include <executor/spi.h>
 #include <fmgr.h>
 #include <lib/stringinfo.h>
-#include <scan_iterator.h>
-#include <scanner.h>
-#include <time_utils.h>
 #include <utils/builtins.h>
 #include <utils/date.h>
 #include <utils/guc.h>
@@ -23,6 +21,9 @@
 #include "debug_assert.h"
 #include "guc.h"
 #include "materialize.h"
+#include "scan_iterator.h"
+#include "scanner.h"
+#include "time_utils.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
 
@@ -633,6 +634,7 @@ create_materialization_plan(MaterializationContext *context, MaterializationPlan
 		char *query = materialization->create_statement(context);
 		Oid types[] = { context->materialization_range.type, context->materialization_range.type };
 
+		elog(DEBUG2, "%s: %s", __func__, query);
 		materialization->plan = SPI_prepare(query, 2, types);
 		if (materialization->plan == NULL)
 			elog(ERROR, "%s: SPI_prepare failed: %s", __func__, query);

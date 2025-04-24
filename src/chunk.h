@@ -188,7 +188,11 @@ extern bool ts_chunk_exists_relid(Oid relid);
 extern TSDLLEXPORT bool ts_chunk_exists_with_compression(int32 hypertable_id);
 extern void ts_chunk_recreate_all_constraints_for_dimension(Hypertable *ht, int32 dimension_id);
 extern int ts_chunk_delete_by_hypertable_id(int32 hypertable_id);
-extern int ts_chunk_delete_by_name(const char *schema, const char *table, DropBehavior behavior);
+extern TSDLLEXPORT int ts_chunk_delete_by_name(const char *schema, const char *table,
+											   DropBehavior behavior);
+extern int ts_chunk_delete_by_relid_and_relname(Oid relid, const char *schemaname,
+												const char *tablename, DropBehavior behavior,
+												bool preserve_chunk_catalog_row);
 extern bool ts_chunk_set_name(Chunk *chunk, const char *newname);
 extern bool ts_chunk_set_schema(Chunk *chunk, const char *newschema);
 extern TSDLLEXPORT List *ts_chunk_get_window(int32 dimension_id, int64 point, int count,
@@ -199,7 +203,7 @@ extern TSDLLEXPORT bool ts_chunk_set_partial(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_set_unordered(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_set_frozen(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_unset_frozen(Chunk *chunk);
-extern TSDLLEXPORT bool ts_chunk_is_frozen(Chunk *chunk);
+extern TSDLLEXPORT bool ts_chunk_is_frozen(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id);
 extern TSDLLEXPORT bool ts_chunk_clear_compressed_chunk(Chunk *chunk);
 extern TSDLLEXPORT void ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level);
@@ -225,10 +229,6 @@ extern TSDLLEXPORT ChunkCompressionStatus ts_chunk_get_compression_status(int32 
 extern TSDLLEXPORT Datum ts_chunk_id_from_relid(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT List *ts_chunk_get_chunk_ids_by_hypertable_id(int32 hypertable_id);
 extern TSDLLEXPORT List *ts_chunk_get_by_hypertable_id(int32 hypertable_id);
-
-extern TSDLLEXPORT Chunk *ts_chunk_create_only_table(Hypertable *ht, Hypercube *cube,
-													 const char *schema_name,
-													 const char *table_name);
 
 extern TSDLLEXPORT int64 ts_chunk_primary_dimension_start(const Chunk *chunk);
 

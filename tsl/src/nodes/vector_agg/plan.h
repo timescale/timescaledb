@@ -3,15 +3,11 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-
 #include <postgres.h>
-
 #include <nodes/plannodes.h>
+#include <utils/relcache.h>
 
-typedef struct VectorAggPlan
-{
-	CustomScan custom;
-} VectorAggPlan;
+#include "nodes/decompress_chunk/vector_quals.h"
 
 /*
  * The indexes of settings that we have to pass through the custom_private list.
@@ -23,6 +19,7 @@ typedef enum
 } VectorAggSettingsIndex;
 
 extern void _vector_agg_init(void);
-
-Plan *try_insert_vector_agg_node(Plan *plan);
+extern void vectoragg_plan_decompress_chunk(Plan *childplan, VectorQualInfo *vqi);
+extern void vectoragg_plan_tam(Plan *childplan, const List *rtable, VectorQualInfo *vqi);
+Plan *try_insert_vector_agg_node(Plan *plan, List *rtable);
 bool has_vector_agg_node(Plan *plan, bool *has_normal_agg);

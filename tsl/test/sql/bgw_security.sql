@@ -5,7 +5,7 @@
 \set ROLE_ADMIN :TEST_DBNAME _admin
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
-CREATE ROLE :ROLE_ADMIN;
+CREATE ROLE :ROLE_ADMIN LOGIN;
 GRANT :ROLE_ADMIN TO :ROLE_DEFAULT_PERM_USER;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -17,22 +17,29 @@ CREATE PROCEDURE custom_job(integer, jsonb) AS $$
   INSERT INTO custom_log values($1, 'custom_job');
 $$ LANGUAGE SQL;
 
+SET ROLE :ROLE_ADMIN;
 SELECT add_job('custom_job', '1h') AS job_id \gset
 
--- Set the owner of the job to the admin role
-UPDATE _timescaledb_config.bgw_job SET owner = :'ROLE_ADMIN' WHERE id = :job_id;
+RESET ROLE;
 
 SELECT id, proc_name, owner FROM _timescaledb_config.bgw_job WHERE id = :job_id;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 
--- We should fail to execute the job since we do not own it or belong
--- to the group that owns it.
+-- We should fail to execute and delete the job since we do not own it
+-- or belong to the group that owns it.
 \set ON_ERROR_STOP 0
 CALL run_job(:job_id);
+SELECT delete_job(:job_id);
 \set ON_ERROR_STOP 1
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 -- This should succeed since the role belongs to the job owner group.
 CALL run_job(:job_id);
+
+-- This should succeed since we belong to the owners role.
+SELECT delete_job(:job_id);
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP ROLE :ROLE_ADMIN;

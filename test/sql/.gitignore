@@ -16,7 +16,6 @@
 /plan_hashagg_optimized-*.sql
 /plan_hypertable_cache-*.sql
 /plan_ordered_append-*.sql
-/query-*.sql
 /rowsecurity-*.sql
 /timestamp-*.sql
 /ts_merge-*.sql

@@ -244,7 +244,7 @@ job_delete(PG_FUNCTION_ARGS)
 	if (!has_privs_of_role(GetUserId(), job->fd.owner))
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("insufficient permissions to delete job for user \"%s\"",
+				 errmsg("insufficient permissions to delete job owned by \"%s\"",
 						GetUserNameFromId(job->fd.owner, false))));
 
 	ts_bgw_job_delete_by_id(job_id);

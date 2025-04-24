@@ -107,7 +107,9 @@ test_factory(ConnectionType type, int status, char *host, int port)
 	}
 
 	if (err != HTTP_ERROR_NONE)
-		elog(ERROR, "%s", ts_http_strerror(err));
+	{
+		ereport(ERROR, (errcode(ERRCODE_IO_ERROR), errmsg("%s", ts_http_strerror(err))));
+	}
 
 	ts_connection_destroy(conn);
 
@@ -278,15 +280,17 @@ ts_test_telemetry(PG_FUNCTION_ARGS)
 	if (err != HTTP_ERROR_NONE)
 	{
 		ts_http_response_state_destroy(rsp);
-		elog(ERROR, "telemetry error: %s", ts_http_strerror(err));
+		ereport(ERROR,
+				(errcode(ERRCODE_IO_ERROR), errmsg("telemetry error: %s", ts_http_strerror(err))));
 	}
 
 	if (!ts_http_response_state_valid_status(rsp))
 	{
 		ts_http_response_state_destroy(rsp);
-		elog(ERROR,
-			 "telemetry got unexpected HTTP response status: %d",
-			 ts_http_response_state_status_code(rsp));
+		ereport(ERROR,
+				(errcode(ERRCODE_IO_ERROR),
+				 errmsg("telemetry got unexpected HTTP response status: %d",
+						ts_http_response_state_status_code(rsp))));
 	}
 
 	json_body =

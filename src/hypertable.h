@@ -28,10 +28,6 @@ typedef struct Chunk Chunk;
 typedef struct Hypercube Hypercube;
 typedef struct ChunkRangeSpace ChunkRangeSpace;
 
-/* For the distributed node case, we would have compression enabled
- * but don't have a corresponding internal table on the access
- * node
- */
 enum
 {
 	HypertableCompressionOff = 0,
@@ -51,6 +47,7 @@ typedef struct Hypertable
 	FormData_hypertable fd;
 	Oid main_table_relid;
 	Oid chunk_sizing_func;
+	Oid amoid;
 	Hyperspace *space;
 	SubspaceStore *chunk_cache;
 	ChunkRangeSpace *range_space;

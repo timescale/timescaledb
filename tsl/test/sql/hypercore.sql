@@ -9,7 +9,7 @@ show timescaledb.hypercore_indexam_whitelist;
 grant all on schema _timescaledb_internal to :ROLE_DEFAULT_PERM_USER;
 set role :ROLE_DEFAULT_PERM_USER;
 
-SET timescaledb.arrow_cache_maxsize = 4;
+SET timescaledb.hypercore_arrow_cache_max_entries = 4;
 
 CREATE TABLE readings(
        time timestamptz UNIQUE,
@@ -427,3 +427,44 @@ returns void as :TSL_MODULE_PATHNAME, 'ts_test_hypercore' language c;
 set role :ROLE_DEFAULT_PERM_USER;
 
 select test_hypercore(:'rescan_chunk');
+
+-- Simple test that loading the hypercore handler works on a fresh
+-- backend.
+--
+-- Since TSL library is loaded late (after a query has been executed),
+-- this can generate a license error if an attempt is made to use a
+-- crossmodule function inside a query, and the hypertable handler is
+-- used through GetTableAmRoutine().
+--
+-- To test this, we create a hypercore table, start a fresh
+-- connection, and run a query on it.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+create table crossmodule_test(
+       time timestamptz unique,
+       location int
+);
+
+select hypertable_id
+  from create_hypertable('crossmodule_test', by_range('time', '1d'::interval)) \gset
+
+select setseed(1);
+
+insert into crossmodule_test select t, ceil(random()*10)
+from generate_series('2022-06-01'::timestamptz, '2022-06-10'::timestamptz, '1h') t;
+
+alter table crossmodule_test
+      set access method hypercore,
+      set (timescaledb.compress_orderby = 'time');
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+select count(*) from crossmodule_test;
+
+-- Verify that vacuum with fail without the correct license.
+alter system set timescaledb.license to 'apache';
+select pg_reload_conf();
+\c :TEST_DBNAME :ROLE_SUPERUSER
+\set ON_ERROR_STOP 0
+vacuum crossmodule_test;
+\set ON_ERROR_STOP 1
+alter system reset timescaledb.license;
+select pg_reload_conf();

@@ -6,7 +6,7 @@
 #include <postgres.h>
 #include <access/heapam.h>
 #include <access/htup.h>
-#include <catalog/namespace.h>
+#include <catalog/pg_namespace_d.h>
 #include <catalog/pg_proc.h>
 #include <catalog/pg_type.h>
 #include <miscadmin.h>
@@ -537,7 +537,6 @@ initialize_func_info()
 	};
 	Oid extension_nsp = ts_extension_schema_oid();
 	Oid experimental_nsp = get_namespace_oid(ts_experimental_schema_name(), false);
-	Oid pg_nsp = get_namespace_oid("pg_catalog", false);
 	HeapTuple tuple;
 	Relation rel;
 
@@ -551,7 +550,7 @@ initialize_func_info()
 	for (size_t i = 0; i < _MAX_CACHE_FUNCTIONS; i++)
 	{
 		FuncInfo *finfo = &funcinfo[i];
-		Oid namespaceoid = pg_nsp;
+		Oid namespaceoid = PG_CATALOG_NAMESPACE;
 		oidvector *paramtypes = buildoidvector(finfo->arg_types, finfo->nargs);
 		FuncEntry *fentry;
 		bool hash_found;

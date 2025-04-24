@@ -12,7 +12,58 @@
 --
 CREATE TABLE test_table(time bigint NOT NULL, device int);
 
+-- EXPLAIN should work in read-only mode, when enabling in transaction.
+START TRANSACTION;
+SET transaction_read_only TO on;
+EXPLAIN (COSTS OFF) SELECT * FROM test_table;
+ROLLBACK;
+
+START TRANSACTION;
+SET transaction_read_only TO on;
+EXPLAIN (ANALYZE ON, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM test_table;
+ROLLBACK;
+
+START TRANSACTION;
+SET transaction_read_only TO on;
+EXPLAIN (COSTS OFF) INSERT INTO test_table VALUES (1, 1);
+ROLLBACK;
+
+-- This should give an error since we are using ANALYZE and a DML. The
+-- read-only is checked when executing the actual INSERT statement,
+-- not inside our code.
+\set ON_ERROR_STOP 0
+START TRANSACTION;
+SET transaction_read_only TO on;
+EXPLAIN (ANALYZE ON, COSTS OFF, TIMING OFF, SUMMARY OFF) INSERT INTO test_table VALUES (1, 1);
+ROLLBACK;
+\set ON_ERROR_STOP 1
+
 SET default_transaction_read_only TO on;
+
+-- EXPLAIN should work in read-only mode, even when using the default.
+START TRANSACTION;
+EXPLAIN (COSTS OFF) SELECT * FROM test_table;
+ROLLBACK;
+
+START TRANSACTION;
+SET transaction_read_only TO on;
+EXPLAIN (ANALYZE ON, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM test_table;
+ROLLBACK;
+
+START TRANSACTION;
+SET transaction_read_only TO on;
+EXPLAIN (COSTS OFF) INSERT INTO test_table VALUES (1, 1);
+ROLLBACK;
+
+-- This should give an error since we are using ANALYZE and a DML. The
+-- read-only is checked when executing the actual INSERT statement,
+-- not inside our code.
+\set ON_ERROR_STOP 0
+START TRANSACTION;
+SET transaction_read_only TO on;
+EXPLAIN (ANALYZE ON, COSTS OFF, TIMING OFF, SUMMARY OFF) INSERT INTO test_table VALUES (1, 1);
+ROLLBACK;
+\set ON_ERROR_STOP 1
 
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('test_table', 'time');
@@ -213,3 +264,4 @@ SELECT remove_retention_policy('test_table');
 SELECT add_job('now','12h');
 SELECT alter_job(1,scheduled:=false);
 SELECT delete_job(1);
+

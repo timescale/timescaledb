@@ -438,7 +438,7 @@ reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id, Oid destinati
 	CheckTableNotInUse(OldHeap, "CLUSTER");
 
 	/* Check heap and index are valid to cluster on */
-	check_index_is_clusterable_compat(OldHeap, indexOid, ExclusiveLock);
+	check_index_is_clusterable(OldHeap, indexOid, ExclusiveLock);
 
 	/* rebuild_relation does all the dirty work */
 	rebuild_relation(OldHeap, indexOid, verbose, wait_id, destination_tablespace, index_tablespace);
@@ -479,11 +479,8 @@ rebuild_relation(Relation OldHeap, Oid indexOid, bool verbose, Oid wait_id,
 	table_close(OldHeap, NoLock);
 
 	/* Create the transient table that will receive the re-ordered data */
-	OIDNewHeap = make_new_heap_compat(tableOid,
-									  tableSpace,
-									  OldHeap->rd_rel->relam,
-									  relpersistence,
-									  ExclusiveLock);
+	OIDNewHeap =
+		make_new_heap(tableOid, tableSpace, OldHeap->rd_rel->relam, relpersistence, ExclusiveLock);
 
 	/* Copy the heap data into the new table in the desired order */
 	copy_heap_data(OIDNewHeap,
@@ -534,9 +531,6 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 	int natts;
 	Datum *values;
 	bool *isnull;
-	TransactionId OldestXmin;
-	TransactionId FreezeXid;
-	MultiXactId MultiXactCutoff;
 	bool use_sort;
 	double num_tuples = 0, tups_vacuumed = 0, tups_recently_dead = 0;
 	BlockNumber num_pages;
@@ -626,24 +620,38 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 	 * Since we're going to rewrite the whole table anyway, there's no reason
 	 * not to be aggressive about this.
 	 */
-	vacuum_set_xid_limits_compat(OldHeap, 0, 0, 0, 0, &OldestXmin, &FreezeXid, &MultiXactCutoff);
+	struct VacuumCutoffs cutoffs;
+	VacuumParams params;
+
+	memset(&params, 0, sizeof(VacuumParams));
+	vacuum_get_cutoffs(OldHeap, &params, &cutoffs);
 
 	/*
 	 * FreezeXid will become the table's new relfrozenxid, and that mustn't go
 	 * backwards, so take the max.
 	 */
-	if (TransactionIdPrecedes(FreezeXid, OldHeap->rd_rel->relfrozenxid))
-		FreezeXid = OldHeap->rd_rel->relfrozenxid;
+	{
+		TransactionId relfrozenxid = OldHeap->rd_rel->relfrozenxid;
+
+		if (TransactionIdIsValid(relfrozenxid) &&
+			TransactionIdPrecedes(cutoffs.FreezeLimit, relfrozenxid))
+			cutoffs.FreezeLimit = relfrozenxid;
+	}
 
 	/*
 	 * MultiXactCutoff, similarly, shouldn't go backwards either.
 	 */
-	if (MultiXactIdPrecedes(MultiXactCutoff, OldHeap->rd_rel->relminmxid))
-		MultiXactCutoff = OldHeap->rd_rel->relminmxid;
+	{
+		MultiXactId relminmxid = OldHeap->rd_rel->relminmxid;
+
+		if (MultiXactIdIsValid(relminmxid) &&
+			MultiXactIdPrecedes(cutoffs.MultiXactCutoff, relminmxid))
+			cutoffs.MultiXactCutoff = relminmxid;
+	}
 
 	/* return selected values to caller */
-	*pFreezeXid = FreezeXid;
-	*pCutoffMulti = MultiXactCutoff;
+	*pFreezeXid = cutoffs.FreezeLimit;
+	*pCutoffMulti = cutoffs.MultiXactCutoff;
 
 	/*
 	 * We know how to use a sort to duplicate the ordering of a btree index,
@@ -677,9 +685,9 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 									NewHeap,
 									OldIndex,
 									use_sort,
-									OldestXmin,
-									&FreezeXid,
-									&MultiXactCutoff,
+									cutoffs.OldestXmin,
+									&cutoffs.FreezeLimit,
+									&cutoffs.MultiXactCutoff,
 									&num_tuples,
 									&tups_vacuumed,
 									&tups_recently_dead);

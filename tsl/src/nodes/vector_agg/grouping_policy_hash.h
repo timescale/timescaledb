@@ -43,7 +43,9 @@ typedef struct GroupingPolicyHash GroupingPolicyHash;
  * results are emitted into the output slot. This is done in the order of unique
  * grouping key indexes, thereby preserving the incoming key order. This
  * guarantees that this policy works correctly even in a Partial GroupAggregate
- * node, even though it's not optimal performance-wise.
+ * node, even though it's not optimal performance-wise. We only support the
+ * direct order of records in batch though, not reverse. This is checked at
+ * planning time.
  */
 typedef struct GroupingPolicyHash
 {
@@ -75,11 +77,6 @@ typedef struct GroupingPolicyHash
 	 * indexes of their grouping keys.
 	 */
 	HashingStrategy hashing;
-
-	/*
-	 * The last used index of an unique grouping key. Key index 0 is invalid.
-	 */
-	uint32 last_used_key_index;
 
 	/*
 	 * Temporary storage of unique indexes of keys corresponding to a given row
@@ -129,6 +126,7 @@ typedef struct GroupingPolicyHash
 	 */
 	uint64 stat_input_total_rows;
 	uint64 stat_input_valid_rows;
+	uint64 stat_bulk_filtered_rows;
 	uint64 stat_consecutive_keys;
 } GroupingPolicyHash;
 

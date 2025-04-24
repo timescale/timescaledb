@@ -212,7 +212,13 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 										node->ss.ss_ScanTupleSlot->tts_tupleDescriptor);
 		}
 	}
-	/* Sort keys should only be present when sorted_merge_append is used */
+
+	/*
+	 * Sort keys should only be present at the level of this node when batch
+	 * sorted merge is used.
+	 * In other cases of sort pushdown, sorting is performed by the underlying
+	 * compressed scan.
+	 */
 	Assert(dcontext->batch_sorted_merge == true || list_length(chunk_state->sortinfo) == 0);
 
 	/*
@@ -375,7 +381,9 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 
 	if (ts_guc_debug_require_batch_sorted_merge && !dcontext->batch_sorted_merge)
 	{
-		elog(ERROR, "debug: batch sorted merge is required but not used");
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("debug: batch sorted merge is required but not used")));
 	}
 
 	/* Constify stable expressions in vectorized predicates. */

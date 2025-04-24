@@ -112,7 +112,7 @@ makeMaterializedTableName(char *buf, const char *prefix, int hypertable_id)
 static int32 mattablecolumninfo_create_materialization_table(
 	MatTableColumnInfo *matcolinfo, int32 hypertable_id, RangeVar *mat_rel,
 	CAggTimebucketInfo *bucket_info, bool create_addl_index, char *tablespacename,
-	char *table_access_method, ObjectAddress *mataddress);
+	char *table_access_method, int64 matpartcol_interval, ObjectAddress *mataddress);
 static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *mattblinfo,
 														  Query *userview_query, bool finalized);
 
@@ -419,6 +419,7 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 												RangeVar *mat_rel, CAggTimebucketInfo *bucket_info,
 												bool create_addl_index, char *const tablespacename,
 												char *const table_access_method,
+												int64 matpartcol_interval,
 												ObjectAddress *mataddress)
 {
 	Oid uid, saved_uid;
@@ -426,7 +427,6 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	char *matpartcolname = matcolinfo->matpartcolname;
 	CreateStmt *create;
 	Datum toast_options;
-	int64 matpartcol_interval;
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
 	int32 mat_htid;
 	Oid mat_relid;
@@ -458,13 +458,6 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options, true);
 	NewRelationCreateToastTable(mat_relid, toast_options);
 	RESTORE_USER(uid, saved_uid, sec_ctx);
-
-	/* Convert the materialization table to a hypertable. */
-	matpartcol_interval = bucket_info->htpartcol_interval_len;
-
-	/* Apply the factor just for non-Hierachical CAggs */
-	if (bucket_info->parent_mat_hypertable_id == INVALID_HYPERTABLE_ID)
-		matpartcol_interval *= MATPARTCOL_INTERVAL_FACTOR;
 
 	cagg_create_hypertable(hypertable_id, mat_relid, matpartcolname, matpartcol_interval);
 
@@ -678,6 +671,21 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 		DatumGetBool(with_clause_options[ContinuousViewOptionMaterializedOnly].parsed);
 	bool finalized = DatumGetBool(with_clause_options[ContinuousViewOptionFinalized].parsed);
 
+	int64 matpartcol_interval = 0;
+	if (!with_clause_options[ContinuousViewOptionChunkTimeInterval].is_default)
+	{
+		matpartcol_interval = interval_to_usec(
+			DatumGetIntervalP(with_clause_options[ContinuousViewOptionChunkTimeInterval].parsed));
+	}
+	else
+	{
+		matpartcol_interval = bucket_info->htpartcol_interval_len;
+
+		/* Apply the factor just for non-Hierachical CAggs */
+		if (bucket_info->parent_mat_hypertable_id == INVALID_HYPERTABLE_ID)
+			matpartcol_interval *= MATPARTCOL_INTERVAL_FACTOR;
+	}
+
 	finalqinfo.finalized = finalized;
 
 	/*
@@ -714,6 +722,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 													is_create_mattbl_index,
 													create_stmt->into->tableSpaceName,
 													create_stmt->into->accessMethod,
+													matpartcol_interval,
 													&mataddress);
 	/*
 	 * Step 2: Create view with select finalize from materialization table.
@@ -940,7 +949,8 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 		refresh_window.start = cagg_get_time_min(cagg);
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
 
-		continuous_agg_refresh_internal(cagg, &refresh_window, CAGG_REFRESH_CREATION, true, true);
+		CaggRefreshContext context = { .callctx = CAGG_REFRESH_CREATION };
+		continuous_agg_refresh_internal(cagg, &refresh_window, context, true, true, false);
 	}
 
 	return DDL_DONE;

@@ -11,13 +11,15 @@
 
 #include <postgres.h>
 
+#include <access/attnum.h>
+#include <access/tupdesc.h>
 #include <executor/tuptable.h>
 #include <nodes/pg_list.h>
 
 #include "grouping_policy.h"
 
-#include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
+#include "nodes/vector_agg/vector_slot.h"
 
 #include "grouping_policy_hash.h"
 
@@ -34,6 +36,10 @@
 extern HashingStrategy single_fixed_2_strategy;
 extern HashingStrategy single_fixed_4_strategy;
 extern HashingStrategy single_fixed_8_strategy;
+#ifdef TS_USE_UMASH
+extern HashingStrategy single_text_strategy;
+extern HashingStrategy serialized_strategy;
+#endif
 
 static const GroupingPolicy grouping_policy_hash_functions;
 
@@ -68,6 +74,14 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 
 	switch (grouping_type)
 	{
+#ifdef TS_USE_UMASH
+		case VAGT_HashSerialized:
+			policy->hashing = serialized_strategy;
+			break;
+		case VAGT_HashSingleText:
+			policy->hashing = single_text_strategy;
+			break;
+#endif
 		case VAGT_HashSingleFixed8:
 			policy->hashing = single_fixed_8_strategy;
 			break;
@@ -81,6 +95,8 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 			Ensure(false, "failed to determine the hashing strategy");
 			break;
 	}
+
+	policy->hashing.key_body_mctx = policy->agg_extra_mctx;
 
 	policy->hashing.init(&policy->hashing, policy);
 
@@ -98,24 +114,24 @@ gp_hash_reset(GroupingPolicy *obj)
 
 	policy->hashing.reset(&policy->hashing);
 
-	policy->last_used_key_index = 0;
-
 	policy->stat_input_valid_rows = 0;
 	policy->stat_input_total_rows = 0;
+	policy->stat_bulk_filtered_rows = 0;
 	policy->stat_consecutive_keys = 0;
 }
 
 static void
-compute_single_aggregate(GroupingPolicyHash *policy, const DecompressBatchState *batch_state,
-						 int start_row, int end_row, const VectorAggDef *agg_def, void *agg_states)
+compute_single_aggregate(GroupingPolicyHash *policy, TupleTableSlot *vector_slot, int start_row,
+						 int end_row, const VectorAggDef *agg_def, void *agg_states)
 {
 	const ArrowArray *arg_arrow = NULL;
 	const uint64 *arg_validity_bitmap = NULL;
 	Datum arg_datum = 0;
 	bool arg_isnull = true;
-
+	uint16 total_batch_rows = 0;
 	const uint32 *offsets = policy->key_index_for_row;
 	MemoryContext agg_extra_mctx = policy->agg_extra_mctx;
+	const uint64 *vector_qual_result = vector_slot_get_qual_result(vector_slot, &total_batch_rows);
 
 	/*
 	 * We have functions with one argument, and one function with no arguments
@@ -123,10 +139,14 @@ compute_single_aggregate(GroupingPolicyHash *policy, const DecompressBatchState 
 	 */
 	if (agg_def->input_offset >= 0)
 	{
+		const AttrNumber attnum = AttrOffsetGetAttrNumber(agg_def->input_offset);
 		const CompressedColumnValues *values =
-			&batch_state->compressed_columns[agg_def->input_offset];
+			vector_slot_get_compressed_column_values(vector_slot, attnum);
+
 		Assert(values->decompression_type != DT_Invalid);
-		Assert(values->decompression_type != DT_Iterator);
+		Ensure(values->decompression_type != DT_Iterator,
+			   "expected arrow array but got iterator for attnum %d",
+			   attnum);
 
 		if (values->arrow != NULL)
 		{
@@ -144,11 +164,11 @@ compute_single_aggregate(GroupingPolicyHash *policy, const DecompressBatchState 
 	/*
 	 * Compute the unified validity bitmap.
 	 */
-	const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
+	const size_t num_words = (total_batch_rows + 63) / 64;
 	const uint64 *filter = arrow_combine_validity(num_words,
 												  policy->tmp_filter,
 												  agg_def->filter_result,
-												  batch_state->vector_qual_result,
+												  vector_qual_result,
 												  arg_validity_bitmap);
 
 	/*
@@ -199,26 +219,24 @@ compute_single_aggregate(GroupingPolicyHash *policy, const DecompressBatchState 
 }
 
 static void
-add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, const int start_row,
+add_one_range(GroupingPolicyHash *policy, TupleTableSlot *vector_slot, const int start_row,
 			  const int end_row)
 {
 	const int num_fns = policy->num_agg_defs;
-
 	Assert(start_row < end_row);
-	Assert(end_row <= batch_state->total_batch_rows);
 
 	/*
 	 * Remember which aggregation states have already existed, and which we
 	 * have to initialize. State index zero is invalid.
 	 */
-	const uint32 last_initialized_key_index = policy->last_used_key_index;
+	const uint32 last_initialized_key_index = policy->hashing.last_used_key_index;
 	Assert(last_initialized_key_index <= policy->num_allocated_per_key_agg_states);
 
 	/*
 	 * Match rows to aggregation states using a hash table.
 	 */
 	Assert((size_t) end_row <= policy->num_key_index_for_row);
-	policy->hashing.fill_offsets(policy, batch_state, start_row, end_row);
+	policy->hashing.fill_offsets(policy, vector_slot, start_row, end_row);
 
 	/*
 	 * Process the aggregate function states. We are processing single aggregate
@@ -232,13 +250,13 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 		 * If we added new keys, initialize the aggregate function states for
 		 * them.
 		 */
-		if (policy->last_used_key_index > last_initialized_key_index)
+		if (policy->hashing.last_used_key_index > last_initialized_key_index)
 		{
 			/*
 			 * If the aggregate function states don't fit into the existing
 			 * storage, reallocate it.
 			 */
-			if (policy->last_used_key_index >= policy->num_allocated_per_key_agg_states)
+			if (policy->hashing.last_used_key_index >= policy->num_allocated_per_key_agg_states)
 			{
 				policy->per_agg_per_key_states[agg_index] =
 					repalloc(policy->per_agg_per_key_states[agg_index],
@@ -249,14 +267,15 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 				agg_def->func.state_bytes * (last_initialized_key_index + 1) +
 				(char *) policy->per_agg_per_key_states[agg_index];
 			agg_def->func.agg_init(first_uninitialized_state,
-								   policy->last_used_key_index - last_initialized_key_index);
+								   policy->hashing.last_used_key_index -
+									   last_initialized_key_index);
 		}
 
 		/*
 		 * Add this batch to the states of this aggregate function.
 		 */
 		compute_single_aggregate(policy,
-								 batch_state,
+								 vector_slot,
 								 start_row,
 								 end_row,
 								 agg_def,
@@ -267,7 +286,7 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 	 * Record the newly allocated number of aggregate function states in case we
 	 * had to reallocate.
 	 */
-	if (policy->last_used_key_index >= policy->num_allocated_per_key_agg_states)
+	if (policy->hashing.last_used_key_index >= policy->num_allocated_per_key_agg_states)
 	{
 		Assert(new_aggstate_rows > policy->num_allocated_per_key_agg_states);
 		policy->num_allocated_per_key_agg_states = new_aggstate_rows;
@@ -275,13 +294,13 @@ add_one_range(GroupingPolicyHash *policy, DecompressBatchState *batch_state, con
 }
 
 static void
-gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
+gp_hash_add_batch(GroupingPolicy *gp, TupleTableSlot *vector_slot)
 {
 	GroupingPolicyHash *policy = (GroupingPolicyHash *) gp;
+	uint16 n;
+	const uint64 *restrict filter = vector_slot_get_qual_result(vector_slot, &n);
 
 	Assert(!policy->returning_results);
-
-	const int n = batch_state->total_batch_rows;
 
 	/*
 	 * Initialize the array for storing the aggregate state offsets corresponding
@@ -317,24 +336,89 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 	for (int i = 0; i < policy->num_grouping_columns; i++)
 	{
 		const GroupingColumn *def = &policy->grouping_columns[i];
-		const CompressedColumnValues *values = &batch_state->compressed_columns[def->input_offset];
-		policy->current_batch_grouping_column_values[i] = *values;
+
+		policy->current_batch_grouping_column_values[i] =
+			*vector_slot_get_compressed_column_values(vector_slot,
+													  AttrOffsetGetAttrNumber(def->input_offset));
 	}
 
 	/*
 	 * Call the per-batch initialization function of the hashing strategy.
 	 */
-
-	policy->hashing.prepare_for_batch(policy, batch_state);
+	policy->hashing.prepare_for_batch(policy, vector_slot);
 
 	/*
 	 * Add the batch rows to aggregate function states.
 	 */
-	const uint64_t *restrict filter = batch_state->vector_qual_result;
-	add_one_range(policy, batch_state, 0, n);
+	if (filter == NULL)
+	{
+		/*
+		 * We don't have a filter on this batch, so aggregate it entirely in one
+		 * go.
+		 */
+		add_one_range(policy, vector_slot, 0, n);
+	}
+	else
+	{
+		/*
+		 * If we have a filter, skip the rows for which the entire words of the
+		 * filter bitmap are zero. This improves performance for highly
+		 * selective filters.
+		 */
+		int statistics_range_row = 0;
+		int start_word = 0;
+		int end_word = 0;
+		int past_the_end_word = (n - 1) / 64 + 1;
+		for (;;)
+		{
+			/*
+			 * Skip the bitmap words which are zero.
+			 */
+			for (start_word = end_word; start_word < past_the_end_word && filter[start_word] == 0;
+				 start_word++)
+				;
 
-	policy->stat_input_total_rows += batch_state->total_batch_rows;
-	policy->stat_input_valid_rows += arrow_num_valid(filter, batch_state->total_batch_rows);
+			if (start_word >= past_the_end_word)
+			{
+				break;
+			}
+
+			/*
+			 * Collect the consecutive bitmap words which are nonzero.
+			 */
+			for (end_word = start_word + 1; end_word < past_the_end_word && filter[end_word] != 0;
+				 end_word++)
+				;
+
+			/*
+			 * Now we have the [start, end] range of bitmap words that are
+			 * nonzero.
+			 *
+			 * Determine starting and ending rows, also skipping the starting
+			 * and trailing zero bits at the ends of the range.
+			 */
+			const int start_row = start_word * 64 + pg_rightmost_one_pos64(filter[start_word]);
+			Assert(start_row <= n);
+
+			/*
+			 * The bits for past-the-end rows must be set to zero, so this
+			 * calculation should yield no more than n.
+			 */
+			Assert(end_word > start_word);
+			const int end_row =
+				(end_word - 1) * 64 + pg_leftmost_one_pos64(filter[end_word - 1]) + 1;
+			Assert(end_row <= n);
+
+			statistics_range_row += end_row - start_row;
+
+			add_one_range(policy, vector_slot, start_row, end_row);
+		}
+
+		policy->stat_bulk_filtered_rows += n - statistics_range_row;
+	}
+
+	policy->stat_input_total_rows += n;
+	policy->stat_input_valid_rows += arrow_num_valid(filter, n);
 }
 
 static bool
@@ -342,7 +426,7 @@ gp_hash_should_emit(GroupingPolicy *gp)
 {
 	GroupingPolicyHash *policy = (GroupingPolicyHash *) gp;
 
-	if (policy->last_used_key_index > UINT32_MAX - GLOBAL_MAX_ROWS_PER_COMPRESSION)
+	if (policy->hashing.last_used_key_index > UINT32_MAX - GLOBAL_MAX_ROWS_PER_COMPRESSION)
 	{
 		/*
 		 * The max valid key index is UINT32_MAX, so we have to spill if the next
@@ -371,14 +455,14 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 		policy->returning_results = true;
 		policy->last_returned_key = 1;
 
-		const float keys = policy->last_used_key_index;
+		const float keys = policy->hashing.last_used_key_index;
 		if (keys > 0)
 		{
 			DEBUG_LOG("spill after %ld input, %ld valid, %ld bulk filtered, %ld cons, %.0f keys, "
 					  "%f ratio, %ld curctx bytes, %ld aggstate bytes",
 					  policy->stat_input_total_rows,
 					  policy->stat_input_valid_rows,
-					  0UL,
+					  policy->stat_bulk_filtered_rows,
 					  policy->stat_consecutive_keys,
 					  keys,
 					  policy->stat_input_valid_rows / keys,
@@ -392,7 +476,7 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 	}
 
 	const uint32 current_key = policy->last_returned_key;
-	const uint32 keys_end = policy->last_used_key_index + 1;
+	const uint32 keys_end = policy->hashing.last_used_key_index + 1;
 	if (current_key >= keys_end)
 	{
 		policy->returning_results = false;

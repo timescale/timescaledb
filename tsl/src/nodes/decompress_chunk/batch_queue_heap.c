@@ -132,7 +132,6 @@ compare_heap_pos_generic(Datum a, Datum b, void *arg)
 	return compare_heap_pos_impl(a, b, arg, ApplySortComparator);
 }
 
-#if PG15_GE
 static int32
 compare_heap_pos_int32(Datum a, Datum b, void *arg)
 {
@@ -145,7 +144,6 @@ compare_heap_pos_signed(Datum a, Datum b, void *arg)
 {
 	return compare_heap_pos_impl(a, b, arg, ApplySignedSortComparator);
 }
-#endif
 #endif
 
 /* Add a new datum to the heap and perform an automatic resizing if needed. In contrast to
@@ -439,7 +437,6 @@ batch_queue_heap_create(int num_compressed_cols, const List *sortinfo,
 	 * case.
 	 */
 	binaryheap_comparator comparator = compare_heap_pos_generic;
-#if PG15_GE
 	if (queue->sortkeys[0].comparator == ssup_datum_int32_cmp)
 	{
 		comparator = compare_heap_pos_int32;
@@ -449,7 +446,6 @@ batch_queue_heap_create(int num_compressed_cols, const List *sortinfo,
 	{
 		comparator = compare_heap_pos_signed;
 	}
-#endif
 #endif
 
 	queue->merge_heap = binaryheap_allocate(INITIAL_BATCH_CAPACITY, comparator, queue);

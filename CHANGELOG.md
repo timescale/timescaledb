@@ -4,6 +4,224 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.19.3 (2025-04-15)
+
+This release contains bug fixes since the 2.19.2 release. We recommend that you upgrade at the next available opportunity.
+
+**Bug fixes**
+* [#7893](https://github.com/timescale/timescaledb/pull/7893) Don't capture hard errors in with-clause parser
+* [#7903](https://github.com/timescale/timescaledb/pull/7903) Don't capture hard errors for old cagg format
+* [#7912](https://github.com/timescale/timescaledb/pull/7912) Don't capture errors estimating time max spread
+* [#7910](https://github.com/timescale/timescaledb/pull/7910) Fix not using SkipScan over one chunk
+* [#7913](https://github.com/timescale/timescaledb/pull/7913) Allow TAM chunk creation as non-owner
+* [#7935](https://github.com/timescale/timescaledb/pull/7935) Fix TAM segfault on DELETE using segmentby column
+* [#7954](https://github.com/timescale/timescaledb/pull/7954) Allow scheduler restarts to be disabled
+* [#7964](https://github.com/timescale/timescaledb/pull/7964) Crash when grouping by multiple columns of a compressed table, one of which is a UUID segmentby column.
+
+## 2.19.2 (2025-04-07)
+
+This release contains bug fixes since the 2.19.1 release. We recommend that you upgrade at the next available opportunity.
+
+**Features**
+* [#7923](https://github.com/timescale/timescaledb/pull/7923) Add a GUC to set a compression batch size limit
+
+**Bugfixes**
+* [#7911](https://github.com/timescale/timescaledb/pull/7911) Don't create a Hypertable for published tables
+* [#7902](https://github.com/timescale/timescaledb/pull/7902) Fix crash in VectorAgg plan code
+
+**GUCs**
+* `compression_batch_size_limit`: set batch size limit, default: `1000`
+
+**Thanks**
+* @soedirgo for reporting that published tables don't get dropped when they have a hypertable*
+
+## 2.19.1 (2025-04-01)
+
+This release contains bug fixes since the 2.19.0 release. We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* [#7816](https://github.com/timescale/timescaledb/pull/7816) Fix `ORDER BY` for direct queries on partial chunks
+* [#7834](https://github.com/timescale/timescaledb/pull/7834) Avoid unnecessary scheduler restarts
+* [#7837](https://github.com/timescale/timescaledb/pull/7837) Ignore frozen chunks in compression policy
+* [#7850](https://github.com/timescale/timescaledb/pull/7850) Add `is_current_xact_tuple` to Arrow TTS
+* [#7890](https://github.com/timescale/timescaledb/pull/7890) Flush error state before doing anything else
+
+**Thanks**
+* @bjornuppeke for reporting a problem with `INSERT INTO ... ON CONFLICT DO NOTHING` on compressed chunks
+* @kav23alex for reporting a segmentation fault on `ALTER TABLE` with `DEFAULT`
+
+## 2.19.0 (2025-03-18)
+
+This release contains performance improvements and bug fixes since the 2.18.2 release. We recommend that you upgrade at the next available opportunity.
+
+* Improved concurrency of `INSERT`, `UPDATE`, and `DELETE` operations on the columnstore by no longer blocking DML statements during the recompression of a chunk.
+* Improved system performance during continuous aggregate refreshes by breaking them into smaller batches. This reduces systems pressure and minimizes the risk of spilling to disk.
+* Faster and more up-to-date results for queries against continuous aggregates by materializing the most recent data first, as opposed to old data first in prior versions.
+* Faster analytical queries with SIMD vectorization of aggregations over text columns and `GROUP BY` over multiple columns.
+* Enable optimizing the chunk size for better query performance in the columnstore by merging them with `merge_chunk`.
+
+**Deprecation warning**
+
+This is the last minor release supporting PostgreSQL 14. Starting with the next minor version of TimescaleDB, only Postgres 15, 16, and 17 will be supported.
+
+**Downgrading of 2.19.0**
+
+This release introduces custom bool compression. If you enable this feature with `enable_bool_compression` and need to revert it, use [this script](https://github.com/timescale/timescaledb-extras/blob/master/utils/2.19.0-downgrade_new_compression_algorithms.sql) to convert the columns back to their previous state. TimescaleDB versions prior to 2.19.0 do not support this new type.
+
+**Features**
+* [#7586](https://github.com/timescale/timescaledb/pull/7586) Vectorized aggregation with grouping by a single text column
+* [#7632](https://github.com/timescale/timescaledb/pull/7632) Optimize recompression for chunks without segmentby
+* [#7655](https://github.com/timescale/timescaledb/pull/7655) Support vectorized aggregation on hypercore TAM
+* [#7669](https://github.com/timescale/timescaledb/pull/7669) Add support for merging compressed chunks
+* [#7701](https://github.com/timescale/timescaledb/pull/7701) Implement a custom compression algorithm for bool columns. It is in early access and can undergo backwards-incompatible changes. For testing, enable it using `timescaledb.enable_bool_compression = on`
+* [#7707](https://github.com/timescale/timescaledb/pull/7707) Support `ALTER COLUMN SET NOT NULL` on compressed chunks
+* [#7765](https://github.com/timescale/timescaledb/pull/7765) Allow `tsdb` as alias for `timescaledb` in `WITH` and `SET` clauses
+* [#7786](https://github.com/timescale/timescaledb/pull/7786) Show a warning for inefficient `compress_chunk_time_interval` configuration
+* [#7788](https://github.com/timescale/timescaledb/pull/7788) Add a callback to `mem_guard` for background workers
+* [#7789](https://github.com/timescale/timescaledb/pull/7789) Do not recompress segmentwise when default order by is empty
+* [#7790](https://github.com/timescale/timescaledb/pull/7790) Add a configurable incremental CAgg refresh policy
+
+**Bugfixes**
+* [#7665](https://github.com/timescale/timescaledb/pull/7665) Block merging of frozen chunks
+* [#7673](https://github.com/timescale/timescaledb/pull/7673) Don't abort additional `INSERT`s when hitting the first conflict
+* [#7714](https://github.com/timescale/timescaledb/pull/7714) Fix the wrong result when compressed `NULL` values were confused with default values. This happened for a very particular order of events.
+* [#7747](https://github.com/timescale/timescaledb/pull/7747) Block TAM rewrites with incompatible GUC setting
+* [#7748](https://github.com/timescale/timescaledb/pull/7748) Crash in the segmentwise recompression
+* [#7764](https://github.com/timescale/timescaledb/pull/7764) Fix compression settings handling in hypercore TAM
+* [#7768](https://github.com/timescale/timescaledb/pull/7768) Remove costing index scan of hypertable parent
+* [#7799](https://github.com/timescale/timescaledb/pull/7799) Handle the `DEFAULT` table access name in `ALTER TABLE`
+
+**GUCs**
+* `enable_bool_compression`: enable the BOOL compression algorithm, default: `OFF`
+* `enable_exclusive_locking_recompression`: enable exclusive locking during recompression (legacy mode), default: `OFF`
+
+**Thanks**
+* @bjornuppeke for reporting a problem with `INSERT INTO ... ON CONFLICT DO NOTHING` on compressed chunks
+* @kav23alex for reporting a segmentation fault on `ALTER TABLE with DEFAULT`
+
+## 2.18.2 (2025-02-19)
+
+This release contains performance improvements and bug fixes since
+the 2.18.1 release. We recommend that you upgrade at the next
+available opportunity.
+
+**Bugfixes**
+* [#7686](https://github.com/timescale/timescaledb/pull/7686) Potential wrong aggregation result when using vectorized aggregation with hash grouping in reverse order
+* [#7694](https://github.com/timescale/timescaledb/pull/7694) Fix ExplainHook breaking call chain
+* [#7695](https://github.com/timescale/timescaledb/pull/7695) Block dropping internal compressed chunks with `drop_chunk()`
+* [#7711](https://github.com/timescale/timescaledb/pull/7711) License error when using hypercore handler
+* [#7712](https://github.com/timescale/timescaledb/pull/7712) Respect other extensions' ExecutorStart hooks
+
+**Thanks**
+* @davidmehren and @jflambert for reporting an issue with extension hooks
+* @jflambert for reporting a bug with license errors shown in autovacuum
+
+## 2.18.1 (2025-02-10)
+
+This release contains performance improvements and bug fixes since
+the 2.18.0 release. We recommend that you upgrade at the next
+available opportunity.
+
+**Features**
+* [#7656](https://github.com/timescale/timescaledb/pull/7656) Remove limitation of compression policy for continuous aggregates
+
+**Bugfixes**
+* [#7600](https://github.com/timescale/timescaledb/pull/7600) Fix lock order when dropping index
+* [#7637](https://github.com/timescale/timescaledb/pull/7637) Allow EXPLAIN in read-only mode
+* [#7645](https://github.com/timescale/timescaledb/pull/7645) Fix DELETE on compressed chunk with non-btree operators
+* [#7649](https://github.com/timescale/timescaledb/pull/7649) Allow non-btree operator pushdown in UPDATE/DELETE queries on compressed chunks
+* [#7653](https://github.com/timescale/timescaledb/pull/7653) Push down orderby scankeys to Hypercore TAM
+* [#7665](https://github.com/timescale/timescaledb/pull/7665) Block merging of frozen chunks
+* [#7673](https://github.com/timescale/timescaledb/pull/7673) Don't abort additional INSERTs when hitting first conflict
+
+**GUCs**
+* `enable_hypercore_scankey_pushdown`: Push down qualifiers as scankeys when using Hypercore TAM introduced with [#7653](https://github.com/timescale/timescaledb/pull/7653)
+
+**Thanks**
+* @bjornuppeke for reporting a problem with INSERT INTO ... ON CONFLICT DO NOTHING on compressed chunks
+* @ikalafat for reporting a problem with EXPLAIN in read-only mode
+* Timescale community members Jacob and pantonis for reporting issues with slow queries.
+
+## 2.18.0 (2025-01-23)
+
+This release introduces the ability to add secondary indexes to the columnstore, improves group by and filtering performance through columnstore vectorization, and contains the highly upvoted community request of transition table support. We recommend that you upgrade at the next available opportunity.
+
+**Highlighted features in TimescaleDB v2.18.0**
+
+* The ability to add secondary indexes to the columnstore through the new hypercore table access method.
+* Significant performance improvements through vectorization (`SIMD`) for aggregations using a group by with one column and/or using a filter clause when querying the columnstore.
+* Hypertables support triggers for transition tables, which is one of the most upvoted community feature requests.
+* Updated methods to manage Timescale's hybrid row-columnar store (hypercore) that highlight the usage of the columnstore which includes both an optimized columnar format as well as compression.
+
+**Dropping support for Bitnami images**
+
+After the recent change in Bitnami’s [LTS support policy](https://github.com/bitnami/containers/issues/75671), we are no longer building Bitnami images for TimescaleDB. We recommend using the [official TimescaleDB Docker image](https://hub.docker.com/r/timescale/timescaledb-ha)
+
+**Deprecation Notice**
+
+We are deprecating the following parameters, functions, procedures and views. They will be removed with the next major release of TimescaleDB. Please find the replacements in the table below:
+
+| Deprecated | Replacement | Type |
+| --- | --- | --- |
+| decompress_chunk | convert_to_rowstore | Procedure |
+| compress_chunk | convert_to_columnstore | Procedure |
+| add_compression_policy | add_columnstore_policy | Function |
+| remove_compression_policy | remove_columnstore_policy | Function |
+| hypertable_compression_stats | hypertable_columnstore_stats | Function |
+| chunk_compression_stats | chunk_columnstore_stats | Function |
+| hypertable_compression_settings | hypertable_columnstore_settings | View |
+| chunk_compression_settings | chunk_columnstore_settings | View |
+| compression_settings | columnstore_settings | View |
+| timescaledb.compress | timescaledb.enable_columnstore | Parameter |
+| timescaledb.compress_segmentby | timescaledb.segmentby | Parameter |
+| timescaledb.compress_orderby  | timescaledb.orderby | Parameter |
+
+**Features**
+* #7341: Vectorized aggregation with grouping by one fixed-size by-value compressed column (such as arithmetic types).
+* #7104: Hypercore table access method.
+* #6901: Add hypertable support for transition tables.
+* #7482: Optimize recompression of partially compressed chunks.
+* #7458: Support vectorized aggregation with aggregate `filter` clauses that are also vectorizable.
+* #7433: Add support for merging chunks.
+* #7271: Push down `order by` in real-time continuous aggregate queries.
+* #7455: Support `drop not null` on compressed hypertables.
+* #7295: Support `alter table set access method` on hypertable.
+* #7411: Change parameter name to enable hypercore table access method.
+* #7436: Add index creation on `order by` columns.
+* #7443: Add hypercore function and view aliases.
+* #7521: Add optional `force` argument to `refresh_continuous_aggregate`.
+* #7528: Transform sorting on `time_bucket` to sorting on time for compressed chunks in some cases.
+* #7565: Add hint when hypertable creation fails.
+* #7390: Disable custom `hashagg` planner code.
+* #7587: Add `include_tiered_data` parameter to `add_continuous_aggregate_policy` API.
+* #7486: Prevent building against PostgreSQL versions with broken ABI.
+* #7412: Add [GUC](https://www.postgresql.org/docs/current/acronyms.html#:~:text=GUC) for the `hypercore_use_access_method` default.
+* #7413: Add GUC for segmentwise recompression.
+
+**Bugfixes**
+* #7378: Remove obsolete job referencing `policy_job_error_retention`.
+* #7409: Update `bgw_job` table when altering procedure.
+* #7410: Fix the `aggregated compressed column not found` error on aggregation query.
+* #7426: Fix `datetime` parsing error in chunk constraint creation.
+* #7432: Verify that the heap tuple is valid before using.
+* #7434: Fix the segfault when internally setting the replica identity for a given chunk.
+* #7488: Emit error for transition table trigger on chunks.
+* #7514: Fix the error: `invalid child of chunk append`.
+* #7517: Fix the performance regression on the `cagg_migrate` procedure.
+* #7527: Restart scheduler on error.
+* #7557: Fix null handling for in-memory tuple filtering.
+* #7566: Improve transaction check in CAGG refresh.
+* #7584: Fix NaN-handling for vectorized aggregation.
+* #7598: Match the Postgres NaN comparison behavior in WHERE clause over compressed tables.
+
+**Thanks**
+* @bharrisau for reporting the segfault when creating chunks.
+* @jakehedlund for reporting the incompatible NaN behavior in WHERE clause over compressed tables.
+* @k-rus for suggesting that we add a hint when hypertable creation fails.
+* @pgloader for reporting the issue in an internal background job.
+* @staticlibs for sending the pull request that improves the transaction check in CAGG refresh.
+* @uasiddiqi for reporting the `aggregated compressed column not found` error.
+
 ## 2.17.2 (2024-11-06)
 
 This release contains bug fixes since the 2.17.1 release. We recommend that you
@@ -381,13 +599,13 @@ We recommend that you upgrade at the next available opportunity.
 
 ## 2.14.0 (2024-02-08)
 
-This release contains performance improvements and bug fixes since 
+This release contains performance improvements and bug fixes since
 the 2.13.1 release. We recommend that you upgrade at the next
 available opportunity.
- 
+
 In addition, it includes these noteworthy features:
 
-* Ability to change compression settings on existing compressed hypertables at any time. 
+* Ability to change compression settings on existing compressed hypertables at any time.
 New compression settings take effect on any new chunks that are compressed after the change.
 * Reduced locking requirements during chunk recompression
 * Limiting tuple decompression during DML operations to avoid decompressing a lot of tuples and causing storage issues (100k limit, configurable)
@@ -407,9 +625,9 @@ If you want to migrate from multi-node TimescaleDB to single-node TimescaleDB, r
 
 **Deprecation notice: recompress_chunk procedure**
 TimescaleDB 2.14 is the last version that will include the recompress_chunk procedure. Its
-functionality will be replaced by the compress_chunk function, which, starting on TimescaleDB 2.14, 
-works on both uncompressed and partially compressed chunks. 
-The compress_chunk function should be used going forward to fully compress all types of chunks or even recompress 
+functionality will be replaced by the compress_chunk function, which, starting on TimescaleDB 2.14,
+works on both uncompressed and partially compressed chunks.
+The compress_chunk function should be used going forward to fully compress all types of chunks or even recompress
 old fully compressed chunks using new compression settings (through the newly introduced recompress optional parameter).
 
 **Features**
@@ -425,7 +643,7 @@ old fully compressed chunks using new compression settings (through the newly in
 * #6545 Remove restrictions for changing compression settings
 * #6566 Limit tuple decompression during DML operations
 * #6579 Change compress_chunk and decompress_chunk to idempotent version by default
-* #6608 Add LWLock for OSM usage in loader 
+* #6608 Add LWLock for OSM usage in loader
 * #6609 Deprecate recompress_chunk
 * #6609 Add optional recompress argument to compress_chunk
 
@@ -434,13 +652,13 @@ old fully compressed chunks using new compression settings (through the newly in
 * #6491 Enable now() plantime constification with BETWEEN
 * #6494 Fix create_hypertable referenced by fk succeeds
 * #6498 Suboptimal query plans when using time_bucket with query parameters
-* #6507 time_bucket_gapfill with timezones doesn't handle daylight savings 
+* #6507 time_bucket_gapfill with timezones doesn't handle daylight savings
 * #6509 Make extension state available through function
 * #6512 Log extension state changes
 * #6522 Disallow triggers on CAggs
 * #6523 Reduce locking level on compressed chunk index during segmentwise recompression
 * #6531 Fix if_not_exists behavior for CAgg policy with NULL offsets
-* #6571 Fix pathtarget adjustment for MergeAppend paths in aggregation pushdown code 
+* #6571 Fix pathtarget adjustment for MergeAppend paths in aggregation pushdown code
 * #6575 Fix compressed chunk not found during upserts
 * #6592 Fix recompression policy ignoring partially compressed chunks
 * #6610 Ensure qsort comparison function is transitive
@@ -501,7 +719,7 @@ If you want to migrate from multi-node TimescaleDB to single-node TimescaleDB re
 We will continue supporting PostgreSQL 13 until April 2024. Sooner to that time, we will announce the specific version of TimescaleDB in which PostgreSQL 13 support will not be included going forward.
 
 **Starting from TimescaleDB 2.13.0**
-* No Amazon Machine Images (AMI) are published. If you previously used AMI, please 
+* No Amazon Machine Images (AMI) are published. If you previously used AMI, please
 use another [installation method](https://docs.timescale.com/self-hosted/latest/install/)
 * Continuous Aggregates are materialized only (non-realtime) by default
 
@@ -509,7 +727,7 @@ use another [installation method](https://docs.timescale.com/self-hosted/latest/
 * #5575 Add chunk-wise sorted paths for compressed chunks
 * #5761 Simplify hypertable DDL API
 * #5890 Reduce WAL activity by freezing compressed tuples immediately
-* #6050 Vectorized aggregation execution for sum() 
+* #6050 Vectorized aggregation execution for sum()
 * #6062 Add metadata for chunk creation time
 * #6077 Make Continous Aggregates materialized only (non-realtime) by default
 * #6177 Change show_chunks/drop_chunks using chunk creation time
@@ -526,7 +744,7 @@ use another [installation method](https://docs.timescale.com/self-hosted/latest/
 * #6264 Fix missing bms_del_member result assignment
 * #6275 Fix negative bitmapset member not allowed in compression
 * #6280 Potential data loss when compressing a table with a partial index that matches compression order.
-* #6289 Add support for startup chunk exclusion with aggs 
+* #6289 Add support for startup chunk exclusion with aggs
 * #6290 Repair relacl on upgrade
 * #6297 Fix segfault when creating a cagg using a NULL width in time bucket function
 * #6305 Make timescaledb_functions.makeaclitem strict
@@ -540,7 +758,7 @@ use another [installation method](https://docs.timescale.com/self-hosted/latest/
 * @torazem for reporting an issue with compression and large oids
 * @fetchezar for reporting an issue in the compression policy
 * @lyp-bobi for reporting an issue with tablespace with constraints
-* @pdipesh02 for contributing to the implementation of the metadata for chunk creation time, 
+* @pdipesh02 for contributing to the implementation of the metadata for chunk creation time,
              the generalized hypertable API, and show_chunks/drop_chunks using chunk creation time
 * @lkshminarayanan for all his work on PG16 support
 
@@ -613,7 +831,7 @@ PostgreSQL 16 support will be added with a following TimescaleDB release.
 * #5788 Chunk_create must add an existing table or fail
 * #5872 Fix duplicates on partially compressed chunk reads
 * #5918 Fix crash in COPY from program returning error
-* #5990 Place data in first/last function in correct mctx 
+* #5990 Place data in first/last function in correct mctx
 * #5991 Call eq_func correctly in time_bucket_gapfill
 * #6015 Correct row count in EXPLAIN ANALYZE INSERT .. ON CONFLICT output
 * #6035 Fix server crash on UPDATE of compressed chunk
@@ -625,8 +843,8 @@ PostgreSQL 16 support will be added with a following TimescaleDB release.
 * #6102 Schedule compression policy more often
 
 **Thanks**
-* @ajcanterbury for reporting a problem with lateral joins on compressed chunks 
-* @alexanderlaw for reporting multiple server crashes 
+* @ajcanterbury for reporting a problem with lateral joins on compressed chunks
+* @alexanderlaw for reporting multiple server crashes
 * @lukaskirner for reporting a bug with monthly continuous aggregates
 * @mrksngl for reporting a bug with unusual user names
 * @willsbit for reporting a crash in time_bucket_gapfill
@@ -640,7 +858,7 @@ We recommend that you upgrade at the next available opportunity.
 * #5923 Feature flags for TimescaleDB features
 **Bugfixes**
 * #5680 Fix DISTINCT query with JOIN on multiple segmentby columns
-* #5774 Fixed two bugs in decompression sorted merge code 
+* #5774 Fixed two bugs in decompression sorted merge code
 * #5786 Ensure pg_config --cppflags are passed
 * #5906 Fix quoting owners in sql scripts.
 * #5912 Fix crash in 1-step integer policy creation
@@ -659,8 +877,8 @@ We recommend that you upgrade at the next available opportunity.
 **Bugfixes**
 * #5705 Scheduler accidentally getting killed when calling `delete_job`
 * #5742 Fix Result node handling with ConstraintAwareAppend on compressed chunks
-* #5750 Ensure tlist is present in decompress chunk plan 
-* #5754 Fixed handling of NULL values in bookend_sfunc 
+* #5750 Ensure tlist is present in decompress chunk plan
+* #5754 Fixed handling of NULL values in bookend_sfunc
 * #5798 Fixed batch look ahead in compressed sorted merge
 * #5804 Mark cagg_watermark function as PARALLEL RESTRICTED
 * #5807 Copy job config JSONB structure into current MemoryContext

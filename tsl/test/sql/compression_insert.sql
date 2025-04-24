@@ -775,3 +775,65 @@ SELECT count(*) FROM unique_null;
 
 DROP TABLE unique_null;
 
+-- test insert with UNIQUE constraint and all compression algorithms
+
+CREATE TABLE unique_all(
+	time timestamptz NOT NULL,
+	device_id int,
+	bool_type bool,
+	numeric_type numeric,
+	float_type float,
+	text_type text,
+	bigint_type bigint,
+	jsonb_type jsonb
+);
+-- Since we don't test uniqueness when we detect a NULL value, making the constraint
+-- with NULLS NOT DISTINCT
+CREATE UNIQUE INDEX ultimate_unique ON unique_all(time, device_id, bool_type, numeric_type, float_type, text_type, bigint_type, jsonb_type) NULLS NOT DISTINCT;
+SELECT table_name FROM create_hypertable('unique_all', 'time');
+ALTER TABLE unique_all SET (tsdb.compress, tsdb.compress_segmentby = 'device_id', tsdb.compress_orderby = 'time');
+
+INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:01', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:02', 1, false, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:03', 1, true, 2.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:04', 1, true, 1.0, 2.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:05', 1, true, 1.0, 1.0, 'second', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:06', 1, true, 1.0, 1.0, 'first', 2, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:07', 1, true, 1.0, 1.0, 'first', 1, '{"second":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:08', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:09', 1, NULL, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:10', 1, true, NULL, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:11', 1, true, 1.0, NULL, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:12', 1, true, 1.0, 1.0, NULL, 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:13', 1, true, 1.0, 1.0, 'first', NULL, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:14', 1, true, 1.0, 1.0, 'first', 1, NULL);
+SELECT count(compress_chunk(c)) FROM show_chunks('unique_all') c;
+
+-- test duplicates
+\set ON_ERROR_STOP 0
+INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:01', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:02', 1, false, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:03', 1, true, 2.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:04', 1, true, 1.0, 2.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:05', 1, true, 1.0, 1.0, 'second', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:06', 1, true, 1.0, 1.0, 'first', 2, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:07', 1, true, 1.0, 1.0, 'first', 1, '{"second":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:08', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:09', 1, NULL, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:10', 1, true, NULL, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:11', 1, true, 1.0, NULL, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:12', 1, true, 1.0, 1.0, NULL, 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:13', 1, true, 1.0, 1.0, 'first', NULL, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:14', 1, true, 1.0, 1.0, 'first', 1, NULL);
+\set ON_ERROR_STOP 1
+
+-- test non-duplicates
+INSERT INTO unique_all VALUES('2024-01-01 00:01:01', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:02', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:03', 1, true, 3.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:04', 1, true, 1.0, 3.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:05', 1, true, 1.0, 1.0, 'third', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:06', 1, true, 1.0, 1.0, 'first', 3, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:07', 1, true, 1.0, 1.0, 'first', 1, '{"third":true}');

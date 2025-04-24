@@ -10,9 +10,12 @@
 #include <access/tableam.h>
 #include <catalog/pg_attribute.h>
 #include <executor/tuptable.h>
+#include <miscadmin.h>
 #include <nodes/execnodes.h>
 #include <nodes/extensible.h>
 #include <nodes/nodeFuncs.h>
+#include <nodes/nodes.h>
+#include <nodes/parsenodes.h>
 #include <nodes/pathnodes.h>
 #include <nodes/pg_list.h>
 #include <optimizer/cost.h>
@@ -23,16 +26,17 @@
 #include <planner.h>
 #include <planner/planner.h>
 #include <utils/palloc.h>
+#include <utils/rel.h>
 #include <utils/snapmgr.h>
 #include <utils/typcache.h>
 
 #include "columnar_scan.h"
-#include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
+#include "guc.h"
 #include "hypercore/arrow_tts.h"
 #include "hypercore/hypercore_handler.h"
+#include "hypercore/vector_quals.h"
 #include "import/ts_explain.h"
-#include "nodes/decompress_chunk/vector_quals.h"
 
 typedef struct SimpleProjInfo
 {
@@ -47,10 +51,13 @@ typedef struct ColumnarScanState
 {
 	CustomScanState css;
 	VectorQualState vqstate;
+	ExprState *segmentby_exprstate;
 	ScanKey scankeys;
 	int nscankeys;
 	List *scankey_quals;
+	List *quals_orig;
 	List *vectorized_quals_orig;
+	List *segmentby_quals;
 	SimpleProjInfo sprojinfo;
 } ColumnarScanState;
 
@@ -67,277 +74,331 @@ match_relvar(Expr *expr, Index relid)
 	return false;
 }
 
-/*
- * ColumnarScan implementation of VectorQualState->get_arrow_array().
- *
- * Given a VectorQualState return the ArrowArray in the contained slot.
- */
-static const ArrowArray *
-vector_qual_state_get_arrow_array(VectorQualState *vqstate, Expr *expr, bool *is_default_value)
+typedef struct QualProcessState
 {
-	TupleTableSlot *slot = vqstate->slot;
-	const Var *var = castNode(Var, expr);
-	const int attoff = AttrNumberGetAttrOffset(var->varattno);
-	const ArrowArray *array = arrow_slot_get_array(slot, var->varattno);
+	Relation rel;
+	Index relid;
+	/*
+	 * The original quals are split into scankey quals, vectorized and
+	 * non-vectorized (regular) quals.
+	 */
+	List *scankey_quals;
+	List *vectorized_quals;
+	List *nonvectorized_quals;
 
-	if (array == NULL)
+	/*
+	 * Further split nonvectorized quals into quals on segmentby columns and
+	 * non-segmentby columns.
+	 */
+	List *segmentby_quals;
+	List *nonsegmentby_quals;
+
+	/* Scankeys created from scankey_quals */
+	ScanKey scankeys;
+	unsigned int scankeys_capacity;
+	unsigned int nscankeys;
+
+	/* Scratch area for processing */
+	bool relvar_found;
+} QualProcessState;
+
+static bool
+segmentby_qual_walker(Node *qual, QualProcessState *qpc)
+{
+	if (qual == NULL)
+		return false;
+
+	if (IsA(qual, Var) && (Index) castNode(Var, qual)->varno == qpc->relid)
 	{
-		Form_pg_attribute attr = &slot->tts_tupleDescriptor->attrs[attoff];
-		/*
-		 * If getting here, this is a non-compressed value or a compressed
-		 * column with a default value. We can treat non-compressed values the
-		 * same as default ones. It is not possible to fall back to the
-		 * non-vectorized quals now, so build a single-value ArrowArray with
-		 * this (default) value, check if it passes the predicate, and apply
-		 * it to the entire batch.
-		 */
-		array = make_single_value_arrow(attr->atttypid,
-										slot->tts_values[attoff],
-										slot->tts_isnull[attoff]);
-		*is_default_value = true;
+		const Var *v = castNode(Var, qual);
+
+		if (AttrNumberIsForUserDefinedAttr(v->varattno))
+		{
+			HypercoreInfo *hcinfo = RelationGetHypercoreInfo(qpc->rel);
+			const ColumnCompressionSettings *ccs =
+				&hcinfo->columns[AttrNumberGetAttrOffset(v->varattno)];
+			qpc->relvar_found = true;
+
+			if (!ccs->is_segmentby)
+				return true;
+		}
+	}
+
+	return expression_tree_walker(qual, segmentby_qual_walker, qpc);
+}
+
+/*
+ * Split "quals" into those that apply on segmentby columns and those that do
+ * not.
+ */
+static void
+process_segmentby_quals(QualProcessState *qpc, List *quals)
+{
+	ListCell *lc;
+
+	qpc->relvar_found = false;
+
+	foreach (lc, quals)
+	{
+		Expr *qual = lfirst(lc);
+
+		if (!segmentby_qual_walker((Node *) qual, qpc) && qpc->relvar_found)
+			qpc->segmentby_quals = lappend(qpc->segmentby_quals, qual);
+		else
+			qpc->nonsegmentby_quals = lappend(qpc->nonsegmentby_quals, qual);
+	}
+}
+
+/*
+ * Process OP-like expression.
+ *
+ * Returns true if the qual should be kept as a regular qual filter in the
+ * scan, or false if it should not be kept.
+ *
+ * Note that only scankeys on segmentby columns can completely replace a
+ * qual. Scankeys on other (compressed) columns will be transformed into
+ * scankeys on metadata columns, and those filters are not 100% accurate so
+ * the original qual must be kept.
+ */
+static bool
+process_opexpr(QualProcessState *qpi, OpExpr *opexpr)
+{
+	Expr *leftop, *rightop, *expr = NULL;
+	Var *relvar = NULL;
+	Datum scanvalue = 0;
+	bool argfound = false;
+	Oid opno = opexpr->opno;
+	Oid vartype_left = InvalidOid;
+	Oid vartype_right = InvalidOid;
+	Oid vartype = InvalidOid;
+
+	/* OpExpr always has 1 or 2 arguments */
+	Assert(is_opclause(opexpr) &&
+		   (list_length(opexpr->args) == 1 || list_length(opexpr->args) == 2));
+
+	if (opexpr->opresulttype != BOOLOID)
+		return true;
+
+	if (list_length(opexpr->args) != 2)
+		return true;
+
+	leftop = (Expr *) get_leftop(opexpr);
+	rightop = (Expr *) get_rightop(opexpr);
+
+	/* Strip any relabeling */
+	if (IsA(leftop, RelabelType))
+	{
+		vartype_left = ((RelabelType *) leftop)->resulttype;
+		leftop = ((RelabelType *) leftop)->arg;
+	}
+	if (IsA(rightop, RelabelType))
+	{
+		vartype_right = ((RelabelType *) rightop)->resulttype;
+		rightop = ((RelabelType *) rightop)->arg;
+	}
+
+	/*
+	 * Find a Var reference in either left or right operand. If an operand was
+	 * relabeled, the vartype must be the original relabel result type instead
+	 * of the Var's type.
+	 */
+	if (match_relvar(leftop, qpi->relid))
+	{
+		relvar = castNode(Var, leftop);
+		expr = rightop;
+		vartype = OidIsValid(vartype_left) ? vartype_left : relvar->vartype;
+	}
+	else if (match_relvar(rightop, qpi->relid))
+	{
+		relvar = castNode(Var, rightop);
+		expr = leftop;
+		vartype = OidIsValid(vartype_right) ? vartype_right : relvar->vartype;
+		opno = get_commutator(opexpr->opno);
 	}
 	else
-		*is_default_value = false;
+	{
+		/* If neither right nor left argument is a variable, we
+		 * don't use it as scan key */
+		return true;
+	}
 
-	return array;
-}
+	if (!OidIsValid(opno) || !op_strict(opno))
+		return true;
 
-static void
-vector_qual_state_reset(VectorQualState *vqstate, ExprContext *econtext)
-{
-	MemoryContextReset(vqstate->per_vector_mcxt);
-	vqstate->vector_qual_result = NULL;
-	vqstate->slot = econtext->ecxt_scantuple;
-	vqstate->num_results = arrow_slot_total_row_count(vqstate->slot);
-}
+	Assert(expr != NULL);
 
-static void
-vector_qual_state_init(VectorQualState *vqstate, ExprContext *econtext)
-{
-	vqstate->per_vector_mcxt = GenerationContextCreateCompat(econtext->ecxt_per_query_memory,
-															 "Per-vector memory context",
-															 64 * 1024);
-	vqstate->get_arrow_array = vector_qual_state_get_arrow_array;
-	vqstate->slot = econtext->ecxt_scantuple;
+	if (IsA(expr, Const))
+	{
+		Const *c = castNode(Const, expr);
+		scanvalue = c->constvalue;
+		argfound = true;
+	}
+
+	HypercoreInfo *hcinfo = RelationGetHypercoreInfo(qpi->rel);
+	const ColumnCompressionSettings *ccs =
+		&hcinfo->columns[AttrNumberGetAttrOffset(relvar->varattno)];
+
+	/* Add a scankey if this is a segmentby column or the column
+	 * has min/max metadata */
+	if (argfound && (ccs->is_segmentby || hypercore_column_has_minmax(ccs)))
+	{
+		TypeCacheEntry *tce = lookup_type_cache(vartype, TYPECACHE_BTREE_OPFAMILY);
+		int op_strategy = get_op_opfamily_strategy(opno, tce->btree_opf);
+
+		if (op_strategy != InvalidStrategy)
+		{
+			Oid op_lefttype;
+			Oid op_righttype;
+
+			get_op_opfamily_properties(opno,
+									   tce->btree_opf,
+									   false,
+									   &op_strategy,
+									   &op_lefttype,
+									   &op_righttype);
+
+			Assert(relvar != NULL);
+
+			if (qpi->scankeys != NULL)
+			{
+				ScanKeyEntryInitialize(&qpi->scankeys[qpi->nscankeys++],
+									   0,
+									   relvar->varattno,
+									   op_strategy,
+									   op_righttype,
+									   opexpr->inputcollid,
+									   opexpr->opfuncid,
+									   scanvalue);
+			}
+
+			qpi->scankey_quals = lappend(qpi->scankey_quals, opexpr);
+
+			return !ccs->is_segmentby;
+		}
+	}
+
+	return true;
 }
 
 /*
- * Utility function to extract quals that can be used as scankeys. The
- * remaining "normal" quals are optionally collected in the corresponding
- * argument.
- *
- * Returns:
- *
- * 1. A list of scankey quals if scankeys is NULL, or
- *
- * 2. NIL if scankeys is non-NULL.
- *
+ * Utility function to extract quals that can be used as scankeys.
+
  * Thus, this function is designed to be called over two passes: one at plan
  * time to split the quals into scankey quals and remaining quals, and one at
  * execution time to populate a scankey array with the scankey quals found in
  * the first pass.
  *
- * The scankey quals returned in pass 1 is used for EXPLAIN.
+ * The scankey quals collected in pass 1 is used for EXPLAIN.
+ *
+ * Returns the remaining quals that cannot be made into scankeys. The scankey
+ * quals are returned in the QualProcessInfo.
  */
 static List *
-process_scan_key_quals(const HypercoreInfo *hsinfo, Index relid, const List *quals,
-					   List **remaining_quals, ScanKey scankeys, unsigned scankeys_capacity)
+process_scan_key_quals(QualProcessState *qpi, const List *quals)
 {
-	List *scankey_quals = NIL;
-	unsigned nkeys = 0;
 	ListCell *lc;
-
-	Assert(scankeys == NULL || (scankeys_capacity >= (unsigned) list_length(quals)));
+	List *remaining_quals = NIL;
 
 	foreach (lc, quals)
 	{
 		Expr *qual = lfirst(lc);
-		bool scankey_found = false;
+		bool keep_qual = true;
 
-		/* ignore volatile expressions */
-		if (contain_volatile_functions((Node *) qual))
+		if (!contain_volatile_functions((Node *) qual))
 		{
-			if (remaining_quals != NULL)
-				*remaining_quals = lappend(*remaining_quals, qual);
-			continue;
-		}
-
-		switch (nodeTag(qual))
-		{
-			case T_OpExpr:
+			switch (nodeTag(qual))
 			{
-				OpExpr *opexpr = castNode(OpExpr, qual);
-				Oid opno = opexpr->opno;
-				Expr *leftop, *rightop, *expr = NULL;
-				Var *relvar = NULL;
-				Datum scanvalue = 0;
-				bool argfound = false;
-
-				if (list_length(opexpr->args) != 2)
+				case T_OpExpr:
+					keep_qual = process_opexpr(qpi, castNode(OpExpr, qual));
 					break;
-
-				leftop = linitial(opexpr->args);
-				rightop = lsecond(opexpr->args);
-
-				/* Strip any relabeling */
-				if (IsA(leftop, RelabelType))
-					leftop = ((RelabelType *) leftop)->arg;
-				if (IsA(rightop, RelabelType))
-					rightop = ((RelabelType *) rightop)->arg;
-
-				if (match_relvar(leftop, relid))
-				{
-					relvar = castNode(Var, leftop);
-					expr = rightop;
-				}
-				else if (match_relvar(rightop, relid))
-				{
-					relvar = castNode(Var, rightop);
-					expr = leftop;
-					opno = get_commutator(opno);
-				}
-				else
-				{
-					/* If neither right nor left argument is a variable, we
-					 * don't use it as scan key */
+				case T_ScalarArrayOpExpr:
+					/*
+					 * Currently cannot pushing down "foo IN (1, 3)". The
+					 * expression can be transformed into a scankey, but it
+					 * only works for index scans.
+					 */
 					break;
-				}
-
-				if (!OidIsValid(opno) || !op_strict(opno))
+				case T_NullTest:
+					/*
+					 * "foo IS NULL"
+					 *
+					 * Not pushed down currently.
+					 */
 					break;
-
-				Assert(expr != NULL);
-
-				if (IsA(expr, Const))
-				{
-					Const *c = castNode(Const, expr);
-					scanvalue = c->constvalue;
-					argfound = true;
-				}
-
-				bool is_segmentby =
-					hsinfo->columns[AttrNumberGetAttrOffset(relvar->varattno)].is_segmentby;
-				if (argfound && is_segmentby)
-				{
-					TypeCacheEntry *tce =
-						lookup_type_cache(relvar->vartype, TYPECACHE_BTREE_OPFAMILY);
-					int op_strategy = get_op_opfamily_strategy(opno, tce->btree_opf);
-
-					if (op_strategy != InvalidStrategy)
-					{
-						Oid op_lefttype;
-						Oid op_righttype;
-
-						scankey_found = true;
-						get_op_opfamily_properties(opno,
-												   tce->btree_opf,
-												   false,
-												   &op_strategy,
-												   &op_lefttype,
-												   &op_righttype);
-
-						Assert(relvar != NULL);
-
-						if (scankeys != NULL)
-						{
-							ScanKeyEntryInitialize(&scankeys[nkeys++],
-												   0 /* flags */,
-												   relvar->varattno, /* attribute number to scan */
-												   op_strategy,		 /* op's strategy */
-												   op_righttype,	 /* strategy subtype */
-												   opexpr->inputcollid, /* collation */
-												   opexpr->opfuncid,	/* reg proc to use */
-												   scanvalue);			/* constant */
-						}
-						else
-						{
-							scankey_quals = lappend(scankey_quals, qual);
-						}
-					}
-				}
-				break;
+				default:
+					break;
 			}
-			default:
-				break;
 		}
 
-		if (!scankey_found && remaining_quals != NULL)
-			*remaining_quals = lappend(*remaining_quals, qual);
+		if (keep_qual)
+			remaining_quals = lappend(remaining_quals, qual);
 	}
 
-	return scankey_quals;
-}
-
-static List *
-extract_scankey_quals(const HypercoreInfo *hsinfo, Index relid, const List *quals,
-					  List **remaining_quals)
-{
-	return process_scan_key_quals(hsinfo, relid, quals, remaining_quals, NULL, 0);
-}
-
-static ScanKey
-create_scankeys_from_quals(const HypercoreInfo *hsinfo, Index relid, const List *quals)
-{
-	unsigned capacity = list_length(quals);
-	ScanKey scankeys = palloc0(sizeof(ScanKeyData) * capacity);
-	process_scan_key_quals(hsinfo, relid, quals, NULL, scankeys, capacity);
-	return scankeys;
+	return remaining_quals;
 }
 
 /*
- * Execute vectorized filter over a vector/array of values.
+ * Classify quals into the following:
  *
- * Returns the number of values filtered until the first valid value.
+ * 1. Scankey quals: quals that can be pushed down to the TAM as
+ *    scankeys. This includes most quals on segmentby columns, and orderby
+ *    columns that have min/max metadata.
+ *
+ * 2. Vectorized quals: quals that can be executed as vectorized filters.
+ *
+ * 3. Non-vectorized quals: regular quals that should be executed in the
+ *    columnar scan node.
+ *
+ * Note that category (3) might include quals from category (1) (scankeys)
+ * because some scankeys that apply to compressed columns that have min/max
+ * metadata might not exclude all data, so the regular quals need to be
+ * applied after.
  */
-static inline uint16
-ExecVectorQual(VectorQualState *vqstate, ExprContext *econtext)
+static void
+classify_quals(QualProcessState *qpi, const VectorQualInfo *vqinfo, List *quals)
 {
-	TupleTableSlot *slot = econtext->ecxt_scantuple;
-	const uint16 rowindex = arrow_slot_row_index(slot);
+	ListCell *lc;
+	List *nonscankey_quals = quals;
 
-	/* Compute the vector quals over both compressed and non-compressed
-	 * tuples. In case a non-compressed tuple is filtered, return SomeRowsPass
-	 * although only one row will pass. */
-	if (rowindex <= 1)
+	Assert(qpi->relid > 0);
+
+	if (ts_guc_enable_hypercore_scankey_pushdown)
+		nonscankey_quals = process_scan_key_quals(qpi, quals);
+
+	foreach (lc, nonscankey_quals)
 	{
-		vector_qual_state_reset(vqstate, econtext);
-		VectorQualSummary vector_qual_summary = vqstate->vectorized_quals_constified != NIL ?
-													vector_qual_compute(vqstate) :
-													AllRowsPass;
+		Node *source_qual = lfirst(lc);
+		Node *vectorized_qual = vector_qual_make(source_qual, vqinfo);
 
-		switch (vector_qual_summary)
+		if (vectorized_qual)
 		{
-			case NoRowsPass:
-				return arrow_slot_total_row_count(slot);
-			case AllRowsPass:
-				/*
-				 * If all rows pass, no need to test the vector qual for each row. This
-				 * is a common case for time range conditions.
-				 */
-				vector_qual_state_reset(vqstate, econtext);
-				return 0;
-			case SomeRowsPass:
-				break;
+			TS_DEBUG_LOG("qual identified as vectorizable: %s", nodeToString(vectorized_qual));
+			qpi->vectorized_quals = lappend(qpi->vectorized_quals, vectorized_qual);
+		}
+		else
+		{
+			TS_DEBUG_LOG("qual identified as non-vectorized qual: %s", nodeToString(source_qual));
+			qpi->nonvectorized_quals = lappend(qpi->nonvectorized_quals, source_qual);
 		}
 	}
 
-	/* Fast path when all rows have passed (i.e., no rows filtered). No need
-	 * to check qual result and it should be NULL. */
-	if (vqstate->vector_qual_result == NULL)
-		return 0;
+	process_segmentby_quals(qpi, qpi->nonvectorized_quals);
+}
 
-	const uint16 nrows = arrow_slot_total_row_count(slot);
-	const uint16 off = arrow_slot_arrow_offset(slot);
-	uint16 nfiltered = 0;
+static ScanKey
+create_scankeys_from_quals(Relation rel, Index relid, const List *quals)
+{
+	unsigned capacity = list_length(quals);
+	QualProcessState qpi = {
+		.rel = rel,
+		.relid = relid,
+		.scankeys = palloc0(sizeof(ScanKeyData) * capacity),
+		.scankeys_capacity = capacity,
+	};
 
-	for (uint16 i = off; i < nrows; i++)
-	{
-		if (arrow_row_is_valid(vqstate->vector_qual_result, i))
-			break;
-		nfiltered++;
-	}
+	process_scan_key_quals(&qpi, quals);
 
-	return nfiltered;
+	return qpi.scankeys;
 }
 
 static pg_attribute_always_inline TupleTableSlot *
@@ -391,6 +452,49 @@ getnextslot(TableScanDesc scandesc, ScanDirection direction, TupleTableSlot *slo
 	return table_scan_getnextslot(scandesc, direction, slot);
 }
 
+static bool
+should_project(const CustomScanState *state)
+{
+	const CustomScan *scan = castNode(CustomScan, state->ss.ps.plan);
+	return scan->flags & CUSTOMPATH_SUPPORT_PROJECTION;
+}
+
+static inline bool
+should_check_segmentby_qual(ScanDirection direction, const TupleTableSlot *slot)
+{
+	if (likely(direction == ForwardScanDirection))
+		return arrow_slot_is_first(slot);
+
+	Assert(direction == BackwardScanDirection);
+	return arrow_slot_is_last(slot);
+}
+
+/*
+ * Filter tuple by segmentby quals.
+ *
+ * Quals on segmentby columns require no decompression and can filter all
+ * values in the arrow slot in one go since the value of a segmentby column is
+ * the same for the entire arrow array.
+ *
+ * Similarly, if the arrow slot passes the filter, the segmentby quals don't
+ * need to be checked again until the next array is processed.
+ */
+static inline bool
+ExecSegmentbyQual(ExprState *qual, ExprContext *econtext)
+{
+	TupleTableSlot *slot = econtext->ecxt_scantuple;
+	ScanDirection direction = econtext->ecxt_estate->es_direction;
+
+	Assert(direction == ForwardScanDirection || direction == BackwardScanDirection);
+	Assert(TTS_IS_ARROWTUPLE(slot));
+
+	if (qual == NULL || !should_check_segmentby_qual(direction, slot))
+		return true;
+
+	Assert(!arrow_slot_is_consumed(slot));
+	return ExecQual(qual, econtext);
+}
+
 static TupleTableSlot *
 columnar_scan_exec(CustomScanState *state)
 {
@@ -399,16 +503,19 @@ columnar_scan_exec(CustomScanState *state)
 	EState *estate;
 	ExprContext *econtext;
 	ExprState *qual;
-	ProjectionInfo *projinfo;
 	ScanDirection direction;
 	TupleTableSlot *slot;
 	bool has_vecquals = cstate->vqstate.vectorized_quals_constified != NIL;
+	/*
+	 * The VectorAgg node could have requested no projection by unsetting the
+	 * "projection support flag", so only project if the flag is still set.
+	 */
+	ProjectionInfo *projinfo = should_project(state) ? state->ss.ps.ps_ProjInfo : NULL;
 
 	scandesc = state->ss.ss_currentScanDesc;
 	estate = state->ss.ps.state;
 	econtext = state->ss.ps.ps_ExprContext;
 	qual = state->ss.ps.qual;
-	projinfo = state->ss.ps.ps_ProjInfo;
 	direction = estate->es_direction;
 	slot = state->ss.ss_ScanTupleSlot;
 
@@ -431,7 +538,7 @@ columnar_scan_exec(CustomScanState *state)
 	 * If no quals to check, do the fast path and just return the raw scan
 	 * tuple or a projected one.
 	 */
-	if (!qual && !has_vecquals)
+	if (!qual && !has_vecquals && !cstate->segmentby_exprstate)
 	{
 		bool gottuple = getnextslot(scandesc, direction, slot);
 
@@ -480,16 +587,38 @@ columnar_scan_exec(CustomScanState *state)
 
 		if (likely(TTS_IS_ARROWTUPLE(slot)))
 		{
+			/*
+			 * Filter on segmentby quals first. This is important for performance
+			 * since segmentby quals don't need decompression and can filter all
+			 * values in an arrow slot in one go.
+			 */
+			if (!ExecSegmentbyQual(cstate->segmentby_exprstate, econtext))
+			{
+				/* The slot didn't pass filters so read the next slot */
+				const uint16 nrows = arrow_slot_total_row_count(slot);
+				arrow_slot_mark_consumed(slot);
+				InstrCountFiltered1(state, nrows);
+				ResetExprContext(econtext);
+				continue;
+			}
+
 			const uint16 nfiltered = ExecVectorQual(&cstate->vqstate, econtext);
 
 			if (nfiltered > 0)
 			{
 				const uint16 total_nrows = arrow_slot_total_row_count(slot);
 
-				TS_DEBUG_LOG("vectorized filtering of %d rows", nfiltered);
+				TS_DEBUG_LOG("vectorized filtering of %u rows", nfiltered);
 
 				/* Skip ahead with the amount filtered */
-				ExecIncrArrowTuple(slot, nfiltered);
+				if (direction == ForwardScanDirection)
+					ExecIncrArrowTuple(slot, nfiltered);
+				else
+				{
+					Assert(direction == BackwardScanDirection);
+					ExecDecrArrowTuple(slot, nfiltered);
+				}
+
 				InstrCountFiltered1(state, nfiltered);
 
 				if (nfiltered == total_nrows && total_nrows > 1)
@@ -514,10 +643,10 @@ columnar_scan_exec(CustomScanState *state)
 
 			return slot;
 		}
+		else
+			InstrCountFiltered1(state, 1);
 
-		/* Row was filtered by non-vectorized qual */
 		ResetExprContext(econtext);
-		InstrCountFiltered1(state, 1);
 	}
 }
 
@@ -627,14 +756,14 @@ columnar_scan_begin(CustomScanState *state, EState *estate, int eflags)
 	ExecAssignScanProjectionInfo(&state->ss);
 	state->ss.ps.qual = ExecInitQual(state->ss.ps.plan->qual, (PlanState *) state);
 #endif
-	vector_qual_state_init(&cstate->vqstate, state->ss.ps.ps_ExprContext);
+	List *vectorized_quals_constified = NIL;
 
 	if (cstate->nscankeys > 0)
 	{
-		const HypercoreInfo *hsinfo = RelationGetHypercoreInfo(state->ss.ss_currentRelation);
 		Scan *scan = (Scan *) state->ss.ps.plan;
-		cstate->scankeys =
-			create_scankeys_from_quals(hsinfo, scan->scanrelid, cstate->scankey_quals);
+		cstate->scankeys = create_scankeys_from_quals(state->ss.ss_currentRelation,
+													  scan->scanrelid,
+													  cstate->scankey_quals);
 	}
 
 	PlannerGlobal glob = {
@@ -647,15 +776,31 @@ columnar_scan_begin(CustomScanState *state, EState *estate, int eflags)
 	foreach (lc, cstate->vectorized_quals_orig)
 	{
 		Node *constified = estimate_expression_value(&root, (Node *) lfirst(lc));
-		cstate->vqstate.vectorized_quals_constified =
-			lappend(cstate->vqstate.vectorized_quals_constified, constified);
+		vectorized_quals_constified = lappend(vectorized_quals_constified, constified);
 	}
+
+	/*
+	 * Initialize the state to compute vectorized quals.
+	 */
+	vector_qual_state_init(&cstate->vqstate,
+						   vectorized_quals_constified,
+						   state->ss.ss_ScanTupleSlot);
 
 	/* If the node is supposed to project, then try to make it a simple
 	 * projection. If not possible, it will fall back to standard PostgreSQL
 	 * projection. */
 	if (cstate->css.ss.ps.ps_ProjInfo)
 		create_simple_projection_state_if_possible(cstate);
+
+	cstate->segmentby_exprstate = ExecInitQual(cstate->segmentby_quals, (PlanState *) state);
+
+	/*
+	 * After having initialized ExprState for processing regular and segmentby
+	 * quals separately, add the segmentby quals list to the original quals in
+	 * order for them to show up together in EXPLAINs.
+	 */
+	if (cstate->segmentby_quals != NIL)
+		state->ss.ps.plan->qual = list_concat(state->ss.ps.plan->qual, cstate->segmentby_quals);
 }
 
 static void
@@ -811,6 +956,7 @@ columnar_scan_initialize_worker(CustomScanState *node, shm_toc *toc, void *arg)
 }
 
 static CustomExecMethods columnar_scan_state_methods = {
+	.CustomName = "ColumnarScan",
 	.BeginCustomScan = columnar_scan_begin,
 	.ExecCustomScan = columnar_scan_exec,
 	.EndCustomScan = columnar_scan_end,
@@ -831,11 +977,13 @@ columnar_scan_state_create(CustomScan *cscan)
 	cstate->css.methods = &columnar_scan_state_methods;
 	cstate->vectorized_quals_orig = linitial(cscan->custom_exprs);
 	cstate->scankey_quals = lsecond(cscan->custom_exprs);
+	cstate->segmentby_quals = lthird(cscan->custom_exprs);
 	cstate->nscankeys = list_length(cstate->scankey_quals);
 	cstate->scankeys = NULL;
 #if PG16_GE
 	cstate->css.slotOps = &TTSOpsArrowTuple;
 #endif
+	cstate->quals_orig = list_concat_copy(cstate->vectorized_quals_orig, cscan->scan.plan.qual);
 
 	return (Node *) cstate;
 }
@@ -845,10 +993,16 @@ static CustomScanMethods columnar_scan_plan_methods = {
 	.CreateCustomScanState = columnar_scan_state_create,
 };
 
+bool
+is_columnar_scan(const Plan *plan)
+{
+	return IsA(plan, CustomScan) &&
+		   ((const CustomScan *) plan)->methods == &columnar_scan_plan_methods;
+}
+
 typedef struct VectorQualInfoHypercore
 {
 	VectorQualInfo vqinfo;
-	const HypercoreInfo *hsinfo;
 } VectorQualInfoHypercore;
 
 static bool *
@@ -877,19 +1031,17 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_p
 	CustomScan *columnar_scan_plan = makeNode(CustomScan);
 	RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
 	Relation relation = RelationIdGetRelation(rte->relid);
-	HypercoreInfo *hsinfo = RelationGetHypercoreInfo(relation);
-	List *vectorized_quals = NIL;
-	List *nonvectorized_quals = NIL;
-	List *scankey_quals = NIL;
-	List *remaining_quals = NIL;
-	ListCell *lc;
-
+	HypercoreInfo *hcinfo = RelationGetHypercoreInfo(relation);
+	QualProcessState qpi = {
+		.rel = relation,
+		.relid = rel->relid,
+	};
 	VectorQualInfoHypercore vqih = {
 		.vqinfo = {
 			.rti = rel->relid,
-			.vector_attrs = columnar_scan_build_vector_attrs(hsinfo->columns, hsinfo->num_columns),
+			.maxattno = hcinfo->num_columns,
+			.vector_attrs = columnar_scan_build_vector_attrs(hcinfo->columns, hcinfo->num_columns),
 		},
-		.hsinfo = hsinfo,
 	};
 	Assert(best_path->path.parent->rtekind == RTE_RELATION);
 
@@ -900,38 +1052,12 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_p
 	/* output target list */
 	columnar_scan_plan->scan.plan.targetlist = tlist;
 
-	/* Reduce RestrictInfo list to bare expressions; ignore pseudoconstants */
 	scan_clauses = extract_actual_clauses(scan_clauses, false);
+	classify_quals(&qpi, &vqih.vqinfo, scan_clauses);
 
-	foreach (lc, scan_clauses)
-	{
-		Node *source_qual = lfirst(lc);
-		Node *vectorized_qual = vector_qual_make(source_qual, &vqih.vqinfo);
-
-		if (vectorized_qual)
-		{
-			TS_DEBUG_LOG("qual identified as vectorizable: %s", nodeToString(vectorized_qual));
-			vectorized_quals = lappend(vectorized_quals, vectorized_qual);
-		}
-		else
-		{
-			TS_DEBUG_LOG("qual identified as non-vectorized qual: %s", nodeToString(source_qual));
-			nonvectorized_quals = lappend(nonvectorized_quals, source_qual);
-		}
-	}
-
-	/* Need to split the nonvectorized quals into scankey quals and remaining
-	 * quals before ExecInitQual() in CustomScanState::begin() since the qual
-	 * execution state is created from the remaining quals. Note that it is
-	 * not possible to create the scankeys themselves here because the only
-	 * way to pass those on to the scan state is via custom_private. And
-	 * anything that goes into custom_private needs to be a Node that is
-	 * printable with nodeToString(). */
-	scankey_quals =
-		extract_scankey_quals(vqih.hsinfo, rel->relid, nonvectorized_quals, &remaining_quals);
-
-	columnar_scan_plan->scan.plan.qual = remaining_quals;
-	columnar_scan_plan->custom_exprs = list_make2(vectorized_quals, scankey_quals);
+	columnar_scan_plan->scan.plan.qual = qpi.nonsegmentby_quals;
+	columnar_scan_plan->custom_exprs =
+		list_make3(qpi.vectorized_quals, qpi.scankey_quals, qpi.segmentby_quals);
 
 	RelationClose(relation);
 
@@ -974,9 +1100,7 @@ columnar_scan_path_create(PlannerInfo *root, RelOptInfo *rel, Relids required_ou
 						   * ordering */
 
 	cspath->custom_path.flags = CUSTOMPATH_SUPPORT_BACKWARD_SCAN;
-#if PG15_GE
 	cspath->custom_path.flags |= CUSTOMPATH_SUPPORT_PROJECTION;
-#endif
 	cspath->custom_path.methods = &columnar_scan_path_methods;
 
 	cost_columnar_scan(path, root, rel);

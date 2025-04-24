@@ -96,7 +96,10 @@ ts_indexing_verify_columns(const Hyperspace *hs, const List *indexelems)
 					(errcode(ERRCODE_TS_BAD_HYPERTABLE_INDEX_DEFINITION),
 					 errmsg("cannot create a unique index without the column \"%s\" (used in "
 							"partitioning)",
-							NameStr(dim->fd.column_name))));
+							NameStr(dim->fd.column_name)),
+					 errhint(
+						 "If you're creating a hypertable on a table with a primary key, ensure "
+						 "the partitioning column is part of the primary or composite key.")));
 	}
 }
 
@@ -342,10 +345,6 @@ ts_indexing_root_table_create_index(IndexStmt *stmt, const char *queryString,
 	 * We also take the opportunity to verify that all
 	 * chunks are something we can put an index on, to
 	 * avoid building some indexes only to fail later.
-	 *
-	 * Note that on distributed hypertables we only create the index on the root
-	 * table, i.e., we do not recurse to chunks. Therefore, there is no need to
-	 * take locks on the chunks here.
 	 */
 	if (!is_multitransaction)
 	{
@@ -357,11 +356,6 @@ ts_indexing_root_table_create_index(IndexStmt *stmt, const char *queryString,
 		{
 			char relkind = get_rel_relkind(lfirst_oid(lc));
 
-			/* Note, that unlike partitioned tables, we allow index creation
-			 * when chunks (partitions) are foreign tables, but in that case we
-			 * actually do not create the indexes on the foreign table
-			 * chunks. Instead, we distribute this index creation to the data
-			 * nodes. */
 			if (relkind != RELKIND_RELATION && relkind != RELKIND_MATVIEW &&
 				relkind != RELKIND_FOREIGN_TABLE)
 				ereport(ERROR,
