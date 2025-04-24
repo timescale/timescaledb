@@ -13,6 +13,7 @@ set(TEST_FILES
     cagg_policy.sql
     cagg_refresh.sql
     cagg_refresh_using_merge.sql
+    cagg_api.sql
     cagg_utils.sql
     cagg_watermark.sql
     chunk_column_stats.sql
