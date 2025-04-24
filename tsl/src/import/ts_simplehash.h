@@ -97,7 +97,7 @@
  *	  looking or is done - buckets following a deleted element are shifted
  *	  backwards, unless they're empty or already at their optimal position.
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2024, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/lib/simplehash.h
@@ -106,9 +106,9 @@
 #include "port/pg_bitutils.h"
 
 /* helpers */
-#define SH_MAKE_PREFIX(a) CppConcat(a, _)
-#define SH_MAKE_NAME(name) SH_MAKE_NAME_(SH_MAKE_PREFIX(SH_PREFIX), name)
-#define SH_MAKE_NAME_(a, b) CppConcat(a, b)
+#define SH_MAKE_PREFIX(a) CppConcat(a,_)
+#define SH_MAKE_NAME(name) SH_MAKE_NAME_(SH_MAKE_PREFIX(SH_PREFIX),name)
+#define SH_MAKE_NAME_(a,b) CppConcat(a,b)
 
 /* name macros for: */
 
@@ -153,16 +153,16 @@ typedef struct SH_TYPE
 	 * tables.  Note that the maximum number of elements is lower
 	 * (SH_MAX_FILLFACTOR)
 	 */
-	uint64 size;
+	uint64		size;
 
 	/* how many elements have valid contents */
-	uint32 members;
+	uint32		members;
 
 	/* mask for bucket and size calculations, based on size */
-	uint32 sizemask;
+	uint32		sizemask;
 
 	/* boundary after which to grow hashtable */
-	uint32 grow_threshold;
+	uint32		grow_threshold;
 
 	/* hash buckets */
 	SH_ELEMENT_TYPE *restrict data;
@@ -173,54 +173,57 @@ typedef struct SH_TYPE
 #endif
 
 	/* user defined data, useful for callbacks */
-	void *private_data;
-} SH_TYPE;
+	void	   *private_data;
+}			SH_TYPE;
 
 typedef struct SH_ITERATOR
 {
-	uint32 cur; /* current element */
-	uint32 end;
-	bool done; /* iterator exhausted? */
-} SH_ITERATOR;
+	uint32		cur;			/* current element */
+	uint32		end;
+	bool		done;			/* iterator exhausted? */
+}			SH_ITERATOR;
 
 /* externally visible function prototypes */
 #ifdef SH_RAW_ALLOCATOR
 /* <prefix>_hash <prefix>_create(uint32 nelements, void *private_data) */
-SH_SCOPE SH_TYPE *SH_CREATE(uint32 nelements, void *private_data);
+SH_SCOPE	SH_TYPE *SH_CREATE(uint32 nelements, void *private_data);
 #else
 /*
  * <prefix>_hash <prefix>_create(MemoryContext ctx, uint32 nelements,
  *								 void *private_data)
  */
-SH_SCOPE SH_TYPE *SH_CREATE(MemoryContext ctx, uint32 nelements, void *private_data);
+SH_SCOPE	SH_TYPE *SH_CREATE(MemoryContext ctx, uint32 nelements,
+							   void *private_data);
 #endif
 
 /* void <prefix>_destroy(<prefix>_hash *tb) */
-SH_SCOPE void SH_DESTROY(SH_TYPE *tb);
+SH_SCOPE void SH_DESTROY(SH_TYPE * tb);
 
 /* void <prefix>_reset(<prefix>_hash *tb) */
-SH_SCOPE void SH_RESET(SH_TYPE *tb);
+SH_SCOPE void SH_RESET(SH_TYPE * tb);
 
 /* void <prefix>_grow(<prefix>_hash *tb, uint64 newsize) */
-SH_SCOPE void SH_GROW(SH_TYPE *tb, uint64 newsize);
+SH_SCOPE void SH_GROW(SH_TYPE * tb, uint64 newsize);
 
 /* <element> *<prefix>_insert(<prefix>_hash *tb, <key> key, bool *found) */
-SH_SCOPE SH_ELEMENT_TYPE *SH_INSERT(SH_TYPE *tb, SH_KEY_TYPE key, bool *found);
+SH_SCOPE	SH_ELEMENT_TYPE *SH_INSERT(SH_TYPE * tb, SH_KEY_TYPE key, bool *found);
 
 /*
  * <element> *<prefix>_insert_hash(<prefix>_hash *tb, <key> key, uint32 hash,
  * 								  bool *found)
  */
-SH_SCOPE SH_ELEMENT_TYPE *SH_INSERT_HASH(SH_TYPE *tb, SH_KEY_TYPE key, uint32 hash, bool *found);
+SH_SCOPE	SH_ELEMENT_TYPE *SH_INSERT_HASH(SH_TYPE * tb, SH_KEY_TYPE key,
+											uint32 hash, bool *found);
 
 /* <element> *<prefix>_lookup(<prefix>_hash *tb, <key> key) */
-SH_SCOPE SH_ELEMENT_TYPE *SH_LOOKUP(SH_TYPE *tb, SH_KEY_TYPE key);
+SH_SCOPE	SH_ELEMENT_TYPE *SH_LOOKUP(SH_TYPE * tb, SH_KEY_TYPE key);
 
 /* <element> *<prefix>_lookup_hash(<prefix>_hash *tb, <key> key, uint32 hash) */
-SH_SCOPE SH_ELEMENT_TYPE *SH_LOOKUP_HASH(SH_TYPE *tb, SH_KEY_TYPE key, uint32 hash);
+SH_SCOPE	SH_ELEMENT_TYPE *SH_LOOKUP_HASH(SH_TYPE * tb, SH_KEY_TYPE key,
+											uint32 hash);
 
 /* void <prefix>_start_iterate(<prefix>_hash *tb, <prefix>_iterator *iter) */
-SH_SCOPE void SH_START_ITERATE(SH_TYPE *tb, SH_ITERATOR *iter);
+SH_SCOPE void SH_START_ITERATE(SH_TYPE * tb, SH_ITERATOR * iter);
 
 /*
  * void <prefix>_start_iterate_at(<prefix>_hash *tb, <prefix>_iterator *iter,
@@ -266,8 +269,7 @@ SH_SCOPE void SH_STAT(SH_TYPE *tb);
 #endif
 
 #ifdef SH_STORE_HASH
-#define SH_COMPARE_KEYS(tb, ahash, akey, b)                                                        \
-	(ahash == SH_GET_HASH(tb, b) && SH_EQUAL(tb, b->SH_KEY, akey))
+#define SH_COMPARE_KEYS(tb, ahash, akey, b) (ahash == SH_GET_HASH(tb, b) && SH_EQUAL(tb, b->SH_KEY, akey))
 #else
 #define SH_COMPARE_KEYS(tb, ahash, akey, b) (SH_EQUAL(tb, b->SH_KEY, akey))
 #endif
@@ -331,14 +333,14 @@ SH_COMPUTE_PARAMETERS(SH_TYPE *tb, uint64 newsize)
 
 /* return the optimal bucket for the hash */
 static pg_attribute_always_inline uint32
-SH_INITIAL_BUCKET(SH_TYPE *tb, uint32 hash)
+SH_INITIAL_BUCKET(SH_TYPE * tb, uint32 hash)
 {
 	return hash & tb->sizemask;
 }
 
 /* return next bucket after the current, handling wraparound */
 static inline uint32
-SH_NEXT(SH_TYPE *tb, uint32 curelem, uint32 startelem)
+SH_NEXT(SH_TYPE * tb, uint32 curelem, uint32 startelem)
 {
 	curelem = (curelem + 1) & tb->sizemask;
 
@@ -349,7 +351,7 @@ SH_NEXT(SH_TYPE *tb, uint32 curelem, uint32 startelem)
 
 /* return bucket before the current, handling wraparound */
 static inline uint32
-SH_PREV(SH_TYPE *tb, uint32 curelem, uint32 startelem)
+SH_PREV(SH_TYPE * tb, uint32 curelem, uint32 startelem)
 {
 	curelem = (curelem - 1) & tb->sizemask;
 
@@ -360,7 +362,7 @@ SH_PREV(SH_TYPE *tb, uint32 curelem, uint32 startelem)
 
 /* return distance between bucket and its optimal position */
 static inline uint32
-SH_DISTANCE_FROM_OPTIMAL(SH_TYPE *tb, uint32 optimal, uint32 bucket)
+SH_DISTANCE_FROM_OPTIMAL(SH_TYPE * tb, uint32 optimal, uint32 bucket)
 {
 	if (optimal <= bucket)
 		return bucket - optimal;
@@ -369,7 +371,7 @@ SH_DISTANCE_FROM_OPTIMAL(SH_TYPE *tb, uint32 optimal, uint32 bucket)
 }
 
 static inline uint32
-SH_ENTRY_HASH(SH_TYPE *tb, SH_ELEMENT_TYPE *entry)
+SH_ENTRY_HASH(SH_TYPE * tb, SH_ELEMENT_TYPE * entry)
 {
 #ifdef SH_STORE_HASH
 	return SH_GET_HASH(tb, entry);
@@ -379,25 +381,26 @@ SH_ENTRY_HASH(SH_TYPE *tb, SH_ELEMENT_TYPE *entry)
 }
 
 /* default memory allocator function */
-static inline void *SH_ALLOCATE(SH_TYPE *type, Size size);
-static inline void SH_FREE(SH_TYPE *type, void *pointer);
+static inline void *SH_ALLOCATE(SH_TYPE * type, Size size);
+static inline void SH_FREE(SH_TYPE * type, void *pointer);
 
 #ifndef SH_USE_NONDEFAULT_ALLOCATOR
 
 /* default memory allocator function */
 static inline void *
-SH_ALLOCATE(SH_TYPE *type, Size size)
+SH_ALLOCATE(SH_TYPE * type, Size size)
 {
 #ifdef SH_RAW_ALLOCATOR
 	return SH_RAW_ALLOCATOR(size);
 #else
-	return MemoryContextAllocExtended(type->ctx, size, MCXT_ALLOC_HUGE | MCXT_ALLOC_ZERO);
+	return MemoryContextAllocExtended(type->ctx, size,
+									  MCXT_ALLOC_HUGE | MCXT_ALLOC_ZERO);
 #endif
 }
 
 /* default memory free function */
 static inline void
-SH_FREE(SH_TYPE *type, void *pointer)
+SH_FREE(SH_TYPE * type, void *pointer)
 {
 	pfree(pointer);
 }
@@ -414,15 +417,15 @@ SH_FREE(SH_TYPE *type, void *pointer)
  * the passed-in context.
  */
 #ifdef SH_RAW_ALLOCATOR
-SH_SCOPE SH_TYPE *
+SH_SCOPE	SH_TYPE *
 SH_CREATE(uint32 nelements, void *private_data)
 #else
-SH_SCOPE SH_TYPE *
+SH_SCOPE	SH_TYPE *
 SH_CREATE(MemoryContext ctx, uint32 nelements, void *private_data)
 #endif
 {
-	SH_TYPE *tb;
-	uint64 size;
+	SH_TYPE    *tb;
+	uint64		size;
 
 #ifdef SH_RAW_ALLOCATOR
 	tb = (SH_TYPE *) SH_RAW_ALLOCATOR(sizeof(SH_TYPE));
@@ -444,7 +447,7 @@ SH_CREATE(MemoryContext ctx, uint32 nelements, void *private_data)
 
 /* destroy a previously created hash table */
 SH_SCOPE void
-SH_DESTROY(SH_TYPE *tb)
+SH_DESTROY(SH_TYPE * tb)
 {
 	SH_FREE(tb, tb->data);
 	pfree(tb);
@@ -452,7 +455,7 @@ SH_DESTROY(SH_TYPE *tb)
 
 /* reset the contents of a previously created hash table */
 SH_SCOPE void
-SH_RESET(SH_TYPE *tb)
+SH_RESET(SH_TYPE * tb)
 {
 	memset(tb->data, 0, sizeof(SH_ELEMENT_TYPE) * tb->size);
 	tb->members = 0;
@@ -466,14 +469,14 @@ SH_RESET(SH_TYPE *tb)
  * performance-wise, when known at some point.
  */
 SH_SCOPE void
-SH_GROW(SH_TYPE *tb, uint64 newsize)
+SH_GROW(SH_TYPE * tb, uint64 newsize)
 {
-	uint64 oldsize = tb->size;
+	uint64		oldsize = tb->size;
 	SH_ELEMENT_TYPE *olddata = tb->data;
 	SH_ELEMENT_TYPE *newdata;
-	uint32 i;
-	uint32 startelem = 0;
-	uint32 copyelem;
+	uint32		i;
+	uint32		startelem = 0;
+	uint32		copyelem;
 
 	Assert(oldsize == pg_nextpower2_64(oldsize));
 	Assert(oldsize != SH_MAX_SIZE);
@@ -507,8 +510,8 @@ SH_GROW(SH_TYPE *tb, uint64 newsize)
 	for (i = 0; i < oldsize; i++)
 	{
 		SH_ELEMENT_TYPE *oldentry = &olddata[i];
-		uint32 hash;
-		uint32 optimal;
+		uint32		hash;
+		uint32		optimal;
 
 		if (SH_ENTRY_EMPTY(oldentry))
 		{
@@ -534,14 +537,14 @@ SH_GROW(SH_TYPE *tb, uint64 newsize)
 
 		if (!SH_ENTRY_EMPTY(oldentry))
 		{
-			uint32 hash;
-			uint32 startelem;
-			uint32 curelem;
+			uint32		hash;
+			uint32		startelem2;
+			uint32		curelem;
 			SH_ELEMENT_TYPE *newentry;
 
 			hash = SH_ENTRY_HASH(tb, oldentry);
-			startelem = SH_INITIAL_BUCKET(tb, hash);
-			curelem = startelem;
+			startelem2 = SH_INITIAL_BUCKET(tb, hash);
+			curelem = startelem2;
 
 			/* find empty element to put data into */
 			while (true)
@@ -553,7 +556,7 @@ SH_GROW(SH_TYPE *tb, uint64 newsize)
 					break;
 				}
 
-				curelem = SH_NEXT(tb, curelem, startelem);
+				curelem = SH_NEXT(tb, curelem, startelem2);
 			}
 
 			/* copy entry to new slot */
@@ -738,20 +741,20 @@ SH_INSERT_HASH_INTERNAL(SH_TYPE *restrict tb, SH_KEY_TYPE key, uint32 hash, bool
  * case.
  */
 static pg_attribute_always_inline SH_ELEMENT_TYPE *
-SH_INSERT(SH_TYPE *tb, SH_KEY_TYPE key, bool *found)
+SH_INSERT(SH_TYPE * tb, SH_KEY_TYPE key, bool *found)
 {
-	uint32 hash = SH_HASH_KEY(tb, key);
+	uint32		hash = SH_HASH_KEY(tb, key);
 
 	return SH_INSERT_HASH_INTERNAL(tb, key, hash, found);
 }
 
 /*
- * Insert the key key into the hash-table using an already-calculated
- * hash. Set *found to true if the key already exists, false
- * otherwise. Returns the hash-table entry in either case.
+ * Insert the key into the hash-table using an already-calculated hash. Set
+ * *found to true if the key already exists, false otherwise. Returns the
+ * hash-table entry in either case.
  */
-SH_SCOPE SH_ELEMENT_TYPE *
-SH_INSERT_HASH(SH_TYPE *tb, SH_KEY_TYPE key, uint32 hash, bool *found)
+SH_SCOPE	SH_ELEMENT_TYPE *
+SH_INSERT_HASH(SH_TYPE * tb, SH_KEY_TYPE key, uint32 hash, bool *found)
 {
 	return SH_INSERT_HASH_INTERNAL(tb, key, hash, found);
 }
@@ -761,10 +764,10 @@ SH_INSERT_HASH(SH_TYPE *tb, SH_KEY_TYPE key, uint32 hash, bool *found)
  * into its wrapper functions even if SH_SCOPE is extern.
  */
 static inline SH_ELEMENT_TYPE *
-SH_LOOKUP_HASH_INTERNAL(SH_TYPE *tb, SH_KEY_TYPE key, uint32 hash)
+SH_LOOKUP_HASH_INTERNAL(SH_TYPE * tb, SH_KEY_TYPE key, uint32 hash)
 {
 	const uint32 startelem = SH_INITIAL_BUCKET(tb, hash);
-	uint32 curelem = startelem;
+	uint32		curelem = startelem;
 
 	while (true)
 	{
@@ -792,23 +795,23 @@ SH_LOOKUP_HASH_INTERNAL(SH_TYPE *tb, SH_KEY_TYPE key, uint32 hash)
 }
 
 /*
- * Lookup up entry in hash table.  Returns NULL if key not present.
+ * Lookup entry in hash table.  Returns NULL if key not present.
  */
-SH_SCOPE SH_ELEMENT_TYPE *
-SH_LOOKUP(SH_TYPE *tb, SH_KEY_TYPE key)
+SH_SCOPE	SH_ELEMENT_TYPE *
+SH_LOOKUP(SH_TYPE * tb, SH_KEY_TYPE key)
 {
-	uint32 hash = SH_HASH_KEY(tb, key);
+	uint32		hash = SH_HASH_KEY(tb, key);
 
 	return SH_LOOKUP_HASH_INTERNAL(tb, key, hash);
 }
 
 /*
- * Lookup up entry in hash table using an already-calculated hash.
+ * Lookup entry in hash table using an already-calculated hash.
  *
  * Returns NULL if key not present.
  */
-SH_SCOPE SH_ELEMENT_TYPE *
-SH_LOOKUP_HASH(SH_TYPE *tb, SH_KEY_TYPE key, uint32 hash)
+SH_SCOPE	SH_ELEMENT_TYPE *
+SH_LOOKUP_HASH(SH_TYPE * tb, SH_KEY_TYPE key, uint32 hash)
 {
 	return SH_LOOKUP_HASH_INTERNAL(tb, key, hash);
 }
@@ -817,9 +820,9 @@ SH_LOOKUP_HASH(SH_TYPE *tb, SH_KEY_TYPE key, uint32 hash)
  * Initialize iterator.
  */
 SH_SCOPE void
-SH_START_ITERATE(SH_TYPE *tb, SH_ITERATOR *iter)
+SH_START_ITERATE(SH_TYPE * tb, SH_ITERATOR * iter)
 {
-	uint64 startelem = PG_UINT64_MAX;
+	uint64		startelem = PG_UINT64_MAX;
 
 	/*
 	 * Search for the first empty element. As deletions during iterations are
@@ -857,13 +860,13 @@ SH_START_ITERATE(SH_TYPE *tb, SH_ITERATOR *iter)
  * same position.
  */
 SH_SCOPE void
-SH_START_ITERATE_AT(SH_TYPE *tb, SH_ITERATOR *iter, uint32 at)
+SH_START_ITERATE_AT(SH_TYPE * tb, SH_ITERATOR * iter, uint32 at)
 {
 	/*
 	 * Iterate backwards, that allows the current element to be deleted, even
 	 * if there are backward shifts.
 	 */
-	iter->cur = at & tb->sizemask; /* ensure at is within a valid range */
+	iter->cur = at & tb->sizemask;	/* ensure at is within a valid range */
 	iter->end = iter->cur;
 	iter->done = false;
 }
@@ -878,8 +881,8 @@ SH_START_ITERATE_AT(SH_TYPE *tb, SH_ITERATOR *iter, uint32 at)
  * deletions), but if so, there's neither a guarantee that all nodes are
  * visited at least once, nor a guarantee that a node is visited at most once.
  */
-SH_SCOPE SH_ELEMENT_TYPE *
-SH_ITERATE(SH_TYPE *tb, SH_ITERATOR *iter)
+SH_SCOPE	SH_ELEMENT_TYPE *
+SH_ITERATE(SH_TYPE * tb, SH_ITERATOR * iter)
 {
 	while (!iter->done)
 	{
@@ -906,24 +909,24 @@ SH_ITERATE(SH_TYPE *tb, SH_ITERATOR *iter)
  * debugging/profiling purposes only.
  */
 SH_SCOPE void
-SH_STAT(SH_TYPE *tb)
+SH_STAT(SH_TYPE * tb)
 {
-	uint32 max_chain_length = 0;
-	uint32 total_chain_length = 0;
-	double avg_chain_length;
-	double fillfactor;
-	uint32 i;
+	uint32		max_chain_length = 0;
+	uint32		total_chain_length = 0;
+	double		avg_chain_length;
+	double		fillfactor;
+	uint32		i;
 
-	uint32 *collisions = (uint32 *) palloc0(tb->size * sizeof(uint32));
-	uint32 total_collisions = 0;
-	uint32 max_collisions = 0;
-	double avg_collisions;
+	uint32	   *collisions = (uint32 *) palloc0(tb->size * sizeof(uint32));
+	uint32		total_collisions = 0;
+	uint32		max_collisions = 0;
+	double		avg_collisions;
 
 	for (i = 0; i < tb->size; i++)
 	{
-		uint32 hash;
-		uint32 optimal;
-		uint32 dist;
+		uint32		hash;
+		uint32		optimal;
+		uint32		dist;
 		SH_ELEMENT_TYPE *elem;
 
 		elem = &tb->data[i];
@@ -944,7 +947,7 @@ SH_STAT(SH_TYPE *tb)
 
 	for (i = 0; i < tb->size; i++)
 	{
-		uint32 curcoll = collisions[i];
+		uint32		curcoll = collisions[i];
 
 		if (curcoll == 0)
 			continue;
@@ -972,21 +975,13 @@ SH_STAT(SH_TYPE *tb)
 		avg_collisions = 0;
 	}
 
-	sh_log("size: " UINT64_FORMAT
-		   ", members: %u, filled: %f, total chain: %u, max chain: %u, avg chain: %f, "
-		   "total_collisions: %u, max_collisions: %u, avg_collisions: %f",
-		   tb->size,
-		   tb->members,
-		   fillfactor,
-		   total_chain_length,
-		   max_chain_length,
-		   avg_chain_length,
-		   total_collisions,
-		   max_collisions,
-		   avg_collisions);
+	sh_log("size: " UINT64_FORMAT ", members: %u, filled: %f, total chain: %u, max chain: %u, avg chain: %f, total_collisions: %u, max_collisions: %u, avg_collisions: %f",
+		   tb->size, tb->members, fillfactor, total_chain_length, max_chain_length, avg_chain_length,
+		   total_collisions, max_collisions, avg_collisions);
 }
 
-#endif /* SH_DEFINE */
+#endif							/* SH_DEFINE */
+
 
 /* undefine external parameters, so next hash table can be defined */
 #undef SH_PREFIX
