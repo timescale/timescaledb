@@ -34,13 +34,6 @@ typedef struct ModifyTableContext {
 	 */
 	TupleTableSlot *planSlot;
 
-	/*
-	 * During EvalPlanQual, project and return the new version of the new
-	 * tuple
-	 */
-	TupleTableSlot *(*GetUpdateNewTuple) (ResultRelInfo * resultRelInfo, TupleTableSlot * epqslot,
-		    TupleTableSlot * oldSlot, MergeActionState * relaction);
-
 	/* MERGE specific */
 	MergeActionState *relaction;	/* MERGE action in progress */
 	/*
