@@ -189,6 +189,9 @@ jobs:
       shell: wsl-bash {0}
       run: |
         yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh || true
+        echo 'Acquire::Retries "10";' >> /etc/apt/apt.conf.d/99retries
+        echo 'Acquire::http::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
+        echo 'Acquire::https::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
         apt-get install -y --force-yes postgresql-server-dev-${{ matrix.pg }}
 
     - name: Run tests
