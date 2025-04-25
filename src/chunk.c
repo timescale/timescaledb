@@ -758,7 +758,22 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 	if (uid != saved_uid)
 		SetUserIdAndSecContext(uid, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
 
+	/* Prepare event trigger state and invoke ddl_command_start triggers */
+	if (ts_guc_enable_event_triggers)
+	{
+		EventTriggerBeginCompleteQuery();
+		EventTriggerDDLCommandStart((Node *) &stmt.base);
+	}
+
 	objaddr = DefineRelation(&stmt.base, chunk->relkind, rel->rd_rel->relowner, NULL, NULL);
+
+	/* Invoke ddl_command_end triggers and clean up the event trigger state */
+	if (ts_guc_enable_event_triggers)
+	{
+		EventTriggerCollectSimpleCommand(objaddr, InvalidObjectAddress, (Node *) &stmt);
+		EventTriggerDDLCommandEnd((Node *) &stmt.base);
+		EventTriggerEndCompleteQuery();
+	}
 
 	/* Make the newly defined relation visible so that we can update the
 	 * ACL. */

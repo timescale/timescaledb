@@ -163,6 +163,7 @@ TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression = false;
 TSDLLEXPORT bool ts_guc_enable_bool_compression = true;
 TSDLLEXPORT int ts_guc_compression_batch_size_limit = 1000;
 TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour = COMPRESS_TRUNCATE_ONLY;
+bool ts_guc_enable_event_triggers = false;
 
 /* Only settable in debug mode for testing */
 TSDLLEXPORT bool ts_guc_enable_null_compression = true;
@@ -829,6 +830,16 @@ _guc_init(void)
 							NULL,
 							NULL,
 							NULL);
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_event_triggers"),
+							 "Enable event triggers for chunks creation",
+							 "Enable event triggers for chunks creation",
+							 &ts_guc_enable_event_triggers,
+							 false,
+							 PGC_SUSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 
 #ifdef TS_DEBUG
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_null_compression"),
