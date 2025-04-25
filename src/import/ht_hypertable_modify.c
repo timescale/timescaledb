@@ -382,9 +382,6 @@ TupleTableSlot *ExecInsert(ModifyTableContext * context, ResultRelInfo * resultR
 						   ChunkDispatchState* cds,
 						   TupleTableSlot * slot, bool canSetTag);
 
-static TupleTableSlot * mergeGetUpdateNewTuple(ResultRelInfo * relinfo, TupleTableSlot * planSlot,
-		    TupleTableSlot * oldSlot, MergeActionState * relaction);
-
 /*
  * Check and execute the first qualifying MATCHED action. The current target
  * tuple is identified by tupleid.
@@ -528,7 +525,6 @@ lmerge_matched:;
 #else
 			context->relaction = relaction;
 #endif
-			context->GetUpdateNewTuple = mergeGetUpdateNewTuple;
 			context->cpUpdateRetrySlot = NULL;
 
 			if (!ht_ExecUpdatePrologue(context, resultRelInfo, tupleid, NULL, newslot, &result))
@@ -1059,21 +1055,5 @@ ht_ExecMerge(ModifyTableContext * context, ResultRelInfo * resultRelInfo, ChunkD
 	}
 
 	return rslot;
-}
-
-/*
- * Callback for ModifyTableContext->GetUpdateNewTuple for use by MERGE.  It
- * computes the updated tuple by projecting from the current merge action's
- * projection.
- */
-static TupleTableSlot *
-mergeGetUpdateNewTuple(ResultRelInfo * relinfo, TupleTableSlot * planSlot, TupleTableSlot * oldSlot,
-		       MergeActionState * relaction) {
-	ExprContext    *econtext = relaction->mas_proj->pi_exprContext;
-
-	econtext->ecxt_scantuple = oldSlot;
-	econtext->ecxt_innertuple = planSlot;
-
-	return ExecProject(relaction->mas_proj);
 }
 

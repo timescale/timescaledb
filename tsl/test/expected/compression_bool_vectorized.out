@@ -1,0 +1,132 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+drop table if exists t1;
+NOTICE:  table "t1" does not exist, skipping
+set timescaledb.enable_bool_compression = on;
+create table t1 (ts int, b bool);
+select create_hypertable('t1','ts');
+NOTICE:  adding not-null constraint to column "ts"
+ create_hypertable 
+-------------------
+ (1,public,t1,t)
+(1 row)
+
+alter table t1 set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "t1" is set to ""
+insert into t1 values (1, true);
+insert into t1 values (2, false);
+insert into t1 values (3, NULL);
+insert into t1 values (4, true);
+insert into t1 values (5, false);
+insert into t1 values (6, NULL);
+select compress_chunk(show_chunks('t1'));
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+select * from t1 order by 1;
+ ts | b 
+----+---
+  1 | t
+  2 | f
+  3 | 
+  4 | t
+  5 | f
+  6 | 
+(6 rows)
+
+select * from t1 where b is null order by 1;
+ ts | b 
+----+---
+  3 | 
+  6 | 
+(2 rows)
+
+select * from t1 where b = true order by 1;
+ ts | b 
+----+---
+  1 | t
+  4 | t
+(2 rows)
+
+select * from t1 where b = false order by 1;
+ ts | b 
+----+---
+  2 | f
+  5 | f
+(2 rows)
+
+select * from t1 where ts > 3 and b is null order by 1;
+ ts | b 
+----+---
+  6 | 
+(1 row)
+
+select * from t1 where ts > 3 and b = true order by 1;
+ ts | b 
+----+---
+  4 | t
+(1 row)
+
+select * from t1 where ts > 3 and b = false order by 1;
+ ts | b 
+----+---
+  5 | f
+(1 row)
+
+-- delete all null values and compress again
+delete from t1 where b is null;
+select compress_chunk(show_chunks('t1'));
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+select * from t1 order by 1;
+ ts | b 
+----+---
+  1 | t
+  2 | f
+  4 | t
+  5 | f
+(4 rows)
+
+select * from t1 where b is null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from t1 where b = true order by 1;
+ ts | b 
+----+---
+  1 | t
+  4 | t
+(2 rows)
+
+select * from t1 where b = false order by 1;
+ ts | b 
+----+---
+  2 | f
+  5 | f
+(2 rows)
+
+select * from t1 where ts > 3 and b is null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from t1 where ts > 3 and b = true order by 1;
+ ts | b 
+----+---
+  4 | t
+(1 row)
+
+select * from t1 where ts > 3 and b = false order by 1;
+ ts | b 
+----+---
+  5 | f
+(1 row)
+
