@@ -33,7 +33,7 @@ SELECT wait_worker_counts(1,0,1,0);
 -- Now let's restart the scheduler in test db 2 and make sure our backend_start changed
 SELECT backend_start as orig_backend_start
 FROM pg_stat_activity
-WHERE application_name = 'TimescaleDB Background Worker Scheduler'
+WHERE backend_type = 'TimescaleDB Background Worker Scheduler'
 AND datname = :'TEST_DBNAME_2' \gset
 -- We'll do this in a txn so that we can see that the worker locks on our txn before continuing
 BEGIN;
@@ -43,14 +43,14 @@ SELECT wait_worker_counts(1,0,1,0);
 SELECT (backend_start > :'orig_backend_start'::timestamptz) backend_start_changed,
 (wait_event = 'virtualxid') wait_event_changed
 FROM pg_stat_activity
-WHERE application_name = 'TimescaleDB Background Worker Scheduler'
+WHERE backend_type = 'TimescaleDB Background Worker Scheduler'
 AND datname = :'TEST_DBNAME_2';
 COMMIT;
 
 SELECT wait_worker_counts(1,0,1,0);
 SELECT (wait_event IS DISTINCT FROM 'virtualxid') wait_event_changed
 FROM pg_stat_activity
-WHERE application_name = 'TimescaleDB Background Worker Scheduler'
+WHERE backend_type = 'TimescaleDB Background Worker Scheduler'
 AND datname = :'TEST_DBNAME_2';
 
 -- Test stop
@@ -68,7 +68,7 @@ SELECT wait_worker_counts(1,0,1,0);
 -- make sure start is idempotent
 SELECT backend_start as orig_backend_start
 FROM pg_stat_activity
-WHERE application_name = 'TimescaleDB Background Worker Scheduler'
+WHERE backend_type = 'TimescaleDB Background Worker Scheduler'
 AND datname = :'TEST_DBNAME_2' \gset
 
 -- Since we're doing idempotency tests, we're also going to exercise our queue and start 20 times
@@ -85,7 +85,7 @@ FOR i in 1..5
 LOOP
 SELECT (backend_start = $1::timestamptz) backend_start_unchanged
 FROM pg_stat_activity
-WHERE application_name = 'TimescaleDB Background Worker Scheduler'
+WHERE backend_type = 'TimescaleDB Background Worker Scheduler'
 AND datname = $2 into r;
 if(r) THEN
   PERFORM pg_sleep(0.1);
@@ -109,7 +109,7 @@ SELECT wait_worker_counts(1,0,1,0);
 -- Now let's restart the scheduler and make sure our backend_start changed
 SELECT backend_start as orig_backend_start
 FROM pg_stat_activity
-WHERE application_name = 'TimescaleDB Background Worker Scheduler'
+WHERE backend_type = 'TimescaleDB Background Worker Scheduler'
 AND datname = :'TEST_DBNAME_2' \gset
 
 BEGIN;
@@ -126,7 +126,7 @@ FOR i in 1..10
 LOOP
 SELECT (backend_start > $1::timestamptz) backend_start_changed
 FROM pg_stat_activity
-WHERE application_name = 'TimescaleDB Background Worker Scheduler'
+WHERE backend_type = 'TimescaleDB Background Worker Scheduler'
 AND datname = $2 into r;
 if(NOT r) THEN
   PERFORM pg_sleep(0.1);
@@ -143,10 +143,10 @@ SELECT wait_greater(:'orig_backend_start',:'TEST_DBNAME_2');
 -- Make sure canceling the launcher backend causes a restart of schedulers
 SELECT backend_start as orig_backend_start
 FROM pg_stat_activity
-WHERE application_name = 'TimescaleDB Background Worker Scheduler'
+WHERE backend_type = 'TimescaleDB Background Worker Scheduler'
 AND datname = :'TEST_DBNAME_2' \gset
 
-SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE application_name = 'TimescaleDB Background Worker Launcher';
+SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE backend_type = 'TimescaleDB Background Worker Launcher';
 
 SELECT wait_worker_counts(1,0,1,0);
 
@@ -208,8 +208,6 @@ SELECT wait_worker_counts(1,0,0,1);
 COMMIT;
 -- End our transaction and it should immediately exit because it's a template database.
 SELECT wait_worker_counts(1,0,0,0);
--- Clean up the template database, removing our test utilities etc
-\ir include/bgw_launcher_utils_cleanup.sql
 
 \c :TEST_DBNAME_2
 -- Now try creating a DB from a template with the extension already installed.
@@ -259,17 +257,13 @@ SELECT wait_for_bgw_scheduler(:'TEST_DBNAME');
 -- Connect to TEST_DBNAME (_timescaledb_functions.stop_background_workers() is not available in TEST_DBNAME_2)
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT _timescaledb_functions.stop_background_workers();
-SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name = 'TimescaleDB Background Worker Launcher';
+SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE backend_type = 'TimescaleDB Background Worker Launcher';
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
 
 -- make sure nobody is using it
-SET client_min_messages TO error;
 REVOKE CONNECT ON DATABASE :TEST_DBNAME FROM public;
-SELECT count(pg_terminate_backend(pg_stat_activity.pid)) AS TERMINATED
-FROM pg_stat_activity
-WHERE pg_stat_activity.datname = :'TEST_DBNAME'
-AND pg_stat_activity.pid <> pg_backend_pid() \gset
-RESET client_min_messages;
+CALL kill_database_backends(:'TEST_DBNAME');
+SELECT * FROM pg_stat_activity WHERE datname = :'TEST_DBNAME';
 
 -- Change tablespace
 ALTER DATABASE :TEST_DBNAME SET TABLESPACE tablespace1;
@@ -278,13 +272,12 @@ ALTER DATABASE :TEST_DBNAME SET TABLESPACE tablespace1;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
 SELECT _timescaledb_functions.stop_background_workers() \gset
-SET client_min_messages TO ERROR;
 REVOKE CONNECT ON DATABASE :TEST_DBNAME_2 FROM public;
-SELECT count(pg_terminate_backend(pg_stat_activity.pid)) AS TERMINATED
-FROM pg_stat_activity
-WHERE pg_stat_activity.datname = :'TEST_DBNAME_2'
-AND pg_stat_activity.pid <> pg_backend_pid() \gset
-RESET client_min_messages;
+CALL kill_database_backends(:'TEST_DBNAME_2');
+SELECT * FROM pg_stat_activity WHERE datname = :'TEST_DBNAME_2';
 
 DROP DATABASE :TEST_DBNAME_2 WITH (force);
 
+-- Clean up the template database, removing our test utilities etc
+\c template1
+\ir include/bgw_launcher_utils_cleanup.sql

@@ -8,19 +8,19 @@
 #include <access/xact.h>
 #include <commands/extension.h>
 #include <miscadmin.h>
-#include <utils/guc.h>
 #include <parser/analyze.h>
 #include <storage/ipc.h>
+#include <utils/guc.h>
 
-#include "extension.h"
-#include "bgw/launcher_interface.h"
-#include "guc.h"
-#include "ts_catalog/catalog.h"
-#include "version.h"
 #include "compat/compat.h"
+#include "bgw/launcher_interface.h"
 #include "config.h"
+#include "extension.h"
+#include "guc.h"
 #include "license_guc.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
+#include "ts_catalog/catalog.h"
+#include "version.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -91,6 +91,8 @@ cleanup_on_pg_proc_exit(int code, Datum arg)
 void
 _PG_init(void)
 {
+	static bool init_done = false;
+
 	/*
 	 * Check extension_is loaded to catch certain errors such as calls to
 	 * functions defined on the wrong extension version
@@ -98,6 +100,12 @@ _PG_init(void)
 	ts_extension_check_version(TIMESCALEDB_VERSION_MOD);
 	ts_extension_check_server_version();
 	ts_bgw_check_loader_api_version();
+
+	/* We can call _PG_init() several times if we do an eager load, so abort
+	 * init if we do. */
+
+	if (init_done)
+		return;
 
 	_cache_init();
 	_hypertable_cache_init();
@@ -118,6 +126,7 @@ _PG_init(void)
 
 	/* Register a cleanup function to be called when the backend exits */
 	on_proc_exit(cleanup_on_pg_proc_exit, 0);
+	init_done = true;
 }
 
 TSDLLEXPORT Datum

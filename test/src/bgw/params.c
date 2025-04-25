@@ -15,11 +15,11 @@
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
 
-#include "params.h"
-#include "timer_mock.h"
-#include "test_utils.h"
 #include "log.h"
+#include "params.h"
 #include "scanner.h"
+#include "test_utils.h"
+#include "timer_mock.h"
 #include "ts_catalog/catalog.h"
 #include "utils.h"
 

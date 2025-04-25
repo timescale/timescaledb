@@ -41,6 +41,15 @@ SELECT * FROM drop_test;
 
 --test drops thru cascades of other objects
 \c :TEST_DBNAME :ROLE_SUPERUSER
-
-drop schema public cascade;
+-- Stop background workers to prevent them from interfering with the drop public schema
+SELECT _timescaledb_functions.stop_background_workers();
+SET client_min_messages TO ERROR;
+REVOKE CONNECT ON DATABASE :TEST_DBNAME FROM public;
+SELECT count(pg_terminate_backend(pg_stat_activity.pid)) AS TERMINATED
+FROM pg_stat_activity
+WHERE pg_stat_activity.datname = :'TEST_DBNAME'
+AND pg_stat_activity.pid <> pg_backend_pid() \gset
+RESET client_min_messages;
+-- drop the public schema and all its objects
+DROP SCHEMA public CASCADE;
 \dn

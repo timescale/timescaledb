@@ -13,8 +13,11 @@ SELECT format('\! diff -u --label "Unoptimized results" --label "Optimized resul
 
 SET timescaledb.enable_now_constify TO false;
 
--- disable memoize node to make EXPLAIN output comparable between PG14 and previous versions
-SELECT CASE WHEN current_setting('server_version_num')::int/10000 >= 14 THEN set_config('enable_memoize','off',false) ELSE 'off' END AS enable_memoize;
+-- disable memoize node to avoid flaky results
+SET enable_memoize TO 'off';
+
+-- disable index only scans to avoid some flaky results
+SET enable_indexonlyscan TO FALSE;
 
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
 

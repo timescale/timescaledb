@@ -6,17 +6,91 @@
 #pragma once
 
 #include <postgres.h>
+
 #include <access/htup_details.h>
-#include <catalog/pg_proc.h>
+#include <access/tupdesc.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_proc.h>
 #include <common/int.h>
-#include <foreign/foreign.h>
-#include <nodes/pathnodes.h>
-#include <nodes/extensible.h>
-#include <utils/datetime.h>
 #include <debug_assert.h>
+#include <foreign/foreign.h>
+#include <nodes/extensible.h>
+#include <nodes/pathnodes.h>
+#include <utils/builtins.h>
+#include <utils/datetime.h>
+#include <utils/jsonb.h>
 
 #include "compat/compat.h"
+
+/*
+ * Macro for debug messages that should *only* be present in debug builds but
+ * which should be removed in release builds. This is typically used for
+ * debug builds for development purposes.
+ *
+ * Note that some debug messages might be relevant to deploy in release build
+ * for debugging production systems. This macro is *not* for those cases.
+ */
+#ifdef TS_DEBUG
+#define TS_DEBUG_LOG(FMT, ...) elog(DEBUG2, "%s - " FMT, __func__, ##__VA_ARGS__)
+#else
+#define TS_DEBUG_LOG(FMT, ...)
+#endif
+
+#define UnassignedDatum (Datum) 0
+
+static inline int64
+interval_to_usec(Interval *interval)
+{
+	return (interval->month * DAYS_PER_MONTH * USECS_PER_DAY) + (interval->day * USECS_PER_DAY) +
+		   interval->time;
+}
+
+#ifdef TS_DEBUG
+
+static inline const char *
+yes_no(bool value)
+{
+	return value ? "yes" : "no";
+}
+
+/* Convert datum to string using the output function. */
+static inline const char *
+datum_as_string(Oid typid, Datum value, bool is_null)
+{
+	Oid typoutput;
+	bool typIsVarlena;
+
+	if (is_null)
+		return "<NULL>";
+
+	getTypeOutputInfo(typid, &typoutput, &typIsVarlena);
+	return OidOutputFunctionCall(typoutput, value);
+}
+
+static inline const char *
+slot_as_string(TupleTableSlot *slot)
+{
+	StringInfoData info;
+	initStringInfo(&info);
+	appendStringInfoString(&info, "{");
+	for (int i = 0; i < slot->tts_tupleDescriptor->natts; i++)
+	{
+		Form_pg_attribute att = TupleDescAttr(slot->tts_tupleDescriptor, i);
+
+		if (att->attisdropped)
+			continue;
+		appendStringInfo(&info,
+						 "%s: %s",
+						 NameStr(att->attname),
+						 datum_as_string(att->atttypid, slot->tts_values[i], slot->tts_isnull[i]));
+		if (i + 1 < slot->tts_tupleDescriptor->natts)
+			appendStringInfoString(&info, ", ");
+	}
+	appendStringInfoString(&info, "}");
+	return info.data;
+}
+
+#endif /* TS_DEBUG */
 
 /*
  * Get the function name in a PG_FUNCTION.
@@ -43,13 +117,6 @@
 
 extern TSDLLEXPORT bool ts_type_is_int8_binary_compatible(Oid sourcetype);
 
-typedef enum TimevalInfinity
-{
-	TimevalFinite = 0,
-	TimevalNegInfinity = -1,
-	TimevalPosInfinity = 1,
-} TimevalInfinity;
-
 typedef bool (*proc_filter)(Form_pg_proc form, void *arg);
 
 /*
@@ -60,8 +127,7 @@ typedef bool (*proc_filter)(Form_pg_proc form, void *arg);
  * Will throw an error for that, or other conversion issues.
  */
 extern TSDLLEXPORT int64 ts_time_value_to_internal(Datum time_val, Oid type);
-extern int64 ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid,
-												   TimevalInfinity *is_infinite_out);
+extern int64 ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid);
 
 extern TSDLLEXPORT int64 ts_interval_value_to_internal(Datum time_val, Oid type_oid);
 
@@ -107,9 +173,7 @@ extern TSDLLEXPORT void *ts_create_struct_from_slot(TupleTableSlot *slot, Memory
 extern TSDLLEXPORT AppendRelInfo *ts_get_appendrelinfo(PlannerInfo *root, Index rti,
 													   bool missing_ok);
 
-#if PG15_GE
 extern TSDLLEXPORT Expr *ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel);
-#endif
 
 extern TSDLLEXPORT bool ts_has_row_security(Oid relid);
 
@@ -125,6 +189,21 @@ extern TSDLLEXPORT List *ts_get_reloptions(Oid relid);
 	(find_inheritance_children(table_relid, AccessShareLock) != NIL)
 
 #define is_inheritance_table(relid) (is_inheritance_child(relid) || is_inheritance_parent(relid))
+
+#define INIT_NULL_DATUM                                                                            \
+	{                                                                                              \
+		.value = 0, .isnull = true                                                                 \
+	}
+
+static inline Datum
+ts_fetch_att(const void *T, bool attbyval, int attlen)
+{
+	/* Length should be set to something sensible, otherwise an error will be
+	 * raised by fetch_att, so we assert this here to get a stack for
+	 * violations. */
+	Assert(!attbyval || (attlen > 0 && attlen <= 8));
+	return fetch_att(T, attbyval, attlen);
+}
 
 static inline int64
 int64_min(int64 a, int64 b)
@@ -239,4 +318,88 @@ ts_get_relation_relid(char const *schema_name, char const *relation_name, bool r
 	}
 }
 
+struct Hypertable;
+
 void replace_now_mock_walker(PlannerInfo *root, Node *clause, Oid funcid);
+
+extern TSDLLEXPORT HeapTuple ts_heap_form_tuple(TupleDesc tupleDescriptor, NullableDatum *datums);
+
+static inline void
+ts_datum_set_text_from_cstring(const AttrNumber attno, NullableDatum *datums, const char *value)
+{
+	if (value != NULL)
+	{
+		datums[AttrNumberGetAttrOffset(attno)].value = PointerGetDatum(cstring_to_text(value));
+		datums[AttrNumberGetAttrOffset(attno)].isnull = false;
+	}
+	else
+		datums[AttrNumberGetAttrOffset(attno)].isnull = true;
+}
+
+static inline void
+ts_datum_set_bool(const AttrNumber attno, NullableDatum *datums, const bool value,
+				  const bool isnull)
+{
+	if (!isnull)
+		datums[AttrNumberGetAttrOffset(attno)].value = BoolGetDatum(value);
+	datums[AttrNumberGetAttrOffset(attno)].isnull = isnull;
+}
+
+static inline void
+ts_datum_set_int32(const AttrNumber attno, NullableDatum *datums, const int32 value,
+				   const bool isnull)
+{
+	if (!isnull)
+		datums[AttrNumberGetAttrOffset(attno)].value = Int32GetDatum(value);
+	datums[AttrNumberGetAttrOffset(attno)].isnull = isnull;
+}
+
+static inline void
+ts_datum_set_int64(const AttrNumber attno, NullableDatum *datums, const int64 value,
+				   const bool isnull)
+{
+	if (!isnull)
+		datums[AttrNumberGetAttrOffset(attno)].value = Int64GetDatum(value);
+	datums[AttrNumberGetAttrOffset(attno)].isnull = isnull;
+}
+
+static inline void
+ts_datum_set_timestamptz(const AttrNumber attno, NullableDatum *datums, const TimestampTz value,
+						 const bool isnull)
+{
+	if (!isnull)
+		datums[AttrNumberGetAttrOffset(attno)].value = TimestampTzGetDatum(value);
+	datums[AttrNumberGetAttrOffset(attno)].isnull = isnull;
+}
+
+static inline void
+ts_datum_set_jsonb(const AttrNumber attno, NullableDatum *datums, const Jsonb *value)
+{
+	if (value != NULL)
+	{
+		datums[AttrNumberGetAttrOffset(attno)].value = JsonbPGetDatum(value);
+		datums[AttrNumberGetAttrOffset(attno)].isnull = false;
+	}
+	else
+		datums[AttrNumberGetAttrOffset(attno)].isnull = true;
+}
+
+static inline void
+ts_datum_set_objectid(const AttrNumber attno, NullableDatum *datums, const Oid value)
+{
+	if (OidIsValid(value))
+	{
+		datums[AttrNumberGetAttrOffset(attno)].value = ObjectIdGetDatum(value);
+		datums[AttrNumberGetAttrOffset(attno)].isnull = false;
+	}
+	else
+		datums[AttrNumberGetAttrOffset(attno)].isnull = true;
+}
+
+extern TSDLLEXPORT void ts_get_rel_info_by_name(const char *relnamespace, const char *relname,
+												Oid *relid, Oid *amoid, char *relkind);
+extern TSDLLEXPORT void ts_get_rel_info(Oid relid, Oid *amoid, char *relkind);
+extern TSDLLEXPORT Oid ts_get_rel_am(Oid relid);
+extern TSDLLEXPORT void ts_relation_set_reloption(Relation rel, List *options, LOCKMODE lockmode);
+extern TSDLLEXPORT bool ts_is_hypercore_am(Oid amoid);
+extern TSDLLEXPORT Jsonb *ts_errdata_to_jsonb(ErrorData *edata, Name proc_schema, Name proc_name);

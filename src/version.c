@@ -3,20 +3,20 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#include <postgres.h>
 #include <string.h>
+#include <postgres.h>
 #include <access/htup_details.h>
-#include <utils/builtins.h>
-#include <funcapi.h>
 #include <fmgr.h>
+#include <funcapi.h>
 #include <storage/fd.h>
+#include <utils/builtins.h>
 #include <utils/timestamp.h>
 
 #include "compat/compat.h"
 #include "annotations.h"
+#include "config.h"
 #include "gitcommit.h"
 #include "version.h"
-#include "config.h"
 
 /* Export the strings to that we can read them using strings(1). We add a
  * prefix so that we can easily find it using grep(1). We only bother about

@@ -541,9 +541,10 @@ SELECT * FROM document d FULL OUTER JOIN category c on d.cid = c.cid ORDER BY d.
      |     |        |                 |                    |  33 | technology
 (6 rows)
 
+\set VERBOSITY sqlstate
 DELETE FROM category WHERE cid = 33;    -- fails with FK violation
-ERROR:  update or delete on table "category" violates foreign key constraint "4_7_document_cid_fkey" on table "_hyper_1_4_chunk"
-DETAIL:  Key is still referenced from table "_hyper_1_4_chunk".
+ERROR:  23503
+\set VERBOSITY default
 -- can insert FK referencing invisible PK
 SET SESSION AUTHORIZATION regress_rls_carol;
 SELECT * FROM document d FULL OUTER JOIN category c on d.cid = c.cid ORDER BY d.did, c.cid;
@@ -2268,7 +2269,7 @@ INSERT INTO bv1 VALUES (12, 'xxx'); -- ok
 EXPLAIN (COSTS OFF) UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);
                                           QUERY PLAN                                           
 -----------------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Update on b1
          Update on _hyper_8_41_chunk b1_1
          ->  Result
@@ -2284,7 +2285,7 @@ NOTICE:  f_leak => a87ff679a2f3e71d9181a67b7542122c
 EXPLAIN (COSTS OFF) DELETE FROM bv1 WHERE a = 6 AND f_leak(b);
                                        QUERY PLAN                                        
 -----------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Delete on b1
          Delete on _hyper_8_42_chunk b1_1
          ->  Custom Scan (ChunkAppend) on b1
@@ -3796,7 +3797,7 @@ INSERT INTO t2 (SELECT * FROM t1);
 EXPLAIN (COSTS OFF) INSERT INTO t2 (SELECT * FROM t1);
                           QUERY PLAN                          
 --------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Insert on t2
          ->  Custom Scan (ChunkDispatch)
                ->  Append
@@ -4354,7 +4355,7 @@ SELECT * FROM current_check;
 EXPLAIN (COSTS OFF) UPDATE current_check SET payload = payload WHERE CURRENT OF current_check_cursor;
                             QUERY PLAN                             
 -------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Update on current_check
          Update on _hyper_21_104_chunk current_check_1
          ->  Tid Scan on _hyper_21_104_chunk current_check_1
@@ -4717,8 +4718,8 @@ ALTER TABLE r2 ENABLE ROW LEVEL SECURITY;
 ALTER TABLE r2 FORCE ROW LEVEL SECURITY;
 -- Errors due to rows in r2
 DELETE FROM r1;
-ERROR:  update or delete on table "r1" violates foreign key constraint "113_23_r2_a_fkey" on table "_hyper_26_113_chunk"
-DETAIL:  Key (a)=(10) is still referenced from table "_hyper_26_113_chunk".
+ERROR:  update or delete on table "r1" violates foreign key constraint "r2_a_fkey" on table "r2"
+DETAIL:  Key (a)=(10) is still referenced from table "r2".
 -- Reset r2 to no-RLS
 DROP POLICY p1 ON r2;
 ALTER TABLE r2 NO FORCE ROW LEVEL SECURITY;
@@ -4792,11 +4793,11 @@ INSERT INTO r2 VALUES (10), (20);
 CREATE POLICY p1 ON r2 USING (false);
 ALTER TABLE r2 ENABLE ROW LEVEL SECURITY;
 ALTER TABLE r2 FORCE ROW LEVEL SECURITY;
--- Updates records in both
+-- Updates records in both (terse output to not print CONTEXT, which can be different).
+\set VERBOSITY terse
 UPDATE r1 SET a = a+5;
 ERROR:  new row for relation "_hyper_28_117_chunk" violates check constraint "constraint_117"
-DETAIL:  Failing row contains (15).
-CONTEXT:  SQL statement "UPDATE ONLY "_timescaledb_internal"."_hyper_28_117_chunk" SET "a" = $1 WHERE $2 OPERATOR(pg_catalog.=) "a""
+\set VERBOSITY default
 -- Remove FORCE from r2
 ALTER TABLE r2 NO FORCE ROW LEVEL SECURITY;
 -- As owner, we now bypass RLS

@@ -4,18 +4,18 @@
  * LICENSE-APACHE for a copy of the license.
  */
 
-#include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <postgres.h>
+#include <access/htup_details.h>
 #include <fmgr.h>
 #include <funcapi.h>
-#include <access/htup_details.h>
+#include <stdlib.h>
+#include <time.h>
 #include <utils/memutils.h>
 
 #include "compat/compat.h"
-#include "export.h"
 #include "bgw/scheduler.h"
+#include "export.h"
 
 TS_FUNCTION_INFO_V1(ts_test_job_refresh);
 

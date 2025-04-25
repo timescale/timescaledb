@@ -7,9 +7,9 @@
 
 #include <postgres.h>
 
-#include <nodes/extensible.h>
 #include "batch_queue.h"
 #include "decompress_context.h"
+#include <nodes/extensible.h>
 
 #define DECOMPRESS_CHUNK_COUNT_ID -9
 #define DECOMPRESS_CHUNK_SEQUENCE_NUM_ID -10
@@ -20,8 +20,8 @@ typedef struct DecompressChunkState
 	List *decompression_map;
 	List *is_segmentby_column;
 	List *bulk_decompression_column;
-	List *aggregated_column_type;
 	List *custom_scan_tlist;
+	bool has_row_marks;
 
 	DecompressContext decompress_context;
 
@@ -32,10 +32,6 @@ typedef struct DecompressChunkState
 	CustomExecMethods exec_methods;
 
 	List *sortinfo;
-
-	/* Perform calculation of the aggregate directly in the decompress chunk node and emit partials
-	 */
-	bool perform_vectorized_aggregation;
 
 	/*
 	 * For some predicates, we have more efficient implementation that work on
@@ -49,3 +45,6 @@ typedef struct DecompressChunkState
 } DecompressChunkState;
 
 extern Node *decompress_chunk_state_create(CustomScan *cscan);
+
+TupleTableSlot *decompress_chunk_exec_vector_agg_impl(CustomScanState *vector_agg_state,
+													  DecompressChunkState *decompress_state);

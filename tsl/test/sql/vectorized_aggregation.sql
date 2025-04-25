@@ -27,6 +27,12 @@ ORDER BY time;
 -- Aggregation result without any vectorization
 SELECT sum(segment_by_value), sum(int_value), sum(float_value) FROM testtable;
 
+--
+-- Enable this GUC to run this test with Hypercore TAM. The EXPLAINs
+-- will differ, but the results should not.
+--
+--SET timescaledb.default_hypercore_use_access_method = true;
+
 ---
 -- Tests with some chunks compressed
 ---
@@ -42,7 +48,7 @@ SELECT sum(segment_by_value) FROM testtable;
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable WHERE segment_by_value > 0;
 
--- Vectorization not possible due to a used filter
+-- Vectorization with filter on compressed columns
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable WHERE segment_by_value > 0 AND int_value > 0;
 
@@ -52,22 +58,30 @@ SELECT sum(segment_by_value) FROM testtable WHERE int_value > 0;
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable WHERE float_value > 0;
 
--- Vectorization not possible due grouping
+-- Vectorization possible with grouping by one fixed-size column
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable GROUP BY float_value;
 
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable GROUP BY int_value;
 
+-- Vectorization possible with grouping by multiple columns
+:EXPLAIN
+SELECT sum(segment_by_value) FROM testtable GROUP BY int_value, float_value;
+
+-- Vectorization possible with grouping by a segmentby column.
 :EXPLAIN
 SELECT sum(int_value) FROM testtable GROUP BY segment_by_value;
 
--- Vectorization not possible due to two variables and grouping
 :EXPLAIN
-SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_by_value;
+SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
+
+SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
 
 :EXPLAIN
-SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_by_value;
+SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
+
+SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
 
 -- Vectorized aggregation possible
 SELECT sum(int_value) FROM testtable;
@@ -75,7 +89,7 @@ SELECT sum(int_value) FROM testtable;
 :EXPLAIN
 SELECT sum(int_value) FROM testtable;
 
--- Vectorized aggregation not possible
+-- Vectorized aggregation possible
 SELECT sum(float_value) FROM testtable;
 
 :EXPLAIN
@@ -132,11 +146,17 @@ SELECT sum(int_value) FROM testtable;
 
 RESET timescaledb.enable_vectorized_aggregation;
 
--- Vectorized aggregation NOT possible without bulk decompression
+-- Vectorized aggregation without bulk decompression only possible for
+-- segmentby columns.
 SET timescaledb.enable_bulk_decompression = OFF;
 
 :EXPLAIN
 SELECT sum(int_value) FROM testtable;
+
+:EXPLAIN
+SELECT sum(segment_by_value) FROM testtable;
+
+SELECT sum(segment_by_value) FROM testtable;
 
 RESET timescaledb.enable_bulk_decompression;
 
@@ -148,17 +168,19 @@ SELECT sum(int_value), sum(int_value) FROM testtable;
 :EXPLAIN
 SELECT sum(segment_by_value), sum(segment_by_value) FROM testtable;
 
--- Performing a sum on multiple columns is currently not supported by vectorization
+-- Performing a sum on multiple columns is supported.
 :EXPLAIN
+SELECT sum(int_value), sum(segment_by_value) FROM testtable;
+
 SELECT sum(int_value), sum(segment_by_value) FROM testtable;
 
 -- Using the sum function together with another non-vector capable aggregate is not supported
 :EXPLAIN
-SELECT sum(int_value), max(int_value) FROM testtable;
+SELECT sum(int_value), bit_or(int_value) FROM testtable;
 
 -- Using the sum function together with another non-vector capable aggregate is not supported
 :EXPLAIN
-SELECT sum(segment_by_value), max(segment_by_value) FROM testtable;
+SELECT sum(segment_by_value), bit_or(segment_by_value) FROM testtable;
 
 ---
 -- Tests with only negative values
@@ -318,7 +340,7 @@ SELECT sum(segment_by_value) FROM testtable;
 
 SELECT sum(int_value) FROM testtable;
 
--- Aggregation filters are not supported at the moment
+-- Vectorizable aggregation filters are supported
 :EXPLAIN
 SELECT sum(segment_by_value) FILTER (WHERE segment_by_value > 99999) FROM testtable;
 
@@ -349,7 +371,7 @@ value2 AS segment_by_value2,
 value1 AS int_value,
 value1 AS float_value
 FROM
-generate_series('1980-01-01 00:00:00-00', '1980-03-01 00:00:00-00', INTERVAL '1 day') AS g1(time),
+generate_series('1980-01-03 00:00:00-00', '1980-03-04 00:00:00-00', INTERVAL '1 day') AS g1(time),
 generate_series(-10, 25, 1) AS g2(value1),
 generate_series(-30, 20, 1) AS g3(value2)
 ORDER BY time;
@@ -358,6 +380,8 @@ ORDER BY time;
 SELECT sum(segment_by_value1), sum(segment_by_value2) FROM testtable2;
 
 SELECT compress_chunk(ch) FROM show_chunks('testtable2') ch;
+
+ANALYZE testtable2;
 
 :EXPLAIN
 SELECT sum(segment_by_value1) FROM testtable2;
@@ -389,3 +413,27 @@ SET max_parallel_workers_per_gather = 0;
 SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 1000 AND int_value > 1000;
 
 RESET max_parallel_workers_per_gather;
+
+
+-- Can't group by a system column
+SELECT sum(float_value) FROM testtable2 GROUP BY tableoid ORDER BY 1 LIMIT 1;
+
+-- Postgres versions starting with 16 remove the grouping columns that are
+-- equated to a constant. Check that our planning code handles this well.
+SELECT sum(float_value), int_value FROM testtable2 WHERE int_value = 1 GROUP BY int_value;
+
+--
+-- Test handling of Agg on top of ChunkAppend. This reproduces a crash
+-- in the vector agg planning code introduced in commit 947f7f400.
+--
+CREATE TABLE testtable3 (time timestamptz, location_id int, device_id int, sensor_id int);
+SELECT create_hypertable('testtable3', 'time');
+ALTER TABLE testtable3 SET (timescaledb.compress_orderby='time', timescaledb.compress_segmentby='location_id');
+
+INSERT INTO testtable3 SELECT t, ceil(random() * 20)::int, ceil(random() * 30)::int, ceil(random() * 20)::int FROM generate_series('2024-01-01'::timestamptz, '2024-01-10'::timestamptz, '1h') AS t;
+
+SELECT count(compress_chunk(ch)) FROM show_chunks('testtable3') ch;
+
+EXPLAIN (costs off) SELECT (date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour')::timestamp as time, TT.location_id as location_id, TT.device_id as device_id, 0 as sensor_id, date_trunc('day', current_timestamp) as discovered_date FROM testtable3 TT WHERE time >= date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour' GROUP BY TT.location_id, TT.device_id;
+
+SELECT (date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour')::timestamp as time, TT.location_id as location_id, TT.device_id as device_id, 0 as sensor_id, date_trunc('day', current_timestamp) as discovered_date FROM testtable3 TT WHERE time >= date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour' GROUP BY TT.location_id, TT.device_id \g :TEST_OUTPUT_DIR/vectorized_aggregation_query_result.out

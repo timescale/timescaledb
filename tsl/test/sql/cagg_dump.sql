@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+SET timezone TO PST8PDT;
+
 CREATE TYPE custom_type AS (high int, low int);
 
 CREATE TABLE conditions_before (
@@ -118,6 +120,7 @@ SELECT count(*) FROM conditions_after;
 
 --dump & restore
 \c postgres :ROLE_SUPERUSER
+
 \! utils/pg_dump_aux_dump.sh dump/pg_dump.sql
 
 \c :TEST_DBNAME
@@ -132,6 +135,8 @@ SELECT timescaledb_post_restore();
 SELECT _timescaledb_functions.stop_background_workers();
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+SET timezone TO PST8PDT;
 
 --make sure the appropriate DROP are still blocked.
 \set ON_ERROR_STOP 0

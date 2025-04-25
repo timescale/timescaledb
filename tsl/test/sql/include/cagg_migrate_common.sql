@@ -121,7 +121,7 @@ SELECT *
 FROM timescaledb_information.jobs
 WHERE hypertable_schema = :'MAT_SCHEMA_NAME'
 AND hypertable_name = :'MAT_TABLE_NAME'
-AND job_id >= 1000;
+AND job_id >= 1000 ORDER BY job_id;
 
 -- execute the migration
 DROP MATERIALIZED VIEW conditions_summary_daily_new;
@@ -149,7 +149,7 @@ SELECT *
 FROM timescaledb_information.jobs
 WHERE hypertable_schema = :'NEW_MAT_SCHEMA_NAME'
 AND hypertable_name = :'NEW_MAT_TABLE_NAME'
-AND job_id >= 1000;
+AND job_id >= 1000 ORDER BY job_id;
 
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
 

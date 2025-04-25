@@ -65,12 +65,18 @@ ForEachMacros:
   - forthree
 IncludeBlocks:   Preserve # separate include blocks will not be merged
 IncludeCategories: # we want to ensure c.h and postgres.h appear first
-  - Regex:           '.*'
-    Priority:        1
-  - Regex:            '^<c\.h>'
-    Priority:        -1
+  - Regex:            '^<(string|unistd)\.h>'
+    Priority:        -2
   - Regex:            '^<postgres\.h>'
     Priority:        -1
+  - Regex:            '^(<|")compat/compat\.h'
+    Priority:        -2
+  - Regex:            '^"compat/compat-msvc-enter\.h'
+    Priority:        -1 
+  - Regex:            '^"compat/compat-msvc-exit\.h'
+    Priority:         2000000000
+  - Regex:            '.*'
+    Priority:         1
 IncludeIsMainRegex: '' # filename_<suffix> will be seen as the primary include
 IndentCaseLabels: true
 IndentPPDirectives: None # do not indent preprocessor directives after the '#'
@@ -97,7 +103,7 @@ PenaltyExcessCharacter: 1000000
 PenaltyReturnTypeOnItsOwnLine: 60
 PointerAlignment: Right # as in char *foo;
 ReflowComments:  true # break up long comments into multiple lines
-SortIncludes:    false # keep includes in the same order as we write them
+SortIncludes: CaseInsensitive # sort includes
 SortUsingDeclarations: false # N/A c++
 SpaceAfterCStyleCast: true
 SpaceAfterTemplateKeyword: false # N/A c++

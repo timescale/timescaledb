@@ -20,11 +20,12 @@
 #include <optimizer/tlist.h>
 #include <parser/parsetree.h>
 
+#include "guc.h"
+#include "import/planner.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/chunk_append/transform.h"
 #include "nodes/hypertable_modify.h"
-#include "import/planner.h"
-#include "guc.h"
+#include "nodes/vector_agg.h"
 
 static Sort *make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx, Oid *sortOperators,
 					   Oid *collations, bool *nullsFirst);
@@ -39,7 +40,6 @@ static CustomScanMethods chunk_append_plan_methods = {
 bool
 ts_is_chunk_append_plan(Plan *plan)
 {
-#if PG15_GE
 	if (IsA(plan, Result))
 	{
 		if (castNode(Result, plan)->plan.lefttree &&
@@ -50,7 +50,6 @@ ts_is_chunk_append_plan(Plan *plan)
 		}
 		return false;
 	}
-#endif
 	return IsA(plan, CustomScan) &&
 		   castNode(CustomScan, plan)->methods == &chunk_append_plan_methods;
 }
@@ -65,15 +64,11 @@ static Plan *
 adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys, List *tlist,
 				 AttrNumber *sortColIdx)
 {
-	AppendRelInfo *appinfo = ts_get_appendrelinfo(root, path->parent->relid, false);
 	int childSortCols;
 	Oid *sortOperators;
 	Oid *collations;
 	bool *nullsFirst;
 	AttrNumber *childColIdx;
-
-	/* push down targetlist to children */
-	plan->targetlist = castNode(List, adjust_appendrel_attrs(root, (Node *) tlist, 1, &appinfo));
 
 	/* Compute sort column info, and adjust subplan's tlist as needed */
 	plan = ts_prepare_sort_from_pathkeys(plan,
@@ -90,6 +85,8 @@ adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys, List
 	/* inject sort node if child sort order does not match desired order */
 	if (!pathkeys_contained_in(pathkeys, path->pathkeys))
 	{
+		Assert(!IsA(plan, Sort));
+
 		plan = (Plan *)
 			make_sort(plan, childSortCols, childColIdx, sortOperators, collations, nullsFirst);
 	}
@@ -119,9 +116,8 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	orig_tlist = ts_build_path_tlist(root, (Path *) path);
 	tlist = orig_tlist;
 
-#if PG14_GE
 	/*
-	 * If this is a child of HypertableModify we need to adjust
+	 * If this is a child of ModifyHypertable we need to adjust
 	 * targetlists to not have any ROWID_VAR references as postgres
 	 * asserts that scan targetlists do not have them in setrefs.c
 	 *
@@ -133,35 +129,35 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	 */
 	if (root->parse->commandType != CMD_SELECT)
 		tlist = ts_replace_rowid_vars(root, tlist, rel->relid);
-#endif
 
 	cscan->scan.plan.targetlist = tlist;
 
-	if (path->path.pathkeys == NIL)
+	ListCell *lc_plan, *lc_path;
+	forboth (lc_path, path->custom_paths, lc_plan, custom_plans)
 	{
-		ListCell *lc_plan, *lc_path;
-		forboth (lc_path, path->custom_paths, lc_plan, custom_plans)
+		Plan *child_plan = lfirst(lc_plan);
+		Path *child_path = lfirst(lc_path);
+
+		/* push down targetlist to children */
+		if (child_path->parent->reloptkind == RELOPT_OTHER_MEMBER_REL)
 		{
-			Plan *child_plan = lfirst(lc_plan);
-			Path *child_path = lfirst(lc_path);
+			/* if this is an append child we need to adjust targetlist references */
+			AppendRelInfo *appinfo = ts_get_appendrelinfo(root, child_path->parent->relid, false);
 
-			/* push down targetlist to children */
-			if (child_path->parent->reloptkind == RELOPT_OTHER_MEMBER_REL)
-			{
-				/* if this is an append child we need to adjust targetlist references */
-				AppendRelInfo *appinfo =
-					ts_get_appendrelinfo(root, child_path->parent->relid, false);
-
-				child_plan->targetlist =
-					castNode(List, adjust_appendrel_attrs(root, (Node *) orig_tlist, 1, &appinfo));
-			}
-			else
-			{
-				child_plan->targetlist = tlist;
-			}
+			child_plan->targetlist =
+				castNode(List, adjust_appendrel_attrs(root, (Node *) orig_tlist, 1, &appinfo));
+		}
+		else
+		{
+			/*
+			 * This can also be a MergeAppend path building the entire
+			 * hypertable, in case we have a single partial chunk.
+			 */
+			child_plan->targetlist = tlist;
 		}
 	}
-	else
+
+	if (path->path.pathkeys != NIL)
 	{
 		/*
 		 * If this is an ordered append node we need to ensure the columns
@@ -169,7 +165,6 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 		 * return sorted output. Children not returning sorted output will be
 		 * wrapped in a sort node.
 		 */
-		ListCell *lc_plan, *lc_path;
 		int numCols;
 		AttrNumber *sortColIdx;
 		Oid *sortOperators;
@@ -220,54 +215,13 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 
 			/*
 			 * This could be a MergeAppend due to space partitioning, or
-			 * due to partially compressed chunks. In the second case, there is
-			 * no need to inject sort nodes
+			 * due to partially compressed chunks. The MergeAppend plan adds
+			 * sort to it children, and has the proper sorting itself, so no
+			 * need to do anything for it.
+			 * We can also have plain chunk scans here which might require a
+			 * Sort.
 			 */
-			if (IsA(lfirst(lc_plan), MergeAppend))
-			{
-				ListCell *lc_childpath, *lc_childplan;
-				MergeAppend *merge_plan = castNode(MergeAppend, lfirst(lc_plan));
-				MergeAppendPath *merge_path = castNode(MergeAppendPath, lfirst(lc_path));
-				Index current_group_relid =
-					((Path *) linitial(merge_path->subpaths))->parent->relid;
-
-				/*
-				 * Since for space partitioning the MergeAppend below ChunkAppend
-				 * still has the hypertable as rel we can copy sort properties and
-				 * target list from toplevel ChunkAppend.
-				 */
-				merge_plan->plan.targetlist = cscan->scan.plan.targetlist;
-				merge_plan->sortColIdx = sortColIdx;
-				merge_plan->sortOperators = sortOperators;
-				merge_plan->collations = collations;
-				merge_plan->nullsFirst = nullsFirst;
-				bool partial_chunks = true;
-
-				/* children will have same parent relid if we have partial chunks */
-				foreach (lc_childpath, merge_path->subpaths)
-				{
-					Path *child = lfirst(lc_childpath);
-					if (child->parent->relid != current_group_relid)
-						partial_chunks = false;
-				}
-
-				forboth (lc_childpath, merge_path->subpaths, lc_childplan, merge_plan->mergeplans)
-				{
-					/*
-					 * Skip this invocation in the existence of partial chunks because it
-					 * will add an unnecessary sort node, create_merge_append_plan has already
-					 * adjusted the childscan with a sort node if required
-					 */
-					if (!partial_chunks)
-						lfirst(lc_childplan) = adjust_childscan(root,
-																lfirst(lc_childplan),
-																lfirst(lc_childpath),
-																pathkeys,
-																orig_tlist,
-																sortColIdx);
-				}
-			}
-			else
+			if (!IsA(lfirst(lc_plan), MergeAppend))
 			{
 				lfirst(lc_plan) = adjust_childscan(root,
 												   lfirst(lc_plan),
@@ -377,9 +331,6 @@ make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx, Oid *sortOperator
 Scan *
 ts_chunk_append_get_scan_plan(Plan *plan)
 {
-	if (plan != NULL && (IsA(plan, Sort) || IsA(plan, Result)))
-		plan = plan->lefttree;
-
 	if (plan == NULL)
 		return NULL;
 
@@ -398,17 +349,35 @@ ts_chunk_append_get_scan_plan(Plan *plan)
 		case T_TidScan:
 		case T_ValuesScan:
 		case T_WorkTableScan:
-#if PG14_GE
 		case T_TidRangeScan:
-#endif
 			return (Scan *) plan;
-			break;
 		case T_CustomScan:
-			if (castNode(CustomScan, plan)->scan.scanrelid > 0)
+		{
+			CustomScan *custom = castNode(CustomScan, plan);
+			if (custom->scan.scanrelid > 0)
+			{
+				/*
+				 * The custom plan node is a scan itself. This handles the
+				 * DecompressChunk node.
+				 */
 				return (Scan *) plan;
-			else
-				return NULL;
+			}
+
+			if (strcmp(custom->methods->CustomName, VECTOR_AGG_NODE_NAME) == 0)
+			{
+				/*
+				 * This is a vectorized aggregation node, we have to recurse
+				 * into its child, similar to the normal aggregation node.
+				 *
+				 * Unfortunately we have to hardcode the node name here, because
+				 * we can't depend on the TSL library.
+				 */
+				return ts_chunk_append_get_scan_plan(linitial(custom->custom_plans));
+			}
 			break;
+		}
+		case T_Sort:
+		case T_Result:
 		case T_Agg:
 			if (plan->lefttree != NULL)
 			{
@@ -416,12 +385,10 @@ ts_chunk_append_get_scan_plan(Plan *plan)
 				/* Let ts_chunk_append_get_scan_plan handle the subplan */
 				return ts_chunk_append_get_scan_plan(plan->lefttree);
 			}
-			return NULL;
 			break;
-		case T_MergeAppend:
-			return NULL;
 		default:
-			elog(ERROR, "invalid child of chunk append: %s", ts_get_node_name((Node *) plan));
+			break;
 	}
-	pg_unreachable();
+
+	return NULL;
 }

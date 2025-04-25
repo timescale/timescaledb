@@ -1,0 +1,108 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+CREATE PROCEDURE
+       convert_hypertable_to_columnstore(regclass)
+LANGUAGE plpgsql AS $$
+DECLARE
+  chunk REGCLASS;
+BEGIN
+   FOR chunk IN SELECT show_chunks($1)
+   LOOP
+      CALL convert_to_columnstore(chunk);
+   END LOOP;
+END
+$$;
+CREATE PROCEDURE
+       convert_hypertable_to_rowstore(regclass)
+LANGUAGE plpgsql AS $$
+DECLARE
+  chunk REGCLASS;
+BEGIN
+   FOR chunk IN SELECT show_chunks($1)
+   LOOP
+      CALL convert_to_rowstore(chunk);
+   END LOOP;
+END
+$$;
+-- These are mostly taken from compression_ddl.sql and are only
+-- intended to check that aliases work. In that sense, the actual
+-- result of each query is not particularly important.
+CREATE TABLE test1 (ts timestamptz, i integer, b bigint, t text);
+SELECT * FROM create_hypertable('test1', 'ts');
+NOTICE:  adding not-null constraint to column "ts"
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             1 | public      | test1      | t
+(1 row)
+
+INSERT INTO test1 SELECT t,  random(), random(), random()::text
+FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-28 1:00', '1 hour') t;
+ALTER TABLE test1 set (
+      timescaledb.enable_columnstore,
+      timescaledb.segmentby = 'b',
+      timescaledb.orderby = 'ts desc'
+);
+CALL convert_hypertable_to_columnstore('test1');
+CALL convert_hypertable_to_rowstore('test1');
+CALL convert_hypertable_to_columnstore('test1');
+-- Pick one chunk to play with and test option names. We mostly use
+-- default since we are only interested in that the option names are
+-- accepted.
+SELECT chunk FROM show_chunks('test1') tbl(chunk) LIMIT 1 \gset
+CALL convert_to_rowstore(:'chunk', if_columnstore => true);
+CALL convert_to_columnstore(:'chunk',
+     if_not_columnstore => true,
+     recompress => false,
+     hypercore_use_access_method => false);
+CALL add_columnstore_policy('test1', interval '1 day');
+CALL remove_columnstore_policy('test1');
+SELECT * FROM timescaledb_information.hypertable_columnstore_settings;
+ hypertable | segmentby | orderby | compress_interval_length 
+------------+-----------+---------+--------------------------
+ test1      | b         | ts DESC | 
+(1 row)
+
+SELECT * FROM timescaledb_information.chunk_columnstore_settings ORDER BY chunk;
+ hypertable |                 chunk                  | segmentby | orderby 
+------------+----------------------------------------+-----------+---------
+ test1      | _timescaledb_internal._hyper_1_1_chunk | b         | ts DESC
+ test1      | _timescaledb_internal._hyper_1_2_chunk | b         | ts DESC
+ test1      | _timescaledb_internal._hyper_1_3_chunk | b         | ts DESC
+ test1      | _timescaledb_internal._hyper_1_4_chunk | b         | ts DESC
+(4 rows)
+
+VACUUM FULL test1;
+-- We only care about the column names for the result. They should be
+-- the same as for the original function.
+SELECT * FROM chunk_columnstore_stats('test1') where 1 = 2 order by chunk_name;
+ chunk_schema | chunk_name | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM hypertable_columnstore_stats('test1') where 1 = 2;
+ total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+CREATE TABLE test2 (ts timestamptz, i integer, b bigint, t text);
+SELECT * FROM create_hypertable('test2', 'ts');
+NOTICE:  adding not-null constraint to column "ts"
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             3 | public      | test2      | t
+(1 row)
+
+INSERT INTO test2 SELECT t,  random(), random(), random()::text
+FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-28 1:00', '1 hour') t;
+ALTER TABLE test2 set (
+      timescaledb.columnstore,
+      timescaledb.segmentby = 'b',
+      timescaledb.orderby = 'ts desc'
+);
+SELECT * FROM timescaledb_information.hypertables WHERE hypertable_name = 'test2';
+ hypertable_schema | hypertable_name |       owner       | num_dimensions | num_chunks | compression_enabled | tablespaces 
+-------------------+-----------------+-------------------+----------------+------------+---------------------+-------------
+ public            | test2           | default_perm_user |              1 |          4 | t                   | 
+(1 row)
+

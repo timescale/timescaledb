@@ -5,16 +5,16 @@
  */
 #include <postgres.h>
 #include <catalog/pg_type.h>
-#include <utils/builtins.h>
-#include <utils/array.h>
-#include <nodes/makefuncs.h>
-#include <utils/lsyscache.h>
-#include <netinet/in.h>
 #include <libpq/pqformat.h>
+#include <netinet/in.h>
+#include <nodes/makefuncs.h>
+#include <utils/array.h>
+#include <utils/builtins.h>
+#include <utils/lsyscache.h>
 
 #include "compat/compat.h"
-#include "utils.h"
 #include "debug_assert.h"
+#include "utils.h"
 
 /* aggregate histogram:
  *	 histogram(state, val, min, max, nbuckets) returns the histogram array with nbuckets
@@ -36,7 +36,8 @@ TS_FUNCTION_INFO_V1(ts_hist_serializefunc);
 TS_FUNCTION_INFO_V1(ts_hist_deserializefunc);
 TS_FUNCTION_INFO_V1(ts_hist_finalfunc);
 
-#define HISTOGRAM_SIZE(state, nbuckets) (sizeof(*(state)) + (nbuckets) * sizeof(*(state)->buckets))
+#define HISTOGRAM_SIZE(state, nbuckets)                                                            \
+	(sizeof(*(state)) + ((nbuckets) * sizeof(*(state)->buckets)))
 
 typedef struct Histogram
 {

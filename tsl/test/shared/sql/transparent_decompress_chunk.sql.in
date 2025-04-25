@@ -7,8 +7,10 @@
 \set PREFIX_NO_ANALYZE 'EXPLAIN (verbose, costs off)'
 \set PREFIX_NO_VERBOSE 'EXPLAIN (costs off)'
 
+-- Some tweaks to get less flaky test
 SET parallel_leader_participation TO off;
 SET min_parallel_table_scan_size TO '0';
+SET enable_incremental_sort TO off;
 
 SELECT show_chunks('metrics_compressed') AS "TEST_TABLE" ORDER BY 1::text LIMIT 1 \gset
 
@@ -239,6 +241,9 @@ FROM metrics m1
 
 -- test OUTER JOIN
 SET min_parallel_table_scan_size TO '0';
+-- Disable merge join to get stable tests. These queries uses hash
+-- joins.
+SET enable_mergejoin TO off;
 :PREFIX_NO_VERBOSE
 SELECT *
 FROM :TEST_TABLE m1
@@ -286,6 +291,7 @@ ORDER BY m1.time,
     m1.device_id,
     m2.device_id
 LIMIT 10;
+RESET enable_mergejoin;
 RESET parallel_leader_participation;
 
 :PREFIX
@@ -331,3 +337,17 @@ EXECUTE param_prep (2);
 EXECUTE param_prep (1);
 DEALLOCATE param_prep;
 RESET plan_cache_mode;
+
+-- test hypertable being non-toplevel equivalence member #6925
+CREATE TABLE i6925_t1(observed timestamptz not null, queryid int8, total_exec_time int8);
+CREATE TABLE i6925_t2(LIKE i6925_t1);
+
+SELECT table_name FROM create_hypertable('i6925_t1', 'observed');
+ALTER TABLE i6925_t1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'queryid');
+INSERT INTO i6925_t1 SELECT '2020-01-01', 1, 1;
+SELECT count(compress_chunk(chunk_name)) FROM show_chunks('i6925_t1') chunk_name;
+
+SELECT queryid, lag(total_exec_time) OVER (PARTITION BY queryid) FROM (SELECT * FROM i6925_t1 UNION ALL SELECT * FROM i6925_t2) q;
+
+DROP TABLE i6925_t1;
+DROP TABLE i6925_t2;

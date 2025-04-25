@@ -4,5 +4,6 @@ if(COMPRESSION_FUZZING)
   add_compile_definitions(TS_COMPRESSION_FUZZING=1)
 endif()
 
+# Add the subdirectories
 add_subdirectory(test)
 add_subdirectory(src)

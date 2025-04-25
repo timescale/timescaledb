@@ -14,7 +14,6 @@ SELECT create_hypertable('test_hyper_pk', 'time');
 \set ON_ERROR_STOP 0
 -- Foreign key constraints that reference hypertables are currently unsupported
 CREATE TABLE test_fk(time TIMESTAMPTZ REFERENCES test_hyper_pk(time));
-ERROR:  foreign keys to hypertables are not supported
 \set ON_ERROR_STOP 1
 CREATE TABLE test_delete(time timestamp with time zone PRIMARY KEY, temp float);
 SELECT create_hypertable('test_delete', 'time');

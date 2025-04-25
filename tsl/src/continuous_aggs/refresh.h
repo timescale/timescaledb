@@ -7,25 +7,21 @@
 
 #include <postgres.h>
 #include <fmgr.h>
-#include "continuous_aggs/materialize.h"
 
-#include "materialize.h"
 #include "invalidation.h"
-
-typedef enum CaggRefreshCallContext
-{
-	CAGG_REFRESH_CREATION,
-	CAGG_REFRESH_WINDOW,
-	CAGG_REFRESH_CHUNK,
-	CAGG_REFRESH_POLICY,
-} CaggRefreshCallContext;
+#include "materialize.h"
 
 extern Datum continuous_agg_refresh(PG_FUNCTION_ARGS);
 extern void continuous_agg_calculate_merged_refresh_window(
-	const InternalTimeRange *refresh_window, const InvalidationStore *invalidations,
-	const int64 bucket_width, const ContinuousAggsBucketFunction *bucket_function,
-	InternalTimeRange *merged_refresh_window);
+	const ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
+	const InvalidationStore *invalidations, const ContinuousAggsBucketFunction *bucket_function,
+	InternalTimeRange *merged_refresh_window, const CaggRefreshContext context);
 extern void continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 											const InternalTimeRange *refresh_window,
-											const CaggRefreshCallContext callctx,
-											const bool start_isnull, const bool end_isnull);
+											const CaggRefreshContext context,
+											const bool start_isnull, const bool end_isnull,
+											bool force);
+extern List *continuous_agg_split_refresh_window(ContinuousAgg *cagg,
+												 InternalTimeRange *original_refresh_window,
+												 int32 buckets_per_batch,
+												 bool refresh_newest_first);

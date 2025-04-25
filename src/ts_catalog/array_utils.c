@@ -4,6 +4,7 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+
 #include <catalog/pg_collation.h>
 #include <catalog/pg_type.h>
 #include <fmgr.h>
@@ -11,9 +12,9 @@
 #include <utils/builtins.h>
 #include <utils/fmgroids.h>
 
-#include <compat/compat.h>
-#include <debug_assert.h>
+#include "compat/compat.h"
 #include "array_utils.h"
+#include "debug_assert.h"
 
 /*
  * Array helper function for internal catalog arrays.
@@ -87,6 +88,42 @@ ts_array_is_member(ArrayType *arr, const char *name)
 
 	array_free_iterator(it);
 	return ret;
+}
+
+extern TSDLLEXPORT void
+ts_array_append_stringinfo(ArrayType *arr, StringInfo info)
+{
+	bool first = true;
+	Datum datum;
+	bool null;
+
+	if (!arr)
+		return;
+
+	Assert(ARR_NDIM(arr) <= 1);
+	Assert(arr->elemtype == TEXTOID);
+
+	ArrayIterator it = array_create_iterator(arr, 0, NULL);
+	while (array_iterate(it, &datum, &null))
+	{
+		Assert(!null);
+		/*
+		 * Our internal catalog arrays should either be NULL or
+		 * have non-NULL members. During normal operation it should
+		 * never have NULL members. If we have NULL members either
+		 * the catalog is corrupted or some catalog tampering has
+		 * happened.
+		 */
+		Ensure(!null, "array element was NULL");
+		if (!first)
+			appendStringInfoString(info, ", ");
+		else
+			first = false;
+
+		appendStringInfo(info, "%s", TextDatumGetCString(datum));
+	}
+
+	array_free_iterator(it);
 }
 
 extern TSDLLEXPORT int
@@ -242,44 +279,16 @@ ts_array_add_element_bool(ArrayType *arr, bool value)
 		Assert(position);
 		position++;
 
-		d = array_set_element(d, 1, &position, value, false, -1, 1, true, TYPALIGN_CHAR);
+		d = array_set_element(d,
+							  1,
+							  &position,
+							  BoolGetDatum(value),
+							  false,
+							  -1,
+							  1,
+							  true,
+							  TYPALIGN_CHAR);
 
 		return DatumGetArrayTypeP(d);
 	}
-}
-
-extern TSDLLEXPORT ArrayType *
-ts_array_create_from_list_text(List *values)
-{
-	if (!values)
-		return NULL;
-
-	List *datums = NIL;
-	ListCell *lc;
-	foreach (lc, values)
-	{
-		datums = lappend(datums, (void *) CStringGetTextDatum(lfirst(lc)));
-	}
-
-	Assert(datums);
-	return construct_array((Datum *) datums->elements,
-						   datums->length,
-						   TEXTOID,
-						   -1,
-						   false,
-						   TYPALIGN_INT);
-}
-
-extern TSDLLEXPORT ArrayType *
-ts_array_create_from_list_bool(List *values)
-{
-	if (!values)
-		return NULL;
-
-	return construct_array((Datum *) values->elements,
-						   values->length,
-						   BOOLOID,
-						   1,
-						   true,
-						   TYPALIGN_CHAR);
 }

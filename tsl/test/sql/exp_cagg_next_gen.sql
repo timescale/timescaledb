@@ -31,6 +31,11 @@ INSERT INTO conditions (day, city, temperature) VALUES
   ('2021-06-26', 'Moscow', 32),
   ('2021-06-27', 'Moscow', 31);
 
+-- timebucket_ng is deprecated and can not be used in new CAggs anymore.
+-- However, using this GUC the restriction can be lifted in debug builds
+-- to ensure the functionality can be tested.
+SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
+
 CREATE MATERIALIZED VIEW conditions_summary_weekly
 WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT city,
@@ -39,6 +44,9 @@ SELECT city,
        MAX(temperature)
 FROM conditions
 GROUP BY city, bucket;
+
+-- Reset GUC to check if the CAgg would also work in release builds
+RESET timescaledb.debug_allow_cagg_with_deprecated_funcs;
 
 SELECT to_char(bucket, 'YYYY-MM-DD'), city, min, max
 FROM conditions_summary_weekly
@@ -74,6 +82,7 @@ INSERT INTO conditions (tstamp, city, temperature) VALUES
   ('2021-06-14 12:32:10', 'Moscow', 32),
   ('2021-06-14 12:32:20', 'Moscow', 31);
 
+SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
 CREATE MATERIALIZED VIEW conditions_summary_30sec
 WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT city,
@@ -100,6 +109,8 @@ SELECT city,
        MAX(temperature)
 FROM conditions
 GROUP BY city, bucket;
+RESET timescaledb.debug_allow_cagg_with_deprecated_funcs;
+
 
 SELECT city, to_char(bucket, 'YYYY-MM-DD HH:mi:ss'), min, max FROM conditions_summary_30sec ORDER BY bucket;
 SELECT city, to_char(bucket, 'YYYY-MM-DD HH:mi:ss'), min, max FROM conditions_summary_1min ORDER BY bucket;
@@ -110,23 +121,24 @@ DROP TABLE conditions CASCADE;
 -- Experimental functions using different schema for installation than PUBLIC
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
-
-CREATE DATABASE test;
-\c test :ROLE_SUPERUSER
-CREATE SCHEMA test;
+\set TEST_DBNAME_2 :TEST_DBNAME _2
+CREATE DATABASE :TEST_DBNAME_2;
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
+CREATE SCHEMA test1;
 SET client_min_messages TO ERROR;
-CREATE EXTENSION timescaledb SCHEMA test;
+CREATE EXTENSION timescaledb SCHEMA test1;
 
 CREATE TABLE conditions(
   tstamp TIMESTAMP NOT NULL,
   city text NOT NULL,
   temperature INT NOT NULL);
 
-SELECT test.create_hypertable(
+SELECT test1.create_hypertable(
   'conditions', 'tstamp',
   chunk_time_interval => INTERVAL '1 day'
 );
 
+SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
 CREATE MATERIALIZED VIEW conditions_summary_monthly
 WITH (timescaledb.continuous) AS
 SELECT city,
@@ -136,11 +148,12 @@ SELECT city,
 FROM conditions
 GROUP BY city, bucket
 WITH NO DATA;
+RESET timescaledb.debug_allow_cagg_with_deprecated_funcs;
 
 CREATE MATERIALIZED VIEW conditions_summary_yearly
 WITH (timescaledb.continuous) AS
 SELECT city,
-       test.time_bucket('1 year', tstamp) AS bucket,
+       test1.time_bucket('1 year', tstamp) AS bucket,
        MIN(temperature),
        MAX(temperature)
 FROM conditions
@@ -150,5 +163,9 @@ WITH NO DATA;
 SELECT bucket_func, bucket_width, bucket_origin, bucket_timezone, bucket_fixed_width
 FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1;
 
+-- Try to toggle realtime feature on existing CAgg using timescaledb_experimental.time_bucket_ng
+ALTER MATERIALIZED VIEW conditions_summary_monthly SET (timescaledb.materialized_only=false);
+ALTER MATERIALIZED VIEW conditions_summary_monthly SET (timescaledb.materialized_only=true);
+
 \c :TEST_DBNAME :ROLE_SUPERUSER
-DROP DATABASE test WITH (FORCE);
+DROP DATABASE :TEST_DBNAME_2 WITH (FORCE);

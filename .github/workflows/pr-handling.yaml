@@ -15,10 +15,9 @@ name: Assign PR to author and reviewers
     types: [ opened, reopened, ready_for_review ]
 
 jobs:
+
   assign-pr:
     name: Assign PR to author
-    permissions:
-      contents: write
     runs-on: ubuntu-latest
     steps:
       - uses: toshimaru/auto-author-assign@v2.1.0
@@ -26,7 +25,7 @@ jobs:
   ask-review:
     name: Run pull-review
     runs-on: ubuntu-latest
-    if: ${{ !github.event.pull_request.draft }}
+    if: ${{ !github.event.pull_request.draft && github.event.pull_request.base.ref == 'main' }}
     steps:
       - uses: actions/checkout@v4
       - name: Run pull-review with docker

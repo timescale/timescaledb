@@ -8,12 +8,12 @@
 #include <postgres.h>
 #include <access/attnum.h>
 #include <access/htup_details.h>
-#include <executor/tuptable.h>
 #include <catalog/pg_type.h>
+#include <executor/tuptable.h>
 
-#include "ts_catalog/catalog.h"
 #include "export.h"
 #include "time_utils.h"
+#include "ts_catalog/catalog.h"
 
 typedef struct PartitioningInfo PartitioningInfo;
 typedef struct DimensionSlice DimensionSlice;
@@ -23,6 +23,7 @@ typedef enum DimensionType
 {
 	DIMENSION_TYPE_OPEN,
 	DIMENSION_TYPE_CLOSED,
+	DIMENSION_TYPE_STATS,
 	DIMENSION_TYPE_ANY,
 } DimensionType;
 
@@ -124,7 +125,8 @@ extern Hyperspace *ts_dimension_scan(int32 hypertable_id, Oid main_table_relid, 
 extern DimensionSlice *ts_dimension_calculate_default_slice(const Dimension *dim, int64 value);
 extern TSDLLEXPORT Point *ts_hyperspace_calculate_point(const Hyperspace *h, TupleTableSlot *slot);
 extern int ts_dimension_get_slice_ordinal(const Dimension *dim, const DimensionSlice *slice);
-extern const Dimension *ts_hyperspace_get_dimension_by_id(const Hyperspace *hs, int32 id);
+extern TSDLLEXPORT const Dimension *ts_hyperspace_get_dimension_by_id(const Hyperspace *hs,
+																	  int32 id);
 extern TSDLLEXPORT const Dimension *ts_hyperspace_get_dimension(const Hyperspace *hs,
 																DimensionType type, Index n);
 extern TSDLLEXPORT Dimension *ts_hyperspace_get_mutable_dimension(Hyperspace *hs,
@@ -138,7 +140,7 @@ extern int32 ts_dimension_get_hypertable_id(int32 dimension_id);
 extern int ts_dimension_set_type(Dimension *dim, Oid newtype);
 extern TSDLLEXPORT Oid ts_dimension_get_partition_type(const Dimension *dim);
 extern int ts_dimension_set_name(Dimension *dim, const char *newname);
-extern int ts_dimension_set_chunk_interval(Dimension *dim, int64 chunk_interval);
+extern TSDLLEXPORT int ts_dimension_set_chunk_interval(Dimension *dim, int64 chunk_interval);
 extern int ts_dimension_set_compress_interval(Dimension *dim, int64 compress_interval);
 extern Datum ts_dimension_transform_value(const Dimension *dim, Oid collation, Datum value,
 										  Oid const_datum_type, Oid *restype);

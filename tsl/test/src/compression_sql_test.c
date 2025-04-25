@@ -7,8 +7,8 @@
 
 #include <postgres.h>
 
-#include <libpq/pqformat.h>
 #include <funcapi.h>
+#include <libpq/pqformat.h>
 #include <utils/builtins.h>
 
 #include "compression_sql_test.h"
@@ -35,6 +35,10 @@ get_compression_algorithm(char *name)
 	else if (pg_strcasecmp(name, "dictionary") == 0)
 	{
 		return COMPRESSION_ALGORITHM_DICTIONARY;
+	}
+	else if (pg_strcasecmp(name, "bool") == 0)
+	{
+		return COMPRESSION_ALGORITHM_BOOL;
 	}
 
 	ereport(ERROR, (errmsg("unknown compression algorithm %s", name)));
@@ -274,6 +278,7 @@ ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
 			MemoryContextSwitchTo(call_memory_context);
 
 			ErrorData *error = CopyErrorData();
+			FlushErrorState();
 
 			values[out_sqlstate] =
 				PointerGetDatum(cstring_to_text(unpack_sql_state(error->sqlerrcode)));
@@ -285,8 +290,7 @@ ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
 					cstring_to_text(psprintf("%s:%d", error->filename, error->lineno)));
 				nulls[out_location] = false;
 			}
-
-			FlushErrorState();
+			FreeErrorData(error);
 		}
 		PG_END_TRY();
 

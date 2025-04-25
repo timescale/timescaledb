@@ -14,18 +14,6 @@ cmp_slices(const void *left, const void *right)
 	return ts_dimension_slice_cmp(left_slice, right_slice);
 }
 
-/*
- * identical to cmp_slices except for reversed arguments to ts_dimension_slice_cmp
- */
-static int
-cmp_slices_reverse(const void *left, const void *right)
-{
-	const DimensionSlice *left_slice = *((DimensionSlice **) left);
-	const DimensionSlice *right_slice = *((DimensionSlice **) right);
-
-	return -ts_dimension_slice_cmp(left_slice, right_slice);
-}
-
 static int
 cmp_coordinate_and_slice(const void *left, const void *right)
 {
@@ -68,18 +56,7 @@ ts_dimension_vec_sort(DimensionVec **vecptr)
 	DimensionVec *vec = *vecptr;
 
 	if (vec->num_slices > 1)
-		qsort(vec->slices, vec->num_slices, sizeof(DimensionSlice *), cmp_slices);
-
-	return vec;
-}
-
-DimensionVec *
-ts_dimension_vec_sort_reverse(DimensionVec **vecptr)
-{
-	DimensionVec *vec = *vecptr;
-
-	if (vec->num_slices > 1)
-		qsort(vec->slices, vec->num_slices, sizeof(DimensionSlice *), cmp_slices_reverse);
+		qsort((void *) vec->slices, vec->num_slices, sizeof(DimensionSlice *), cmp_slices);
 
 	return vec;
 }
@@ -125,8 +102,8 @@ ts_dimension_vec_remove_slice(DimensionVec **vecptr, int32 index)
 	DimensionVec *vec = *vecptr;
 
 	ts_dimension_slice_free(vec->slices[index]);
-	memmove(vec->slices + index,
-			vec->slices + (index + 1),
+	memmove((void *) &vec->slices[index],
+			(void *) &vec->slices[index + 1],
 			sizeof(DimensionSlice *) * (vec->num_slices - index - 1));
 	vec->num_slices--;
 }
@@ -141,7 +118,7 @@ dimension_vec_is_sorted(const DimensionVec *vec)
 		return true;
 
 	for (i = 1; i < vec->num_slices; i++)
-		if (cmp_slices(&vec->slices[i - 1], &vec->slices[i]) > 0)
+		if (cmp_slices((void *) &vec->slices[i - 1], (void *) &vec->slices[i]) > 0)
 			return false;
 
 	return true;
@@ -158,11 +135,11 @@ ts_dimension_vec_find_slice(const DimensionVec *vec, int64 coordinate)
 
 	Assert(dimension_vec_is_sorted(vec));
 
-	res = bsearch(&coordinate,
-				  vec->slices,
-				  vec->num_slices,
-				  sizeof(DimensionSlice *),
-				  cmp_coordinate_and_slice);
+	res = (DimensionSlice **) bsearch(&coordinate,
+									  (void *) vec->slices,
+									  vec->num_slices,
+									  sizeof(DimensionSlice *),
+									  cmp_coordinate_and_slice);
 
 	if (res == NULL)
 		return NULL;

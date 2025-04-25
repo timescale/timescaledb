@@ -699,6 +699,9 @@ select total_runs, total_successes, total_failures from timescaledb_information.
 
 -- test the compression policy
 alter table test_schedint set (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test_schedint" is set to ""
+NOTICE:  default order by for hypertable "test_schedint" is set to ""time" DESC"
 select add_compression_policy('test_schedint', interval '3 weeks', schedule_interval => '40 seconds') as polcomp_schedint \gset
 select ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(1000);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 

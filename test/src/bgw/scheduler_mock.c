@@ -5,34 +5,35 @@
  */
 #include <postgres.h>
 
+#include <access/xact.h>
 #include <miscadmin.h>
+#include <pgstat.h>
 #include <postmaster/bgworker.h>
+#include <signal.h>
 #include <storage/ipc.h>
 #include <storage/latch.h>
-#include <storage/lwlock.h>
 #include <storage/lmgr.h>
+#include <storage/lwlock.h>
 #include <storage/proc.h>
 #include <storage/shmem.h>
+#include <utils/builtins.h>
+#include <utils/errcodes.h>
 #include <utils/guc.h>
 #include <utils/jsonb.h>
-#include <utils/timestamp.h>
-#include <utils/snapmgr.h>
 #include <utils/memutils.h>
-#include <utils/builtins.h>
-#include <access/xact.h>
-#include <pgstat.h>
-#include <signal.h>
+#include <utils/snapmgr.h>
+#include <utils/timestamp.h>
 
-#include "extension.h"
-#include "log.h"
-#include "bgw/scheduler.h"
 #include "bgw/job.h"
 #include "bgw/job_stat.h"
-#include "timer_mock.h"
+#include "bgw/scheduler.h"
+#include "cross_module_fn.h"
+#include "extension.h"
+#include "log.h"
 #include "params.h"
 #include "test_utils.h"
-#include "cross_module_fn.h"
 #include "time_bucket.h"
+#include "timer_mock.h"
 
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish);
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_run);
@@ -114,8 +115,8 @@ ts_test_next_scheduled_execution_slot(PG_FUNCTION_ARGS)
 			DirectFunctionCall2(timestamptz_part, CStringGetTextDatum("month"), timebucket_fini);
 
 		/* convert everything to months */
-		float8 month_diff = DatumGetFloat8(year_fini) * 12 + DatumGetFloat8(month_fini) -
-							(DatumGetFloat8(year_init) * 12 + DatumGetFloat8(month_init));
+		float8 month_diff = (DatumGetFloat8(year_fini) * 12) + DatumGetFloat8(month_fini) -
+							((DatumGetFloat8(year_init) * 12) + DatumGetFloat8(month_init));
 
 		Datum months_to_add = DirectFunctionCall2(interval_mul,
 												  IntervalPGetDatum(&one_month),
@@ -232,12 +233,14 @@ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(PG_FUNCTION_ARGS)
 	BgwHandleStatus status = WaitForBackgroundWorkerStartup(worker_handle, &pid);
 	TestAssertTrue(BGWH_STARTED == status);
 	if (status != BGWH_STARTED)
-		elog(ERROR, "bgw not started");
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE), errmsg("bgw not started")));
 
 	status = WaitForBackgroundWorkerShutdown(worker_handle);
 	TestAssertTrue(BGWH_STOPPED == status);
 	if (status != BGWH_STOPPED)
-		elog(ERROR, "bgw not stopped");
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE), errmsg("bgw not stopped")));
 
 	PG_RETURN_VOID();
 }
@@ -265,7 +268,8 @@ ts_bgw_db_scheduler_test_run(PG_FUNCTION_ARGS)
 	status = WaitForBackgroundWorkerStartup(current_handle, &pid);
 	TestAssertTrue(BGWH_STARTED == status);
 	if (status != BGWH_STARTED)
-		elog(ERROR, "bgw not started");
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE), errmsg("bgw not started")));
 
 	PG_RETURN_VOID();
 }
@@ -278,7 +282,8 @@ ts_bgw_db_scheduler_test_wait_for_scheduler_finish(PG_FUNCTION_ARGS)
 		BgwHandleStatus status = WaitForBackgroundWorkerShutdown(current_handle);
 		TestAssertTrue(BGWH_STOPPED == status);
 		if (status != BGWH_STOPPED)
-			elog(ERROR, "bgw not stopped");
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE), errmsg("bgw not stopped")));
 	}
 	PG_RETURN_VOID();
 }
@@ -299,7 +304,7 @@ test_job_2_error()
 	StartTransactionCommand();
 	elog(WARNING, "Before error job 2");
 
-	elog(ERROR, "Error job 2");
+	ereport(ERROR, (errcode(ERRCODE_TRIGGERED_ACTION_EXCEPTION), errmsg("Error job 2")));
 
 	elog(WARNING, "After error job 2");
 

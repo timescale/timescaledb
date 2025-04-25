@@ -5,11 +5,11 @@
  */
 #include <postgres.h>
 #include <access/xact.h>
+#include <catalog/pg_collation.h>
+#include <commands/extension.h>
 #include <fmgr.h>
 #include <miscadmin.h>
-#include <commands/extension.h>
 #include <storage/ipc.h>
-#include <catalog/pg_collation.h>
 #include <utils/builtins.h>
 #include <utils/json.h>
 #include <utils/jsonb.h>
@@ -17,22 +17,22 @@
 #include <utils/snapmgr.h>
 
 #include "compat/compat.h"
+#include "bgw_policy/policy.h"
 #include "config.h"
-#include "version.h"
-#include "guc.h"
-#include "telemetry.h"
-#include "ts_catalog/metadata.h"
-#include "telemetry_metadata.h"
-#include "hypertable.h"
 #include "extension.h"
-#include "net/http.h"
+#include "functions.h"
+#include "guc.h"
+#include "hypertable.h"
 #include "jsonb_utils.h"
 #include "license_guc.h"
-#include "bgw_policy/policy.h"
-#include "ts_catalog/compression_chunk_size.h"
-#include "stats.h"
-#include "functions.h"
+#include "net/http.h"
 #include "replication.h"
+#include "stats.h"
+#include "telemetry.h"
+#include "telemetry_metadata.h"
+#include "ts_catalog/compression_chunk_size.h"
+#include "ts_catalog/metadata.h"
+#include "version.h"
 
 #include "cross_module_fn.h"
 
@@ -86,6 +86,9 @@
 #define REQ_IS_WAL_RECEIVER "is_wal_receiver"
 
 #define PG_PROMETHEUS "pg_prometheus"
+#define PG_VECTOR "vector"
+#define TS_AI "ai"
+#define TS_VECTORSCALE "vectorscale"
 #define PROMSCALE "promscale"
 #define POSTGIS "postgis"
 #define TIMESCALE_ANALYTICS "timescale_analytics"
@@ -95,7 +98,8 @@
 #define REQ_NUM_ERR_BY_SQLERRCODE "errors_by_sqlerrcode"
 
 static const char *related_extensions[] = {
-	PG_PROMETHEUS, PROMSCALE, POSTGIS, TIMESCALE_ANALYTICS, TIMESCALEDB_TOOLKIT,
+	PG_PROMETHEUS,		 PROMSCALE, POSTGIS, TIMESCALE_ANALYTICS,
+	TIMESCALEDB_TOOLKIT, PG_VECTOR, TS_AI,	 TS_VECTORSCALE,
 };
 
 /* This function counts background worker jobs by type. */
@@ -330,7 +334,7 @@ add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 {
 	int res;
 	StringInfo command;
-	MemoryContext old_context = CurrentMemoryContext, spi_context;
+	MemoryContext orig_context = CurrentMemoryContext;
 
 	const char *command_string = "SELECT "
 								 "job_type, jsonb_object_agg(sqlerrcode, count) "
@@ -360,9 +364,8 @@ add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 		elog(ERROR, "could not connect to SPI");
 
 	/* Lock down search_path */
-	res = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
-	if (res < 0)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
 
 	command = makeStringInfo();
 
@@ -391,12 +394,15 @@ add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 		if (sqlerrs_jsonb == NULL)
 			continue;
 		/* the jsonb object cannot be created in the SPI context or it will be lost */
-		spi_context = MemoryContextSwitchTo(old_context);
+		MemoryContext spi_context = MemoryContextSwitchTo(orig_context);
 		add_errors_by_sqlerrcode_internal(parse_state,
 										  TextDatumGetCString(record_jobtype),
 										  sqlerrs_jsonb);
-		old_context = MemoryContextSwitchTo(spi_context);
+		MemoryContextSwitchTo(spi_context);
 	}
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
 
 	res = SPI_finish();
 
@@ -431,15 +437,15 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 {
 	StringInfo command;
 	int res;
-	MemoryContext old_context = CurrentMemoryContext, spi_context;
+	MemoryContext orig_context = CurrentMemoryContext;
 	SPITupleTable *tuptable = NULL;
 
 	const char *command_string =
 		"SELECT ("
 		"	CASE "
 		"		WHEN j.proc_schema = \'_timescaledb_functions\' AND j.proc_name ~ "
-		"\'^policy_(retention|compression|reorder|refresh_continuous_aggregate|telemetry|job_error_"
-		"retention)$\' "
+		"\'^policy_(retention|compression|reorder|refresh_continuous_aggregate|telemetry|job_stat_"
+		"history_retention)$\' "
 		"		THEN j.proc_name::TEXT "
 		"		ELSE \'user_defined_action\' "
 		"	END"
@@ -455,16 +461,15 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 		"FROM "
 		"	_timescaledb_internal.bgw_job_stat s "
 		"	JOIN _timescaledb_config.bgw_job j on j.id = s.job_id "
-		"GROUP BY "
-		"job_type";
+		"GROUP BY job_type "
+		"ORDER BY job_type";
 
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI");
 
 	/* Lock down search_path */
-	res = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
-	if (res < 0)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
 
 	command = makeStringInfo();
 
@@ -511,7 +516,7 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 			elog(ERROR, "null record field returned");
 		}
 
-		spi_context = MemoryContextSwitchTo(old_context);
+		MemoryContext spi_context = MemoryContextSwitchTo(orig_context);
 		TelemetryJobStats stats = { .total_runs = DatumGetInt64(total_runs),
 									.total_successes = DatumGetInt64(total_successes),
 									.total_failures = DatumGetInt64(total_failures),
@@ -522,8 +527,12 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 									.total_duration_failures =
 										DatumGetIntervalP(total_duration_failures) };
 		add_job_stats_internal(parse_state, TextDatumGetCString(jobtype_datum), &stats);
-		old_context = MemoryContextSwitchTo(spi_context);
+		MemoryContextSwitchTo(spi_context);
 	}
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
+
 	res = SPI_finish();
 	Assert(res == SPI_OK_FINISH);
 }
@@ -757,6 +766,91 @@ add_replication_telemetry(JsonbParseState *state)
 #define REQ_RELS_CONTINUOUS_AGGS "continuous_aggregates"
 #define REQ_FUNCTIONS_USED "functions_used"
 #define REQ_REPLICATION "replication"
+#define REQ_ACCESS_METHODS "access_methods"
+
+/*
+ * Add the result of a query as a sub-object to the JSONB.
+ *
+ * Each row from the query generates a separate object keyed by one of the
+ * columns. Each row will be represented as an object and stored under the
+ * "key" column. For example, with this query:
+ *
+ *    select amname as name,
+ *           sum(relpages) as pages,
+ *			 count(*) as instances
+ *		from pg_class join pg_am on relam = pg_am.oid
+ *	  group by pg_am.oid;
+ *
+ * might generate the object
+ *
+ * {
+ *    "brin" : {
+ *       "instances" : 44,
+ *       "pages" : 432
+ *    },
+ *    "btree" : {
+ *       "instances" : 99,
+ *       "pages" : 1234
+ *    }
+ * }
+ */
+static void
+add_query_result_dict(JsonbParseState *state, const char *query)
+{
+	MemoryContext orig_context = CurrentMemoryContext;
+
+	int res;
+	if (SPI_connect() != SPI_OK_CONNECT)
+		elog(ERROR, "could not connect to SPI");
+
+	/* Lock down search_path */
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
+
+	res = SPI_execute(query, true, 0);
+	Ensure(res >= 0, "could not execute query");
+
+	MemoryContext spi_context = MemoryContextSwitchTo(orig_context);
+
+	(void) pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
+	for (uint64 r = 0; r < SPI_processed; r++)
+	{
+		char *key_string = SPI_getvalue(SPI_tuptable->vals[r], SPI_tuptable->tupdesc, 1);
+		JsonbValue key = {
+			.type = jbvString,
+			.val.string.val = pstrdup(key_string),
+			.val.string.len = strlen(key_string),
+		};
+
+		(void) pushJsonbValue(&state, WJB_KEY, &key);
+
+		(void) pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
+		for (int c = 1; c < SPI_tuptable->tupdesc->natts; ++c)
+		{
+			bool isnull;
+			Datum val_datum =
+				SPI_getbinval(SPI_tuptable->vals[r], SPI_tuptable->tupdesc, c + 1, &isnull);
+			if (!isnull)
+			{
+				char *key_string = SPI_fname(SPI_tuptable->tupdesc, c + 1);
+				JsonbValue value;
+				ts_jsonb_set_value_by_type(&value,
+										   SPI_gettypeid(SPI_tuptable->tupdesc, c + 1),
+										   val_datum);
+				ts_jsonb_add_value(state, key_string, &value);
+			}
+		}
+		pushJsonbValue(&state, WJB_END_OBJECT, NULL);
+	}
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
+
+	MemoryContextSwitchTo(spi_context);
+	res = SPI_finish();
+	Assert(res == SPI_OK_FINISH);
+	(void) pushJsonbValue(&state, WJB_END_OBJECT, NULL);
+}
 
 static Jsonb *
 build_telemetry_report()
@@ -937,6 +1031,15 @@ build_telemetry_report()
 	add_replication_telemetry(parse_state);
 	pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 
+	key.type = jbvString;
+	key.val.string.val = REQ_ACCESS_METHODS;
+	key.val.string.len = strlen(REQ_ACCESS_METHODS);
+	(void) pushJsonbValue(&parse_state, WJB_KEY, &key);
+	add_query_result_dict(parse_state,
+						  "SELECT amname AS name, sum(relpages) AS pages, count(*) AS "
+						  "instances FROM pg_class JOIN pg_am ON relam = pg_am.oid "
+						  "GROUP BY amname");
+
 	/* end of telemetry object */
 	result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 
@@ -1081,8 +1184,10 @@ ts_telemetry_main(const char *host, const char *path, const char *service)
 		/* If the response is malformed, ts_check_version_response() will
 		 * throw an error, so we capture the error here and print debugging
 		 * information. */
+		FlushErrorState();
 		ereport(NOTICE,
-				(errmsg("malformed telemetry response body"),
+				(errcode(ERRCODE_DATA_EXCEPTION),
+				 errmsg("malformed telemetry response body"),
 				 errdetail("host=%s, service=%s, path=%s: %s",
 						   host,
 						   service,

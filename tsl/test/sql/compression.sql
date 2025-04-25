@@ -3,6 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 SET timescaledb.enable_transparent_decompression to OFF;
+SET timezone TO 'America/Los_Angeles';
 
 \set PREFIX 'EXPLAIN (analyze, verbose, costs off, timing off, summary off)'
 
@@ -161,7 +162,7 @@ where uncompressed.compressed_chunk_id = compressed.id AND uncompressed.id = :'C
 SELECT count(*) from :CHUNK_NAME;
 SELECT count(*) from :COMPRESSED_CHUNK_NAME;
 SELECT sum(_ts_meta_count) from :COMPRESSED_CHUNK_NAME;
-SELECT location, _ts_meta_sequence_num from :COMPRESSED_CHUNK_NAME ORDER BY 1,2;
+SELECT location, _ts_meta_min_1, _ts_meta_max_1 from :COMPRESSED_CHUNK_NAME ORDER BY 1,2;
 
 \x
 SELECT chunk_id, numrows_pre_compression, numrows_post_compression
@@ -462,7 +463,7 @@ CREATE TABLE table2(col1 INT, col2 int, primary key (col1,col2));
 CREATE TABLE table1(col1 INT NOT NULL, col2 INT);
 ALTER TABLE table1 ADD CONSTRAINT fk_table1 FOREIGN KEY (col1,col2) REFERENCES table2(col1,col2);
 SELECT create_hypertable('table1','col1', chunk_time_interval => 10);
--- Trying to list an incomplete set of fields of the compound key (should fail with a nice message)
+-- Trying to list an incomplete set of fields of the compound key
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1');
 -- Listing all fields of the compound key should succeed:
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1,col2');
@@ -529,7 +530,8 @@ SELECT create_hypertable('stattest', 'time');
 INSERT INTO stattest SELECT '2020/02/20 01:00'::TIMESTAMPTZ + ('1 hour'::interval * v), 250 * v FROM generate_series(0,25) v;
 SELECT table_name INTO TEMPORARY temptable FROM _timescaledb_catalog.chunk WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'stattest');
 \set statchunk '(select table_name from temptable)'
-SELECT * FROM pg_stats WHERE tablename = :statchunk;
+SELECT schemaname, tablename, attname, inherited, null_frac, avg_width, n_distinct, most_common_vals, most_common_freqs, histogram_bounds, correlation, most_common_elems, most_common_elem_freqs, elem_count_histogram
+FROM pg_stats WHERE tablename = :statchunk;
 
 ALTER TABLE stattest SET (timescaledb.compress);
 -- check that approximate_row_count works with all normal chunks
@@ -629,6 +631,8 @@ SET reltuples = 0, relpages = 0
         AND ch.compressed_chunk_id > 0 );
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
+SET timezone TO 'America/Los_Angeles';
+
 -- reltuples is initially -1 on PG14 before VACUUM/ANALYZE has been run
 SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, relpages, relallvisible FROM pg_class
  WHERE relname in ( SELECT ch.table_name FROM
@@ -711,6 +715,8 @@ ORDER BY 1;
 
 SELECT count(*) FROM metrics;
 
+-- TODO: remove this test in a separate PR since it introduces
+-- a lot of changes which hurt readability of test output
 -- test sequence number is local to segment by
 CREATE TABLE local_seq(time timestamptz, device int);
 SELECT table_name FROM create_hypertable('local_seq','time');
@@ -723,15 +729,6 @@ INSERT INTO local_seq SELECT '2000-01-01',4 FROM generate_series(1,3000);
 INSERT INTO local_seq SELECT '2000-01-01', generate_series(5,8);
 
 SELECT compress_chunk(c) FROM show_chunks('local_seq') c;
-
-SELECT
-	format('%s.%s',chunk.schema_name,chunk.table_name) AS "COMP_CHUNK"
-FROM _timescaledb_catalog.hypertable ht
-  INNER JOIN _timescaledb_catalog.hypertable ht_comp ON ht_comp.id = ht.compressed_hypertable_id
-  INNER JOIN _timescaledb_catalog.chunk ON chunk.hypertable_id = ht_comp.id
-WHERE ht.table_name = 'local_seq' \gset
-
-SELECT device, _ts_meta_sequence_num, _ts_meta_count FROM :COMP_CHUNK ORDER BY 1,2;
 
 -- github issue 4872
 -- If subplan of ConstraintAwareAppend is TidRangeScan, then SELECT on
@@ -796,6 +793,8 @@ ALTER TABLE f_sensor_data SET (timescaledb.compress, timescaledb.compress_segmen
 
 SELECT compress_chunk(i) FROM show_chunks('f_sensor_data') i;
 CALL reindex_compressed_hypertable('f_sensor_data');
+
+VACUUM ANALYZE f_sensor_data;
 
 -- Encourage use of parallel plans
 SET parallel_setup_cost = 0;
@@ -1147,7 +1146,7 @@ COPY compressed_table (time,a,b,c) FROM stdin;
 2024-02-29 15:02:03.87313+01	20	3	3
 \.
 
-SELECT * FROM compressed_table;
+SELECT * FROM compressed_table ORDER BY time, a;
 SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('compressed_table') i;
 
 -- Check DML decompression limit
@@ -1159,3 +1158,84 @@ COPY compressed_table (time,a,b,c) FROM stdin;
 \.
 \set ON_ERROR_STOP 1
 RESET timescaledb.max_tuples_decompressed_per_dml_transaction;
+
+-- Test decompression with DML which compares int8 to int4
+CREATE TABLE hyper_84 (time timestamptz, device int8, location int8, temp float8);
+SELECT create_hypertable('hyper_84', 'time', create_default_indexes => false);
+INSERT INTO hyper_84 VALUES ('2024-01-01', 1, 1, 1.0);
+ALTER TABLE hyper_84 SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+SELECT compress_chunk(ch) FROM show_chunks('hyper_84') ch;
+-- indexscan for decompression: UPDATE
+UPDATE hyper_84 SET temp = 100 where device = 1;
+SELECT compress_chunk(ch) FROM show_chunks('hyper_84') ch;
+-- indexscan for decompression: DELETE
+DELETE FROM hyper_84 WHERE device = 1;
+
+-- Test using DELETE instead of TRUNCATE after compression
+CREATE TABLE hyper_delete (time timestamptz, device int, location int, temp float, t text);
+SELECT table_name FROM create_hypertable('hyper_delete', 'time');
+INSERT INTO hyper_delete VALUES ('2024-07-10', 1, 1, 1.0, repeat('X', 10000));
+ANALYZE hyper_delete;
+SELECT ch AS "CHUNK" FROM show_chunks('hyper_delete') ch \gset
+SELECT relpages, reltuples::int AS reltuples FROM pg_catalog.pg_class WHERE oid = :'CHUNK'::regclass;
+
+-- One uncompressed row
+SELECT count(*) FROM :CHUNK;
+
+ALTER TABLE hyper_delete SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+
+SET timescaledb.enable_delete_after_compression TO true;
+SELECT FROM compress_chunk(:'CHUNK');
+
+-- still have more than one tuple
+SELECT relpages, reltuples::int AS reltuples FROM pg_catalog.pg_class WHERE oid = :'CHUNK'::regclass;
+ANALYZE hyper_delete;
+
+-- after ANALYZE we should have no tuples
+SELECT relpages, reltuples::int AS reltuples FROM pg_catalog.pg_class WHERE oid = :'CHUNK'::regclass;
+
+-- One compressed row
+SELECT count(*) FROM :CHUNK;
+
+RESET timescaledb.enable_delete_after_compression;
+
+-- Test batch size limiting GUC
+CREATE TABLE hyper_85 (time timestamptz, device int8, location int8, temp float8);
+SELECT create_hypertable('hyper_85', 'time', create_default_indexes => false);
+INSERT INTO hyper_85
+SELECT t, 1, 1, 1.0
+FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '20 sec'::interval) t;
+ALTER TABLE hyper_85 SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+
+-- first without the limit
+BEGIN;
+SELECT compress_chunk(ch) FROM show_chunks('hyper_85') ch;
+
+SELECT ch1.id "CHUNK_ID"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'hyper_85'
+ORDER BY ch1.id
+LIMIT 1 \gset
+
+select  compressed.schema_name|| '.' || compressed.table_name as "COMPRESSED_CHUNK_NAME"
+from _timescaledb_catalog.chunk uncompressed, _timescaledb_catalog.chunk compressed
+where uncompressed.compressed_chunk_id = compressed.id AND uncompressed.id = :'CHUNK_ID' \gset
+
+SELECT _ts_meta_count FROM :COMPRESSED_CHUNK_NAME ORDER BY device, _ts_meta_min_1 DESC;
+ROLLBACK;
+
+-- now lets set the limit
+SET timescaledb.compression_batch_size_limit = 505;
+BEGIN;
+SELECT compress_chunk(ch) FROM show_chunks('hyper_85') ch;
+
+SELECT ch1.id "CHUNK_ID"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'hyper_85'
+ORDER BY ch1.id
+LIMIT 1 \gset
+
+select  compressed.schema_name|| '.' || compressed.table_name as "COMPRESSED_CHUNK_NAME"
+from _timescaledb_catalog.chunk uncompressed, _timescaledb_catalog.chunk compressed
+where uncompressed.compressed_chunk_id = compressed.id AND uncompressed.id = :'CHUNK_ID' \gset
+
+SELECT _ts_meta_count FROM :COMPRESSED_CHUNK_NAME ORDER BY device, _ts_meta_min_1 DESC;
+ROLLBACK;

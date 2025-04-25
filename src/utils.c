@@ -6,12 +6,14 @@
 #include <postgres.h>
 #include <access/genam.h>
 #include <access/heapam.h>
-#include <access/htup_details.h>
 #include <access/htup.h>
+#include <access/htup_details.h>
 #include <access/reloptions.h>
 #include <access/xact.h>
 #include <catalog/indexing.h>
 #include <catalog/namespace.h>
+#include <catalog/objectaccess.h>
+#include <catalog/pg_am.h>
 #include <catalog/pg_cast.h>
 #include <catalog/pg_inherits.h>
 #include <catalog/pg_operator.h>
@@ -24,6 +26,7 @@
 #include <parser/parse_coerce.h>
 #include <parser/parse_func.h>
 #include <parser/scansup.h>
+#include <storage/lockdefs.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
 #include <utils/catcache.h>
@@ -37,11 +40,13 @@
 
 #include "compat/compat.h"
 #include "chunk.h"
+#include "cross_module_fn.h"
 #include "debug_point.h"
 #include "guc.h"
 #include "hypertable_cache.h"
-#include "utils.h"
+#include "jsonb_utils.h"
 #include "time_utils.h"
+#include "utils.h"
 
 typedef struct
 {
@@ -234,8 +239,7 @@ ts_integer_to_internal(Datum time_val, Oid type_oid)
 }
 
 int64
-ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid,
-									  TimevalInfinity *is_infinite_out)
+ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid)
 {
 	switch (type_oid)
 	{
@@ -246,14 +250,10 @@ ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid,
 			{
 				if (TIMESTAMP_IS_NOBEGIN(ts))
 				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalNegInfinity;
 					return PG_INT64_MIN;
 				}
 				else
 				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalPosInfinity;
 					return PG_INT64_MAX;
 				}
 			}
@@ -267,14 +267,10 @@ ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid,
 			{
 				if (TIMESTAMP_IS_NOBEGIN(ts))
 				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalNegInfinity;
 					return PG_INT64_MIN;
 				}
 				else
 				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalPosInfinity;
 					return PG_INT64_MAX;
 				}
 			}
@@ -288,23 +284,19 @@ ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid,
 			{
 				if (DATE_IS_NOBEGIN(d))
 				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalNegInfinity;
 					return PG_INT64_MIN;
 				}
 				else
 				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalPosInfinity;
 					return PG_INT64_MAX;
 				}
 			}
 
 			return ts_time_value_to_internal(time_val, type_oid);
 		}
+		default:
+			return ts_time_value_to_internal(time_val, type_oid);
 	}
-
-	return ts_time_value_to_internal(time_val, type_oid);
 }
 
 TS_FUNCTION_INFO_V1(ts_time_to_internal);
@@ -618,9 +610,7 @@ ts_get_function_oid(const char *funcname, const char *schema_name, int nargs, Oi
 											nargs,
 											NIL,
 											false,
-#if PG14_GE
 											false, /* include_out_arguments */
-#endif
 											false,
 											false);
 	while (func_candidates != NULL)
@@ -762,7 +752,6 @@ ts_get_appendrelinfo(PlannerInfo *root, Index rti, bool missing_ok)
 	return NULL;
 }
 
-#if PG15_GE
 /*
  * Find an equivalence class member expression, all of whose Vars, come from
  * the indicated relation.
@@ -795,7 +784,6 @@ ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
 	/* We didn't find any suitable equivalence class expression */
 	return NULL;
 }
-#endif
 
 bool
 ts_has_row_security(Oid relid)
@@ -1041,13 +1029,13 @@ ts_try_relation_cached_size(Relation rel, bool verbose)
 	ForkNumber forkNum;
 	bool cached = true;
 
+	if (!RELKIND_HAS_STORAGE(rel->rd_rel->relkind))
+		return (int64) nblocks;
+
 	/* Get heap size, including FSM and VM */
 	for (forkNum = 0; forkNum <= MAX_FORKNUM; forkNum++)
 	{
-#if PG14_GE
-		/* PG13 does not have smgr_cached_nblocks */
 		result = RelationGetSmgr(rel)->smgr_cached_nblocks[forkNum];
-#endif
 
 		if (result != InvalidBlockNumber)
 		{
@@ -1313,10 +1301,6 @@ ts_get_node_name(Node *node)
 		NODE_CASE(RangeVar);
 		NODE_CASE(TableFunc);
 		NODE_CASE(IntoClause);
-#if PG15_LT
-		/* PG15 removed T_Expr nodetag because it's an abstract type. */
-		NODE_CASE(Expr);
-#endif
 		NODE_CASE(Var);
 		NODE_CASE(Const);
 		NODE_CASE(Param);
@@ -1546,6 +1530,14 @@ ts_copy_relation_acl(const Oid source_relid, const Oid target_relid, const Oid o
 		new_repl[AttrNumberGetAttrOffset(Anum_pg_class_relacl)] = true;
 		new_val[AttrNumberGetAttrOffset(Anum_pg_class_relacl)] = PointerGetDatum(acl);
 
+		/*
+		 * ts_copy_relation_acl() is typically used to copy ACLs from the hypertable
+		 * to a newly created chunk. The creation is done via DefineRelation(),
+		 * which takes an AccessExclusiveLock and should be enough to handle any
+		 * inplace update issues.
+		 */
+		AssertSufficientPgClassUpdateLockHeld(target_relid);
+
 		/* Find the tuple for the target in `pg_class` */
 		target_tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(target_relid));
 		Assert(HeapTupleIsValid(target_tuple));
@@ -1712,6 +1704,9 @@ ts_makeaclitem(PG_FUNCTION_ARGS)
 		{ "SET", ACL_SET },
 		{ "ALTER SYSTEM", ACL_ALTER_SYSTEM },
 #endif
+#if PG17_GE
+		{ "MAINTAIN", ACL_MAINTAIN },
+#endif
 		{ "RULE", 0 }, /* ignore old RULE privileges */
 		{ NULL, 0 }
 	};
@@ -1726,4 +1721,254 @@ ts_makeaclitem(PG_FUNCTION_ARGS)
 	ACLITEM_SET_PRIVS_GOPTIONS(*result, priv, (goption ? priv : ACL_NO_RIGHTS));
 
 	PG_RETURN_ACLITEM_P(result);
+}
+
+/*
+ * heap_form_tuple using NullableDatum array instead of two arrays for
+ * values and nulls
+ */
+HeapTuple
+ts_heap_form_tuple(TupleDesc tupleDescriptor, NullableDatum *datums)
+{
+	int numElements = tupleDescriptor->natts;
+	Datum *values = palloc0(sizeof(Datum) * numElements);
+	bool *nulls = palloc0(sizeof(bool) * numElements);
+
+	for (int i = 0; i < numElements; i++)
+	{
+		values[i] = datums[i].value;
+		nulls[i] = datums[i].isnull;
+	}
+
+	return heap_form_tuple(tupleDescriptor, values, nulls);
+}
+
+/*
+ * To not introduce shared object dependencies on functions in extension update
+ * scripts we use this stub function as placeholder whenever we need to reference
+ * c functions in the update scripts.
+ */
+TS_FUNCTION_INFO_V1(ts_update_placeholder);
+Datum
+ts_update_placeholder(PG_FUNCTION_ARGS)
+{
+	elog(ERROR, "this stub function is used only as placeholder during extension updates");
+	PG_RETURN_NULL();
+}
+
+/*
+ * Get relation information from the syscache in one call.
+ *
+ * Returns relkind and access method used. Both are non-optional.
+ */
+void
+ts_get_rel_info(Oid relid, Oid *amoid, char *relkind)
+{
+	HeapTuple tuple;
+	Form_pg_class cform;
+
+	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for relation %u", relid);
+
+	cform = (Form_pg_class) GETSTRUCT(tuple);
+	*amoid = cform->relam;
+	*relkind = cform->relkind;
+	ReleaseSysCache(tuple);
+}
+
+/*
+ * Get relation information from the syscache in one call.
+ *
+ * Returns relid, relkind and access method used. All are non-optional.
+ */
+void
+ts_get_rel_info_by_name(const char *relnamespace, const char *relname, Oid *relid, Oid *amoid,
+						char *relkind)
+{
+	HeapTuple tuple;
+	Form_pg_class cform;
+	Oid namespaceoid = get_namespace_oid(relnamespace, false);
+
+	tuple = SearchSysCache2(RELNAMENSP, PointerGetDatum(relname), ObjectIdGetDatum(namespaceoid));
+
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for relation %s.%s", relnamespace, relname);
+
+	cform = (Form_pg_class) GETSTRUCT(tuple);
+	*relid = cform->oid;
+	*amoid = cform->relam;
+	*relkind = cform->relkind;
+	ReleaseSysCache(tuple);
+}
+
+Oid
+ts_get_rel_am(Oid relid)
+{
+	HeapTuple tuple;
+	Form_pg_class cform;
+	Oid amoid;
+
+	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for relation %u", relid);
+
+	cform = (Form_pg_class) GETSTRUCT(tuple);
+	amoid = cform->relam;
+	ReleaseSysCache(tuple);
+
+	return amoid;
+}
+
+static Oid hypercore_amoid = InvalidOid;
+
+bool
+ts_is_hypercore_am(Oid amoid)
+{
+	if (!OidIsValid(hypercore_amoid))
+		hypercore_amoid = get_table_am_oid(TS_HYPERCORE_TAM_NAME, true);
+
+	if (!OidIsValid(amoid) || !OidIsValid(hypercore_amoid))
+		return false;
+
+	return amoid == hypercore_amoid;
+}
+
+/*
+ * Set reloption for relation.
+ *
+ * Most of the code is from ATExecSetRelOptions() in tablecmds.c since that
+ * function is static and we also need to do a slightly different job.
+ */
+static void
+relation_set_reloption_impl(Relation rel, List *options, LOCKMODE lockmode)
+{
+	Datum repl_val[Natts_pg_class] = { 0 };
+	bool repl_null[Natts_pg_class] = { false };
+	bool repl_repl[Natts_pg_class] = { false };
+	bool isnull;
+
+	Assert(rel->rd_rel->relkind == RELKIND_RELATION || rel->rd_rel->relkind == RELKIND_TOASTVALUE);
+
+	if (options == NIL)
+		return; /* nothing to do */
+
+	TS_DEBUG_LOG("setting reloptions for %s", RelationGetRelationName(rel));
+
+	Relation pgclass = table_open(RelationRelationId, RowExclusiveLock);
+	Oid relid = RelationGetRelid(rel);
+	HeapTuple tuple = SearchSysCacheLockedCopy1(RELOID, ObjectIdGetDatum(relid));
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for relation %u", relid);
+#ifdef SYSCACHE_TUPLE_LOCK_NEEDED
+	ItemPointerData otid = tuple->t_self;
+#endif
+
+	/* Get the old reloptions */
+	Datum datum = SysCacheGetAttr(RELOID, tuple, Anum_pg_class_reloptions, &isnull);
+
+	/* Generate new proposed reloptions (text array) */
+	Datum newOptions =
+		transformRelOptions(isnull ? (Datum) 0 : datum, options, NULL, NULL, false, false);
+	(void) heap_reloptions(rel->rd_rel->relkind, newOptions, true);
+
+	if (newOptions)
+		repl_val[AttrNumberGetAttrOffset(Anum_pg_class_reloptions)] = newOptions;
+	else
+		repl_null[AttrNumberGetAttrOffset(Anum_pg_class_reloptions)] = true;
+
+	repl_repl[AttrNumberGetAttrOffset(Anum_pg_class_reloptions)] = true;
+
+	HeapTuple newtuple =
+		heap_modify_tuple(tuple, RelationGetDescr(pgclass), repl_val, repl_null, repl_repl);
+
+	CatalogTupleUpdate(pgclass, &newtuple->t_self, newtuple);
+
+	/* Not sure if we need this one, but keeping it as a precaution */
+	InvokeObjectPostAlterHook(RelationRelationId, RelationGetRelid(rel), 0);
+
+	UnlockSysCacheTuple(pgclass, &otid);
+	heap_freetuple(newtuple);
+	heap_freetuple(tuple);
+	table_close(pgclass, RowExclusiveLock);
+}
+
+/*
+ * Set value of reloptions for given relation.
+ *
+ * This will also set the reloption for the relations' associated relations,
+ * in this case the TOAST table. It is based on ATExecSetRelOptions but we
+ * split out the code to set the reloptions rather than duplicating it.
+ *
+ * The lockmode is needed for taking a correct lock on the toast table for the
+ * already locked relation. It is only used for
+ *
+ * rel: Relation to add reloptions to.
+ * defList: List of DefElem for the new definitions.
+ * lockmode: the mode that the actual tables are locked in.
+ */
+void
+ts_relation_set_reloption(Relation rel, List *options, LOCKMODE lockmode)
+{
+	Assert(RelationIsValid(rel));
+	relation_set_reloption_impl(rel, options, lockmode);
+	if (OidIsValid(rel->rd_rel->reltoastrelid))
+	{
+		Relation toastrel = table_open(rel->rd_rel->reltoastrelid, lockmode);
+		relation_set_reloption_impl(toastrel, options, lockmode);
+		table_close(toastrel, NoLock);
+	}
+}
+
+/* this function fills in a jsonb with the non-null fields of
+ the error data and also includes the proc name and schema in the jsonb
+ we include these here to avoid adding these fields to the table */
+Jsonb *
+ts_errdata_to_jsonb(ErrorData *edata, Name proc_schema, Name proc_name)
+{
+	JsonbParseState *parse_state = NULL;
+	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	if (edata->sqlerrcode)
+		ts_jsonb_add_str(parse_state, "sqlerrcode", unpack_sql_state(edata->sqlerrcode));
+	if (edata->message)
+		ts_jsonb_add_str(parse_state, "message", edata->message);
+	if (edata->detail)
+		ts_jsonb_add_str(parse_state, "detail", edata->detail);
+	if (edata->hint)
+		ts_jsonb_add_str(parse_state, "hint", edata->hint);
+	if (edata->filename)
+		ts_jsonb_add_str(parse_state, "filename", edata->filename);
+	if (edata->lineno)
+		ts_jsonb_add_int32(parse_state, "lineno", edata->lineno);
+	if (edata->funcname)
+		ts_jsonb_add_str(parse_state, "funcname", edata->funcname);
+	if (edata->domain)
+		ts_jsonb_add_str(parse_state, "domain", edata->domain);
+	if (edata->context_domain)
+		ts_jsonb_add_str(parse_state, "context_domain", edata->context_domain);
+	if (edata->context)
+		ts_jsonb_add_str(parse_state, "context", edata->context);
+	if (edata->schema_name)
+		ts_jsonb_add_str(parse_state, "schema_name", edata->schema_name);
+	if (edata->table_name)
+		ts_jsonb_add_str(parse_state, "table_name", edata->table_name);
+	if (edata->column_name)
+		ts_jsonb_add_str(parse_state, "column_name", edata->column_name);
+	if (edata->datatype_name)
+		ts_jsonb_add_str(parse_state, "datatype_name", edata->datatype_name);
+	if (edata->constraint_name)
+		ts_jsonb_add_str(parse_state, "constraint_name", edata->constraint_name);
+	if (edata->internalquery)
+		ts_jsonb_add_str(parse_state, "internalquery", edata->internalquery);
+	if (edata->detail_log)
+		ts_jsonb_add_str(parse_state, "detail_log", edata->detail_log);
+	if (strlen(NameStr(*proc_schema)) > 0)
+		ts_jsonb_add_str(parse_state, "proc_schema", NameStr(*proc_schema));
+	if (strlen(NameStr(*proc_name)) > 0)
+		ts_jsonb_add_str(parse_state, "proc_name", NameStr(*proc_name));
+	/* we add the schema qualified name here as well*/
+	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+	return JsonbValueToJsonb(result);
 }

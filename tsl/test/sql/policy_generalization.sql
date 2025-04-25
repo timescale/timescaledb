@@ -62,12 +62,17 @@ INSERT INTO test SELECT i, i %10, 0.10 FROM generate_series(1, 100, 1) i;
 SELECT DISTINCT compression_status FROM _timescaledb_internal.compressed_chunk_stats;
 
 -- Compression policy
-SELECT add_compression_policy('test', compress_created_before => INTERVAL '2 seconds') AS compress_chunks_job_id \gset
+SELECT add_compression_policy('test', compress_created_before => INTERVAL '1 hour') AS compress_chunks_job_id \gset
 SELECT pg_sleep(3);
 CALL run_job(:compress_chunks_job_id);
-
 -- Chunk compression status
 SELECT DISTINCT compression_status FROM _timescaledb_internal.compressed_chunk_stats;
+SELECT remove_compression_policy('test');
+SELECT add_compression_policy('test', compress_created_before => INTERVAL '2 seconds') AS compress_chunks_job_id \gset
+CALL run_job(:compress_chunks_job_id);
+-- Chunk compression status
+SELECT DISTINCT compression_status FROM _timescaledb_internal.compressed_chunk_stats;
+
 -- check for WARNING/NOTICE if policy already exists
 SELECT add_compression_policy('test', compress_created_before => INTERVAL '2 seconds',
     if_not_exists => true);

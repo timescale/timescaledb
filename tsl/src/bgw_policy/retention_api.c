@@ -15,20 +15,20 @@
 #include <hypertable_cache.h>
 
 #include "bgw/job.h"
-#include "ts_catalog/continuous_agg.h"
-#include "chunk.h"
-#include "retention_api.h"
-#include "errors.h"
-#include "hypertable.h"
-#include "dimension.h"
-#include "policy_utils.h"
-#include "utils.h"
-#include "guc.h"
-#include "jsonb_utils.h"
-#include "bgw_policy/job.h"
-#include "bgw_policy/policies_v2.h"
 #include "bgw/job_stat.h"
 #include "bgw/timer.h"
+#include "bgw_policy/job.h"
+#include "bgw_policy/policies_v2.h"
+#include "chunk.h"
+#include "dimension.h"
+#include "errors.h"
+#include "guc.h"
+#include "hypertable.h"
+#include "jsonb_utils.h"
+#include "policy_utils.h"
+#include "retention_api.h"
+#include "ts_catalog/continuous_agg.h"
+#include "utils.h"
 
 Datum
 policy_retention_proc(PG_FUNCTION_ARGS)
@@ -51,7 +51,8 @@ policy_retention_check(PG_FUNCTION_ARGS)
 
 	if (PG_ARGISNULL(0))
 	{
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("config must not be NULL")));
+		ereport(ERROR,
+				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), errmsg("config must not be NULL")));
 	}
 
 	policy_retention_read_and_validate_config(PG_GETARG_JSONB_P(0), NULL);

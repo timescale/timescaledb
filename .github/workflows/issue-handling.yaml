@@ -13,7 +13,7 @@ jobs:
     # pull requests. To avoid adding pull requests to the bug board,
     # filter out pull requests
     if: ${{ !github.event.issue.pull_request }}
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     steps:
       - name: Add to bugs board
         uses: actions/add-to-project@v0.5.0
@@ -31,30 +31,36 @@ jobs:
 
   notify-sec:
     name: Notify security channel
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     if: >-
-      github.event_name == 'issues'
-      && github.event.action != 'closed'
-      && ( contains(github.event.issues.issue.labels.*.name, 'segfault')
-           || contains(github.event.issues.issue.labels.*.name, 'security') )
+      github.event_name == 'issues' &&
+      github.event.action != 'closed' &&
+      ( contains(github.event.issue.labels.*.name, 'segfault') ||
+        contains(github.event.issue.labels.*.name, 'security') )
     env:
       SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-      SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL_SECURITY }}
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-
-      - name: Generate message
-        run: |
-          gh api ${{ github.url }} --template='{"channel": $SLACK_CHANNEL, "text": "Issue <{{.url}}|#{{.number}} {{.title}}> needs attention"}' >message.json
-
-      - name: Send slack message
-        uses: krider2010/slack-bot-action@1.0.1
-        env:
-          MESSAGE_FILE: message.json
+      - name: Post to Security Channel
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          channel-id: '${{ secrets.SLACK_CHANNEL_SECURITY }}'
+          payload: |
+            {
+              "text": "Issue #${{github.event.issue.number}} (${{github.event.issue.title}})> needs attention",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "Issue <${{github.event.issue.html_url}}|#${{github.event.issue.number}} ${{github.event.issue.title}}> needs attention"
+                  }
+                }
+              ]
+            }
 
   close-issue:
     name: Issue is closed
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     if: github.event_name == 'issues' && github.event.action == 'closed' && contains(github.event.issues.issue.labels.*.name, 'bug')
     steps:
       - uses: leonsteinhaeuser/project-beta-automations@v2.0.0
@@ -72,7 +78,7 @@ jobs:
 
   waiting-for-author:
     name: Waiting for Author
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     if: github.event_name == 'issues' && github.event.action == 'labeled'
       && github.event.label.name == 'waiting-for-author'
     steps:
@@ -86,7 +92,7 @@ jobs:
 
   waiting-for-engineering:
     name: Waiting for Engineering
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     if: github.event_name == 'issue_comment' && !github.event.issue.pull_request
     steps:
       - name: Install dependencies
@@ -162,8 +168,9 @@ jobs:
          team: 'database-eng'
          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
       - name: Remove waiting-for-author label
-        if: ${{ steps.checkUserMember.outputs.isTeamMember == 'false'
-          && steps.extract_board_column.outputs.issue_board_column == 'Waiting for Author' }}
+        if: >-
+          steps.checkUserMember.outputs.isTeamMember == 'false' &&
+          steps.extract_board_column.outputs.issue_board_column == 'Waiting for Author'
         uses: andymckay/labeler@3a4296e9dcdf9576b0456050db78cfd34853f260
         with:
           remove-labels: 'waiting-for-author, no-activity'

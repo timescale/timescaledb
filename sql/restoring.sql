@@ -11,7 +11,6 @@ BEGIN
     EXECUTE format($$ALTER DATABASE %I SET timescaledb.restoring ='on'$$, db);
     SET SESSION timescaledb.restoring = 'on';
     PERFORM _timescaledb_functions.stop_background_workers();
-    --exported uuid may be included in the dump so backup the version
     RETURN true;
 END
 $BODY$

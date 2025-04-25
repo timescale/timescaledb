@@ -10,11 +10,11 @@
 #include <postgres.h>
 #include <access/attnum.h>
 #include <access/htup_details.h>
-#include <utils/typcache.h>
 #include <fmgr.h>
+#include <utils/typcache.h>
 
-#include "ts_catalog/catalog.h"
 #include "dimension.h"
+#include "ts_catalog/catalog.h"
 
 #define OPEN_START_TIME -1
 #define OPEN_END_TIME PG_INT64_MAX

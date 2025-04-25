@@ -1,0 +1,249 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+\set client_min_messages TO NOTICE;
+create or replace procedure job_fail(jobid int, config jsonb) language plpgsql as $$
+begin
+perform pg_sleep(2);
+raise exception 'raising an exception';
+end
+$$;
+-- very simple case: job that raises an exception
+select add_job('job_fail', '4 minutes') as jobf_id \gset
+-- test jobs that try to update concurrently
+CREATE TABLE custom_log (
+    a int,
+    b int,
+    msg text
+);
+insert into custom_log values (0, 0, 'msg0');
+ALTER SYSTEM SET DEFAULT_TRANSACTION_ISOLATION TO 'serializable';
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
+ t
+(1 row)
+
+-- Reconnect to make sure the GUC is set
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- test a concurrent update
+CREATE OR REPLACE PROCEDURE custom_proc1(jobid int, config jsonb) LANGUAGE PLPGSQL AS
+$$
+BEGIN
+  UPDATE custom_log set msg = 'msg1' where msg = 'msg0';
+  perform pg_sleep(5);
+  COMMIT;
+END
+$$;
+CREATE OR REPLACE PROCEDURE custom_proc2(jobid int, config jsonb) LANGUAGE PLPGSQL AS
+$$
+BEGIN
+  UPDATE custom_log set msg = 'msg2' where msg = 'msg0';
+  COMMIT;
+END
+$$;
+select add_job('custom_proc1', '2 min', initial_start => now());
+ add_job 
+---------
+    1001
+(1 row)
+
+-- to make sure custom_log is first updated by custom_proc_1
+select add_job('custom_proc2', '2 min', initial_start => now() + interval '2 seconds');
+ add_job 
+---------
+    1002
+(1 row)
+
+SELECT _timescaledb_functions.start_background_workers();
+ start_background_workers 
+--------------------------
+ t
+(1 row)
+
+-- enough time to for job_fail to fail
+select pg_sleep(5);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+select job_id, data->'job'->>'proc_name' as proc_name, data->'error_data'->>'message' as err_message, data->'error_data'->>'sqlerrcode' as sqlerrcode
+from _timescaledb_internal.bgw_job_stat_history where job_id = :jobf_id and succeeded is false;
+ job_id | proc_name |     err_message      | sqlerrcode 
+--------+-----------+----------------------+------------
+   1000 | job_fail  | raising an exception | P0001
+(1 row)
+
+select delete_job(:jobf_id);
+ delete_job 
+------------
+ 
+(1 row)
+
+select pg_sleep(5);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+-- exclude internal jobs
+select job_id, data->'job'->>'proc_name' as proc_name, data->'error_data'->>'message' as err_message, data->'error_data'->>'sqlerrcode' as sqlerrcode
+from _timescaledb_internal.bgw_job_stat_history WHERE job_id >= 1000 and succeeded is false;
+ job_id |  proc_name   |                     err_message                     | sqlerrcode 
+--------+--------------+-----------------------------------------------------+------------
+   1000 | job_fail     | raising an exception                                | P0001
+   1002 | custom_proc2 | could not serialize access due to concurrent update | 40001
+(2 rows)
+
+ALTER SYSTEM RESET DEFAULT_TRANSACTION_ISOLATION;
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
+ t
+(1 row)
+
+-- Reconnect to make sure the GUC is set
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- test the retention job
+SELECT next_start FROM alter_job(3, next_start => '2060-01-01 00:00:00+00'::timestamptz);
+          next_start          
+------------------------------
+ Wed Dec 31 16:00:00 2059 PST
+(1 row)
+
+DELETE FROM _timescaledb_internal.bgw_job_stat_history;
+INSERT INTO _timescaledb_internal.bgw_job_stat_history(job_id, pid, succeeded, execution_start, execution_finish, data)
+VALUES (123, 12345, false, '2000-01-01 00:00:00+00'::timestamptz, '2000-01-01 00:00:10+00'::timestamptz, '{}'),
+(456, 45678, false, '2000-01-01 00:00:20+00'::timestamptz, '2000-01-01 00:00:40+00'::timestamptz, '{}'),
+-- not older than a month
+(123, 23456, false, '2050-01-01 00:00:00+00'::timestamptz, '2050-01-01 00:00:10+00'::timestamptz, '{}');
+-- 3 rows in the table before policy runs
+SELECT job_id, pid, succeeded, execution_start, execution_finish, data
+FROM _timescaledb_internal.bgw_job_stat_history
+WHERE succeeded IS FALSE;
+ job_id |  pid  | succeeded |       execution_start        |       execution_finish       | data 
+--------+-------+-----------+------------------------------+------------------------------+------
+    123 | 12345 | f         | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:10 1999 PST | {}
+    456 | 45678 | f         | Fri Dec 31 16:00:20 1999 PST | Fri Dec 31 16:00:40 1999 PST | {}
+    123 | 23456 | f         | Fri Dec 31 16:00:00 2049 PST | Fri Dec 31 16:00:10 2049 PST | {}
+(3 rows)
+
+-- drop all job_stats for the retention job
+DELETE FROM _timescaledb_internal.bgw_job_stat WHERE job_id = 3;
+SELECT  next_start FROM alter_job(3, next_start => now() + interval '2 seconds') \gset
+SELECT test.wait_for_job_to_run(3, 1);
+ wait_for_job_to_run 
+---------------------
+ t
+(1 row)
+
+-- only the last row remains
+SELECT job_id, pid, succeeded, execution_start, execution_finish, data
+FROM _timescaledb_internal.bgw_job_stat_history
+WHERE succeeded IS FALSE;
+ job_id |  pid  | succeeded |       execution_start        |       execution_finish       | data 
+--------+-------+-----------+------------------------------+------------------------------+------
+    123 | 23456 | f         | Fri Dec 31 16:00:00 2049 PST | Fri Dec 31 16:00:10 2049 PST | {}
+(1 row)
+
+-- test failure when starting jobs
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT _timescaledb_functions.stop_background_workers();
+ stop_background_workers 
+-------------------------
+ t
+(1 row)
+
+-- Job didn't finish yet and Crash detected
+DELETE FROM _timescaledb_internal.bgw_job_stat_history;
+INSERT INTO _timescaledb_internal.bgw_job_stat_history(job_id, pid, succeeded, execution_start, execution_finish, data)
+VALUES (1, NULL, NULL, '2000-01-01 00:00:00+00'::timestamptz, NULL, '{}'), -- Crash server detected
+(2, 2222, false, '2000-01-01 00:00:00+00'::timestamptz, NULL, '{}'), -- Didn't finished yet
+(3, 3333, false, '2000-01-01 00:00:00+00'::timestamptz, '2000-01-01 01:00:00+00'::timestamptz, '{}'), -- Finish with ERROR
+(4, 4444, true, '2000-01-01 00:00:00+00'::timestamptz, '2000-01-01 01:00:00+00'::timestamptz, '{}'); -- Finish with SUCCESS
+SELECT job_id, pid, succeeded, start_time, finish_time, config, err_message
+FROM timescaledb_information.job_history
+ORDER BY job_id;
+ job_id | pid  | succeeded |          start_time          |         finish_time          | config |             err_message             
+--------+------+-----------+------------------------------+------------------------------+--------+-------------------------------------
+      1 |      |           | Fri Dec 31 16:00:00 1999 PST |                              |        | job crash detected, see server logs
+      2 | 2222 | f         | Fri Dec 31 16:00:00 1999 PST |                              |        | 
+      3 | 3333 | f         | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 17:00:00 1999 PST |        | 
+      4 | 4444 | t         | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 17:00:00 1999 PST |        | 
+(4 rows)
+
+SELECT job_id, pid, start_time, finish_time, err_message
+FROM timescaledb_information.job_errors
+ORDER BY job_id;
+ job_id | pid  |          start_time          |         finish_time          |             err_message             
+--------+------+------------------------------+------------------------------+-------------------------------------
+      1 |      | Fri Dec 31 16:00:00 1999 PST |                              | job crash detected, see server logs
+      2 | 2222 | Fri Dec 31 16:00:00 1999 PST |                              | 
+      3 | 3333 | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 17:00:00 1999 PST | 
+(3 rows)
+
+DELETE FROM _timescaledb_internal.bgw_job_stat;
+DELETE FROM _timescaledb_internal.bgw_job_stat_history;
+DELETE FROM _timescaledb_config.bgw_job CASCADE;
+SELECT _timescaledb_functions.start_background_workers();
+ start_background_workers 
+--------------------------
+ t
+(1 row)
+
+\set VERBOSITY default
+-- Setup Jobs
+DO
+$TEST$
+DECLARE
+  stmt TEXT;
+  njobs INT := 26;
+BEGIN
+  RAISE INFO 'Creating % jobs', njobs;
+  FOR stmt IN
+    SELECT format('CREATE PROCEDURE custom_job%s(job_id int, config jsonb) LANGUAGE PLPGSQL AS $$ BEGIN PERFORM pg_sleep(0.1); END; $$', i) FROM generate_series(1, njobs) AS i
+  LOOP
+    EXECUTE stmt;
+  END LOOP;
+
+  RAISE INFO 'Scheduling % jobs', njobs;
+  PERFORM add_job(format('custom_job%s', i)::regproc, schedule_interval => interval '1 hour', initial_start := now())
+  FROM generate_series(1, njobs) AS i;
+END;
+$TEST$;
+INFO:  Creating 26 jobs
+INFO:  Scheduling 26 jobs
+-- Wait for jobs to run
+DO
+$TEST$
+DECLARE
+  njobs INT := 26;
+BEGIN
+  RAISE INFO 'Waiting for the % jobs to run', njobs;
+  SET LOCAL client_min_messages TO WARNING;
+  PERFORM test.wait_for_job_to_run_or_fail(id) FROM _timescaledb_config.bgw_job WHERE id >= 1000;
+END;
+$TEST$;
+INFO:  Waiting for the 26 jobs to run
+SELECT count(*) > 0 FROM timescaledb_information.job_history WHERE succeeded IS FALSE AND err_message ~ 'failed to start job';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT count(*) > 0 FROM timescaledb_information.job_errors WHERE err_message ~ 'failed to start job';
+ ?column? 
+----------
+ t
+(1 row)
+
+\set VERBOSITY terse
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT _timescaledb_functions.stop_background_workers();
+ stop_background_workers 
+-------------------------
+ t
+(1 row)
+

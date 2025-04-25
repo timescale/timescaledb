@@ -29,6 +29,7 @@ SELECT create_hypertable('public.table_to_compress', 'time', chunk_time_interval
 (1 row)
 
 ALTER TABLE public.table_to_compress SET (timescaledb.compress, timescaledb.compress_segmentby = 'acq_id');
+NOTICE:  default order by for hypertable "table_to_compress" is set to ""time" DESC"
 INSERT INTO public.table_to_compress VALUES ('2020-01-01', 1234567, 777888);
 INSERT INTO public.table_to_compress VALUES ('2020-02-01', 567567, 890890);
 INSERT INTO public.table_to_compress VALUES ('2020-02-10', 1234, 5678);

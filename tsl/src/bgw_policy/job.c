@@ -9,6 +9,7 @@
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
 #include <commands/defrem.h>
+#include <extension.h>
 #include <funcapi.h>
 #include <hypertable_cache.h>
 #include <nodes/makefuncs.h>
@@ -18,23 +19,23 @@
 #include <parser/parser.h>
 #include <tcop/pquery.h>
 #include <utils/builtins.h>
+#include <utils/guc.h>
 #include <utils/lsyscache.h>
 #include <utils/portal.h>
-#include <utils/syscache.h>
 #include <utils/snapmgr.h>
+#include <utils/syscache.h>
 #include <utils/timestamp.h>
-#include <extension.h>
 
-#include "bgw/timer.h"
+#include "compat/compat.h"
 #include "bgw/job.h"
 #include "bgw/job_stat.h"
+#include "bgw/timer.h"
 #include "bgw_policy/chunk_stats.h"
 #include "bgw_policy/compression_api.h"
 #include "bgw_policy/continuous_aggregate_api.h"
 #include "bgw_policy/policy_utils.h"
 #include "bgw_policy/reorder_api.h"
 #include "bgw_policy/retention_api.h"
-#include "compat/compat.h"
 #include "compression/api.h"
 #include "continuous_aggs/materialize.h"
 #include "continuous_aggs/refresh.h"
@@ -45,13 +46,14 @@
 
 #include "tsl/src/chunk.h"
 
-#include "config.h"
-#include "errors.h"
-#include "job.h"
 #include "chunk.h"
+#include "config.h"
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
+#include "errors.h"
+#include "guc.h"
+#include "job.h"
 #include "reorder.h"
 #include "utils.h"
 
@@ -372,12 +374,73 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 {
 	PolicyContinuousAggData policy_data;
 
+	StringInfo str = makeStringInfo();
+	JsonbToCStringIndent(str, &config->root, VARSIZE(config));
+
 	policy_refresh_cagg_read_and_validate_config(config, &policy_data);
-	continuous_agg_refresh_internal(policy_data.cagg,
-									&policy_data.refresh_window,
-									CAGG_REFRESH_POLICY,
-									policy_data.start_is_null,
-									policy_data.end_is_null);
+
+	bool enable_osm_reads_old = ts_guc_enable_osm_reads;
+
+	if (!policy_data.include_tiered_data_isnull)
+	{
+		SetConfigOption("timescaledb.enable_tiered_reads",
+						policy_data.include_tiered_data ? "on" : "off",
+						PGC_USERSET,
+						PGC_S_SESSION);
+	}
+
+	CaggRefreshContext context = { .callctx = CAGG_REFRESH_POLICY };
+
+	/* Try to split window range into a list of ranges */
+	List *refresh_window_list =
+		continuous_agg_split_refresh_window(policy_data.cagg,
+											&policy_data.refresh_window,
+											policy_data.buckets_per_batch,
+											policy_data.refresh_newest_first);
+	if (refresh_window_list == NIL)
+		refresh_window_list = lappend(refresh_window_list, &policy_data.refresh_window);
+	else
+		context.callctx = CAGG_REFRESH_POLICY_BATCHED;
+
+	context.number_of_batches = list_length(refresh_window_list);
+
+	ListCell *lc;
+	int32 processing_batch = 0;
+	foreach (lc, refresh_window_list)
+	{
+		InternalTimeRange *refresh_window = (InternalTimeRange *) lfirst(lc);
+		elog(DEBUG1,
+			 "refreshing continuous aggregate \"%s\" from %s to %s",
+			 NameStr(policy_data.cagg->data.user_view_name),
+			 ts_internal_to_time_string(refresh_window->start, refresh_window->type),
+			 ts_internal_to_time_string(refresh_window->end, refresh_window->type));
+
+		context.processing_batch = ++processing_batch;
+		continuous_agg_refresh_internal(policy_data.cagg,
+										refresh_window,
+										context,
+										refresh_window->start_isnull,
+										refresh_window->end_isnull,
+										false);
+		if (processing_batch >= policy_data.max_batches_per_execution &&
+			processing_batch < context.number_of_batches &&
+			policy_data.max_batches_per_execution > 0)
+		{
+			elog(LOG,
+				 "reached maximum number of batches per execution (%d), batches not processed (%d)",
+				 policy_data.max_batches_per_execution,
+				 context.number_of_batches - processing_batch);
+			break;
+		}
+	}
+
+	if (!policy_data.include_tiered_data_isnull)
+	{
+		SetConfigOption("timescaledb.enable_tiered_reads",
+						enable_osm_reads_old ? "on" : "off",
+						PGC_USERSET,
+						PGC_S_SESSION);
+	}
 
 	return true;
 }
@@ -390,7 +453,10 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 	const Dimension *open_dim;
 	Oid dim_type;
 	int64 refresh_start, refresh_end;
+	int32 buckets_per_batch, max_batches_per_execution;
 	bool start_isnull, end_isnull;
+	bool include_tiered_data, include_tiered_data_isnull;
+	bool refresh_newest_first;
 
 	materialization_id = policy_continuous_aggregate_get_mat_hypertable_id(config);
 	mat_ht = ts_hypertable_get_by_id(materialization_id);
@@ -401,9 +467,11 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 				 errmsg("configuration materialization hypertable id %d not found",
 						materialization_id)));
 
+	ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(materialization_id, false);
+
 	open_dim = get_open_dimension_for_hypertable(mat_ht, true);
 	dim_type = ts_dimension_get_partition_type(open_dim);
-	refresh_start = policy_refresh_cagg_get_refresh_start(open_dim, config, &start_isnull);
+	refresh_start = policy_refresh_cagg_get_refresh_start(cagg, open_dim, config, &start_isnull);
 	refresh_end = policy_refresh_cagg_get_refresh_end(open_dim, config, &end_isnull);
 
 	if (refresh_start >= refresh_end)
@@ -415,14 +483,43 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 						   ts_internal_to_time_string(refresh_end, dim_type)),
 				 errhint("The start of the window must be before the end.")));
 
+	include_tiered_data =
+		policy_refresh_cagg_get_include_tiered_data(config, &include_tiered_data_isnull);
+
+	buckets_per_batch = policy_refresh_cagg_get_buckets_per_batch(config);
+
+	if (buckets_per_batch < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid buckets per batch"),
+				 errdetail("buckets_per_batch: %d", buckets_per_batch),
+				 errhint("The buckets per batch should be greater than or equal to zero.")));
+
+	max_batches_per_execution = policy_refresh_cagg_get_max_batches_per_execution(config);
+
+	if (max_batches_per_execution < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid max batches per execution"),
+				 errdetail("max_batches_per_execution: %d", max_batches_per_execution),
+				 errhint(
+					 "The max batches per execution should be greater than or equal to zero.")));
+
+	refresh_newest_first = policy_refresh_cagg_get_refresh_newest_first(config);
+
 	if (policy_data)
 	{
 		policy_data->refresh_window.type = dim_type;
 		policy_data->refresh_window.start = refresh_start;
+		policy_data->refresh_window.start_isnull = start_isnull;
 		policy_data->refresh_window.end = refresh_end;
-		policy_data->cagg = ts_continuous_agg_find_by_mat_hypertable_id(materialization_id, false);
-		policy_data->start_is_null = start_isnull;
-		policy_data->end_is_null = end_isnull;
+		policy_data->refresh_window.end_isnull = end_isnull;
+		policy_data->cagg = cagg;
+		policy_data->include_tiered_data = include_tiered_data;
+		policy_data->include_tiered_data_isnull = include_tiered_data_isnull;
+		policy_data->buckets_per_batch = buckets_per_batch;
+		policy_data->max_batches_per_execution = max_batches_per_execution;
+		policy_data->refresh_newest_first = refresh_newest_first;
 	}
 }
 
@@ -565,7 +662,6 @@ job_execute(BgwJob *job)
 	bool portal_created = false;
 	char prokind;
 	Oid proc;
-	ObjectWithArgs *object;
 	FuncExpr *funcexpr;
 	MemoryContext parent_ctx = CurrentMemoryContext;
 	StringInfo query;
@@ -589,11 +685,7 @@ job_execute(BgwJob *job)
 		PortalContext = portal->portalContext;
 
 		StartTransactionCommand();
-#if (PG13 && PG_VERSION_NUM >= 130004) || PG14_GE
 		EnsurePortalSnapshotExists();
-#else
-		PushActiveSnapshot(GetTransactionSnapshot());
-#endif
 	}
 
 #ifdef USE_TELEMETRY
@@ -617,12 +709,7 @@ job_execute(BgwJob *job)
 	}
 #endif
 
-	object = makeNode(ObjectWithArgs);
-	object->objname = list_make2(makeString(NameStr(job->fd.proc_schema)),
-								 makeString(NameStr(job->fd.proc_name)));
-	object->objargs = list_make2(SystemTypeName("int4"), SystemTypeName("jsonb"));
-	proc = LookupFuncWithArgs(OBJECT_ROUTINE, object, false);
-
+	proc = ts_bgw_job_get_funcid(job);
 	prokind = get_func_prokind(proc);
 
 	/*

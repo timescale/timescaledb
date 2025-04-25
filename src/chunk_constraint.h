@@ -8,8 +8,8 @@
 #include <postgres.h>
 #include <nodes/pg_list.h>
 
-#include "ts_catalog/catalog.h"
 #include "hypertable.h"
+#include "ts_catalog/catalog.h"
 
 typedef struct ChunkConstraint
 {
@@ -42,9 +42,9 @@ extern int ts_chunk_constraint_scan_by_dimension_slice(const DimensionSlice *sli
 													   ChunkScanCtx *ctx, MemoryContext mctx);
 extern int ts_chunk_constraint_scan_by_dimension_slice_to_list(const DimensionSlice *slice,
 															   List **list, MemoryContext mctx);
-extern int ts_chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_id,
-														  ChunkConstraints *ccs,
-														  MemoryContext mctx);
+extern int TSDLLEXPORT ts_chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_id,
+																	  ChunkConstraints *ccs,
+																	  MemoryContext mctx);
 extern ChunkConstraint *ts_chunk_constraints_add(ChunkConstraints *ccs, int32 chunk_id,
 												 int32 dimension_slice_id,
 												 const char *constraint_name,
@@ -58,6 +58,9 @@ extern TSDLLEXPORT int ts_chunk_constraints_add_inheritable_constraints(ChunkCon
 extern TSDLLEXPORT int ts_chunk_constraints_add_inheritable_check_constraints(
 	ChunkConstraints *ccs, int32 chunk_id, const char chunk_relkind, Oid hypertable_oid);
 extern TSDLLEXPORT void ts_chunk_constraints_insert_metadata(const ChunkConstraints *ccs);
+extern TSDLLEXPORT Constraint *ts_chunk_constraint_dimensional_create(const Dimension *dim,
+																	  const DimensionSlice *slice,
+																	  const char *name);
 extern TSDLLEXPORT void ts_chunk_constraints_create(const Hypertable *ht, const Chunk *chunk);
 extern void ts_chunk_constraint_create_on_chunk(const Hypertable *ht, const Chunk *chunk,
 												Oid constraint_oid);

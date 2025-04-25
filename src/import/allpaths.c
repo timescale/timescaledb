@@ -34,7 +34,7 @@
 
 #include "allpaths.h"
 #include "chunk.h"
-#include "compat/compat.h"
+#include "cross_module_fn.h"
 #include "planner/planner.h"
 
 static void set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
@@ -152,7 +152,7 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 		AppendRelInfo *appinfo = (AppendRelInfo *) lfirst(l);
 
 		/* append_rel_list contains all append rels; ignore others */
-		if (appinfo->parent_relid != (Index) parent_rt_index)
+		if (appinfo->parent_relid != parent_rt_index)
 			continue;
 
 		/* Re-locate the child RTE and RelOptInfo */
@@ -187,16 +187,16 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 		TsRelType reltype = ts_classify_relation(root, child_rel, &ht);
 		if (reltype == TS_REL_CHUNK_CHILD && !TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
 		{
-			TimescaleDBPrivate *fdw_private = (TimescaleDBPrivate *) child_rel->fdw_private;
+			const Chunk *chunk = ts_planner_chunk_fetch(root, child_rel);
 
 			/*
 			 * This function is called only in tandem with our own hypertable
 			 * expansion, so the Chunk struct must be initialized already.
 			 */
-			Assert(fdw_private->cached_chunk_struct != NULL);
+			Assert(chunk != NULL);
 
-			if (!ts_chunk_is_partial(fdw_private->cached_chunk_struct) &&
-				ts_chunk_is_compressed(fdw_private->cached_chunk_struct))
+			if (!ts_chunk_is_partial(chunk) && ts_chunk_is_compressed(chunk) &&
+				!ts_is_hypercore_am(chunk->amoid))
 			{
 				child_rel->indexlist = NIL;
 			}
@@ -213,14 +213,6 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 		 */
 		if (IS_DUMMY_REL(child_rel))
 			continue;
-
-			/* Bubble up childrel's partitioned children. */
-#if PG14_LT
-		if (parent_rel->part_scheme)
-			parent_rel->partitioned_child_rels =
-				list_concat(parent_rel->partitioned_child_rels,
-							list_copy(child_rel->partitioned_child_rels));
-#endif
 
 		/*
 		 * Child is live, so add it to the live_childrels list for use below.
@@ -328,16 +320,8 @@ set_dummy_rel_pathlist(RelOptInfo *rel)
 
 	/* Set up the dummy path */
 	add_path(rel,
-			 (Path *) create_append_path_compat(NULL,
-												rel,
-												NIL,
-												NIL,
-												NIL,
-												rel->lateral_relids,
-												0,
-												false,
-												NIL,
-												-1));
+			 (Path *)
+				 create_append_path(NULL, rel, NIL, NIL, NIL, rel->lateral_relids, 0, false, -1));
 
 	/*
 	 * We set the cheapest-path fields immediately, just in case they were
@@ -534,19 +518,6 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 	check_stack_depth();
 
 	Assert(IS_SIMPLE_REL(rel));
-
-	/*
-	 * Initialize partitioned_child_rels to contain this RT index.
-	 *
-	 * Note that during the set_append_rel_pathlist() phase, we will bubble up
-	 * the indexes of partitioned relations that appear down in the tree, so
-	 * that when we've created Paths for all the children, the root
-	 * partitioned table's list will contain all such indexes.
-	 */
-#if PG14_LT
-	if (rte->relkind == RELKIND_PARTITIONED_TABLE)
-		rel->partitioned_child_rels = list_make1_int(rti);
-#endif
 
 	/*
 	 * If this is a partitioned baserel, set the consider_partitionwise_join

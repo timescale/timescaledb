@@ -9,9 +9,9 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 
+#include "compat/compat.h"
 #include "conn_internal.h"
 #include "conn_plain.h"
-#include "compat/compat.h"
 #include "port.h"
 
 #define DEFAULT_TIMEOUT_MSEC 3000

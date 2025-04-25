@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+SET timezone TO PST8PDT;
+
 \set ON_ERROR_STOP 0
 
 SELECT _timescaledb_internal.alter_job_set_hypertable_id(0,0);
@@ -36,8 +38,8 @@ SELECT _timescaledb_internal.indexes_local_size(NULL,NULL);
 SELECT _timescaledb_internal.interval_to_usec(NULL);
 SELECT _timescaledb_internal.partialize_agg(NULL::text);
 SELECT _timescaledb_internal.policy_compression_check(NULL);
-SELECT _timescaledb_internal.policy_job_error_retention(0,NULL);
-SELECT _timescaledb_internal.policy_job_error_retention_check(NULL);
+SELECT _timescaledb_internal.policy_job_stat_history_retention(0,NULL);
+SELECT _timescaledb_internal.policy_job_stat_history_retention_check(NULL);
 SELECT _timescaledb_internal.policy_refresh_continuous_aggregate_check(NULL);
 SELECT _timescaledb_internal.policy_reorder_check(NULL);
 SELECT _timescaledb_internal.policy_retention_check(NULL);

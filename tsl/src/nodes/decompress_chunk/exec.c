@@ -5,9 +5,9 @@
  */
 
 #include <postgres.h>
-#include <miscadmin.h>
 #include <access/sysattr.h>
 #include <executor/executor.h>
+#include <miscadmin.h>
 #include <nodes/bitmapset.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
@@ -18,16 +18,17 @@
 #include <utils/memutils.h>
 #include <utils/typcache.h>
 
+#include <tcop/tcopprot.h>
+
 #include "compat/compat.h"
-#include "compression/array.h"
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
 #include "guc.h"
 #include "import/ts_explain.h"
 #include "nodes/decompress_chunk/batch_array.h"
 #include "nodes/decompress_chunk/batch_queue.h"
-#include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
+#include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
 
@@ -61,37 +62,32 @@ decompress_chunk_state_create(CustomScan *cscan)
 	chunk_state->csstate.methods = &chunk_state->exec_methods;
 
 	Assert(IsA(cscan->custom_private, List));
-	Assert(list_length(cscan->custom_private) == 6);
-	List *settings = linitial(cscan->custom_private);
-	chunk_state->decompression_map = lsecond(cscan->custom_private);
-	chunk_state->is_segmentby_column = lthird(cscan->custom_private);
-	chunk_state->bulk_decompression_column = lfourth(cscan->custom_private);
-	chunk_state->aggregated_column_type = lfifth(cscan->custom_private);
-	chunk_state->sortinfo = lsixth(cscan->custom_private);
+	Assert(list_length(cscan->custom_private) == DCP_Count);
+	List *settings = list_nth(cscan->custom_private, DCP_Settings);
+	chunk_state->decompression_map = list_nth(cscan->custom_private, DCP_DecompressionMap);
+	chunk_state->is_segmentby_column = list_nth(cscan->custom_private, DCP_IsSegmentbyColumn);
+	chunk_state->bulk_decompression_column =
+		list_nth(cscan->custom_private, DCP_BulkDecompressionColumn);
+	chunk_state->sortinfo = list_nth(cscan->custom_private, DCP_SortInfo);
+
 	chunk_state->custom_scan_tlist = cscan->custom_scan_tlist;
 
 	Assert(IsA(settings, IntList));
-	Assert(list_length(settings) == 6);
-	chunk_state->hypertable_id = linitial_int(settings);
-	chunk_state->chunk_relid = lsecond_int(settings);
-	chunk_state->decompress_context.reverse = lthird_int(settings);
-	chunk_state->decompress_context.batch_sorted_merge = lfourth_int(settings);
-	chunk_state->decompress_context.enable_bulk_decompression = lfifth_int(settings);
-	chunk_state->perform_vectorized_aggregation = lsixth_int(settings);
+	Assert(list_length(settings) == DCS_Count);
+	chunk_state->hypertable_id = list_nth_int(settings, DCS_HypertableId);
+	chunk_state->chunk_relid = list_nth_int(settings, DCS_ChunkRelid);
+	chunk_state->decompress_context.reverse = list_nth_int(settings, DCS_Reverse);
+	chunk_state->decompress_context.batch_sorted_merge =
+		list_nth_int(settings, DCS_BatchSortedMerge);
+	chunk_state->decompress_context.enable_bulk_decompression =
+		list_nth_int(settings, DCS_EnableBulkDecompression);
+	chunk_state->has_row_marks = list_nth_int(settings, DCS_HasRowMarks);
 
 	Assert(IsA(cscan->custom_exprs, List));
 	Assert(list_length(cscan->custom_exprs) == 1);
 	chunk_state->vectorized_quals_original = linitial(cscan->custom_exprs);
 	Assert(list_length(chunk_state->decompression_map) ==
 		   list_length(chunk_state->is_segmentby_column));
-
-#ifdef USE_ASSERT_CHECKING
-	if (chunk_state->perform_vectorized_aggregation)
-	{
-		Assert(list_length(chunk_state->decompression_map) ==
-			   list_length(chunk_state->aggregated_column_type));
-	}
-#endif
 
 	return (Node *) chunk_state;
 }
@@ -128,7 +124,9 @@ constify_tableoid_walker(Node *node, ConstifyTableOidContext *ctx)
 		 * segfault if any system columns get through
 		 */
 		if (var->varattno < SelfItemPointerAttributeNumber)
-			elog(ERROR, "transparent decompression only supports tableoid system column");
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+					 errmsg("transparent decompression only supports tableoid system column")));
 
 		return node;
 	}
@@ -214,7 +212,13 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 										node->ss.ss_ScanTupleSlot->tts_tupleDescriptor);
 		}
 	}
-	/* Sort keys should only be present when sorted_merge_append is used */
+
+	/*
+	 * Sort keys should only be present at the level of this node when batch
+	 * sorted merge is used.
+	 * In other cases of sort pushdown, sorting is performed by the underlying
+	 * compressed scan.
+	 */
 	Assert(dcontext->batch_sorted_merge == true || list_length(chunk_state->sortinfo) == 0);
 
 	/*
@@ -223,13 +227,15 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	node->custom_ps = lappend(node->custom_ps, ExecInitNode(compressed_scan, estate, eflags));
 
 	/*
-	 * Determine which columns we are going to decompress. Since in the hottest
-	 * loop we work only with compressed columns, we'll put them in front of the
-	 * array. So first, count how many compressed and not compressed columns
-	 * we have.
+	 * Count the actual data columns we have to decompress, skipping the
+	 * metadata columns. We only need the metadata columns when initializing the
+	 * compressed batch, so they are not saved in the compressed batch itself,
+	 * it tracks only the data columns. We put the metadata columns to the end
+	 * of the array to have the same column indexes in compressed batch state
+	 * and in decompression context.
 	 */
-	int num_compressed = 0;
-	int num_total = 0;
+	int num_data_columns = 0;
+	int num_columns_with_metadata = 0;
 
 	ListCell *dest_cell;
 	ListCell *is_segmentby_cell;
@@ -246,77 +252,83 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 			continue;
 		}
 
-		if (output_attno > 0 && !lfirst_int(is_segmentby_cell))
+		if (output_attno > 0)
 		{
 			/*
-			 * Not a metadata column and not a segmentby column, hence a
-			 * compressed one.
+			 * Not a metadata column.
 			 */
-			num_compressed++;
+			num_data_columns++;
 		}
 
-		num_total++;
+		num_columns_with_metadata++;
 	}
 
-	Assert(num_compressed <= num_total);
-	dcontext->num_compressed_columns = num_compressed;
-	dcontext->num_total_columns = num_total;
-	dcontext->template_columns = palloc0(sizeof(CompressionColumnDescription) * num_total);
-	dcontext->decompressed_slot = node->ss.ss_ScanTupleSlot;
+	Assert(num_data_columns <= num_columns_with_metadata);
+	dcontext->num_data_columns = num_data_columns;
+	dcontext->num_columns_with_metadata = num_columns_with_metadata;
+	dcontext->compressed_chunk_columns =
+		palloc0(sizeof(CompressionColumnDescription) * num_columns_with_metadata);
+	dcontext->custom_scan_slot = node->ss.ss_ScanTupleSlot;
+	dcontext->uncompressed_chunk_tdesc = RelationGetDescr(node->ss.ss_currentRelation);
 	dcontext->ps = &node->ss.ps;
 
-	TupleDesc desc = dcontext->decompressed_slot->tts_tupleDescriptor;
+	TupleDesc desc = dcontext->custom_scan_slot->tts_tupleDescriptor;
 
 	/*
 	 * Compressed columns go in front, and the rest go to the back, so we have
 	 * separate indices for them.
 	 */
 	int current_compressed = 0;
-	int current_not_compressed = num_compressed;
+	int current_not_compressed = num_data_columns;
 	for (int compressed_index = 0; compressed_index < list_length(chunk_state->decompression_map);
 		 compressed_index++)
 	{
 		CompressionColumnDescription column = {
 			.compressed_scan_attno = AttrOffsetGetAttrNumber(compressed_index),
-			.output_attno = list_nth_int(chunk_state->decompression_map, compressed_index),
+			.custom_scan_attno = list_nth_int(chunk_state->decompression_map, compressed_index),
 			.bulk_decompression_supported =
 				list_nth_int(chunk_state->bulk_decompression_column, compressed_index)
 		};
 
-		if (column.output_attno == 0)
+		if (column.custom_scan_attno == 0)
 		{
 			/* We are asked not to decompress this column, skip it. */
 			continue;
 		}
 
-		if (column.output_attno > 0)
+		if (column.custom_scan_attno > 0)
 		{
-			if (chunk_state->perform_vectorized_aggregation &&
-				lfirst_int(list_nth_cell(chunk_state->aggregated_column_type, compressed_index)) !=
-					-1)
-			{
-				column.typid = lfirst_int(
-					list_nth_cell(chunk_state->aggregated_column_type, compressed_index));
-			}
-			else
-			{
-				/* normal column that is also present in decompressed chunk */
-				Form_pg_attribute attribute =
-					TupleDescAttr(desc, AttrNumberGetAttrOffset(column.output_attno));
+			/* normal column that is also present in decompressed chunk */
+			Form_pg_attribute attribute =
+				TupleDescAttr(desc, AttrNumberGetAttrOffset(column.custom_scan_attno));
 
-				column.typid = attribute->atttypid;
-				column.value_bytes = get_typlen(column.typid);
-			}
+			column.typid = attribute->atttypid;
+			get_typlenbyval(column.typid, &column.value_bytes, &column.by_value);
 
 			if (list_nth_int(chunk_state->is_segmentby_column, compressed_index))
 				column.type = SEGMENTBY_COLUMN;
 			else
 				column.type = COMPRESSED_COLUMN;
+
+			if (cscan->custom_scan_tlist == NIL)
+			{
+				column.uncompressed_chunk_attno = column.custom_scan_attno;
+			}
+			else
+			{
+				Var *var =
+					castNode(Var,
+							 castNode(TargetEntry,
+									  list_nth(cscan->custom_scan_tlist,
+											   AttrNumberGetAttrOffset(column.custom_scan_attno)))
+								 ->expr);
+				column.uncompressed_chunk_attno = var->varattno;
+			}
 		}
 		else
 		{
 			/* metadata columns */
-			switch (column.output_attno)
+			switch (column.custom_scan_attno)
 			{
 				case DECOMPRESS_CHUNK_COUNT_ID:
 					column.type = COUNT_COLUMN;
@@ -325,73 +337,27 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 					column.type = SEQUENCE_NUM_COLUMN;
 					break;
 				default:
-					elog(ERROR, "Invalid column attno \"%d\"", column.output_attno);
+					elog(ERROR, "Invalid column attno \"%d\"", column.custom_scan_attno);
 					break;
 			}
 		}
 
-		if (column.type == COMPRESSED_COLUMN)
+		if (column.custom_scan_attno > 0)
 		{
-			Assert(current_compressed < num_total);
-			dcontext->template_columns[current_compressed++] = column;
+			/* Data column. */
+			Assert(current_compressed < num_data_columns);
+			dcontext->compressed_chunk_columns[current_compressed++] = column;
 		}
 		else
 		{
-			Assert(current_not_compressed < num_total);
-			dcontext->template_columns[current_not_compressed++] = column;
+			/* Metadata column. */
+			Assert(current_not_compressed < num_columns_with_metadata);
+			dcontext->compressed_chunk_columns[current_not_compressed++] = column;
 		}
 	}
 
-	Assert(current_compressed == num_compressed);
-	Assert(current_not_compressed == num_total);
-
-	/*
-	 * Calculate the desired size of the batch memory context. Especially if we
-	 * use bulk decompression, the results should fit into the first page of the
-	 * context, otherwise it's going to do malloc/free on every
-	 * MemoryContextReset.
-	 *
-	 * Start with the default size.
-	 */
-	Size batch_memory_context_bytes = ALLOCSET_DEFAULT_INITSIZE;
-
-	if (dcontext->enable_bulk_decompression)
-	{
-		for (int i = 0; i < num_total; i++)
-		{
-			CompressionColumnDescription *column = &dcontext->template_columns[i];
-			if (column->bulk_decompression_supported)
-			{
-				/*
-				 * Values array, with 64 element padding (actually we have less).
-				 *
-				 * For variable-length types (we only have text) we can't
-				 * estimate the width currently.
-				 */
-				batch_memory_context_bytes += (GLOBAL_MAX_ROWS_PER_COMPRESSION + 64) *
-											  (column->value_bytes > 0 ? column->value_bytes : 16);
-				/* Nulls bitmap, one uint64 per 64 rows. */
-				batch_memory_context_bytes +=
-					((GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64) * sizeof(uint64);
-				/* Arrow data structure. */
-				batch_memory_context_bytes += sizeof(ArrowArray) + sizeof(void *) * 2 /* buffers */;
-				/* Memory context header overhead for the above parts. */
-				batch_memory_context_bytes += sizeof(void *) * 3;
-			}
-		}
-	}
-
-	/* Round up to even number of 4k pages. */
-	batch_memory_context_bytes = ((batch_memory_context_bytes + 4095) / 4096) * 4096;
-
-	/* As a precaution, limit it to 1MB. */
-	batch_memory_context_bytes = Min(batch_memory_context_bytes, 1 * 1024 * 1024);
-
-	elog(DEBUG3,
-		 "Batch memory context has initial capacity of %zu bytes",
-		 batch_memory_context_bytes);
-
-	dcontext->batch_memory_context_bytes = batch_memory_context_bytes;
+	Assert(current_compressed == num_data_columns);
+	Assert(current_not_compressed == num_columns_with_metadata);
 
 	/*
 	 * Choose which batch queue we are going to use: heap for batch sorted
@@ -400,24 +366,24 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	if (dcontext->batch_sorted_merge)
 	{
 		chunk_state->batch_queue =
-			batch_queue_heap_create(num_compressed,
-									batch_memory_context_bytes,
+			batch_queue_heap_create(num_data_columns,
 									chunk_state->sortinfo,
-									dcontext->decompressed_slot->tts_tupleDescriptor,
+									dcontext->custom_scan_slot->tts_tupleDescriptor,
 									&BatchQueueFunctionsHeap);
 		chunk_state->exec_methods.ExecCustomScan = decompress_chunk_exec_heap;
 	}
 	else
 	{
-		chunk_state->batch_queue = batch_queue_fifo_create(num_compressed,
-														   batch_memory_context_bytes,
-														   &BatchQueueFunctionsFifo);
+		chunk_state->batch_queue =
+			batch_queue_fifo_create(num_data_columns, &BatchQueueFunctionsFifo);
 		chunk_state->exec_methods.ExecCustomScan = decompress_chunk_exec_fifo;
 	}
 
 	if (ts_guc_debug_require_batch_sorted_merge && !dcontext->batch_sorted_merge)
 	{
-		elog(ERROR, "debug: batch sorted merge is required but not used");
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("debug: batch sorted merge is required but not used")));
 	}
 
 	/* Constify stable expressions in vectorized predicates. */
@@ -440,272 +406,6 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 }
 
 /*
- * Perform a vectorized aggregation on int4 values
- */
-static TupleTableSlot *
-perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
-{
-	DecompressContext *dcontext = &chunk_state->decompress_context;
-	BatchQueue *batch_queue = chunk_state->batch_queue;
-
-	Assert(chunk_state != NULL);
-	Assert(aggref != NULL);
-
-	/* Partial result is a int8 */
-	Assert(aggref->aggtranstype == INT8OID);
-
-	/* Two columns are decompressed, the column that needs to be aggregated and the count column */
-	Assert(dcontext->num_total_columns == 2);
-
-	CompressionColumnDescription *value_column_description = &dcontext->template_columns[0];
-	CompressionColumnDescription *count_column_description = &dcontext->template_columns[1];
-	if (count_column_description->type != COUNT_COLUMN)
-	{
-		/*
-		 * The count and value columns can go in different order based on their
-		 * order in compressed chunk, so check which one we are seeing.
-		 */
-		CompressionColumnDescription *tmp = value_column_description;
-		value_column_description = count_column_description;
-		count_column_description = tmp;
-	}
-	Assert(value_column_description->type == COMPRESSED_COLUMN ||
-		   value_column_description->type == SEGMENTBY_COLUMN);
-	Assert(count_column_description->type == COUNT_COLUMN);
-
-	/* Get a free batch slot */
-	const int new_batch_index = batch_array_get_unused_slot(&batch_queue->batch_array);
-
-	/* Nobody else should use batch states */
-	Assert(new_batch_index == 0);
-	DecompressBatchState *batch_state =
-		batch_array_get_at(&batch_queue->batch_array, new_batch_index);
-
-	/* Init per batch memory context */
-	Assert(batch_state != NULL);
-	Assert(batch_state->per_batch_context == NULL);
-	batch_state->per_batch_context =
-		create_per_batch_mctx(batch_queue->batch_array.batch_memory_context_bytes);
-	Assert(batch_state->per_batch_context != NULL);
-
-	/* Init bulk decompression memory context */
-	Assert(dcontext->bulk_decompression_context == NULL);
-	dcontext->bulk_decompression_context = create_bulk_decompression_mctx(CurrentMemoryContext);
-	Assert(dcontext->bulk_decompression_context != NULL);
-
-	/* Get a reference the the output TupleTableSlot */
-	TupleTableSlot *decompressed_scan_slot = chunk_state->csstate.ss.ss_ScanTupleSlot;
-	Assert(decompressed_scan_slot->tts_tupleDescriptor->natts == 1);
-
-	/* Set all attributes of the result tuple to NULL. So, we return NULL if no data is processed
-	 * by our implementation. In addition, the call marks the slot as being used (i.e., no
-	 * ExecStoreVirtualTuple call is required). */
-	ExecStoreAllNullTuple(decompressed_scan_slot);
-	Assert(!TupIsNull(decompressed_scan_slot));
-
-	int64 result_sum = 0;
-
-	if (value_column_description->type == SEGMENTBY_COLUMN)
-	{
-		/*
-		 * To calculate the sum for a segment by value, we need to multiply the value of the segment
-		 * by column with the number of compressed tuples in this batch.
-		 */
-		while (true)
-		{
-			TupleTableSlot *compressed_slot =
-				ExecProcNode(linitial(chunk_state->csstate.custom_ps));
-
-			if (TupIsNull(compressed_slot))
-			{
-				/* All segment by values are processed. */
-				break;
-			}
-
-			MemoryContext old_mctx = MemoryContextSwitchTo(batch_state->per_batch_context);
-			MemoryContextReset(batch_state->per_batch_context);
-
-			bool isnull_value, isnull_elements;
-			Datum value = slot_getattr(compressed_slot,
-									   value_column_description->compressed_scan_attno,
-									   &isnull_value);
-
-			/* We have multiple compressed tuples for this segment by value. Get number of
-			 * compressed tuples */
-			Datum elements = slot_getattr(compressed_slot,
-										  count_column_description->compressed_scan_attno,
-										  &isnull_elements);
-
-			if (!isnull_value && !isnull_elements)
-			{
-				int32 intvalue = DatumGetInt32(value);
-				int32 amount = DatumGetInt32(elements);
-				int64 batch_sum = 0;
-
-				Assert(amount > 0);
-
-				/* We have at least one value */
-				decompressed_scan_slot->tts_isnull[0] = false;
-
-				/* Multiply the number of tuples with the actual value */
-				if (unlikely(pg_mul_s64_overflow(intvalue, amount, &batch_sum)))
-				{
-					ereport(ERROR,
-							(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
-							 errmsg("bigint out of range")));
-				}
-
-				/* Add the value to our sum */
-				if (unlikely(pg_add_s64_overflow(result_sum, batch_sum, ((int64 *) &result_sum))))
-					ereport(ERROR,
-							(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
-							 errmsg("bigint out of range")));
-			}
-			MemoryContextSwitchTo(old_mctx);
-		}
-	}
-	else if (value_column_description->type == COMPRESSED_COLUMN)
-	{
-		Assert(dcontext->enable_bulk_decompression);
-		Assert(value_column_description->bulk_decompression_supported);
-		Assert(list_length(aggref->args) == 1);
-
-		while (true)
-		{
-			TupleTableSlot *compressed_slot =
-				ExecProcNode(linitial(chunk_state->csstate.custom_ps));
-			if (TupIsNull(compressed_slot))
-			{
-				/* All compressed batches are processed. */
-				break;
-			}
-
-			MemoryContext old_mctx = MemoryContextSwitchTo(batch_state->per_batch_context);
-			MemoryContextReset(batch_state->per_batch_context);
-
-			/* Decompress data */
-			bool isnull;
-			Datum value = slot_getattr(compressed_slot,
-									   value_column_description->compressed_scan_attno,
-									   &isnull);
-
-			Ensure(isnull == false, "got unexpected NULL attribute value from compressed batch");
-
-			/* We have at least one value */
-			decompressed_scan_slot->tts_isnull[0] = false;
-
-			CompressedDataHeader *header =
-				(CompressedDataHeader *) detoaster_detoast_attr((struct varlena *) DatumGetPointer(
-																	value),
-																&dcontext->detoaster);
-
-			ArrowArray *arrow = NULL;
-
-			DecompressAllFunction decompress_all =
-				tsl_get_decompress_all_function(header->compression_algorithm,
-												value_column_description->typid);
-			Assert(decompress_all != NULL);
-
-			MemoryContextSwitchTo(dcontext->bulk_decompression_context);
-
-			arrow = decompress_all(PointerGetDatum(header),
-								   value_column_description->typid,
-								   batch_state->per_batch_context);
-
-			Assert(arrow != NULL);
-
-			MemoryContextReset(dcontext->bulk_decompression_context);
-			MemoryContextSwitchTo(batch_state->per_batch_context);
-
-			/* A compressed batch consists of 1000 tuples (see MAX_ROWS_PER_COMPRESSION). The
-			 * attribute value is a int32 with a max value of 2^32. Even if all tuples have the max
-			 * value, the max sum is = 1000 * 2^32 < 2^10 * 2^32 = 2^42. This is smaller than 2^64,
-			 * which is the max value of the int64 variable. The same is true for negative values).
-			 * Therefore, we don't need to check for overflows within the loop, which would slow
-			 * down the calculation. */
-			Assert(arrow->length <= MAX_ROWS_PER_COMPRESSION);
-			Assert(MAX_ROWS_PER_COMPRESSION <= 1024);
-
-			int64 batch_sum = 0;
-			for (int i = 0; i < arrow->length; i++)
-			{
-				const bool arrow_isnull = !arrow_row_is_valid(arrow->buffers[0], i);
-
-				if (likely(!arrow_isnull))
-				{
-					const int32 arrow_value = ((int32 *) arrow->buffers[1])[i];
-					batch_sum += arrow_value;
-				}
-			}
-
-			if (unlikely(pg_add_s64_overflow(result_sum, batch_sum, ((int64 *) &result_sum))))
-				ereport(ERROR,
-						(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
-						 errmsg("bigint out of range")));
-			MemoryContextSwitchTo(old_mctx);
-		}
-	}
-	else
-	{
-		elog(ERROR, "unsupported column type");
-	}
-
-	/* Use Int64GetDatum to store the result since a 64-bit value is not pass-by-value on 32-bit
-	 * systems */
-	decompressed_scan_slot->tts_values[0] = Int64GetDatum(result_sum);
-
-	return decompressed_scan_slot;
-}
-
-/*
- * Directly execute an aggregation function on decompressed data and emit a partial aggregate
- * result.
- *
- * Executing the aggregation directly in this node makes it possible to use the columnar data
- * directly before it is converted into row-based tuples.
- */
-static TupleTableSlot *
-perform_vectorized_aggregation(DecompressChunkState *chunk_state)
-{
-	BatchQueue *bq = chunk_state->batch_queue;
-
-	Assert(list_length(chunk_state->custom_scan_tlist) == 1);
-
-	/* Checked by planner */
-	Assert(ts_guc_enable_vectorized_aggregation);
-	Assert(ts_guc_enable_bulk_decompression);
-
-	/* When using vectorized aggregates, only one result tuple is produced. So, if we have
-	 * already initialized a batch state, the aggregation was already performed.
-	 */
-	if (batch_array_has_active_batches(&bq->batch_array))
-	{
-		ExecClearTuple(chunk_state->csstate.ss.ss_ScanTupleSlot);
-		return chunk_state->csstate.ss.ss_ScanTupleSlot;
-	}
-
-	/* Determine which kind of vectorized aggregation we should perform */
-	TargetEntry *tlentry = (TargetEntry *) linitial(chunk_state->custom_scan_tlist);
-	Assert(IsA(tlentry->expr, Aggref));
-	Aggref *aggref = castNode(Aggref, tlentry->expr);
-
-	/* The aggregate should be a partial aggregate */
-	Assert(aggref->aggsplit == AGGSPLIT_INITIAL_SERIAL);
-
-	switch (aggref->aggfnoid)
-	{
-		case F_SUM_INT4:
-			return perform_vectorized_sum_int4(chunk_state, aggref);
-		default:
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("vectorized aggregation for function %d is not supported",
-							aggref->aggfnoid)));
-			pg_unreachable();
-	}
-}
-
-/*
  * The exec function for the DecompressChunk node. It takes the explicit queue
  * functions pointer as an optimization, to allow these functions to be
  * inlined in the FIFO case. This is important because this is a part of a
@@ -718,11 +418,6 @@ decompress_chunk_exec_impl(DecompressChunkState *chunk_state, const BatchQueueFu
 	BatchQueue *bq = chunk_state->batch_queue;
 
 	Assert(bq->funcs == bqfuncs);
-
-	if (chunk_state->perform_vectorized_aggregation)
-	{
-		return perform_vectorized_aggregation(chunk_state);
-	}
 
 	bqfuncs->pop(bq, dcontext);
 
@@ -742,6 +437,13 @@ decompress_chunk_exec_impl(DecompressChunkState *chunk_state, const BatchQueueFu
 	if (TupIsNull(result_slot))
 	{
 		return NULL;
+	}
+
+	if (chunk_state->has_row_marks)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("locking compressed tuples is not supported")));
 	}
 
 	if (chunk_state->csstate.ss.ps.ps_ProjInfo)
@@ -826,13 +528,6 @@ decompress_chunk_explain(CustomScanState *node, List *ancestors, ExplainState *e
 		{
 			ExplainPropertyBool("Bulk Decompression",
 								chunk_state->decompress_context.enable_bulk_decompression,
-								es);
-		}
-
-		if (chunk_state->perform_vectorized_aggregation)
-		{
-			ExplainPropertyBool("Vectorized Aggregation",
-								chunk_state->perform_vectorized_aggregation,
 								es);
 		}
 	}

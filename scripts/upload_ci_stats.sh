@@ -29,7 +29,10 @@ create table job(
     url text,
     run_attempt int,
     run_id bigint,
-    run_number int
+    run_number int,
+    pg_version text generated always as (
+        substring(job_name from 'PG([0-9]+(\.[0-9]+)*)')
+    ) stored
 );
 
 create unique index on job(job_date);
@@ -75,7 +78,13 @@ JOB_NAME="${JOB_NAME:-test-job}"
 export JOB_NAME
 
 JOB_DATE=$("${PSQL[@]}" -c "
-insert into job values (
+insert into job(
+    job_date, commit_sha, job_name,
+    repository, ref_name, event_name,
+    pr_number, job_status,
+    url,
+    run_attempt, run_id, run_number
+) values (
     now(), '$COMMIT_SHA', '$JOB_NAME',
     '$GITHUB_REPOSITORY', '$GITHUB_REF_NAME', '$GITHUB_EVENT_NAME',
     '$GITHUB_PR_NUMBER', '$JOB_STATUS',
@@ -93,6 +102,9 @@ then
     gawk -v OFS='\t' '
     match($0, /^(test|    ) ([^ ]+)[ ]+\.\.\.[ ]+([^ ]+) (|\(.*\))[ ]+([0-9]+) ms$/, a) {
         print ENVIRON["JOB_DATE"], a[2], tolower(a[3] (a[4] ? (" " a[4]) : "")), a[5];
+    }
+    match($0, /^([^0-9]+) [0-9]+ +[-+] ([^ ]+) +([0-9]+) ms/, a) {
+        print ENVIRON["JOB_DATE"], a[2], a[1], a[3];
     }
     ' installcheck.log > tests.tsv
 
@@ -161,9 +173,13 @@ done
 # Save a snippet of logs where a backend was terminated by signal.
 grep -C40 "was terminated by signal" postmaster.log > postgres-failure.log ||:
 
-# Find internal program errors in Postgres logs.
-jq 'select(.state_code == "XX000" and .error_severity != "LOG")
-    | [env.JOB_DATE, .message, .func_name,  .statement] | @tsv
+# Find internal program errors and resource owner leak warnings in the sever log.
+# We do the same thing in Flaky Check and error out if we find any, not to
+# introduce these errors for the new tests.
+jq 'select(
+        (.state_code == "XX000" and .error_severity != "LOG")
+        or (.message | test("resource was not closed"))
+    ) | [env.JOB_DATE, .message, .func_name,  .statement] | @tsv
 ' -r postmaster.json > ipe.tsv ||:
 "${PSQL[@]}" -c "\copy ipe from ipe.tsv"
 

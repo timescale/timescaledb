@@ -10,6 +10,11 @@
 
 #include "chunk_constraint.h"
 
+/* Put DIMENSION_SLICE_MAXVALUE point in same slice as DIMENSION_SLICE_MAXVALUE-1, always */
+/* This avoids the problem with coord < range_end where coord and range_end is an int64 */
+#define REMAP_LAST_COORDINATE(coord)                                                               \
+	(((coord) == DIMENSION_SLICE_MAXVALUE) ? DIMENSION_SLICE_MAXVALUE - 1 : (coord))
+
 #define DIMENSION_SLICE_MAXVALUE ((int64) PG_INT64_MAX)
 #define DIMENSION_SLICE_MINVALUE ((int64) PG_INT64_MIN)
 
@@ -53,8 +58,8 @@ ts_dimension_slice_scan_range_limit(int32 dimension_id, StrategyNumber start_str
 									int limit, const ScanTupLock *tuplock);
 extern DimensionVec *ts_dimension_slice_collision_scan_limit(int32 dimension_id, int64 range_start,
 															 int64 range_end, int limit);
-extern bool ts_dimension_slice_scan_for_existing(const DimensionSlice *slice,
-												 const ScanTupLock *tuplock);
+extern TSDLLEXPORT bool ts_dimension_slice_scan_for_existing(const DimensionSlice *slice,
+															 const ScanTupLock *tuplock);
 extern DimensionSlice *ts_dimension_slice_scan_by_id_and_lock(int32 dimension_slice_id,
 															  const ScanTupLock *tuplock,
 															  MemoryContext mctx,
@@ -65,22 +70,25 @@ extern DimensionVec *ts_dimension_slice_scan_by_dimension_before_point(int32 dim
 																	   ScanDirection scandir,
 																	   MemoryContext mctx);
 extern int ts_dimension_slice_delete_by_dimension_id(int32 dimension_id, bool delete_constraints);
-extern int ts_dimension_slice_delete_by_id(int32 dimension_slice_id, bool delete_constraints);
+extern TSDLLEXPORT int ts_dimension_slice_delete_by_id(int32 dimension_slice_id,
+													   bool delete_constraints);
 extern TSDLLEXPORT DimensionSlice *ts_dimension_slice_create(int dimension_id, int64 range_start,
 															 int64 range_end);
 extern TSDLLEXPORT DimensionSlice *ts_dimension_slice_copy(const DimensionSlice *original);
 extern TSDLLEXPORT bool ts_dimension_slices_collide(const DimensionSlice *slice1,
 													const DimensionSlice *slice2);
-extern bool ts_dimension_slices_equal(const DimensionSlice *slice1, const DimensionSlice *slice2);
+extern TSDLLEXPORT bool ts_dimension_slices_equal(const DimensionSlice *slice1,
+												  const DimensionSlice *slice2);
 extern bool ts_dimension_slice_cut(DimensionSlice *to_cut, const DimensionSlice *other,
 								   int64 coord);
 extern void ts_dimension_slice_free(DimensionSlice *slice);
 extern int ts_dimension_slice_insert_multi(DimensionSlice **slice, Size num_slices);
-extern void ts_dimension_slice_insert(DimensionSlice *slice);
+extern TSDLLEXPORT void ts_dimension_slice_insert(DimensionSlice *slice);
 extern int ts_dimension_slice_cmp(const DimensionSlice *left, const DimensionSlice *right);
 extern int ts_dimension_slice_cmp_coordinate(const DimensionSlice *slice, int64 coord);
 
 extern TSDLLEXPORT DimensionSlice *ts_dimension_slice_nth_latest_slice(int32 dimension_id, int n);
+extern TSDLLEXPORT DimensionSlice *ts_dimension_slice_nth_earliest_slice(int32 dimension_id, int n);
 extern TSDLLEXPORT int32 ts_dimension_slice_oldest_valid_chunk_for_reorder(
 	int32 job_id, int32 dimension_id, StrategyNumber start_strategy, int64 start_value,
 	StrategyNumber end_strategy, int64 end_value);
@@ -104,8 +112,7 @@ extern int ts_dimension_slice_scan_iterator_set_range(ScanIterator *it, int32 di
 extern bool ts_osm_chunk_range_overlaps(int32 osm_dimension_slice_id, int32 dimension_id,
 										int64 range_start, int64 range_end);
 
-extern int ts_dimension_slice_update_by_id(int32 dimension_slice_id,
-										   FormData_dimension_slice *fd_slice);
+extern int ts_dimension_slice_range_update(DimensionSlice *slice);
 
 #define dimension_slice_insert(slice) ts_dimension_slice_insert_multi(&(slice), 1)
 
@@ -114,3 +121,6 @@ extern int ts_dimension_slice_update_by_id(int32 dimension_slice_id,
 
 #define dimension_slice_collision_scan(dimension_id, range_start, range_end)                       \
 	ts_dimension_slice_collision_scan_limit(dimension_id, range_start, range_end, 0)
+
+DimensionSlice *ts_chunk_get_osm_slice_and_lock(int32 osm_chunk_id, int32 time_dim_id,
+												LockTupleMode tuplockmode, LOCKMODE tablelockmode);

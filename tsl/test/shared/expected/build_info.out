@@ -12,3 +12,9 @@ SELECT pg_typeof(commit_tag) AS commit_tag_type,
  text            | text             |                 40 | timestamp with time zone
 (1 row)
 
+SELECT extname, obj_description(oid, 'pg_extension') FROM pg_extension WHERE extname = 'timescaledb';
+   extname   |                                    obj_description                                    
+-------------+---------------------------------------------------------------------------------------
+ timescaledb | Enables scalable inserts and complex queries for time-series data (Community Edition)
+(1 row)
+

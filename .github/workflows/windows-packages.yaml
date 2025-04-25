@@ -4,25 +4,23 @@ name: Windows Packages
   schedule:
     # run daily 0:00 on main branch
     - cron: '0 0 * * *'
+  pull_request:
+    paths: .github/workflows/windows-packages.yaml
   push:
     tags:
     - '*'
     branches:
     - release_test
     - trigger/windows_packages
+  workflow_dispatch:
 
 jobs:
   config:
     runs-on: ubuntu-latest
     outputs:
-      pg13_earliest: ${{ steps.config.outputs.pg13_abi_min }}
-      pg14_earliest: ${{ steps.config.outputs.pg14_abi_min }}
-      pg15_earliest: ${{ steps.config.outputs.pg15_abi_min }}
-      pg16_earliest: ${{ steps.config.outputs.pg16_abi_min }}
-      pg13_latest: ${{ steps.config.outputs.pg13_latest }}
-      pg14_latest: ${{ steps.config.outputs.pg14_latest }}
       pg15_latest: ${{ steps.config.outputs.pg15_latest }}
       pg16_latest: ${{ steps.config.outputs.pg16_latest }}
+      pg17_latest: ${{ steps.config.outputs.pg17_latest }}
 
     steps:
     - name: Checkout source code
@@ -32,39 +30,21 @@ jobs:
       run: python .github/gh_config_reader.py
 
   build:
-    name: Windows package PG${{ matrix.test }}
+    name: Windows package PG${{ matrix.pkg_version }}
     runs-on: ${{ matrix.os }}
     needs: config
     strategy:
       fail-fast: false
       matrix:
         os: [ windows-2019 ]
-        test: [ "13min", "13max", "14min", "14max", "15min", "15max", "16min", "16max" ]
+        pg: [ "15", "16", "17" ]
         include:
-          - test: 13min
-            pg: 13
-            pkg_version: ${{ fromJson(needs.config.outputs.pg13_earliest) }}.1
-          - test: 13max
-            pg: 13
-            pkg_version: 13.13.0 # hardcoded since 13.14 is not available on chocolatey
-          - test: 14min
-            pg: 14
-            pkg_version: ${{ fromJson(needs.config.outputs.pg14_earliest) }}.1
-          - test: 14max
-            pg: 14
-            pkg_version: 14.10.0 # hardcoded since 14.11 is not available yet
-          - test: 15min
-            pg: 15
-            pkg_version: ${{ fromJson(needs.config.outputs.pg15_earliest) }}.1
-          - test: 15max
-            pg: 15
-            pkg_version: 15.5.0 # hardcoded since 15.6 is not available yet
-          - test: 16min
-            pg: 16
-            pkg_version: ${{ fromJson(needs.config.outputs.pg16_earliest) }}.0
-          - test: 16max
-            pg: 16
-            pkg_version: 16.1.0 # hardcoded since 16.2 is not available yet
+          - pg: 15
+            pkg_version: ${{ fromJson(needs.config.outputs.pg15_latest) }}.0
+          - pg: 16
+            pkg_version: ${{ fromJson(needs.config.outputs.pg16_latest) }}.0
+          - pg: 17
+            pkg_version: ${{ fromJson(needs.config.outputs.pg17_latest) }}.0
     env:
       # PostgreSQL configuration
       PGPORT: 6543
@@ -77,13 +57,13 @@ jobs:
     - name: Get version
       id: version
       run: |
-        # version will only be a proper version in a release branch so we use update_from_version
+        # version will only be a proper version in a release branch so we use previous_version
         # as fallback for main
         if (grep '^version = [0-9.]\+$' version.config)
         {
           $version=sed -n 's!^version = !!p' version.config
         } else {
-          $version=sed -n 's!^update_from_version = !!p' version.config
+          $version=sed -n 's!^previous_version = !!p' version.config
         }
         cat version.config
         echo "Determined version: "

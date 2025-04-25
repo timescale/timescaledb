@@ -11,17 +11,11 @@ SELECT
 SELECT format('\! diff -u --label "Uncompressed results" --label "Compressed results" %s %s', :'TEST_RESULTS_UNCOMPRESSED', :'TEST_RESULTS_COMPRESSED') as "DIFF_CMD"
 \gset
 
--- disable memoize node to make EXPLAIN output comparable between PG14 and previous versions
-SELECT CASE WHEN current_setting('server_version_num')::int/10000 >= 14 THEN set_config('enable_memoize','off',false) ELSE 'off' END AS enable_memoize;
-
 -- get EXPLAIN output for all variations
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
 \set PREFIX_VERBOSE 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
 
-set work_mem to '64MB';
--- disable incremental sort here to make plans comparable to PG < 13
-SELECT CASE WHEN current_setting('server_version_num')::int/10000 >= 13 THEN set_config('enable_incremental_sort','off',false) ELSE 'off' END;
-
+SET work_mem TO '64MB';
 
 -- In the following test cases, we test that certain indexes are used. By using the
 -- timescaledb.enable_decompression_sorted_merge optimization, we are pushing a sort node
@@ -29,9 +23,14 @@ SELECT CASE WHEN current_setting('server_version_num')::int/10000 >= 13 THEN set
 -- tests because the input data is small and PostgreSQL switches from IndexScans to
 -- SequentialScans. Disable the optimization for the following tests to ensure we have
 -- stable query plans in all CI environments.
-SET timescaledb.enable_decompression_sorted_merge = 0;
+SET timescaledb.enable_decompression_sorted_merge TO 'off';
+SET max_parallel_workers_per_gather TO '0';
 
-set max_parallel_workers_per_gather to 0;
+-- disable incremental sort to avoid flaky results
+SET enable_incremental_sort TO 'off';
+-- disable memoize node to avoid flaky results
+SET enable_memoize TO 'off';
+
 \set TEST_TABLE 'metrics'
 \ir :TEST_QUERY_NAME
 \set TEST_TABLE 'metrics_space'

@@ -3,6 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 SET search_path TO public, _timescaledb_functions;
+SET timezone TO PST8PDT;
 
 CREATE TABLE devices (
     id INTEGER,
@@ -106,11 +107,8 @@ SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 year', bucket) AS buc
 --
 -- Test bucket Oid recovery
 --
-\c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE OR REPLACE FUNCTION cagg_get_bucket_function(
-    mat_hypertable_id INTEGER
-) RETURNS regprocedure AS :MODULE_PATHNAME, 'ts_continuous_agg_get_bucket_function' LANGUAGE C STRICT VOLATILE;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+SET timezone TO PST8PDT;
 
 CREATE TABLE timestamp_ht (
   time timestamp NOT NULL,
@@ -154,9 +152,15 @@ CREATE MATERIALIZED VIEW temperature_tz_4h_ts
     FROM timestamptz_ht
     GROUP BY 1 ORDER BY 1;
 
-CREATE MATERIALIZED VIEW temperature_tz_4h_ts_ng
+CREATE MATERIALIZED VIEW temperature_tz_4h_ts_origin
   WITH  (timescaledb.continuous) AS
-  SELECT timescaledb_experimental.time_bucket_ng('4 hour', time, 'Asia/Shanghai'), avg(value)
+  SELECT time_bucket('4 hour', time, timezone => 'Europe/Berlin', origin => '2001-01-01'::timestamptz), avg(value)
+    FROM timestamptz_ht
+    GROUP BY 1 ORDER BY 1;
+
+CREATE MATERIALIZED VIEW temperature_tz_4h_ts_offset
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('4 hour', time, timezone => 'Europe/Berlin', "offset" => '1 hour'::interval), avg(value)
     FROM timestamptz_ht
     GROUP BY 1 ORDER BY 1;
 
@@ -168,18 +172,74 @@ SELECT set_integer_now_func('integer_ht', 'integer_now_integer_ht');
 
 CREATE MATERIALIZED VIEW integer_ht_cagg
   WITH (timescaledb.continuous) AS
-  SELECT a, count(b)
+  SELECT time_bucket(1, a) AS bucket, a, count(b)
      FROM integer_ht
-     GROUP BY time_bucket(1, a), a;
+     GROUP BY bucket, a;
 
---- Get the bucket Oids
-SELECT user_view_name,
-       cagg_get_bucket_function(mat_hypertable_id)
-       FROM _timescaledb_catalog.continuous_agg
-       WHERE user_view_name in('temperature_4h', 'temperature_tz_4h', 'temperature_tz_4h_ts', 'temperature_tz_4h_ts_ng', 'integer_ht_cagg')
-       ORDER BY user_view_name;
+CREATE MATERIALIZED VIEW integer_ht_cagg_offset
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket(1, a, "offset" => 10) AS bucket, a, count(b)
+     FROM integer_ht
+     GROUP BY bucket, a;
 
---- Cleanup
+-- Get the bucket Oids
+SELECT user_view_name, bf.bucket_func
+FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id) AS bf
+WHERE user_view_name IN
+  ('temperature_4h', 'temperature_tz_4h', 'temperature_tz_4h_ts', 'temperature_tz_4h_ts_origin', 'temperature_tz_4h_ts_offset', 'integer_ht_cagg', 'integer_ht_cagg_offset')
+ORDER BY user_view_name;
+
+-- Get all bucket function information
+SELECT user_view_name, bf.*
+FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id) AS bf
+WHERE user_view_name IN
+  ('temperature_4h', 'temperature_tz_4h', 'temperature_tz_4h_ts', 'temperature_tz_4h_ts_origin', 'temperature_tz_4h_ts_offset', 'integer_ht_cagg', 'integer_ht_cagg_offset')
+ORDER BY user_view_name;
+
+-- Valid multiple time_bucket usage on view definition
+CREATE MATERIALIZED VIEW temperature_tz_4h_2
+WITH  (timescaledb.continuous) AS
+SELECT (time_bucket('4 hour', time) at time zone 'utc')::date, avg(value)
+FROM timestamptz_ht
+GROUP BY time_bucket('4 hour', time)
+ORDER BY 1
+WITH NO DATA;
+
+SELECT user_view_name, bf.bucket_func
+FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id) AS bf
+WHERE user_view_name = 'temperature_tz_4h_2'
+ORDER BY user_view_name;
+
+-- Corrupt the direct view definition
 \c :TEST_DBNAME :ROLE_SUPERUSER
-DROP FUNCTION IF EXISTS cagg_get_bucket_function(INTEGER);
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+SELECT direct_view_schema, direct_view_name
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'temperature_tz_4h_2' \gset
+
+CREATE OR REPLACE VIEW :direct_view_schema.:direct_view_name AS
+SELECT NULL::date AS timezone, NULL::FLOAT8 AS avg;
+
+\set ON_ERROR_STOP 0
+-- Should error because there's no time_bucket function on the view definition
+SELECT user_view_name, bf.bucket_func
+FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id) AS bf
+WHERE user_view_name = 'temperature_tz_4h_2'
+ORDER BY user_view_name;
+\set ON_ERROR_STOP 1
+
+-- Group by another function to make sure it will be ignored
+CREATE FUNCTION skip() RETURNS INTEGER AS $$ SELECT 1; $$ IMMUTABLE LANGUAGE SQL;
+
+CREATE MATERIALIZED VIEW temperature_tz_4h_3
+WITH  (timescaledb.continuous) AS
+SELECT skip(), time_bucket('4 hour', time), avg(value)
+FROM timestamptz_ht
+GROUP BY 1, 2
+ORDER BY 1
+WITH NO DATA;
+
+SELECT user_view_name, bf.bucket_func
+FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id) AS bf
+WHERE user_view_name = 'temperature_tz_4h_3'
+ORDER BY user_view_name;

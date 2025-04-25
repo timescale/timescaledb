@@ -9,7 +9,7 @@
 set -e
 set -u
 
-FROM_VERSION=${FROM_VERSION:-$(grep '^downgrade_to_version ' version.config | awk '{ print $3 }')}
+FROM_VERSION=${FROM_VERSION:-$(grep '^previous_version ' version.config | awk '{ print $3 }')}
 TO_VERSION=${TO_VERSION:-$(grep '^version ' version.config | awk '{ print $3 }')}
 
 TEST_REPAIR=${TEST_REPAIR:-false}
@@ -61,7 +61,7 @@ initdb > "${OUTPUT_DIR}/initdb.log" 2>&1
 pg_ctl -l "${OUTPUT_DIR}/postgres.log" start -o "-c unix_socket_directories='${UNIX_SOCKET_DIR}' -c timezone=GMT -c client_min_messages=warning -c port=${PGPORT} -c max_prepared_transactions=100 -c shared_preload_libraries=timescaledb -c timescaledb.telemetry_level=off -c max_worker_processes=0"
 pg_isready -t 30 > /dev/null
 
-echo -e "\nUpdate test for ${FROM_VERSION} -> ${TO_VERSION}\n"
+echo -e "\nUpdate test version ${TEST_VERSION} for ${FROM_VERSION} -> ${TO_VERSION}\n"
 
 # caller should ensure that the versions are available
 check_version "${FROM_VERSION}"

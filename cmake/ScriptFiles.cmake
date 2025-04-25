@@ -16,11 +16,14 @@ set(PRE_INSTALL_SOURCE_FILES
     pre_install/types.post.sql # Must be before tables.sql
     pre_install/tables.sql
     pre_install/cache.sql
+    pre_install/tam.functions.sql
+    pre_install/tam.sql
     pre_install/insert_data.sql)
 
 # Source files that define functions and need to be rerun in update
 set(PRE_INSTALL_FUNCTION_FILES
     pre_install/types.functions.sql
+    pre_install/tam.functions.sql
     )
 
 # The rest of the source files defining mostly functions
@@ -53,7 +56,7 @@ set(SOURCE_FILES
     policy_internal.sql
     cagg_utils.sql
     cagg_migrate.sql
-    job_error_log_retention.sql
+    job_stat_history_log_retention.sql
     osm_api.sql
     compression_defaults.sql)
 
@@ -79,7 +82,13 @@ list(APPEND SOURCE_FILES
 list(APPEND SOURCE_FILES
   bgw_startup.sql)
 
-# These files should be pre-pended to update scripts so that they are executed
+if(APACHE_ONLY)
+  list(APPEND SOURCE_FILES comment_apache.sql)
+else()
+  list(APPEND SOURCE_FILES comment_tsl.sql)
+endif()
+
+# These files should be prepended to update scripts so that they are executed
 # before anything else during updates
 set(PRE_UPDATE_FILES updates/pre-version-change.sql updates/pre-update.sql)
 set(PRE_DOWNGRADE_FILES updates/pre-version-change.sql)

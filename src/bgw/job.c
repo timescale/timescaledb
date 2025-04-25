@@ -4,54 +4,76 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <miscadmin.h>
-#include <pgstat.h>
+
+#include <unistd.h>
 #include <access/xact.h>
 #include <catalog/pg_authid.h>
+#include <executor/execdebug.h>
+#include <executor/instrument.h>
+#include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <parser/parse_func.h>
 #include <parser/parser.h>
+#include <pgstat.h>
 #include <postmaster/bgworker.h>
 #include <storage/ipc.h>
-#include <tcop/tcopprot.h>
-#include <utils/builtins.h>
-#include <utils/memutils.h>
-#include <utils/syscache.h>
-#include <utils/timestamp.h>
 #include <storage/lock.h>
 #include <storage/proc.h>
 #include <storage/procarray.h>
 #include <storage/sinvaladt.h>
+#include <tcop/tcopprot.h>
 #include <utils/acl.h>
+#include <utils/builtins.h>
 #include <utils/elog.h>
-#include <executor/execdebug.h>
-#include <executor/instrument.h>
 #include <utils/jsonb.h>
+#include <utils/lsyscache.h>
+#include <utils/memutils.h>
 #include <utils/snapmgr.h>
-#include <unistd.h>
+#include <utils/syscache.h>
+#include <utils/timestamp.h>
 
-#include "job.h"
-#include "config.h"
-#include "scanner.h"
-#include "extension.h"
 #include "compat/compat.h"
+#include "bgw/job_stat_history.h"
+#include "bgw/scheduler.h"
+#include "bgw_policy/chunk_stats.h"
+#include "bgw_policy/policy.h"
+#include "config.h"
+#include "cross_module_fn.h"
+#include "debug_assert.h"
+#include "extension.h"
+#include "job.h"
 #include "job_stat.h"
 #include "license_guc.h"
+#include "scan_iterator.h"
+#include "scanner.h"
+#include "tss_callbacks.h"
 #include "utils.h"
+
 #ifdef USE_TELEMETRY
 #include "telemetry/telemetry.h"
 #endif
-#include "bgw_policy/chunk_stats.h"
-#include "bgw_policy/policy.h"
-#include "scan_iterator.h"
-#include "bgw/scheduler.h"
-
-#include <cross_module_fn.h>
-#include "jsonb_utils.h"
-#include "debug_assert.h"
 
 static scheduler_test_hook_type scheduler_test_hook = NULL;
 static char *job_entrypoint_function_name = "ts_bgw_job_entrypoint";
+
+/*
+ * Get the mem_guard callbacks.
+ *
+ * You might get a NULL pointer back if there are no mem_guard installed, so
+ * check before using.
+ */
+MGCallbacks *
+ts_get_mem_guard_callbacks(void)
+{
+	static MGCallbacks **mem_guard_callback_ptr = NULL;
+
+	if (mem_guard_callback_ptr)
+		return *mem_guard_callback_ptr;
+
+	mem_guard_callback_ptr = (MGCallbacks **) find_rendezvous_variable(MG_CALLBACKS_VAR_NAME);
+
+	return *mem_guard_callback_ptr;
+}
 
 typedef enum JobLockLifetime
 {
@@ -64,6 +86,8 @@ ts_bgw_job_start(BgwJob *job, Oid user_oid)
 {
 	BgwParams bgw_params = {
 		.job_id = Int32GetDatum(job->fd.id),
+		.job_history_id = job->job_history.id,
+		.job_history_execution_start = job->job_history.execution_start,
 		.user_oid = user_oid,
 	};
 
@@ -157,57 +181,6 @@ job_config_check(BgwJob *job, Jsonb *config)
 			 NameStr(job->fd.check_schema),
 			 NameStr(job->fd.check_name),
 			 job->fd.id);
-}
-
-/* this function fills in a jsonb with the non-null fields of
- the error data and also includes the proc name and schema in the jsonb
- we include these here to avoid adding these fields to the table */
-static Jsonb *
-ts_errdata_to_jsonb(ErrorData *edata, Name proc_schema, Name proc_name)
-{
-	JsonbParseState *parse_state = NULL;
-	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-	if (edata->sqlerrcode)
-		ts_jsonb_add_str(parse_state, "sqlerrcode", unpack_sql_state(edata->sqlerrcode));
-	if (edata->message)
-		ts_jsonb_add_str(parse_state, "message", edata->message);
-	if (edata->detail)
-		ts_jsonb_add_str(parse_state, "detail", edata->detail);
-	if (edata->hint)
-		ts_jsonb_add_str(parse_state, "hint", edata->hint);
-	if (edata->filename)
-		ts_jsonb_add_str(parse_state, "filename", edata->filename);
-	if (edata->lineno)
-		ts_jsonb_add_int32(parse_state, "lineno", edata->lineno);
-	if (edata->funcname)
-		ts_jsonb_add_str(parse_state, "funcname", edata->funcname);
-	if (edata->domain)
-		ts_jsonb_add_str(parse_state, "domain", edata->domain);
-	if (edata->context_domain)
-		ts_jsonb_add_str(parse_state, "context_domain", edata->context_domain);
-	if (edata->context)
-		ts_jsonb_add_str(parse_state, "context", edata->context);
-	if (edata->schema_name)
-		ts_jsonb_add_str(parse_state, "schema_name", edata->schema_name);
-	if (edata->table_name)
-		ts_jsonb_add_str(parse_state, "table_name", edata->table_name);
-	if (edata->column_name)
-		ts_jsonb_add_str(parse_state, "column_name", edata->column_name);
-	if (edata->datatype_name)
-		ts_jsonb_add_str(parse_state, "datatype_name", edata->datatype_name);
-	if (edata->constraint_name)
-		ts_jsonb_add_str(parse_state, "constraint_name", edata->constraint_name);
-	if (edata->internalquery)
-		ts_jsonb_add_str(parse_state, "internalquery", edata->internalquery);
-	if (edata->detail_log)
-		ts_jsonb_add_str(parse_state, "detail_log", edata->detail_log);
-	if (strlen(NameStr(*proc_schema)) > 0)
-		ts_jsonb_add_str(parse_state, "proc_schema", NameStr(*proc_schema));
-	if (strlen(NameStr(*proc_name)) > 0)
-		ts_jsonb_add_str(parse_state, "proc_name", NameStr(*proc_name));
-	/* we add the schema qualified name here as well*/
-	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
-	return JsonbValueToJsonb(result);
 }
 
 static BgwJob *
@@ -402,13 +375,19 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 		 * would have to be freed separately when freeing a job. */
 		job->fd.config = NULL;
 
+		old_ctx = MemoryContextSwitchTo(mctx);
+
 		timezone = slot_getattr(ti->slot, Anum_bgw_job_timezone, &timezone_isnull);
 		if (!timezone_isnull)
-			job->fd.timezone = DatumGetTextPP(timezone);
+		{
+			/* We use DatumGetTextPCopy to move the detoasted value into our memory context */
+			job->fd.timezone = DatumGetTextPCopy(timezone);
+		}
 		else
+		{
 			job->fd.timezone = NULL;
+		}
 
-		old_ctx = MemoryContextSwitchTo(mctx);
 		jobs = lappend(jobs, job);
 		MemoryContextSwitchTo(old_ctx);
 	}
@@ -491,33 +470,6 @@ ts_bgw_job_find_by_proc_and_hypertable_id(const char *proc_name, const char *pro
 	init_scan_by_proc_schema(&scankey[0], proc_schema);
 	init_scan_by_proc_name(&scankey[1], proc_name);
 	init_scan_by_hypertable_id(&scankey[2], hypertable_id);
-
-	ts_scanner_scan(&scanctx);
-	return list_data.list;
-}
-
-List *
-ts_bgw_job_find_by_proc(const char *proc_name, const char *proc_schema)
-{
-	Catalog *catalog = ts_catalog_get();
-	ScanKeyData scankey[2];
-	AccumData list_data = {
-		.list = NIL,
-		.alloc_size = sizeof(BgwJob),
-	};
-	ScannerCtx scanctx = {
-		.table = catalog_get_table_id(catalog, BGW_JOB),
-		.index = catalog_get_index(ts_catalog_get(), BGW_JOB, BGW_JOB_PROC_HYPERTABLE_ID_IDX),
-		.data = &list_data,
-		.scankey = scankey,
-		.nkeys = sizeof(scankey) / sizeof(*scankey),
-		.tuple_found = bgw_job_accum_tuple_found,
-		.lockmode = AccessShareLock,
-		.scandirection = ForwardScanDirection,
-	};
-
-	init_scan_by_proc_schema(&scankey[0], proc_schema);
-	init_scan_by_proc_name(&scankey[1], proc_name);
 
 	ts_scanner_scan(&scanctx);
 	return list_data.list;
@@ -719,7 +671,7 @@ get_job_lock_for_delete(int32 job_id)
 
 		if (VirtualTransactionIdIsValid(*vxid))
 		{
-			proc = BackendIdGetProc(vxid->backendId);
+			proc = VirtualTransactionGetProcCompat(vxid);
 			if (proc != NULL && proc->isBackgroundWorker)
 			{
 				/* Simply assuming that this pid corresponds to the background worker
@@ -906,7 +858,7 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 	else
 		isnull[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = true;
 
-	if (updated_job->fd.hypertable_id != 0)
+	if (updated_job->fd.hypertable_id != INVALID_HYPERTABLE_ID)
 	{
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)] =
 			Int32GetDatum(updated_job->fd.hypertable_id);
@@ -1029,6 +981,10 @@ void
 ts_bgw_job_validate_job_owner(Oid owner)
 {
 	HeapTuple role_tup = SearchSysCache1(AUTHOID, ObjectIdGetDatum(owner));
+
+	if (!HeapTupleIsValid(role_tup))
+		elog(ERROR, "cache lookup failed for role %u", owner);
+
 	Form_pg_authid rform = (Form_pg_authid) GETSTRUCT(role_tup);
 
 	if (!rform->rolcanlogin)
@@ -1055,7 +1011,7 @@ ts_is_telemetry_job(BgwJob *job)
 }
 #endif
 
-bool
+JobResult
 ts_bgw_job_execute(BgwJob *job)
 {
 #ifdef USE_TELEMETRY
@@ -1124,44 +1080,57 @@ zero_guc(const char *guc_name)
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("could not set \"%s\" guc", guc_name)));
 }
 
-/*
- * This function creates an entry in the job_errors table
- * when a background job throws a runtime error or the job scheduler
- * detects that the job crashed
- */
-bool
-ts_job_errors_insert_tuple(const FormData_job_error *job_err)
+Oid
+ts_bgw_job_get_funcid(BgwJob *job)
 {
-	Catalog *catalog = ts_catalog_get();
-	Relation rel = table_open(catalog_get_table_id(catalog, JOB_ERRORS), RowExclusiveLock);
-	TupleDesc desc = RelationGetDescr(rel);
-	Datum values[Natts_job_error];
-	bool nulls[Natts_job_error] = { false };
-	CatalogSecurityContext sec_ctx;
+	ObjectWithArgs *object = makeNode(ObjectWithArgs);
+	object->objname = list_make2(makeString(NameStr(job->fd.proc_schema)),
+								 makeString(NameStr(job->fd.proc_name)));
+	object->objargs = list_make2(SystemTypeName("int4"), SystemTypeName("jsonb"));
 
-	values[AttrNumberGetAttrOffset(Anum_job_error_job_id)] = Int32GetDatum(job_err->job_id);
-	values[AttrNumberGetAttrOffset(Anum_job_error_start_time)] =
-		TimestampTzGetDatum(job_err->start_time);
-	values[AttrNumberGetAttrOffset(Anum_job_error_finish_time)] =
-		TimestampTzGetDatum(job_err->finish_time);
+	/* Return InvalidOid if don't found */
+	return LookupFuncWithArgs(OBJECT_ROUTINE, object, true);
+}
 
-	if (job_err->pid > 0)
-		values[AttrNumberGetAttrOffset(Anum_job_error_pid)] = Int64GetDatum(job_err->pid);
-	else
-		nulls[AttrNumberGetAttrOffset(Anum_job_error_pid)] = true;
-	if (job_err->error_data)
-		values[AttrNumberGetAttrOffset(Anum_job_error_error_data)] =
-			JsonbPGetDatum(job_err->error_data);
-	else
-		nulls[AttrNumberGetAttrOffset(Anum_job_error_error_data)] = true;
+const char *
+ts_bgw_job_function_call_string(BgwJob *job)
+{
+	Oid funcid = ts_bgw_job_get_funcid(job);
+	/* If do not found the function or procedure then fallback to PROKIND_FUNCTION */
+	char prokind = OidIsValid(funcid) ? get_func_prokind(funcid) : PROKIND_FUNCTION;
+	StringInfo stmt = makeStringInfo();
+	char *jsonb_str = "NULL";
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
+	if (job->fd.config)
+		jsonb_str = quote_literal_cstr(
+			JsonbToCString(NULL, &job->fd.config->root, VARSIZE(job->fd.config)));
 
-	table_close(rel, RowExclusiveLock);
+	switch (prokind)
+	{
+		case PROKIND_FUNCTION:
+			appendStringInfo(stmt,
+							 "SELECT %s.%s('%d', %s)",
+							 quote_identifier(NameStr(job->fd.proc_schema)),
+							 quote_identifier(NameStr(job->fd.proc_name)),
+							 job->fd.id,
+							 jsonb_str);
+			break;
+		case PROKIND_PROCEDURE:
+			appendStringInfo(stmt,
+							 "CALL %s.%s('%d', %s)",
+							 quote_identifier(NameStr(job->fd.proc_schema)),
+							 quote_identifier(NameStr(job->fd.proc_name)),
+							 job->fd.id,
+							 jsonb_str);
+			break;
+		default:
+			ereport(ERROR,
+					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					 errmsg("unsupported function type: %c", prokind)));
+			break;
+	}
 
-	return true;
+	return stmt->data;
 }
 
 extern Datum
@@ -1170,13 +1139,13 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	Oid db_oid = DatumGetObjectId(MyBgworkerEntry->bgw_main_arg);
 	BgwParams params;
 	BgwJob *job;
-	JobResult res = JOB_FAILURE;
+	JobResult res = JOB_FAILURE_IN_EXECUTION;
 	bool got_lock;
 	instr_time start;
 	instr_time duration;
 
 	memcpy(&params, MyBgworkerEntry->bgw_extra, sizeof(BgwParams));
-	Ensure(params.user_oid != 0 && params.job_id != 0,
+	Ensure(OidIsValid(params.user_oid) && params.job_id != 0,
 		   "job id or user oid was zero - job_id: %d, user_oid: %d",
 		   params.job_id,
 		   params.user_oid);
@@ -1191,6 +1160,16 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	pqsignal(SIGTERM, die);
 	BackgroundWorkerUnblockSignals();
 
+	/*
+	 * Set up mem_guard before starting to allocate (any significant amounts
+	 * of) memory but after we have unblocked signals since we have no control
+	 * over how the callback behaves.
+	 */
+	MGCallbacks *callbacks = ts_get_mem_guard_callbacks();
+	if (callbacks && callbacks->version_num == MG_CALLBACKS_VERSION &&
+		callbacks->toggle_allocation_blocking && !callbacks->enabled)
+		callbacks->toggle_allocation_blocking(/*enable=*/true);
+
 	BackgroundWorkerInitializeConnectionByOid(db_oid, params.user_oid, 0);
 
 	log_min_messages = ts_guc_bgw_log_level;
@@ -1202,6 +1181,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	INSTR_TIME_SET_CURRENT(start);
 
 	StartTransactionCommand();
+
 	/* Grab a session lock on the job row to prevent concurrent deletes. Lock is released
 	 * when the job process exits */
 	job = ts_bgw_job_find_with_lock(params.job_id,
@@ -1210,18 +1190,25 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 									SESSION_LOCK,
 									/* block */ true,
 									&got_lock);
+	if (job == NULL)
+		/* If the job is not found, we can't proceed */
+		elog(ERROR, "job %d not found when running the background worker", params.job_id);
+
+	/* get parameters from bgworker */
+	job->job_history.id = params.job_history_id;
+	job->job_history.execution_start = params.job_history_execution_start;
+	ts_bgw_job_stat_history_update(JOB_STAT_HISTORY_UPDATE_PID, job, JOB_SUCCESS, NULL);
 
 	CommitTransactionCommand();
-
-	if (job == NULL)
-		elog(ERROR, "job %d not found when running the background worker", params.job_id);
 
 	elog(DEBUG2, "job %d (%s) found", params.job_id, NameStr(job->fd.application_name));
 
 	pgstat_report_appname(NameStr(job->fd.application_name));
 	MemoryContext oldcontext = CurrentMemoryContext;
-	TimestampTz start_time = DT_NOBEGIN, finish_time = DT_NOBEGIN;
-	NameData proc_schema = { .data = { 0 } }, proc_name = { .data = { 0 } };
+
+	bool job_failed = false;
+	if (scheduler_test_hook == NULL)
+		ts_begin_tss_store_callback();
 
 	PG_TRY();
 	{
@@ -1234,6 +1221,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		zero_guc("max_parallel_maintenance_workers");
 
 		res = ts_bgw_job_execute(job);
+
 		/* The job is responsible for committing or aborting it's own txns */
 		if (IsTransactionState())
 			elog(ERROR,
@@ -1242,6 +1230,9 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	}
 	PG_CATCH();
 	{
+		ErrorData *edata;
+		NameData proc_schema = { .data = { 0 } }, proc_name = { .data = { 0 } };
+
 		if (IsTransactionState())
 			/* If there was an error, rollback what was done before the error */
 			AbortCurrentTransaction();
@@ -1255,6 +1246,12 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		{
 			pfree(job);
 		}
+
+		/* switch away from error context to not lose the data */
+		MemoryContextSwitchTo(oldcontext);
+		job_failed = true;
+		edata = CopyErrorData();
+		FlushErrorState();
 
 		/*
 		 * Note that the mark_start happens in the scheduler right before the
@@ -1270,10 +1267,16 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 										&got_lock);
 		if (job != NULL)
 		{
-			ts_bgw_job_stat_mark_end(job, JOB_FAILURE);
-			ts_bgw_job_check_max_retries(job);
 			namestrcpy(&proc_name, NameStr(job->fd.proc_name));
 			namestrcpy(&proc_schema, NameStr(job->fd.proc_schema));
+
+			job->job_history.id = params.job_history_id;
+			job->job_history.execution_start = params.job_history_execution_start;
+
+			ts_bgw_job_stat_mark_end(job,
+									 JOB_FAILURE_IN_EXECUTION,
+									 ts_errdata_to_jsonb(edata, &proc_schema, &proc_name));
+			ts_bgw_job_check_max_retries(job);
 			pfree(job);
 		}
 
@@ -1283,30 +1286,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		 */
 		elog(LOG, "job %d threw an error", params.job_id);
 
-		ErrorData *edata;
-		FormData_job_error jerr = { 0 };
-		// switch away from error context to not lose the data
-		MemoryContextSwitchTo(oldcontext);
-		edata = CopyErrorData();
-
-		BgwJobStat *job_stat = ts_bgw_job_stat_find(params.job_id);
-		if (job_stat != NULL)
-		{
-			start_time = job_stat->fd.last_start;
-			finish_time = job_stat->fd.last_finish;
-		}
-		/* We include the procname in the error data and expose it in the view
-		 to avoid adding an extra field in the table */
-		jerr.error_data = ts_errdata_to_jsonb(edata, &proc_schema, &proc_name);
-		jerr.job_id = params.job_id;
-		jerr.start_time = start_time;
-		jerr.finish_time = finish_time;
-		jerr.pid = MyProcPid;
-
-		ts_job_errors_insert_tuple(&jerr);
-
 		CommitTransactionCommand();
-		FlushErrorState();
 		ReThrowError(edata);
 	}
 	PG_END_TRY();
@@ -1319,7 +1299,13 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	 * Note that the mark_start happens in the scheduler right before the job
 	 * is launched
 	 */
-	ts_bgw_job_stat_mark_end(job, res);
+	ts_bgw_job_stat_mark_end(job, res, NULL);
+
+	if (!job_failed && ts_is_tss_enabled() && scheduler_test_hook == NULL)
+	{
+		const char *stmt = ts_bgw_job_function_call_string(job);
+		ts_end_tss_store_callback(stmt, -1, (int) strlen(stmt), 0, 0);
+	}
 
 	CommitTransactionCommand();
 
@@ -1375,12 +1361,12 @@ ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial
 		StartTransactionCommand();
 
 	if (mark)
-		ts_bgw_job_stat_mark_start(job->fd.id);
+		ts_bgw_job_stat_mark_start(job);
 
 	result = func();
 
 	if (mark)
-		ts_bgw_job_stat_mark_end(job, result ? JOB_SUCCESS : JOB_FAILURE);
+		ts_bgw_job_stat_mark_end(job, result ? JOB_SUCCESS : JOB_FAILURE_IN_EXECUTION, NULL);
 
 	/* Now update next_start. */
 	job_stat = ts_bgw_job_stat_find(job->fd.id);
@@ -1464,7 +1450,7 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 			TimestampTzGetDatum(initial_start);
 	}
 
-	if (hypertable_id == 0)
+	if (hypertable_id == INVALID_HYPERTABLE_ID)
 		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)] = true;
 	else
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)] = Int32GetDatum(hypertable_id);

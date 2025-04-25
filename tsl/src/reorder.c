@@ -13,8 +13,8 @@
 
 /* see postgres commit ab5e9caa4a3ec4765348a0482e88edcf3f6aab4a */
 
-#include "utils.h"
 #include <postgres.h>
+#include "utils.h"
 #include <access/amapi.h>
 #include <access/multixact.h>
 #include <access/relscan.h>
@@ -22,7 +22,6 @@
 #include <access/transam.h>
 #include <access/xact.h>
 #include <access/xlog.h>
-#include <catalog/pg_authid.h>
 #include <catalog/catalog.h>
 #include <catalog/dependency.h>
 #include <catalog/heap.h>
@@ -30,12 +29,14 @@
 #include <catalog/namespace.h>
 #include <catalog/objectaccess.h>
 #include <catalog/pg_am.h>
+#include <catalog/pg_authid.h>
 #include <catalog/pg_tablespace_d.h>
 #include <catalog/toasting.h>
 #include <commands/cluster.h>
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
 #include <commands/vacuum.h>
+#include <executor/spi.h>
 #include <miscadmin.h>
 #include <nodes/pg_list.h>
 #include <optimizer/planner.h>
@@ -56,7 +57,6 @@
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
 #include <utils/tuplesort.h>
-#include <executor/spi.h>
 
 #include "compat/compat.h"
 #include <access/toast_internals.h>
@@ -64,10 +64,10 @@
 #include "annotations.h"
 #include "chunk.h"
 #include "chunk_index.h"
+#include "debug_assert.h"
 #include "hypertable_cache.h"
 #include "indexing.h"
 #include "reorder.h"
-#include "debug_assert.h"
 
 static void reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id,
 						Oid destination_tablespace, Oid index_tablespace);
@@ -438,7 +438,7 @@ reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id, Oid destinati
 	CheckTableNotInUse(OldHeap, "CLUSTER");
 
 	/* Check heap and index are valid to cluster on */
-	check_index_is_clusterable_compat(OldHeap, indexOid, ExclusiveLock);
+	check_index_is_clusterable(OldHeap, indexOid, ExclusiveLock);
 
 	/* rebuild_relation does all the dirty work */
 	rebuild_relation(OldHeap, indexOid, verbose, wait_id, destination_tablespace, index_tablespace);
@@ -479,11 +479,8 @@ rebuild_relation(Relation OldHeap, Oid indexOid, bool verbose, Oid wait_id,
 	table_close(OldHeap, NoLock);
 
 	/* Create the transient table that will receive the re-ordered data */
-	OIDNewHeap = make_new_heap_compat(tableOid,
-									  tableSpace,
-									  OldHeap->rd_rel->relam,
-									  relpersistence,
-									  ExclusiveLock);
+	OIDNewHeap =
+		make_new_heap(tableOid, tableSpace, OldHeap->rd_rel->relam, relpersistence, ExclusiveLock);
 
 	/* Copy the heap data into the new table in the desired order */
 	copy_heap_data(OIDNewHeap,
@@ -534,9 +531,6 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 	int natts;
 	Datum *values;
 	bool *isnull;
-	TransactionId OldestXmin;
-	TransactionId FreezeXid;
-	MultiXactId MultiXactCutoff;
 	bool use_sort;
 	double num_tuples = 0, tups_vacuumed = 0, tups_recently_dead = 0;
 	BlockNumber num_pages;
@@ -626,24 +620,38 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 	 * Since we're going to rewrite the whole table anyway, there's no reason
 	 * not to be aggressive about this.
 	 */
-	vacuum_set_xid_limits_compat(OldHeap, 0, 0, 0, 0, &OldestXmin, &FreezeXid, &MultiXactCutoff);
+	struct VacuumCutoffs cutoffs;
+	VacuumParams params;
+
+	memset(&params, 0, sizeof(VacuumParams));
+	vacuum_get_cutoffs(OldHeap, &params, &cutoffs);
 
 	/*
 	 * FreezeXid will become the table's new relfrozenxid, and that mustn't go
 	 * backwards, so take the max.
 	 */
-	if (TransactionIdPrecedes(FreezeXid, OldHeap->rd_rel->relfrozenxid))
-		FreezeXid = OldHeap->rd_rel->relfrozenxid;
+	{
+		TransactionId relfrozenxid = OldHeap->rd_rel->relfrozenxid;
+
+		if (TransactionIdIsValid(relfrozenxid) &&
+			TransactionIdPrecedes(cutoffs.FreezeLimit, relfrozenxid))
+			cutoffs.FreezeLimit = relfrozenxid;
+	}
 
 	/*
 	 * MultiXactCutoff, similarly, shouldn't go backwards either.
 	 */
-	if (MultiXactIdPrecedes(MultiXactCutoff, OldHeap->rd_rel->relminmxid))
-		MultiXactCutoff = OldHeap->rd_rel->relminmxid;
+	{
+		MultiXactId relminmxid = OldHeap->rd_rel->relminmxid;
+
+		if (MultiXactIdIsValid(relminmxid) &&
+			MultiXactIdPrecedes(cutoffs.MultiXactCutoff, relminmxid))
+			cutoffs.MultiXactCutoff = relminmxid;
+	}
 
 	/* return selected values to caller */
-	*pFreezeXid = FreezeXid;
-	*pCutoffMulti = MultiXactCutoff;
+	*pFreezeXid = cutoffs.FreezeLimit;
+	*pCutoffMulti = cutoffs.MultiXactCutoff;
 
 	/*
 	 * We know how to use a sort to duplicate the ordering of a btree index,
@@ -677,9 +685,9 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 									NewHeap,
 									OldIndex,
 									use_sort,
-									OldestXmin,
-									&FreezeXid,
-									&MultiXactCutoff,
+									cutoffs.OldestXmin,
+									&cutoffs.FreezeLimit,
+									&cutoffs.MultiXactCutoff,
 									&num_tuples,
 									&tups_vacuumed,
 									&tups_recently_dead);
@@ -1139,6 +1147,10 @@ swap_relation_files(Oid r1, Oid r2, bool swap_toast_by_content, bool is_internal
 	 * itself, the smgr close on pg_class must happen after all accesses in
 	 * this function.
 	 */
+
+#if PG17_LT
+	/* Not needed as of 21d9c3ee4ef7 in the upstream */
 	RelationCloseSmgrByOid(r1);
 	RelationCloseSmgrByOid(r2);
+#endif
 }

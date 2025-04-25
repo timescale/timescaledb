@@ -3,6 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
+
 #pragma once
 
 #include <postgres.h>
@@ -20,7 +21,6 @@
 #define PGDLLIMPORT
 #define extern extern _declspec(dllimport)
 
-#if PG_VERSION_NUM >= 140000
 #include <catalog/genbki.h>
 #undef DECLARE_TOAST
 #undef DECLARE_INDEX
@@ -39,6 +39,5 @@
 #define DECLARE_FOREIGN_KEY_OPT(cols, reftbl, refcols)
 #define DECLARE_ARRAY_FOREIGN_KEY(cols, reftbl, refcols)
 #define DECLARE_ARRAY_FOREIGN_KEY_OPT(cols, reftbl, refcols)
-#endif
 
 #endif /* _MSC_VER */

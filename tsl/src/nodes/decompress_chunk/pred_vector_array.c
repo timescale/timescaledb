@@ -7,19 +7,18 @@
 #include <postgres.h>
 
 #include "compression/arrow_c_data_interface.h"
-
-#include "vector_predicates.h"
-
 #include "compression/compression.h"
+#include "src/utils.h"
+#include "vector_predicates.h"
 
 /*
  * Vectorized implementation of ScalarArrayOpExpr. Applies scalar_predicate for
  * vector and each element of array, combines the result according to "is_or"
  * flag. Written along the lines of ExecEvalScalarArrayOp().
  */
-static inline void
-vector_array_predicate_impl(VectorPredicate *vector_const_predicate, bool is_or,
-							const ArrowArray *vector, Datum array, uint64 *restrict final_result)
+void
+vector_array_predicate(VectorPredicate *vector_const_predicate, bool is_or,
+					   const ArrowArray *vector, Datum array, uint64 *restrict final_result)
 {
 	const size_t n_rows = vector->length;
 	const size_t result_words = (n_rows + 63) / 64;
@@ -49,7 +48,7 @@ vector_array_predicate_impl(VectorPredicate *vector_const_predicate, bool is_or,
 
 	const char *array_data = (const char *) ARR_DATA_PTR(arr);
 	const size_t nitems = ArrayGetNItems(ARR_NDIM(arr), ARR_DIMS(arr));
-	const uint64 *restrict array_null_bitmap = (uint64 *) ARR_NULLBITMAP(arr);
+	const uint64 *array_null_bitmap = (uint64 *) ARR_NULLBITMAP(arr);
 
 	for (size_t array_index = 0; array_index < nitems; array_index++)
 	{
@@ -73,13 +72,13 @@ vector_array_predicate_impl(VectorPredicate *vector_const_predicate, bool is_or,
 
 			for (size_t word = 0; word < result_words; word++)
 			{
-				array_result[word] = 0;
+				final_result[word] = 0;
 			}
 			return;
 		}
-		Datum constvalue = fetch_att(array_data, typbyval, typlen);
+		Datum constvalue = ts_fetch_att(array_data, typbyval, typlen);
 		array_data = att_addlength_pointer(array_data, typlen, array_data);
-		array_data = (char *) att_align_nominal(array_data, typalign);
+		array_data = (const char *) att_align_nominal(array_data, typalign);
 
 		/*
 		 * For OR, we also need an intermediate storage for predicate result
@@ -95,7 +94,7 @@ vector_array_predicate_impl(VectorPredicate *vector_const_predicate, bool is_or,
 			single_result = single_result_storage;
 			for (size_t outer = 0; outer < result_words; outer++)
 			{
-				single_result[outer] = -1;
+				single_result[outer] = ~0ULL;
 			}
 		}
 		else
@@ -135,30 +134,5 @@ vector_array_predicate_impl(VectorPredicate *vector_const_predicate, bool is_or,
 			 */
 			final_result[outer] &= array_result[outer];
 		}
-	}
-}
-
-/*
- * This is a thin wrapper to nudge the compiler to specialize the AND version
- * which is much simpler than the OR version.
- */
-static pg_noinline void
-vector_array_predicate_and(VectorPredicate *scalar_predicate, const ArrowArray *vector, Datum array,
-						   uint64 *restrict result)
-{
-	vector_array_predicate_impl(scalar_predicate, /* is_or = */ false, vector, array, result);
-}
-
-void
-vector_array_predicate(VectorPredicate *scalar_predicate, bool is_or, const ArrowArray *vector,
-					   Datum array, uint64 *restrict result)
-{
-	if (is_or)
-	{
-		vector_array_predicate_impl(scalar_predicate, /* is_or = */ true, vector, array, result);
-	}
-	else
-	{
-		vector_array_predicate_and(scalar_predicate, vector, array, result);
 	}
 }

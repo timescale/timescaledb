@@ -1,0 +1,115 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Test parameterized vector aggregation plans.
+-- Uncomment to run this test with hypercore TAM
+--set timescaledb.default_hypercore_use_access_method=true;
+create table pvagg(s int, a int);
+select create_hypertable('pvagg', 'a', chunk_time_interval => 1000);
+NOTICE:  adding not-null constraint to column "a"
+ create_hypertable  
+--------------------
+ (1,public,pvagg,t)
+(1 row)
+
+insert into pvagg select 1, generate_series(1, 999);
+insert into pvagg select 2, generate_series(1001, 1999);
+alter table pvagg set (timescaledb.compress, timescaledb.compress_segmentby = 's');
+NOTICE:  default order by for hypertable "pvagg" is set to "a DESC"
+select count(compress_chunk(x)) from show_chunks('pvagg') x;
+ count 
+-------
+     2
+(1 row)
+
+analyze pvagg;
+-- The reference for this test is generated using the standard Postgres
+-- aggregation. When you change this test, recheck the results against the
+-- Postgres aggregation by uncommenting the below GUC.
+-- set timescaledb.enable_vectorized_aggregation to off;
+explain (verbose, costs off)
+select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a) from pvagg where s = x) xx;
+                                                                                                        QUERY PLAN                                                                                                         
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop
+   Output: x.x, (sum(pvagg.a))
+   ->  Function Scan on pg_catalog.unnest x
+         Output: x.x
+         Function Call: unnest('{0,1,2}'::integer[])
+   ->  Finalize Aggregate
+         Output: sum(pvagg.a)
+         ->  Custom Scan (ChunkAppend) on public.pvagg
+               Output: (PARTIAL sum(pvagg.a))
+               Startup Exclusion: false
+               Runtime Exclusion: true
+               ->  Custom Scan (VectorAgg)
+                     Output: (PARTIAL sum(_hyper_1_1_chunk.a))
+                     Grouping Policy: all compressed batches
+                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
+                           Output: _hyper_1_1_chunk.a
+                           ->  Seq Scan on _timescaledb_internal.compress_hyper_2_3_chunk
+                                 Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk.s, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1, compress_hyper_2_3_chunk.a
+                                 Filter: (compress_hyper_2_3_chunk.s = x.x)
+               ->  Custom Scan (VectorAgg)
+                     Output: (PARTIAL sum(_hyper_1_2_chunk.a))
+                     Grouping Policy: all compressed batches
+                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk
+                           Output: _hyper_1_2_chunk.a
+                           ->  Seq Scan on _timescaledb_internal.compress_hyper_2_4_chunk
+                                 Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk.s, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk.a
+                                 Filter: (compress_hyper_2_4_chunk.s = x.x)
+(27 rows)
+
+select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a) from pvagg where s = x) xx;
+ x |   sum   
+---+---------
+ 0 |        
+ 1 |  499500
+ 2 | 1498500
+(3 rows)
+
+explain (verbose, costs off)
+select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a + x) from pvagg) xx;
+                                                                                                        QUERY PLAN                                                                                                         
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop
+   Output: x.x, (sum((_hyper_1_1_chunk.a + x.x)))
+   ->  Function Scan on pg_catalog.unnest x
+         Output: x.x
+         Function Call: unnest('{0,1,2}'::integer[])
+   ->  Finalize Aggregate
+         Output: sum((_hyper_1_1_chunk.a + x.x))
+         ->  Append
+               ->  Partial Aggregate
+                     Output: PARTIAL sum((_hyper_1_1_chunk.a + x.x))
+                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
+                           Output: _hyper_1_1_chunk.a
+                           ->  Seq Scan on _timescaledb_internal.compress_hyper_2_3_chunk
+                                 Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk.s, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1, compress_hyper_2_3_chunk.a
+               ->  Partial Aggregate
+                     Output: PARTIAL sum((_hyper_1_2_chunk.a + x.x))
+                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk
+                           Output: _hyper_1_2_chunk.a
+                           ->  Seq Scan on _timescaledb_internal.compress_hyper_2_4_chunk
+                                 Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk.s, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk.a
+(20 rows)
+
+select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a + x) from pvagg) xx;
+ x |   sum   
+---+---------
+ 0 | 1998000
+ 1 | 1999998
+ 2 | 2001996
+(3 rows)
+
+-- The plan for this query differs after PG16, x is not used as grouping key but
+-- just added into the output targetlist of partial aggregation nodes.
+select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a) from pvagg group by x) xx;
+ x |   sum   
+---+---------
+ 0 | 1998000
+ 1 | 1998000
+ 2 | 1998000
+(3 rows)
+
+drop table pvagg;

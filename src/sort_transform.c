@@ -16,7 +16,10 @@
 #include <utils/lsyscache.h>
 
 #include "compat/compat.h"
+#include "cross_module_fn.h"
 #include "func_cache.h"
+#include "hypertable.h"
+#include "import/allpaths.h"
 #include "sort_transform.h"
 
 /* This optimizations allows GROUP BY clauses that transform time in
@@ -28,8 +31,6 @@
  * For example, an ordering on date_trunc('minute', time) can be transformed
  * to an ordering on time.
  */
-
-extern void ts_sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel);
 
 static Expr *
 transform_timestamp_cast(FuncExpr *func)
@@ -99,6 +100,10 @@ transform_time_op_const_interval(OpExpr *op)
 			(left == TIMESTAMPTZOID && right == INTERVALOID) ||
 			(left == DATEOID && right == INTERVALOID))
 		{
+			Interval *interval = DatumGetIntervalP((lsecond_node(Const, op->args))->constvalue);
+			if (interval->month != 0 || interval->day != 0)
+				return (Expr *) op;
+
 			char *name = get_opname(op->opno);
 
 			if (strncmp(name, "-", NAMEDATALEN) == 0 || strncmp(name, "+", NAMEDATALEN) == 0)
@@ -168,6 +173,12 @@ transform_int_op_const(OpExpr *op)
 								return copyObject(nonconst);
 						}
 						break;
+					default:
+						/*
+						 * Do nothing for unknown operators. The explicit empty
+						 * branch is to placate the static analyzers.
+						 */
+						break;
 				}
 			}
 		}
@@ -208,20 +219,12 @@ ts_sort_transform_expr(Expr *orig_expr)
 		}
 
 		/* Functions of one argument that convert something to timestamp(tz). */
-#if PG14_LT
-		if (func->funcid == F_DATE_TIMESTAMP || func->funcid == F_TIMESTAMPTZ_TIMESTAMP)
-#else
 		if (func->funcid == F_TIMESTAMP_DATE || func->funcid == F_TIMESTAMP_TIMESTAMPTZ)
-#endif
 		{
 			return transform_timestamp_cast(func);
 		}
 
-#if PG14_LT
-		if (func->funcid == F_DATE_TIMESTAMPTZ || func->funcid == F_TIMESTAMP_TIMESTAMPTZ)
-#else
 		if (func->funcid == F_TIMESTAMPTZ_DATE || func->funcid == F_TIMESTAMPTZ_TIMESTAMP)
-#endif
 		{
 			return transform_timestamptz_cast(func);
 		}
@@ -382,8 +385,9 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig)
  *	For example: an ORDER BY date_trunc('minute', time) can be implemented by
  *	an ordering of time.
  */
-void
-ts_sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel)
+List *
+ts_sort_transform_get_pathkeys(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte,
+							   Hypertable *ht)
 {
 	/*
 	 * We attack this problem in three steps:
@@ -397,8 +401,7 @@ ts_sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel)
 	 *
 	 */
 	ListCell *lc;
-	List *transformed_query_pathkey = NIL;
-	List *orig_query_pathkeys = root->query_pathkeys;
+	List *transformed_query_pathkeys = NIL;
 	PathKey *last_pk;
 	PathKey *new_pk;
 	EquivalenceClass *transformed;
@@ -406,8 +409,8 @@ ts_sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel)
 	/*
 	 * nothing to do for empty pathkeys
 	 */
-	if (orig_query_pathkeys == NIL)
-		return;
+	if (root->query_pathkeys == NIL)
+		return NIL;
 
 	/*
 	 * These sort transformations are only safe for single member ORDER BY
@@ -418,7 +421,7 @@ ts_sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel)
 	transformed = sort_transform_ec(root, last_pk->pk_eclass);
 
 	if (transformed == NULL)
-		return;
+		return NIL;
 
 	new_pk = make_canonical_pathkey(root,
 									transformed,
@@ -432,30 +435,72 @@ ts_sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel)
 	foreach (lc, root->query_pathkeys)
 	{
 		if (lfirst(lc) != last_pk)
-			transformed_query_pathkey = lappend(transformed_query_pathkey, lfirst(lc));
+			transformed_query_pathkeys = lappend(transformed_query_pathkeys, lfirst(lc));
 		else
-			transformed_query_pathkey = lappend(transformed_query_pathkey, new_pk);
+			transformed_query_pathkeys = lappend(transformed_query_pathkeys, new_pk);
 	}
 
-	/* search for indexes on transformed pathkeys */
-	root->query_pathkeys = transformed_query_pathkey;
-	create_index_paths(root, rel);
-	root->query_pathkeys = orig_query_pathkeys;
+	return transformed_query_pathkeys;
+}
 
-	/*
-	 * change returned paths to use original pathkeys. have to go through
-	 * all paths since create_index_paths might have modified existing
-	 * pathkey. Always safe to do transform since ordering of
-	 * transformed_query_pathkey implements ordering of
-	 * orig_query_pathkeys.
-	 */
-	foreach (lc, rel->pathlist)
+/*
+ * After we have created new paths with transformed pathkeys, replace them back
+ * with the original pathkeys.
+ */
+void
+ts_sort_transform_replace_pathkeys(void *node, List *transformed_pathkeys, List *original_pathkeys)
+{
+	if (node == NULL)
 	{
-		Path *path = lfirst(lc);
+		return;
+	}
 
-		if (compare_pathkeys(path->pathkeys, transformed_query_pathkey) == PATHKEYS_EQUAL)
+	if (IsA(node, List))
+	{
+		List *list = castNode(List, node);
+		ListCell *lc;
+		foreach (lc, list)
 		{
-			path->pathkeys = orig_query_pathkeys;
+			ts_sort_transform_replace_pathkeys(lfirst(lc), transformed_pathkeys, original_pathkeys);
 		}
+		return;
+	}
+
+	Path *path = (Path *) node;
+	if (compare_pathkeys(path->pathkeys, transformed_pathkeys) == PATHKEYS_EQUAL)
+	{
+		path->pathkeys = original_pathkeys;
+	}
+
+	if (IsA(path, CustomPath))
+	{
+		/*
+		 * We should only see ChunkAppend here.
+		 */
+		CustomPath *custom = castNode(CustomPath, path);
+		ts_sort_transform_replace_pathkeys(custom->custom_paths,
+										   transformed_pathkeys,
+										   original_pathkeys);
+	}
+	else if (IsA(path, MergeAppendPath))
+	{
+		MergeAppendPath *append = castNode(MergeAppendPath, path);
+		ts_sort_transform_replace_pathkeys(append->subpaths,
+										   transformed_pathkeys,
+										   original_pathkeys);
+	}
+	else if (IsA(path, AppendPath))
+	{
+		AppendPath *append = castNode(AppendPath, path);
+		ts_sort_transform_replace_pathkeys(append->subpaths,
+										   transformed_pathkeys,
+										   original_pathkeys);
+	}
+	else if (IsA(path, ProjectionPath))
+	{
+		ProjectionPath *projection = castNode(ProjectionPath, path);
+		ts_sort_transform_replace_pathkeys(projection->subpath,
+										   transformed_pathkeys,
+										   original_pathkeys);
 	}
 }

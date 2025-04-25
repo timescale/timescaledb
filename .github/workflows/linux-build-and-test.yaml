@@ -45,16 +45,26 @@ jobs:
     name: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
     needs: matrixbuilder
     runs-on: ${{ matrix.os }}
-    strategy:
-      matrix: ${{ fromJson(needs.matrixbuilder.outputs.matrix) }}
-      fail-fast: false
+
     env:
       PG_SRC_DIR: pgbuild
       PG_INSTALL_DIR: postgresql
-      MAKE_JOBS: 6
       CLANG: ${{ matrix.clang }}
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
+
+      # For some reason, on PG <= 15 with faketime the client backends get the
+      # modified time, and the background workers the unmodified time, so it
+      # doesn't work.
+      FAKETIME: |
+        ${{ (contains(matrix.os, 'ubuntu')
+               && !startsWith(matrix.pg, '14.')
+               && !startsWith(matrix.pg, '15.')
+            ) && 'faketime -f +379d' || '' }}
+
+    strategy:
+      matrix: ${{ fromJson(needs.matrixbuilder.outputs.matrix) }}
+      fail-fast: false
 
     steps:
     - name: Install Linux Dependencies
@@ -64,12 +74,14 @@ jobs:
         # If needed, install them before opening the core dump.
         sudo apt-get update
         sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl \
-          libtest-most-perl pkgconf icu-devtools ${{ matrix.extra_packages }}
+          libtest-most-perl pkgconf icu-devtools faketime ${{ matrix.extra_packages }}
 
     - name: Install macOS Dependencies
       if: runner.os == 'macOS'
       run: |
-        brew install gawk
+        # Disable the automatic dependency upgrade executed by `brew install`
+        # https://docs.brew.sh/Manpage#install-options-formulacask-
+        HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gawk
         # Install perl modules after last Homebew call, since Homebrew can change the perl version
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'IPC::Run')"
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'Test::Most')"
@@ -122,14 +134,18 @@ jobs:
         cd ~/$PG_SRC_DIR
         ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
           --without-readline --without-zlib --without-libxml ${{ matrix.pg_extra_args }}
-        make -j $MAKE_JOBS
-        make -j $MAKE_JOBS -C src/test/isolation
-        make -j $MAKE_JOBS -C contrib/postgres_fdw
+        make -j $(nproc)
+        for ext in ${{ matrix.pg_extensions }}; do
+          make -j $(nproc) -C contrib/${ext}
+        done
 
     - name: Install PostgreSQL ${{ matrix.pg }}
       run: |
-        make -C ~/$PG_SRC_DIR install
-        make -C ~/$PG_SRC_DIR/contrib/postgres_fdw install
+        cd ~/$PG_SRC_DIR
+        make install
+        for ext in ${{ matrix.pg_extensions }}; do
+          make -C contrib/${ext} install
+        done
         echo "$HOME/$PG_INSTALL_DIR/bin" >> "${GITHUB_PATH}"
 
     - name: Upload config.log
@@ -143,21 +159,36 @@ jobs:
       if: github.event_name != 'pull_request' && runner.os == 'Linux' && matrix.build_type == 'Debug'
       run: |
         BUILD_DIR=nossl ./bootstrap -DCMAKE_BUILD_TYPE=Debug \
-          -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
+          -DPG_SOURCE_DIR=$HOME/$PG_SRC_DIR -DPG_PATH=$HOME/$PG_INSTALL_DIR \
           ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} -DUSE_OPENSSL=OFF \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
-        make -j $MAKE_JOBS -C nossl
+        make -j $(nproc) -C nossl
         make -C nossl install
         make -C nossl regresscheck TESTS=telemetry
 
     - name: Build TimescaleDB
       run: |
-        ./bootstrap -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-          -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
+        # Show the actual architecture this CI runner has
+        "$CC" -march=native -E -v - </dev/null 2>&1 | grep cc1
+
+        ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" \
+          -DPG_SOURCE_DIR=$HOME/$PG_SRC_DIR -DPG_PATH=$HOME/$PG_INSTALL_DIR \
           ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
-        make -j $MAKE_JOBS -C build
+        make -j $(nproc) -C build
         make -C build install
+
+    - name: Upload CMake Logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: CMake Logs ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        path: |
+            build/CMakeCache.txt
+            build/CMakeFiles/CMakeConfigureLog.yaml
+            build/CMakeFiles/CMakeError.log
+            build/CMakeFiles/CMakeOutput.log
+            build/compile_commands.json
 
     - name: Check exported symbols
       run: ./build/scripts/export_prefix_check.sh
@@ -165,7 +196,6 @@ jobs:
     - name: make installcheck
       id: installcheck
       run: |
-        ulimit -c unlimited
         set -o pipefail
         make -k -C build installcheck IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \
             SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }} \
@@ -177,7 +207,7 @@ jobs:
 
     - name: coverage
       if: matrix.coverage
-      run: make -j $MAKE_JOBS -k -C build coverage
+      run: make -j $(nproc) -k -C build coverage
 
     - name: Send coverage report to Codecov.io app
       if: matrix.coverage
@@ -248,7 +278,7 @@ jobs:
           list
           info args
           info locals
-        " 2>&1 | tee stacktrace.log
+        " 2>&1 | tee -a stacktrace.log
         ./scripts/bundle_coredumps.sh
 
     - name: Stack trace macOS
@@ -263,6 +293,13 @@ jobs:
         name: Coredumps ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: coredumps
 
+    - name: Save stacktraces
+      if: always() && steps.collectlogs.outputs.coredumps == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: Stacktraces ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        path: stacktrace.log
+
     - name: Save TAP test logs
       if: always()
       uses: actions/upload-artifact@v4
@@ -271,6 +308,20 @@ jobs:
         path: |
           build/test/tmp_check/log
           build/tsl/test/tmp_check/log
+
+    - name: Check that no new internal program errors are introduced
+      # We collect the same messages when uploading to the CI checks database,
+      # but it runs on different conditions (not on forks and not on flaky check),
+      # and requires different data (job date), so we do it separately here.
+      # The jq --exit-code option is broken with select() on jq-1.6 which we see
+      # on some machines, so we use grep instead (see https://github.com/jqlang/jq/issues/1139).
+      if: always() && contains(matrix.name, 'Flaky')
+      run: |
+        ! jq 'select(
+                (.state_code == "XX000" and .error_severity != "LOG")
+                or (.message | test("resource was not closed"))
+            ) | [.message, .func_name,  .statement] | @tsv
+        ' -r postmaster.json | grep .
 
     - name: Upload test results to the database
       # Don't upload the results of the flaky check, because the db schema only

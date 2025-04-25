@@ -11,8 +11,8 @@
 
 #include "compat/compat.h"
 #include "chunk.h"
-#include "hypertable.h"
 #include "frozen_chunk_dml.h"
+#include "hypertable.h"
 #include "utils.h"
 
 /*
@@ -73,9 +73,10 @@ frozen_chunk_dml_exec(CustomScanState *node)
 {
 	FrozenChunkDmlState *state = (FrozenChunkDmlState *) node;
 	Oid chunk_relid = state->chunk_relid;
-	elog(ERROR,
-		 "cannot update/delete rows from chunk \"%s\" as it is frozen",
-		 get_rel_name(chunk_relid));
+	ereport(ERROR,
+			(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+			 errmsg("cannot update/delete rows from chunk \"%s\" as it is frozen",
+					get_rel_name(chunk_relid))));
 	return NULL;
 }
 

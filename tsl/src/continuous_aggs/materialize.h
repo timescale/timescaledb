@@ -6,10 +6,10 @@
 #pragma once
 
 #include <postgres.h>
+#include "common.h"
+#include "ts_catalog/continuous_agg.h"
 #include <fmgr.h>
 #include <nodes/pg_list.h>
-#include "ts_catalog/continuous_agg.h"
-#include "common.h"
 
 typedef struct SchemaAndName
 {
@@ -33,9 +33,12 @@ typedef struct InternalTimeRange
 	Oid type;
 	int64 start; /* inclusive */
 	int64 end;	 /* exclusive */
+	bool start_isnull;
+	bool end_isnull;
 } InternalTimeRange;
 
-void continuous_agg_update_materialization(Hypertable *mat_ht, SchemaAndName partial_view,
+void continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *cagg,
+										   SchemaAndName partial_view,
 										   SchemaAndName materialization_table,
 										   const NameData *time_column_name,
 										   InternalTimeRange new_materialization_range,

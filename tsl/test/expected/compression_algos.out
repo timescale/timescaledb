@@ -44,9 +44,9 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::bigint FROM (s
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
 psql:include/compression_test.sql:7: NOTICE:  table "compressed" does not exist, skipping
- compressed size 
------------------
-            1720
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DELTADELTA | f         |            1720
 (1 row)
 
                                    ?column?                                    | count 
@@ -78,9 +78,9 @@ INSERT INTO base_ints VALUES (0, NULL), (10, NULL), (10000, NULL);
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              93
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DELTADELTA | t         |              93
 (1 row)
 
                                    ?column?                                    | count 
@@ -117,9 +117,9 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::bigint FROM (S
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              45
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DELTADELTA | f         |              45
 (1 row)
 
                                    ?column?                                    | count 
@@ -162,9 +162,9 @@ CREATE TABLE base_ints AS SELECT row_number() over () as rn, item FROM
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             184
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DELTADELTA | f         |             184
 (1 row)
 
                                    ?column?                                    | count 
@@ -195,9 +195,9 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(i, 5) item FR
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              69
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DELTADELTA | t         |              69
 (1 row)
 
                                    ?column?                                    | count 
@@ -227,9 +227,9 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(i, 1) item FR
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              69
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DELTADELTA | t         |              69
 (1 row)
 
                                    ?column?                                    | count 
@@ -259,9 +259,9 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(i, 10) item F
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              69
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DELTADELTA | t         |              69
 (1 row)
 
                                    ?column?                                    | count 
@@ -291,9 +291,9 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLIF
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              69
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DELTADELTA | t         |              69
 (1 row)
 
                                    ?column?                                    | count 
@@ -334,9 +334,9 @@ SELECT
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-            1720
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DELTADELTA | f         |            1720
 (1 row)
 
                                    ?column?                                    | count 
@@ -380,9 +380,9 @@ CREATE TABLE base_time AS SELECT row_number() OVER() as rn, item FROM
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-            5332
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DELTADELTA | f         |            5332
 (1 row)
 
                                    ?column?                                    | count 
@@ -426,9 +426,9 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, item::float4 FROM
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-            1808
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | f         |            1808
 (1 row)
 
                                    ?column?                                    | count 
@@ -465,9 +465,9 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, item::float4 FROM 
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             109
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | f         |             109
 (1 row)
 
                                    ?column?                                    | count 
@@ -509,9 +509,9 @@ CREATE TABLE base_floats AS SELECT row_number() over () as rn, item FROM
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             152
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | f         |             152
 (1 row)
 
                                    ?column?                                    | count 
@@ -542,9 +542,9 @@ CREATE TABLE base_floats AS SELECT row_number() over () as rn, 0::float4 as item
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             160
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | f         |             160
 (1 row)
 
                                    ?column?                                    | count 
@@ -575,9 +575,9 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::floa
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             136
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | t         |             136
 (1 row)
 
                                    ?column?                                    | count 
@@ -607,9 +607,9 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::floa
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             136
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | t         |             136
 (1 row)
 
                                    ?column?                                    | count 
@@ -639,9 +639,9 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::flo
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             136
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | t         |             136
 (1 row)
 
                                    ?column?                                    | count 
@@ -671,9 +671,9 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULL
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             136
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | t         |             136
 (1 row)
 
                                    ?column?                                    | count 
@@ -717,9 +717,9 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, item::double prec
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-            1808
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | f         |            1808
 (1 row)
 
                                    ?column?                                    | count 
@@ -756,9 +756,9 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, item::double prec
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             109
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | f         |             109
 (1 row)
 
                                    ?column?                                    | count 
@@ -800,9 +800,9 @@ CREATE TABLE base_doubles AS SELECT row_number() over () as rn, item FROM
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             152
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | f         |             152
 (1 row)
 
                                    ?column?                                    | count 
@@ -833,9 +833,9 @@ CREATE TABLE base_doubles AS SELECT row_number() over () as rn, 0::FLOAT(50) as 
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             160
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | f         |             160
 (1 row)
 
                                    ?column?                                    | count 
@@ -866,9 +866,9 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::DOU
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             136
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | t         |             136
 (1 row)
 
                                    ?column?                                    | count 
@@ -898,9 +898,9 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::DOU
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             136
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | t         |             136
 (1 row)
 
                                    ?column?                                    | count 
@@ -930,9 +930,9 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::DO
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             136
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | t         |             136
 (1 row)
 
                                    ?column?                                    | count 
@@ -962,9 +962,9 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NUL
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             136
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ GORILLA   | t         |             136
 (1 row)
 
                                    ?column?                                    | count 
@@ -1009,9 +1009,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-            4305
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ ARRAY     | f         |            4305
 (1 row)
 
                                    ?column?                                    | count 
@@ -1049,9 +1049,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             605
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DICTIONARY | f         |             605
 (1 row)
 
                                    ?column?                                    | count 
@@ -1082,9 +1082,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM (SE
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              39
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ ARRAY     | f         |              39
 (1 row)
 
                                    ?column?                                    | count 
@@ -1125,9 +1125,9 @@ SELECT pg_total_relation_size(reltoastrelid)
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-         1100092
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ ARRAY     | f         |         1100092
 (1 row)
 
                                    ?column?                                    | count 
@@ -1158,9 +1158,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::TEXT 
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             187
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DICTIONARY | t         |             187
 (1 row)
 
                                    ?column?                                    | count 
@@ -1190,9 +1190,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::TEXT 
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             179
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DICTIONARY | t         |             179
 (1 row)
 
                                    ?column?                                    | count 
@@ -1222,9 +1222,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::TEXT
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             178
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DICTIONARY | t         |             178
 (1 row)
 
                                    ?column?                                    | count 
@@ -1254,9 +1254,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLI
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             189
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DICTIONARY | t         |             189
 (1 row)
 
                                    ?column?                                    | count 
@@ -1301,9 +1301,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-             356
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ ARRAY     | f         |             356
 (1 row)
 
                                    ?column?                                    | count 
@@ -1340,9 +1340,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM (SE
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              39
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ ARRAY     | f         |              39
 (1 row)
 
                                    ?column?                                    | count 
@@ -1383,9 +1383,9 @@ SELECT pg_total_relation_size(reltoastrelid)
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-         1100092
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ ARRAY     | f         |         1100092
 (1 row)
 
                                    ?column?                                    | count 
@@ -1416,9 +1416,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::TEXT 
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              80
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ ARRAY     | t         |              80
 (1 row)
 
                                    ?column?                                    | count 
@@ -1448,9 +1448,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::TEXT 
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              80
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ ARRAY     | t         |              80
 (1 row)
 
                                    ?column?                                    | count 
@@ -1480,9 +1480,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::TEXT
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              79
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ ARRAY     | t         |              79
 (1 row)
 
                                    ?column?                                    | count 
@@ -1512,9 +1512,9 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLI
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- compressed size 
------------------
-              74
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ ARRAY     | t         |              74
 (1 row)
 
                                    ?column?                                    | count 
@@ -1538,6 +1538,217 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLI
 (1 row)
 
 DROP TABLE base_texts;
+----------------------
+-- Bool Compression --
+----------------------
+SELECT
+  $$
+  select item from base_bools order by rn
+  $$ AS "QUERY"
+\gset
+\set TABLE_NAME base_bools
+\set TYPE boolean
+\set COMPRESSION_CMD _timescaledb_internal.compress_bool(item)
+\set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::boolean)
+\set DECOMPRESS_REVERSE_CMD _timescaledb_internal.decompress_reverse(c::_timescaledb_internal.compressed_data, NULL::boolean)
+-- bool test, flipping values betweem true and false, no nulls
+CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, (item%2=0)::boolean as item FROM (SELECT generate_series(1, 1000) item) sub;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ BOOL      | f         |             152
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_bools;
+-- bool test, all true values, no nulls
+CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, true as item FROM (SELECT generate_series(1, 1000) item) sub;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ BOOL      | f         |              29
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_bools;
+-- bool test, all false, no nulls
+CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, false as item FROM (SELECT generate_series(1, 1000) item) sub;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ BOOL      | f         |              29
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_bools;
+-- a single true element
+CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, true as item FROM (SELECT generate_series(1, 1) item) sub;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ BOOL      | f         |              29
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_bools;
+-- all true, except every 43rd value is null
+CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, ((NULLIF(i, (CASE WHEN i%43=0 THEN i ELSE -1 END)))>0)::boolean item FROM generate_series(1, 1000) i;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ BOOL      | t         |             176
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_bools;
+-- all false, except every 29th value is null
+CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, ((NULLIF(i, (CASE WHEN i%29=0 THEN i ELSE -1 END)))<0)::boolean item FROM generate_series(1, 1000) i;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ BOOL      | t         |             176
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_bools;
 -----------------------------------------------
 -- Interesting corrupt data found by fuzzing --
 -----------------------------------------------
@@ -1547,6 +1758,9 @@ as :TSL_MODULE_PATHNAME, 'ts_read_compressed_data_file' language c;
 \set ON_ERROR_STOP 0
 select ts_read_compressed_data_file('gorilla', 'float8', '--nonexistent');
 ERROR:  could not open the file '--nonexistent'
+-- Just some random file that returns "compressed data is corrupt", for one-off testing.
+select ts_read_compressed_data_file('gorilla', 'float8', (:'TEST_INPUT_DIR' || '/fuzzing/compression/gorilla-float8/1f09f12d930daae8e5fd34e11e7b2303e1705b2e')::cstring);
+ERROR:  the compressed data is corrupt
 \set ON_ERROR_STOP 1
 create or replace function ts_read_compressed_data_directory(cstring, regtype, cstring, bool)
 returns table(path text, bytes int, rows int, sqlstate text, location text)
@@ -1562,9 +1776,9 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-   142 | XX001       | true
+   143 | XX001       | true
     82 | XX001       | XX001
-    55 | true        | true
+    54 | true        | true
     23 | 08P01       | 08P01
 (4 rows)
 
@@ -1595,9 +1809,9 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-    17 | XX001       | XX001
-    15 | true        | true
-     7 | 08P01       | 08P01
+    18 | true        | true
+    15 | XX001       | XX001
+     8 | 08P01       | 08P01
      2 | 3F000       | 3F000
      1 | 22021       | 22021
      1 | false       | false
@@ -1613,9 +1827,9 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-    80 | XX001       | XX001
+    76 | XX001       | XX001
+     9 | XX001       | true
      5 | 08P01       | 08P01
-     5 | XX001       | true
      4 | true        | true
      3 | 22021       | 22021
      1 | 3F000       | 3F000

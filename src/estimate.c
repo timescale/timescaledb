@@ -4,14 +4,14 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <catalog/pg_type.h>
 #include <optimizer/optimizer.h>
 #include <parser/parse_oper.h>
-#include <catalog/pg_type.h>
 #include <utils/selfuncs.h>
 
 #include "compat/compat.h"
-#include "func_cache.h"
 #include "estimate.h"
+#include "func_cache.h"
 #include "import/planner.h"
 #include "utils.h"
 
@@ -33,8 +33,8 @@ estimate_max_spread_var(PlannerInfo *root, Var *var)
 	VariableStatData vardata;
 	Oid ltop;
 	Datum max_datum, min_datum;
-	volatile int64 max, min;
-	volatile bool valid;
+	int64 max, min;
+	bool valid;
 
 	examine_variable(root, (Node *) var, 0, &vardata);
 	get_sort_group_operators(var->vartype, true, false, false, &ltop, NULL, NULL, NULL);
@@ -44,20 +44,8 @@ estimate_max_spread_var(PlannerInfo *root, Var *var)
 	if (!valid)
 		return INVALID_ESTIMATE;
 
-	PG_TRY();
-	{
-		max = ts_time_value_to_internal(max_datum, var->vartype);
-		min = ts_time_value_to_internal(min_datum, var->vartype);
-	}
-	PG_CATCH();
-	{
-		valid = false;
-		FlushErrorState();
-	}
-	PG_END_TRY();
-
-	if (!valid)
-		return INVALID_ESTIMATE;
+	max = ts_time_value_to_internal(max_datum, var->vartype);
+	min = ts_time_value_to_internal(min_datum, var->vartype);
 
 	return (double) (max - min);
 }
@@ -235,7 +223,7 @@ ts_estimate_group(PlannerInfo *root, double path_rows)
 
 	/* multiply by default estimates */
 	if (new_group_expr != NIL)
-		d_num_groups *= estimate_num_groups_compat(root, new_group_expr, path_rows, NULL, NULL);
+		d_num_groups *= estimate_num_groups(root, new_group_expr, path_rows, NULL, NULL);
 
 	if (d_num_groups > path_rows)
 		return INVALID_ESTIMATE;

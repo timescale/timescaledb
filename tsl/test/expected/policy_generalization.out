@@ -135,6 +135,9 @@ SELECT remove_retention_policy('test');
 
 -- compression policy
 ALTER TABLE test SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test" is set to ""
+NOTICE:  default order by for hypertable "test" is set to ""time" DESC"
 INSERT INTO test SELECT i, i %10, 0.10 FROM generate_series(1, 100, 1) i;
 -- Chunk compression status
 SELECT DISTINCT compression_status FROM _timescaledb_internal.compressed_chunk_stats;
@@ -144,13 +147,28 @@ SELECT DISTINCT compression_status FROM _timescaledb_internal.compressed_chunk_s
 (1 row)
 
 -- Compression policy
-SELECT add_compression_policy('test', compress_created_before => INTERVAL '2 seconds') AS compress_chunks_job_id \gset
+SELECT add_compression_policy('test', compress_created_before => INTERVAL '1 hour') AS compress_chunks_job_id \gset
 SELECT pg_sleep(3);
  pg_sleep 
 ----------
  
 (1 row)
 
+CALL run_job(:compress_chunks_job_id);
+-- Chunk compression status
+SELECT DISTINCT compression_status FROM _timescaledb_internal.compressed_chunk_stats;
+ compression_status 
+--------------------
+ Uncompressed
+(1 row)
+
+SELECT remove_compression_policy('test');
+ remove_compression_policy 
+---------------------------
+ t
+(1 row)
+
+SELECT add_compression_policy('test', compress_created_before => INTERVAL '2 seconds') AS compress_chunks_job_id \gset
 CALL run_job(:compress_chunks_job_id);
 -- Chunk compression status
 SELECT DISTINCT compression_status FROM _timescaledb_internal.compressed_chunk_stats;

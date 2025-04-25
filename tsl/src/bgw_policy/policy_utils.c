@@ -5,16 +5,16 @@
  */
 
 #include <postgres.h>
-#include <utils/builtins.h>
-#include "ts_catalog/continuous_agg.h"
+#include "policy_utils.h"
 #include "dimension.h"
 #include "errors.h"
 #include "guc.h"
 #include "hypertable.h"
 #include "jsonb_utils.h"
-#include "policy_utils.h"
-#include "time_utils.h"
 #include "policies_v2.h"
+#include "time_utils.h"
+#include "ts_catalog/continuous_agg.h"
+#include <utils/builtins.h>
 
 /* Helper function to compare jsonb label value in the config
  * with passed in value.

@@ -10,6 +10,8 @@
 #
 setup
 {
+  SET timezone TO PST8PDT;
+
   CREATE TABLE temperature (
     time timestamptz NOT NULL,
     value float
@@ -44,6 +46,11 @@ setup
     SELECT time, ceil(random() * 100)::int
       FROM generate_series('2020-01-01 0:00:00+0'::timestamptz,
                           '2020-01-01 23:59:59+0','1m') time;
+}
+
+setup
+{
+  VACUUM ANALYZE;
 }
 
 teardown {

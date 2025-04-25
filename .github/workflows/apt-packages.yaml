@@ -4,12 +4,15 @@ name: APT packages
   schedule:
     # run daily 0:00 on main branch
     - cron: '0 0 * * *'
+  pull_request:
+    paths: .github/workflows/apt-packages.yaml
   push:
     tags:
     - '*'
     branches:
     - release_test
     - trigger/package_test
+  workflow_dispatch:
 jobs:
   apt_tests:
     name: APT ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }}
@@ -21,8 +24,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [ "debian:10-slim", "debian:11-slim", "debian:12-slim", "ubuntu:20.04", "ubuntu:22.04", "ubuntu:23.04" ]
-        pg: [ 13, 14, 15, 16 ]
+        image: [ "debian:11-slim", "debian:12-slim", "ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04" ]
+        pg: [ 15, 16, 17 ]
         license: [ "TSL", "Apache"]
         include:
           - license: Apache
@@ -61,12 +64,12 @@ jobs:
       id: versions
       run: |
         # read expected version from version.config
-        # version will only be a proper version in a release branch so we use update_from_version
+        # version will only be a proper version in a release branch so we use previous_version
         # as fallback for main
         if grep '^version = [0-9.]\+$' version.config; then
           version=$(grep '^version = ' version.config | sed -e 's!^version = !!')
         else
-          version=$(grep '^update_from_version = ' version.config | sed -e 's!^update_from_version = !!')
+          version=$(grep '^previous_version = ' version.config | sed -e 's!^previous_version = !!')
         fi
         echo "version=${version}" >>$GITHUB_OUTPUT
 
@@ -82,6 +85,7 @@ jobs:
         fi
 
     - name: Test Downgrade
+      if: matrix.pg != '17'
       run: |
         # Since this runs nightly on main we have to get the previous version
         # from the last released version and not current branch.

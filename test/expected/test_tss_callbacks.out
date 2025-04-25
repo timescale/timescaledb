@@ -1,0 +1,48 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE OR REPLACE FUNCTION test.setup_tss_hook_v0() RETURNS VOID
+    AS :MODULE_PATHNAME, 'ts_setup_tss_hook_v0' LANGUAGE C VOLATILE;
+CREATE OR REPLACE FUNCTION test.setup_tss_hook_v1() RETURNS VOID
+    AS :MODULE_PATHNAME, 'ts_setup_tss_hook_v1' LANGUAGE C VOLATILE;
+CREATE OR REPLACE FUNCTION test.teardown_tss_hook_v1() RETURNS VOID
+    AS :MODULE_PATHNAME, 'ts_teardown_tss_hook_v1' LANGUAGE C VOLATILE;
+SELECT test.setup_tss_hook_v1();
+ setup_tss_hook_v1 
+-------------------
+ 
+(1 row)
+
+CREATE TABLE copy_test (
+    "time" timestamptz NOT NULL,
+    "value" double precision NOT NULL
+);
+SELECT create_hypertable('copy_test', 'time');
+   create_hypertable    
+------------------------
+ (1,public,copy_test,t)
+(1 row)
+
+-- We should se a mock message
+COPY copy_test FROM STDIN DELIMITER ',';
+NOTICE:  test_tss_callbacks (mock): query=COPY copy_test FROM STDIN DELIMITER ',';, len=39, id=0, rows=2
+SELECT test.teardown_tss_hook_v1();
+ teardown_tss_hook_v1 
+----------------------
+ 
+(1 row)
+
+-- Without the hook registered we cannot see the mock message
+COPY copy_test FROM STDIN DELIMITER ',';
+-- Test for mismatch version
+SELECT test.setup_tss_hook_v0();
+ setup_tss_hook_v0 
+-------------------
+ 
+(1 row)
+
+-- Warning because the mismatch versions
+COPY copy_test FROM STDIN DELIMITER ',';
+WARNING:  version mismatch between timescaledb and ts_stat_statements callbacks
+WARNING:  version mismatch between timescaledb and ts_stat_statements callbacks

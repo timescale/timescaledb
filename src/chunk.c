@@ -18,6 +18,7 @@
 #include <catalog/pg_opfamily.h>
 #include <catalog/pg_trigger.h>
 #include <catalog/pg_type.h>
+#include <catalog/pg_type_d.h>
 #include <catalog/toasting.h>
 #include <commands/defrem.h>
 #include <commands/tablecmds.h>
@@ -31,6 +32,7 @@
 #include <storage/lmgr.h>
 #include <tcop/tcopprot.h>
 #include <utils/acl.h>
+#include <utils/array.h>
 #include <utils/builtins.h>
 #include <utils/datum.h>
 #include <utils/hsearch.h>
@@ -41,14 +43,14 @@
 
 #include "chunk.h"
 
+#include "compat/compat.h"
 #include "bgw_policy/chunk_stats.h"
 #include "cache.h"
 #include "chunk_index.h"
 #include "chunk_scan.h"
-#include "compat/compat.h"
 #include "cross_module_fn.h"
-#include "debug_point.h"
 #include "debug_assert.h"
+#include "debug_point.h"
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
@@ -66,6 +68,7 @@
 #include "time_utils.h"
 #include "trigger.h"
 #include "ts_catalog/catalog.h"
+#include "ts_catalog/chunk_column_stats.h"
 #include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
@@ -76,6 +79,7 @@ TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_single_chunk);
 TS_FUNCTION_INFO_V1(ts_chunk_attach_osm_table_chunk);
+TS_FUNCTION_INFO_V1(ts_chunk_drop_osm_chunk);
 TS_FUNCTION_INFO_V1(ts_chunk_id_from_relid);
 TS_FUNCTION_INFO_V1(ts_chunk_show);
 TS_FUNCTION_INFO_V1(ts_chunk_create);
@@ -129,7 +133,7 @@ static void chunk_scan_ctx_destroy(ChunkScanCtx *ctx);
 static void chunk_collision_scan(ChunkScanCtx *scanctx, const Hypercube *cube);
 static int chunk_scan_ctx_foreach_chunk_stub(ChunkScanCtx *ctx, on_chunk_stub_func on_chunk,
 											 uint16 limit);
-static Datum chunks_return_srf(FunctionCallInfo fcinfo);
+static Datum show_chunks_return_srf(FunctionCallInfo fcinfo);
 static int chunk_cmp(const void *ch1, const void *ch2);
 static int chunk_point_find_chunk_id(const Hypertable *ht, const Point *p);
 static void init_scan_by_qualified_table_name(ScanIterator *iterator, const char *schema_name,
@@ -661,7 +665,7 @@ set_attoptions(Relation ht_rel, Oid chunk_oid)
 
 	if (alter_cmds != NIL)
 	{
-		ts_alter_table_with_event_trigger(chunk_oid, NULL, alter_cmds, false);
+		AlterTableInternal(chunk_oid, alter_cmds, false);
 		list_free_deep(alter_cmds);
 	}
 }
@@ -677,28 +681,6 @@ create_toast_table(CreateStmt *stmt, Oid chunk_oid)
 	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options, true);
 
 	NewRelationCreateToastTable(chunk_oid, toast_options);
-}
-
-/*
- * Get the access method name for a relation.
- */
-static char *
-get_am_name_for_rel(Oid relid)
-{
-	HeapTuple tuple;
-	Form_pg_class cform;
-	Oid amoid;
-
-	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
-
-	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "cache lookup failed for relation %u", relid);
-
-	cform = (Form_pg_class) GETSTRUCT(tuple);
-	amoid = cform->relam;
-	ReleaseSysCache(tuple);
-
-	return get_am_name(amoid);
 }
 
 static void
@@ -753,7 +735,7 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 		.base.options =
 			(chunk->relkind == RELKIND_RELATION) ? ts_get_reloptions(ht->main_table_relid) : NIL,
 		.base.accessMethod = (chunk->relkind == RELKIND_RELATION) ?
-								 get_am_name_for_rel(chunk->hypertable_relid) :
+								 get_am_name(ts_get_rel_am(chunk->hypertable_relid)) :
 								 NULL,
 	};
 	Oid uid, saved_uid;
@@ -895,6 +877,16 @@ static void
 chunk_set_replica_identity(const Chunk *chunk)
 {
 	Relation ht_rel = relation_open(chunk->hypertable_relid, AccessShareLock);
+	Relation ch_rel = relation_open(chunk->table_id, AccessShareLock);
+
+	/* Do nothing if REPLICA IDENTITY of hypertable and chunk are equal */
+	if (ht_rel->rd_rel->relreplident == ch_rel->rd_rel->relreplident)
+	{
+		table_close(ch_rel, NoLock);
+		table_close(ht_rel, NoLock);
+		return;
+	}
+
 	ReplicaIdentityStmt stmt = {
 		.type = T_ReplicaIdentityStmt,
 		.identity_type = ht_rel->rd_rel->relreplident,
@@ -920,8 +912,9 @@ chunk_set_replica_identity(const Chunk *chunk)
 	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	AlterTableInternal(chunk->table_id, list_make1(&cmd), false);
+	ts_alter_table_with_event_trigger(chunk->table_id, NULL, list_make1(&cmd), false);
 	ts_catalog_restore_user(&sec_ctx);
+	table_close(ch_rel, NoLock);
 	table_close(ht_rel, NoLock);
 }
 
@@ -977,70 +970,11 @@ chunk_create_only_table_after_lock(const Hypertable *ht, Hypercube *cube, const 
 	return chunk;
 }
 
-static void
-chunk_table_drop_inherit(const Chunk *chunk, Hypertable *ht)
-{
-	AlterTableCmd drop_inh_cmd = {
-		.type = T_AlterTableCmd,
-		.subtype = AT_DropInherit,
-		.def = (Node *) makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), -1),
-		.missing_ok = false
-	};
-
-	ts_alter_table_with_event_trigger(chunk->table_id, NULL, list_make1(&drop_inh_cmd), false);
-}
-
-/*
- * Checks that given hypercube does not collide with existing chunks and
- * creates an empty table for a chunk without any metadata modifications.
- */
-Chunk *
-ts_chunk_create_only_table(Hypertable *ht, Hypercube *cube, const char *schema_name,
-						   const char *table_name)
-{
-	ChunkStub *stub;
-	Chunk *chunk;
-	ScanTupLock tuplock = {
-		.lockmode = LockTupleKeyShare,
-		.waitpolicy = LockWaitBlock,
-	};
-
-	/*
-	 * Chunk table can be created if no chunk collides with the dimension slices.
-	 */
-	stub = chunk_collides(ht, cube);
-	if (stub != NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_CHUNK_COLLISION),
-				 errmsg("chunk table creation failed due to dimension slice collision")));
-
-	/*
-	 * Serialize chunk creation around a lock on the "main table" to avoid
-	 * multiple processes trying to create the same chunk. We use a
-	 * ShareUpdateExclusiveLock, which is the weakest lock possible that
-	 * conflicts with itself. The lock needs to be held until transaction end.
-	 */
-	LockRelationOid(ht->main_table_relid, ShareUpdateExclusiveLock);
-
-	ts_hypercube_find_existing_slices(cube, &tuplock);
-
-	chunk = chunk_create_only_table_after_lock(ht,
-											   cube,
-											   schema_name,
-											   table_name,
-											   NULL,
-											   INVALID_CHUNK_ID);
-	chunk_table_drop_inherit(chunk, ht);
-
-	return chunk;
-}
-
 static Chunk *
 chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 									   const char *schema_name, const char *table_name,
 									   const char *prefix)
 {
-#if PG14_GE
 	chunk_insert_check_hook_type osm_chunk_insert_hook = ts_get_osm_chunk_insert_hook();
 
 	if (osm_chunk_insert_hook)
@@ -1068,7 +1002,6 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 			Assert(!isvarlena);
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("distributed hypertable member cannot create chunk on its own"),
 					 errmsg("Cannot insert into tiered chunk range of %s.%s - attempt to create "
 							"new chunk "
 							"with range  [%s %s] failed",
@@ -1080,7 +1013,6 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 						 "Hypertable has tiered data with time range that overlaps the insert")));
 		}
 	}
-#endif
 	/* Insert any new dimension slices into metadata */
 	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
 
@@ -1090,6 +1022,9 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 													  table_name,
 													  prefix,
 													  get_next_chunk_id());
+
+	/* Insert any new chunk column stats entries into the catalog */
+	ts_chunk_column_stats_insert(ht, chunk);
 
 	chunk_add_constraints(chunk);
 	chunk_insert_into_metadata_after_lock(chunk);
@@ -1120,11 +1055,7 @@ chunk_add_inheritance(Chunk *chunk, const Hypertable *ht)
 		.type = T_AlterTableStmt,
 		.cmds = list_make1(&altercmd),
 		.missing_ok = false,
-#if PG14_GE
 		.objtype = OBJECT_TABLE,
-#else
-		.relkind = OBJECT_TABLE,
-#endif
 		.relation = makeRangeVar((char *) NameStr(chunk->fd.schema_name),
 								 (char *) NameStr(chunk->fd.table_name),
 								 0),
@@ -1318,7 +1249,7 @@ Chunk *
 ts_chunk_find_for_point(const Hypertable *ht, const Point *p)
 {
 	int chunk_id = chunk_point_find_chunk_id(ht, p);
-	if (chunk_id == 0)
+	if (chunk_id == INVALID_CHUNK_ID)
 	{
 		return NULL;
 	}
@@ -1351,7 +1282,7 @@ ts_chunk_create_for_point(const Hypertable *ht, const Point *p, bool *found, con
 	 * aren't removed.
 	 */
 	int chunk_id = chunk_point_find_chunk_id(ht, p);
-	if (chunk_id != 0)
+	if (chunk_id != INVALID_CHUNK_ID)
 	{
 		/* The chunk might be dropped, so we don't fail if we haven't found it. */
 		Chunk *chunk = ts_chunk_get_by_id(chunk_id, /* fail_if_not_found = */ false);
@@ -1368,9 +1299,8 @@ ts_chunk_create_for_point(const Hypertable *ht, const Point *p, bool *found, con
 		}
 
 		/*
-		 * If we managed to find some metadata for the chunk (chunk_id != 0),
+		 * If we managed to find some metadata for the chunk (chunk_id != INVALID_CHUNK_ID),
 		 * but it is marked as dropped, try to resurrect it.
-		 * Not sure if this ever worked for distributed hypertables.
 		 */
 		chunk = chunk_resurrect(ht, chunk_id);
 		if (chunk != NULL)
@@ -1390,6 +1320,29 @@ ts_chunk_create_for_point(const Hypertable *ht, const Point *p, bool *found, con
 	ASSERT_IS_VALID_CHUNK(chunk);
 
 	return chunk;
+}
+
+static void
+scan_add_chunk_context(ChunkScanCtx *ctx, int32 chunk_id, List *dimension_vecs, List **l_chunk_ids)
+{
+	bool found = false;
+	ChunkScanEntry *entry = hash_search(ctx->htab, &chunk_id, HASH_ENTER, &found);
+	if (!found)
+	{
+		entry->stub = NULL;
+		entry->num_dimension_constraints = 0;
+	}
+
+	entry->num_dimension_constraints++;
+
+	/*
+	 * A chunk is complete when we've found slices for all required dimensions,
+	 * i.e., a complete subspace.
+	 */
+	if (entry->num_dimension_constraints == list_length(dimension_vecs))
+	{
+		*l_chunk_ids = lappend_int(*l_chunk_ids, entry->chunk_id);
+	}
 }
 
 /*
@@ -1412,6 +1365,30 @@ ts_chunk_id_find_in_subspace(Hypertable *ht, List *dimension_vecs)
 	foreach (lc, dimension_vecs)
 	{
 		const DimensionVec *vec = lfirst(lc);
+
+		/*
+		 * If it's an entry of type DIMENSION_TYPE_STATS then we need to get
+		 * the chunks using the _timescaledb_catalog.chunk_column_stats catalog.
+		 */
+		Assert(vec->dri != NULL);
+		if (vec->dri->dimension->type == DIMENSION_TYPE_STATS)
+		{
+			ListCell *lc;
+			List *range_chunk_ids;
+
+			Assert(vec->num_slices == 0);
+			range_chunk_ids = ts_chunk_column_stats_get_chunk_ids_by_scan(vec->dri);
+
+			/* add these chunks to the context appropriately. */
+			foreach (lc, range_chunk_ids)
+			{
+				int32 chunk_id = lfirst_int(lc);
+
+				scan_add_chunk_context(&ctx, chunk_id, dimension_vecs, &chunk_ids);
+			}
+			continue;
+		}
+
 		/*
 		 * We shouldn't see a dimension with zero matching dimension slices.
 		 * That would mean that no chunks match at all, this should have been
@@ -1432,16 +1409,7 @@ ts_chunk_id_find_in_subspace(Hypertable *ht, List *dimension_vecs)
 				Datum datum = slot_getattr(ti->slot, Anum_chunk_constraint_chunk_id, &isnull);
 				Assert(!isnull);
 				int32 current_chunk_id = DatumGetInt32(datum);
-				Assert(current_chunk_id != 0);
-
-				bool found = false;
-				ChunkScanEntry *entry =
-					hash_search(ctx.htab, &current_chunk_id, HASH_ENTER, &found);
-				if (!found)
-				{
-					entry->stub = NULL;
-					entry->num_dimension_constraints = 0;
-				}
+				Assert(current_chunk_id != INVALID_CHUNK_ID);
 
 				/*
 				 * We have only the dimension constraints here, because we're searching
@@ -1449,16 +1417,7 @@ ts_chunk_id_find_in_subspace(Hypertable *ht, List *dimension_vecs)
 				 */
 				Assert(!slot_attisnull(ts_scan_iterator_slot(&iterator),
 									   Anum_chunk_constraint_dimension_slice_id));
-				entry->num_dimension_constraints++;
-
-				/*
-				 * A chunk is complete when we've found slices for all required dimensions,
-				 * i.e., a complete subspace.
-				 */
-				if (entry->num_dimension_constraints == list_length(dimension_vecs))
-				{
-					chunk_ids = lappend_int(chunk_ids, entry->chunk_id);
-				}
+				scan_add_chunk_context(&ctx, current_chunk_id, dimension_vecs, &chunk_ids);
 			}
 		}
 	}
@@ -1573,24 +1532,6 @@ chunk_tuple_dropped_filter(const TupleInfo *ti, void *arg)
 	return stubctx->is_dropped ? SCAN_EXCLUDE : SCAN_INCLUDE;
 }
 
-/* This is a modified version of chunk_tuple_dropped_filter that does
- * not use ChunkStubScanCtx as the arg, it just ignores the passed in
- * argument.
- * We need a variant as the ScannerCtx assumes that the the filter function
- * and tuple_found function share the argument.
- */
-static ScanFilterResult
-chunk_check_ignorearg_dropped_filter(const TupleInfo *ti, void *arg)
-{
-	bool isnull;
-	Datum dropped = slot_getattr(ti->slot, Anum_chunk_dropped, &isnull);
-
-	Assert(!isnull);
-	bool is_dropped = DatumGetBool(dropped);
-
-	return is_dropped ? SCAN_EXCLUDE : SCAN_INCLUDE;
-}
-
 static ScanTupleResult
 chunk_tuple_found(TupleInfo *ti, void *arg)
 {
@@ -1604,12 +1545,14 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 	 * ts_chunk_build_from_tuple_and_stub() since chunk_resurrect() also uses
 	 * that function and, in that case, the chunk object is needed to create
 	 * the data table and related objects. */
-	chunk->table_id =
-		ts_get_relation_relid(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), false);
-
 	chunk->hypertable_relid = ts_hypertable_id_to_relid(chunk->fd.hypertable_id, false);
+	ts_get_rel_info_by_name(NameStr(chunk->fd.schema_name),
+							NameStr(chunk->fd.table_name),
+							&chunk->table_id,
+							&chunk->amoid,
+							&chunk->relkind);
 
-	chunk->relkind = get_rel_relkind(chunk->table_id);
+	Assert(OidIsValid(chunk->amoid) || chunk->fd.osm_chunk);
 
 	Ensure(chunk->relkind > 0,
 		   "relkind for chunk \"%s\".\"%s\" is invalid",
@@ -1838,7 +1781,7 @@ chunk_resurrect(const Hypertable *ht, int chunk_id)
 	Chunk *chunk = NULL;
 	PG_USED_FOR_ASSERTS_ONLY int count = 0;
 
-	Assert(chunk_id != 0);
+	Assert(chunk_id != INVALID_CHUNK_ID);
 
 	iterator = ts_scan_iterator_create(CHUNK, RowExclusiveLock, CurrentMemoryContext);
 	ts_chunk_scan_iterator_set_chunk_id(&iterator, chunk_id);
@@ -1947,7 +1890,7 @@ chunk_point_find_chunk_id(const Hypertable *ht, const Point *p)
 			Datum datum = slot_getattr(ti->slot, Anum_chunk_constraint_chunk_id, &isnull);
 			Assert(!isnull);
 			int32 current_chunk_id = DatumGetInt32(datum);
-			Assert(current_chunk_id != 0);
+			Assert(current_chunk_id != INVALID_CHUNK_ID);
 
 			bool found = false;
 			ChunkScanEntry *entry = hash_search(ctx.htab, &current_chunk_id, HASH_ENTER, &found);
@@ -1977,7 +1920,7 @@ chunk_point_find_chunk_id(const Hypertable *ht, const Point *p)
 			}
 		}
 
-		if (matching_chunk_id != 0)
+		if (matching_chunk_id != INVALID_CHUNK_ID)
 		{
 			break;
 		}
@@ -2034,7 +1977,7 @@ Datum
 ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 {
 	/*
-	 * chunks_return_srf is called even when it is not the first call but only
+	 * show_chunks_return_srf is called even when it is not the first call but only
 	 * after doing some computation first
 	 */
 	if (SRF_IS_FIRSTCALL())
@@ -2057,6 +2000,17 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 		ht = ts_resolve_hypertable_from_table_or_cagg(hcache, relid, true);
 		Assert(ht != NULL);
 		time_dim = hyperspace_get_open_dimension(ht->space, 0);
+
+		if (!time_dim)
+			time_dim = hyperspace_get_closed_dimension(ht->space, 0);
+
+		if (time_dim && IS_CLOSED_DIMENSION(time_dim) && (!PG_ARGISNULL(1) || !PG_ARGISNULL(2)))
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot specify \"older_than\" or \"newer_than\" for "
+							"\"closed\"-like partitioning types"),
+					 errhint("Use \"created_before\" and/or \"created_after\" which rely on the "
+							 "chunk creation time values.")));
 
 		if (time_dim)
 			time_type = ts_dimension_get_partition_type(time_dim);
@@ -2081,7 +2035,8 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 
 		/*
 		 * We cannot have a mix of [older_than/newer_than] and [created_before/created_after].
-		 * So, check that first.
+		 * So, check that first. Note that created_before/created_after have a type of
+		 * TIMESTAMPTZOID regardless of the partitioning type.
 		 */
 
 		if (!PG_ARGISNULL(3))
@@ -2094,7 +2049,11 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 								"or \"created_after\"")));
 
 			arg_type = get_fn_expr_argtype(fcinfo->flinfo, 3);
-			created_before = ts_time_value_from_arg(PG_GETARG_DATUM(3), arg_type, time_type, false);
+			/* We use the existing function for various type/conversion checks */
+			created_before =
+				ts_time_value_from_arg(PG_GETARG_DATUM(3), arg_type, TIMESTAMPTZOID, false);
+			/* convert into int64 format for comparisons */
+			created_before = ts_internal_to_time_int64(created_before, TIMESTAMPTZOID);
 			before_after = true;
 		}
 
@@ -2108,7 +2067,11 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 								"or \"created_after\"")));
 
 			arg_type = get_fn_expr_argtype(fcinfo->flinfo, 4);
-			created_after = ts_time_value_from_arg(PG_GETARG_DATUM(4), arg_type, time_type, false);
+			/* We use the existing function for various type/conversion checks */
+			created_after =
+				ts_time_value_from_arg(PG_GETARG_DATUM(4), arg_type, TIMESTAMPTZOID, false);
+			/* convert into int64 format for comparisons */
+			created_after = ts_internal_to_time_int64(created_after, TIMESTAMPTZOID);
 			before_after = true;
 		}
 
@@ -2164,7 +2127,7 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 		ts_cache_release(hcache);
 	}
 
-	return chunks_return_srf(fcinfo);
+	return show_chunks_return_srf(fcinfo);
 }
 
 static Chunk *
@@ -2192,6 +2155,14 @@ get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than, Mem
 	start_strategy = (newer_than == PG_INT64_MIN) ? InvalidStrategy : BTGreaterEqualStrategyNumber;
 	end_strategy = (older_than == PG_INT64_MAX) ? InvalidStrategy : BTLessStrategyNumber;
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
+
+	if (time_dim == NULL)
+		time_dim = hyperspace_get_closed_dimension(ht->space, 0);
+
+	Ensure(time_dim != NULL,
+		   "partitioning dimension not found for hypertable \"%s\".\"%s\"",
+		   NameStr(ht->fd.schema_name),
+		   NameStr(ht->fd.table_name));
 
 	oldcontext = MemoryContextSwitchTo(mctx);
 	chunks_find_all_in_range_limit(ht,
@@ -2549,36 +2520,6 @@ ts_chunk_get_by_id(int32 id, bool fail_if_not_found)
 }
 
 /*
- * Number of chunks created after given chunk.
- * If chunk2.id > chunk1.id then chunk2 is created after chunk1
- */
-int
-ts_chunk_num_of_chunks_created_after(const Chunk *chunk)
-{
-	ScanKeyData scankey[1];
-
-	/*
-	 * Try to find chunks with a greater Id then a given chunk
-	 */
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_idx_id,
-				BTGreaterStrategyNumber,
-				F_INT4GT,
-				Int32GetDatum(chunk->fd.id));
-
-	return chunk_scan_internal(CHUNK_ID_INDEX,
-							   scankey,
-							   1,
-							   NULL,
-							   NULL,
-							   NULL,
-							   0,
-							   ForwardScanDirection,
-							   AccessShareLock,
-							   CurrentMemoryContext);
-}
-
-/*
  * Simple scans provide lightweight ways to access chunk information without the
  * overhead of getting a full chunk (i.e., no extra metadata, like constraints,
  * are joined in). This function forms the basis of a number of lookup functions
@@ -2639,8 +2580,8 @@ chunk_simple_scan_by_name(const char *schema, const char *table, FormData_chunk 
 	return chunk_simple_scan(&iterator, form, missing_ok, displaykey);
 }
 
-static bool
-chunk_simple_scan_by_reloid(Oid reloid, FormData_chunk *form, bool missing_ok)
+bool
+ts_chunk_simple_scan_by_reloid(Oid reloid, FormData_chunk *form, bool missing_ok)
 {
 	bool found = false;
 
@@ -2693,7 +2634,7 @@ ts_chunk_id_from_relid(PG_FUNCTION_ARGS)
 	if (last_relid == relid)
 		return last_id;
 
-	chunk_simple_scan_by_reloid(relid, &form, false);
+	ts_chunk_simple_scan_by_reloid(relid, &form, false);
 
 	last_relid = relid;
 	last_id = form.id;
@@ -2706,7 +2647,7 @@ ts_chunk_exists_relid(Oid relid)
 {
 	FormData_chunk form;
 
-	return chunk_simple_scan_by_reloid(relid, &form, true);
+	return ts_chunk_simple_scan_by_reloid(relid, &form, true);
 }
 
 /*
@@ -2717,25 +2658,12 @@ ts_chunk_get_hypertable_id_by_reloid(Oid reloid)
 {
 	FormData_chunk form;
 
-	if (chunk_simple_scan_by_reloid(reloid, &form, /* missing_ok = */ true))
+	if (ts_chunk_simple_scan_by_reloid(reloid, &form, /* missing_ok = */ true))
 	{
 		return form.hypertable_id;
 	}
 
 	return 0;
-}
-
-/*
- * Returns the compressed chunk id. The original chunk must exist.
- */
-int32
-ts_chunk_get_compressed_chunk_id(int32 chunk_id)
-{
-	FormData_chunk form;
-	PG_USED_FOR_ASSERTS_ONLY bool result =
-		chunk_simple_scan_by_id(chunk_id, &form, /* missing_ok = */ false);
-	Assert(result);
-	return form.compressed_chunk_id;
 }
 
 FormData_chunk
@@ -2820,6 +2748,10 @@ typedef enum ChunkDeleteResult
 
 /* Delete the chunk tuple.
  *
+ * relid: Required when deleting via an event trigger hook, because at that
+ * point the relation is gone and it is no longer possible to resolve the Oid
+ * from the PG catalog.
+ *
  * preserve_chunk_catalog_row - instead of deleting the row, mark it as dropped.
  * this is used when we need to preserve catalog information about the chunk
  * after dropping it. Currently only used when preserving continuous aggregates
@@ -2836,7 +2768,7 @@ typedef enum ChunkDeleteResult
  * of tuples to process.
  */
 static ChunkDeleteResult
-chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_catalog_row)
+chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool preserve_chunk_catalog_row)
 {
 	FormData_chunk form;
 	CatalogSecurityContext sec_ctx;
@@ -2919,18 +2851,41 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 	/* Delete any row in bgw_policy_chunk-stats corresponding to this chunk */
 	ts_bgw_policy_chunk_stats_delete_by_chunk_id(form.id);
 
+	/* Delete any rows in _timescaledb_catalog.chunk_column_stats corresponding to this chunk */
+	ts_chunk_column_stats_delete_by_chunk_id(form.id);
+
+	if (!OidIsValid(relid))
+	{
+		/*
+		 * If the chunk is deleted as a result of deleting the Hypertable, and
+		 * it is cleaned up in the DROP eventtrigger hook, it might not be
+		 * possible to resolve the relid because the relation is already gone
+		 * in pg_catalog. But that's OK, because compression settings will be
+		 * cleaned up when processing the eventtrigger.
+		 */
+		relid = ts_get_relation_relid(NameStr(form.schema_name), NameStr(form.table_name), true);
+	}
+
 	if (form.compressed_chunk_id != INVALID_CHUNK_ID)
 	{
 		Chunk *compressed_chunk = ts_chunk_get_by_id(form.compressed_chunk_id, false);
 
-		/* The chunk may have been delete by a CASCADE */
+		if (OidIsValid(relid))
+			ts_compression_settings_delete(relid);
+
+		/* The chunk may have been deleted by a CASCADE */
 		if (compressed_chunk != NULL)
 		{
 			/* Plain drop without preserving catalog row because this is the compressed
 			 * chunk */
-			ts_compression_settings_delete(compressed_chunk->table_id);
 			ts_chunk_drop(compressed_chunk, behavior, DEBUG1);
 		}
+	}
+	else if (OidIsValid(relid))
+	{
+		/* If there is no compressed chunk ID, this might be the actual
+		 * compressed chunk */
+		ts_compression_settings_delete_by_compress_relid(relid);
 	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
@@ -2982,7 +2937,8 @@ init_scan_by_qualified_table_name(ScanIterator *iterator, const char *schema_nam
 }
 
 static int
-chunk_delete(ScanIterator *iterator, DropBehavior behavior, bool preserve_chunk_catalog_row)
+chunk_delete(ScanIterator *iterator, Oid relid, DropBehavior behavior,
+			 bool preserve_chunk_catalog_row)
 {
 	int count = 0;
 
@@ -2991,6 +2947,7 @@ chunk_delete(ScanIterator *iterator, DropBehavior behavior, bool preserve_chunk_
 		ChunkDeleteResult res;
 
 		res = chunk_tuple_delete(ts_scan_iterator_tuple_info(iterator),
+								 relid,
 								 behavior,
 								 preserve_chunk_catalog_row);
 
@@ -3010,14 +2967,14 @@ chunk_delete(ScanIterator *iterator, DropBehavior behavior, bool preserve_chunk_
 }
 
 static int
-ts_chunk_delete_by_name_internal(const char *schema, const char *table, DropBehavior behavior,
-								 bool preserve_chunk_catalog_row)
+ts_chunk_delete_by_name_internal(const char *schema, const char *table, Oid relid,
+								 DropBehavior behavior, bool preserve_chunk_catalog_row)
 {
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowExclusiveLock, CurrentMemoryContext);
 	int count;
 
 	init_scan_by_qualified_table_name(&iterator, schema, table);
-	count = chunk_delete(&iterator, behavior, preserve_chunk_catalog_row);
+	count = chunk_delete(&iterator, relid, behavior, preserve_chunk_catalog_row);
 
 	/* (schema,table) names and (hypertable_id) are unique so should only have
 	 * dropped one chunk or none (if not found) */
@@ -3029,17 +2986,20 @@ ts_chunk_delete_by_name_internal(const char *schema, const char *table, DropBeha
 int
 ts_chunk_delete_by_name(const char *schema, const char *table, DropBehavior behavior)
 {
-	return ts_chunk_delete_by_name_internal(schema, table, behavior, false);
+	Oid relid = ts_get_relation_relid(schema, table, false);
+	return ts_chunk_delete_by_name_internal(schema, table, relid, behavior, false);
 }
 
-static int
-ts_chunk_delete_by_relid(Oid relid, DropBehavior behavior, bool preserve_chunk_catalog_row)
+int
+ts_chunk_delete_by_relid_and_relname(Oid relid, const char *schemaname, const char *tablename,
+									 DropBehavior behavior, bool preserve_chunk_catalog_row)
 {
 	if (!OidIsValid(relid))
 		return 0;
 
-	return ts_chunk_delete_by_name_internal(get_namespace_name(get_rel_namespace(relid)),
-											get_rel_name(relid),
+	return ts_chunk_delete_by_name_internal(schemaname,
+											tablename,
+											relid,
 											behavior,
 											preserve_chunk_catalog_row);
 }
@@ -3062,7 +3022,7 @@ ts_chunk_delete_by_hypertable_id(int32 hypertable_id)
 
 	init_scan_by_hypertable_id(&iterator, hypertable_id);
 
-	return chunk_delete(&iterator, DROP_RESTRICT, false);
+	return chunk_delete(&iterator, InvalidOid, DROP_RESTRICT, false);
 }
 
 bool
@@ -3232,155 +3192,46 @@ ts_chunk_recreate_all_constraints_for_dimension(Hypertable *ht, int32 dimension_
 }
 
 /*
- * Drops all FK constraints on a given chunk.
- * Currently it is used only for chunks, which have been compressed and
- * contain no data.
- */
-void
-ts_chunk_drop_fks(const Chunk *const chunk)
-{
-	Relation rel;
-	List *fks;
-	ListCell *lc;
-
-	ASSERT_IS_VALID_CHUNK(chunk);
-
-	rel = table_open(chunk->table_id, AccessShareLock);
-	fks = copyObject(RelationGetFKeyList(rel));
-	table_close(rel, AccessShareLock);
-
-	foreach (lc, fks)
-	{
-		const ForeignKeyCacheInfo *const fk = lfirst_node(ForeignKeyCacheInfo, lc);
-		ts_chunk_constraint_delete_by_constraint_name(chunk->fd.id,
-													  get_constraint_name(fk->conoid),
-													  true,
-													  true);
-	}
-}
-
-/*
- * Recreates all FK constraints on a chunk by using the constraints on the parent hypertable
- * as a template. Currently it is used only during chunk decompression, since FK constraints
- * are dropped during compression.
- */
-void
-ts_chunk_create_fks(const Hypertable *ht, const Chunk *const chunk)
-{
-	Relation rel;
-	List *fks;
-	ListCell *lc;
-
-	ASSERT_IS_VALID_CHUNK(chunk);
-
-	rel = table_open(chunk->hypertable_relid, AccessShareLock);
-	fks = copyObject(RelationGetFKeyList(rel));
-	table_close(rel, AccessShareLock);
-	foreach (lc, fks)
-	{
-		ForeignKeyCacheInfo *fk = lfirst_node(ForeignKeyCacheInfo, lc);
-		ts_chunk_constraint_create_on_chunk(ht, chunk, fk->conoid);
-	}
-}
-
-static ScanTupleResult
-chunk_tuple_update_schema_and_table(TupleInfo *ti, void *data)
-{
-	FormData_chunk form;
-	FormData_chunk *update = data;
-	CatalogSecurityContext sec_ctx;
-	HeapTuple new_tuple;
-
-	ts_chunk_formdata_fill(&form, ti);
-
-	namestrcpy(&form.schema_name, NameStr(update->schema_name));
-	namestrcpy(&form.table_name, NameStr(update->table_name));
-
-	new_tuple = chunk_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
-
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
-	heap_freetuple(new_tuple);
-	return SCAN_DONE;
-}
-
-static ScanTupleResult
-chunk_tuple_update_status(TupleInfo *ti, void *data)
-{
-	FormData_chunk form;
-	FormData_chunk *update = data;
-	CatalogSecurityContext sec_ctx;
-	HeapTuple new_tuple;
-
-	ts_chunk_formdata_fill(&form, ti);
-	form.status = update->status;
-	new_tuple = chunk_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
-
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
-	heap_freetuple(new_tuple);
-	return SCAN_DONE;
-}
-
-static bool
-chunk_update_form(FormData_chunk *form)
-{
-	ScanKeyData scankey[1];
-
-	ScanKeyInit(&scankey[0], Anum_chunk_idx_id, BTEqualStrategyNumber, F_INT4EQ, form->id);
-
-	return chunk_scan_internal(CHUNK_ID_INDEX,
-							   scankey,
-							   1,
-							   NULL,
-							   chunk_tuple_update_schema_and_table,
-							   form,
-							   0,
-							   ForwardScanDirection,
-							   RowExclusiveLock,
-							   CurrentMemoryContext) > 0;
-}
-
-/* update the status flag for chunk. Should not be called directly
- * Use chunk_update_status instead
- * Acquires RowExclusiveLock
- */
-static bool
-chunk_update_status_internal(FormData_chunk *form)
-{
-	ScanKeyData scankey[1];
-
-	ScanKeyInit(&scankey[0], Anum_chunk_idx_id, BTEqualStrategyNumber, F_INT4EQ, form->id);
-
-	return chunk_scan_internal(CHUNK_ID_INDEX,
-							   scankey,
-							   1,
-							   NULL,
-							   chunk_tuple_update_status,
-							   form,
-							   0,
-							   ForwardScanDirection,
-							   RowExclusiveLock,
-							   CurrentMemoryContext) > 0;
-}
-
-/* status update is done in 2 steps.
- * Do the equivalent of SELECT for UPDATE, followed by UPDATE
- * 1. RowShare lock to read the status.
- * 2. if status != proposed new status
- *      update status using RowExclusiveLock
- * All callers who want to update chunk status should call this function so that locks
+ * Chunk catalog updates are done in three steps.
+ * This is achieved by following this sequence:
+ *   1: call lock_chunk_tuple: this finds most recent version of tuple,
+ *   locks it, fills TID and data
+ *   2: make changes to the data
+ *   3: call chunk_update_catalog_tuple with the TID and updated data
+ *
+ * This is equivalent to SELECT for UPDATE, followed by UPDATE
+ *
+ * All callers who want to update chunk tuples should respect this so that locks
  * are acquired correctly.
+ *
+ */
+static void
+chunk_update_catalog_tuple(ItemPointer tid, FormData_chunk *update)
+{
+	HeapTuple new_tuple;
+	CatalogSecurityContext sec_ctx;
+	Catalog *catalog = ts_catalog_get();
+	Oid table = catalog_get_table_id(catalog, CHUNK);
+	Relation chunk_rel = relation_open(table, RowExclusiveLock);
+
+	new_tuple = chunk_formdata_make_tuple(update, chunk_rel->rd_att);
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_catalog_update_tid(chunk_rel, tid, new_tuple);
+	ts_catalog_restore_user(&sec_ctx);
+	heap_freetuple(new_tuple);
+	relation_close(chunk_rel, NoLock);
+}
+/*
+ * This function locks the  timescaledb_catalog.chunk tuple (corresponding to chunk_id ) in
+ * LockTupleExclusiveMode. It blocks till the lock is acquired. The tid and data (corresponding to
+ * the locked tuple) are returned via tid and form arguments. Anyone updating/deleting a chunk entry
+ * from the catalog table is expected to first call this function. Refer to
+ * chunk_update_catalog_tuple() for more details.
  */
 static bool
-chunk_update_status(FormData_chunk *form)
+lock_chunk_tuple(int32 chunk_id, ItemPointer tid, FormData_chunk *form)
 {
-	int32 chunk_id = form->id;
-	int32 new_status = form->status;
-	bool success = true, dropped = false;
-	/* lock the chunk tuple for update. Block till we get exclusivetuplelock */
 	ScanTupLock scantuplock = {
 		.waitpolicy = LockWaitBlock,
 		.lockmode = LockTupleExclusive,
@@ -3388,6 +3239,8 @@ chunk_update_status(FormData_chunk *form)
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowShareLock, CurrentMemoryContext);
 	iterator.ctx.index = catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_ID_INDEX);
 	iterator.ctx.tuplock = &scantuplock;
+	/* Keeping the lock since we presumably want to update the tuple */
+	iterator.ctx.flags = SCANNER_F_KEEPLOCK;
 
 	/* see table_tuple_lock for details about flags that are set in TupleExclusive mode */
 	scantuplock.lockflags = TUPLE_LOCK_FLAG_LOCK_UPDATE_IN_PROGRESS;
@@ -3402,44 +3255,82 @@ chunk_update_status(FormData_chunk *form)
 								   BTEqualStrategyNumber,
 								   F_INT4EQ,
 								   Int32GetDatum(chunk_id));
+	bool success = false;
+	bool dropped, dropped_isnull;
 
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		bool dropped_isnull, status_isnull;
-		int status;
+
+		if (ti->lockresult != TM_Ok)
+		{
+			if (IsolationUsesXactSnapshot())
+			{
+				/* For Repeatable Read and Serializable isolation level report error
+				 * if we cannot lock the tuple
+				 */
+				ereport(ERROR,
+						(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+						 errmsg("could not serialize access due to concurrent update")));
+			}
+			else
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_INTERNAL_ERROR),
+						 errmsg("unable to lock chunk catalog tuple, lock result is %d for chunk "
+								"ID (%d)",
+								ti->lockresult,
+								chunk_id)));
+			}
+		}
 
 		dropped = DatumGetBool(slot_getattr(ti->slot, Anum_chunk_dropped, &dropped_isnull));
 		Assert(!dropped_isnull);
-		status = DatumGetInt32(slot_getattr(ti->slot, Anum_chunk_status, &status_isnull));
-		Assert(!status_isnull);
-		if (!dropped && status != new_status)
+		if (!dropped)
 		{
-			success = chunk_update_status_internal(form); // get RowExclusiveLock and update here
+			ts_chunk_formdata_fill(form, ti);
+			ItemPointer result_tid = ts_scanner_get_tuple_tid(ti);
+			tid->ip_blkid = result_tid->ip_blkid;
+			tid->ip_posid = result_tid->ip_posid;
+			success = true;
+			break;
 		}
 	}
 	ts_scan_iterator_close(&iterator);
-	if (dropped)
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("attempt to update status(%d) on dropped chunk %d", new_status, chunk_id)));
+
 	return success;
 }
 
 bool
 ts_chunk_set_name(Chunk *chunk, const char *newname)
 {
-	namestrcpy(&chunk->fd.table_name, newname);
+	FormData_chunk form;
+	ItemPointerData tid;
+	bool PG_USED_FOR_ASSERTS_ONLY found;
 
-	return chunk_update_form(&chunk->fd);
+	found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
+	Assert(found);
+
+	namestrcpy(&form.table_name, newname);
+
+	chunk_update_catalog_tuple(&tid, &form);
+	return true;
 }
 
 bool
 ts_chunk_set_schema(Chunk *chunk, const char *newschema)
 {
-	namestrcpy(&chunk->fd.schema_name, newschema);
+	FormData_chunk form;
+	ItemPointerData tid;
+	bool PG_USED_FOR_ASSERTS_ONLY found;
 
-	return chunk_update_form(&chunk->fd);
+	found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
+	Assert(found);
+
+	namestrcpy(&form.schema_name, newschema);
+
+	chunk_update_catalog_tuple(&tid, &form);
+	return true;
 }
 
 bool
@@ -3452,8 +3343,19 @@ ts_chunk_set_unordered(Chunk *chunk)
 bool
 ts_chunk_set_partial(Chunk *chunk)
 {
+	bool set_status;
+
 	Assert(ts_chunk_is_compressed(chunk));
-	return ts_chunk_add_status(chunk, CHUNK_STATUS_COMPRESSED_PARTIAL);
+	set_status = ts_chunk_add_status(chunk, CHUNK_STATUS_COMPRESSED_PARTIAL);
+
+	/*
+	 * If the status was set then convert the corresponding
+	 * _timescaledb_catalog.chunk_column_stats entries "INVALID".
+	 */
+	if (set_status)
+		ts_chunk_column_stats_set_invalid(chunk->fd.hypertable_id, chunk->fd.id);
+
+	return set_status;
 }
 
 /* No inserts, updates, and deletes are permitted on a frozen chunk.
@@ -3463,34 +3365,19 @@ ts_chunk_set_partial(Chunk *chunk)
 bool
 ts_chunk_set_frozen(Chunk *chunk)
 {
-#if PG14_GE
 	return ts_chunk_add_status(chunk, CHUNK_STATUS_FROZEN);
-#else
-	elog(ERROR, "freeze chunk supported only for PG14 or greater");
-	return false;
-#endif
 }
 
 bool
 ts_chunk_unset_frozen(Chunk *chunk)
 {
-#if PG14_GE
 	return ts_chunk_clear_status(chunk, CHUNK_STATUS_FROZEN);
-#else
-	elog(ERROR, "freeze chunk supported only for PG14 or greater");
-	return false;
-#endif
 }
 
 bool
-ts_chunk_is_frozen(Chunk *chunk)
+ts_chunk_is_frozen(const Chunk *chunk)
 {
-#if PG14_GE
 	return ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FROZEN);
-#else
-	elog(ERROR, "freeze chunk supported only for PG14 or greater");
-	return false;
-#endif
 }
 
 /* only caller used to be ts_chunk_unset_frozen. This code was in PG14 block as we run into
@@ -3511,14 +3398,30 @@ ts_chunk_clear_status(Chunk *chunk, int32 status)
 						   status,
 						   chunk->fd.status)));
 	}
-	uint32 mstatus = ts_clear_flags_32(chunk->fd.status, status);
-	chunk->fd.status = mstatus;
-	return chunk_update_status(&chunk->fd);
+
+	FormData_chunk form;
+	ItemPointerData tid;
+	bool PG_USED_FOR_ASSERTS_ONLY found;
+
+	found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
+	Assert(found);
+
+	/* applying the flags after locking the metadata tuple */
+	int32 old_status = form.status;
+	form.status = ts_clear_flags_32(form.status, status);
+	chunk->fd.status = form.status;
+
+	/* Row-level locks are released at transaction end or during savepoint rollback */
+	if (old_status != form.status)
+		chunk_update_catalog_tuple(&tid, &form);
+
+	return true;
 }
 
 static bool
 ts_chunk_add_status(Chunk *chunk, int32 status)
 {
+	bool status_set = false;
 	if (ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FROZEN))
 	{
 		/* chunk in frozen state cannot be modified */
@@ -3530,112 +3433,138 @@ ts_chunk_add_status(Chunk *chunk, int32 status)
 						   status,
 						   chunk->fd.status)));
 	}
-	uint32 mstatus = ts_set_flags_32(chunk->fd.status, status);
-	chunk->fd.status = mstatus;
-	return chunk_update_status(&chunk->fd);
-}
-
-/*
- * Setting (INVALID_CHUNK_ID, true) is valid for an Access Node. It means
- * the data nodes contain the actual compressed chunks, and the meta-chunk is
- * marked as compressed in the Access Node.
- * Setting (is_compressed => false) means that the chunk is uncompressed.
- */
-static ScanTupleResult
-chunk_change_compressed_status_in_tuple(TupleInfo *ti, int32 compressed_chunk_id,
-										bool is_compressed)
-{
 	FormData_chunk form;
-	HeapTuple new_tuple;
-	CatalogSecurityContext sec_ctx;
+	ItemPointerData tid;
+	bool PG_USED_FOR_ASSERTS_ONLY found;
 
-	ts_chunk_formdata_fill(&form, ti);
-	if (is_compressed)
+	found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
+	Assert(found);
+
+	/* Somebody could update the status before we are able to lock it so check again */
+	if (ts_flags_are_set_32(form.status, CHUNK_STATUS_FROZEN))
 	{
-		form.compressed_chunk_id = compressed_chunk_id;
-		form.status = ts_set_flags_32(form.status, CHUNK_STATUS_COMPRESSED);
+		/* chunk in frozen state cannot be modified */
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("cannot modify frozen chunk status"),
+				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
+						   chunk->fd.id,
+						   status,
+						   form.status)));
 	}
-	else
+
+	/* applying the flags after locking the metadata tuple */
+	int32 old_status = form.status;
+	form.status = ts_set_flags_32(form.status, status);
+	chunk->fd.status = form.status;
+
+	/* Row-level locks are released at transaction end or during savepoint rollback */
+	if (old_status != form.status)
 	{
-		form.compressed_chunk_id = INVALID_CHUNK_ID;
-		form.status =
-			ts_clear_flags_32(form.status,
-							  CHUNK_STATUS_COMPRESSED | CHUNK_STATUS_COMPRESSED_UNORDERED |
-								  CHUNK_STATUS_COMPRESSED_PARTIAL);
+		chunk_update_catalog_tuple(&tid, &form);
+		status_set = true;
 	}
-	new_tuple = chunk_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
-	heap_freetuple(new_tuple);
-
-	return SCAN_DONE;
-}
-
-static ScanTupleResult
-chunk_clear_compressed_status_in_tuple(TupleInfo *ti, void *data)
-{
-	return chunk_change_compressed_status_in_tuple(ti, INVALID_CHUNK_ID, false);
-}
-
-static ScanTupleResult
-chunk_set_compressed_id_in_tuple(TupleInfo *ti, void *data)
-{
-	int32 compressed_chunk_id = *((int32 *) data);
-
-	return chunk_change_compressed_status_in_tuple(ti, compressed_chunk_id, true);
+	return status_set;
 }
 
 /*Assume permissions are already checked */
 bool
 ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id)
 {
-	bool success = false;
-	ScanKeyData scankey[1];
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_idx_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(chunk->fd.id));
-	success = chunk_scan_internal(CHUNK_ID_INDEX,
-								  scankey,
-								  1,
-								  chunk_check_ignorearg_dropped_filter,
-								  chunk_set_compressed_id_in_tuple,
-								  &compressed_chunk_id,
-								  0,
-								  ForwardScanDirection,
-								  RowExclusiveLock,
-								  CurrentMemoryContext) > 0;
-	if (success)
+	uint32 flags = CHUNK_STATUS_COMPRESSED;
+	uint32 mstatus = ts_set_flags_32(chunk->fd.status, flags);
+	if (ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FROZEN))
 	{
-		chunk->fd.status = ts_set_flags_32(chunk->fd.status, CHUNK_STATUS_COMPRESSED);
+		/* chunk in frozen state cannot be modified */
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("cannot modify frozen chunk status"),
+				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
+						   chunk->fd.id,
+						   mstatus,
+						   chunk->fd.status)));
 	}
-	return success;
+
+	FormData_chunk form;
+	ItemPointerData tid;
+	bool PG_USED_FOR_ASSERTS_ONLY found;
+
+	found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
+	Assert(found);
+
+	/* Somebody could update the status before we are able to lock it so check again */
+	if (ts_flags_are_set_32(form.status, CHUNK_STATUS_FROZEN))
+	{
+		/* chunk in frozen state cannot be modified */
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("cannot modify frozen chunk status"),
+				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
+						   chunk->fd.id,
+						   mstatus,
+						   form.status)));
+	}
+
+	/* re-applying the flags after locking the metadata tuple */
+	form.status = ts_set_flags_32(form.status, flags);
+	form.compressed_chunk_id = compressed_chunk_id;
+
+	chunk->fd.compressed_chunk_id = form.compressed_chunk_id;
+	chunk->fd.status = form.status;
+
+	chunk_update_catalog_tuple(&tid, &form);
+	return true;
 }
 
 /*Assume permissions are already checked */
 bool
 ts_chunk_clear_compressed_chunk(Chunk *chunk)
 {
-	int32 compressed_chunk_id = INVALID_CHUNK_ID;
-	ScanKeyData scankey[1];
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_idx_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(chunk->fd.id));
-	return chunk_scan_internal(CHUNK_ID_INDEX,
-							   scankey,
-							   1,
-							   chunk_check_ignorearg_dropped_filter,
-							   chunk_clear_compressed_status_in_tuple,
-							   &compressed_chunk_id,
-							   0,
-							   ForwardScanDirection,
-							   RowExclusiveLock,
-							   CurrentMemoryContext) > 0;
+	uint32 flags = CHUNK_STATUS_COMPRESSED | CHUNK_STATUS_COMPRESSED_UNORDERED |
+				   CHUNK_STATUS_COMPRESSED_PARTIAL;
+	uint32 mstatus = ts_clear_flags_32(chunk->fd.status, flags);
+	if (ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FROZEN))
+	{
+		/* chunk in frozen state cannot be modified */
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("cannot modify frozen chunk status"),
+				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
+						   chunk->fd.id,
+						   mstatus,
+						   chunk->fd.status)));
+	}
+
+	FormData_chunk form;
+	ItemPointerData tid;
+	bool PG_USED_FOR_ASSERTS_ONLY found;
+
+	found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
+	Assert(found);
+
+	/* Somebody could update the status before we are able to lock it so check again */
+	if (ts_flags_are_set_32(form.status, CHUNK_STATUS_FROZEN))
+	{
+		/* chunk in frozen state cannot be modified */
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("cannot modify frozen chunk status"),
+				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
+						   chunk->fd.id,
+						   mstatus,
+						   form.status)));
+	}
+
+	/* re-applying the flags after locking the metadata tuple */
+	form.status = ts_clear_flags_32(form.status, flags);
+	form.compressed_chunk_id = INVALID_CHUNK_ID;
+
+	chunk->fd.compressed_chunk_id = form.compressed_chunk_id;
+	chunk->fd.status = form.status;
+
+	chunk_update_catalog_tuple(&tid, &form);
+	return true;
 }
 
 /* Used as a tuple found function */
@@ -3711,12 +3640,13 @@ chunk_cmp(const void *ch1, const void *ch2)
  * to work.
  */
 static Datum
-chunks_return_srf(FunctionCallInfo fcinfo)
+show_chunks_return_srf(FunctionCallInfo fcinfo)
 {
 	FuncCallContext *funcctx;
 	uint64 call_cntr;
 	TupleDesc tupdesc;
 	Chunk *result_set;
+	Chunk *curr_chunk;
 
 	/* stuff done only on the first call of the function */
 	if (SRF_IS_FIRSTCALL())
@@ -3735,6 +3665,24 @@ chunks_return_srf(FunctionCallInfo fcinfo)
 
 	call_cntr = funcctx->call_cntr;
 	result_set = (Chunk *) funcctx->user_fctx;
+
+	/*
+	 * skip if it's an OSM chunk. Ideally this check could be done deep down in
+	 * functions like "chunk_scan_context_add_chunk", "chunk_tuple_dropped_filter"
+	 * etc. but they are used by other APIs like drop_chunks, chunk_scan_find, etc
+	 * which need access to the OSM chunk. Trying to unify scan functions across
+	 * all such usages seems to be too much of an overhaul as compared to this.
+	 *
+	 * Check the index appropriately first.
+	 */
+	if (call_cntr < funcctx->max_calls)
+	{
+		curr_chunk = &result_set[call_cntr];
+		if (IS_OSM_CHUNK(curr_chunk))
+		{
+			call_cntr = ++funcctx->call_cntr;
+		}
+	}
 
 	/* do when there is more left to send */
 	if (call_cntr < funcctx->max_calls)
@@ -3759,7 +3707,11 @@ ts_chunk_drop_internal(const Chunk *chunk, DropBehavior behavior, int32 log_leve
 			 NameStr(chunk->fd.table_name));
 
 	/* Remove the chunk from the chunk table */
-	ts_chunk_delete_by_relid(chunk->table_id, behavior, preserve_catalog_row);
+	ts_chunk_delete_by_relid_and_relname(chunk->table_id,
+										 NameStr(chunk->fd.schema_name),
+										 NameStr(chunk->fd.table_name),
+										 behavior,
+										 preserve_catalog_row);
 
 	/* Drop the table */
 	performDeletion(&objaddr, behavior, 0);
@@ -3889,9 +3841,9 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		ErrorData *edata;
 		MemoryContextSwitchTo(oldcontext);
 		edata = CopyErrorData();
+		FlushErrorState();
 		if (edata->sqlerrcode == ERRCODE_LOCK_NOT_AVAILABLE)
 		{
-			FlushErrorState();
 			edata->detail = edata->message;
 			edata->message =
 				psprintf("some chunks could not be read since they are being concurrently updated");
@@ -3973,8 +3925,6 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 			ts_chunk_drop(chunks + i, DROP_RESTRICT, log_level);
 	}
 	// if we have tiered chunks cascade drop to tiering layer as well
-#if PG14_GE
-
 	if (osm_chunk_id != INVALID_CHUNK_ID)
 	{
 		hypertable_drop_chunks_hook_type osm_drop_chunks_hook =
@@ -3998,7 +3948,6 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 			}
 		}
 	}
-#endif
 
 	/* When dropping chunks for a given CAgg then force set the watermark */
 	if (is_materialization_hypertable)
@@ -4070,6 +4019,14 @@ ts_chunk_drop_single_chunk(PG_FUNCTION_ARGS)
 															   true);
 	Assert(ch != NULL);
 	ts_chunk_validate_chunk_status_for_operation(ch, CHUNK_DROP, true /*throw_error */);
+
+	if (ts_chunk_contains_compressed_data(ch))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("dropping compressed chunks not supported"),
+				 errhint("Please drop the corresponding chunk on the uncompressed hypertable "
+						 "instead.")));
+
 	/* do not drop any chunk dependencies */
 	ts_chunk_drop(ch, DROP_RESTRICT, LOG);
 	PG_RETURN_BOOL(true);
@@ -4152,7 +4109,8 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 
 	/*
 	 * We cannot have a mix of [older_than/newer_than] and [created_before/created_after].
-	 * So, check that first.
+	 * So, check that first. Note that created_before/created_after have a type of
+	 * TIMESTAMPTZOID regardless of the partitioning type.
 	 */
 
 	if (!PG_ARGISNULL(4))
@@ -4170,7 +4128,11 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 							 " partitioning.")));
 
 		arg_type = get_fn_expr_argtype(fcinfo->flinfo, 4);
-		created_before = ts_time_value_from_arg(PG_GETARG_DATUM(4), arg_type, time_type, false);
+		/* We use the existing function for various type/conversion checks */
+		created_before =
+			ts_time_value_from_arg(PG_GETARG_DATUM(4), arg_type, TIMESTAMPTZOID, false);
+		/* convert into int64 format for comparisons */
+		created_before = ts_internal_to_time_int64(created_before, TIMESTAMPTZOID);
 		before_after = true;
 		older_than = created_before;
 	}
@@ -4189,7 +4151,10 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 							 "with \"integer\"-like"
 							 " partitioning.")));
 		arg_type = get_fn_expr_argtype(fcinfo->flinfo, 5);
-		created_after = ts_time_value_from_arg(PG_GETARG_DATUM(5), arg_type, time_type, false);
+		/* We use the existing function for various type/conversion checks */
+		created_after = ts_time_value_from_arg(PG_GETARG_DATUM(5), arg_type, TIMESTAMPTZOID, false);
+		/* convert into int64 format for comparisons */
+		created_after = ts_internal_to_time_int64(created_after, TIMESTAMPTZOID);
 		before_after = true;
 		newer_than = created_after;
 	}
@@ -4530,15 +4495,6 @@ ts_chunk_lock_if_exists(Oid chunk_oid, LOCKMODE chunk_lockmode)
 	return true;
 }
 
-int
-ts_chunk_oid_cmp(const void *p1, const void *p2)
-{
-	const Chunk *c1 = *((const Chunk **) p1);
-	const Chunk *c2 = *((const Chunk **) p2);
-
-	return oid_cmp(&c1->table_id, &c2->table_id);
-}
-
 ScanIterator
 ts_chunk_scan_iterator_create(MemoryContext result_mcxt)
 {
@@ -4668,7 +4624,7 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 	parent_ht->fd.status =
 		ts_set_flags_32(parent_ht->fd.status,
 						HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
-	ts_hypertable_update(parent_ht);
+	ts_hypertable_update_status_osm(parent_ht);
 }
 
 void
@@ -5161,4 +5117,38 @@ get_chunks_in_creation_time_range(Hypertable *ht, int64 older_than, int64 newer_
 	*num_chunks_returned = num_chunks;
 
 	return chunks;
+}
+
+Datum
+ts_chunk_drop_osm_chunk(PG_FUNCTION_ARGS)
+{
+	Oid hypertable_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	Cache *hcache = ts_hypertable_cache_pin();
+	Hypertable *ht = ts_resolve_hypertable_from_table_or_cagg(hcache, hypertable_relid, true);
+	int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
+	Chunk *osm_chunk = ts_chunk_get_by_id(osm_chunk_id, true);
+
+	ts_chunk_validate_chunk_status_for_operation(osm_chunk, CHUNK_DROP, true);
+
+	/* do not drop any chunk dependencies */
+	ts_chunk_drop(osm_chunk, DROP_RESTRICT, LOG);
+
+	/* reset hypertable OSM status */
+	ht->fd.status =
+		ts_clear_flags_32(ht->fd.status,
+						  HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
+	ts_hypertable_update_status_osm(ht);
+	ts_cache_release(hcache);
+	PG_RETURN_BOOL(true);
+}
+
+TS_FUNCTION_INFO_V1(ts_merge_two_chunks);
+
+Datum
+ts_merge_two_chunks(PG_FUNCTION_ARGS)
+{
+	Datum chunks[2] = { PG_GETARG_DATUM(0), PG_GETARG_DATUM(1) };
+	ArrayType *chunk_array =
+		construct_array(chunks, 2, REGCLASSOID, sizeof(Oid), true, TYPALIGN_INT);
+	return DirectFunctionCall1(ts_cm_functions->merge_chunks, PointerGetDatum(chunk_array));
 }

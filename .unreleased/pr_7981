@@ -1,0 +1,1 @@
+Implements: #7981 Add columnstore as alias for enable_columnstore in ALTER TABLE

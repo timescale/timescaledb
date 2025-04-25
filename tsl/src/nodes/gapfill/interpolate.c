@@ -9,8 +9,8 @@
 #include <catalog/pg_type.h>
 #include <utils/builtins.h>
 #include <utils/datum.h>
-#include <utils/typcache.h>
 #include <utils/numeric.h>
+#include <utils/typcache.h>
 
 #include "compat/compat.h"
 #include "gapfill_internal.h"
@@ -27,12 +27,10 @@ gapfill_interpolate_initialize(GapFillInterpolateColumnState *interpolate, GapFi
 {
 	interpolate->prev.isnull = true;
 	interpolate->next.isnull = true;
-	if (list_length(((FuncExpr *) function)->args) > 1)
-		interpolate->lookup_before =
-			gapfill_adjust_varnos(state, lsecond(((FuncExpr *) function)->args));
-	if (list_length(((FuncExpr *) function)->args) > 2)
-		interpolate->lookup_after =
-			gapfill_adjust_varnos(state, lthird(((FuncExpr *) function)->args));
+	if (list_length(function->args) > 1)
+		interpolate->lookup_before = gapfill_adjust_varnos(state, lsecond(function->args));
+	if (list_length(function->args) > 2)
+		interpolate->lookup_after = gapfill_adjust_varnos(state, lthird(function->args));
 }
 
 /*

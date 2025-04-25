@@ -136,10 +136,38 @@ struct ArrowSchema
 static pg_attribute_always_inline bool
 arrow_row_is_valid(const uint64 *bitmap, size_t row_number)
 {
+	if (likely(bitmap == NULL))
+	{
+		return true;
+	}
+
 	const size_t qword_index = row_number / 64;
 	const size_t bit_index = row_number % 64;
 	const uint64 mask = 1ull << bit_index;
 	return bitmap[qword_index] & mask;
+}
+
+/*
+ * Same as above but for two bitmaps, this is a typical situation when we have
+ * validity bitmap + filter result.
+ */
+static pg_attribute_always_inline bool
+arrow_row_both_valid(const uint64 *bitmap1, const uint64 *bitmap2, size_t row_number)
+{
+	if (likely(bitmap1 == NULL))
+	{
+		return arrow_row_is_valid(bitmap2, row_number);
+	}
+
+	if (likely(bitmap2 == NULL))
+	{
+		return arrow_row_is_valid(bitmap1, row_number);
+	}
+
+	const size_t qword_index = row_number / 64;
+	const size_t bit_index = row_number % 64;
+	const uint64 mask = 1ull << bit_index;
+	return (bitmap1[qword_index] & bitmap2[qword_index]) & mask;
 }
 
 static pg_attribute_always_inline void
@@ -148,15 +176,115 @@ arrow_set_row_validity(uint64 *bitmap, size_t row_number, bool value)
 	const size_t qword_index = row_number / 64;
 	const size_t bit_index = row_number % 64;
 	const uint64 mask = 1ull << bit_index;
+	const uint64 new_bit = (value ? 1ull : 0ull) << bit_index;
 
-	bitmap[qword_index] = (bitmap[qword_index] & ~mask) | ((-(uint64) value) & mask);
+	bitmap[qword_index] = (bitmap[qword_index] & ~mask) | new_bit;
 
 	Assert(arrow_row_is_valid(bitmap, row_number) == value);
 }
 
-/* Increase the `source_value` to be an even multiple of `pad_to`. */
+/*
+ * Combine the validity bitmaps into the given storage.
+ */
+static inline const uint64 *
+arrow_combine_validity(size_t num_words, uint64 *restrict storage, const uint64 *filter1,
+					   const uint64 *filter2, const uint64 *filter3)
+{
+	/*
+	 * Any and all of the filters can be null. For simplicity, move the non-null
+	 * filters to the leading positions.
+	 */
+	const uint64 *tmp;
+#define SWAP(X, Y)                                                                                 \
+	tmp = (X);                                                                                     \
+	(X) = (Y);                                                                                     \
+	(Y) = tmp;
+
+	if (filter1 == NULL)
+	{
+		/*
+		 * We have at least one NULL that goes to the last position.
+		 */
+		SWAP(filter1, filter3);
+
+		if (filter1 == NULL)
+		{
+			/*
+			 * We have another NULL that goes to the second position.
+			 */
+			SWAP(filter1, filter2);
+		}
+	}
+	else
+	{
+		if (filter2 == NULL)
+		{
+			/*
+			 * We have at least one NULL that goes to the last position.
+			 */
+			SWAP(filter2, filter3);
+		}
+	}
+#undef SWAP
+
+	Assert(filter2 == NULL || filter1 != NULL);
+	Assert(filter3 == NULL || filter2 != NULL);
+
+	if (filter2 == NULL)
+	{
+		/* Either have one non-null filter, or all of them are null. */
+		return filter1;
+	}
+
+	if (filter3 == NULL)
+	{
+		/* Have two non-null filters. */
+		for (size_t i = 0; i < num_words; i++)
+		{
+			storage[i] = filter1[i] & filter2[i];
+		}
+	}
+	else
+	{
+		/* Have three non-null filters. */
+		for (size_t i = 0; i < num_words; i++)
+		{
+			storage[i] = filter1[i] & filter2[i] & filter3[i];
+		}
+	}
+
+	return storage;
+}
+
+/*
+ * Increase the `source_value` to be an even multiple of `pad_to`.
+ */
 static inline uint64
 pad_to_multiple(uint64 pad_to, uint64 source_value)
 {
 	return ((source_value + pad_to - 1) / pad_to) * pad_to;
+}
+
+static inline size_t
+arrow_num_valid(const uint64 *bitmap, size_t total_rows)
+{
+	if (bitmap == NULL)
+	{
+		return total_rows;
+	}
+
+	uint64 num_valid = 0;
+#ifdef HAVE__BUILTIN_POPCOUNT
+	const uint64 words = pad_to_multiple(64, total_rows) / 64;
+	for (uint64 i = 0; i < words; i++)
+	{
+		num_valid += __builtin_popcountll(bitmap[i]);
+	}
+#else
+	for (size_t i = 0; i < total_rows; i++)
+	{
+		num_valid += arrow_row_is_valid(bitmap, i);
+	}
+#endif
+	return num_valid;
 }

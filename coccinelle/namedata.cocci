@@ -16,12 +16,13 @@ struct I1
 }
 
 @rule_namedata_strlcpy@
-expression E1, E2;
+identifier I1;
+expression E1;
 symbol NAMEDATALEN;
 @@
-- strlcpy(E1, E2, NAMEDATALEN);
+- strlcpy(I1, E1, NAMEDATALEN);
 + /* You are using strlcpy with NAMEDATALEN, please consider using NameData and namestrcpy instead. */
-+ namestrcpy(E1, E2);
++ namestrcpy(I1, E1);
 
 @rule_namedata_memcpy@
 expression E1, E2;

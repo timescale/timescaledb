@@ -4,6 +4,7 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+
 #include <access/xact.h>
 #include <catalog/namespace.h>
 #include <commands/view.h>
@@ -13,18 +14,19 @@
 #include <rewrite/rewriteManip.h>
 #include <utils/builtins.h>
 
-#include "options.h"
 #include "cache.h"
-#include "compression_with_clause.h"
-#include "ts_catalog/continuous_agg.h"
-#include "continuous_aggs/create.h"
 #include "compression/create.h"
+#include "continuous_aggs/common.h"
+#include "continuous_aggs/create.h"
 #include "errors.h"
 #include "hypertable_cache.h"
+#include "options.h"
 #include "scan_iterator.h"
+#include "ts_catalog/continuous_agg.h"
+#include "with_clause/alter_table_with_clause.h"
+#include "with_clause/create_materialized_view_with_clause.h"
 
 static void cagg_update_materialized_only(ContinuousAgg *agg, bool materialized_only);
-static List *cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht);
 static List *cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht);
 static void cagg_alter_compression(ContinuousAgg *agg, Hypertable *mat_ht, List *compress_defelems);
 
@@ -69,95 +71,6 @@ cagg_update_materialized_only(ContinuousAgg *agg, bool materialized_only)
 		break;
 	}
 	ts_scan_iterator_close(&iterator);
-}
-
-/*
- * This function is responsible to return a list of column names used in
- * GROUP BY clause of the cagg query. It behaves a bit different depending
- * of the type of the Continuous Aggregate.
- *
- * 1) Partials form (finalized=false)
- *
- *    Retrieve the "user view query" and find the GROUP BY clause and
- *    "time_bucket" clause. Map them to the column names (of mat.hypertable)
- *
- *    Note that the "user view query" has 2 forms:
- *    - with UNION
- *    - without UNION
- *
- *    We have to extract the part of the query that has "finalize_agg" on
- *    the materialized hypertable to find the GROUP BY clauses.
- *    (see continuous_aggs/create.c for more info on the query structure)
- *
- * 2) Finals form (finalized=true) (>= 2.7)
- *
- *    Retrieve the "direct view query" and find the GROUP BY clause and
- *    "time_bucket" clause. We use the "direct view query" because in the
- *    "user view query" we removed the re-aggregation in the part that query
- *    the materialization hypertable so we don't have a GROUP BY clause
- *    anymore.
- *
- *    Get the column name from the GROUP BY clause because all the column
- *    names are the same in all underlying objects (user view, direct view,
- *    partial view and materialization hypertable).
- */
-static List *
-cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
-{
-	List *retlist = NIL;
-	ListCell *lc;
-	Query *cagg_view_query = ts_continuous_agg_get_query(agg);
-	Oid mat_relid = mat_ht->main_table_relid;
-	Query *finalize_query;
-
-#if PG16_LT
-	/* The view rule has dummy old and new range table entries as the 1st and 2nd entries */
-	Assert(list_length(cagg_view_query->rtable) >= 2);
-#endif
-
-	if (cagg_view_query->setOperations)
-	{
-		/*
-		 * This corresponds to the union view.
-		 *   PG16_LT the 3rd RTE entry has the SELECT 1 query from the union view.
-		 *   PG16_GE the 1st RTE entry has the SELECT 1 query from the union view
-		 */
-#if PG16_LT
-		RangeTblEntry *finalize_query_rte = lthird(cagg_view_query->rtable);
-#else
-		RangeTblEntry *finalize_query_rte = linitial(cagg_view_query->rtable);
-#endif
-		if (finalize_query_rte->rtekind != RTE_SUBQUERY)
-			ereport(ERROR,
-					(errcode(ERRCODE_TS_UNEXPECTED),
-					 errmsg("unexpected rte type for view %d", finalize_query_rte->rtekind)));
-
-		finalize_query = finalize_query_rte->subquery;
-	}
-	else
-	{
-		finalize_query = cagg_view_query;
-	}
-
-	foreach (lc, finalize_query->groupClause)
-	{
-		SortGroupClause *cagg_gc = (SortGroupClause *) lfirst(lc);
-		TargetEntry *cagg_tle = get_sortgroupclause_tle(cagg_gc, finalize_query->targetList);
-
-		if (ContinuousAggIsFinalized(agg))
-		{
-			/* "resname" is the same as "mat column names" in the finalized version */
-			if (!cagg_tle->resjunk && cagg_tle->resname)
-				retlist = lappend(retlist, get_attname(mat_relid, cagg_tle->resno, false));
-		}
-		else
-		{
-			/* groupby clauses are columns from the mat hypertable */
-			Var *mat_var = castNode(Var, cagg_tle->expr);
-			retlist = lappend(retlist, get_attname(mat_relid, mat_var->varattno, false));
-		}
-	}
-	return retlist;
 }
 
 /* get the compression parameters for cagg. The parameters are
@@ -214,47 +127,40 @@ static void
 cagg_alter_compression(ContinuousAgg *agg, Hypertable *mat_ht, List *compress_defelems)
 {
 	Assert(mat_ht != NULL);
-	WithClauseResult *with_clause_options =
-		ts_compress_hypertable_set_clause_parse(compress_defelems);
+	WithClauseResult *with_clause_options = ts_alter_table_with_clause_parse(compress_defelems);
 
-	if (with_clause_options[CompressEnabled].parsed)
+	if (with_clause_options[AlterTableFlagCompressEnabled].parsed)
 	{
 		List *default_compress_defelems = cagg_get_compression_params(agg, mat_ht);
 		WithClauseResult *default_with_clause_options =
-			ts_compress_hypertable_set_clause_parse(default_compress_defelems);
+			ts_alter_table_with_clause_parse(default_compress_defelems);
 		/* Merge defaults if there's any. */
-		for (int i = 0; i < CompressOptionMax; i++)
+		for (int i = 0; i < AlterTableFlagsMax; i++)
 		{
 			if (with_clause_options[i].is_default && !default_with_clause_options[i].is_default)
 			{
 				with_clause_options[i] = default_with_clause_options[i];
 				elog(NOTICE,
 					 "defaulting %s to %s",
-					 with_clause_options[i].definition->arg_name,
+					 with_clause_options[i].definition->arg_names[0],
 					 ts_with_clause_result_deparse_value(&with_clause_options[i]));
 			}
 		}
 	}
 
-	AlterTableCmd alter_cmd = {
-		.type = T_AlterTableCmd,
-		.subtype = AT_SetRelOptions,
-		.def = (Node *) compress_defelems,
-	};
-
-	tsl_process_compress_table(&alter_cmd, mat_ht, with_clause_options);
+	tsl_process_compress_table(mat_ht, with_clause_options);
 }
 
 void
 continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_options)
 {
-	if (!with_clause_options[ContinuousEnabled].is_default)
+	if (!with_clause_options[CreateMaterializedViewFlagContinuous].is_default)
 		elog(ERROR, "cannot disable continuous aggregates");
 
-	if (!with_clause_options[ContinuousViewOptionMaterializedOnly].is_default)
+	if (!with_clause_options[CreateMaterializedViewFlagMaterializedOnly].is_default)
 	{
 		bool materialized_only =
-			DatumGetBool(with_clause_options[ContinuousViewOptionMaterializedOnly].parsed);
+			DatumGetBool(with_clause_options[CreateMaterializedViewFlagMaterializedOnly].parsed);
 
 		Cache *hcache = ts_hypertable_cache_pin();
 		Hypertable *mat_ht =
@@ -273,6 +179,19 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		cagg_update_materialized_only(agg, materialized_only);
 		ts_cache_release(hcache);
 	}
+	if (!with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].is_default)
+	{
+		Cache *hcache = ts_hypertable_cache_pin();
+		Hypertable *mat_ht =
+			ts_hypertable_cache_get_entry_by_id(hcache, agg->data.mat_hypertable_id);
+
+		int64 interval = interval_to_usec(DatumGetIntervalP(
+			with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].parsed));
+		Dimension *dim = ts_hyperspace_get_mutable_dimension(mat_ht->space, DIMENSION_TYPE_OPEN, 0);
+
+		ts_dimension_set_chunk_interval(dim, interval);
+		ts_cache_release(hcache);
+	}
 	List *compression_options = ts_continuous_agg_get_compression_defelems(with_clause_options);
 
 	if (list_length(compression_options) > 0)
@@ -285,11 +204,11 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		cagg_alter_compression(agg, mat_ht, compression_options);
 		ts_cache_release(hcache);
 	}
-	if (!with_clause_options[ContinuousViewOptionCreateGroupIndex].is_default)
+	if (!with_clause_options[CreateMaterializedViewFlagCreateGroupIndexes].is_default)
 	{
 		elog(ERROR, "cannot alter create_group_indexes option for continuous aggregates");
 	}
-	if (!with_clause_options[ContinuousViewOptionFinalized].is_default)
+	if (!with_clause_options[CreateMaterializedViewFlagFinalized].is_default)
 	{
 		elog(ERROR, "cannot alter finalized option for continuous aggregates");
 	}

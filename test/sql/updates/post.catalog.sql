@@ -12,14 +12,16 @@
 
 SELECT nspname AS Schema,
        relname AS Name,
-       unnest(relacl)::text as ACL
+       -- PG17 introduced MAINTAIN acl (m) so removed it to keep output backward compatible
+       replace(unnest(relacl)::text, 'm', '') as ACL
 FROM pg_class JOIN pg_namespace ns ON relnamespace = ns.oid
 WHERE nspname IN ('_timescaledb_catalog', '_timescaledb_config')
 ORDER BY Schema, Name, ACL;
 
 SELECT nspname AS schema,
        relname AS name,
-       unnest(initprivs)::text AS initpriv
+       -- PG17 introduced MAINTAIN acl (m) so removed it to keep output backward compatible
+       replace(unnest(initprivs)::text, 'm', '') AS initpriv
 FROM pg_class cl JOIN pg_namespace ns ON ns.oid = relnamespace
             LEFT JOIN pg_init_privs ON objoid = cl.oid AND objsubid = 0
 WHERE classoid = 'pg_class'::regclass
@@ -28,19 +30,76 @@ ORDER BY schema, name, initpriv;
 
 \di _timescaledb_catalog.*
 \ds+ _timescaledb_catalog.*
-\df _timescaledb_internal.*
-\df+ _timescaledb_internal.*
-\df public.*;
-\df+ public.*;
+
+-- Functions in schemas:
+--   * _timescaledb_internal
+--   * _timescaledb_functions
+--   * public
+SELECT n.nspname as "Schema",
+  p.proname as "Name",
+  pg_catalog.pg_get_function_result(p.oid) as "Result data type",
+  pg_catalog.pg_get_function_arguments(p.oid) as "Argument data types",
+ CASE p.prokind
+  WHEN 'a' THEN 'agg'
+  WHEN 'w' THEN 'window'
+  WHEN 'p' THEN 'proc'
+  ELSE 'func'
+ END as "Type",
+ CASE
+  WHEN p.provolatile = 'i' THEN 'immutable'
+  WHEN p.provolatile = 's' THEN 'stable'
+  WHEN p.provolatile = 'v' THEN 'volatile'
+ END as "Volatility",
+ CASE
+  WHEN p.proparallel = 'r' THEN 'restricted'
+  WHEN p.proparallel = 's' THEN 'safe'
+  WHEN p.proparallel = 'u' THEN 'unsafe'
+ END as "Parallel",
+ pg_catalog.pg_get_userbyid(p.proowner) as "Owner",
+ CASE WHEN prosecdef THEN 'definer' ELSE 'invoker' END AS "Security",
+ CASE WHEN pg_catalog.array_length(p.proacl, 1) = 0 THEN '(none)' ELSE pg_catalog.array_to_string(p.proacl, E'\n') END AS "Access privileges",
+ l.lanname as "Language",
+ p.prosrc as "Source code",
+ CASE WHEN l.lanname IN ('internal', 'c') THEN p.prosrc END as "Internal name",
+ pg_catalog.obj_description(p.oid, 'pg_proc') as "Description"
+FROM pg_catalog.pg_proc p
+     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+     LEFT JOIN pg_catalog.pg_language l ON l.oid = p.prolang
+WHERE n.nspname OPERATOR(pg_catalog.~) '^(_timescaledb_internal|_timescaledb_functions|public)$' COLLATE pg_catalog.default
+ORDER BY 1, 2, 4;
 
 \dy
 \d public.*
 
-\dx+ timescaledb
-SELECT count(*)
-  FROM pg_depend
- WHERE refclassid = 'pg_extension'::regclass
-     AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
+-- Keep the output backward compatible
+\if :PG_UPGRADE_TEST
+  SELECT oid AS extoid FROM pg_catalog.pg_extension WHERE extname = 'timescaledb' \gset
+
+  WITH ext AS (
+    SELECT pg_catalog.pg_describe_object(classid, objid, 0) AS objdesc
+    FROM pg_catalog.pg_depend
+    WHERE refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND refobjid = :'extoid' AND deptype = 'e'
+    ORDER BY 1
+  )
+  SELECT objdesc AS "Object description" FROM ext
+  WHERE objdesc !~ '^type' OR objdesc ~ '^type _timescaledb_internal.(compressed_data|dimension_info)$'
+  ORDER BY 1;
+
+  WITH ext AS (
+    SELECT pg_catalog.pg_describe_object(classid, objid, 0) AS objdesc
+    FROM pg_catalog.pg_depend
+    WHERE refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND refobjid = :'extoid' AND deptype = 'e'
+    ORDER BY 1
+  )
+  SELECT count(*) FROM ext
+  WHERE objdesc !~ '^type' OR objdesc ~ '^type _timescaledb_internal.(compressed_data|dimension_info)$';
+\else
+  \dx+ timescaledb
+  SELECT count(*)
+    FROM pg_depend
+   WHERE refclassid = 'pg_extension'::regclass
+       AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
+\endif
 
 -- The list of tables configured to be dumped.
 SELECT unnest(extconfig)::regclass::text, unnest(extcondition) FROM pg_extension WHERE extname = 'timescaledb' ORDER BY 1;

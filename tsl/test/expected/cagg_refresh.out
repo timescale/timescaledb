@@ -1,15 +1,11 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
--- Disable background workers since we are testing manual refresh
-\c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT _timescaledb_functions.stop_background_workers();
- stop_background_workers 
--------------------------
- t
-(1 row)
-
-SET ROLE :ROLE_DEFAULT_PERM_USER;
+SET timezone TO PST8PDT;
+\ir include/cagg_refresh_common.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
 CREATE TABLE conditions (time timestamptz NOT NULL, device int, temp float);
 SELECT create_hypertable('conditions', 'time');
     create_hypertable    
@@ -17,6 +13,18 @@ SELECT create_hypertable('conditions', 'time');
  (1,public,conditions,t)
 (1 row)
 
+-- Test refresh on a cagg built on an empty table
+CREATE MATERIALIZED VIEW daily_temp
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
+AS
+SELECT time_bucket('1 day', time) AS day, device, avg(temp) AS avg_temp
+FROM conditions
+GROUP BY 1,2 WITH NO DATA;
+CALL refresh_continuous_aggregate('daily_temp', NULL, NULL);
+psql:include/cagg_refresh_common.sql:17: NOTICE:  continuous aggregate "daily_temp" is already up-to-date
+CALL refresh_continuous_aggregate('daily_temp', NULL, NULL, force => true);
+psql:include/cagg_refresh_common.sql:18: NOTICE:  continuous aggregate "daily_temp" is already up-to-date
 SELECT setseed(.12);
  setseed 
 ---------
@@ -44,13 +52,6 @@ LIMIT 10;
  Mon May 04 22:30:00 2020 PDT |      0 |    8
 (10 rows)
 
-CREATE MATERIALIZED VIEW daily_temp
-WITH (timescaledb.continuous,
-      timescaledb.materialized_only=true)
-AS
-SELECT time_bucket('1 day', time) AS day, device, avg(temp) AS avg_temp
-FROM conditions
-GROUP BY 1,2 WITH NO DATA;
 -- The continuous aggregate should be empty
 SELECT * FROM daily_temp
 ORDER BY day DESC, device;
@@ -75,16 +76,16 @@ CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 17:00 PDT', '2020-05
 -- These refreshes will fail since they don't align with the bucket's
 -- time zone
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-04');
-ERROR:  refresh window too small
+psql:include/cagg_refresh_common.sql:47: ERROR:  refresh window too small
 DETAIL:  The refresh window must cover at least one bucket of data.
 HINT:  Align the refresh window with the bucket time zone or use at least two buckets.
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 PDT', '2020-05-04 00:00 PDT');
-ERROR:  refresh window too small
+psql:include/cagg_refresh_common.sql:48: ERROR:  refresh window too small
 DETAIL:  The refresh window must cover at least one bucket of data.
 HINT:  Align the refresh window with the bucket time zone or use at least two buckets.
 -- Refresh window less than one bucket
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-03 23:59 UTC');
-ERROR:  refresh window too small
+psql:include/cagg_refresh_common.sql:51: ERROR:  refresh window too small
 DETAIL:  The refresh window must cover at least one bucket of data.
 HINT:  Align the refresh window with the bucket time zone or use at least two buckets.
 -- Refresh window bigger than one bucket, but failing since it is not
@@ -93,7 +94,7 @@ HINT:  Align the refresh window with the bucket time zone or use at least two bu
 -- Refresh window:    [----------)
 -- Buckets:          [------|------]
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 01:00 UTC', '2020-05-04 08:00 UTC');
-ERROR:  refresh window too small
+psql:include/cagg_refresh_common.sql:57: ERROR:  refresh window too small
 DETAIL:  The refresh window must cover at least one bucket of data.
 HINT:  Align the refresh window with the bucket time zone or use at least two buckets.
 \set VERBOSITY terse
@@ -121,15 +122,14 @@ ORDER BY day DESC, device;
 -- Refresh the rest (and try DEBUG output)
 SET client_min_messages TO DEBUG1;
 CALL refresh_continuous_aggregate('daily_temp', '2020-04-30', '2020-05-04');
-LOG:  statement: CALL refresh_continuous_aggregate('daily_temp', '2020-04-30', '2020-05-04');
-DEBUG:  refreshing continuous aggregate "daily_temp" in window [ Thu Apr 30 17:00:00 2020 PDT, Sun May 03 17:00:00 2020 PDT ]
-DEBUG:  hypertable 1 existing watermark >= new invalidation threshold 1588723200000000 1588550400000000
-DEBUG:  invalidation refresh on "daily_temp" in window [ Thu Apr 30 17:00:00 2020 PDT, Sat May 02 17:00:00 2020 PDT ]
-LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
-LOG:  inserted 8 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
-DEBUG:  hypertable 2 existing watermark >= new watermark 1588723200000000 1588723200000000
+psql:include/cagg_refresh_common.sql:69: LOG:  statement: CALL refresh_continuous_aggregate('daily_temp', '2020-04-30', '2020-05-04');
+psql:include/cagg_refresh_common.sql:69: DEBUG:  hypertable 1 existing watermark >= new invalidation threshold 1588723200000000 1588550400000000
+psql:include/cagg_refresh_common.sql:69: DEBUG:  continuous aggregate refresh (individual invalidation) on "daily_temp" in window [ Thu Apr 30 17:00:00 2020 PDT, Sat May 02 17:00:00 2020 PDT ]
+psql:include/cagg_refresh_common.sql:69: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
+psql:include/cagg_refresh_common.sql:69: LOG:  inserted 8 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
+psql:include/cagg_refresh_common.sql:69: DEBUG:  hypertable 2 existing watermark >= new watermark 1588723200000000 1588723200000000
 RESET client_min_messages;
-LOG:  statement: RESET client_min_messages;
+psql:include/cagg_refresh_common.sql:70: LOG:  statement: RESET client_min_messages;
 -- Compare the aggregate to the equivalent query on the source table
 SELECT * FROM daily_temp
 ORDER BY day DESC, device;
@@ -187,47 +187,88 @@ ORDER BY 1 DESC,2;
 
 -- Test unusual, but valid input
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::timestamptz, '2020-05-03'::date);
-NOTICE:  continuous aggregate "daily_temp" is already up-to-date
+psql:include/cagg_refresh_common.sql:82: NOTICE:  continuous aggregate "daily_temp" is already up-to-date
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::date, '2020-05-03'::date);
-NOTICE:  continuous aggregate "daily_temp" is already up-to-date
+psql:include/cagg_refresh_common.sql:83: NOTICE:  continuous aggregate "daily_temp" is already up-to-date
 -- Unbounded window forward in time
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', NULL);
-NOTICE:  continuous aggregate "daily_temp" is already up-to-date
+psql:include/cagg_refresh_common.sql:86: NOTICE:  continuous aggregate "daily_temp" is already up-to-date
 CALL refresh_continuous_aggregate('daily_temp', NULL, NULL);
 -- Unbounded window back in time
 CALL refresh_continuous_aggregate('daily_temp', NULL, '2020-05-01');
-NOTICE:  continuous aggregate "daily_temp" is already up-to-date
+psql:include/cagg_refresh_common.sql:90: NOTICE:  continuous aggregate "daily_temp" is already up-to-date
 -- Test bad input
 \set ON_ERROR_STOP 0
 -- Bad continuous aggregate name
 CALL refresh_continuous_aggregate(NULL, '2020-05-03', '2020-05-05');
-ERROR:  invalid continuous aggregate
+psql:include/cagg_refresh_common.sql:95: ERROR:  invalid continuous aggregate
 CALL refresh_continuous_aggregate('xyz', '2020-05-03', '2020-05-05');
-ERROR:  relation "xyz" does not exist at character 35
+psql:include/cagg_refresh_common.sql:96: ERROR:  relation "xyz" does not exist at character 35
 -- Valid object, but not a continuous aggregate
 CALL refresh_continuous_aggregate('conditions', '2020-05-03', '2020-05-05');
-ERROR:  relation "conditions" is not a continuous aggregate
+psql:include/cagg_refresh_common.sql:98: ERROR:  relation "conditions" is not a continuous aggregate
 -- Object ID with no object
 CALL refresh_continuous_aggregate(1, '2020-05-03', '2020-05-05');
-ERROR:  continuous aggregate does not exist
+psql:include/cagg_refresh_common.sql:100: ERROR:  continuous aggregate does not exist
 -- Lacking arguments
 CALL refresh_continuous_aggregate('daily_temp');
-ERROR:  procedure refresh_continuous_aggregate(unknown) does not exist at character 6
+psql:include/cagg_refresh_common.sql:102: ERROR:  procedure refresh_continuous_aggregate(unknown) does not exist at character 6
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-03');
-ERROR:  procedure refresh_continuous_aggregate(unknown, unknown) does not exist at character 6
+psql:include/cagg_refresh_common.sql:103: ERROR:  procedure refresh_continuous_aggregate(unknown, unknown) does not exist at character 6
 -- Bad time ranges
 CALL refresh_continuous_aggregate('daily_temp', 'xyz', '2020-05-05');
-ERROR:  invalid input syntax for type timestamp with time zone: "xyz"
+psql:include/cagg_refresh_common.sql:105: ERROR:  invalid input syntax for type timestamp with time zone: "xyz"
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', 'xyz');
-ERROR:  invalid input syntax for type timestamp with time zone: "xyz"
+psql:include/cagg_refresh_common.sql:106: ERROR:  invalid input syntax for type timestamp with time zone: "xyz"
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-01');
-ERROR:  refresh window too small
+psql:include/cagg_refresh_common.sql:107: ERROR:  refresh window too small
 -- Bad time input
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::text, '2020-05-03'::text);
-ERROR:  invalid time argument type "text"
+psql:include/cagg_refresh_common.sql:109: ERROR:  invalid time argument type "text"
 CALL refresh_continuous_aggregate('daily_temp', 0, '2020-05-01');
-ERROR:  invalid time argument type "integer"
+psql:include/cagg_refresh_common.sql:110: ERROR:  invalid time argument type "integer"
 \set ON_ERROR_STOP 1
+-- Test forceful refreshment. Here we simulate the situation that we've seen
+-- with tiered data when `timescaledb.enable_tiered_reads` were disabled on the
+-- server level. In that case we would not see materialized tiered data and
+-- we wouldn't be able to re-materialize the data using a normal refresh call
+-- because it would skip previously materialized ranges, but it should be
+-- possible with `force=>true` parameter. To simulate this use-case we clear
+-- the materialization hypertable and forefully re-materialize it.
+SELECT format('%I.%I', ht.schema_name, ht.table_name) AS mat_ht, mat_hypertable_id FROM _timescaledb_catalog.continuous_agg cagg
+JOIN _timescaledb_catalog.hypertable ht ON cagg.mat_hypertable_id = ht.id
+WHERE user_view_name = 'daily_temp' \gset
+-- Delete the data from the materialization hypertable
+DELETE FROM :mat_ht;
+-- Run regular refresh, it should not touch previously materialized range
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-02', '2020-05-05 17:00');
+psql:include/cagg_refresh_common.sql:128: NOTICE:  continuous aggregate "daily_temp" is already up-to-date
+SELECT * FROM daily_temp
+ORDER BY day DESC, device;
+ day | device | avg_temp 
+-----+--------+----------
+(0 rows)
+
+-- Run it again with force=>true, the data should be rematerialized
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-02', '2020-05-05 17:00', force=>true);
+SELECT * FROM daily_temp
+ORDER BY day DESC, device;
+             day              | device |     avg_temp     
+------------------------------+--------+------------------
+ Mon May 04 17:00:00 2020 PDT |      0 | 19.3846153846154
+ Mon May 04 17:00:00 2020 PDT |      1 | 16.5555555555556
+ Mon May 04 17:00:00 2020 PDT |      2 | 18.5714285714286
+ Mon May 04 17:00:00 2020 PDT |      3 | 23.5714285714286
+ Sun May 03 17:00:00 2020 PDT |      0 | 15.7647058823529
+ Sun May 03 17:00:00 2020 PDT |      1 | 24.3142857142857
+ Sun May 03 17:00:00 2020 PDT |      2 | 14.8205128205128
+ Sun May 03 17:00:00 2020 PDT |      3 | 18.1111111111111
+ Sat May 02 17:00:00 2020 PDT |      0 |               17
+ Sat May 02 17:00:00 2020 PDT |      1 |            18.75
+ Sat May 02 17:00:00 2020 PDT |      2 |               20
+ Sat May 02 17:00:00 2020 PDT |      3 | 21.5217391304348
+(12 rows)
+
 -- Test different time types
 CREATE TABLE conditions_date (time date NOT NULL, device int, temp float);
 SELECT create_hypertable('conditions_date', 'time');
@@ -273,7 +314,7 @@ AS
 SELECT time_bucket(SMALLINT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_smallint c
 GROUP BY 1,2 WITH NO DATA;
-ERROR:  custom time function required on hypertable "conditions_smallint"
+psql:include/cagg_refresh_common.sql:177: ERROR:  custom time function required on hypertable "conditions_smallint"
 \set ON_ERROR_STOP 1
 SELECT set_integer_now_func('conditions_smallint', 'smallint_now');
  set_integer_now_func 
@@ -428,7 +469,7 @@ AS
 SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions
 GROUP BY 1,2 WITH DATA;
-NOTICE:  refreshing continuous aggregate "weekly_temp_with_data"
+psql:include/cagg_refresh_common.sql:282: NOTICE:  refreshing continuous aggregate "weekly_temp_with_data"
 SELECT * FROM weekly_temp_without_data;
  day | device | avg_temp 
 -----+--------+----------
@@ -450,7 +491,7 @@ SELECT * FROM weekly_temp_with_data ORDER BY 1,2;
 \set ON_ERROR_STOP 0
 -- REFRESH MATERIALIZED VIEW is blocked on continuous aggregates
 REFRESH MATERIALIZED VIEW weekly_temp_without_data;
-ERROR:  operation not supported on continuous aggregate
+psql:include/cagg_refresh_common.sql:289: ERROR:  operation not supported on continuous aggregate
 -- These should fail since we do not allow refreshing inside a
 -- transaction, not even as part of CREATE MATERIALIZED VIEW.
 DO LANGUAGE PLPGSQL $$ BEGIN
@@ -462,7 +503,7 @@ SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions
 GROUP BY 1,2 WITH DATA;
 END $$;
-ERROR:  CREATE MATERIALIZED VIEW ... WITH DATA cannot be executed from a function
+psql:include/cagg_refresh_common.sql:301: ERROR:  CREATE MATERIALIZED VIEW ... WITH DATA cannot be executed from a function
 BEGIN;
 CREATE MATERIALIZED VIEW weekly_conditions
 WITH (timescaledb.continuous,
@@ -471,7 +512,7 @@ AS
 SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions
 GROUP BY 1,2 WITH DATA;
-ERROR:  CREATE MATERIALIZED VIEW ... WITH DATA cannot run inside a transaction block
+psql:include/cagg_refresh_common.sql:310: ERROR:  CREATE MATERIALIZED VIEW ... WITH DATA cannot run inside a transaction block
 COMMIT;
 \set ON_ERROR_STOP 1
 -- This should not fail since we do not refresh the continuous
@@ -494,3 +535,68 @@ SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions
 GROUP BY 1,2 WITH NO DATA;
 COMMIT;
+-- refresh_continuous_aggregate can run two transactions, thus it cannot be
+-- called in a transaction block (from a function, from dynamic SQL) or in a
+-- subtransaction (from a procedure block with an EXCEPTION clause). Though it
+-- does NOT require a top level context and can be called from a procedure
+-- block without an EXCEPTION clause.
+-- DO block
+DO $$
+BEGIN
+  CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-04 00:00 UTC');
+END; $$;
+psql:include/cagg_refresh_common.sql:347: NOTICE:  continuous aggregate "daily_temp" is already up-to-date
+-- Procedure without subtransaction
+CREATE OR REPLACE PROCEDURE refresh_cagg_proc_normal()
+LANGUAGE PLPGSQL AS
+$$
+BEGIN
+  CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-04 00:00 UTC');
+END; $$;
+CALL refresh_cagg_proc_normal();
+psql:include/cagg_refresh_common.sql:357: NOTICE:  continuous aggregate "daily_temp" is already up-to-date
+\set ON_ERROR_STOP 0
+-- Procedure with subtransaction
+CREATE OR REPLACE PROCEDURE refresh_cagg_proc_subtransaction()
+LANGUAGE PLPGSQL AS
+$$
+DECLARE
+  errmsg TEXT;
+BEGIN
+  CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-04 00:00 UTC');
+EXCEPTION WHEN OTHERS THEN
+  GET STACKED DIAGNOSTICS errmsg = MESSAGE_TEXT;
+  RAISE EXCEPTION '%', errmsg;
+END; $$;
+CALL refresh_cagg_proc_subtransaction();
+psql:include/cagg_refresh_common.sql:374: ERROR:  refresh_continuous_aggregate() cannot run inside a transaction block
+-- Function
+CREATE OR REPLACE FUNCTION refresh_cagg_fun()
+RETURNS INT LANGUAGE PLPGSQL AS
+$$
+BEGIN
+  CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-04 00:00 UTC');
+  RETURN 1;
+END; $$;
+SELECT * from  refresh_cagg_fun();
+psql:include/cagg_refresh_common.sql:385: ERROR:  refresh_continuous_aggregate() cannot be executed from a function
+-- Dynamic SQL
+DO $$
+BEGIN
+  EXECUTE $inner$
+      CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-04 00:00 UTC');
+  $inner$;
+END; $$;
+psql:include/cagg_refresh_common.sql:393: ERROR:  refresh_continuous_aggregate() cannot be executed from a function
+-- Trigger
+CREATE TABLE refresh_cagg_trigger_table(a int);
+CREATE FUNCTION refresh_cagg_trigger_fun()
+RETURNS TRIGGER LANGUAGE PLPGSQL AS $$
+BEGIN
+  CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-04 00:00 UTC');
+END; $$;
+CREATE TRIGGER refresh_cagg_trigger AFTER INSERT ON refresh_cagg_trigger_table
+EXECUTE FUNCTION refresh_cagg_trigger_fun();
+INSERT INTO refresh_cagg_trigger_table VALUES(1);
+psql:include/cagg_refresh_common.sql:407: ERROR:  refresh_continuous_aggregate() cannot be executed from a function
+\set ON_ERROR_STOP 1

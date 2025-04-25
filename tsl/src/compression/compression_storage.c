@@ -26,14 +26,16 @@
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 
-#include "extension_constants.h"
+#include "compression.h"
+#include "compression_storage.h"
+#include "create.h"
 #include "custom_type_cache.h"
+#include "extension_constants.h"
+#include "guc.h"
+#include "hypertable.h"
+#include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_settings.h"
-#include "compression_storage.h"
-#include "hypertable.h"
-#include "compression.h"
-#include "create.h"
 #include "utils.h"
 
 #define PRINT_COMPRESSION_TABLE_NAME(buf, prefix, hypertable_id)                                   \
@@ -50,9 +52,6 @@
 
 static void set_toast_tuple_target_on_chunk(Oid compressed_table_id);
 static void set_statistics_on_compressed_chunk(Oid compressed_table_id);
-static void create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings);
-static void clone_constraints_to_chunk(Oid ht_reloid, const Chunk *compressed_chunk);
-static List *get_fk_constraints(Oid reloid);
 
 int32
 compression_hypertable_create(Hypertable *ht, Oid owner, Oid tablespace_oid)
@@ -140,15 +139,13 @@ compression_chunk_create(Chunk *src_chunk, Chunk *chunk, List *column_defs, Oid 
 		transformRelOptions((Datum) 0, create->options, "toast", validnsps, true, false);
 	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options, true);
 	NewRelationCreateToastTable(chunk->table_id, toast_options);
-	ts_catalog_restore_user(&sec_ctx);
-	modify_compressed_toast_table_storage(settings, column_defs, chunk->table_id);
 
+	modify_compressed_toast_table_storage(settings, column_defs, chunk->table_id);
 	set_statistics_on_compressed_chunk(chunk->table_id);
 	set_toast_tuple_target_on_chunk(chunk->table_id);
+	ts_catalog_restore_user(&sec_ctx);
 
 	create_compressed_chunk_indexes(chunk, settings);
-
-	clone_constraints_to_chunk(src_chunk->hypertable_relid, chunk);
 
 	return chunk->table_id;
 }
@@ -159,7 +156,7 @@ set_toast_tuple_target_on_chunk(Oid compressed_table_id)
 	DefElem def_elem = {
 		.type = T_DefElem,
 		.defname = "toast_tuple_target",
-		.arg = (Node *) makeInteger(128),
+		.arg = (Node *) makeInteger(ts_guc_debug_toast_tuple_target),
 		.defaction = DEFELEM_SET,
 		.location = -1,
 	};
@@ -168,7 +165,8 @@ set_toast_tuple_target_on_chunk(Oid compressed_table_id)
 		.subtype = AT_SetRelOptions,
 		.def = (Node *) list_make1(&def_elem),
 	};
-	ts_alter_table_with_event_trigger(compressed_table_id, NULL, list_make1(&cmd), true);
+
+	AlterTableInternal(compressed_table_id, list_make1(&cmd), true);
 }
 
 static void
@@ -178,17 +176,21 @@ set_statistics_on_compressed_chunk(Oid compressed_table_id)
 	Relation attrelation = table_open(AttributeRelationId, RowExclusiveLock);
 	TupleDesc table_desc = RelationGetDescr(table_rel);
 	Oid compressed_data_type = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
+
 	for (int i = 0; i < table_desc->natts; i++)
 	{
 		Form_pg_attribute attrtuple;
 		HeapTuple tuple;
 		Form_pg_attribute col_attr = TupleDescAttr(table_desc, i);
+		Datum repl_val[Natts_pg_attribute] = { 0 };
+		bool repl_null[Natts_pg_attribute] = { false };
+		bool repl_repl[Natts_pg_attribute] = { false };
 
 		/* skip system columns */
 		if (col_attr->attnum <= 0)
 			continue;
 
-		tuple = SearchSysCacheCopyAttName(compressed_table_id, NameStr(col_attr->attname));
+		tuple = SearchSysCacheCopyAttName(RelationGetRelid(table_rel), NameStr(col_attr->attname));
 
 		if (!HeapTupleIsValid(tuple))
 			ereport(ERROR,
@@ -199,19 +201,25 @@ set_statistics_on_compressed_chunk(Oid compressed_table_id)
 
 		attrtuple = (Form_pg_attribute) GETSTRUCT(tuple);
 
-		/* the planner should never look at compressed column statistics because
+		/* The planner should never look at compressed column statistics because
 		 * it will not understand them. Statistics on the other columns,
 		 * segmentbys and metadata, are very important, so we increase their
 		 * target.
 		 */
 		if (col_attr->atttypid == compressed_data_type)
-			attrtuple->attstattarget = 0;
+			repl_val[AttrNumberGetAttrOffset(Anum_pg_attribute_attstattarget)] = Int16GetDatum(0);
 		else
-			attrtuple->attstattarget = 1000;
+			repl_val[AttrNumberGetAttrOffset(Anum_pg_attribute_attstattarget)] =
+				Int16GetDatum(1000);
+		repl_repl[AttrNumberGetAttrOffset(Anum_pg_attribute_attstattarget)] = true;
 
+		tuple =
+			heap_modify_tuple(tuple, RelationGetDescr(attrelation), repl_val, repl_null, repl_repl);
 		CatalogTupleUpdate(attrelation, &tuple->t_self, tuple);
 
-		InvokeObjectPostAlterHook(RelationRelationId, compressed_table_id, attrtuple->attnum);
+		InvokeObjectPostAlterHook(RelationRelationId,
+								  RelationGetRelid(table_rel),
+								  attrtuple->attnum);
 		heap_freetuple(tuple);
 	}
 
@@ -263,11 +271,11 @@ modify_compressed_toast_table_storage(CompressionSettings *settings, List *colde
 
 	if (cmds != NIL)
 	{
-		ts_alter_table_with_event_trigger(compress_relid, NULL, cmds, false);
+		AlterTableInternal(compress_relid, cmds, false);
 	}
 }
 
-static void
+void
 create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 {
 	IndexStmt stmt = {
@@ -277,10 +285,7 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 		.relation = makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), 0),
 		.tableSpace = get_tablespace_name(get_rel_tablespace(chunk->table_id)),
 	};
-	IndexElem sequence_num_elem = {
-		.type = T_IndexElem,
-		.name = COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME,
-	};
+
 	NameData index_name;
 	ObjectAddress index_addr;
 	HeapTuple index_tuple;
@@ -303,13 +308,68 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 		}
 	}
 
-	if (list_length(indexcols) == 0)
-	{
-		return;
-	}
+	SortByDir ordering;
+	SortByNulls nulls_ordering;
 
-	appendStringInfoString(buf, COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
-	indexcols = lappend(indexcols, &sequence_num_elem);
+	StringInfo orderby_buf = makeStringInfo();
+	for (int i = 1; i <= ts_array_length(settings->fd.orderby); i++)
+	{
+		resetStringInfo(orderby_buf);
+		/* Add min metadata column */
+		IndexElem *orderby_min_elem = makeNode(IndexElem);
+		orderby_min_elem->name = column_segment_min_name(i);
+		if (ts_array_get_element_bool(settings->fd.orderby_desc, i))
+		{
+			appendStringInfoString(orderby_buf, " DESC");
+			ordering = SORTBY_DESC;
+		}
+		else
+		{
+			appendStringInfoString(orderby_buf, " ASC");
+			ordering = SORTBY_ASC;
+		}
+		orderby_min_elem->ordering = ordering;
+
+		if (ts_array_get_element_bool(settings->fd.orderby_nullsfirst, i))
+		{
+			if (orderby_min_elem->ordering != SORTBY_DESC)
+			{
+				appendStringInfoString(orderby_buf, " NULLS FIRST");
+				nulls_ordering = SORTBY_NULLS_FIRST;
+			}
+			else
+			{
+				nulls_ordering = SORTBY_NULLS_DEFAULT;
+			}
+		}
+		else
+		{
+			if (orderby_min_elem->ordering != SORTBY_DESC)
+			{
+				nulls_ordering = SORTBY_NULLS_DEFAULT;
+			}
+			else
+			{
+				appendStringInfoString(orderby_buf, " NULLS LAST");
+				nulls_ordering = SORTBY_NULLS_LAST;
+			}
+		}
+		orderby_min_elem->nulls_ordering = nulls_ordering;
+		appendStringInfoString(buf, orderby_min_elem->name);
+		appendStringInfoString(buf, orderby_buf->data);
+		appendStringInfoString(buf, ", ");
+		indexcols = lappend(indexcols, orderby_min_elem);
+
+		/* Add max metadata column */
+		IndexElem *orderby_max_elem = makeNode(IndexElem);
+		orderby_max_elem->name = column_segment_max_name(i);
+		orderby_max_elem->ordering = orderby_min_elem->ordering;
+		orderby_max_elem->nulls_ordering = orderby_min_elem->nulls_ordering;
+		appendStringInfoString(buf, orderby_max_elem->name);
+		appendStringInfoString(buf, orderby_buf->data);
+		appendStringInfoString(buf, ", ");
+		indexcols = lappend(indexcols, orderby_max_elem);
+	}
 
 	stmt.indexParams = indexcols;
 	index_addr = DefineIndexCompat(chunk->table_id,
@@ -337,55 +397,4 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 		 buf->data);
 
 	ReleaseSysCache(index_tuple);
-}
-
-static void
-clone_constraints_to_chunk(Oid ht_reloid, const Chunk *compressed_chunk)
-{
-	CatalogSecurityContext sec_ctx;
-	List *constraint_list = get_fk_constraints(ht_reloid);
-
-	ListCell *lc;
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	foreach (lc, constraint_list)
-	{
-		Oid conoid = lfirst_oid(lc);
-		CatalogInternalCall2(DDL_CONSTRAINT_CLONE,
-							 Int32GetDatum(conoid),
-							 Int32GetDatum(compressed_chunk->table_id));
-	}
-	ts_catalog_restore_user(&sec_ctx);
-}
-
-static List *
-get_fk_constraints(Oid reloid)
-{
-	SysScanDesc scan;
-	ScanKeyData scankey;
-	HeapTuple tuple;
-	List *conlist = NIL;
-
-	Relation pg_constr = table_open(ConstraintRelationId, AccessShareLock);
-
-	ScanKeyInit(&scankey,
-				Anum_pg_constraint_conrelid,
-				BTEqualStrategyNumber,
-				F_OIDEQ,
-				ObjectIdGetDatum(reloid));
-
-	scan = systable_beginscan(pg_constr, ConstraintRelidTypidNameIndexId, true, NULL, 1, &scankey);
-	while (HeapTupleIsValid(tuple = systable_getnext(scan)))
-	{
-		Form_pg_constraint form = (Form_pg_constraint) GETSTRUCT(tuple);
-
-		if (form->contype == CONSTRAINT_FOREIGN)
-		{
-			conlist = lappend_oid(conlist, form->oid);
-		}
-	}
-
-	systable_endscan(scan);
-	table_close(pg_constr, AccessShareLock);
-
-	return conlist;
 }

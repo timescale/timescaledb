@@ -2,7 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+SET timezone TO 'America/Los_Angeles';
+
 \set PREFIX 'EXPLAIN (costs off, summary off, timing off) '
+\set ANALYZE  'EXPLAIN (analyze, costs off, summary off, timing off) '
 CREATE TABLE test1 (timec timestamptz , i integer ,
       b bigint, t text);
 SELECT table_name from create_hypertable('test1', 'timec', chunk_time_interval=> INTERVAL '7 days');
@@ -687,6 +690,19 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('test_copy') ch;
 
 \copy test_copy FROM data/copy_data.csv WITH CSV HEADER;
 
+-- Also test the code path where the chunk insert state goes out of cache.
+set timescaledb.max_open_chunks_per_insert = 1;
+
+truncate table test_copy;
+
+INSERT INTO test_copy SELECT generate_series(1,25,1), -1;
+
+SELECT count(compress_chunk(ch)) FROM show_chunks('test_copy') ch;
+
+\copy test_copy FROM data/copy_data.csv WITH CSV HEADER;
+
+reset timescaledb.max_open_chunks_per_insert;
+
 DROP TABLE test_copy;
 
 -- Text limitting decompressed tuple during an insert
@@ -700,18 +716,124 @@ CREATE UNIQUE INDEX timestamp_id_idx ON test_limit(timestamp, id);
 
 ALTER TABLE test_limit SET (
     timescaledb.compress,
+    timescaledb.compress_segmentby = '',
     timescaledb.compress_orderby = 'timestamp'
 );
 SELECT count(compress_chunk(ch)) FROM show_chunks('test_limit') ch;
 
-SET timescaledb.max_tuples_decompressed_per_dml_transaction = 5000;
+SET timescaledb.max_tuples_decompressed_per_dml_transaction = 1;
 \set VERBOSITY default
 \set ON_ERROR_STOP 0
 -- Inserting in the same period should decompress tuples
-INSERT INTO test_limit SELECT t, 11 FROM generate_series(1,6000,1000) t;
+INSERT INTO test_limit SELECT t, 2 FROM generate_series(1,6000,1000) t;
 -- Setting to 0 should remove the limit.
 SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0;
-INSERT INTO test_limit SELECT t, 11 FROM generate_series(1,6000,1000) t;
+INSERT INTO test_limit SELECT t, 2 FROM generate_series(1,6000,1000) t;
 \set ON_ERROR_STOP 1
 
 DROP TABLE test_limit;
+RESET timescaledb.max_tuples_decompressed_per_dml_transaction;
+
+-- test multiple unique constraints
+CREATE TABLE multi_unique (time timestamptz NOT NULL, u1 int, u2 int, value float, unique(time, u1), unique(time, u2));
+SELECT table_name FROM create_hypertable('multi_unique', 'time');
+ALTER TABLE multi_unique SET (timescaledb.compress, timescaledb.compress_segmentby = 'u1, u2');
+
+INSERT INTO multi_unique VALUES('2024-01-01', 0, 0, 1.0);
+SELECT count(compress_chunk(c)) FROM show_chunks('multi_unique') c;
+
+\set ON_ERROR_STOP 0
+-- all INSERTS should fail with constraint violation
+BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 0, 0, 1.0); ROLLBACK;
+BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 0, 1, 1.0); ROLLBACK;
+BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 1, 0, 1.0); ROLLBACK;
+\set ON_ERROR_STOP 1
+
+DROP TABLE multi_unique;
+
+-- test insert with unique constraints and NULLs
+CREATE TABLE unique_null(time timestamptz NOT NULL, u1 int, u2 int, value float, unique(time, u1, u2));
+SELECT table_name FROM create_hypertable('unique_null', 'time');
+ALTER TABLE unique_null SET (timescaledb.compress, timescaledb.compress_segmentby = 'u1, u2');
+
+INSERT INTO unique_null VALUES('2024-01-01', 0, 0, 1.0);
+SELECT count(compress_chunk(c)) FROM show_chunks('unique_null') c;
+
+\set ON_ERROR_STOP 0
+-- all INSERTS should fail with constraint violation
+BEGIN; INSERT INTO unique_null VALUES('2024-01-01', 0, 0, 1.0); ROLLBACK;
+\set ON_ERROR_STOP 1
+-- neither of these should need to decompress
+:ANALYZE INSERT INTO unique_null VALUES('2024-01-01', NULL, 1, 1.0);
+SELECT count(*) FROM unique_null;
+:ANALYZE INSERT INTO unique_null VALUES('2024-01-01', 1, NULL, 1.0);
+SELECT count(*) FROM unique_null;
+:ANALYZE INSERT INTO unique_null VALUES('2024-01-01', NULL, NULL, 1.0);
+SELECT count(*) FROM unique_null;
+INSERT INTO unique_null VALUES('2024-01-01', NULL, NULL, 1.0);
+SELECT count(*) FROM unique_null;
+
+DROP TABLE unique_null;
+
+-- test insert with UNIQUE constraint and all compression algorithms
+
+CREATE TABLE unique_all(
+	time timestamptz NOT NULL,
+	device_id int,
+	bool_type bool,
+	numeric_type numeric,
+	float_type float,
+	text_type text,
+	bigint_type bigint,
+	jsonb_type jsonb
+);
+-- Since we don't test uniqueness when we detect a NULL value, making the constraint
+-- with NULLS NOT DISTINCT
+CREATE UNIQUE INDEX ultimate_unique ON unique_all(time, device_id, bool_type, numeric_type, float_type, text_type, bigint_type, jsonb_type) NULLS NOT DISTINCT;
+SELECT table_name FROM create_hypertable('unique_all', 'time');
+ALTER TABLE unique_all SET (tsdb.compress, tsdb.compress_segmentby = 'device_id', tsdb.compress_orderby = 'time');
+
+INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:01', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:02', 1, false, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:03', 1, true, 2.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:04', 1, true, 1.0, 2.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:05', 1, true, 1.0, 1.0, 'second', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:06', 1, true, 1.0, 1.0, 'first', 2, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:07', 1, true, 1.0, 1.0, 'first', 1, '{"second":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:08', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:09', 1, NULL, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:10', 1, true, NULL, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:11', 1, true, 1.0, NULL, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:12', 1, true, 1.0, 1.0, NULL, 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:13', 1, true, 1.0, 1.0, 'first', NULL, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:14', 1, true, 1.0, 1.0, 'first', 1, NULL);
+SELECT count(compress_chunk(c)) FROM show_chunks('unique_all') c;
+
+-- test duplicates
+\set ON_ERROR_STOP 0
+INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:01', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:02', 1, false, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:03', 1, true, 2.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:04', 1, true, 1.0, 2.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:05', 1, true, 1.0, 1.0, 'second', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:06', 1, true, 1.0, 1.0, 'first', 2, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:07', 1, true, 1.0, 1.0, 'first', 1, '{"second":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:08', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:09', 1, NULL, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:10', 1, true, NULL, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:11', 1, true, 1.0, NULL, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:12', 1, true, 1.0, 1.0, NULL, 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:13', 1, true, 1.0, 1.0, 'first', NULL, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:14', 1, true, 1.0, 1.0, 'first', 1, NULL);
+\set ON_ERROR_STOP 1
+
+-- test non-duplicates
+INSERT INTO unique_all VALUES('2024-01-01 00:01:01', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:02', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:03', 1, true, 3.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:04', 1, true, 1.0, 3.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:05', 1, true, 1.0, 1.0, 'third', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:06', 1, true, 1.0, 1.0, 'first', 3, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:07', 1, true, 1.0, 1.0, 'first', 1, '{"third":true}');

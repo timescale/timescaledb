@@ -27,114 +27,24 @@
 #include "compat/compat.h"
 
 #include "bgw/job.h"
-#include "compression_with_clause.h"
 #include "cross_module_fn.h"
 #include "errors.h"
 #include "func_cache.h"
 #include "hypercube.h"
-#include "hypertable_cache.h"
 #include "hypertable.h"
+#include "hypertable_cache.h"
 #include "scan_iterator.h"
 #include "time_bucket.h"
 #include "time_utils.h"
 #include "ts_catalog/catalog.h"
+#include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
 #include "utils.h"
+#include "with_clause/alter_table_with_clause.h"
 
 #define BUCKET_FUNCTION_SERIALIZE_VERSION 1
 #define CHECK_NAME_MATCH(name1, name2) (namestrcmp(name1, name2) == 0)
-
-static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
-		[ContinuousEnabled] = {
-			.arg_name = "continuous",
-			.type_id = BOOLOID,
-			.default_val = (Datum)false,
-		},
-		[ContinuousViewOptionCreateGroupIndex] = {
-			.arg_name = "create_group_indexes",
-			.type_id = BOOLOID,
-			.default_val = (Datum)true,
-		},
-		[ContinuousViewOptionMaterializedOnly] = {
-			.arg_name = "materialized_only",
-			.type_id = BOOLOID,
-			.default_val = (Datum)true,
-		},
-		[ContinuousViewOptionCompress] = {
-			.arg_name = "compress",
-			.type_id = BOOLOID,
-		},
-		[ContinuousViewOptionFinalized] = {
-			.arg_name = "finalized",
-			.type_id = BOOLOID,
-			.default_val = (Datum)true,
-		},
-		[ContinuousViewOptionCompressSegmentBy] = {
-			 .arg_name = "compress_segmentby",
-			 .type_id = TEXTOID,
-		},
-		[ContinuousViewOptionCompressOrderBy] = {
-			 .arg_name = "compress_orderby",
-			 .type_id = TEXTOID,
-		},
-		[ContinuousViewOptionCompressChunkTimeInterval] = {
-			 .arg_name = "compress_chunk_time_interval",
-			 .type_id = INTERVALOID,
-		},
-};
-
-WithClauseResult *
-ts_continuous_agg_with_clause_parse(const List *defelems)
-{
-	return ts_with_clauses_parse(defelems,
-								 continuous_aggregate_with_clause_def,
-								 TS_ARRAY_LEN(continuous_aggregate_with_clause_def));
-}
-
-List *
-ts_continuous_agg_get_compression_defelems(const WithClauseResult *with_clauses)
-{
-	List *ret = NIL;
-
-	for (int i = 0; i < CompressOptionMax; i++)
-	{
-		int option_index = 0;
-		switch (i)
-		{
-			case CompressEnabled:
-				option_index = ContinuousViewOptionCompress;
-				break;
-			case CompressSegmentBy:
-				option_index = ContinuousViewOptionCompressSegmentBy;
-				break;
-			case CompressOrderBy:
-				option_index = ContinuousViewOptionCompressOrderBy;
-				break;
-			case CompressChunkTimeInterval:
-				option_index = ContinuousViewOptionCompressChunkTimeInterval;
-				break;
-			default:
-				elog(ERROR, "Unhandled compression option");
-				break;
-		}
-
-		const WithClauseResult *input = &with_clauses[option_index];
-		WithClauseDefinition def = continuous_aggregate_with_clause_def[option_index];
-
-		if (!input->is_default)
-		{
-			Node *value = (Node *) makeString(ts_with_clause_result_deparse_value(input));
-			DefElem *elem = makeDefElemExtended(EXTENSION_NAMESPACE,
-												(char *) def.arg_name,
-												value,
-												DEFELEM_UNSPEC,
-												-1);
-			ret = lappend(ret, elem);
-		}
-	}
-	return ret;
-}
 
 static void
 init_scan_by_mat_hypertable_id(ScanIterator *iterator, const int32 mat_hypertable_id)
@@ -332,9 +242,6 @@ continuous_agg_formdata_make_tuple(const FormData_continuous_agg *fd, TupleDesc 
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_partial_view_name)] =
 		NameGetDatum(&fd->partial_view_name);
 
-	values[AttrNumberGetAttrOffset(Anum_continuous_agg_bucket_width)] =
-		Int64GetDatum(fd->bucket_width);
-
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_schema)] =
 		NameGetDatum(&fd->direct_view_schema);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_name)] =
@@ -383,9 +290,6 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
 			   DatumGetCString(
 				   values[AttrNumberGetAttrOffset(Anum_continuous_agg_partial_view_name)]));
 
-	fd->bucket_width =
-		DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_continuous_agg_bucket_width)]);
-
 	namestrcpy(&fd->direct_view_schema,
 			   DatumGetCString(
 				   values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_schema)]));
@@ -399,6 +303,88 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
 
 	if (should_free)
 		heap_freetuple(tuple);
+}
+
+/*
+ * Fill the fields of a integer based bucketing function
+ */
+static void
+cagg_fill_bucket_function_integer_based(ContinuousAggsBucketFunction *bf, bool *isnull,
+										Datum *values)
+{
+	/* Bucket width */
+	Assert(!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)]);
+	const char *bucket_width_str = TextDatumGetCString(
+		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)]);
+	Assert(strlen(bucket_width_str) > 0);
+	bf->bucket_integer_width = pg_strtoint64(bucket_width_str);
+
+	/* Bucket origin cannot be used with integer based buckets */
+	Assert(isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)] ==
+		   true);
+
+	/* Bucket offset */
+	if (!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_offset)])
+	{
+		const char *offset_str = TextDatumGetCString(
+			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_offset)]);
+		bf->bucket_integer_offset = pg_strtoint64(offset_str);
+	}
+
+	/* Timezones cannot be used with integer based buckets */
+	Assert(isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_timezone)] ==
+		   true);
+}
+
+/*
+ * Fill the fields of a time based bucketing function
+ */
+static void
+cagg_fill_bucket_function_time_based(ContinuousAggsBucketFunction *bf, bool *isnull, Datum *values)
+{
+	/*
+	 * bucket_width
+	 *
+	 * The value is stored as TEXT since we have to store the interval value of time
+	 * buckets and also the number value of integer based buckets.
+	 */
+	Assert(!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)]);
+	const char *bucket_width_str = TextDatumGetCString(
+		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)]);
+	Assert(strlen(bucket_width_str) > 0);
+	bf->bucket_time_width = DatumGetIntervalP(
+		DirectFunctionCall3(interval_in, CStringGetDatum(bucket_width_str), InvalidOid, -1));
+
+	/* Bucket origin */
+	if (!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)])
+	{
+		const char *origin_str = TextDatumGetCString(
+			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)]);
+		bf->bucket_time_origin = DatumGetTimestamp(DirectFunctionCall3(timestamptz_in,
+																	   CStringGetDatum(origin_str),
+																	   ObjectIdGetDatum(InvalidOid),
+																	   Int32GetDatum(-1)));
+	}
+	else
+	{
+		TIMESTAMP_NOBEGIN(bf->bucket_time_origin);
+	}
+
+	/* Bucket offset */
+	if (!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_offset)])
+	{
+		const char *offset_str = TextDatumGetCString(
+			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_offset)]);
+		bf->bucket_time_offset = DatumGetIntervalP(
+			DirectFunctionCall3(interval_in, CStringGetDatum(offset_str), InvalidOid, -1));
+	}
+
+	/* Bucket timezone */
+	if (!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_timezone)])
+	{
+		bf->bucket_time_timezone = TextDatumGetCString(
+			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_timezone)]);
+	}
 }
 
 static void
@@ -427,44 +413,20 @@ continuous_agg_fill_bucket_function(int32 mat_hypertable_id, ContinuousAggsBucke
 
 		/* Bucket function */
 		Assert(!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)]);
-		bf->bucket_function = DatumGetObjectId(
+		const char *bucket_function_str = TextDatumGetCString(
 			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)]);
+		bf->bucket_function = DatumGetObjectId(
+			DirectFunctionCall1(regprocedurein, CStringGetDatum(bucket_function_str)));
 
-		Assert(OidIsValid(bf->bucket_function));
+		bf->bucket_time_based = ts_continuous_agg_bucket_on_interval(bf->bucket_function);
 
-		/*
-		 * bucket_width
-		 *
-		 * The value is stored as TEXT since we have to store the interval value of time
-		 * buckets and also the number value of integer based buckets.
-		 */
-		Assert(!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)]);
-		const char *bucket_width_str = TextDatumGetCString(
-			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)]);
-		Assert(strlen(bucket_width_str) > 0);
-		bf->bucket_width = DatumGetIntervalP(
-			DirectFunctionCall3(interval_in, CStringGetDatum(bucket_width_str), InvalidOid, -1));
-
-		/* Bucket origin */
-		if (!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)])
+		if (bf->bucket_time_based)
 		{
-			const char *origin_str = TextDatumGetCString(values[AttrNumberGetAttrOffset(
-				Anum_continuous_aggs_bucket_function_bucket_origin)]);
-			bf->bucket_origin = DatumGetTimestamp(DirectFunctionCall3(timestamptz_in,
-																	  CStringGetDatum(origin_str),
-																	  ObjectIdGetDatum(InvalidOid),
-																	  Int32GetDatum(-1)));
+			cagg_fill_bucket_function_time_based(bf, isnull, values);
 		}
 		else
 		{
-			TIMESTAMP_NOBEGIN(bf->bucket_origin);
-		}
-
-		/* Bucket timezone */
-		if (!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_timezone)])
-		{
-			bf->timezone = TextDatumGetCString(values[AttrNumberGetAttrOffset(
-				Anum_continuous_aggs_bucket_function_bucket_timezone)]);
+			cagg_fill_bucket_function_integer_based(bf, isnull, values);
 		}
 
 		/* Bucket fixed width */
@@ -510,11 +472,8 @@ continuous_agg_init(ContinuousAgg *cagg, const Form_continuous_agg fd)
 	Assert(OidIsValid(cagg->relid));
 	Assert(OidIsValid(cagg->partition_type));
 
-	if (ts_continuous_agg_bucket_width_variable(cagg))
-	{
-		cagg->bucket_function = palloc0(sizeof(ContinuousAggsBucketFunction));
-		continuous_agg_fill_bucket_function(cagg->data.mat_hypertable_id, cagg->bucket_function);
-	}
+	cagg->bucket_function = palloc0(sizeof(ContinuousAggsBucketFunction));
+	continuous_agg_fill_bucket_function(cagg->data.mat_hypertable_id, cagg->bucket_function);
 }
 
 TSDLLEXPORT CaggsInfo
@@ -524,9 +483,7 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 
 	List *caggs = ts_continuous_aggs_find_by_raw_table_id(raw_hypertable_id);
 	ListCell *lc;
-	Datum bucket_width;
 
-	all_caggs_info.bucket_widths = NIL;
 	all_caggs_info.mat_hypertable_ids = NIL;
 	all_caggs_info.bucket_functions = NIL;
 
@@ -535,12 +492,6 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 	foreach (lc, caggs)
 	{
 		ContinuousAgg *cagg = lfirst(lc);
-
-		bucket_width = Int64GetDatum(ts_continuous_agg_bucket_width_variable(cagg) ?
-										 BUCKET_WIDTH_VARIABLE :
-										 ts_continuous_agg_bucket_width(cagg));
-		all_caggs_info.bucket_widths =
-			lappend(all_caggs_info.bucket_widths, DatumGetPointer(bucket_width));
 
 		all_caggs_info.bucket_functions =
 			lappend(all_caggs_info.bucket_functions, cagg->bucket_function);
@@ -962,10 +913,7 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 		ts_cagg_watermark_delete_by_mat_hypertable_id(form.mat_hypertable_id);
 	}
 
-	if (cadata->bucket_width == BUCKET_WIDTH_VARIABLE)
-	{
-		cagg_bucket_function_delete(cadata->mat_hypertable_id);
-	}
+	cagg_bucket_function_delete(cadata->mat_hypertable_id);
 
 	/* Perform actual deletions now */
 	if (OidIsValid(user_view.objectId))
@@ -979,6 +927,7 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 	if (OidIsValid(mat_hypertable.objectId))
 	{
 		performDeletion(&mat_hypertable, DROP_CASCADE, 0);
+		ts_compression_settings_delete(mat_hypertable.objectId);
 		ts_hypertable_delete_by_id(cadata->mat_hypertable_id);
 	}
 
@@ -1328,31 +1277,28 @@ ts_continuous_agg_invalidate_chunk(Hypertable *ht, Chunk *chunk)
 	ts_cm_functions->continuous_agg_invalidate_raw_ht(ht, start, end);
 }
 
-/* Determines if bucket width if variable for given continuous aggregate. */
+/* Determines if a bucket is using integer or an interval partitioning */
 bool
-ts_continuous_agg_bucket_width_variable(const ContinuousAgg *agg)
+ts_continuous_agg_bucket_on_interval(Oid bucket_function)
 {
-	return agg->data.bucket_width == BUCKET_WIDTH_VARIABLE;
-}
+	Assert(OidIsValid(bucket_function));
 
-/* Determines bucket width for given continuous aggregate. */
-int64
-ts_continuous_agg_bucket_width(const ContinuousAgg *agg)
-{
-	if (ts_continuous_agg_bucket_width_variable(agg))
-	{
-		/* should never happen, this code is useful mostly for debugging purposes */
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("bucket width is not defined for a variable bucket")));
-	}
+	FuncInfo *func_info = ts_func_cache_get(bucket_function);
+	Ensure(func_info != NULL, "unable to get function info for Oid %d", bucket_function);
 
-	return agg->data.bucket_width;
+	/* The function has to be a currently allowed function or one of the deprecated bucketing
+	 * functions */
+	Assert(func_info->allowed_in_cagg_definition || IS_DEPRECATED_TIME_BUCKET_NG_FUNC(func_info));
+
+	Oid first_bucket_arg = func_info->arg_types[0];
+
+	return first_bucket_arg == INTERVALOID;
 }
 
 /*
- * Calls one of time_bucket_ng() versions depending on the arguments. This is
- * a common procedure used by ts_compute_* below.
+ * Calls the desired time bucket function depending on the arguments. If the experimental flag is
+ * set on ContinuousAggsBucketFunction, one of time_bucket_ng() versions is used. This is a common
+ * procedure used by ts_compute_* below.
  */
 static Datum
 generic_time_bucket(const ContinuousAggsBucketFunction *bf, Datum timestamp)
@@ -1363,80 +1309,80 @@ generic_time_bucket(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 
 	if (!is_experimental)
 	{
-		if (bf->timezone != NULL)
+		if (bf->bucket_time_timezone != NULL)
 		{
-			if (TIMESTAMP_NOT_FINITE(bf->bucket_origin))
+			if (TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
 			{
 				/* using default origin */
 				return DirectFunctionCall3(ts_timestamptz_timezone_bucket,
-										   IntervalPGetDatum(bf->bucket_width),
+										   IntervalPGetDatum(bf->bucket_time_width),
 										   timestamp,
-										   CStringGetTextDatum(bf->timezone));
+										   CStringGetTextDatum(bf->bucket_time_timezone));
 			}
 			else
 			{
 				/* custom origin specified */
 				return DirectFunctionCall4(ts_timestamptz_timezone_bucket,
-										   IntervalPGetDatum(bf->bucket_width),
+										   IntervalPGetDatum(bf->bucket_time_width),
 										   timestamp,
-										   CStringGetTextDatum(bf->timezone),
-										   TimestampTzGetDatum(bf->bucket_origin));
+										   CStringGetTextDatum(bf->bucket_time_timezone),
+										   TimestampTzGetDatum(bf->bucket_time_origin));
 			}
 		}
 
-		if (TIMESTAMP_NOT_FINITE(bf->bucket_origin))
+		if (TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
 		{
 			/* using default origin */
 			return DirectFunctionCall2(ts_timestamp_bucket,
-									   IntervalPGetDatum(bf->bucket_width),
+									   IntervalPGetDatum(bf->bucket_time_width),
 									   timestamp);
 		}
 		else
 		{
 			/* custom origin specified */
 			return DirectFunctionCall3(ts_timestamp_bucket,
-									   IntervalPGetDatum(bf->bucket_width),
+									   IntervalPGetDatum(bf->bucket_time_width),
 									   timestamp,
-									   TimestampTzGetDatum(bf->bucket_origin));
+									   TimestampTzGetDatum(bf->bucket_time_origin));
 		}
 	}
 	else
 	{
-		if (bf->timezone != NULL)
+		if (bf->bucket_time_timezone != NULL)
 		{
-			if (TIMESTAMP_NOT_FINITE(bf->bucket_origin))
+			if (TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
 			{
 				/* using default origin */
 				return DirectFunctionCall3(ts_time_bucket_ng_timezone,
-										   IntervalPGetDatum(bf->bucket_width),
+										   IntervalPGetDatum(bf->bucket_time_width),
 										   timestamp,
-										   CStringGetTextDatum(bf->timezone));
+										   CStringGetTextDatum(bf->bucket_time_timezone));
 			}
 			else
 			{
 				/* custom origin specified */
 				return DirectFunctionCall4(ts_time_bucket_ng_timezone_origin,
-										   IntervalPGetDatum(bf->bucket_width),
+										   IntervalPGetDatum(bf->bucket_time_width),
 										   timestamp,
-										   TimestampTzGetDatum(bf->bucket_origin),
-										   CStringGetTextDatum(bf->timezone));
+										   TimestampTzGetDatum(bf->bucket_time_origin),
+										   CStringGetTextDatum(bf->bucket_time_timezone));
 			}
 		}
 
-		if (TIMESTAMP_NOT_FINITE(bf->bucket_origin))
+		if (TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
 		{
 			/* using default origin */
 			return DirectFunctionCall2(ts_time_bucket_ng_timestamp,
-									   IntervalPGetDatum(bf->bucket_width),
+									   IntervalPGetDatum(bf->bucket_time_width),
 									   timestamp);
 		}
 		else
 		{
 			/* custom origin specified */
 			return DirectFunctionCall3(ts_time_bucket_ng_timestamp,
-									   IntervalPGetDatum(bf->bucket_width),
+									   IntervalPGetDatum(bf->bucket_time_width),
 									   timestamp,
-									   TimestampTzGetDatum(bf->bucket_origin));
+									   TimestampTzGetDatum(bf->bucket_time_origin));
 		}
 	}
 }
@@ -1445,14 +1391,14 @@ generic_time_bucket(const ContinuousAggsBucketFunction *bf, Datum timestamp)
  * Adds one bf->bucket_size interval to the timestamp. This is a common
  * procedure used by ts_compute_* below.
  *
- * If bf->timezone is specified, the math happens in this timezone.
+ * If bf->bucket_time_timezone is specified, the math happens in this timezone.
  * Otherwise, it happens in UTC.
  */
 static Datum
 generic_add_interval(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 {
 	Datum tzname = 0;
-	bool has_timezone = (bf->timezone != NULL);
+	bool has_timezone = (bf->bucket_time_timezone != NULL);
 
 	if (has_timezone)
 	{
@@ -1460,12 +1406,13 @@ generic_add_interval(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 		 * Convert 'timestamp' to TIMESTAMP at given timezone.
 		 * The code is equal to 'timestamptz AT TIME ZONE tzname'.
 		 */
-		tzname = CStringGetTextDatum(bf->timezone);
+		tzname = CStringGetTextDatum(bf->bucket_time_timezone);
 		timestamp = DirectFunctionCall2(timestamptz_zone, tzname, timestamp);
 	}
 
-	timestamp =
-		DirectFunctionCall2(timestamp_pl_interval, timestamp, IntervalPGetDatum(bf->bucket_width));
+	timestamp = DirectFunctionCall2(timestamp_pl_interval,
+									timestamp,
+									IntervalPGetDatum(bf->bucket_time_width));
 
 	if (has_timezone)
 	{
@@ -1491,7 +1438,8 @@ void
 ts_compute_inscribed_bucketed_refresh_window_variable(int64 *start, int64 *end,
 													  const ContinuousAggsBucketFunction *bf)
 {
-	Datum start_old, end_old, start_new, end_new;
+	Datum start_old, end_old, start_aligned, end_aliged;
+
 	/*
 	 * It's OK to use TIMESTAMPOID here. Variable-sized buckets can be used
 	 * only for dates, timestamps and timestamptz's. For all these types our
@@ -1502,16 +1450,16 @@ ts_compute_inscribed_bucketed_refresh_window_variable(int64 *start, int64 *end,
 	start_old = ts_internal_to_time_value(*start, TIMESTAMPOID);
 	end_old = ts_internal_to_time_value(*end, TIMESTAMPOID);
 
-	start_new = generic_time_bucket(bf, start_old);
-	end_new = generic_time_bucket(bf, end_old);
+	start_aligned = generic_time_bucket(bf, start_old);
+	end_aliged = generic_time_bucket(bf, end_old);
 
-	if (DatumGetTimestamp(start_new) != DatumGetTimestamp(start_old))
+	if (DatumGetTimestamp(start_aligned) != DatumGetTimestamp(start_old))
 	{
-		start_new = generic_add_interval(bf, start_new);
+		start_aligned = generic_add_interval(bf, start_aligned);
 	}
 
-	*start = ts_time_value_to_internal(start_new, TIMESTAMPOID);
-	*end = ts_time_value_to_internal(end_new, TIMESTAMPOID);
+	*start = ts_time_value_to_internal(start_aligned, TIMESTAMPOID);
+	*end = ts_time_value_to_internal(end_aliged, TIMESTAMPOID);
 }
 
 /*
@@ -1596,12 +1544,12 @@ ts_continuous_agg_get_query(ContinuousAgg *cagg)
 	Query *cagg_view_query;
 
 	/*
-	 * Get the direct_view definition for the finalized version because
+	 * Get the partial_view definition for the finalized version because
 	 * the user view doesn't have the "GROUP BY" clause anymore.
 	 */
 	if (ContinuousAggIsFinalized(cagg))
-		cagg_view_oid = ts_get_relation_relid(NameStr(cagg->data.direct_view_schema),
-											  NameStr(cagg->data.direct_view_name),
+		cagg_view_oid = ts_get_relation_relid(NameStr(cagg->data.partial_view_schema),
+											  NameStr(cagg->data.partial_view_name),
 											  false);
 	else
 		cagg_view_oid = ts_get_relation_relid(NameStr(cagg->data.user_view_schema),
@@ -1620,4 +1568,68 @@ ts_continuous_agg_get_query(ContinuousAgg *cagg)
 	table_close(cagg_view_rel, NoLock);
 
 	return cagg_view_query;
+}
+
+/*
+ * Get the width of a fixed size bucket
+ */
+int64
+ts_continuous_agg_fixed_bucket_width(const ContinuousAggsBucketFunction *bucket_function)
+{
+	Assert(bucket_function->bucket_fixed_interval == true);
+
+	if (bucket_function->bucket_time_based)
+	{
+		Interval *interval = bucket_function->bucket_time_width;
+		Assert(interval->month == 0);
+		return interval->time + (interval->day * USECS_PER_DAY);
+	}
+	else
+	{
+		return bucket_function->bucket_integer_width;
+	}
+}
+
+/*
+ * Get the width of a bucket
+ */
+int64
+ts_continuous_agg_bucket_width(const ContinuousAggsBucketFunction *bucket_function)
+{
+	int64 bucket_width;
+
+	if (bucket_function->bucket_fixed_interval == false)
+	{
+		/*
+		 * There are several cases of variable-sized buckets:
+		 * 1. Monthly buckets
+		 * 2. Buckets with timezones
+		 * 3. Cases 1 and 2 at the same time
+		 *
+		 * For months we simply take 30 days like on interval_to_int64 and
+		 * multiply this number by the number of months in the bucket. This
+		 * reduces the task to days/hours/minutes scenario.
+		 *
+		 * Days/hours/minutes case is handled the same way as for fixed-sized
+		 * buckets. The refresh window at least two buckets in size is adequate
+		 * for such corner cases as DST.
+		 */
+
+		/* bucket_function should always be specified for variable-sized buckets */
+		Assert(bucket_function != NULL);
+		/* ... and bucket_function->bucket_time_width too */
+		Assert(bucket_function->bucket_time_width != NULL);
+
+		/* Make a temporary copy of bucket_width */
+		Interval interval = *bucket_function->bucket_time_width;
+		interval.day += 30 * interval.month;
+		interval.month = 0;
+		bucket_width = ts_interval_value_to_internal(IntervalPGetDatum(&interval), INTERVALOID);
+	}
+	else
+	{
+		bucket_width = ts_continuous_agg_fixed_bucket_width(bucket_function);
+	}
+
+	return bucket_width;
 }

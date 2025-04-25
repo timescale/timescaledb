@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+\set ANALYZE 'EXPLAIN (analyze, costs off, timing off, summary off)'
+
 -- test constraint exclusion with prepared statements and generic plans
 CREATE TABLE i3719 (time timestamptz NOT NULL,data text);
 SELECT table_name FROM create_hypertable('i3719', 'time');
@@ -76,7 +78,7 @@ SELECT chunk_schema || '.' || chunk_name as "chunk_table"
        WHERE hypertable_name = 'mytab' ORDER BY range_start limit 1 \gset
 
 -- compress only the first chunk
-SELECT compress_chunk(:'chunk_table');
+SELECT count(compress_chunk(:'chunk_table'));
 
 -- insert a row into first compressed chunk
 INSERT INTO mytab SELECT '2022-10-07 05:30:10+05:30'::timestamp with time zone, 3, 3;
@@ -105,7 +107,7 @@ generate_series('1990-01-01'::timestamptz, '1990-01-10'::timestamptz, INTERVAL '
 generate_series(1, 3, 1 ) AS g2(source_id),
 generate_series(1, 3, 1 ) AS g3(label);
 
-SELECT compress_chunk(c) FROM show_chunks('comp_seg_varchar') c;
+SELECT count(compress_chunk(c)) FROM show_chunks('comp_seg_varchar') c;
 
 
 -- all tuples should come from compressed chunks
@@ -124,3 +126,227 @@ ON CONFLICT (source_id, label, time) DO UPDATE SET data = '{"update": true}';
 EXPLAIN (analyze,costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
 
 DROP TABLE comp_seg_varchar;
+
+-- test row locks for compressed tuples are blocked
+CREATE TABLE row_locks(time timestamptz NOT NULL);
+SELECT table_name FROM create_hypertable('row_locks', 'time');
+ALTER TABLE row_locks SET (timescaledb.compress);
+INSERT INTO row_locks VALUES('2021-01-01 00:00:00');
+SELECT count(compress_chunk(c)) FROM show_chunks('row_locks') c;
+
+-- should succeed cause no compressed tuples are returned
+SELECT FROM row_locks WHERE time < '2021-01-01 00:00:00' FOR UPDATE;
+-- should be blocked
+\set ON_ERROR_STOP 0
+SELECT FROM row_locks FOR UPDATE;
+SELECT FROM row_locks FOR NO KEY UPDATE;
+SELECT FROM row_locks FOR SHARE;
+SELECT FROM row_locks FOR KEY SHARE;
+\set ON_ERROR_STOP 1
+
+DROP TABLE row_locks;
+
+CREATE TABLE lazy_decompress(time timestamptz not null, device text, value float, primary key (device,time));
+SELECT table_name FROM create_hypertable('lazy_decompress', 'time');
+ALTER TABLE lazy_decompress SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+
+INSERT INTO lazy_decompress SELECT '2024-01-01'::timestamptz + format('%s',i)::interval, 'd1', i FROM generate_series(1,6000) g(i);
+
+SELECT count(compress_chunk(c)) FROM show_chunks('lazy_decompress') c;
+
+-- no decompression cause no match in batch
+BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:00.5','d1',random() ON CONFLICT DO NOTHING; ROLLBACK;
+BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:00.5','d1',random() ON CONFLICT(time,device) DO UPDATE SET value=EXCLUDED.value; ROLLBACK;
+-- should decompress 1 batch cause there is match
+BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:01','d1',random() ON CONFLICT DO NOTHING; ROLLBACK;
+
+-- no decompression cause no match in batch
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0; ROLLBACK;
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0 AND device='d1'; ROLLBACK;
+-- 1 batch decompression
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 2300; ROLLBACK;
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value > 3100 AND value < 3200; ROLLBACK;
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value BETWEEN 3100 AND 3200; ROLLBACK;
+
+-- check GUC is working, should be 6 batches and 6000 tuples decompresed
+SET timescaledb.enable_dml_decompression_tuple_filtering TO off;
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0 AND device='d1'; ROLLBACK;
+RESET timescaledb.enable_dml_decompression_tuple_filtering;
+
+-- no decompression cause no match in batch
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0; ROLLBACK;
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0 AND device='d1'; ROLLBACK;
+-- 1 batch decompression
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 2300; ROLLBACK;
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value > 3100 AND value < 3200; ROLLBACK;
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value BETWEEN 3100 AND 3200; ROLLBACK;
+
+-- check GUC is working, should be 6 batches and 6000 tuples decompresed
+SET timescaledb.enable_dml_decompression_tuple_filtering TO off;
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0 AND device='d1'; ROLLBACK;
+RESET timescaledb.enable_dml_decompression_tuple_filtering;
+
+DROP TABLE lazy_decompress;
+
+CREATE FUNCTION trigger_function() RETURNS TRIGGER LANGUAGE PLPGSQL
+AS $$
+BEGIN
+  RAISE WARNING 'Trigger fired';
+  RETURN NEW;
+END;
+$$;
+
+-- test direct delete on compressed hypertable
+CREATE TABLE direct_delete(time timestamptz not null, device text, reading text, value float);
+SELECT table_name FROM create_hypertable('direct_delete', 'time');
+
+ALTER TABLE direct_delete SET (timescaledb.compress, timescaledb.compress_segmentby = 'device, reading');
+INSERT INTO direct_delete VALUES
+('2021-01-01', 'd1', 'r1', 1.0),
+('2021-01-01', 'd1', 'r2', 1.0),
+('2021-01-01', 'd1', 'r3', 1.0),
+('2021-01-01', 'd1', NULL, 1.0),
+('2021-01-01', 'd2', 'r1', 1.0),
+('2021-01-01', 'd2', 'r2', 1.0),
+('2021-01-01', 'd2', 'r3', 1.0),
+('2021-01-01', 'd2', NULL, 1.0);
+
+SELECT count(compress_chunk(c)) FROM show_chunks('direct_delete') c;
+
+BEGIN;
+-- should be 3 batches directly deleted
+:ANALYZE DELETE FROM direct_delete WHERE device='d1';
+-- double check its actually deleted
+SELECT count(*) FROM direct_delete WHERE device='d1';
+ROLLBACK;
+
+BEGIN;
+-- should be 2 batches directly deleted
+:ANALYZE DELETE FROM direct_delete WHERE reading='r2';
+-- double check its actually deleted
+SELECT count(*) FROM direct_delete WHERE reading='r2';
+ROLLBACK;
+
+-- issue #7644
+-- make sure non-btree operators don't delete unrelated batches
+BEGIN;
+:ANALYZE DELETE FROM direct_delete WHERE reading <> 'r2';
+-- 4 tuples should still be there
+SELECT count(*) FROM direct_delete;
+ROLLBACK;
+
+-- test IS NULL
+BEGIN;
+:ANALYZE DELETE FROM direct_delete WHERE reading IS NULL;
+-- 6 tuples should still be there
+SELECT count(*) FROM direct_delete;
+ROLLBACK;
+
+-- test IS NOT NULL
+BEGIN;
+:ANALYZE DELETE FROM direct_delete WHERE reading IS NOT NULL;
+-- 2 tuples should still be there
+SELECT count(*) FROM direct_delete;
+ROLLBACK;
+
+-- test IN
+BEGIN;
+:ANALYZE DELETE FROM direct_delete WHERE reading IN ('r1','r2');
+-- 4 tuples should still be there
+SELECT count(*) FROM direct_delete;
+ROLLBACK;
+
+-- test IN
+BEGIN;
+:ANALYZE DELETE FROM direct_delete WHERE reading NOT IN ('r1');
+-- 4 tuples should still be there
+SELECT count(*) FROM direct_delete;
+ROLLBACK;
+
+-- combining constraints on segmentby columns should work
+BEGIN;
+-- should be 1 batches directly deleted
+:ANALYZE DELETE FROM direct_delete WHERE device='d1' AND reading='r2';
+-- double check its actually deleted
+SELECT count(*) FROM direct_delete WHERE device='d1' AND reading='r2';
+ROLLBACK;
+
+-- constraints involving non-segmentby columns should not directly delete
+BEGIN; :ANALYZE DELETE FROM direct_delete WHERE value = '1.0'; ROLLBACK;
+BEGIN; :ANALYZE DELETE FROM direct_delete WHERE device = 'd1' AND value = '1.0'; ROLLBACK;
+BEGIN; :ANALYZE DELETE FROM direct_delete WHERE reading = 'r1' AND value = '1.0'; ROLLBACK;
+BEGIN; :ANALYZE DELETE FROM direct_delete WHERE device = 'd2' AND reading = 'r3' AND value = '1.0'; ROLLBACK;
+
+-- presence of trigger should prevent direct delete
+CREATE TRIGGER direct_delete_trigger BEFORE DELETE ON direct_delete FOR EACH ROW EXECUTE FUNCTION trigger_function();
+BEGIN; :ANALYZE DELETE FROM direct_delete WHERE device = 'd1'; ROLLBACK;
+DROP TRIGGER direct_delete_trigger ON direct_delete;
+
+CREATE TRIGGER direct_delete_trigger AFTER DELETE ON direct_delete FOR EACH ROW EXECUTE FUNCTION trigger_function();
+BEGIN; :ANALYZE DELETE FROM direct_delete WHERE device = 'd1'; ROLLBACK;
+DROP TRIGGER direct_delete_trigger ON direct_delete;
+
+DROP TABLE direct_delete;
+
+-- test DML on metadata columns
+CREATE TABLE compress_dml(time timestamptz NOT NULL, device text, reading text, value float);
+SELECT table_name FROM create_hypertable('compress_dml', 'time');
+ALTER TABLE compress_dml SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby='time DESC, reading');
+
+INSERT INTO compress_dml VALUES
+('2025-01-01','d1','r1',0.01),
+('2025-01-01','d2','r2',0.01),
+('2025-01-01','d3','r1',0.01),
+('2025-01-01','d3','r2',0.01),
+('2025-01-01','d4','r1',0.01),
+('2025-01-01','d4',NULL,0.01),
+('2025-01-01','d5','r2',0.01),
+('2025-01-01','d5',NULL,0.01),
+('2025-01-01','d6','r1',0.01),
+('2025-01-01','d6','r2',0.01),
+('2025-01-01','d6',NULL,0.01);
+
+SELECT compress_chunk(show_chunks('compress_dml'));
+
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading = 'r1';
+SELECT * FROM compress_dml t ORDER BY t;
+ROLLBACK;
+
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading <> 'r1';
+SELECT * FROM compress_dml t ORDER BY t;
+ROLLBACK;
+
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading IS NULL;
+SELECT * FROM compress_dml t ORDER BY t;
+ROLLBACK;
+
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading IS NOT NULL;
+SELECT * FROM compress_dml t ORDER BY t;
+ROLLBACK;
+
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading IN ('r2','r3');
+SELECT * FROM compress_dml t ORDER BY t;
+ROLLBACK;
+
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading = ANY('{r2,r3}');
+SELECT * FROM compress_dml t ORDER BY t;
+ROLLBACK;
+
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading NOT IN ('r2','r3');
+SELECT * FROM compress_dml t ORDER BY t;
+ROLLBACK;
+
+BEGIN;
+:ANALYZE DELETE FROM compress_dml WHERE reading <> ALL('{r2,r3}');
+SELECT * FROM compress_dml t ORDER BY t;
+ROLLBACK;
+
+DROP TABLE compress_dml;
+

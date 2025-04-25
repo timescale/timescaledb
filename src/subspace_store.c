@@ -75,12 +75,6 @@ ts_subspace_store_init(const Hyperspace *space, MemoryContext mcxt, int16 max_it
 	MemoryContext old = MemoryContextSwitchTo(mcxt);
 	SubspaceStore *sst = palloc(sizeof(SubspaceStore));
 
-	/*
-	 * make sure that the first dimension is a time dimension, otherwise the
-	 * tree will grow in a way that makes pruning less effective.
-	 */
-	Assert(space->num_dimensions < 1 || space->dimensions[0].type == DIMENSION_TYPE_OPEN);
-
 	sst->origin = subspace_store_internal_node_create(space->num_dimensions == 1);
 	sst->num_dimensions = space->num_dimensions;
 	/* max_items = 0 is treated as unlimited */

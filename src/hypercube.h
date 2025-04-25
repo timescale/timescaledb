@@ -24,10 +24,10 @@ typedef struct Hypercube
 } Hypercube;
 
 #define HYPERCUBE_SIZE(num_dimensions)                                                             \
-	(sizeof(Hypercube) + sizeof(DimensionSlice *) * (num_dimensions))
+	(sizeof(Hypercube) + (sizeof(DimensionSlice *) * (num_dimensions)))
 
 extern TSDLLEXPORT Hypercube *ts_hypercube_alloc(int16 num_dimensions);
-extern void ts_hypercube_free(Hypercube *hc);
+extern TSDLLEXPORT void ts_hypercube_free(Hypercube *hc);
 
 extern TSDLLEXPORT DimensionSlice *
 ts_hypercube_add_slice_from_range(Hypercube *hc, int32 dimension_id, int64 start, int64 end);
@@ -41,6 +41,6 @@ extern Hypercube *ts_hypercube_calculate_from_point(const Hyperspace *hs, const 
 extern bool ts_hypercubes_collide(const Hypercube *cube1, const Hypercube *cube2);
 extern TSDLLEXPORT const DimensionSlice *ts_hypercube_get_slice_by_dimension_id(const Hypercube *hc,
 																				int32 dimension_id);
-extern Hypercube *ts_hypercube_copy(const Hypercube *hc);
+extern TSDLLEXPORT Hypercube *ts_hypercube_copy(const Hypercube *hc);
 extern bool ts_hypercube_equal(const Hypercube *hc1, const Hypercube *hc2);
 extern void ts_hypercube_slice_sort(Hypercube *hc);

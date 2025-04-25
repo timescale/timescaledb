@@ -3,38 +3,43 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#include <postgres.h>
 
-#include <access/xact.h>
+#include <postgres.h>
 #include <access/heapam.h>
-#include "../compat/compat-msvc-enter.h"
-#include <postmaster/bgworker.h>
-#include <commands/extension.h>
-#include <commands/user.h>
-#include <miscadmin.h>
-#include <parser/analyze.h>
-#include <storage/ipc.h>
-#include <tcop/utility.h>
-#include "../compat/compat-msvc-exit.h"
-#include <utils/guc.h>
-#include <utils/inval.h>
-#include <nodes/print.h>
+#include <access/parallel.h>
+#include <access/xact.h>
+#include <catalog/pg_database.h>
 #include <commands/dbcommands.h>
 #include <commands/defrem.h>
-#include <access/parallel.h>
+#include <commands/user.h>
+#include <nodes/print.h>
+#include <parser/analyze.h>
+#include <pg_config.h>
+#include <postmaster/bgworker.h>
+#include <storage/ipc.h>
+#include <tcop/utility.h>
+#include <utils/guc.h>
+#include <utils/inval.h>
 
-#include "extension_utils.c"
+#if PG_VERSION_NUM < 150000
+#include "compat/compat-msvc-enter.h"
+#include <commands/extension.h>
+#include <miscadmin.h>
+#include "compat/compat-msvc-exit.h"
+#endif
+
+#include "compat/compat.h"
 #include "config.h"
 #include "export.h"
-#include "compat/compat.h"
 #include "extension_constants.h"
+#include "extension_utils.c"
 
-#include "loader/loader.h"
-#include "loader/function_telemetry.h"
 #include "loader/bgw_counter.h"
 #include "loader/bgw_interface.h"
 #include "loader/bgw_launcher.h"
 #include "loader/bgw_message_queue.h"
+#include "loader/function_telemetry.h"
+#include "loader/loader.h"
 #include "loader/lwlocks.h"
 
 /*
@@ -108,9 +113,7 @@ int ts_guc_bgw_launcher_poll_time = BGW_LAUNCHER_POLL_TIME_MS;
 /* This is the hook that existed before the loader was installed */
 static post_parse_analyze_hook_type prev_post_parse_analyze_hook;
 static shmem_startup_hook_type prev_shmem_startup_hook;
-#if PG15_GE
 static shmem_request_hook_type prev_shmem_request_hook;
-#endif
 
 typedef struct TsExtension
 {
@@ -166,14 +169,9 @@ TsExtension extensions[] = {
 };
 
 inline static void extension_check(TsExtension * /*ext*/);
-#if PG14_LT
-static void call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
-												   TsExtension const *);
-#else
 static void call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
 												   TsExtension const * /*ext*/,
 												   JumbleState *jstate);
-#endif
 
 static bool
 extension_is_loaded(TsExtension const *const ext)
@@ -393,12 +391,41 @@ stop_workers_on_db_drop(DropdbStmt *drop_db_statement)
 	}
 }
 
+static bool
+database_allowconn(const Oid db_oid)
+{
+	Relation pg_database;
+	ScanKeyData entry[1];
+	SysScanDesc scan;
+	HeapTuple dbtuple;
+	bool allowconn = false;
+
+	pg_database = table_open(DatabaseRelationId, AccessShareLock);
+	ScanKeyInit(&entry[0],
+				Anum_pg_database_oid,
+				BTEqualStrategyNumber,
+				F_OIDEQ,
+				ObjectIdGetDatum(db_oid));
+	scan = systable_beginscan(pg_database, DatabaseOidIndexId, true, NULL, 1, entry);
+
+	dbtuple = systable_getnext(scan);
+
+	/* We assume that there can be at most one matching tuple */
+	if (!HeapTupleIsValid(dbtuple))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_DATABASE),
+				 errmsg("database with OID \"%u\" does not exist", db_oid)));
+
+	allowconn = ((Form_pg_database) GETSTRUCT(dbtuple))->datallowconn;
+
+	systable_endscan(scan);
+	table_close(pg_database, AccessShareLock);
+
+	return allowconn;
+}
+
 static void
-#if PG14_LT
-post_analyze_hook(ParseState *pstate, Query *query)
-#else
 post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
-#endif
 {
 	if (query->commandType == CMD_UTILITY)
 	{
@@ -447,7 +474,7 @@ post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 					{
 						Oid db_oid = get_database_oid(defGetString(option), false);
 
-						if (OidIsValid(db_oid))
+						if (OidIsValid(db_oid) && database_allowconn(db_oid))
 							ts_bgw_message_send_and_wait(RESTART, db_oid);
 					}
 				}
@@ -534,20 +561,12 @@ post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 		 * extension hook and calls it explicitly after the check for installing
 		 * the extension.
 		 */
-#if PG14_LT
-		call_extension_post_parse_analyze_hook(pstate, query, ext);
-#else
 		call_extension_post_parse_analyze_hook(pstate, query, ext, jstate);
-#endif
 	}
 
 	if (prev_post_parse_analyze_hook != NULL)
 	{
-#if PG14_LT
-		prev_post_parse_analyze_hook(pstate, query);
-#else
 		prev_post_parse_analyze_hook(pstate, query, jstate);
-#endif
 	}
 }
 
@@ -570,10 +589,8 @@ timescaledb_shmem_startup_hook(void)
 static void
 timescaledb_shmem_request_hook(void)
 {
-#if PG15_GE
 	if (prev_shmem_request_hook)
 		prev_shmem_request_hook();
-#endif
 
 	ts_bgw_counter_shmem_alloc();
 	ts_bgw_message_queue_alloc();
@@ -600,11 +617,7 @@ _PG_init(void)
 
 	elog(INFO, "timescaledb loaded");
 
-#if PG15_LT
-	timescaledb_shmem_request_hook();
-#endif
-
-	ts_bgw_cluster_launcher_register();
+	ts_bgw_cluster_launcher_init();
 	ts_bgw_counter_setup_gucs();
 	ts_bgw_interface_register_api_version();
 
@@ -651,10 +664,8 @@ _PG_init(void)
 	post_parse_analyze_hook = post_analyze_hook;
 	shmem_startup_hook = timescaledb_shmem_startup_hook;
 
-#if PG15_GE
 	prev_shmem_request_hook = shmem_request_hook;
 	shmem_request_hook = timescaledb_shmem_request_hook;
-#endif
 }
 
 inline static void
@@ -769,20 +780,11 @@ ts_loader_extension_check(void)
 }
 
 static void
-#if PG14_LT
-call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
-									   TsExtension const *const ext)
-#else
 call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
 									   TsExtension const *const ext, JumbleState *jstate)
-#endif
 {
 	if (extension_is_loaded(ext) && ext->post_parse_analyze_hook != NULL)
 	{
-#if PG14_LT
-		ext->post_parse_analyze_hook(pstate, query);
-#else
 		ext->post_parse_analyze_hook(pstate, query, jstate);
-#endif
 	}
 }

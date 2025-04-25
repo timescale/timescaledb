@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+set max_parallel_workers_per_gather = 0;
+
 -- qual pushdown tests for decompresschunk ---
 -- Test qual pushdown with ints
 CREATE TABLE meta (device_id INT PRIMARY KEY);
@@ -119,6 +121,7 @@ EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar';
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_c = 'char';
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar' AND dev_c = 'char';
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar'::char(10) AND dev_c = 'char'::varchar;
+RESET enable_seqscan;
 
 -- github issue #5286
 CREATE TABLE deleteme AS
@@ -134,6 +137,7 @@ ALTER TABLE deleteme SET (
 );
 
 SELECT compress_chunk(i) FROM show_chunks('deleteme') i;
+VACUUM ANALYZE deleteme;
 EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE segment::text like '%4%';
 EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE '4' = segment::text;
 
@@ -155,12 +159,13 @@ DROP table deleteme;
 DROP table deleteme_with_bytea;
 
 -- test sqlvaluefunction pushdown
-CREATE TABLE svf_pushdown(time timestamptz, c_date date, c_time time, c_timetz timetz, c_timestamp timestamptz, c_name text);
+CREATE TABLE svf_pushdown(time timestamptz, c_date date, c_time time, c_timetz timetz, c_timestamp timestamptz, c_name text, c_bool bool);
 SELECT table_name FROM create_hypertable('svf_pushdown', 'time');
-ALTER TABLE svf_pushdown SET (timescaledb.compress,timescaledb.compress_segmentby='c_date,c_time, c_timetz,c_timestamp,c_name');
+ALTER TABLE svf_pushdown SET (timescaledb.compress,timescaledb.compress_segmentby='c_date,c_time, c_timetz,c_timestamp,c_name,c_bool');
 
 INSERT INTO svf_pushdown SELECT '2020-01-01';
 SELECT compress_chunk(show_chunks('svf_pushdown'));
+VACUUM ANALYZE svf_pushdown;
 
 -- constraints should be pushed down into scan below decompresschunk in all cases
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_date = CURRENT_DATE;
@@ -175,9 +180,25 @@ EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_timestamp = LOCALTIMESTAM
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = USER;
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_USER;
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = SESSION_USER;
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_USER OR c_name = SESSION_USER;
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_CATALOG;
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_SCHEMA;
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_bool;
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_bool = true;
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_bool = false;
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE NOT c_bool;
 
 -- current_query() is not a sqlvaluefunction and volatile so should not be pushed down
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = current_query();
 
+-- test or constraints in lateral query #6912
+SELECT FROM svf_pushdown m1,
+LATERAL(
+  SELECT FROM svf_pushdown m2
+  WHERE
+    m1.time = m2.time AND
+    EXISTS (SELECT random()) OR
+    EXISTS (SELECT FROM meta) LIMIT 1
+) l;
+
+DROP TABLE svf_pushdown;

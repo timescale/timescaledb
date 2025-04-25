@@ -7,9 +7,9 @@
 
 #include <fmgr.h>
 
+#include "compat/compat.h"
 #include "extension.h"
 #include "launcher_interface.h"
-#include "compat/compat.h"
 
 #define MIN_LOADER_API_VERSION 4
 

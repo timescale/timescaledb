@@ -5,14 +5,14 @@
  */
 #include <postgres.h>
 
-#include <miscadmin.h>
 #include <fmgr.h>
+#include <miscadmin.h>
 
-#include "bgw_interface.h"
 #include "../compat/compat.h"
-#include "bgw_counter.h"
-#include "bgw_message_queue.h"
 #include "../extension_constants.h"
+#include "bgw_counter.h"
+#include "bgw_interface.h"
+#include "bgw_message_queue.h"
 
 /* This is where versioned-extension facing functions live. They shouldn't live anywhere else. */
 

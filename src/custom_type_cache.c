@@ -4,31 +4,21 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <catalog/namespace.h>
 #include <catalog/pg_type.h>
 #include <utils/syscache.h>
-#include <catalog/namespace.h>
 
 #include "custom_type_cache.h"
-#include "ts_catalog/catalog.h"
 #include "extension_constants.h"
+#include "ts_catalog/catalog.h"
 
 /* Information about functions that we put in the cache */
 static CustomTypeInfo typeinfo[_CUSTOM_TYPE_MAX_INDEX] = {
-	[CUSTOM_TYPE_TS_INTERVAL] = {
-		.schema_name = INTERNAL_SCHEMA_NAME,
-		.type_name = "ts_interval",
-		.type_oid = InvalidOid,
-	},
 	[CUSTOM_TYPE_COMPRESSED_DATA] = {
 		.schema_name = INTERNAL_SCHEMA_NAME,
 		.type_name = "compressed_data",
 		.type_oid = InvalidOid,
 	},
-	[CUSTOM_TYPE_SEGMENT_META_MIN_MAX] = {
-		.schema_name = INTERNAL_SCHEMA_NAME,
-		.type_name = "segment_meta_min_max",
-		.type_oid = InvalidOid,
-	}
 };
 
 extern CustomTypeInfo *

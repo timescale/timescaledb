@@ -5,8 +5,8 @@
  */
 #pragma once
 
-#include "ts_catalog/catalog.h"
 #include "export.h"
+#include "ts_catalog/catalog.h"
 
 typedef struct BgwPolicyChunkStats
 {

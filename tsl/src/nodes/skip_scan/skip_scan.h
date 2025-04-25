@@ -9,6 +9,6 @@
 #include <nodes/plannodes.h>
 
 extern void tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel,
-									RelOptInfo *output_rel);
+									RelOptInfo *output_rel, UpperRelationKind stage);
 extern Node *tsl_skip_scan_state_create(CustomScan *cscan);
 extern void _skip_scan_init(void);

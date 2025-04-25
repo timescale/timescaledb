@@ -27,13 +27,13 @@
 #include <utils/rel.h>
 #include <utils/syscache.h>
 
+#include "chunk.h"
 #include "chunk_index.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
-#include "ts_catalog/catalog.h"
-#include "scanner.h"
 #include "scan_iterator.h"
-#include "chunk.h"
+#include "scanner.h"
+#include "ts_catalog/catalog.h"
 
 static bool chunk_index_insert(int32 chunk_id, const char *chunk_index, int32 hypertable_id,
 							   const char *hypertable_index);
@@ -222,6 +222,7 @@ chunk_relation_index_create(Relation htrel, Relation template_indexrel, Relation
 		ts_adjust_indexinfo_attnos(indexinfo, htrel->rd_id, chunkrel);
 
 	hypertable_id = ts_hypertable_relid_to_id(htrel->rd_id);
+	Assert(hypertable_id != INVALID_HYPERTABLE_ID);
 
 	return ts_chunk_index_create_post_adjustment(hypertable_id,
 												 template_indexrel,
@@ -277,26 +278,28 @@ ts_chunk_index_create_post_adjustment(int32 hypertable_id, Relation template_ind
 	if (template_indexrel->rd_index->indisprimary)
 		flags |= INDEX_CREATE_IS_PRIMARY;
 
-	chunk_indexrelid = index_create(chunkrel,
-									indexname,
-									InvalidOid,
-									InvalidOid,
-									InvalidOid,
-									InvalidOid,
-									indexinfo,
-									colnames,
-									template_indexrel->rd_rel->relam,
-									tablespace,
-									template_indexrel->rd_indcollation,
-									indclassoid->values,
-									template_indexrel->rd_indoption,
-									reloptions,
-									flags,
-									0,	   /* constr_flags constant and 0
-											* for now */
-									false, /* allow system table mods */
-									false, /* is internal */
-									NULL); /* constraintId */
+	chunk_indexrelid = index_create_compat(chunkrel,
+										   indexname,
+										   InvalidOid,
+										   InvalidOid,
+										   InvalidOid,
+										   InvalidOid,
+										   indexinfo,
+										   colnames,
+										   template_indexrel->rd_rel->relam,
+										   tablespace,
+										   template_indexrel->rd_indcollation,
+										   indclassoid->values,
+										   NULL, /* opclassOptions */
+										   template_indexrel->rd_indoption,
+										   NULL, /* stattargets */
+										   reloptions,
+										   flags,
+										   0,	  /* constr_flags constant and 0
+												   * for now */
+										   false, /* allow system table mods */
+										   false, /* is internal */
+										   NULL); /* constraintId */
 
 	ReleaseSysCache(tuple);
 
@@ -522,7 +525,7 @@ chunk_index_mapping_from_tuple(TupleInfo *ti, ChunkIndexMapping *cim)
 static ScanTupleResult
 chunk_index_collect(TupleInfo *ti, void *data)
 {
-	List **mappings = data;
+	List **mappings = (List **) data;
 	ChunkIndexMapping *cim;
 	MemoryContext oldmctx;
 
@@ -557,7 +560,7 @@ ts_chunk_index_get_mappings(Hypertable *ht, Oid hypertable_indexrelid)
 					 2,
 					 chunk_index_collect,
 					 NULL,
-					 &mappings,
+					 (void *) &mappings,
 					 AccessShareLock);
 
 	return mappings;
@@ -570,16 +573,69 @@ typedef struct ChunkIndexDeleteData
 	bool drop_index;
 } ChunkIndexDeleteData;
 
-/* Find all internal dependencies to be able to delete all the objects in one
+/*
+ * Lock object.
+ *
+ * In particular, we need to ensure that we lock the table of an index before
+ * locking the index, or run the risk of ending up in a deadlock since the
+ * normal locking order is table first, index second. Since we're not a
+ * concurrent delete, we take a strong lock for this.
+ *
+ * It is also necessary that the parent table is locked first, but we have
+ * already done that at this stage, so it does not need to be done explicitly.
+ */
+static bool
+chunk_lock_object_for_deletion(const ObjectAddress *obj)
+{
+	/*
+	 * If we're locking an index, we need to lock the table first. See
+	 * RangeVarCallbackForDropRelation() in tablecmds.c. We can ignore
+	 * partition indexes since we're not using that.
+	 */
+	char relkind = get_rel_relkind(obj->objectId);
+
+	/*
+	 * If we cannot find the object, it might have been concurrently deleted
+	 * (we do not have locks on objects yet).
+	 */
+	if (relkind == '\0')
+		return false;
+	if (relkind == RELKIND_INDEX)
+	{
+		Oid heapOid = IndexGetRelation(obj->objectId, true);
+		if (OidIsValid(heapOid))
+			LockRelationOid(heapOid, AccessExclusiveLock);
+	}
+
+	LockRelationOid(obj->objectId, AccessExclusiveLock);
+	return true;
+}
+
+/*
+ * Find all internal dependencies to be able to delete all the objects in one
  * go. We do this by scanning the dependency table and keeping all the tables
- * in our internal schema. */
-static void
-chunk_collect_objects_for_deletion(const ObjectAddress *relobj, ObjectAddresses *objects)
+ * in our internal schema.
+ *
+ * We also lock the objects in the correct order (meaning table first, index
+ * second) here to make sure that we do not end up with deadlocks.
+ *
+ * We return 'true' if we added any objects, and 'false' otherwise.
+ */
+static bool
+chunk_collect_and_lock_objects_for_deletion(const ObjectAddress *relobj, ObjectAddresses *objects)
 {
 	Relation deprel = table_open(DependRelationId, RowExclusiveLock);
 	ScanKeyData scankey[2];
 	SysScanDesc scan;
 	HeapTuple tup;
+
+	/*
+	 * If the object disappeared before we managed to get a lock on it, there
+	 * is nothing more to do so just return early and indicate that there are
+	 * no objects to delete.
+	 */
+	if (!chunk_lock_object_for_deletion(relobj))
+		return false;
 
 	add_exact_object_address(relobj, objects);
 
@@ -605,18 +661,13 @@ chunk_collect_objects_for_deletion(const ObjectAddress *relobj, ObjectAddresses 
 	{
 		Form_pg_depend record = (Form_pg_depend) GETSTRUCT(tup);
 		ObjectAddress refobj = { .classId = record->refclassid, .objectId = record->refobjid };
-
-		switch (record->deptype)
-		{
-			case DEPENDENCY_INTERNAL:
-				add_exact_object_address(&refobj, objects);
-				break;
-			default:
-				continue; /* Do nothing */
-		}
+		if (record->deptype == DEPENDENCY_INTERNAL && chunk_lock_object_for_deletion(&refobj))
+			add_exact_object_address(&refobj, objects);
 	}
+
 	systable_endscan(scan);
 	table_close(deprel, RowExclusiveLock);
+	return true;
 }
 
 static ScanTupleResult
@@ -639,7 +690,8 @@ chunk_index_tuple_delete(TupleInfo *ti, void *data)
 
 		if (OidIsValid(idxobj.objectId))
 		{
-			/* If we use performDeletion here it will fail if there are
+			/*
+			 * If we use performDeletion() here it will fail if there are
 			 * internal dependencies on the object since we are restricting
 			 * the cascade.
 			 *
@@ -648,15 +700,28 @@ chunk_index_tuple_delete(TupleInfo *ti, void *data)
 			 * internal dependencies and use the function
 			 * performMultipleDeletions.
 			 *
-			 * The function performMultipleDeletions accept a list of objects
-			 * and if there are dependencies between any of the objects given
-			 * to the function, it will not generate an error for that but
-			 * rather proceed with the deletion. If there are any dependencies
-			 * (internal or not) outside this set of objects, it will still
-			 * abort the deletion and print an error. */
+			 * We lock the objects to delete first to make sure that the lock
+			 * order is correct. This is done inside RemoveRelations and
+			 * performMultipleDeletions() expect these locks to be taken
+			 * first. If not, it will take very rudimentary locks, which will
+			 * cause deadlocks in some cases because the lock order is not
+			 * correct.
+			 *
+			 * Since we do not have any locks on any objects at this point,
+			 * the relations might have disappeared before we had a chance to
+			 * lock them. In this case it is not necessary to do an explicit
+			 * call to performMultipleDeletions().
+			 *
+			 * The function performMultipleDeletions() accept a list of
+			 * objects and if there are dependencies between any of the
+			 * objects given to the function, it will not generate an error
+			 * for that but rather proceed with the deletion. If there are any
+			 * dependencies (internal or not) outside this set of objects, it
+			 * will still abort the deletion and print an error.
+			 */
 			ObjectAddresses *objects = new_object_addresses();
-			chunk_collect_objects_for_deletion(&idxobj, objects);
-			performMultipleDeletions(objects, DROP_RESTRICT, 0);
+			if (chunk_collect_and_lock_objects_for_deletion(&idxobj, objects))
+				performMultipleDeletions(objects, DROP_RESTRICT, 0);
 			free_object_addresses(objects);
 		}
 	}
@@ -1182,6 +1247,9 @@ Datum
 ts_chunk_index_clone(PG_FUNCTION_ARGS)
 {
 	Oid chunk_index_oid = PG_GETARG_OID(0);
+	if (!OidIsValid(chunk_index_oid))
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk index")));
+
 	Relation chunk_index_rel;
 	Relation hypertable_rel;
 	Relation chunk_rel;
@@ -1225,7 +1293,13 @@ Datum
 ts_chunk_index_replace(PG_FUNCTION_ARGS)
 {
 	Oid chunk_index_oid_old = PG_GETARG_OID(0);
+	if (!OidIsValid(chunk_index_oid_old))
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk index")));
+
 	Oid chunk_index_oid_new = PG_GETARG_OID(1);
+	if (!OidIsValid(chunk_index_oid_new))
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk index")));
+
 	Relation index_rel;
 	Chunk *chunk;
 	ChunkIndexMapping cim;

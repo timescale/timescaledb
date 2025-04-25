@@ -14,6 +14,9 @@ SELECT create_hypertable('corrupt_float8','time');
 (1 row)
 
 ALTER TABLE corrupt_float8 SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "corrupt_float8" is set to ""
+NOTICE:  default order by for hypertable "corrupt_float8" is set to ""time" DESC"
 -- insert these 1000 values
 INSERT INTO corrupt_float8 VALUES
 ('2023-09-21 01:47:02.979+00', 11510.1), ('2023-09-21 01:48:03.58+00', 11510.6), ('2023-09-21 01:49:01.92+00', 11511), ('2023-09-21 01:50:02.49+00', 11511.5), ('2023-09-21 01:51:03.057+00', 11511.9),

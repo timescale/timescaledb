@@ -6,11 +6,11 @@
 #pragma once
 
 #include <postgres.h>
-#include <funcapi.h>
 #include <access/tupconvert.h>
+#include <funcapi.h>
 
-#include "chunk.h"
 #include "cache.h"
+#include "chunk.h"
 #include "cross_module_fn.h"
 
 typedef struct TSCopyMultiInsertBuffer TSCopyMultiInsertBuffer;
@@ -49,12 +49,14 @@ typedef struct ChunkInsertState
 	EState *estate;
 	Oid hypertable_relid;
 	int32 chunk_id;
-	int32 compressed_chunk_id;
 	Oid user_id;
 
 	/* for tracking compressed chunks */
 	bool chunk_compressed;
 	bool chunk_partial;
+
+	/* Chunk uses our own table access method */
+	bool use_tam;
 } ChunkInsertState;
 
 typedef struct ChunkDispatch ChunkDispatch;
@@ -63,5 +65,6 @@ extern ChunkInsertState *ts_chunk_insert_state_create(Oid chunk_relid,
 													  const ChunkDispatch *dispatch);
 extern void ts_chunk_insert_state_destroy(ChunkInsertState *state);
 
-OnConflictAction chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch);
+TSDLLEXPORT OnConflictAction
+ts_chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch);
 void ts_set_compression_status(ChunkInsertState *state, const Chunk *chunk);

@@ -222,9 +222,11 @@ SELECT create_hypertable('test_table_int', by_range('id', 10));
 SELECT create_hypertable('test_table_int', by_range('id', 10), if_not_exists => true);
 SELECT * FROM _timescaledb_functions.get_create_command('test_table_int');
 
--- Should throw an error when if_not_exists is not set
 \set ON_ERROR_STOP 0
+-- Should throw an error when if_not_exists is not set
 SELECT create_hypertable('test_table_int', by_range('id', 10));
+-- Should error out when hash partitioning is used as the main partitioning scheme
+SELECT create_hypertable('test_table_int', by_hash('device', number_partitions => 2));
 \set ON_ERROR_STOP 1
 
 DROP TABLE test_table_int;
@@ -235,6 +237,7 @@ SELECT create_hypertable('test_table_int', by_range('id', 10), migrate_data => t
 
 INSERT INTO test_table_int SELECT t, t%10, '01-01-2023 11:00'::TIMESTAMPTZ FROM generate_series(1, 50, 1) t;
 
+-- adding a space dimension via "by_hash" should work
 SELECT add_dimension('test_table_int', by_hash('device', number_partitions => 2));
 
 SELECT hypertable_name, dimension_number, column_name FROM timescaledb_information.dimensions WHERE hypertable_name = 'test_table_int';

@@ -14,14 +14,14 @@
 #include <jsonb_utils.h>
 #include <utils/builtins.h>
 
+#include "bgw/job.h"
+#include "bgw/job_stat.h"
+#include "bgw/timer.h"
 #include "bgw_policy/continuous_aggregate_api.h"
-#include "bgw_policy/job_api.h"
 #include "bgw_policy/job.h"
+#include "bgw_policy/job_api.h"
 #include "bgw_policy/policies_v2.h"
 #include "bgw_policy/policy_utils.h"
-#include "bgw/job_stat.h"
-#include "bgw/job.h"
-#include "bgw/timer.h"
 #include "continuous_aggs/materialize.h"
 #include "dimension.h"
 #include "guc.h"
@@ -111,13 +111,18 @@ get_time_from_config(const Dimension *dim, const Jsonb *config, const char *json
 }
 
 int64
-policy_refresh_cagg_get_refresh_start(const Dimension *dim, const Jsonb *config, bool *start_isnull)
+policy_refresh_cagg_get_refresh_start(const ContinuousAgg *cagg, const Dimension *dim,
+									  const Jsonb *config, bool *start_isnull)
 {
 	int64 res = get_time_from_config(dim, config, POL_REFRESH_CONF_KEY_START_OFFSET, start_isnull);
 
 	/* interpret NULL as min value for that type */
 	if (*start_isnull)
-		return ts_time_get_min(ts_dimension_get_partition_type(dim));
+	{
+		Assert(cagg->partition_type == ts_dimension_get_partition_type(dim));
+		return cagg_get_time_min(cagg);
+	}
+
 	return res;
 }
 
@@ -128,6 +133,50 @@ policy_refresh_cagg_get_refresh_end(const Dimension *dim, const Jsonb *config, b
 
 	if (*end_isnull)
 		return ts_time_get_end_or_max(ts_dimension_get_partition_type(dim));
+	return res;
+}
+
+bool
+policy_refresh_cagg_get_include_tiered_data(const Jsonb *config, bool *isnull)
+{
+	bool found;
+	bool res = ts_jsonb_get_bool_field(config, POL_REFRESH_CONF_KEY_INCLUDE_TIERED_DATA, &found);
+
+	*isnull = !found;
+	return res;
+}
+
+int32
+policy_refresh_cagg_get_buckets_per_batch(const Jsonb *config)
+{
+	bool found;
+	int32 res = ts_jsonb_get_int32_field(config, POL_REFRESH_CONF_KEY_BUCKETS_PER_BATCH, &found);
+
+	return res;
+}
+
+int32
+policy_refresh_cagg_get_max_batches_per_execution(const Jsonb *config)
+{
+	bool found;
+	int32 res =
+		ts_jsonb_get_int32_field(config, POL_REFRESH_CONF_KEY_MAX_BATCHES_PER_EXECUTION, &found);
+
+	if (!found)
+		res = 10; /* default value */
+
+	return res;
+}
+
+bool
+policy_refresh_cagg_get_refresh_newest_first(const Jsonb *config)
+{
+	bool found;
+	bool res = ts_jsonb_get_bool_field(config, POL_REFRESH_CONF_KEY_REFRESH_NEWEST_FIRST, &found);
+
+	if (!found)
+		res = true; /* default value */
+
 	return res;
 }
 
@@ -224,7 +273,8 @@ policy_refresh_cagg_check(PG_FUNCTION_ARGS)
 {
 	if (PG_ARGISNULL(0))
 	{
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("config must not be NULL")));
+		ereport(ERROR,
+				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), errmsg("config must not be NULL")));
 	}
 
 	policy_refresh_cagg_read_and_validate_config(PG_GETARG_JSONB_P(0), NULL);
@@ -430,38 +480,8 @@ validate_window_size(const ContinuousAgg *cagg, const CaggPolicyConfig *config)
 	else
 		end_offset = interval_to_int64(config->offset_end.value, config->offset_end.type);
 
-	if (ts_continuous_agg_bucket_width_variable(cagg))
-	{
-		/*
-		 * There are several cases of variable-sized buckets:
-		 * 1. Monthly buckets
-		 * 2. Buckets with timezones
-		 * 3. Cases 1 and 2 at the same time
-		 *
-		 * For months we simply take 31 days as the worst case scenario and
-		 * multiply this number by the number of months in the bucket. This
-		 * reduces the task to days/hours/minutes scenario.
-		 *
-		 * Days/hours/minutes case is handled the same way as for fixed-sized
-		 * buckets. The refresh window at least two buckets in size is adequate
-		 * for such corner cases as DST.
-		 */
-
-		/* bucket_function should always be specified for variable-sized buckets */
-		Assert(cagg->bucket_function != NULL);
-		/* ... and bucket_function->bucket_width too */
-		Assert(cagg->bucket_function->bucket_width != NULL);
-
-		/* Make a temporary copy of bucket_width */
-		Interval interval = *cagg->bucket_function->bucket_width;
-		interval.day += 31 * interval.month;
-		interval.month = 0;
-		bucket_width = ts_interval_value_to_internal(IntervalPGetDatum(&interval), INTERVALOID);
-	}
-	else
-	{
-		bucket_width = ts_continuous_agg_bucket_width(cagg);
-	}
+	bucket_width = ts_continuous_agg_bucket_width(cagg->bucket_function);
+	Assert(bucket_width > 0);
 
 	if (ts_time_saturating_add(end_offset, bucket_width * 2, INT8OID) > start_offset)
 		ereport(ERROR,
@@ -512,7 +532,10 @@ Datum
 policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDatum start_offset,
 								 Oid end_offset_type, NullableDatum end_offset,
 								 Interval refresh_interval, bool if_not_exists, bool fixed_schedule,
-								 TimestampTz initial_start, const char *timezone)
+								 TimestampTz initial_start, const char *timezone,
+								 NullableDatum include_tiered_data, NullableDatum buckets_per_batch,
+								 NullableDatum max_batches_per_execution,
+								 NullableDatum refresh_newest_first)
 {
 	NameData application_name;
 	NameData proc_name, proc_schema, check_name, check_schema, owner;
@@ -609,6 +632,7 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 	ts_jsonb_add_int32(parse_state,
 					   POL_REFRESH_CONF_KEY_MAT_HYPERTABLE_ID,
 					   cagg->data.mat_hypertable_id);
+
 	if (!policyconf.offset_start.isnull)
 		json_add_dim_interval_value(parse_state,
 									POL_REFRESH_CONF_KEY_START_OFFSET,
@@ -616,6 +640,7 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 									policyconf.offset_start.value);
 	else
 		ts_jsonb_add_null(parse_state, POL_REFRESH_CONF_KEY_START_OFFSET);
+
 	if (!policyconf.offset_end.isnull)
 		json_add_dim_interval_value(parse_state,
 									POL_REFRESH_CONF_KEY_END_OFFSET,
@@ -623,6 +648,27 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 									policyconf.offset_end.value);
 	else
 		ts_jsonb_add_null(parse_state, POL_REFRESH_CONF_KEY_END_OFFSET);
+
+	if (!include_tiered_data.isnull)
+		ts_jsonb_add_bool(parse_state,
+						  POL_REFRESH_CONF_KEY_INCLUDE_TIERED_DATA,
+						  include_tiered_data.value);
+
+	if (!buckets_per_batch.isnull)
+		ts_jsonb_add_int32(parse_state,
+						   POL_REFRESH_CONF_KEY_BUCKETS_PER_BATCH,
+						   buckets_per_batch.value);
+
+	if (!max_batches_per_execution.isnull)
+		ts_jsonb_add_int32(parse_state,
+						   POL_REFRESH_CONF_KEY_MAX_BATCHES_PER_EXECUTION,
+						   max_batches_per_execution.value);
+
+	if (!refresh_newest_first.isnull)
+		ts_jsonb_add_bool(parse_state,
+						  POL_REFRESH_CONF_KEY_REFRESH_NEWEST_FIRST,
+						  refresh_newest_first.value);
+
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	Jsonb *config = JsonbValueToJsonb(result);
 
@@ -653,6 +699,10 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	Interval refresh_interval;
 	bool if_not_exists;
 	NullableDatum start_offset, end_offset;
+	NullableDatum include_tiered_data;
+	NullableDatum buckets_per_batch;
+	NullableDatum max_batches_per_execution;
+	NullableDatum refresh_newest_first;
 
 	ts_feature_flag_check(FEATURE_POLICY);
 
@@ -675,6 +725,14 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	bool fixed_schedule = !PG_ARGISNULL(5);
 	text *timezone = PG_ARGISNULL(6) ? NULL : PG_GETARG_TEXT_PP(6);
 	char *valid_timezone = NULL;
+	include_tiered_data.value = PG_GETARG_DATUM(7);
+	include_tiered_data.isnull = PG_ARGISNULL(7);
+	buckets_per_batch.value = PG_GETARG_DATUM(8);
+	buckets_per_batch.isnull = PG_ARGISNULL(8);
+	max_batches_per_execution.value = PG_GETARG_DATUM(9);
+	max_batches_per_execution.isnull = PG_ARGISNULL(9);
+	refresh_newest_first.value = PG_GETARG_DATUM(10);
+	refresh_newest_first.isnull = PG_ARGISNULL(10);
 
 	Datum retval;
 	/* if users pass in -infinity for initial_start, then use the current_timestamp instead */
@@ -697,7 +755,11 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 											  if_not_exists,
 											  fixed_schedule,
 											  initial_start,
-											  valid_timezone);
+											  valid_timezone,
+											  include_tiered_data,
+											  buckets_per_batch,
+											  max_batches_per_execution,
+											  refresh_newest_first);
 	if (!TIMESTAMP_NOT_FINITE(initial_start))
 	{
 		int32 job_id = DatumGetInt32(retval);

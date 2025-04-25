@@ -370,6 +370,51 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLI
 \ir include/compression_test.sql
 DROP TABLE base_texts;
 
+----------------------
+-- Bool Compression --
+----------------------
+
+SELECT
+  $$
+  select item from base_bools order by rn
+  $$ AS "QUERY"
+\gset
+\set TABLE_NAME base_bools
+\set TYPE boolean
+\set COMPRESSION_CMD _timescaledb_internal.compress_bool(item)
+\set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::boolean)
+\set DECOMPRESS_REVERSE_CMD _timescaledb_internal.decompress_reverse(c::_timescaledb_internal.compressed_data, NULL::boolean)
+
+-- bool test, flipping values betweem true and false, no nulls
+CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, (item%2=0)::boolean as item FROM (SELECT generate_series(1, 1000) item) sub;
+\ir include/compression_test.sql
+DROP TABLE base_bools;
+
+-- bool test, all true values, no nulls
+CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, true as item FROM (SELECT generate_series(1, 1000) item) sub;
+\ir include/compression_test.sql
+DROP TABLE base_bools;
+
+-- bool test, all false, no nulls
+CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, false as item FROM (SELECT generate_series(1, 1000) item) sub;
+\ir include/compression_test.sql
+DROP TABLE base_bools;
+
+-- a single true element
+CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, true as item FROM (SELECT generate_series(1, 1) item) sub;
+\ir include/compression_test.sql
+DROP TABLE base_bools;
+
+-- all true, except every 43rd value is null
+CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, ((NULLIF(i, (CASE WHEN i%43=0 THEN i ELSE -1 END)))>0)::boolean item FROM generate_series(1, 1000) i;
+\ir include/compression_test.sql
+DROP TABLE base_bools;
+
+-- all false, except every 29th value is null
+CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, ((NULLIF(i, (CASE WHEN i%29=0 THEN i ELSE -1 END)))<0)::boolean item FROM generate_series(1, 1000) i;
+\ir include/compression_test.sql
+DROP TABLE base_bools;
+
 -----------------------------------------------
 -- Interesting corrupt data found by fuzzing --
 -----------------------------------------------
@@ -381,6 +426,8 @@ as :TSL_MODULE_PATHNAME, 'ts_read_compressed_data_file' language c;
 
 \set ON_ERROR_STOP 0
 select ts_read_compressed_data_file('gorilla', 'float8', '--nonexistent');
+-- Just some random file that returns "compressed data is corrupt", for one-off testing.
+select ts_read_compressed_data_file('gorilla', 'float8', (:'TEST_INPUT_DIR' || '/fuzzing/compression/gorilla-float8/1f09f12d930daae8e5fd34e11e7b2303e1705b2e')::cstring);
 \set ON_ERROR_STOP 1
 
 create or replace function ts_read_compressed_data_directory(cstring, regtype, cstring, bool)

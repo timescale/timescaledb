@@ -7,20 +7,37 @@
 
 #include "compression/compression.h"
 #include "nodes/decompress_chunk/decompress_context.h"
+#include "nodes/decompress_chunk/vector_quals.h"
+#include <executor/tuptable.h>
 
 typedef struct ArrowArray ArrowArray;
 
 /* How to obtain the decompressed datum for individual row. */
 typedef enum
 {
+	/*
+	 * The decompressed value is a boolean and is stored as a vector of bits.
+	 */
+	DT_ArrowBits = -5,
+
 	DT_ArrowTextDict = -4,
+
 	DT_ArrowText = -3,
-	DT_Default = -2,
+
+	/*
+	 * The decompressed value is already in the decompressed slot. This is used
+	 * for segmentby and compressed columns with default value in batch.
+	 */
+	DT_Scalar = -2,
+
 	DT_Iterator = -1,
+
 	DT_Invalid = 0,
+
 	/*
 	 * Any positive number is also valid for the decompression type. It means
-	 * arrow array of a fixed-size by-value type, with size given by the number.
+	 * arrow array of a fixed-size by-value type, with size in bytes given by
+	 * the number.
 	 */
 } DecompressionType;
 
@@ -82,15 +99,8 @@ typedef struct DecompressBatchState
 	 */
 	VirtualTupleTableSlot decompressed_scan_slot_data;
 
-	/*
-	 * Compressed target slot. We have to keep a local copy when doing batch
-	 * sorted merge, because the segmentby column values might reference the
-	 * original tuple, and a batch outlives its source tuple.
-	 */
-	TupleTableSlot *compressed_slot;
 	uint16 total_batch_rows;
 	uint16 next_batch_row;
-	Size block_size_bytes; /* Block size to use for memory context */
 	MemoryContext per_batch_context;
 
 	/*
@@ -98,14 +108,20 @@ typedef struct DecompressBatchState
 	 * row. Indexed same as arrow arrays, w/o accounting for the reverse scan
 	 * direction. Initialized to all ones, i.e. all rows pass.
 	 */
-	uint64 *restrict vector_qual_result;
+	const uint64 *restrict vector_qual_result;
 
+	/*
+	 * This follows DecompressContext.compressed_chunk_columns, but does not
+	 * include the trailing metadata columns, but only the leading data columns.
+	 * These columns are compressed and segmentby columns, their total number is
+	 * given by DecompressContext.num_data_columns.
+	 */
 	CompressedColumnValues compressed_columns[FLEXIBLE_ARRAY_MEMBER];
 } DecompressBatchState;
 
 extern void compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 												  DecompressBatchState *batch_state,
-												  TupleTableSlot *subslot);
+												  TupleTableSlot *compressed_slot);
 
 extern void compressed_batch_advance(DecompressContext *dcontext,
 									 DecompressBatchState *batch_state);
@@ -114,27 +130,32 @@ extern void compressed_batch_save_first_tuple(DecompressContext *dcontext,
 											  DecompressBatchState *batch_state,
 											  TupleTableSlot *first_tuple_slot);
 
-#define create_bulk_decompression_mctx(parent_mctx)                                                \
-	AllocSetContextCreate(parent_mctx,                                                             \
-						  "DecompressBatchState bulk decompression",                               \
-						  /* minContextSize = */ 0,                                                \
-						  /* initBlockSize = */ 64 * 1024,                                         \
-						  /* maxBlockSize = */ 64 * 1024);
 /*
- * Initialize the batch memory context
+ * Initialize the batch memory context and bulk decompression context.
  *
- * We use custom size for the batch memory context page, calculated to
- * fit the typical result of bulk decompression (if we use it).
- * This allows us to save on expensive malloc/free calls, because the
- * Postgres memory contexts reallocate all pages except the first one
- * after each reset.
+ * We use Generation context here because the AllocSet has a hardcoded threshold
+ * of 8kB per allocation, after which it allocates directly through malloc. We
+ * want to make the blocks as big as possible, but below the malloc's mmap
+ * threshold. For small queries, these contexts are basically single-shot and
+ * the page faults after an mmap slow them down significantly. The threshold
+ * should be 128 kiB according to the docs, but I'm seeing 64 kiB in testing.
+ *
+ * If bulk decompression is not used, use the default size for batch context.
+ * This reduces memory usage and improves performance with batch sorted merge.
  */
-#define create_per_batch_mctx(block_size_bytes)                                                    \
-	AllocSetContextCreate(CurrentMemoryContext,                                                    \
-						  "DecompressBatchState per-batch",                                        \
-						  0,                                                                       \
-						  block_size_bytes,                                                        \
-						  block_size_bytes);
+#define create_bulk_decompression_mctx(parent_mctx)                                                \
+	GenerationContextCreate(parent_mctx,                                                           \
+							"DecompressBatchState bulk decompression",                             \
+							0,                                                                     \
+							64 * 1024,                                                             \
+							64 * 1024);
+
+#define create_per_batch_mctx(dcontext)                                                            \
+	GenerationContextCreate(CurrentMemoryContext,                                                  \
+							"DecompressBatchState per-batch",                                      \
+							0,                                                                     \
+							dcontext->enable_bulk_decompression ? 64 * 1024 : 8 * 1024,            \
+							dcontext->enable_bulk_decompression ? 64 * 1024 : 8 * 1024);
 
 extern void compressed_batch_destroy(DecompressBatchState *batch_state);
 
@@ -161,3 +182,18 @@ compressed_batch_current_tuple(DecompressBatchState *batch_state)
 	Assert(batch_state->per_batch_context != NULL);
 	return &batch_state->decompressed_scan_slot_data.base;
 }
+
+/*
+ * VectorQualState for a compressed batch used to pass
+ * DecompressChunk-specific data to vector qual functions that are shared
+ * across scan nodes.
+ */
+typedef struct CompressedBatchVectorQualState
+{
+	VectorQualState vqstate;
+	DecompressBatchState *batch_state;
+	DecompressContext *dcontext;
+} CompressedBatchVectorQualState;
+
+const ArrowArray *compressed_batch_get_arrow_array(VectorQualState *vqstate, Expr *expr,
+												   bool *is_default_value);

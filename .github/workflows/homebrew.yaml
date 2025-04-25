@@ -10,6 +10,8 @@ name: Homebrew
     branches:
     - release_test
     - trigger/package_test
+    - trigger/homebrew_test
+  workflow_dispatch:
 
 jobs:
   homebrew:
@@ -27,8 +29,8 @@ jobs:
 
     - name: Setup
       run: |
-        brew install postgresql@16
-        echo "/usr/local/opt/postgresql@16/bin" >> $GITHUB_PATH
+        brew install postgresql@17
+        echo "/opt/homebrew/opt/postgresql@17/bin" >> $GITHUB_PATH
         brew tap timescale/tap
         brew info timescaledb
 
@@ -37,7 +39,7 @@ jobs:
         brew install timescaledb ${{ matrix.install_options }}
         timescaledb-tune --quiet --yes
         timescaledb_move.sh
-        brew services start postgresql@16
+        brew services start postgresql@17
 
     # checkout code to get version information
     - uses: actions/checkout@v4
@@ -50,7 +52,7 @@ jobs:
         if grep '^version = [0-9.]\+$' version.config; then
           version=$(grep '^version = ' version.config | sed -e 's!^version = !!')
         else
-          version=$(grep '^update_from_version = ' version.config | sed -e 's!^update_from_version = !!')
+          version=$(grep '^previous_version = ' version.config | sed -e 's!^previous_version = !!')
         fi
         installed_version=$(psql -X -t \
             -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" \

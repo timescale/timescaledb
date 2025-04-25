@@ -8,11 +8,12 @@
 -- we can still test its interactions with its children, but can't test some of the things specific to the launcher.
 -- So we've added some bits about the version number as needed.
 
-CREATE VIEW worker_counts as SELECT count(*) filter (WHERE application_name = 'TimescaleDB Background Worker Launcher') as launcher,
-count(*) filter (WHERE application_name = 'TimescaleDB Background Worker Scheduler' AND datname = :'TEST_DBNAME') as single_scheduler,
-count(*) filter (WHERE application_name = 'TimescaleDB Background Worker Scheduler' AND datname = :'TEST_DBNAME_2') as single_2_scheduler,
-count(*) filter (WHERE application_name = 'TimescaleDB Background Worker Scheduler' AND datname = 'template1') as template1_scheduler
-FROM pg_stat_activity;
+CREATE VIEW worker_counts as
+SELECT count(*) filter (WHERE backend_type = 'TimescaleDB Background Worker Launcher') as launcher,
+       count(*) filter (WHERE backend_type = 'TimescaleDB Background Worker Scheduler' AND datname = :'TEST_DBNAME') as single_scheduler,
+       count(*) filter (WHERE backend_type = 'TimescaleDB Background Worker Scheduler' AND datname = :'TEST_DBNAME_2') as single_2_scheduler,
+       count(*) filter (WHERE backend_type = 'TimescaleDB Background Worker Scheduler' AND datname = 'template1') as template1_scheduler
+  FROM pg_stat_activity;
 
 CREATE FUNCTION wait_worker_counts(launcher_ct INTEGER,  scheduler1_ct INTEGER, scheduler2_ct INTEGER, template1_ct INTEGER) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
 $BODY$
@@ -59,6 +60,33 @@ BEGIN
   END LOOP;
 
   RETURN 'BGW Scheduler NOT found.';
+
+END
+$BODY$;
+
+CREATE PROCEDURE kill_database_backends(_datname NAME) LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+  r INTEGER;
+BEGIN
+  FOR i in 1..100
+  LOOP
+    SELECT count(pg_terminate_backend(pg_stat_activity.pid))
+    FROM pg_stat_activity
+    WHERE
+      datname = _datname
+          AND pg_stat_activity.pid <> pg_backend_pid()
+    INTO r;
+
+    IF(r = 0) THEN
+        RETURN;
+    END IF;
+
+    PERFORM pg_sleep(0.1);
+    PERFORM pg_stat_clear_snapshot();
+  END LOOP;
+
+  RAISE 'Failed to terminate backends';
 
 END
 $BODY$;

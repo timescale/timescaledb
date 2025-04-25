@@ -42,7 +42,8 @@ _timescaledb_functions.policy_compression_execute(
   maxchunks           INTEGER,
   verbose_log         BOOLEAN,
   recompress_enabled  BOOLEAN,
-  use_creation_time   BOOLEAN)
+  use_creation_time   BOOLEAN,
+  useam               BOOLEAN = NULL)
 AS $$
 DECLARE
   htoid       REGCLASS;
@@ -51,6 +52,8 @@ DECLARE
   _message     text;
   _detail      text;
   _sqlstate    text;
+  -- fully compressed chunk status
+  status_fully_compressed int := 1;
   -- chunk status bits:
   bit_compressed int := 1;
   bit_compressed_unordered int := 2;
@@ -94,58 +97,27 @@ BEGIN
       INNER JOIN pg_class pgc ON pgc.oid = show.oid
       INNER JOIN pg_namespace pgns ON pgc.relnamespace = pgns.oid
       INNER JOIN _timescaledb_catalog.chunk ch ON ch.table_name = pgc.relname AND ch.schema_name = pgns.nspname AND ch.hypertable_id = htid
-    WHERE
-      NOT ch.dropped AND NOT ch.osm_chunk
-      AND (
-        ch.status = 0 OR
-        (
-          ch.status & bit_compressed > 0 AND (
-            ch.status & bit_compressed_unordered > 0 OR
-            ch.status & bit_compressed_partial > 0
-          )
-        )
-      )
+    WHERE NOT ch.dropped
+    AND NOT ch.osm_chunk
+    -- Checking for chunks which are not fully compressed and not frozen
+    AND ch.status != status_fully_compressed
+    AND ch.status & bit_frozen = 0
   LOOP
-    IF chunk_rec.status = 0 THEN
-      BEGIN
-        PERFORM @extschema@.compress_chunk( chunk_rec.oid );
-      EXCEPTION WHEN OTHERS THEN
-        GET STACKED DIAGNOSTICS
-            _message = MESSAGE_TEXT,
-            _detail = PG_EXCEPTION_DETAIL,
-            _sqlstate = RETURNED_SQLSTATE;
-        RAISE WARNING 'compressing chunk "%" failed when compression policy is executed', chunk_rec.oid::regclass::text
-            USING DETAIL = format('Message: (%s), Detail: (%s).', _message, _detail),
-                  ERRCODE = _sqlstate;
-        chunks_failure := chunks_failure + 1;
-      END;
-    ELSIF
-      (
-        chunk_rec.status & bit_compressed > 0 AND (
-          chunk_rec.status & bit_compressed_unordered > 0 OR
-          chunk_rec.status & bit_compressed_partial > 0
-        )
-      ) AND recompress_enabled IS TRUE THEN
-      BEGIN
-        -- first check if there's an index. Might have to use a heuristic to determine if index usage would be efficient,
-        -- or if we'd better fall back to decompressing & recompressing entire chunk
-        IF _timescaledb_functions.get_compressed_chunk_index_for_recompression(chunk_rec.oid) IS NOT NULL THEN
-          PERFORM _timescaledb_functions.recompress_chunk_segmentwise(chunk_rec.oid);
-        ELSE
-          PERFORM @extschema@.decompress_chunk(chunk_rec.oid, if_compressed => true);
-          PERFORM @extschema@.compress_chunk(chunk_rec.oid);
-        END IF;
-      EXCEPTION WHEN OTHERS THEN
-        GET STACKED DIAGNOSTICS
-            _message = MESSAGE_TEXT,
-            _detail = PG_EXCEPTION_DETAIL,
-            _sqlstate = RETURNED_SQLSTATE;
-        RAISE WARNING 'recompressing chunk "%" failed when compression policy is executed', chunk_rec.oid::regclass::text
-            USING DETAIL = format('Message: (%s), Detail: (%s).', _message, _detail),
-                  ERRCODE = _sqlstate;
-        chunks_failure := chunks_failure + 1;
-      END;
-    END IF;
+    BEGIN
+      IF chunk_rec.status = bit_compressed OR recompress_enabled IS TRUE THEN
+        PERFORM @extschema@.compress_chunk(chunk_rec.oid, hypercore_use_access_method => useam);
+        numchunks := numchunks + 1;
+      END IF;
+    EXCEPTION WHEN OTHERS THEN
+      GET STACKED DIAGNOSTICS
+          _message = MESSAGE_TEXT,
+          _detail = PG_EXCEPTION_DETAIL,
+          _sqlstate = RETURNED_SQLSTATE;
+      RAISE WARNING 'compressing chunk "%" failed when compression policy is executed', chunk_rec.oid::regclass::text
+          USING DETAIL = format('Message: (%s), Detail: (%s).', _message, _detail),
+                ERRCODE = _sqlstate;
+      chunks_failure := chunks_failure + 1;
+    END;
     COMMIT;
     -- SET LOCAL is only active until end of transaction.
     -- While we could use SET at the start of the function we do not
@@ -155,7 +127,6 @@ BEGIN
     IF verbose_log THEN
        RAISE LOG 'job % completed processing chunk %.%', job_id, chunk_rec.schema_name, chunk_rec.table_name;
     END IF;
-    numchunks := numchunks + 1;
     IF maxchunks > 0 AND numchunks >= maxchunks THEN
          EXIT;
     END IF;
@@ -186,6 +157,7 @@ DECLARE
   numchunks           INTEGER := 1;
   recompress_enabled  BOOL;
   use_creation_time   BOOL := FALSE;
+  hypercore_use_access_method   BOOL;
 BEGIN
 
   -- procedures with SET clause cannot execute transaction
@@ -226,27 +198,29 @@ BEGIN
     lag_value := compress_after;
   END IF;
 
+  hypercore_use_access_method := jsonb_object_field_text(config, 'hypercore_use_access_method')::bool;
+
   -- execute the properly type casts for the lag value
   CASE dimtype
     WHEN 'TIMESTAMP'::regtype, 'TIMESTAMPTZ'::regtype, 'DATE'::regtype, 'INTERVAL' ::regtype  THEN
       CALL _timescaledb_functions.policy_compression_execute(
         job_id, htid, lag_value::INTERVAL,
-        maxchunks, verbose_log, recompress_enabled, use_creation_time
+        maxchunks, verbose_log, recompress_enabled, use_creation_time, hypercore_use_access_method
       );
     WHEN 'BIGINT'::regtype THEN
       CALL _timescaledb_functions.policy_compression_execute(
         job_id, htid, lag_value::BIGINT,
-        maxchunks, verbose_log, recompress_enabled, use_creation_time
+        maxchunks, verbose_log, recompress_enabled, use_creation_time, hypercore_use_access_method
       );
     WHEN 'INTEGER'::regtype THEN
       CALL _timescaledb_functions.policy_compression_execute(
         job_id, htid, lag_value::INTEGER,
-        maxchunks, verbose_log, recompress_enabled, use_creation_time
+        maxchunks, verbose_log, recompress_enabled, use_creation_time, hypercore_use_access_method
       );
     WHEN 'SMALLINT'::regtype THEN
       CALL _timescaledb_functions.policy_compression_execute(
         job_id, htid, lag_value::SMALLINT,
-        maxchunks, verbose_log, recompress_enabled, use_creation_time
+        maxchunks, verbose_log, recompress_enabled, use_creation_time, hypercore_use_access_method
       );
   END CASE;
 END;

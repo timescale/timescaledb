@@ -1,0 +1,562 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+\ir include/setup_hypercore.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set hypertable readings
+\ir hypercore_helpers.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Function to run an explain analyze with and do replacements on the
+-- emitted plan. This is intended to be used when the structure of the
+-- plan is important, but not the specific chunks scanned nor the
+-- number of heap fetches, rows, loops, etc.
+create function anonymize(ln text) returns text language plpgsql as
+$$
+begin
+    ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
+    ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
+    ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
+    ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
+
+    if trim(both from ln) like 'Array: %' then
+       ln := regexp_replace(ln, 'hits=\d+', 'hits=N');
+       ln := regexp_replace(ln, 'misses=\d+', 'misses=N');
+       ln := regexp_replace(ln, 'count=\d+', 'count=N');
+       ln := regexp_replace(ln, 'calls=\d+', 'calls=N');
+    end if;
+    return ln;
+end
+$$;
+create function explain_analyze_anonymize(text) returns setof text
+language plpgsql as
+$$
+declare
+    ln text;
+begin
+    for ln in
+        execute format('explain (analyze, costs off, summary off, timing off, decompress_cache_stats) %s', $1)
+    loop
+        -- Group keys are shown for plans in PG15 but not others, so
+        -- we remove these lines to avoid having to have
+        -- version-sensible tests.
+	if trim(both from ln) like 'Group Key:%' then
+	   continue;
+	end if;
+        return next anonymize(ln);
+    end loop;
+end;
+$$;
+create function explain_anonymize(text) returns setof text
+language plpgsql as
+$$
+declare
+    ln text;
+begin
+    for ln in
+        execute format('explain (costs off, summary off, timing off) %s', $1)
+    loop
+        return next anonymize(ln);
+    end loop;
+end;
+$$;
+create table :hypertable(
+       metric_id serial,
+       created_at timestamptz not null unique,
+       location_id smallint,	--segmentby attribute with index
+       owner_id bigint,		--segmentby attribute without index
+       device_id bigint,	--non-segmentby attribute
+       temp float8,
+       humidity float4
+);
+create index hypertable_location_id_idx on :hypertable (location_id);
+create index hypertable_device_id_idx on :hypertable (device_id);
+select create_hypertable(:'hypertable', by_range('created_at'));
+ create_hypertable 
+-------------------
+ (1,t)
+(1 row)
+
+-- Disable incremental sort to make tests stable
+set enable_incremental_sort = false;
+select setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+-- Insert rows into the tables.
+--
+-- The timestamps for the original rows will have timestamps every 10
+-- seconds. Any other timestamps are inserted as part of the test.
+insert into :hypertable (created_at, location_id, device_id, owner_id, temp, humidity)
+select t, ceil(random()*10), ceil(random()*30), ceil(random() * 5), random()*40, random()*100
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') t;
+alter table :hypertable set (
+	  timescaledb.compress,
+	  timescaledb.compress_orderby = 'created_at',
+	  timescaledb.compress_segmentby = 'location_id, owner_id'
+);
+-- Get some test chunks as global variables (first and last chunk here)
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk1
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
+ order by chunk1 asc
+ limit 1 \gset
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
+ order by chunk2 asc
+ limit 1 offset 1 \gset
+-- TODO(#1068) Parallel sequence scan does not work
+set max_parallel_workers_per_gather to 0;
+select compress_chunk(show_chunks(:'hypertable'), hypercore_use_access_method => true);
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+(6 rows)
+
+-- Check that all chunks are compressed
+select chunk_name, compression_status from chunk_compression_stats(:'hypertable');
+    chunk_name    | compression_status 
+------------------+--------------------
+ _hyper_1_1_chunk | Compressed
+ _hyper_1_2_chunk | Compressed
+ _hyper_1_3_chunk | Compressed
+ _hyper_1_4_chunk | Compressed
+ _hyper_1_5_chunk | Compressed
+ _hyper_1_6_chunk | Compressed
+(6 rows)
+
+select relname, amname
+  from pg_class join pg_am on (relam = pg_am.oid)
+ where pg_class.oid in (select show_chunks(:'hypertable'))
+order by relname;
+     relname      |  amname   
+------------------+-----------
+ _hyper_1_1_chunk | hypercore
+ _hyper_1_2_chunk | hypercore
+ _hyper_1_3_chunk | hypercore
+ _hyper_1_4_chunk | hypercore
+ _hyper_1_5_chunk | hypercore
+ _hyper_1_6_chunk | hypercore
+(6 rows)
+
+-- Pick a random row to update
+\x on
+select * from :hypertable order by created_at offset 577 limit 1;
+-[ RECORD 1 ]-----------------------------
+metric_id   | 578
+created_at  | Fri Jun 03 00:05:00 2022 PDT
+location_id | 5
+owner_id    | 4
+device_id   | 19
+temp        | 14.8028647461121
+humidity    | 32.8889
+
+select created_at, location_id, owner_id, device_id
+from :hypertable order by created_at offset 577 limit 1 \gset
+\x off
+-- Test updating the same row using segment-by column, other lookup column
+explain (costs off)
+update :hypertable set temp = 100.0 where created_at = :'created_at';
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
+ Custom Scan (ModifyHypertable)
+   ->  Update on readings
+         Update on _hyper_1_2_chunk readings_1
+         ->  Result
+               ->  Index Scan using "2_2_readings_created_at_key" on _hyper_1_2_chunk readings_1
+                     Index Cond: (created_at = 'Fri Jun 03 00:05:00 2022 PDT'::timestamp with time zone)
+(6 rows)
+
+\x on
+select * from :hypertable where created_at = :'created_at';
+-[ RECORD 1 ]-----------------------------
+metric_id   | 578
+created_at  | Fri Jun 03 00:05:00 2022 PDT
+location_id | 5
+owner_id    | 4
+device_id   | 19
+temp        | 14.8028647461121
+humidity    | 32.8889
+
+update :hypertable set temp = 100.0 where created_at = :'created_at';
+select * from :hypertable where created_at = :'created_at';
+-[ RECORD 1 ]-----------------------------
+metric_id   | 578
+created_at  | Fri Jun 03 00:05:00 2022 PDT
+location_id | 5
+owner_id    | 4
+device_id   | 19
+temp        | 100
+humidity    | 32.8889
+
+\x off
+-- Disable checks on max tuples decompressed per transaction
+set timescaledb.max_tuples_decompressed_per_dml_transaction to 0;
+-- Using the segmentby attribute that has an index
+explain (costs off)
+update :hypertable set humidity = 110.0 where location_id = :location_id;
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ModifyHypertable)
+   ->  Update on readings
+         Update on _hyper_1_1_chunk readings_1
+         Update on _hyper_1_2_chunk readings_2
+         Update on _hyper_1_3_chunk readings_3
+         Update on _hyper_1_4_chunk readings_4
+         Update on _hyper_1_5_chunk readings_5
+         Update on _hyper_1_6_chunk readings_6
+         ->  Result
+               ->  Append
+                     ->  Index Scan using _hyper_1_1_chunk_hypertable_location_id_idx on _hyper_1_1_chunk readings_1
+                           Index Cond: (location_id = 5)
+                     ->  Index Scan using _hyper_1_2_chunk_hypertable_location_id_idx on _hyper_1_2_chunk readings_2
+                           Index Cond: (location_id = 5)
+                     ->  Index Scan using _hyper_1_3_chunk_hypertable_location_id_idx on _hyper_1_3_chunk readings_3
+                           Index Cond: (location_id = 5)
+                     ->  Index Scan using _hyper_1_4_chunk_hypertable_location_id_idx on _hyper_1_4_chunk readings_4
+                           Index Cond: (location_id = 5)
+                     ->  Index Scan using _hyper_1_5_chunk_hypertable_location_id_idx on _hyper_1_5_chunk readings_5
+                           Index Cond: (location_id = 5)
+                     ->  Index Scan using _hyper_1_6_chunk_hypertable_location_id_idx on _hyper_1_6_chunk readings_6
+                           Index Cond: (location_id = 5)
+(22 rows)
+
+select count(*) from :hypertable where humidity = 110.0;
+ count 
+-------
+     0
+(1 row)
+
+update :hypertable set humidity = 110.0 where location_id = :location_id;
+select count(*) from :hypertable where humidity = 110.0;
+ count 
+-------
+   832
+(1 row)
+
+-- Make sure there is a mix of compressed and non-compressed rows for
+-- the select for update test below. Run an update on a metric_id to
+-- decompress the corresponding segment.
+update :hypertable set humidity = 120.0 where metric_id = 1001;
+-- Testing to select for update, and then perform an update of those
+-- rows. The selection is to make sure that we have a mix of
+-- compressed and uncompressed tuples.
+start transaction;
+select _timescaledb_debug.is_compressed_tid(ctid),
+       metric_id, created_at
+  into to_update
+  from :hypertable
+ where metric_id between 6330 and 6340
+order by metric_id for update;
+select * from to_update order by metric_id;
+ is_compressed_tid | metric_id |          created_at          
+-------------------+-----------+------------------------------
+ f                 |      6330 | Wed Jun 22 23:25:00 2022 PDT
+ t                 |      6331 | Wed Jun 22 23:30:00 2022 PDT
+ t                 |      6332 | Wed Jun 22 23:35:00 2022 PDT
+ f                 |      6333 | Wed Jun 22 23:40:00 2022 PDT
+ t                 |      6334 | Wed Jun 22 23:45:00 2022 PDT
+ t                 |      6335 | Wed Jun 22 23:50:00 2022 PDT
+ t                 |      6336 | Wed Jun 22 23:55:00 2022 PDT
+ t                 |      6337 | Thu Jun 23 00:00:00 2022 PDT
+ t                 |      6338 | Thu Jun 23 00:05:00 2022 PDT
+ t                 |      6339 | Thu Jun 23 00:10:00 2022 PDT
+ t                 |      6340 | Thu Jun 23 00:15:00 2022 PDT
+(11 rows)
+
+update :hypertable set humidity = 200.0, temp = 500.0
+where (created_at, metric_id) in (select created_at, metric_id from to_update);
+select * from :hypertable where humidity = 200.0 order by metric_id;
+ metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity 
+-----------+------------------------------+-------------+----------+-----------+------+----------
+      6330 | Wed Jun 22 23:25:00 2022 PDT |           5 |        4 |         6 |  500 |      200
+      6331 | Wed Jun 22 23:30:00 2022 PDT |           9 |        3 |        12 |  500 |      200
+      6332 | Wed Jun 22 23:35:00 2022 PDT |           1 |        1 |        15 |  500 |      200
+      6333 | Wed Jun 22 23:40:00 2022 PDT |           5 |        1 |        24 |  500 |      200
+      6334 | Wed Jun 22 23:45:00 2022 PDT |           7 |        5 |        25 |  500 |      200
+      6335 | Wed Jun 22 23:50:00 2022 PDT |           4 |        4 |        10 |  500 |      200
+      6336 | Wed Jun 22 23:55:00 2022 PDT |           6 |        5 |        23 |  500 |      200
+      6337 | Thu Jun 23 00:00:00 2022 PDT |           2 |        3 |         1 |  500 |      200
+      6338 | Thu Jun 23 00:05:00 2022 PDT |           7 |        3 |        27 |  500 |      200
+      6339 | Thu Jun 23 00:10:00 2022 PDT |           1 |        1 |        24 |  500 |      200
+      6340 | Thu Jun 23 00:15:00 2022 PDT |          10 |        3 |        21 |  500 |      200
+(11 rows)
+
+commit;
+-- Test update of a segment-by column. The selection is to make sure
+-- that we have a mix of compressed and uncompressed tuples.
+select compress_chunk(show_chunks(:'hypertable'), hypercore_use_access_method => true);
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+(6 rows)
+
+select _timescaledb_debug.is_compressed_tid(ctid), metric_id, created_at
+from :hypertable
+where (created_at, metric_id) in (select created_at, metric_id from to_update)
+order by metric_id;
+ is_compressed_tid | metric_id |          created_at          
+-------------------+-----------+------------------------------
+ t                 |      6330 | Wed Jun 22 23:25:00 2022 PDT
+ t                 |      6331 | Wed Jun 22 23:30:00 2022 PDT
+ t                 |      6332 | Wed Jun 22 23:35:00 2022 PDT
+ t                 |      6333 | Wed Jun 22 23:40:00 2022 PDT
+ t                 |      6334 | Wed Jun 22 23:45:00 2022 PDT
+ t                 |      6335 | Wed Jun 22 23:50:00 2022 PDT
+ t                 |      6336 | Wed Jun 22 23:55:00 2022 PDT
+ t                 |      6337 | Thu Jun 23 00:00:00 2022 PDT
+ t                 |      6338 | Thu Jun 23 00:05:00 2022 PDT
+ t                 |      6339 | Thu Jun 23 00:10:00 2022 PDT
+ t                 |      6340 | Thu Jun 23 00:15:00 2022 PDT
+(11 rows)
+
+update :hypertable set location_id = 66
+where (created_at, metric_id) in (select created_at, metric_id from to_update);
+select _timescaledb_debug.is_compressed_tid(ctid), metric_id, created_at
+from :hypertable
+where (created_at, metric_id) in (select created_at, metric_id from to_update)
+order by metric_id;
+ is_compressed_tid | metric_id |          created_at          
+-------------------+-----------+------------------------------
+ f                 |      6330 | Wed Jun 22 23:25:00 2022 PDT
+ f                 |      6331 | Wed Jun 22 23:30:00 2022 PDT
+ f                 |      6332 | Wed Jun 22 23:35:00 2022 PDT
+ f                 |      6333 | Wed Jun 22 23:40:00 2022 PDT
+ f                 |      6334 | Wed Jun 22 23:45:00 2022 PDT
+ f                 |      6335 | Wed Jun 22 23:50:00 2022 PDT
+ f                 |      6336 | Wed Jun 22 23:55:00 2022 PDT
+ f                 |      6337 | Thu Jun 23 00:00:00 2022 PDT
+ f                 |      6338 | Thu Jun 23 00:05:00 2022 PDT
+ f                 |      6339 | Thu Jun 23 00:10:00 2022 PDT
+ f                 |      6340 | Thu Jun 23 00:15:00 2022 PDT
+(11 rows)
+
+-- Compress all chunks again before testing RETURNING
+select compress_chunk(show_chunks(:'hypertable'), hypercore_use_access_method => true);
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+(6 rows)
+
+select _timescaledb_debug.is_compressed_tid(ctid), metric_id, created_at
+from :hypertable
+where (created_at, metric_id) in (select created_at, metric_id from to_update)
+order by metric_id;
+ is_compressed_tid | metric_id |          created_at          
+-------------------+-----------+------------------------------
+ t                 |      6330 | Wed Jun 22 23:25:00 2022 PDT
+ t                 |      6331 | Wed Jun 22 23:30:00 2022 PDT
+ t                 |      6332 | Wed Jun 22 23:35:00 2022 PDT
+ t                 |      6333 | Wed Jun 22 23:40:00 2022 PDT
+ t                 |      6334 | Wed Jun 22 23:45:00 2022 PDT
+ t                 |      6335 | Wed Jun 22 23:50:00 2022 PDT
+ t                 |      6336 | Wed Jun 22 23:55:00 2022 PDT
+ t                 |      6337 | Thu Jun 23 00:00:00 2022 PDT
+ t                 |      6338 | Thu Jun 23 00:05:00 2022 PDT
+ t                 |      6339 | Thu Jun 23 00:10:00 2022 PDT
+ t                 |      6340 | Thu Jun 23 00:15:00 2022 PDT
+(11 rows)
+
+-- Update a table and return values. This is just to check that the
+-- updated values are returned properly and not corrupted.
+update :hypertable set location_id = 99
+where (created_at, metric_id) in (select created_at, metric_id from to_update)
+returning _timescaledb_debug.is_compressed_tid(ctid), *;
+ is_compressed_tid | metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity 
+-------------------+-----------+------------------------------+-------------+----------+-----------+------+----------
+ f                 |      6337 | Thu Jun 23 00:00:00 2022 PDT |          99 |        3 |         1 |  500 |      200
+ f                 |      6340 | Thu Jun 23 00:15:00 2022 PDT |          99 |        3 |        21 |  500 |      200
+ f                 |      6335 | Wed Jun 22 23:50:00 2022 PDT |          99 |        4 |        10 |  500 |      200
+ f                 |      6338 | Thu Jun 23 00:05:00 2022 PDT |          99 |        3 |        27 |  500 |      200
+ f                 |      6331 | Wed Jun 22 23:30:00 2022 PDT |          99 |        3 |        12 |  500 |      200
+ f                 |      6332 | Wed Jun 22 23:35:00 2022 PDT |          99 |        1 |        15 |  500 |      200
+ f                 |      6330 | Wed Jun 22 23:25:00 2022 PDT |          99 |        4 |         6 |  500 |      200
+ f                 |      6339 | Thu Jun 23 00:10:00 2022 PDT |          99 |        1 |        24 |  500 |      200
+ f                 |      6333 | Wed Jun 22 23:40:00 2022 PDT |          99 |        1 |        24 |  500 |      200
+ f                 |      6336 | Wed Jun 22 23:55:00 2022 PDT |          99 |        5 |        23 |  500 |      200
+ f                 |      6334 | Wed Jun 22 23:45:00 2022 PDT |          99 |        5 |        25 |  500 |      200
+(11 rows)
+
+-- Test update of a segment-by column directly on the chunk. This
+-- should fail for compressed rows even for segment-by columns.
+select compress_chunk(:'chunk1', hypercore_use_access_method => true);
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+select metric_id from :chunk1 limit 1 \gset
+select _timescaledb_debug.is_compressed_tid(ctid), metric_id, created_at
+from :chunk1
+where metric_id = :metric_id;
+ is_compressed_tid | metric_id |          created_at          
+-------------------+-----------+------------------------------
+ t                 |        88 | Wed Jun 01 07:15:00 2022 PDT
+(1 row)
+
+\set ON_ERROR_STOP 0
+update :chunk1 set location_id = 77 where metric_id = :metric_id;
+ERROR:  cannot update compressed tuple
+update :chunk1 set location_id = 88
+where metric_id = :metric_id
+returning _timescaledb_debug.is_compressed_tid(ctid), *;
+ERROR:  cannot update compressed tuple
+\set ON_ERROR_STOP 1
+-----------------------------
+-- Test update from cursor --
+-----------------------------
+-- Test cursor update via hypertable. Data is non-compressed
+\x on
+select _timescaledb_debug.is_compressed_tid(ctid), *
+from :hypertable order by created_at offset 898 limit 1;
+-[ RECORD 1 ]-----+-----------------------------
+is_compressed_tid | f
+metric_id         | 899
+created_at        | Sat Jun 04 02:50:00 2022 PDT
+location_id       | 4
+owner_id          | 1
+device_id         | 5
+temp              | 32.7528003907232
+humidity          | 98.639
+
+select created_at, location_id, owner_id, device_id, humidity
+from :hypertable order by created_at offset 898 limit 1 \gset
+\x off
+begin;
+declare curs1 cursor for select humidity from :hypertable where created_at = :'created_at' for update;
+fetch forward 1 from curs1;
+ humidity 
+----------
+   98.639
+(1 row)
+
+-- Update via the cursor. The update should work since it happens on
+-- non-compressed data
+update :hypertable set humidity = 200.0 where current of curs1;
+commit;
+select humidity from :hypertable
+where created_at = :'created_at' and humidity = 200.0;
+ humidity 
+----------
+      200
+(1 row)
+
+-- Test cursor update via hypertable on compressed data
+--
+-- First, make sure the data is compressed. Do it only on the chunk we
+-- will select the cursor from to make it faster
+select ch as chunk
+from show_chunks(:'hypertable') ch limit 1 \gset
+vacuum full :chunk;
+-- Pick a tuple in the compressed chunk and get the values from that
+-- tuple for the cursor.
+select metric_id from :chunk offset 5 limit 1 \gset
+\x on
+select _timescaledb_debug.is_compressed_tid(ctid), *
+from :hypertable where metric_id = :metric_id;
+-[ RECORD 1 ]-----+-----------------------------
+is_compressed_tid | t
+metric_id         | 50
+created_at        | Wed Jun 01 04:05:00 2022 PDT
+location_id       | 1
+owner_id          | 2
+device_id         | 18
+temp              | 6.16907446378801
+humidity          | 33.7603
+
+select created_at, location_id, owner_id, device_id, humidity
+from :hypertable where metric_id = :metric_id \gset
+\x off
+begin;
+declare curs1 cursor for select humidity from :hypertable where created_at = :'created_at' for update;
+fetch forward 1 from curs1;
+ humidity 
+----------
+  33.7603
+(1 row)
+
+update :hypertable set humidity = 400.0 where current of curs1;
+commit;
+-- The update silently succeeds but doesn't update anything since DML
+-- decompression deleted the row at the cursor and moved it to the
+-- non-compressed rel. Currently, this is not the "correct" behavior.
+select humidity from :hypertable where created_at = :'created_at' and humidity = 400.0;
+ humidity 
+----------
+(0 rows)
+
+\x on
+select _timescaledb_debug.is_compressed_tid(ctid), *
+from :hypertable where metric_id = :metric_id;
+-[ RECORD 1 ]-----+-----------------------------
+is_compressed_tid | f
+metric_id         | 50
+created_at        | Wed Jun 01 04:05:00 2022 PDT
+location_id       | 1
+owner_id          | 2
+device_id         | 18
+temp              | 6.16907446378801
+humidity          | 33.7603
+
+select created_at, location_id, owner_id, device_id, humidity
+from :hypertable where metric_id = :metric_id \gset
+\x off
+-- Test doing the update directly on the chunk. The data should now be
+-- decompressed again due to DML decompression in the previous query.
+begin;
+declare curs1 cursor for select humidity from :chunk where created_at = :'created_at' for update;
+fetch forward 1 from curs1;
+ humidity 
+----------
+  33.7603
+(1 row)
+
+update :chunk set humidity = 400.0 where current of curs1;
+commit;
+-- The update should succeed because the data is not compressed
+select humidity from :chunk where created_at = :'created_at' and humidity = 400.0;
+ humidity 
+----------
+      400
+(1 row)
+
+-- Recompress everything again and try cursor update via chunk on
+-- compressed data
+vacuum full :chunk;
+\set ON_ERROR_STOP 0
+begin;
+declare curs1 cursor for select humidity from :chunk where created_at = :'created_at' for update;
+fetch forward 1 from curs1;
+ humidity 
+----------
+      400
+(1 row)
+
+-- The update should now "correctly" fail with an error when it
+-- happens on compressed data.
+update :chunk set humidity = 500.0 where current of curs1;
+ERROR:  cannot update compressed tuple
+commit;
+\set ON_ERROR_STOP 1

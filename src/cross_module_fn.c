@@ -4,15 +4,16 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/amapi.h>
 #include <fmgr.h>
-#include <utils/timestamp.h>
 #include <utils/lsyscache.h>
+#include <utils/timestamp.h>
 
-#include "export.h"
+#include "bgw/job.h"
 #include "cross_module_fn.h"
+#include "export.h"
 #include "guc.h"
 #include "license_guc.h"
-#include "bgw/job.h"
 
 #define CROSSMODULE_WRAPPER(func)                                                                  \
 	TS_FUNCTION_INFO_V1(ts_##func);                                                                \
@@ -66,6 +67,8 @@ CROSSMODULE_WRAPPER(compressed_data_send);
 CROSSMODULE_WRAPPER(compressed_data_recv);
 CROSSMODULE_WRAPPER(compressed_data_in);
 CROSSMODULE_WRAPPER(compressed_data_out);
+CROSSMODULE_WRAPPER(compressed_data_info);
+CROSSMODULE_WRAPPER(compressed_data_has_nulls);
 CROSSMODULE_WRAPPER(deltadelta_compressor_append);
 CROSSMODULE_WRAPPER(deltadelta_compressor_finish);
 CROSSMODULE_WRAPPER(gorilla_compressor_append);
@@ -74,24 +77,32 @@ CROSSMODULE_WRAPPER(dictionary_compressor_append);
 CROSSMODULE_WRAPPER(dictionary_compressor_finish);
 CROSSMODULE_WRAPPER(array_compressor_append);
 CROSSMODULE_WRAPPER(array_compressor_finish);
+CROSSMODULE_WRAPPER(bool_compressor_append);
+CROSSMODULE_WRAPPER(bool_compressor_finish);
 CROSSMODULE_WRAPPER(create_compressed_chunk);
 CROSSMODULE_WRAPPER(compress_chunk);
 CROSSMODULE_WRAPPER(decompress_chunk);
+CROSSMODULE_WRAPPER(hypercore_handler);
+CROSSMODULE_WRAPPER(hypercore_proxy_handler);
 
 /* continuous aggregate */
 CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
 CROSSMODULE_WRAPPER(continuous_agg_refresh);
 CROSSMODULE_WRAPPER(continuous_agg_validate_query);
 CROSSMODULE_WRAPPER(continuous_agg_get_bucket_function);
+CROSSMODULE_WRAPPER(continuous_agg_get_bucket_function_info);
+CROSSMODULE_WRAPPER(continuous_agg_migrate_to_time_bucket);
 CROSSMODULE_WRAPPER(cagg_try_repair);
 
 CROSSMODULE_WRAPPER(chunk_freeze_chunk);
 CROSSMODULE_WRAPPER(chunk_unfreeze_chunk);
 
-CROSSMODULE_WRAPPER(chunk_create_empty_table);
-
 CROSSMODULE_WRAPPER(recompress_chunk_segmentwise);
 CROSSMODULE_WRAPPER(get_compressed_chunk_index_for_recompression);
+CROSSMODULE_WRAPPER(merge_chunks);
+
+/* hypercore */
+CROSSMODULE_WRAPPER(is_compressed_tid);
 
 /*
  * casting a function pointer to a pointer of another type is undefined
@@ -110,6 +121,37 @@ error_no_default_fn_community(void)
 					 "Timescale Cloud.")));
 }
 
+static bytea *
+error_hypercore_proxy_index_options(Datum reloptions, bool validate)
+{
+	error_no_default_fn_community();
+	return NULL;
+}
+
+/*
+ * An index AM always needs to return a IndexAmRoutine because the handler
+ * function is invoked when the default opclass for a type is defined in
+ * SQL. Therefore, return this dummy under non-TSL license and error out when
+ * parsing index options instead.
+ */
+static Datum
+process_hypercore_proxy_handler(PG_FUNCTION_ARGS)
+{
+	ts_license_enable_module_loading();
+
+	if (ts_cm_functions->hypercore_proxy_handler != process_hypercore_proxy_handler)
+		return ts_cm_functions->hypercore_proxy_handler(fcinfo);
+
+	IndexAmRoutine *amroutine = makeNode(IndexAmRoutine);
+
+	amroutine->amstrategies = 0;
+	amroutine->amsupport = 1;
+	amroutine->amoptsprocnum = 0;
+	amroutine->amoptions = error_hypercore_proxy_index_options;
+
+	PG_RETURN_POINTER(amroutine);
+}
+
 static bool
 error_no_default_fn_bool_void_community(void)
 {
@@ -124,16 +166,13 @@ job_execute_default_fn(BgwJob *job)
 	pg_unreachable();
 }
 
-static bool
-push_down_aggregation(PlannerInfo *root, AggPath *aggregation_path, Path *subpath)
+static void
+tsl_postprocess_plan_stub(PlannedStmt *stmt)
 {
-	/* Don't skip adding the agg node on top of the path */
-	return false;
 }
 
 static bool
-process_compress_table_default(AlterTableCmd *cmd, Hypertable *ht,
-							   WithClauseResult *with_clause_options)
+process_compress_table_default(Hypertable *ht, WithClauseResult *with_clause_options)
 {
 	error_no_default_fn_community();
 	pg_unreachable();
@@ -213,6 +252,24 @@ process_cagg_try_repair(PG_FUNCTION_ARGS)
 	pg_unreachable();
 }
 
+/*
+ * Ensure that the TSL library is loaded before trying to use the handler.
+ *
+ * As for the functions above, the TSL library might not be loaded when this
+ * function is called, so we try to load this function, but fall back on the
+ * Apache error message if not possible.
+ */
+static Datum
+process_hypercore_handler(PG_FUNCTION_ARGS)
+{
+	ts_license_enable_module_loading();
+	if (ts_cm_functions->hypercore_handler != process_hypercore_handler)
+		return ts_cm_functions->hypercore_handler(fcinfo);
+
+	error_no_default_fn_pg_community(fcinfo);
+	pg_unreachable();
+}
+
 static DDLResult
 process_cagg_viewstmt_default(Node *stmt, const char *query_string, void *pstmt,
 							  WithClauseResult *with_clause_options)
@@ -260,7 +317,7 @@ ts_tsl_loaded(PG_FUNCTION_ARGS)
 }
 
 static void
-preprocess_query_tsl_default_fn_community(Query *parse)
+preprocess_query_tsl_default_fn_community(Query *parse, int *cursor_opts)
 {
 	/* No op in community licensed code */
 }
@@ -274,9 +331,11 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.create_upper_paths_hook = NULL,
 	.set_rel_pathlist_dml = NULL,
 	.set_rel_pathlist_query = NULL,
-	.set_rel_pathlist = NULL,
+	.ddl_command_start = NULL,
+	.ddl_command_end = NULL,
 	.process_altertable_cmd = NULL,
 	.process_rename_cmd = NULL,
+	.process_explain_def = NULL,
 
 	/* gapfill */
 	.gapfill_marker = error_no_default_fn_pg_community,
@@ -322,7 +381,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.policies_alter = error_no_default_fn_pg_community,
 	.policies_show = error_no_default_fn_pg_community,
 
-	.push_down_aggregation = push_down_aggregation,
+	.tsl_postprocess_plan = tsl_postprocess_plan_stub,
 
 	.partialize_agg = error_no_default_fn_pg_community,
 	.finalize_agg_sfunc = error_no_default_fn_pg_community,
@@ -336,6 +395,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_update_options = continuous_agg_update_options_default,
 	.continuous_agg_validate_query = error_no_default_fn_pg_community,
 	.continuous_agg_get_bucket_function = error_no_default_fn_pg_community,
+	.continuous_agg_get_bucket_function_info = error_no_default_fn_pg_community,
+	.continuous_agg_migrate_to_time_bucket = error_no_default_fn_pg_community,
 	.cagg_try_repair = process_cagg_try_repair,
 
 	/* compression */
@@ -357,15 +418,22 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.dictionary_compressor_finish = error_no_default_fn_pg_community,
 	.array_compressor_append = error_no_default_fn_pg_community,
 	.array_compressor_finish = error_no_default_fn_pg_community,
+	.bool_compressor_append = error_no_default_fn_pg_community,
+	.bool_compressor_finish = error_no_default_fn_pg_community,
+	.hypercore_handler = process_hypercore_handler,
+	.hypercore_proxy_handler = process_hypercore_proxy_handler,
+	.is_compressed_tid = error_no_default_fn_pg_community,
+
+	.compression_enable = NULL,
 
 	.show_chunk = error_no_default_fn_pg_community,
 	.create_chunk = error_no_default_fn_pg_community,
 	.chunk_freeze_chunk = error_no_default_fn_pg_community,
 	.chunk_unfreeze_chunk = error_no_default_fn_pg_community,
-	.chunk_create_empty_table = error_no_default_fn_pg_community,
 	.recompress_chunk_segmentwise = error_no_default_fn_pg_community,
 	.get_compressed_chunk_index_for_recompression = error_no_default_fn_pg_community,
 	.preprocess_query_tsl = preprocess_query_tsl_default_fn_community,
+	.merge_chunks = error_no_default_fn_pg_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

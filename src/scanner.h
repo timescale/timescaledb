@@ -11,8 +11,8 @@
 #include <nodes/lockoptions.h>
 #include <utils/fmgroids.h>
 
-#include "utils.h"
 #include "compat/compat.h"
+#include "utils.h"
 
 typedef struct ScanTupLock
 {

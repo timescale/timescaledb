@@ -5,13 +5,15 @@ name: Test Update and Downgrade
       - main
       - prerelease_test
   pull_request:
+  workflow_dispatch:
+
 jobs:
   update_test:
     name: Update test PG${{ matrix.pg }}
     runs-on: 'ubuntu-latest'
     strategy:
       matrix:
-        pg: [13, 14, 15, 16]
+        pg: [15, 16, 17]
       fail-fast: false
     env:
       PG_VERSION: ${{ matrix.pg }}

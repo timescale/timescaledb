@@ -1,12 +1,13 @@
+/agg_bookends-*.sql
 /alternate_users-*.sql
 /append-*.sql
 /cluster-*.sql
-/cursor-*.sql
-/ddl-*.sql
-/delete-*.sql
+/drop_owned-*.sql
+/grant_hypertable-*.sql
 /histogram_test-*.sql
 /insert-*.sql
 /insert_many-*.sql
+/null_exclusion-*.sql
 /parallel-*.sql
 /partitioning-*.sql
 /partitionwise-*.sql
@@ -15,9 +16,7 @@
 /plan_hashagg_optimized-*.sql
 /plan_hypertable_cache-*.sql
 /plan_ordered_append-*.sql
-/query-*.sql
 /rowsecurity-*.sql
 /timestamp-*.sql
 /ts_merge-*.sql
-/update-*.sql
 /loader-*.sql

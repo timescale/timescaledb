@@ -34,6 +34,10 @@ typedef struct BgwParams
 	/** Job id to use for the worker when executing the job */
 	int32 job_id;
 
+	/** Job history information to use for the worker when recording the job execution */
+	int64 job_history_id;
+	TimestampTz job_history_execution_start;
+
 	/** Time to live. Only used in tests. */
 	int32 ttl;
 

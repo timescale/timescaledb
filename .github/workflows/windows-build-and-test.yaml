@@ -20,11 +20,15 @@ name: Regression Windows
       - 'LICENSE*'
       - NOTICE
       - 'bootstrap*'
+  workflow_dispatch:
 jobs:
   config:
     runs-on: ubuntu-latest
     outputs:
       build_type: ${{ steps.build_type.outputs.build_type }}
+      pg15_latest: ${{ steps.config.outputs.pg15_latest }}
+      pg16_latest: ${{ steps.config.outputs.pg16_latest }}
+      pg17_latest: ${{ steps.config.outputs.pg17_latest }}
 
     steps:
     - name: Checkout source code
@@ -49,22 +53,29 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ 13, 14, 15, 16 ]
+        pg: [ 15, 16, 17 ]
         os: [ windows-2022 ]
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
-        ignores: ["chunk_adaptive metadata telemetry"]
+        ignores: ["bgw_launcher chunk_adaptive metadata telemetry"]
         tsl_ignores: ["compression_algos"]
-        tsl_skips: ["bgw_db_scheduler bgw_db_scheduler_fixed"]
+        tsl_skips:
+          - >-
+            bgw_db_scheduler
+            bgw_db_scheduler_fixed
+            hypercore_vectoragg
+            vector_agg_groupagg
+            vector_agg_grouping
+            vector_agg_text
+            vector_agg_uuid_segmentby
+            vectorized_aggregation
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
         include:
-          - pg: 13
-            tsl_skips_version: telemetry_stats-13
-          - pg: 14
-            tsl_skips_version: telemetry_stats-14
           - pg: 15
-            tsl_skips_version: telemetry_stats-15
+            pg_version: ${{ needs.config.outputs.pg15_latest }}
           - pg: 16
-            tsl_skips_version: telemetry_stats-16
+            pg_version: ${{ needs.config.outputs.pg16_latest }}
+          - pg: 17
+            pg_version: ${{ needs.config.outputs.pg17_latest }}
     env:
       # PostgreSQL configuration
       PGPORT: 55432
@@ -73,7 +84,7 @@ jobs:
       TABLESPACE2: D:\tablespace2\
     steps:
     - name: Setup WSL
-      uses: Vampire/setup-wsl@v3
+      uses: Vampire/setup-wsl@v3.1.4
       with:
         additional-packages:
           cmake
@@ -122,8 +133,19 @@ jobs:
         key: "${{ runner.os }}-build-pg${{ matrix.pkg_version }}\
           -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
 
+    # Force install PostgreSQL 17 since the package still on moderation
+    # https://community.chocolatey.org/packages/postgresql17
+    - name: Install PostgreSQL ${{ matrix.pg }} (using ${{ matrix.pg_version }})
+      if: github.event_name != 'schedule' && steps.cache-postgresql.outputs.cache-hit != 'true'
+      run: |
+        choco feature disable --name=usePackageExitCodes
+        choco feature disable --name=showDownloadProgress
+        choco install postgresql${{ matrix.pg }} --version ${{ matrix.pg_version }} `
+          --force -y --install-args="'--prefix $HOME\PostgreSQL\${{ matrix.pg }} --extract-only yes'"
+
+    # This is for nightly builds. Here we pick the latest version of the package.
     - name: Install PostgreSQL ${{ matrix.pg }}
-      if: steps.cache-postgresql.outputs.cache-hit != 'true'
+      if: github.event_name == 'schedule' && steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
         choco feature disable --name=usePackageExitCodes
         choco feature disable --name=showDownloadProgress
@@ -133,7 +155,8 @@ jobs:
     - name: Configure TimescaleDB
       run: cmake -B build_win -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
         -DPG_PATH="$HOME/PostgreSQL/${{ matrix.pg }}" `
-        -DOPENSSL_ROOT_DIR="$HOME/PostgreSQL/${{ matrix.pg }}" -DASSERTIONS=ON
+        -DOPENSSL_ROOT_DIR="$HOME/PostgreSQL/${{ matrix.pg }}" -DASSERTIONS=ON `
+        -DTEST_PG_LOG_DIRECTORY="log"
     - name: Build TimescaleDB
       run: cmake --build build_win --config ${{ matrix.build_type }}
     - name: Install TimescaleDB
@@ -175,12 +198,7 @@ jobs:
         export TEST_TABLESPACE2_PREFIX='${{ env.TABLESPACE2 }}'
         cmake -B build_wsl -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTEST_PGPORT_LOCAL=${{ env.PGPORT }}
 
-        # isolationtester is only packaged with pg14+ so we would have to build our own postgres
-        # to get it for earlier versions so we skip it for < 14.
-        if [[ "${{ matrix.pg }}" -ge "14" ]]; then
-          make -C build_wsl isolationchecklocal | tee -a installcheck.log
-        fi
-
+        make -C build_wsl isolationchecklocal | tee -a installcheck.log
         make -C build_wsl regresschecklocal IGNORES="${{ matrix.ignores }}" | tee -a installcheck.log
 
     - name: Setup postgres cluster for TSL tests
@@ -201,12 +219,7 @@ jobs:
         export TEST_TABLESPACE1_PREFIX='${{ env.TABLESPACE1 }}'
         export TEST_TABLESPACE2_PREFIX='${{ env.TABLESPACE2 }}'
 
-        # isolationtester is only packaged with pg14+ so we would have to build our own postgres
-        # to get it for earlier versions so we skip it for < 14.
-        if [[ "${{ matrix.pg }}" -ge "14" ]]; then
-          make -C build_wsl isolationchecklocal-t | tee -a installcheck.log
-        fi
-
+        make -C build_wsl isolationchecklocal-t | tee -a installcheck.log
         make -C build_wsl -k regresschecklocal-t \
           IGNORES="${{ matrix.tsl_ignores }} ${{ matrix.tsl_ignores_version }}" \
           SKIPS="${{ matrix.tsl_skips }} ${{ matrix.tsl_skips_version }}" | tee -a installcheck.log
@@ -237,7 +250,24 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: PostgreSQL ${{ matrix.pg }} log ${{ matrix.os }} ${{ matrix.build_type }} Build
-        path: postmaster.log
+        path: ${{ env.PGDATA }}\log\postmaster.log
+
+    - name: Upload CMake Logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: CMake Logs ${{ matrix.pg }} ${{ matrix.os }} ${{ matrix.build_type }}
+        path: |
+            build_win/CMakeCache.txt
+            build_win/CMakeFiles/CMakeConfigureLog.yaml
+            build_win/CMakeFiles/CMakeError.log
+            build_win/CMakeFiles/CMakeOutput.log
+            build_win/compile_commands.json
+            build_wsl/CMakeCache.txt
+            build_wsl/CMakeFiles/CMakeConfigureLog.yaml
+            build_wsl/CMakeFiles/CMakeError.log
+            build_wsl/CMakeFiles/CMakeOutput.log
+            build_wsl/compile_commands.json
 
     - name: Upload test results to the database
       if: always()

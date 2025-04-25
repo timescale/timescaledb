@@ -4,22 +4,20 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
-#include "compression/compression.h"
 #include "nodes/decompress_chunk/batch_array.h"
+#include "compression/compression.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
 /*
  * Create states to hold information for up to n batches.
  */
 void
-batch_array_init(BatchArray *array, int nbatches, int ncolumns_per_batch,
-				 Size memory_context_block_size_bytes)
+batch_array_init(BatchArray *array, int nbatches, int ncolumns_per_batch)
 {
 	Assert(nbatches >= 0);
 
 	array->n_batch_states = nbatches;
 	array->n_columns_per_batch = ncolumns_per_batch;
 	array->unused_batch_states = bms_add_range(NULL, 0, nbatches - 1);
-	array->batch_memory_context_bytes = memory_context_block_size_bytes;
 	array->n_batch_state_bytes =
 		sizeof(DecompressBatchState) + sizeof(CompressedColumnValues) * ncolumns_per_batch;
 	array->batch_states = palloc0(array->n_batch_state_bytes * nbatches);
@@ -54,7 +52,7 @@ batch_array_enlarge(BatchArray *array, int new_number)
 	array->batch_states = repalloc(array->batch_states, array->n_batch_state_bytes * new_number);
 
 	/* Zero out the tail. The batch states are initialized on first use. */
-	memset(((char *) array->batch_states) + array->n_batch_state_bytes * array->n_batch_states,
+	memset(((char *) array->batch_states) + (array->n_batch_state_bytes * array->n_batch_states),
 		   0x0,
 		   array->n_batch_state_bytes * (new_number - array->n_batch_states));
 

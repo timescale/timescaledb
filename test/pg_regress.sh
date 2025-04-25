@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 # shellcheck disable=SC2053
-# shellcheck disable=SC2235
 
 # Wrapper around pg_regress and pg_isolation_regress to be able to control the schedule with environment variables
 #
@@ -29,7 +28,7 @@ IGNORES=${IGNORES:-}
 SKIPS=${SKIPS:-}
 PSQL=${PSQL:-psql}
 PSQL="${PSQL} -X" # Prevent any .psqlrc files from being executed during the tests
-PG_VERSION_MAJOR=$(${PSQL} --version | awk '{split($3,v,"."); print v[1]}')
+PG_VERSION_MAJOR=$(${PSQL} --version | awk '{split($3,v,"[.a-z]"); print v[1]}')
 
 # check if test matches any of the patterns in a list
 # $1 list of patterns or test names
@@ -78,7 +77,7 @@ if [[ -z ${TESTS} ]] && [[ -z ${SKIPS} ]] && [[ -z ${IGNORES} ]]; then
 
   SCHEDULE=${TEST_SCHEDULE}
 
-elif [[ -z ${TESTS} ]] && ( [[ -n ${SKIPS} ]] || [[ -n ${IGNORES} ]] ); then
+elif [[ -z ${TESTS} && ( -n ${SKIPS} || -n ${IGNORES} ) ]]; then
   # If we only have IGNORES or SKIPS we can use the cmake created schedule
   # and just prepend ignore lines for the tests whose result should be
   # ignored and strip out the skipped tests. This will allow us to retain
@@ -86,7 +85,7 @@ elif [[ -z ${TESTS} ]] && ( [[ -n ${SKIPS} ]] || [[ -n ${IGNORES} ]] ); then
 
   echo > ${TEMP_SCHEDULE}
 
-  ALL_TESTS=$(grep '^test: ' ${TEST_SCHEDULE} | sed -e 's!^test: !!' |tr '\n' ' ')
+  ALL_TESTS=$(grep -a '^test: ' ${TEST_SCHEDULE} | sed -e 's!^test: !!' |tr '\n' ' ')
 
   # to support wildcards in IGNORES we match the IGNORES
   # list against the actual list of tests
@@ -120,7 +119,7 @@ elif [[ -z ${TESTS} ]] && ( [[ -n ${SKIPS} ]] || [[ -n ${IGNORES} ]] ); then
 else
   # TESTS was specified so we need to create a new schedule based on that
 
-  ALL_TESTS=$(grep '^test: ' ${TEST_SCHEDULE} | sed -e 's!^test: !!' |tr '\n' ' ')
+  ALL_TESTS=$(grep -a '^test: ' ${TEST_SCHEDULE} | sed -e 's!^test: !!' |tr '\n' ' ')
 
   if [[ -z "${TESTS}" ]]; then
     TESTS=${ALL_TESTS}
@@ -211,5 +210,14 @@ mkdir -p ${EXE_DIR}/sql/dump
 
 export PG_REGRESS_DIFF_OPTS
 
+# If so configured, we run the tests with faketime utility to change the current
+# time. This helps catch the mistakes with using the current time in test
+# references. We can't do this for isolation tests because this breaks the
+# waiting mechanism in isolation tester.
+if [[ "${PG_REGRESS_USE_FAKETIME}" == "1" ]]
+then
+    PG_REGRESS_FAKETIME="${FAKETIME}"
+fi
+
 PG_REGRESS_OPTS="${PG_REGRESS_OPTS}  --schedule=${SCHEDULE}"
-${PG_REGRESS} "$@" ${PG_REGRESS_OPTS}
+${PG_REGRESS_FAKETIME} ${PG_REGRESS} "$@" ${PG_REGRESS_OPTS}

@@ -5,20 +5,52 @@
  */
 
 #include <postgres.h>
+#include <access/htup_details.h>
+#include <catalog/pg_type.h>
+#include <commands/defrem.h>
 #include <fmgr.h>
 #include <funcapi.h>
-#include <access/htup_details.h>
-#include <commands/defrem.h>
-#include <catalog/pg_type.h>
+#include <postgres_ext.h>
 #include <utils/array.h>
 #include <utils/builtins.h>
+#include <utils/elog.h>
 #include <utils/lsyscache.h>
 #include <utils/memutils.h>
+#include <utils/regproc.h>
 
+#include "annotations.h"
 #include "export.h"
 #include "test_utils.h"
-#include "with_clause_parser.h"
-#include "annotations.h"
+#include "with_clause/with_clause_parser.h"
+
+TS_FUNCTION_INFO_V1(ts_sqlstate_raise_in);
+TS_FUNCTION_INFO_V1(ts_sqlstate_raise_out);
+
+/*
+ * Input function that will raise the error code give. This means that you can
+ * trigger an error when reading and converting a string to this type.
+ */
+Datum
+ts_sqlstate_raise_in(PG_FUNCTION_ARGS)
+{
+	char *code = PG_GETARG_CSTRING(0);
+	if (strlen(code) != 5)
+		ereport(ERROR,
+				errcode(ERRCODE_SYNTAX_ERROR),
+				errmsg("error code \"%s\" was not of length 5", code));
+	int sqlstate = MAKE_SQLSTATE(code[0], code[1], code[2], code[3], code[4]);
+	ereport(ERROR, errcode(sqlstate), errmsg("raised requested error code \"%s\"", code));
+	return 0;
+}
+
+/*
+ * Dummy function, we do not store values of this type anywhere.
+ */
+Datum
+ts_sqlstate_raise_out(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_CSTRING("uninteresting");
+}
 
 static DefElem *
 def_elem_from_texts(Datum *texts, int nelems)
@@ -177,19 +209,26 @@ typedef enum TestArgs
 	TestArgDefault,
 	TestArgName,
 	TestArgRegclass,
+	TestArgRaise,
 } TestArgs;
 
 static WithClauseDefinition test_args[] = {
-	[TestArgUnimpl] = { .arg_name = "unimplemented",
+	[TestArgUnimpl] = { .arg_names = {"unimplemented", NULL},
 						.type_id = InvalidOid, },
-	[TestArgBool] = { .arg_name = "bool", .type_id = BOOLOID, },
-	[TestArgInt32] = { .arg_name = "int32", .type_id = INT4OID, },
-	[TestArgDefault] = { .arg_name = "default",
+	[TestArgBool] = { .arg_names = {"bool", NULL}, .type_id = BOOLOID, },
+	[TestArgInt32] = { .arg_names = {"int32", NULL}, .type_id = INT4OID, },
+	[TestArgDefault] = { .arg_names = {"default", NULL},
 						 .type_id = INT4OID,
 						 .default_val = (Datum)-100 },
-	[TestArgName] = { .arg_name = "name", .type_id = NAMEOID, },
-	[TestArgRegclass] = { .arg_name = "regclass",
-						  .type_id = REGCLASSOID },
+	[TestArgName] = { .arg_names = {"name", NULL}, .type_id = NAMEOID, },
+	[TestArgRegclass] = {
+		.arg_names = {"regclass", NULL},
+		.type_id = REGCLASSOID,
+	},
+	[TestArgRaise] = {
+		.arg_names = {"sqlstate_raise", NULL},
+		.type_id = InvalidOid,
+	},
 };
 
 typedef struct WithClauseValue
@@ -206,6 +245,32 @@ TS_TEST_FN(ts_test_with_clause_parse)
 	bool *nulls;
 	HeapTuple tuple;
 	WithClauseValue *result;
+
+	/*
+	 * Look up any missing type ids before using it below to allow
+	 * user-defined types.
+	 *
+	 * Note that this will not look up types we have found in previous calls
+	 * of this function.
+	 *
+	 * We use the slightly more complicated way of calling to_regtype since
+	 * that exists on all versions of PostgreSQL. We cannot use regtypein
+	 * since that can generate errors and we do not want to deal with that.
+	 */
+	for (unsigned int i = 0; i < TS_ARRAY_LEN(test_args); ++i)
+	{
+		LOCAL_FCINFO(fcinfo_in, 1);
+		Datum result;
+		if (!OidIsValid(test_args[i].type_id))
+		{
+			InitFunctionCallInfoData(*fcinfo_in, NULL, 1, InvalidOid, NULL, NULL);
+			fcinfo_in->args[0].value = CStringGetTextDatum(test_args[i].arg_names[0]);
+			fcinfo_in->args[0].isnull = false;
+			result = to_regtype(fcinfo_in);
+			if (!fcinfo_in->isnull)
+				test_args[i].type_id = DatumGetObjectId(result);
+		}
+	}
 
 	if (SRF_IS_FIRSTCALL())
 	{
@@ -247,7 +312,7 @@ TS_TEST_FN(ts_test_with_clause_parse)
 	nulls = palloc(sizeof(*nulls) * funcctx->tuple_desc->natts);
 	memset(nulls, true, sizeof(*nulls) * funcctx->tuple_desc->natts);
 
-	values[0] = CStringGetTextDatum(test_args[result->i].arg_name);
+	values[0] = CStringGetTextDatum(test_args[result->i].arg_names[0]);
 	nulls[0] = false;
 	if (!result->parsed[result->i].is_default || result->i == TestArgDefault)
 	{

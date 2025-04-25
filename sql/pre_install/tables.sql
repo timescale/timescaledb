@@ -207,6 +207,46 @@ CREATE INDEX chunk_index_hypertable_id_hypertable_index_name_idx ON _timescaledb
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_index', '');
 
+-- Track statistics for columns of chunks from a hypertable.
+-- Currently, we track the min/max range for a given column across chunks.
+-- More statistics (like bloom filters) can be added in the future.
+--
+-- A "special" entry for a column with invalid chunk_id, PG_INT64_MAX,
+-- PG_INT64_MIN indicates that min/max ranges could be computed for this column
+-- for chunks.
+--
+-- The ranges can overlap across chunks. The values could be out-of-date if
+-- modifications/changes occur in the corresponding chunk and such entries
+-- should be marked as "invalid" to ensure that the chunk is in
+-- appropriate state to be able to use these values. Thus these entries
+-- are different from dimension_slice which is used for tracking partitioning
+-- column ranges which have different characteristics.
+--
+-- Currently this catalog supports datatypes like INT, SERIAL, BIGSERIAL,
+-- DATE, TIMESTAMP etc. by storing the ranges in bigint columns. In the
+-- future, we could support additional datatypes (which support btree style
+-- >, <, = comparators) by storing their textual representation.
+--
+CREATE TABLE _timescaledb_catalog.chunk_column_stats (
+  id serial NOT NULL,
+  hypertable_id integer NOT NULL,
+  chunk_id integer NOT NULL,
+  column_name name NOT NULL,
+  range_start bigint NOT NULL,
+  range_end bigint NOT NULL,
+  valid boolean NOT NULL,
+  -- table constraints
+  CONSTRAINT chunk_column_stats_pkey PRIMARY KEY (id),
+  CONSTRAINT chunk_column_stats_ht_id_chunk_id_colname_key UNIQUE (hypertable_id, chunk_id, column_name),
+  CONSTRAINT chunk_column_stats_range_check CHECK (range_start <= range_end),
+  CONSTRAINT chunk_column_stats_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id),
+  CONSTRAINT chunk_column_stats_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id)
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_column_stats', '');
+
+SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.chunk_column_stats', 'id'), '');
+
 -- Default jobs are given the id space [1,1000). User-installed jobs and any jobs created inside tests
 -- are given the id space [1000, INT_MAX). That way, we do not pg_dump jobs that are always default-installed
 -- inside other .sql scripts. This avoids insertion conflicts during pg_restore.
@@ -269,6 +309,24 @@ CREATE TABLE _timescaledb_internal.bgw_job_stat (
   CONSTRAINT bgw_job_stat_job_id_fkey FOREIGN KEY (job_id) REFERENCES _timescaledb_config.bgw_job (id) ON DELETE CASCADE
 );
 
+CREATE SEQUENCE _timescaledb_internal.bgw_job_stat_history_id_seq MINVALUE 1;
+
+CREATE TABLE _timescaledb_internal.bgw_job_stat_history (
+  id BIGINT NOT NULL DEFAULT nextval('_timescaledb_internal.bgw_job_stat_history_id_seq'),
+  job_id INTEGER NOT NULL,
+  pid INTEGER,
+  execution_start TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  execution_finish TIMESTAMPTZ,
+  succeeded boolean,
+  data jsonb,
+  -- table constraints
+  CONSTRAINT bgw_job_stat_history_pkey PRIMARY KEY (id)
+);
+
+ALTER SEQUENCE _timescaledb_internal.bgw_job_stat_history_id_seq OWNED BY _timescaledb_internal.bgw_job_stat_history.id;
+
+CREATE INDEX bgw_job_stat_history_job_id_idx ON _timescaledb_internal.bgw_job_stat_history (job_id);
+
 --The job_stat table is not dumped by pg_dump on purpose because
 --the statistics probably aren't very meaningful across instances.
 -- Now we define a special stats table for each job/chunk pair. This will be used by the scheduler
@@ -311,7 +369,6 @@ CREATE TABLE _timescaledb_catalog.continuous_agg (
   user_view_name name NOT NULL,
   partial_view_schema name NOT NULL,
   partial_view_name name NOT NULL,
-  bucket_width bigint NOT NULL,
   direct_view_schema name NOT NULL,
   direct_view_name name NOT NULL,
   materialized_only bool NOT NULL DEFAULT FALSE,
@@ -334,7 +391,7 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg'
 CREATE TABLE _timescaledb_catalog.continuous_aggs_bucket_function (
   mat_hypertable_id integer NOT NULL,
   -- The bucket function
-  bucket_func regprocedure NOT NULL,
+  bucket_func text NOT NULL,
   -- `bucket_width` argument of the function, e.g. "1 month"
   bucket_width text NOT NULL,
   -- optional `origin` argument of the function provided by the user
@@ -347,7 +404,8 @@ CREATE TABLE _timescaledb_catalog.continuous_aggs_bucket_function (
   bucket_fixed_width bool NOT NULL,
   -- table constraints
   CONSTRAINT continuous_aggs_bucket_function_pkey PRIMARY KEY (mat_hypertable_id),
-  CONSTRAINT continuous_aggs_bucket_function_mat_hypertable_id_fkey FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
+  CONSTRAINT continuous_aggs_bucket_function_mat_hypertable_id_fkey FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
+  CONSTRAINT continuous_aggs_bucket_function_func_check CHECK (pg_catalog.to_regprocedure(bucket_func) IS DISTINCT FROM 0)
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_bucket_function', '');
@@ -413,7 +471,8 @@ CREATE TABLE _timescaledb_catalog.compression_algorithm (
 );
 
 CREATE TABLE _timescaledb_catalog.compression_settings (
-	relid regclass NOT NULL,
+  relid regclass NOT NULL,
+  compress_relid regclass NULL,
   segmentby text[],
   orderby text[],
   orderby_desc bool[],
@@ -425,6 +484,7 @@ CREATE TABLE _timescaledb_catalog.compression_settings (
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_settings', '');
+CREATE INDEX compression_settings_compress_relid_idx ON _timescaledb_catalog.compression_settings (compress_relid);
 
 CREATE TABLE _timescaledb_catalog.compression_chunk_size (
   chunk_id integer NOT NULL,
@@ -443,6 +503,11 @@ CREATE TABLE _timescaledb_catalog.compression_chunk_size (
   CONSTRAINT compression_chunk_size_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
   CONSTRAINT compression_chunk_size_compressed_chunk_id_fkey FOREIGN KEY (compressed_chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE
 );
+
+-- Create index on the compressed_chunk_id to speed up maintainance
+-- operations during upgrades. This is mostly relevant for very large
+-- number of chunks.
+CREATE INDEX compression_chunk_size_idx ON _timescaledb_catalog.compression_chunk_size (compressed_chunk_id);
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_chunk_size', '');
 
@@ -476,14 +541,6 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg_
 
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.continuous_agg_migrate_plan_step', 'step_id'), '');
 
-CREATE TABLE _timescaledb_internal.job_errors (
-  job_id integer not null,
-  pid integer,
-  start_time timestamptz,
-  finish_time timestamptz,
-  error_data jsonb
-);
-
 -- Set table permissions
 -- We need to grant SELECT to PUBLIC for all tables even those not
 -- marked as being dumped because pg_dump will try to access all
@@ -501,6 +558,6 @@ GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_config TO PUBLIC;
 
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_internal TO PUBLIC;
 
--- We want to restrict access to the job errors to only work through
--- the job_errors view.
-REVOKE ALL ON _timescaledb_internal.job_errors FROM PUBLIC;
+-- We want to restrict access to the bgw_job_stat_history to only work through
+-- the job_errors and job_history views.
+REVOKE ALL ON _timescaledb_internal.bgw_job_stat_history FROM PUBLIC;

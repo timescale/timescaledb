@@ -6,18 +6,23 @@
 #pragma once
 
 #include <postgres.h>
-#include <utils/jsonb.h>
+#include "compression/api.h"
 #include "dimension.h"
-#include <continuous_aggs/materialize.h>
 #include <bgw_policy/compression_api.h>
 #include <bgw_policy/continuous_aggregate_api.h>
 #include <bgw_policy/retention_api.h>
+#include <continuous_aggs/materialize.h>
+#include <utils/jsonb.h>
 
 #define POLICY_REFRESH_CAGG_PROC_NAME "policy_refresh_continuous_aggregate"
 #define POLICY_REFRESH_CAGG_CHECK_NAME "policy_refresh_continuous_aggregate_check"
 #define POL_REFRESH_CONF_KEY_MAT_HYPERTABLE_ID "mat_hypertable_id"
 #define POL_REFRESH_CONF_KEY_START_OFFSET "start_offset"
 #define POL_REFRESH_CONF_KEY_END_OFFSET "end_offset"
+#define POL_REFRESH_CONF_KEY_INCLUDE_TIERED_DATA "include_tiered_data"
+#define POL_REFRESH_CONF_KEY_BUCKETS_PER_BATCH "buckets_per_batch"
+#define POL_REFRESH_CONF_KEY_MAX_BATCHES_PER_EXECUTION "max_batches_per_execution"
+#define POL_REFRESH_CONF_KEY_REFRESH_NEWEST_FIRST "refresh_newest_first"
 
 #define POLICY_COMPRESSION_PROC_NAME "policy_compression"
 #define POLICY_COMPRESSION_CHECK_NAME "policy_compression_check"
@@ -25,6 +30,7 @@
 #define POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER "compress_after"
 #define POL_COMPRESSION_CONF_KEY_MAXCHUNKS_TO_COMPRESS "maxchunks_to_compress"
 #define POL_COMPRESSION_CONF_KEY_COMPRESS_CREATED_BEFORE "compress_created_before"
+#define POL_COMPRESSION_CONF_KEY_USE_ACCESS_METHOD "hypercore_use_access_method"
 
 #define POLICY_RECOMPRESSION_PROC_NAME "policy_recompression"
 #define POL_RECOMPRESSION_CONF_KEY_RECOMPRESS_AFTER "recompress_after"
@@ -88,6 +94,7 @@ typedef struct compression_policy
 	Datum compress_after;
 	Oid compress_after_type;
 	bool create_policy;
+	UseAccessMethod use_access_method;
 } compression_policy;
 
 typedef struct retention_policy

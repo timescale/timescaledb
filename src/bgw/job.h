@@ -6,8 +6,8 @@
 #pragma once
 
 #include <postgres.h>
-#include <storage/lock.h>
 #include <postmaster/bgworker.h>
+#include <storage/lock.h>
 
 #include "export.h"
 #include "ts_catalog/catalog.h"
@@ -15,10 +15,50 @@
 #define TELEMETRY_INITIAL_NUM_RUNS 12
 #define SCHEDULER_APPNAME "TimescaleDB Background Worker Scheduler"
 
+/*
+ * This is copied from mem_guard and have to be the same as the type in
+ * mem_guard.
+ *
+ * These are intended as an interim solution and will be removed once we have
+ * a stable plugin ABI for TimescaleDB.
+ */
+
+#define MG_CALLBACKS_VERSION 1
+#define MG_CALLBACKS_VAR_NAME "mg_callbacks"
+
+typedef void (*mg_toggle_allocation_blocking)(bool enable);
+typedef size_t (*mg_get_allocated_memory)();
+typedef size_t (*mg_get_total_allocated_memory)();
+typedef bool (*mg_enabled)();
+
+typedef struct MGCallbacks
+{
+	int64 version_num;
+	mg_toggle_allocation_blocking toggle_allocation_blocking;
+	mg_get_allocated_memory get_allocated_memory;
+	mg_get_total_allocated_memory get_total_allocated_memory;
+	mg_enabled enabled;
+} MGCallbacks;
+
+typedef struct BgwJobHistory
+{
+	int64 id;
+	TimestampTz execution_start;
+} BgwJobHistory;
+
 typedef struct BgwJob
 {
 	FormData_bgw_job fd;
+	BgwJobHistory job_history;
 } BgwJob;
+
+/* Positive result numbers reserved for success */
+typedef enum JobResult
+{
+	JOB_FAILURE_TO_START = -1,
+	JOB_FAILURE_IN_EXECUTION = 0,
+	JOB_SUCCESS = 1,
+} JobResult;
 
 typedef bool job_main_func(void);
 typedef bool (*scheduler_test_hook_type)(BgwJob *job);
@@ -28,7 +68,6 @@ extern BackgroundWorkerHandle *ts_bgw_job_start(BgwJob *job, Oid user_oid);
 extern List *ts_bgw_job_get_all(size_t alloc_size, MemoryContext mctx);
 extern List *ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx);
 
-extern TSDLLEXPORT List *ts_bgw_job_find_by_proc(const char *proc_name, const char *proc_schema);
 extern TSDLLEXPORT List *ts_bgw_job_find_by_hypertable_id(int32 hypertable_id);
 extern TSDLLEXPORT List *ts_bgw_job_find_by_proc_and_hypertable_id(const char *proc_name,
 																   const char *proc_schema,
@@ -53,7 +92,7 @@ extern TSDLLEXPORT void ts_bgw_job_permission_check(BgwJob *job, const char *cmd
 
 extern TSDLLEXPORT void ts_bgw_job_validate_job_owner(Oid owner);
 
-extern bool ts_bgw_job_execute(BgwJob *job);
+extern JobResult ts_bgw_job_execute(BgwJob *job);
 extern TSDLLEXPORT void ts_bgw_job_run_config_check(Oid check, int32 job_id, Jsonb *config);
 
 extern TSDLLEXPORT Datum ts_bgw_job_entrypoint(PG_FUNCTION_ARGS);
@@ -63,8 +102,13 @@ extern TSDLLEXPORT bool ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_
 														  int64 initial_runs,
 														  Interval *next_interval, bool atomic,
 														  bool mark);
-extern TSDLLEXPORT bool ts_job_errors_insert_tuple(const FormData_job_error *job_err);
 extern TSDLLEXPORT void ts_bgw_job_validate_schedule_interval(Interval *schedule_interval);
 extern TSDLLEXPORT char *ts_bgw_job_validate_timezone(Datum timezone);
 
 extern TSDLLEXPORT bool ts_is_telemetry_job(BgwJob *job);
+ScanTupleResult ts_bgw_job_change_owner(TupleInfo *ti, void *data);
+
+extern TSDLLEXPORT Oid ts_bgw_job_get_funcid(BgwJob *job);
+extern TSDLLEXPORT const char *ts_bgw_job_function_call_string(BgwJob *job);
+
+extern TSDLLEXPORT MGCallbacks *ts_get_mem_guard_callbacks(void);

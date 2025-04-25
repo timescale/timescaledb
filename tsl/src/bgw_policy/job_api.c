@@ -16,11 +16,11 @@
 #include <bgw/job.h>
 #include <bgw/job_stat.h>
 
-#include "job.h"
-#include "job_api.h"
-#include "hypertable_cache.h"
 #include "bgw/timer.h"
 #include "debug_assert.h"
+#include "hypertable_cache.h"
+#include "job.h"
+#include "job_api.h"
 
 /* Default max runtime for a custom job is unlimited for now */
 #define DEFAULT_MAX_RUNTIME 0
@@ -183,7 +183,7 @@ job_add(PG_FUNCTION_ARGS)
 										owner,
 										scheduled,
 										fixed_schedule,
-										0,
+										INVALID_HYPERTABLE_ID,
 										config,
 										initial_start,
 										valid_timezone);
@@ -244,7 +244,7 @@ job_delete(PG_FUNCTION_ARGS)
 	if (!has_privs_of_role(GetUserId(), job->fd.owner))
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("insufficient permissions to delete job for user \"%s\"",
+				 errmsg("insufficient permissions to delete job owned by \"%s\"",
 						GetUserNameFromId(job->fd.owner, false))));
 
 	ts_bgw_job_delete_by_id(job_id);
@@ -315,7 +315,7 @@ job_alter(PG_FUNCTION_ARGS)
 	Oid check = PG_ARGISNULL(9) ? InvalidOid : PG_GETARG_OID(9);
 	char *check_name_str = NULL;
 	/* Added space for period and NULL */
-	char schema_qualified_check_name[2 * NAMEDATALEN + 2] = { 0 };
+	char schema_qualified_check_name[(2 * NAMEDATALEN) + 2] = { 0 };
 	bool unregister_check = (!PG_ARGISNULL(9) && !OidIsValid(check));
 	TimestampTz initial_start = PG_ARGISNULL(11) ? DT_NOBEGIN : PG_GETARG_TIMESTAMPTZ(11);
 	text *timezone = PG_ARGISNULL(12) ? NULL : PG_GETARG_TEXT_PP(12);

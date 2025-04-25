@@ -5,14 +5,12 @@
  */
 #pragma once
 
-#include <postgres.h>
 #include "compat/compat.h"
+#include <postgres.h>
 
 typedef enum CustomType
 {
-	CUSTOM_TYPE_TS_INTERVAL = 0,
-	CUSTOM_TYPE_COMPRESSED_DATA,
-	CUSTOM_TYPE_SEGMENT_META_MIN_MAX,
+	CUSTOM_TYPE_COMPRESSED_DATA = 0,
 
 	_CUSTOM_TYPE_MAX_INDEX
 } CustomType;

@@ -20,7 +20,7 @@ jobs:
   # Implements: #NNNN <feature description> (mandatory in case of new features)
   check_changelog_file:
     name: Check for file with CHANGELOG entry
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     steps:
       - name: Install Linux Dependencies
         run: |
@@ -47,7 +47,7 @@ jobs:
           folder=".unreleased"
 
           # Get the list of modified files in this pull request
-          files=$(git --no-pager diff --diff-filter=ACMR --name-only $(git merge-base HEAD ${{ github.event.pull_request.base.sha }}) HEAD)
+          files=$(git --no-pager diff --diff-filter=ACMR --name-only $(git merge-base HEAD ${{ github.event.pull_request.base.sha }}) HEAD ':!.unreleased/*.j2')
 
           if  echo "$BODY" | egrep -qsi "Disable-check:[[:space:]]*force-changelog-file"; then
             # skip changelog checks if forced

@@ -5,9 +5,9 @@
  */
 #pragma once
 
+#include "compat/compat.h"
 #include <postgres.h>
 #include <fmgr.h>
-#include "compat/compat.h"
 #include <postmaster/bgworker.h>
 
 #include "timer.h"

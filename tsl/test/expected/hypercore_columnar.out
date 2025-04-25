@@ -1,0 +1,310 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\ir include/hypercore_helpers.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Function to run an explain analyze with and do replacements on the
+-- emitted plan. This is intended to be used when the structure of the
+-- plan is important, but not the specific chunks scanned nor the
+-- number of heap fetches, rows, loops, etc.
+create function anonymize(ln text) returns text language plpgsql as
+$$
+begin
+    ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
+    ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
+    ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
+    ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
+
+    if trim(both from ln) like 'Array: %' then
+       ln := regexp_replace(ln, 'hits=\d+', 'hits=N');
+       ln := regexp_replace(ln, 'misses=\d+', 'misses=N');
+       ln := regexp_replace(ln, 'count=\d+', 'count=N');
+       ln := regexp_replace(ln, 'calls=\d+', 'calls=N');
+    end if;
+    return ln;
+end
+$$;
+create function explain_analyze_anonymize(text) returns setof text
+language plpgsql as
+$$
+declare
+    ln text;
+begin
+    for ln in
+        execute format('explain (analyze, costs off, summary off, timing off, decompress_cache_stats) %s', $1)
+    loop
+        -- Group keys are shown for plans in PG15 but not others, so
+        -- we remove these lines to avoid having to have
+        -- version-sensible tests.
+	if trim(both from ln) like 'Group Key:%' then
+	   continue;
+	end if;
+        return next anonymize(ln);
+    end loop;
+end;
+$$;
+create function explain_anonymize(text) returns setof text
+language plpgsql as
+$$
+declare
+    ln text;
+begin
+    for ln in
+        execute format('explain (costs off, summary off, timing off) %s', $1)
+    loop
+        return next anonymize(ln);
+    end loop;
+end;
+$$;
+create table readings(
+       metric_id serial,
+       time timestamptz unique,
+       location int,
+       device int,
+       temp numeric(4,1),
+       humidity float
+);
+select create_hypertable('readings', 'time');
+NOTICE:  adding not-null constraint to column "time"
+   create_hypertable   
+-----------------------
+ (1,public,readings,t)
+(1 row)
+
+-- Disable incremental sort to make tests stable
+set enable_incremental_sort = false;
+select setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+insert into readings (time, location, device, temp, humidity)
+select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') t;
+alter table readings SET (
+	  timescaledb.compress,
+	  timescaledb.compress_orderby = 'time',
+	  timescaledb.compress_segmentby = 'device'
+);
+-- Set some test chunks as global variables
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = 'readings'::regclass
+ limit 1 \gset
+alter table :chunk set access method hypercore;
+-- Test that filtering is not removed on ColumnarScan when it includes
+-- columns that cannot be scankeys.
+select explain_analyze_anonymize(format($$
+       select * from %s where device < 4 and location = 2 limit 5
+$$, :'chunk'));
+                          explain_analyze_anonymize                           
+------------------------------------------------------------------------------
+ Limit (actual rows=N loops=N)
+   ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
+         Scankey: (device < 4)
+         Vectorized Filter: (location = 2)
+         Rows Removed by Filter: 16
+ Array: cache misses=N, decompress count=N calls=N
+(6 rows)
+
+-- Save away all data from the chunk so that we can compare.
+create table saved as select * from :chunk;
+-- Check that we have matching rows in both.
+with
+  lhs as (select * from :chunk),
+  rhs as (select * from saved)
+select lhs.*, rhs.*
+from lhs full join rhs using (metric_id)
+where lhs.metric_id is null or rhs.metric_id is null;
+ metric_id | time | location | device | temp | humidity | metric_id | time | location | device | temp | humidity 
+-----------+------+----------+--------+------+----------+-----------+------+----------+--------+------+----------
+(0 rows)
+
+--
+-- Test vectorized filters on compressed column.
+--
+-- Use a filter that filters all rows in order to test that the scan
+-- does not decompress more than necessary to filter data. The
+-- decompress count should be equal to the number cache hits (i.e., we
+-- only decompress one column per segment).
+select explain_analyze_anonymize(format($$
+       select count(*) from %s where humidity > 110
+$$, :'chunk'));
+                          explain_analyze_anonymize                           
+------------------------------------------------------------------------------
+ Aggregate (actual rows=N loops=N)
+   ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
+         Vectorized Filter: (humidity > '110'::double precision)
+         Rows Removed by Filter: 204
+ Array: cache misses=N, decompress count=N calls=N
+(5 rows)
+
+select count(*) from :chunk where humidity > 110;
+ count 
+-------
+     0
+(1 row)
+
+-- Test with a query that should generate some rows. Make sure it
+-- matches the result of a normal table.
+select explain_analyze_anonymize(format($$
+       select count(*) from %s where humidity > 50
+$$, :'chunk'));
+                          explain_analyze_anonymize                           
+------------------------------------------------------------------------------
+ Aggregate (actual rows=N loops=N)
+   ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
+         Vectorized Filter: (humidity > '50'::double precision)
+         Rows Removed by Filter: 87
+ Array: cache misses=N, decompress count=N calls=N
+(5 rows)
+
+select lhs.count, rhs.count
+from (select count(*) from :chunk where humidity > 50) lhs,
+     (select count(*) from saved where humidity > 50) rhs;
+ count | count 
+-------+-------
+   117 |   117
+(1 row)
+
+with
+  lhs as (select * from :chunk where humidity > 50),
+  rhs as (select * from saved where humidity > 50)
+select lhs.*, rhs.*
+from lhs full join rhs using (metric_id)
+where lhs.metric_id is null or rhs.metric_id is null;
+ metric_id | time | location | device | temp | humidity | metric_id | time | location | device | temp | humidity 
+-----------+------+----------+--------+------+----------+-----------+------+----------+--------+------+----------
+(0 rows)
+
+-- Test that a type that a type that does not support batch
+-- decompression (numeric in this case) behaves as expected.
+select explain_analyze_anonymize(format($$
+       select count(*) from %s where temp > 50
+$$, :'chunk'));
+                          explain_analyze_anonymize                           
+------------------------------------------------------------------------------
+ Aggregate (actual rows=N loops=N)
+   ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
+         Filter: (temp > '50'::numeric)
+         Rows Removed by Filter: 204
+ Array: cache misses=N, decompress count=N calls=N
+(5 rows)
+
+select count(*) from :chunk where temp > 50;
+ count 
+-------
+     0
+(1 row)
+
+-- test same thing with a query that should generate some rows.
+select explain_analyze_anonymize(format($$
+       select count(*) from %s where temp > 20
+$$, :'chunk'));
+                          explain_analyze_anonymize                           
+------------------------------------------------------------------------------
+ Aggregate (actual rows=N loops=N)
+   ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
+         Filter: (temp > '20'::numeric)
+         Rows Removed by Filter: 98
+ Array: cache misses=N, decompress count=N calls=N
+(5 rows)
+
+select lhs.count, rhs.count
+from (select count(*) from :chunk where temp > 20) lhs,
+     (select count(*) from saved where temp > 20) rhs;
+ count | count 
+-------+-------
+   106 |   106
+(1 row)
+
+with
+  lhs as (select * from :chunk where temp > 20),
+  rhs as (select * from saved where temp > 20)
+select lhs.*, rhs.*
+from lhs full join rhs using (metric_id)
+where lhs.metric_id is null or rhs.metric_id is null;
+ metric_id | time | location | device | temp | humidity | metric_id | time | location | device | temp | humidity 
+-----------+------+----------+--------+------+----------+-----------+------+----------+--------+------+----------
+(0 rows)
+
+-- test with clauses that use both vectorizable and non-vectorizable
+-- types together.
+explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
+select count(*) from :chunk where humidity > 40 and temp > 20;
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=72 loops=1)
+         Filter: (temp > '20'::numeric)
+         Rows Removed by Filter: 132
+         Vectorized Filter: (humidity > '40'::double precision)
+ Array: cache misses=30, decompress count=60 calls=165
+(6 rows)
+
+select count(*) from :chunk where humidity > 40 and temp > 20;
+ count 
+-------
+    72
+(1 row)
+
+select lhs.count, rhs.count
+from (select count(*) from :chunk where humidity > 40 and temp > 20) lhs,
+     (select count(*) from saved where humidity > 40 and temp > 20) rhs;
+ count | count 
+-------+-------
+    72 |    72
+(1 row)
+
+-- test scans with clasues that are vectorizable, non-vectorizable,
+-- and used as scan key.
+select explain_analyze_anonymize(format($$
+       select count(*) from %s where humidity > 40 and temp > 20 and device = 3
+$$, :'chunk'));
+                          explain_analyze_anonymize                           
+------------------------------------------------------------------------------
+ Aggregate (actual rows=N loops=N)
+   ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
+         Filter: (temp > '20'::numeric)
+         Rows Removed by Filter: 3
+         Scankey: (device = 3)
+         Vectorized Filter: (humidity > '40'::double precision)
+ Array: cache misses=N, decompress count=N calls=N
+(7 rows)
+
+select count(*) from :chunk where humidity > 40 and temp > 20 and device = 3;
+ count 
+-------
+     2
+(1 row)
+
+select lhs.count, rhs.count from
+  (select count(*) from :chunk where humidity > 40 and temp > 20 and device = 3) as lhs,
+  (select count(*) from saved where humidity > 40 and temp > 20 and device = 3) as rhs;
+ count | count 
+-------+-------
+     2 |     2
+(1 row)
+
+-- test that columnar scan can be turned off
+set timescaledb.enable_columnarscan = false;
+select explain_analyze_anonymize(format($$
+       select * from %s where device < 4 order by device asc limit 5
+$$, :'chunk'));
+                    explain_analyze_anonymize                     
+------------------------------------------------------------------
+ Limit (actual rows=N loops=N)
+   ->  Sort (actual rows=N loops=N)
+         Sort Key: device
+         Sort Method: top-N heapsort 
+         ->  Seq Scan on _hyper_I_N_chunk (actual rows=N loops=N)
+               Filter: (device < 4)
+               Rows Removed by Filter: 184
+ Array: cache misses=N, decompress count=N calls=N
+(8 rows)
+
+drop table readings;
+drop table saved;

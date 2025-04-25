@@ -6,20 +6,20 @@
 #pragma once
 
 #include <postgres.h>
-#include <fmgr.h>
 #include <commands/event_trigger.h>
+#include <fmgr.h>
 #include <optimizer/planner.h>
-#include <utils/timestamp.h>
-#include <utils/jsonb.h>
 #include <utils/array.h>
+#include <utils/jsonb.h>
+#include <utils/timestamp.h>
 
-#include "export.h"
 #include "compat/compat.h"
 #include "bgw/job.h"
-#include "process_utility.h"
-#include "with_clause_parser.h"
-#include "ts_catalog/continuous_agg.h"
+#include "export.h"
 #include "planner/planner.h"
+#include "process_utility.h"
+#include "ts_catalog/continuous_agg.h"
+#include "with_clause/with_clause_parser.h"
 
 /*
  * To define a cross-module function add it to this struct, add a default
@@ -34,7 +34,7 @@ typedef struct Hypertable Hypertable;
 typedef struct Chunk Chunk;
 typedef struct ChunkInsertState ChunkInsertState;
 typedef struct CopyChunkState CopyChunkState;
-typedef struct HypertableModifyState HypertableModifyState;
+typedef struct ModifyHypertableState ModifyHypertableState;
 
 typedef struct CrossModuleFunctions
 {
@@ -74,7 +74,7 @@ typedef struct CrossModuleFunctions
 	void (*set_rel_pathlist_dml)(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *, Hypertable *);
 	void (*set_rel_pathlist_query)(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *,
 								   Hypertable *);
-	void (*set_rel_pathlist)(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
+	bool (*process_explain_def)(DefElem *def);
 
 	/* gapfill */
 	PGFunction gapfill_marker;
@@ -89,8 +89,11 @@ typedef struct CrossModuleFunctions
 	PGFunction reorder_chunk;
 	PGFunction move_chunk;
 
+	DDLResult (*ddl_command_start)(ProcessUtilityArgs *args);
+	void (*ddl_command_end)(EventTriggerData *trigdata);
+
 	/* Vectorized queries */
-	bool (*push_down_aggregation)(PlannerInfo *root, AggPath *aggregation_path, Path *subpath);
+	void (*tsl_postprocess_plan)(PlannedStmt *stmt);
 
 	/* Continuous Aggregates */
 	PGFunction partialize_agg;
@@ -110,21 +113,30 @@ typedef struct CrossModuleFunctions
 										  WithClauseResult *with_clause_options);
 	PGFunction continuous_agg_validate_query;
 	PGFunction continuous_agg_get_bucket_function;
+	PGFunction continuous_agg_get_bucket_function_info;
+	PGFunction continuous_agg_migrate_to_time_bucket;
 	PGFunction cagg_try_repair;
 
 	PGFunction compressed_data_send;
 	PGFunction compressed_data_recv;
 	PGFunction compressed_data_in;
 	PGFunction compressed_data_out;
-	bool (*process_compress_table)(AlterTableCmd *cmd, Hypertable *ht,
-								   WithClauseResult *with_clause_options);
+	PGFunction compressed_data_info;
+	PGFunction compressed_data_has_nulls;
+	bool (*process_compress_table)(Hypertable *ht, WithClauseResult *with_clause_options);
 	void (*process_altertable_cmd)(Hypertable *ht, const AlterTableCmd *cmd);
 	void (*process_rename_cmd)(Oid relid, Cache *hcache, const RenameStmt *stmt);
 	PGFunction create_compressed_chunk;
 	PGFunction compress_chunk;
 	PGFunction decompress_chunk;
 	void (*decompress_batches_for_insert)(const ChunkInsertState *state, TupleTableSlot *slot);
-	bool (*decompress_target_segments)(HypertableModifyState *ht_state);
+	bool (*decompress_target_segments)(ModifyHypertableState *ht_state);
+	int (*hypercore_decompress_update_segment)(Relation relation, const ItemPointer ctid,
+											   TupleTableSlot *slot, Snapshot snapshot,
+											   ItemPointer new_tid);
+
+	void (*compression_enable)(Hypertable *ht);
+
 	/* The compression functions below are not installed in SQL as part of create extension;
 	 *  They are installed and tested during testing scripts. They are exposed in cross-module
 	 *  functions because they may be very useful for debugging customer problems if the sql
@@ -140,16 +152,21 @@ typedef struct CrossModuleFunctions
 	PGFunction dictionary_compressor_finish;
 	PGFunction array_compressor_append;
 	PGFunction array_compressor_finish;
+	PGFunction bool_compressor_append;
+	PGFunction bool_compressor_finish;
+	PGFunction hypercore_handler;
+	PGFunction hypercore_proxy_handler;
+	PGFunction is_compressed_tid;
 
 	PGFunction create_chunk;
 	PGFunction show_chunk;
 
-	PGFunction chunk_create_empty_table;
 	PGFunction chunk_freeze_chunk;
 	PGFunction chunk_unfreeze_chunk;
 	PGFunction recompress_chunk_segmentwise;
 	PGFunction get_compressed_chunk_index_for_recompression;
-	void (*preprocess_query_tsl)(Query *parse);
+	void (*preprocess_query_tsl)(Query *parse, int *cursor_opts);
+	PGFunction merge_chunks;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+SET timezone TO PST8PDT;
+
 SELECT
        format('include/%s_setup.sql', :'TEST_BASE_NAME') as "TEST_SETUP_NAME",
        format('include/%s_query.sql', :'TEST_BASE_NAME') as "TEST_QUERY_NAME",
@@ -104,7 +106,10 @@ CREATE MATERIALIZED VIEW comp_rename_cagg WITH (timescaledb.continuous, timescal
 SELECT time_bucket('1 week', time) AS bucket FROM comp_rename GROUP BY 1;
 
 ALTER MATERIALIZED VIEW comp_rename_cagg RENAME COLUMN bucket to "time";
+
+SET client_min_messages TO WARNING;
 ALTER MATERIALIZED VIEW comp_rename_cagg SET ( timescaledb.compress='true');
+RESET client_min_messages;
 
 DROP TABLE comp_rename CASCADE;
 

@@ -632,7 +632,6 @@ select * from tidrangescan_test where time > '2023-02-12 00:00:00+02:40'::timest
 
 drop table tidrangescan_test;
 
-\set ON_ERROR_STOP 0
 \set VERBOSITY default
 set client_min_messages = WARNING;
 -- test creating a hypertable from table referenced by a foreign key fails with
@@ -643,5 +642,88 @@ create table test_schema.fk_child(
   id int,
   foreign key (time, id) references test_schema.fk_parent(time, id)
 );
+select create_hypertable ('test_schema.fk_child', 'time');
+\set ON_ERROR_STOP 0
 select create_hypertable ('test_schema.fk_parent', 'time');
 \set ON_ERROR_STOP 1
+
+-- create default indexes on chunks when migrating data
+CREATE TABLE test(time TIMESTAMPTZ, val BIGINT);
+CREATE INDEX test_val_idx ON test(val);
+INSERT INTO test VALUES('2024-01-01 00:00:00-03', 500);
+SELECT FROM create_hypertable('test', 'time', migrate_data=>TRUE);
+-- should return ALL indexes for hypertable and chunk
+SELECT * FROM test.show_indexes('test') ORDER BY 1;
+SELECT * FROM show_chunks('test') ch, LATERAL test.show_indexes(ch) ORDER BY 1, 2;
+DROP TABLE test;
+
+-- don't create default indexes on chunks when migrating data
+CREATE TABLE test(time TIMESTAMPTZ, val BIGINT);
+CREATE INDEX test_val_idx ON test(val);
+INSERT INTO test VALUES('2024-01-01 00:00:00-03', 500);
+SELECT FROM create_hypertable('test', 'time', create_default_indexes => FALSE, migrate_data=>TRUE);
+-- should NOT return default indexes for hypertable and chunk
+-- only user indexes should be returned
+SELECT * FROM test.show_indexes('test') ORDER BY 1;
+SELECT * FROM show_chunks('test') ch, LATERAL test.show_indexes(ch) ORDER BY 1, 2;
+DROP TABLE test;
+
+-- test creating a hypertable with a primary key where the partitioning column is not part of the primary key
+CREATE TABLE test_schema.partition_not_pk (id INT NOT NULL, device_id INT NOT NULL, time TIMESTAMPTZ NOT NULL, a TEXT NOT NULL, PRIMARY KEY (id));
+\set ON_ERROR_STOP 0
+select create_hypertable ('test_schema.partition_not_pk', 'time');
+\set ON_ERROR_STOP 1
+DROP TABLE test_schema.partition_not_pk;
+
+-- test creating a hypertable with a composite key where the partitioning column is not part of the composite key
+CREATE TABLE test_schema.partition_not_pk (id INT NOT NULL, device_id INT NOT NULL, time TIMESTAMPTZ NOT NULL, a TEXT NOT NULL, PRIMARY KEY (id, device_id));
+\set ON_ERROR_STOP 0
+select create_hypertable ('test_schema.partition_not_pk', 'time');
+\set ON_ERROR_STOP 1
+DROP TABLE test_schema.partition_not_pk;
+
+-- test hypertable is not created for a table that is a part of a publication explicitly
+SET client_min_messages = ERROR;
+CREATE TABLE test (timestamp TIMESTAMPTZ NOT NULL);
+CREATE PUBLICATION publication_test;
+ALTER PUBLICATION publication_test ADD TABLE test;
+\set ON_ERROR_STOP 0
+SELECT create_hypertable('test', 'timestamp');
+\set ON_ERROR_STOP 1
+INSERT INTO test (timestamp) values (now());
+ALTER PUBLICATION publication_test DROP TABLE test;
+DROP PUBLICATION publication_test;
+DROP TABLE test;
+
+CREATE TABLE test (timestamp TIMESTAMPTZ NOT NULL);
+CREATE PUBLICATION publication_test1;
+CREATE PUBLICATION publication_test2;
+ALTER PUBLICATION publication_test1 ADD TABLE test;
+ALTER PUBLICATION publication_test2 ADD TABLE test;
+\set ON_ERROR_STOP 0
+SELECT create_hypertable('test', 'timestamp');
+\set ON_ERROR_STOP 1
+INSERT INTO test (timestamp) values (now());
+ALTER PUBLICATION publication_test1 DROP TABLE test;
+ALTER PUBLICATION publication_test2 DROP TABLE test;
+DROP PUBLICATION publication_test1;
+DROP PUBLICATION publication_test2;
+DROP TABLE test;
+
+-- test hypertable is not created for a table that is a part of a publication implicitly
+CREATE PUBLICATION publication_test FOR ALL tables;
+CREATE TABLE test (timestamp TIMESTAMPTZ NOT NULL);
+\set ON_ERROR_STOP 0
+SELECT create_hypertable('test', 'timestamp');
+\set ON_ERROR_STOP 1
+DROP PUBLICATION publication_test;
+DROP TABLE test;
+
+CREATE TABLE test (timestamp TIMESTAMPTZ NOT NULL);
+CREATE PUBLICATION publication_test FOR ALL tables;
+\set ON_ERROR_STOP 0
+SELECT create_hypertable('test', 'timestamp');
+\set ON_ERROR_STOP 1
+DROP PUBLICATION publication_test;
+DROP TABLE test;
+RESET client_min_messages;

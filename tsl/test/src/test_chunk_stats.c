@@ -5,13 +5,13 @@
  */
 
 #include <postgres.h>
+#include <access/htup_details.h>
 #include <fmgr.h>
 #include <utils/timestamp.h>
-#include <access/htup_details.h>
 
 #include "bgw/job.h"
-#include "export.h"
 #include "bgw_policy/chunk_stats.h"
+#include "export.h"
 #include "osm_callbacks.h"
 
 TS_FUNCTION_INFO_V1(ts_test_chunk_stats_insert);

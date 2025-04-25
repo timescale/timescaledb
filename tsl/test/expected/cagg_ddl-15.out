@@ -22,6 +22,7 @@ SELECT table_name FROM create_hypertable('conditions', 'timec');
 
 -- schema tests
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+SET timezone TO 'UTC+8';
 -- drop if the tablespace1 and/or tablespace2 exists
 SET client_min_messages TO error;
 DROP TABLESPACE IF EXISTS tablespace1;
@@ -31,6 +32,7 @@ CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLE
 CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE2_PATH;
 CREATE SCHEMA rename_schema;
 GRANT ALL ON SCHEMA rename_schema TO :ROLE_DEFAULT_PERM_USER;
+CREATE SCHEMA test_schema AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 CREATE TABLE foo(time TIMESTAMPTZ NOT NULL, data INTEGER);
 SELECT create_hypertable('foo', 'time');
@@ -39,19 +41,29 @@ SELECT create_hypertable('foo', 'time');
  (2,public,foo,t)
 (1 row)
 
-CREATE MATERIALIZED VIEW rename_test
+CREATE MATERIALIZED VIEW rename_test_old
   WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
 AS SELECT time_bucket('1week', time), COUNT(data)
     FROM foo
     GROUP BY 1 WITH NO DATA;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
-------------------+----------------+-----------------------+-------------------
- public           | rename_test    | _timescaledb_internal | _partial_view_3
+ user_view_schema | user_view_name  |  partial_view_schema  | partial_view_name 
+------------------+-----------------+-----------------------+-------------------
+ public           | rename_test_old | _timescaledb_internal | _partial_view_3
 (1 row)
 
-ALTER MATERIALIZED VIEW rename_test SET SCHEMA rename_schema;
+ALTER TABLE rename_test_old RENAME TO rename_test;
+ALTER TABLE rename_test SET SCHEMA test_schema;
+SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
+      FROM _timescaledb_catalog.continuous_agg;
+ user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
+------------------+----------------+-----------------------+-------------------
+ test_schema      | rename_test    | _timescaledb_internal | _partial_view_3
+(1 row)
+
+ALTER MATERIALIZED VIEW test_schema.rename_test SET SCHEMA rename_schema;
+DROP SCHEMA test_schema;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
  user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
@@ -468,11 +480,11 @@ CALL refresh_continuous_aggregate('cagg_expr', NULL, NULL);
 SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
              time             | const | numeric |                    first                     | case | coalesce | avg1 | avg2 
 ------------------------------+-------+---------+----------------------------------------------+------+----------+------+------
- Fri Dec 31 16:00:00 1999 PST | Const |     4.3 | ("Sat Jan 01 00:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1
- Sat Jan 01 16:00:00 2000 PST | Const |     4.3 | ("Sat Jan 01 16:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1
- Sun Jan 02 16:00:00 2000 PST | Const |     4.3 | ("Sun Jan 02 16:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1
- Mon Jan 03 16:00:00 2000 PST | Const |     4.3 | ("Mon Jan 03 16:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1
- Tue Jan 04 16:00:00 2000 PST | Const |     4.3 | ("Tue Jan 04 16:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1
+ Fri Dec 31 16:00:00 1999 UTC | Const |     4.3 | ("Sat Jan 01 00:00:00 2000 UTC",1,0.25,0.75) | foo  | coalesce |    1 |    1
+ Sat Jan 01 16:00:00 2000 UTC | Const |     4.3 | ("Sat Jan 01 16:00:00 2000 UTC",1,0.25,0.75) | foo  | coalesce |    1 |    1
+ Sun Jan 02 16:00:00 2000 UTC | Const |     4.3 | ("Sun Jan 02 16:00:00 2000 UTC",1,0.25,0.75) | foo  | coalesce |    1 |    1
+ Mon Jan 03 16:00:00 2000 UTC | Const |     4.3 | ("Mon Jan 03 16:00:00 2000 UTC",1,0.25,0.75) | foo  | coalesce |    1 |    1
+ Tue Jan 04 16:00:00 2000 UTC | Const |     4.3 | ("Tue Jan 04 16:00:00 2000 UTC",1,0.25,0.75) | foo  | coalesce |    1 |    1
 (5 rows)
 
 --test materialization of invalidation before drop
@@ -1508,6 +1520,8 @@ INSERT INTO test_setting VALUES( '2020-11-01', 20);
 --try out 2 settings here --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'true', timescaledb.compress='true');
 NOTICE:  defaulting compress_orderby to time_bucket
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "_materialized_hypertable_40" is set to ""
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
 where view_name = 'test_setting_cagg';
@@ -1526,6 +1540,8 @@ SELECT count(*) from test_setting_cagg ORDER BY 1;
 --now set it back to false --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'false', timescaledb.compress='true');
 NOTICE:  defaulting compress_orderby to time_bucket
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "_materialized_hypertable_40" is set to ""
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
 where view_name = 'test_setting_cagg';
@@ -1593,6 +1609,8 @@ INSERT INTO test_setting VALUES( '2020-11-01', 20);
 --try out 2 settings here --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'false', timescaledb.compress='true');
 NOTICE:  defaulting compress_orderby to time_bucket
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "_materialized_hypertable_42" is set to ""
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
 where view_name = 'test_setting_cagg';
@@ -1611,6 +1629,8 @@ SELECT count(*) from test_setting_cagg ORDER BY 1;
 --now set it back to false --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'true', timescaledb.compress='true');
 NOTICE:  defaulting compress_orderby to time_bucket
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "_materialized_hypertable_42" is set to ""
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
 where view_name = 'test_setting_cagg';
@@ -1785,15 +1805,15 @@ View definition:
     _materialized_hypertable_45.cashflow2
    FROM _timescaledb_internal._materialized_hypertable_45;
 
-SELECT * FROM cashflows;
+SELECT * FROM cashflows ORDER BY cashflows;
             bucket            | amount | cashflow | cashflow2 
 ------------------------------+--------+----------+-----------
- Sun Dec 31 16:00:00 2017 PST |      1 |       10 |        11
- Mon Jan 01 16:00:00 2018 PST |     -1 |      -30 |        29
- Wed Oct 31 17:00:00 2018 PDT |     -1 |      -20 |        19
- Wed Oct 31 17:00:00 2018 PDT |      1 |       30 |        31
- Thu Nov 01 17:00:00 2018 PDT |     -1 |      -10 |         9
- Thu Nov 01 17:00:00 2018 PDT |      1 |       10 |        11
+ Sun Dec 31 16:00:00 2017 UTC |      1 |       10 |        11
+ Mon Jan 01 16:00:00 2018 UTC |     -1 |      -30 |        29
+ Wed Oct 31 16:00:00 2018 UTC |     -1 |      -20 |        19
+ Wed Oct 31 16:00:00 2018 UTC |      1 |       30 |        31
+ Thu Nov 01 16:00:00 2018 UTC |     -1 |      -10 |         9
+ Thu Nov 01 16:00:00 2018 UTC |      1 |       10 |        11
 (6 rows)
 
 -- test cagg creation with named arguments in time_bucket
@@ -1848,8 +1868,8 @@ CALL refresh_continuous_aggregate('transactions_montly', NULL, INTERVAL '1 month
 SELECT * FROM transactions_montly ORDER BY bucket;
             bucket            | sum | max | min 
 ------------------------------+-----+-----+-----
- Sun Dec 31 16:00:00 2017 PST |  40 |  10 |  10
- Wed Oct 31 17:00:00 2018 PDT |  70 |  10 |  10
+ Sun Dec 31 16:00:00 2017 UTC |  40 |  10 |  10
+ Wed Oct 31 16:00:00 2018 UTC |  70 |  10 |  10
 (2 rows)
 
 TRUNCATE transactions_montly;
@@ -1858,7 +1878,7 @@ CALL refresh_continuous_aggregate('transactions_montly', NULL, '2018-11-01 11:50
 SELECT * FROM transactions_montly ORDER BY bucket;
             bucket            | sum | max | min 
 ------------------------------+-----+-----+-----
- Sun Dec 31 16:00:00 2017 PST |  40 |  10 |  10
+ Sun Dec 31 16:00:00 2017 UTC |  40 |  10 |  10
 (1 row)
 
 -- Full refresh the CAGG
@@ -1866,8 +1886,8 @@ CALL refresh_continuous_aggregate('transactions_montly', NULL, NULL);
 SELECT * FROM transactions_montly ORDER BY bucket;
             bucket            | sum | max | min 
 ------------------------------+-----+-----+-----
- Sun Dec 31 16:00:00 2017 PST |  40 |  10 |  10
- Wed Oct 31 17:00:00 2018 PDT |  70 |  10 |  10
+ Sun Dec 31 16:00:00 2017 UTC |  40 |  10 |  10
+ Wed Oct 31 16:00:00 2018 UTC |  70 |  10 |  10
 (2 rows)
 
 -- Check set_chunk_time_interval on continuous aggregate
@@ -1912,7 +1932,7 @@ SELECT create_hypertable('conditions', 'time');
 (1 row)
 
 INSERT INTO conditions VALUES ( '2018-01-01 09:20:00-08', 'SFO', 55);
-INSERT INTO conditions VALUES ( '2018-01-02 09:30:00-08', 'por', 100);
+INSERT INTO conditions VALUES ( '2018-01-02 09:30:00-08', 'POR', 100);
 INSERT INTO conditions VALUES ( '2018-01-02 09:20:00-08', 'SFO', 65);
 INSERT INTO conditions VALUES ( '2018-01-02 09:10:00-08', 'NYC', 65);
 INSERT INTO conditions VALUES ( '2018-11-01 09:20:00-08', 'NYC', 45);
@@ -1944,7 +1964,7 @@ View definition:
    FROM _timescaledb_internal._materialized_hypertable_53;
 
 -- Should return NO ROWS
-SELECT * FROM conditions_daily ORDER BY bucket, avg;
+SELECT * FROM conditions_daily ORDER BY bucket, location;
  location | bucket | avg 
 ----------+--------+-----
 (0 rows)
@@ -1972,15 +1992,15 @@ UNION ALL
   GROUP BY conditions.location, (time_bucket('@ 1 day'::interval, conditions."time"));
 
 -- Should return ROWS because now it is realtime
-SELECT * FROM conditions_daily ORDER BY bucket, avg;
+SELECT * FROM conditions_daily ORDER BY bucket, location;
  location |            bucket            | avg 
 ----------+------------------------------+-----
- SFO      | Sun Dec 31 16:00:00 2017 PST |  55
- SFO      | Mon Jan 01 16:00:00 2018 PST |  65
- NYC      | Mon Jan 01 16:00:00 2018 PST |  65
- por      | Mon Jan 01 16:00:00 2018 PST | 100
- NYC      | Wed Oct 31 17:00:00 2018 PDT |  65
- NYC      | Thu Nov 01 17:00:00 2018 PDT |  15
+ SFO      | Sun Dec 31 16:00:00 2017 UTC |  55
+ NYC      | Mon Jan 01 16:00:00 2018 UTC |  65
+ POR      | Mon Jan 01 16:00:00 2018 UTC | 100
+ SFO      | Mon Jan 01 16:00:00 2018 UTC |  65
+ NYC      | Wed Oct 31 16:00:00 2018 UTC |  65
+ NYC      | Thu Nov 01 16:00:00 2018 UTC |  15
 (6 rows)
 
 -- Should return ROWS because we refreshed it
@@ -1999,14 +2019,199 @@ View definition:
    FROM _timescaledb_internal._materialized_hypertable_53;
 
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
-SELECT * FROM conditions_daily ORDER BY bucket, avg;
+SELECT * FROM conditions_daily ORDER BY bucket, location;
  location |            bucket            | avg 
 ----------+------------------------------+-----
- SFO      | Sun Dec 31 16:00:00 2017 PST |  55
- SFO      | Mon Jan 01 16:00:00 2018 PST |  65
- NYC      | Mon Jan 01 16:00:00 2018 PST |  65
- por      | Mon Jan 01 16:00:00 2018 PST | 100
- NYC      | Wed Oct 31 17:00:00 2018 PDT |  65
- NYC      | Thu Nov 01 17:00:00 2018 PDT |  15
+ SFO      | Sun Dec 31 16:00:00 2017 UTC |  55
+ NYC      | Mon Jan 01 16:00:00 2018 UTC |  65
+ POR      | Mon Jan 01 16:00:00 2018 UTC | 100
+ SFO      | Mon Jan 01 16:00:00 2018 UTC |  65
+ NYC      | Wed Oct 31 16:00:00 2018 UTC |  65
+ NYC      | Thu Nov 01 16:00:00 2018 UTC |  15
 (6 rows)
 
+-- Test TRUNCATE over a Realtime CAgg
+DROP MATERIALIZED VIEW conditions_daily;
+NOTICE:  drop cascades to 2 other objects
+CREATE MATERIALIZED VIEW conditions_daily
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
+SELECT location,
+       time_bucket(INTERVAL '1 day', time) AS bucket,
+       AVG(temperature)
+  FROM conditions
+GROUP BY location, bucket
+WITH NO DATA;
+SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'conditions_daily' \gset
+-- Check the current watermark for an empty CAgg
+SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id)) AS watermak_empty_cagg;
+       watermak_empty_cagg       
+---------------------------------
+ Sun Nov 23 16:00:00 4714 UTC BC
+(1 row)
+
+-- Refresh the CAGG
+CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
+-- Check the watermark after the refresh and before truncate the CAgg
+SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id)) AS watermak_before;
+       watermak_before        
+------------------------------
+ Fri Nov 02 16:00:00 2018 UTC
+(1 row)
+
+-- Exists chunks before truncate the cagg (> 0)
+SELECT count(*) FROM show_chunks('conditions_daily');
+ count 
+-------
+     2
+(1 row)
+
+-- Truncate the given CAgg, it should reset the watermark to the empty state
+TRUNCATE conditions_daily;
+-- No chunks remains after truncate the cagg (= 0)
+SELECT count(*) FROM show_chunks('conditions_daily');
+ count 
+-------
+     0
+(1 row)
+
+-- Watermark should be reseted
+SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id)) AS watermak_after;
+         watermak_after          
+---------------------------------
+ Sun Nov 23 16:00:00 4714 UTC BC
+(1 row)
+
+-- Should return ROWS because the watermark was reseted by the TRUNCATE
+SELECT * FROM conditions_daily ORDER BY bucket, location;
+ location |            bucket            | avg 
+----------+------------------------------+-----
+ SFO      | Sun Dec 31 16:00:00 2017 UTC |  55
+ NYC      | Mon Jan 01 16:00:00 2018 UTC |  65
+ POR      | Mon Jan 01 16:00:00 2018 UTC | 100
+ SFO      | Mon Jan 01 16:00:00 2018 UTC |  65
+ NYC      | Wed Oct 31 16:00:00 2018 UTC |  65
+ NYC      | Thu Nov 01 16:00:00 2018 UTC |  15
+(6 rows)
+
+-- check compression settings are cleaned up when deleting a cagg with compression
+CREATE TABLE cagg_cleanup(time timestamptz not null);
+SELECT table_name FROM create_hypertable('cagg_cleanup','time');
+  table_name  
+--------------
+ cagg_cleanup
+(1 row)
+
+INSERT INTO cagg_cleanup SELECT '2020-01-01';
+CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous) AS SELECT time_bucket('1h',time) FROM cagg_cleanup GROUP BY 1;
+NOTICE:  refreshing continuous aggregate "cagg1"
+ALTER MATERIALIZED VIEW cagg1 SET (timescaledb.compress);
+NOTICE:  defaulting compress_orderby to time_bucket
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "_materialized_hypertable_56" is set to ""
+SELECT count(compress_chunk(ch)) FROM show_chunks('cagg1') ch;
+ count 
+-------
+     1
+(1 row)
+
+DROP MATERIALIZED VIEW cagg1;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_56_70_chunk
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+----------------+-----------+---------+--------------+--------------------
+(0 rows)
+
+-- test WITH namespace alias
+CREATE TABLE with_alias(time timestamptz not null);
+CREATE MATERIALIZED VIEW cagg_alias
+WITH (tsdb.continuous, tsdb.materialized_only=false) AS
+SELECT time_bucket(INTERVAL '1 day', time) FROM conditions GROUP BY 1 WITH NO DATA;
+ALTER MATERIALIZED VIEW cagg_alias SET (timescaledb.materialized_only=false);
+ALTER MATERIALIZED VIEW cagg_alias SET (tsdb.materialized_only=false);
+DROP MATERIALIZED VIEW cagg_alias;
+-- test SET chunk_time_interval
+CREATE MATERIALIZED VIEW cagg_set
+WITH (tsdb.continuous, tsdb.chunk_time_interval='1day') AS
+SELECT time_bucket(INTERVAL '1 day', time) AS cagg_interval_setter FROM conditions GROUP BY 1 WITH NO DATA;
+SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE column_name='cagg_interval_setter';
+     column_name      | time_interval 
+----------------------+---------------
+ cagg_interval_setter | @ 1 day
+(1 row)
+
+ALTER MATERIALIZED VIEW cagg_set SET (tsdb.chunk_time_interval='23 day');
+SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE column_name='cagg_interval_setter';
+     column_name      | time_interval 
+----------------------+---------------
+ cagg_interval_setter | @ 23 days
+(1 row)
+
+ALTER MATERIALIZED VIEW cagg_set SET (tsdb.chunk_time_interval='6 month');
+SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE column_name='cagg_interval_setter';
+     column_name      | time_interval 
+----------------------+---------------
+ cagg_interval_setter | @ 180 days
+(1 row)
+
+ALTER MATERIALIZED VIEW cagg_set SET (tsdb.chunk_time_interval='1 year');
+SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE column_name='cagg_interval_setter';
+     column_name      | time_interval 
+----------------------+---------------
+ cagg_interval_setter | @ 360 days
+(1 row)
+
+-- test cagg with stable functions
+CREATE MATERIALIZED VIEW cagg_stable WITH (tsdb.continuous) AS
+SELECT sum(temperature), max(time + INTERVAL '1h')
+FROM conditions
+GROUP BY time_bucket('1week', time), location;
+WARNING:  using non-immutable functions in continuous aggregate view may lead to inconsistent results on rematerialization
+NOTICE:  refreshing continuous aggregate "cagg_stable"
+SELECT * FROM cagg_stable t ORDER BY t;
+ sum |             max              
+-----+------------------------------
+  65 | Tue Jan 02 10:10:00 2018 UTC
+ 100 | Tue Jan 02 10:30:00 2018 UTC
+ 120 | Tue Jan 02 10:20:00 2018 UTC
+ 355 | Fri Nov 02 11:30:00 2018 UTC
+(4 rows)
+
+--aggregate without combine function but stable function
+CREATE MATERIALIZED VIEW cagg_json_agg WITH (tsdb.continuous, tsdb.materialized_only=false)
+AS SELECT json_agg(location) from conditions group by time_bucket('1week', time), location WITH NO DATA;
+WARNING:  using non-immutable functions in continuous aggregate view may lead to inconsistent results on rematerialization
+CREATE FUNCTION test_stablefunc(int) RETURNS int LANGUAGE 'sql' STABLE AS 'SELECT $1 + 10';
+CREATE MATERIALIZED VIEW cagg_stable2 WITH (tsdb.continuous) AS
+SELECT sum(test_stablefunc(temperature::int)), min(location)
+FROM conditions
+GROUP BY time_bucket('1week', time) WITH NO DATA;
+WARNING:  using non-immutable functions in continuous aggregate view may lead to inconsistent results on rematerialization
+CREATE MATERIALIZED VIEW cagg_stable3 WITH (tsdb.continuous) AS
+SELECT sum(temperature), min(location)
+FROM conditions
+GROUP BY time_bucket('1week', time), test_stablefunc(temperature::int) WITH NO DATA;
+WARNING:  using non-immutable functions in continuous aggregate view may lead to inconsistent results on rematerialization
+-- test window functions in caggs
+-- first do sanity check that we error without the GUC
+\set ON_ERROR_STOP 0
+CREATE MATERIALIZED VIEW cagg_window WITH (tsdb.continuous)
+AS SELECT time_bucket('1week', time), rank() OVER (PARTITION BY time_bucket('1 week',time)) FROM conditions GROUP BY 1;
+ERROR:  invalid continuous aggregate query
+\set ON_ERROR_STOP 1
+SET timescaledb.enable_cagg_window_functions TO on;
+CREATE MATERIALIZED VIEW cagg_window_1 WITH (tsdb.continuous)
+AS SELECT time_bucket('1week', time), rank() OVER (PARTITION BY time_bucket('1 week',time)) FROM conditions GROUP BY 1;
+WARNING:  window function support is experimental and may result in unexpected results depending on the functions used.
+NOTICE:  refreshing continuous aggregate "cagg_window_1"
+CREATE MATERIALIZED VIEW cagg_window_2 WITH (tsdb.continuous)
+AS SELECT time_bucket('1week', time), rank() OVER (PARTITION BY time_bucket('1 week',time), location) FROM conditions GROUP BY 1, location;
+WARNING:  window function support is experimental and may result in unexpected results depending on the functions used.
+NOTICE:  refreshing continuous aggregate "cagg_window_2"
+CREATE MATERIALIZED VIEW cagg_window_3 WITH (tsdb.continuous)
+AS SELECT time_bucket('1week', time), rank() OVER (PARTITION BY time_bucket('1 week',time)) FROM conditions GROUP BY 1, location;
+WARNING:  window function support is experimental and may result in unexpected results depending on the functions used.
+NOTICE:  refreshing continuous aggregate "cagg_window_3"
+CREATE MATERIALIZED VIEW cagg_window_4 WITH (tsdb.continuous)
+AS SELECT time_bucket('1week', time), rank() OVER w FROM conditions GROUP BY 1, location WINDOW w AS (PARTITION BY time_bucket('1 week',time));
+WARNING:  window function support is experimental and may result in unexpected results depending on the functions used.
+NOTICE:  refreshing continuous aggregate "cagg_window_4"

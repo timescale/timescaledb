@@ -1,6 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+SET timezone TO PST8PDT;
 CREATE TYPE custom_type AS (high int, low int);
 CREATE TABLE conditions_before (
       timec       TIMESTAMPTZ       NOT NULL,
@@ -158,6 +159,7 @@ SELECT _timescaledb_functions.stop_background_workers();
 (1 row)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET timezone TO PST8PDT;
 --make sure the appropriate DROP are still blocked.
 \set ON_ERROR_STOP 0
 DROP table :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME";

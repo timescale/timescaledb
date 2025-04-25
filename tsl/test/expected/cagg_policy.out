@@ -36,6 +36,7 @@ SELECT a, count(b)
 FROM int_tab
 GROUP BY time_bucket(1, a), a WITH NO DATA;
 \c :TEST_DBNAME :ROLE_SUPERUSER
+SET timezone TO PST8PDT;
 DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT count(*) FROM _timescaledb_config.bgw_job;
@@ -260,6 +261,7 @@ SELECT hypertable_id as mat_id FROM _timescaledb_config.bgw_job where id = :job_
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_SUPERUSER
+SET timezone TO PST8PDT;
 UPDATE _timescaledb_config.bgw_job
 SET config = jsonb_build_object('mat_hypertable_id', :mat_id)
 WHERE id = :job_id;
@@ -384,6 +386,8 @@ CREATE MATERIALIZED VIEW max_mat_view_date
 -- Test 1 step policy for timestamp type buckets
 ALTER materialized view max_mat_view_date set (timescaledb.compress = true);
 NOTICE:  defaulting compress_orderby to time_bucket
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "_materialized_hypertable_6" is set to ""
 -- Only works for cagg
 SELECT timescaledb_experimental.add_policies('continuous_agg_max_mat_date', refresh_start_offset => '1 day'::interval, refresh_end_offset => '2 day'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
 ERROR:  "continuous_agg_max_mat_date" is not a continuous aggregate
@@ -395,7 +399,8 @@ SELECT timescaledb_experimental.remove_policies('continuous_agg_max_mat_date', f
 ERROR:  "continuous_agg_max_mat_date" is not a continuous aggregate
 -- No policy is added if one errors out
 SELECT timescaledb_experimental.add_policies('max_mat_view_date', refresh_start_offset => '1 day'::interval, refresh_end_offset => '2 day'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
-ERROR:  there are gaps in refresh policy
+ERROR:  policy refresh window too small
+DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "date".
 SELECT timescaledb_experimental.show_policies('max_mat_view_date');
  show_policies 
 ---------------
@@ -819,6 +824,7 @@ WHERE id = :job_id;
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+SET timezone TO PST8PDT;
 UPDATE _timescaledb_config.bgw_job
 SET config = jsonb_build_object('mat_hypertable_id', :mat_id)
 WHERE id = :job_id;
@@ -868,6 +874,8 @@ GROUP BY 1 WITH NO DATA;
 -- Test 1 step policy for smallint type buckets
 ALTER materialized view mat_smallint set (timescaledb.compress = true);
 NOTICE:  defaulting compress_orderby to a
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "_materialized_hypertable_11" is set to ""
 -- All policies are added in one step
 SELECT timescaledb_experimental.add_policies('mat_smallint', refresh_start_offset => 10::smallint, refresh_end_offset => 1::smallint, compress_after => 11::smallint, drop_after => 20::smallint);
  add_policies 
@@ -1071,6 +1079,8 @@ GROUP BY 1 WITH NO DATA;
 -- Test 1 step policy for bigint type buckets
 ALTER materialized view mat_bigint set (timescaledb.compress = true);
 NOTICE:  defaulting compress_orderby to a
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "_materialized_hypertable_14" is set to ""
 -- All policies are added in one step
 SELECT timescaledb_experimental.add_policies('mat_bigint', refresh_start_offset => 10::bigint, refresh_end_offset => 1::bigint, compress_after => 11::bigint, drop_after => 20::bigint);
  add_policies 
@@ -1142,26 +1152,48 @@ SELECT * FROM mat_bigint WHERE a>100 ORDER BY 1;
 
 ALTER MATERIALIZED VIEW mat_bigint SET (timescaledb.compress);
 NOTICE:  defaulting compress_orderby to a
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "_materialized_hypertable_14" is set to ""
 ALTER MATERIALIZED VIEW mat_smallint SET (timescaledb.compress);
 NOTICE:  defaulting compress_orderby to a
-\set ON_ERROR_STOP 0
-SELECT add_compression_policy('mat_smallint', 0::smallint);
-ERROR:  compress_after value for compression policy should be greater than the start of the refresh window of continuous aggregate policy for mat_smallint
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "_materialized_hypertable_11" is set to ""
+-- With immutable compressed chunks, these policies would fail by overlapping the refresh window
 SELECT add_compression_policy('mat_smallint', -4::smallint);
-ERROR:  compress_after value for compression policy should be greater than the start of the refresh window of continuous aggregate policy for mat_smallint
-SELECT add_compression_policy('mat_bigint', 0::bigint);
-ERROR:  compress_after value for compression policy should be greater than the start of the refresh window of continuous aggregate policy for mat_bigint
-\set ON_ERROR_STOP 1
-SELECT add_compression_policy('mat_smallint', 5::smallint);
  add_compression_policy 
 ------------------------
                    1053
 (1 row)
 
-SELECT add_compression_policy('mat_bigint', 20::bigint);
+SELECT remove_compression_policy('mat_smallint');
+ remove_compression_policy 
+---------------------------
+ t
+(1 row)
+
+SELECT add_compression_policy('mat_bigint', 0::bigint);
  add_compression_policy 
 ------------------------
                    1054
+(1 row)
+
+SELECT remove_compression_policy('mat_bigint');
+ remove_compression_policy 
+---------------------------
+ t
+(1 row)
+
+-- End previous limitation tests
+SELECT add_compression_policy('mat_smallint', 5::smallint);
+ add_compression_policy 
+------------------------
+                   1055
+(1 row)
+
+SELECT add_compression_policy('mat_bigint', 20::bigint);
+ add_compression_policy 
+------------------------
+                   1056
 (1 row)
 
 -- end of coverage tests
@@ -1192,6 +1224,9 @@ SELECT time,
 FROM generate_series('2000-01-01 0:00:00+0'::timestamptz, '2000-01-02 23:55:00+0', '20m') gtime (time),
     generate_series(1, 2, 1) gdevice (device_id);
 ALTER TABLE metrics SET ( timescaledb.compress );
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "metrics" is set to ""
+NOTICE:  default order by for hypertable "metrics" is set to ""time" DESC"
 SELECT compress_chunk(ch) FROM show_chunks('metrics') ch;
               compress_chunk              
 ------------------------------------------
@@ -1210,7 +1245,7 @@ WITH NO DATA;
 SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, NULL, '1 h'::interval, if_not_exists => true);
  add_continuous_aggregate_policy 
 ---------------------------------
-                            1055
+                            1057
 (1 row)
 
 SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, '1 day'::interval, '1 h'::interval, if_not_exists => true);
@@ -1229,7 +1264,7 @@ SELECT remove_continuous_aggregate_policy('metrics_cagg');
 SELECT add_continuous_aggregate_policy('metrics_cagg', NULL, '1 day'::interval, '1h'::interval, if_not_exists=>true);
  add_continuous_aggregate_policy 
 ---------------------------------
-                            1056
+                            1058
 (1 row)
 
 SELECT add_continuous_aggregate_policy('metrics_cagg', NULL, '1 day'::interval, '1h'::interval, if_not_exists=>true); -- same param values, so we get a NOTICE
@@ -1270,7 +1305,7 @@ ERROR:  cannot use "compress_created_before" with continuous aggregate "metrics_
 SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" ;
  COMP_JOB 
 ----------
-     1058
+     1060
 (1 row)
 
 SELECT remove_compression_policy('metrics_cagg');
@@ -1412,7 +1447,7 @@ SELECT set_integer_now_func('t', 'unix_now');
 SELECT add_retention_policy('t', 20);
  add_retention_policy 
 ----------------------
-                 1060
+                 1062
 (1 row)
 
 CREATE MATERIALIZED VIEW cagg(a, sumb) WITH (timescaledb.continuous)

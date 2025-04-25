@@ -1,12 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
--- disable memoize on PG14+
-SELECT CASE WHEN current_setting('server_version_num')::int/10000 >= 14 THEN set_config('enable_memoize','off',false) ELSE 'off' END AS enable_memoize;
- enable_memoize 
- off
-(1 row)
-
+SET enable_memoize TO false;
 SET enable_indexscan TO false;
 -- test join on compressed time column
 -- #3079, #4465
@@ -42,6 +37,7 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 ALTER TABLE partial_join set(timescaledb.compress,timescaledb.compress_segmentby='device');
+NOTICE:  default order by for hypertable "partial_join" is set to ""time" DESC"
 INSERT INTO partial_join SELECT '2000-01-01','d1';
 SELECT count(*) FROM (SELECT compress_chunk(show_chunks('partial_join'),true)) compress;
  count 

@@ -4,27 +4,27 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <access/table.h>
 #include <access/genam.h>
-#include <access/tableam.h>
 #include <access/htup_details.h>
-#include <catalog/pg_class.h>
+#include <access/table.h>
+#include <access/tableam.h>
 #include <catalog/indexing.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_class.h>
 #include <catalog/pg_namespace.h>
-#include <utils/builtins.h>
-#include <utils/syscache.h>
-#include <utils/snapmgr.h>
-#include <storage/lmgr.h>
 #include <fmgr.h>
+#include <storage/lmgr.h>
+#include <utils/builtins.h>
+#include <utils/snapmgr.h>
+#include <utils/syscache.h>
 
+#include "chunk.h"
+#include "debug_point.h"
+#include "extension.h"
+#include "hypertable_cache.h"
 #include "stats.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
-#include "chunk.h"
-#include "extension.h"
-#include "hypertable_cache.h"
-#include "debug_point.h"
 #include "utils.h"
 
 typedef struct StatsContext
@@ -253,11 +253,7 @@ process_partition(HyperStats *stats, Form_pg_class class, bool ischunk)
 	 * all children, so no need to count the partitions separately since the
 	 * sum will be in the root.
 	 */
-	if (
-#if PG14_GE
-		ischunk &&
-#endif
-		class->reltuples > 0)
+	if (ischunk && class->reltuples > 0)
 	{
 		stats->storage.base.reltuples += class->reltuples;
 	}
@@ -277,13 +273,7 @@ add_chunk_stats(HyperStats *stats, Form_pg_class class, const Chunk *chunk,
 	if (ts_chunk_is_compressed(chunk))
 		stats->compressed_chunk_count++;
 
-	/*
-	 * A chunk on a distributed hypertable can be marked as compressed but
-	 * have no compression stats (the stats exists on the data node and might
-	 * not be "imported"). Therefore, the check here is not the same as
-	 * above.
-	 */
-	if (NULL != fd_compr)
+	if (fd_compr)
 	{
 		stats->compressed_heap_size += fd_compr->compressed_heap_size;
 		stats->compressed_indexes_size += fd_compr->compressed_index_size;

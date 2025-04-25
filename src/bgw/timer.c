@@ -4,7 +4,9 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/xact.h>
 #include <miscadmin.h>
+#include <pgstat.h>
 #include <postmaster/bgworker.h>
 #include <storage/ipc.h>
 #include <storage/latch.h>
@@ -12,15 +14,13 @@
 #include <storage/proc.h>
 #include <storage/shmem.h>
 #include <utils/jsonb.h>
-#include <utils/timestamp.h>
-#include <utils/snapmgr.h>
 #include <utils/memutils.h>
-#include <access/xact.h>
-#include <pgstat.h>
+#include <utils/snapmgr.h>
+#include <utils/timestamp.h>
 
-#include "timer.h"
 #include "compat/compat.h"
 #include "config.h"
+#include "timer.h"
 
 #define MAX_TIMEOUT (5 * INT64CONST(1000))
 #define MILLISECS_PER_SEC INT64CONST(1000)
@@ -57,7 +57,8 @@ get_timeout_millisec(TimestampTz by_time)
 	if (timeout_sec < 0 || timeout_usec < 0)
 		return 0;
 
-	return (int64) (timeout_sec * MILLISECS_PER_SEC + ((int64) timeout_usec) / USECS_PER_MILLISEC);
+	return (int64) ((timeout_sec * MILLISECS_PER_SEC) +
+					(((int64) timeout_usec) / USECS_PER_MILLISEC));
 }
 
 static bool
@@ -73,7 +74,7 @@ wait_using_wait_latch(TimestampTz until)
 		timeout = MAX_TIMEOUT;
 
 	/* Wait latch requires timeout to be <= INT_MAX */
-	if ((int64) timeout > (int64) INT_MAX)
+	if (timeout > (int64) INT_MAX)
 		timeout = INT_MAX;
 
 	wl_rc = WaitLatch(MyLatch,

@@ -57,6 +57,9 @@ step "s1_recompress_chunk" {
    FROM show_chunks('sensor_data') i
    LIMIT 1;
 }
+step "s1_commit" {
+	COMMIT;
+}
 step "s1_rollback" {
 	ROLLBACK;
 }
@@ -74,25 +77,91 @@ step "s1_decompress" {
    SELECT count(*) FROM sensor_data;
 }
 
+step "s1_show_chunk_state" {
+   SELECT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+   SELECT count(*) FROM sensor_data;
+}
+
+step "s1_insert_for_recompression" {
+   INSERT INTO sensor_data
+   SELECT time + (INTERVAL '1 minute' * random()) AS time, 
+   5 as sensor_id,
+   random() AS cpu,
+   random()* 100 AS temperature
+   FROM
+   generate_series('2022-01-01 00:00:00', '2022-01-01 00:59:59', INTERVAL '1 minute') AS g1(time)
+   ORDER BY time;
+}
+
 session "s2"
-## locking up the catalog table will block the recompression from releasing the index lock
-## we should not be deadlocking since the index lock has been reduced to ExclusiveLock
-step "s2_block_on_compressed_chunk_size" {
+step "s2_begin" {
 	BEGIN;
-	LOCK TABLE _timescaledb_catalog.compression_chunk_size;
 }
-step "s2_unblock" {
-	ROLLBACK;
+step "s2_commit" {
+	COMMIT;
 }
+	
 step "s2_select_from_compressed_chunk" {
 	SELECT sum(temperature) > 1 FROM sensor_data WHERE sensor_id = 2;
 }
 ## select should not be blocked by the recompress_chunk_segmentwise in progress
-step "s2_wait_for_select_to_finish" {
+step "s2_wait_for_finish" {
 }
 
-step "s2_insert" {
-   INSERT INTO sensor_data VALUES ('2022-01-01 20:00'::timestamptz, 1, 1.0, 1.0), ('2022-01-01 21:00'::timestamptz, 2, 2.0, 2.0) ON CONFLICT (time, sensor_id) DO NOTHING;
+step "s2_insert_do_nothing" {
+   INSERT INTO sensor_data
+   VALUES ('2022-01-01 20:00'::timestamptz, 1, 1.0, 1.0), ('2022-01-01 21:00'::timestamptz, 2, 2.0, 2.0) 
+   ON CONFLICT (time, sensor_id) DO NOTHING;
+}
+
+step "s2_insert_existing_do_nothing" {
+   INSERT INTO sensor_data 
+   SELECT time, sensor_id, 1.0, 1.0 FROM sensor_data
+   WHERE sensor_id = 4
+   LIMIT 1
+   ON CONFLICT (time, sensor_id) DO NOTHING;
+}
+
+step "s2_upsert" {
+   INSERT INTO sensor_data 
+   VALUES ('2022-01-01 20:00'::timestamptz, 100, 9999, 9999), ('2022-01-01 21:00'::timestamptz, 101, 9999, 9999) 
+   ON CONFLICT (time, sensor_id) DO UPDATE SET cpu = EXCLUDED.cpu, temperature = EXCLUDED.temperature;
+}
+
+step "s2_upsert_existing" {
+   INSERT INTO sensor_data 
+   SELECT time, sensor_id, 9999, 9999 FROM sensor_data
+   WHERE sensor_id = 4
+   LIMIT 1
+   ON CONFLICT (time, sensor_id) DO UPDATE SET cpu = EXCLUDED.cpu, temperature = EXCLUDED.temperature;
+}
+
+step "s2_delete_compressed" {
+	DELETE FROM sensor_data WHERE sensor_id = 1;
+}
+
+step "s2_delete_uncompressed" {
+	DELETE FROM sensor_data WHERE sensor_id = 11;
+}
+
+step "s2_delete_recompressed" {
+	DELETE FROM sensor_data WHERE sensor_id = 5 AND time > '2022-01-01 01:00'::timestamptz;
+}
+
+step "s2_update_compressed" {
+	UPDATE sensor_data SET cpu = 9999 WHERE sensor_id = 1;
+}
+
+step "s2_update_uncompressed" {
+	UPDATE sensor_data SET cpu = 9999 WHERE sensor_id = 11;
+}
+
+step "s2_update_recompressed" {
+	UPDATE sensor_data SET cpu = 9999 WHERE sensor_id = 5 AND time > '2022-01-01 01:00'::timestamptz;
+}
+
+step "s2_show_updated_count" {
+	SELECT COUNT(*) FROM sensor_data WHERE cpu = 9999;
 }
 
 session "s3"
@@ -105,7 +174,90 @@ step "s3_release_chunk_insert" {
 	SELECT debug_waitpoint_release('chunk_insert_before_lock');
 }
 
+step "s3_block_exclusive_lock" {
+	BEGIN;
+	LOCK TABLE sensor_data IN ROW EXCLUSIVE MODE;
+}
+step "s3_release_exclusive_lock" {
+	ROLLBACK;
+}
 
-permutation "s2_block_on_compressed_chunk_size" "s1_begin" "s1_recompress_chunk" "s2_select_from_compressed_chunk" "s2_wait_for_select_to_finish" "s2_unblock" "s1_rollback"
+step "s3_begin" {
+	BEGIN;
+}
 
-permutation "s1_compress" "s3_block_chunk_insert" "s2_insert" "s1_decompress" "s1_compress" "s3_release_chunk_insert"
+step "s3_commit" {
+	COMMIT;
+}
+
+step "s3_rollback" {
+	ROLLBACK;
+}
+
+step "s3_delete_uncompressed" {
+	DELETE FROM sensor_data WHERE sensor_id = 11;
+}
+
+step "s3_recompress_chunk" {
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(i)) AS recompress
+   FROM show_chunks('sensor_data') i
+   LIMIT 1;
+}
+
+
+permutation "s1_begin" "s1_recompress_chunk" "s2_select_from_compressed_chunk" "s2_wait_for_finish" "s1_rollback"
+
+permutation "s1_compress" "s3_block_chunk_insert" "s2_insert_do_nothing" "s1_decompress" "s1_compress" "s3_release_chunk_insert"
+
+## test inserts and recompression
+permutation "s1_show_chunk_state" "s2_begin" "s2_insert_do_nothing" "s1_begin" "s1_recompress_chunk" "s2_insert_do_nothing" "s2_wait_for_finish" "s2_commit" "s1_commit" "s1_show_chunk_state"
+permutation "s1_show_chunk_state" "s2_begin" "s2_insert_do_nothing" "s1_begin" "s1_recompress_chunk" "s2_insert_existing_do_nothing" "s2_wait_for_finish" "s2_commit" "s1_commit" "s1_show_chunk_state"
+permutation "s1_show_chunk_state" "s2_begin" "s2_insert_do_nothing" "s1_recompress_chunk" "s2_wait_for_finish" "s2_commit" "s1_show_chunk_state"
+permutation "s1_show_chunk_state" "s2_begin" "s2_insert_existing_do_nothing" "s1_recompress_chunk" "s2_wait_for_finish" "s2_commit" "s1_show_chunk_state"
+permutation "s1_recompress_chunk" "s1_show_chunk_state" "s1_insert_for_recompression" "s1_show_chunk_state" "s2_begin" "s2_insert_existing_do_nothing" "s1_recompress_chunk" "s2_wait_for_finish" "s2_commit" "s1_show_chunk_state"
+## recompression can block inserts if its able to get the ExclusiveLock to update
+## chunk status, it should be quick to release it
+permutation "s1_show_chunk_state" "s1_begin" "s1_recompress_chunk" "s2_upsert" "s1_commit" "s1_show_chunk_state" "s2_show_updated_count"
+permutation "s1_show_chunk_state" "s1_begin" "s1_recompress_chunk" "s2_upsert_existing" "s1_commit" "s1_show_chunk_state" "s2_show_updated_count"
+## if recompression cannot update the status, there is no blocking
+permutation "s1_show_chunk_state" "s3_block_exclusive_lock" "s1_begin" "s1_recompress_chunk" "s2_upsert" "s2_wait_for_finish" "s1_commit" "s1_show_chunk_state" "s2_show_updated_count" "s3_release_exclusive_lock"
+permutation "s1_show_chunk_state" "s3_block_exclusive_lock" "s1_begin" "s1_recompress_chunk" "s2_upsert_existing" "s2_wait_for_finish" "s1_commit" "s1_show_chunk_state" "s2_show_updated_count" "s3_release_exclusive_lock"
+permutation "s1_show_chunk_state" "s2_begin" "s2_upsert" "s1_recompress_chunk" "s2_wait_for_finish" "s2_commit" "s1_show_chunk_state" "s2_show_updated_count"
+permutation "s1_show_chunk_state" "s2_begin" "s2_upsert_existing" "s1_recompress_chunk" "s2_wait_for_finish" "s2_commit" "s1_show_chunk_state" "s2_show_updated_count"
+permutation "s1_recompress_chunk" "s1_insert_for_recompression" "s1_show_chunk_state" "s2_begin" "s2_upsert_existing" "s1_recompress_chunk" "s2_wait_for_finish" "s2_commit" "s1_show_chunk_state" "s2_show_updated_count"
+# test that we don't update chunk status to fully compressed if there were concurrent inserts to uncompressed chunk
+permutation "s1_show_chunk_state" "s3_begin" "s1_begin" "s3_delete_uncompressed" "s1_recompress_chunk" "s2_insert_do_nothing" "s3_rollback" "s1_commit" "s1_show_chunk_state"
+
+## test delete and recompression
+## recompression can block deletes if its able to get the ExclusiveLock to update
+## chunk status, it should be quick to release it
+permutation "s1_show_chunk_state" "s1_begin" "s1_recompress_chunk" "s2_delete_compressed" "s1_commit" "s1_show_chunk_state"
+permutation "s1_show_chunk_state" "s1_begin" "s1_recompress_chunk" "s2_delete_uncompressed" "s1_commit" "s1_show_chunk_state"
+permutation "s1_recompress_chunk" "s1_insert_for_recompression" "s1_show_chunk_state" "s1_begin" "s1_recompress_chunk" "s2_delete_recompressed" "s1_commit" "s1_show_chunk_state"
+## if recompression cannot update the status, there is no blocking
+permutation "s1_show_chunk_state" "s3_block_exclusive_lock" "s1_begin" "s1_recompress_chunk" "s2_delete_compressed" "s2_wait_for_finish" "s1_commit" "s1_show_chunk_state" "s3_release_exclusive_lock"
+## unless they block each other on tuple level
+permutation "s1_show_chunk_state" "s3_block_exclusive_lock" "s1_begin" "s1_recompress_chunk" "s2_delete_uncompressed" "s1_commit" "s1_show_chunk_state" "s3_release_exclusive_lock"
+permutation "s1_recompress_chunk" "s3_block_exclusive_lock" "s1_insert_for_recompression" "s1_show_chunk_state" "s1_begin" "s1_recompress_chunk" "s2_delete_recompressed" "s1_commit" "s1_show_chunk_state" "s3_release_exclusive_lock"
+permutation "s1_show_chunk_state" "s2_begin" "s2_delete_uncompressed" "s1_recompress_chunk" "s2_commit" "s1_show_chunk_state"
+permutation "s1_show_chunk_state" "s2_begin" "s2_delete_compressed" "s1_recompress_chunk" "s2_commit" "s1_show_chunk_state"
+permutation "s1_recompress_chunk" "s1_insert_for_recompression" "s1_show_chunk_state" "s2_begin" "s2_delete_recompressed" "s1_recompress_chunk" "s2_commit" "s1_show_chunk_state"
+
+##test update and recompression
+## recompression can block deletes if its able to get the ExclusiveLock to update
+## chunk status, it should be quick to release it
+permutation "s1_show_chunk_state" "s1_begin" "s1_recompress_chunk" "s2_update_compressed"  "s1_commit" "s1_show_chunk_state" "s2_show_updated_count"
+permutation "s1_show_chunk_state" "s1_begin" "s1_recompress_chunk" "s2_update_uncompressed" "s1_commit" "s1_show_chunk_state" "s2_show_updated_count"
+permutation "s1_recompress_chunk" "s1_insert_for_recompression" "s1_begin" "s1_recompress_chunk" "s2_update_recompressed" "s1_commit" "s1_show_chunk_state" "s2_show_updated_count"
+## if recompression cannot update the status, there is no blocking
+permutation "s1_show_chunk_state" "s3_block_exclusive_lock" "s1_begin" "s1_recompress_chunk" "s2_update_compressed" "s2_wait_for_finish" "s1_commit" "s1_show_chunk_state" "s2_show_updated_count" "s3_release_exclusive_lock"
+## unless they block each other on tuple level
+permutation "s1_show_chunk_state" "s3_block_exclusive_lock" "s1_begin" "s1_recompress_chunk" "s2_update_uncompressed" "s1_commit" "s1_show_chunk_state" "s2_show_updated_count" "s3_release_exclusive_lock"
+permutation "s1_recompress_chunk" "s1_insert_for_recompression" "s3_block_exclusive_lock" "s1_begin" "s1_recompress_chunk" "s2_update_recompressed" "s1_commit" "s1_show_chunk_state" "s2_show_updated_count" "s3_release_exclusive_lock"
+permutation "s1_show_chunk_state" "s2_begin" "s2_update_uncompressed" "s1_recompress_chunk" "s2_commit" "s1_show_chunk_state" "s2_show_updated_count"
+permutation "s1_show_chunk_state" "s2_begin" "s2_update_compressed" "s1_recompress_chunk" "s2_commit" "s1_show_chunk_state" "s2_show_updated_count"
+permutation "s1_recompress_chunk" "s1_insert_for_recompression" "s1_show_chunk_state" "s2_begin" "s2_update_recompressed" "s1_recompress_chunk" "s2_commit" "s1_show_chunk_state" "s2_show_updated_count"
+
+## test multiple recompressions running at same time
+## blocking each other since they acquire ShareUpdateExclusive locks on the chunk
+permutation "s1_show_chunk_state" "s1_begin" "s3_begin" "s1_recompress_chunk" "s3_recompress_chunk"  "s1_commit" "s3_commit" "s1_show_chunk_state" "s2_show_updated_count"

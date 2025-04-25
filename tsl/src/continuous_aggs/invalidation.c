@@ -4,36 +4,36 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/htup.h>
+#include <access/htup_details.h>
+#include <access/xact.h>
+#include <miscadmin.h>
+#include <nodes/makefuncs.h>
+#include <nodes/memnodes.h>
+#include <storage/lockdefs.h>
 #include <utils/builtins.h>
 #include <utils/memutils.h>
 #include <utils/palloc.h>
 #include <utils/snapmgr.h>
 #include <utils/tuplestore.h>
-#include <nodes/makefuncs.h>
-#include <nodes/memnodes.h>
-#include <storage/lockdefs.h>
-#include <access/htup_details.h>
-#include <access/htup.h>
-#include <access/xact.h>
-#include <miscadmin.h>
 
 #include <extension.h>
 #include <fmgr.h>
 #include <funcapi.h>
-#include <parser/parse_func.h>
-#include <scanner.h>
-#include <scan_iterator.h>
-#include <utils.h>
-#include <time_utils.h>
-#include <time_bucket.h>
 #include <hypertable_cache.h>
+#include <parser/parse_func.h>
+#include <scan_iterator.h>
+#include <scanner.h>
+#include <time_bucket.h>
+#include <time_utils.h>
+#include <utils.h>
 
 #include "compat/compat.h"
-#include "ts_catalog/catalog.h"
-#include "ts_catalog/continuous_agg.h"
 #include "continuous_aggs/materialize.h"
 #include "invalidation.h"
 #include "refresh.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/continuous_agg.h"
 
 /*
  * Invalidation processing for continuous aggregates.
@@ -97,8 +97,6 @@ typedef struct CaggInvalidationState
 	Snapshot snapshot;
 	Tuplestorestate *invalidations;
 	const CaggsInfo *all_caggs;
-	int64 bucket_width;
-	/* bucket_function is NULL unless bucket_width == BUCKET_WIDTH_VARIABLE */
 	const ContinuousAggsBucketFunction *bucket_function;
 } CaggInvalidationState;
 
@@ -119,15 +117,14 @@ static void set_remainder_after_cut(Invalidation *remainder, int32 hyper_id,
 									int64 lowest_modified_value, int64 greatest_modified_value);
 static void invalidation_entry_reset(Invalidation *entry);
 static void
-invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid, int64 bucket_width,
+invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
 										 const ContinuousAggsBucketFunction *bucket_function);
 static void
 invalidation_entry_set_from_hyper_invalidation(Invalidation *entry, const TupleInfo *ti,
-											   int32 hyper_id, Oid dimtype, int64 bucket_width,
+											   int32 hyper_id, Oid dimtype,
 											   const ContinuousAggsBucketFunction *bucket_function);
 static void
 invalidation_entry_set_from_cagg_invalidation(Invalidation *entry, const TupleInfo *ti, Oid dimtype,
-											  int64 bucket_width,
 											  const ContinuousAggsBucketFunction *bucket_function);
 static bool invalidations_can_be_merged(const Invalidation *a, const Invalidation *b);
 static bool invalidation_entry_try_merge(Invalidation *entry, const Invalidation *newentry);
@@ -143,10 +140,10 @@ static Invalidation cut_cagg_invalidation_and_compute_remainder(
 	const CaggInvalidationState *state, const InternalTimeRange *refresh_window,
 	const Invalidation *mergedentry, const Invalidation *current_remainder);
 static void clear_cagg_invalidations_for_refresh(const CaggInvalidationState *state,
-												 const InternalTimeRange *refresh_window);
-static void invalidation_state_init(CaggInvalidationState *state, int32 mat_hypertable_id,
-									int32 raw_hypertable_id, Oid dimtype,
-									const CaggsInfo *all_caggs);
+												 const InternalTimeRange *refresh_window,
+												 bool force);
+static void invalidation_state_init(CaggInvalidationState *state, const ContinuousAgg *cagg,
+									Oid dimtype, const CaggsInfo *all_caggs);
 static void invalidation_state_cleanup(const CaggInvalidationState *state);
 
 static Relation
@@ -474,7 +471,7 @@ invalidation_entry_reset(Invalidation *entry)
  * invalidations.
  */
 static void
-invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid, int64 bucket_width,
+invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
 										 const ContinuousAggsBucketFunction *bucket_function)
 {
 	const int64 time_dimension_min = ts_time_get_min(time_type_oid);
@@ -482,7 +479,7 @@ invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid, i
 	int64 min_bucket_start;
 	int64 max_bucket_end;
 
-	if (bucket_width == BUCKET_WIDTH_VARIABLE)
+	if (bucket_function->bucket_fixed_interval == false)
 	{
 		ts_compute_circumscribed_bucketed_refresh_window_variable(&inv->lowest_modified_value,
 																  &inv->greatest_modified_value,
@@ -490,6 +487,7 @@ invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid, i
 		return;
 	}
 
+	int64 bucket_width = ts_continuous_agg_fixed_bucket_width(bucket_function);
 	Assert(bucket_width > 0);
 
 	/* Compute the start of the "first" bucket for the type. The min value
@@ -568,7 +566,7 @@ invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid, i
 
 static void
 invalidation_entry_set_from_hyper_invalidation(Invalidation *entry, const TupleInfo *ti,
-											   int32 hyper_id, Oid dimtype, int64 bucket_width,
+											   int32 hyper_id, Oid dimtype,
 											   const ContinuousAggsBucketFunction *bucket_function)
 {
 	INVALIDATION_ENTRY_SET(entry,
@@ -579,12 +577,11 @@ invalidation_entry_set_from_hyper_invalidation(Invalidation *entry, const TupleI
 	 * invalidation log, a different hypertable ID must be set (the ID of the
 	 * materialized hypertable). */
 	entry->hyper_id = hyper_id;
-	invalidation_expand_to_bucket_boundaries(entry, dimtype, bucket_width, bucket_function);
+	invalidation_expand_to_bucket_boundaries(entry, dimtype, bucket_function);
 }
 
 static void
 invalidation_entry_set_from_cagg_invalidation(Invalidation *entry, const TupleInfo *ti, Oid dimtype,
-											  int64 bucket_width,
 											  const ContinuousAggsBucketFunction *bucket_function)
 {
 	INVALIDATION_ENTRY_SET(entry,
@@ -600,7 +597,7 @@ invalidation_entry_set_from_cagg_invalidation(Invalidation *entry, const TupleIn
 	 * invalidation log for some users. Therefore we try to expand
 	 * invalidation entries also here, although in most cases it would do
 	 * nothing. */
-	invalidation_expand_to_bucket_boundaries(entry, dimtype, bucket_width, bucket_function);
+	invalidation_expand_to_bucket_boundaries(entry, dimtype, bucket_function);
 }
 
 /*
@@ -698,7 +695,7 @@ move_invalidations_from_hyper_to_cagg_log(const CaggInvalidationState *state)
 	const CaggsInfo *all_caggs = state->all_caggs;
 	int32 hyper_id = state->raw_hypertable_id;
 	int32 last_cagg_hyper_id;
-	ListCell *lc1, *lc2, *lc3;
+	ListCell *lc1, *lc2;
 
 	last_cagg_hyper_id = llast_int(all_caggs->mat_hypertable_ids);
 
@@ -713,16 +710,10 @@ move_invalidations_from_hyper_to_cagg_log(const CaggInvalidationState *state)
 	 * the cagg invalidation log. This creates better locality for scanning
 	 * the invalidations later.
 	 */
-	forthree (lc1,
-			  all_caggs->mat_hypertable_ids,
-			  lc2,
-			  all_caggs->bucket_widths,
-			  lc3,
-			  all_caggs->bucket_functions)
+	forboth (lc1, all_caggs->mat_hypertable_ids, lc2, all_caggs->bucket_functions)
 	{
 		int32 cagg_hyper_id = lfirst_int(lc1);
-		int64 bucket_width = DatumGetInt64(PointerGetDatum(lfirst(lc2)));
-		const ContinuousAggsBucketFunction *bucket_function = lfirst(lc3);
+		const ContinuousAggsBucketFunction *bucket_function = lfirst(lc2);
 
 		Invalidation mergedentry;
 		ScanIterator iterator;
@@ -745,7 +736,6 @@ move_invalidations_from_hyper_to_cagg_log(const CaggInvalidationState *state)
 														   ti,
 														   cagg_hyper_id,
 														   state->dimtype,
-														   bucket_width,
 														   bucket_function);
 
 			if (!IS_VALID_INVALIDATION(&mergedentry))
@@ -889,7 +879,7 @@ cut_cagg_invalidation_and_compute_remainder(const CaggInvalidationState *state,
  */
 static void
 clear_cagg_invalidations_for_refresh(const CaggInvalidationState *state,
-									 const InternalTimeRange *refresh_window)
+									 const InternalTimeRange *refresh_window, bool force)
 {
 	ScanIterator iterator;
 	int32 cagg_hyper_id = state->mat_hypertable_id;
@@ -903,20 +893,32 @@ clear_cagg_invalidations_for_refresh(const CaggInvalidationState *state,
 
 	MemoryContextReset(state->per_tuple_mctx);
 
+	/* Force refresh within the entire window */
+	if (force)
+	{
+		Invalidation logentry;
+
+		logentry.hyper_id = cagg_hyper_id;
+		logentry.lowest_modified_value = refresh_window->start;
+		logentry.greatest_modified_value = refresh_window->end;
+		logentry.is_modified = false;
+		ItemPointerSet(&logentry.tid, InvalidBlockNumber, 0);
+
+		save_invalidation_for_refresh(state, &logentry);
+	}
+
 	/* Process all invalidations for the continuous aggregate */
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		MemoryContext oldmctx;
 		Invalidation logentry;
-		int64 bucket_width = state->bucket_width;
 		const ContinuousAggsBucketFunction *bucket_function = state->bucket_function;
 
 		oldmctx = MemoryContextSwitchTo(state->per_tuple_mctx);
 		invalidation_entry_set_from_cagg_invalidation(&logentry,
 													  ti,
 													  state->dimtype,
-													  bucket_width,
 													  bucket_function);
 
 		if (!IS_VALID_INVALIDATION(&mergedentry))
@@ -956,14 +958,12 @@ clear_cagg_invalidations_for_refresh(const CaggInvalidationState *state,
 }
 
 static void
-invalidation_state_init(CaggInvalidationState *state, int32 mat_hypertable_id,
-						int32 raw_hypertable_id, Oid dimtype, const CaggsInfo *all_caggs)
+invalidation_state_init(CaggInvalidationState *state, const ContinuousAgg *cagg, Oid dimtype,
+						const CaggsInfo *all_caggs)
 {
-	ListCell *lc1, *lc2, *lc3;
-	bool PG_USED_FOR_ASSERTS_ONLY found = false;
-
-	state->mat_hypertable_id = mat_hypertable_id;
-	state->raw_hypertable_id = raw_hypertable_id;
+	state->bucket_function = cagg->bucket_function;
+	state->mat_hypertable_id = cagg->data.mat_hypertable_id;
+	state->raw_hypertable_id = cagg->data.raw_hypertable_id;
 	state->dimtype = dimtype;
 	state->all_caggs = all_caggs;
 	state->cagg_log_rel = open_invalidation_log(LOG_CAGG, RowExclusiveLock);
@@ -971,25 +971,6 @@ invalidation_state_init(CaggInvalidationState *state, int32 mat_hypertable_id,
 												  "Continuous aggregate invalidations",
 												  ALLOCSET_DEFAULT_SIZES);
 	state->snapshot = RegisterSnapshot(GetTransactionSnapshot());
-	forthree (lc1,
-			  all_caggs->mat_hypertable_ids,
-			  lc2,
-			  all_caggs->bucket_widths,
-			  lc3,
-			  all_caggs->bucket_functions)
-	{
-		int32 cagg_hyper_id = lfirst_int(lc1);
-
-		if (cagg_hyper_id == mat_hypertable_id)
-		{
-			state->bucket_width = DatumGetInt64(PointerGetDatum(lfirst(lc2)));
-			state->bucket_function = lfirst(lc3);
-
-			found = true;
-			break;
-		}
-	}
-	Assert(found);
 }
 
 static void
@@ -1001,21 +982,21 @@ invalidation_state_cleanup(const CaggInvalidationState *state)
 }
 
 void
-invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hypertable_id, Oid dimtype,
+invalidation_process_hypertable_log(const ContinuousAgg *cagg, Oid dimtype,
 									const CaggsInfo *all_caggs)
 {
 	CaggInvalidationState state;
 
-	invalidation_state_init(&state, mat_hypertable_id, raw_hypertable_id, dimtype, all_caggs);
+	invalidation_state_init(&state, cagg, dimtype, all_caggs);
 	move_invalidations_from_hyper_to_cagg_log(&state);
 	invalidation_state_cleanup(&state);
 }
 
 InvalidationStore *
-invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
-							  const InternalTimeRange *refresh_window,
+invalidation_process_cagg_log(const ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
 							  const CaggsInfo *all_caggs_info, const long max_materializations,
-							  bool *do_merged_refresh, InternalTimeRange *ret_merged_refresh_window)
+							  bool *do_merged_refresh, InternalTimeRange *ret_merged_refresh_window,
+							  const CaggRefreshContext context, bool force)
 {
 	CaggInvalidationState state;
 	InvalidationStore *store = NULL;
@@ -1023,13 +1004,9 @@ invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
 
 	*do_merged_refresh = false;
 
-	invalidation_state_init(&state,
-							mat_hypertable_id,
-							raw_hypertable_id,
-							refresh_window->type,
-							all_caggs_info);
+	invalidation_state_init(&state, cagg, refresh_window->type, all_caggs_info);
 	state.invalidations = tuplestore_begin_heap(false, false, work_mem);
-	clear_cagg_invalidations_for_refresh(&state, refresh_window);
+	clear_cagg_invalidations_for_refresh(&state, refresh_window, force);
 	count = tuplestore_tuple_count(state.invalidations);
 
 	if (count == 0)
@@ -1053,11 +1030,12 @@ invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
 	if (count && tuplestore_tuple_count(store->tupstore) > max_materializations)
 	{
 		InternalTimeRange merged_refresh_window;
-		continuous_agg_calculate_merged_refresh_window(refresh_window,
+		continuous_agg_calculate_merged_refresh_window(cagg,
+													   refresh_window,
 													   store,
-													   state.bucket_width,
 													   state.bucket_function,
-													   &merged_refresh_window);
+													   &merged_refresh_window,
+													   context);
 		*do_merged_refresh = true;
 		*ret_merged_refresh_window = merged_refresh_window;
 		invalidation_store_free(store);
