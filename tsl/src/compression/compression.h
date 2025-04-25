@@ -33,7 +33,7 @@ typedef struct BulkInsertStateData *BulkInsertState;
 	char vl_len_[4];                                                                               \
 	uint8 compression_algorithm
 
-#define TARGET_COMPRESSED_BATCH_SIZE 1000
+#define TARGET_COMPRESSED_BATCH_SIZE 4096
 
 typedef struct CompressedDataHeader
 {
