@@ -3512,4 +3512,143 @@ select * from bool_table where b is not null order by 1;
  101 | f
 (2 rows)
 
+-- At this point the bool data is generated as 'bool compression disabed'
+-- meaning, it is compressed with array compression. I try to confuse the
+-- executor by creating a vectorized plan and still hoping to get the right
+-- results.
+set timescaledb.debug_require_vector_qual to 'require';
+set timescaledb.enable_bool_compression = on;
+select * from bool_table where b is true order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b is false order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b is not true order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b is not false order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b is unknown order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b is not unknown order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b = true order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b = true or b = false order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b = true and b = false order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b = true or b is null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b = true or b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b = true and b is null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b = true and b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b = false order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b = false or b is null order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b = false or b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b = false and b is null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b = false and b is not null order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b is null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b is null or b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b is null and b is not null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bool_compression;

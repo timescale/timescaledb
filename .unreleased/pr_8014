@@ -1,0 +1,1 @@
+Implements: #8014 enable bool compression by default by setting `timescaledb.enable_bool_compression=true`. Note: for downgrading to 2.18 or earlier version one needs to use the provided downgrade script in 'timescaledb-extras'.

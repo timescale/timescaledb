@@ -48,9 +48,11 @@ extern Datum dictionary_compressed_recv(StringInfo buf);
 extern Datum tsl_dictionary_compressor_append(PG_FUNCTION_ARGS);
 extern Datum tsl_dictionary_compressor_finish(PG_FUNCTION_ARGS);
 
-ArrowArray *tsl_text_array_decompress_all(Datum compressed_array, Oid element_type,
+/* Pass through to the specialized functions below for BOOL and TEXT */
+ArrowArray *tsl_dictionary_decompress_all(Datum compressed, Oid element_type,
 										  MemoryContext dest_mctx);
-
+ArrowArray *tsl_bool_dictionary_decompress_all(Datum compressed, Oid element_type,
+											   MemoryContext dest_mctx);
 ArrowArray *tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type,
 											   MemoryContext dest_mctx);
 
@@ -62,5 +64,5 @@ ArrowArray *tsl_text_dictionary_decompress_all(Datum compressed, Oid element_typ
 		.compressed_data_recv = dictionary_compressed_recv,                                        \
 		.compressor_for_type = dictionary_compressor_for_type,                                     \
 		.compressed_data_storage = TOAST_STORAGE_EXTENDED,                                         \
-		.decompress_all = tsl_text_dictionary_decompress_all,                                      \
+		.decompress_all = tsl_dictionary_decompress_all,                                           \
 	}
