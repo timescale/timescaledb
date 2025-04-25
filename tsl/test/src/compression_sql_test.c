@@ -14,6 +14,7 @@
 #include "compression_sql_test.h"
 
 #include "compression/arrow_c_data_interface.h"
+#include "guc.h"
 
 #if !defined(NDEBUG) || defined(TS_COMPRESSION_FUZZING)
 

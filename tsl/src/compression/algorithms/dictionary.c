@@ -25,6 +25,7 @@
 #include "datum_serialize.h"
 #include "dictionary.h"
 #include "dictionary_hash.h"
+#include "guc.h"
 #include "simple8b_rle.h"
 #include "simple8b_rle_bitmap.h"
 

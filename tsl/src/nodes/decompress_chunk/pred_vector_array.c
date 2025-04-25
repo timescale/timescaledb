@@ -8,6 +8,7 @@
 
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
+#include "guc.h"
 #include "src/utils.h"
 #include "vector_predicates.h"
 

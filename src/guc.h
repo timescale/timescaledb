@@ -176,3 +176,10 @@ extern TSDLLEXPORT Oid ts_guc_default_segmentby_fn_oid(void);
 extern TSDLLEXPORT Oid ts_guc_default_orderby_fn_oid(void);
 
 extern TSDLLEXPORT bool ts_is_whitelisted_indexam(const char *amname);
+
+#define TARGET_COMPRESSED_BATCH_SIZE 4096
+
+/*
+ * We use this limit for sanity checks in case the compressed data is corrupt.
+ */
+#define GLOBAL_MAX_ROWS_PER_COMPRESSION INT16_MAX
