@@ -1304,7 +1304,7 @@ makeRangeTblEntry(Query *query, const char *aliasname)
 
 	rte->lateral = false;
 	rte->inh = false; /* never true for subqueries */
-	rte->inFromCl = true;
+	rte->inFromCl = false;
 
 	return rte;
 }
@@ -1436,11 +1436,11 @@ build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query
 	}
 
 	query->targetList = tlist;
+	query->jointree = makeFromExpr(NIL, NULL);
 
 	if (sortClause)
 	{
 		query->sortClause = sortClause;
-		query->jointree = makeFromExpr(NIL, NULL);
 	}
 
 	setop->colTypes = col_types;
