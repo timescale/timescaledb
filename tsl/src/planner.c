@@ -72,42 +72,39 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *parent)
  * Projection path and also handling Lists.
  */
 static void
-try_disable_bulk_decompression(PlannerInfo *root, Node *node)
+try_disable_bulk_decompression(PlannerInfo *root, Node *node, List *required_pathkeys)
 {
 	if (IsA(node, List))
 	{
 		ListCell *lc;
 		foreach (lc, (List *) node)
 		{
-			try_disable_bulk_decompression(root, (Node *) lfirst(lc));
+			try_disable_bulk_decompression(root, (Node *) lfirst(lc), required_pathkeys);
 		}
 		return;
 	}
 
 	if (IsA(node, ProjectionPath))
 	{
-		try_disable_bulk_decompression(root, (Node *) castNode(ProjectionPath, node)->subpath);
+		try_disable_bulk_decompression(root,
+									   (Node *) castNode(ProjectionPath, node)->subpath,
+									   required_pathkeys);
 		return;
 	}
 
 	if (IsA(node, AppendPath))
 	{
-		try_disable_bulk_decompression(root, (Node *) castNode(AppendPath, node)->subpaths);
+		try_disable_bulk_decompression(root,
+									   (Node *) castNode(AppendPath, node)->subpaths,
+									   required_pathkeys);
 		return;
 	}
 
 	if (IsA(node, MergeAppendPath))
 	{
-		MergeAppendPath *mergeappend = castNode(MergeAppendPath, node);
-		ListCell *lc;
-		foreach (lc, mergeappend->subpaths)
-		{
-			Path *child = (Path *) lfirst(lc);
-			if (pathkeys_contained_in(mergeappend->path.pathkeys, child->pathkeys))
-			{
-				try_disable_bulk_decompression(root, (Node *) child);
-			}
-		}
+		try_disable_bulk_decompression(root,
+									   (Node *) castNode(MergeAppendPath, node)->subpaths,
+									   required_pathkeys);
 		return;
 	}
 
@@ -119,11 +116,23 @@ try_disable_bulk_decompression(PlannerInfo *root, Node *node)
 	CustomPath *custom_child = castNode(CustomPath, node);
 	if (strcmp(custom_child->methods->CustomName, "ChunkAppend") == 0)
 	{
-		try_disable_bulk_decompression(root, (Node *) custom_child->custom_paths);
+		try_disable_bulk_decompression(root,
+									   (Node *) custom_child->custom_paths,
+									   required_pathkeys);
 		return;
 	}
 
 	if (strcmp(custom_child->methods->CustomName, "DecompressChunk") != 0)
+	{
+		return;
+	}
+
+	/*
+	 * At the Path level, a Sort is implied anywhere in the Path tree where the
+	 * pathkeys differ. All subplan's rows will be read in this case, so the
+	 * optimization does not apply.
+	 */
+	if (!pathkeys_contained_in(custom_child->path.pathkeys, required_pathkeys))
 	{
 		return;
 	}
@@ -173,7 +182,9 @@ check_limit_bulk_decompression(PlannerInfo *root, Node *node)
 
 			if (limit > 0 && limit < 100)
 			{
-				try_disable_bulk_decompression(root, (Node *) path->subpath);
+				try_disable_bulk_decompression(root,
+											   (Node *) path->subpath,
+											   path->subpath->pathkeys);
 			}
 
 			break;
