@@ -99,7 +99,7 @@ jobs:
       shell: wsl-bash {0}
       run: |
         apt-get update
-        apt-get install --yes --no-install-recommends cmake gawk gcc git gnupg make postgresql-client postgresql-common tree
+        apt-get install --yes --no-install-recommends cmake gawk gcc git gnupg jq make postgresql-client postgresql-common tree
 
     - name: Configure git
       # Since we want to reuse the checkout in the WSL environment
