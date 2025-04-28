@@ -128,7 +128,7 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
 
 -- recompress the partial chunks
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
-NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -180,7 +180,7 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
 
 -- recompress the paritial chunks
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
-NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -2483,7 +2483,7 @@ NOTICE:  adding not-null constraint to column "a"
 
 INSERT INTO t values(1, 2);
 ALTER TABLE t SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "t" is set to ""
 NOTICE:  default order by for hypertable "t" is set to "a DESC"
 SELECT compress_chunk(show_chunks('t'));
@@ -2719,7 +2719,7 @@ ALTER TABLE test_limit SET (
     timescaledb.compress,
     timescaledb.compress_orderby = 'timestamp'
 );
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "test_limit" is set to ""
 SELECT count(compress_chunk(ch)) FROM show_chunks('test_limit') ch;
  count 
@@ -2766,7 +2766,7 @@ VALUES -- chunk1
   ('2022-01-01 00:04'::timestamptz, 1, 2);
 -- enable compression, compress all chunks
 ALTER TABLE test_partials SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "test_partials" is set to ""
 NOTICE:  default order by for hypertable "test_partials" is set to ""time" DESC"
 SELECT compress_chunk(show_chunks('test_partials'));
@@ -3354,7 +3354,7 @@ WHERE update_trigger_test.effective_date_time >= '2020-01-01T00:00:00'::timestam
 ROLLBACK;
 -- try with default compression
 ALTER TABLE update_trigger_test SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "update_trigger_test" is set to ""
 NOTICE:  default order by for hypertable "update_trigger_test" is set to "effective_date_time DESC"
 SELECT compress_chunk(show_chunks('update_trigger_test'));

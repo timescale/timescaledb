@@ -258,7 +258,7 @@ BEGIN
         return json_build_object(
             'columns', json_build_array(),
             'confidence', 5,
-            'message',  'You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes');
+            'message',  'You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes');
     END IF;
 END
 $BODY$ SET search_path TO pg_catalog, pg_temp;

@@ -1520,7 +1520,7 @@ INSERT INTO test_setting VALUES( '2020-11-01', 20);
 --try out 2 settings here --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'true', timescaledb.compress='true');
 NOTICE:  defaulting compress_orderby to time_bucket
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "_materialized_hypertable_40" is set to ""
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
@@ -1540,7 +1540,7 @@ SELECT count(*) from test_setting_cagg ORDER BY 1;
 --now set it back to false --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'false', timescaledb.compress='true');
 NOTICE:  defaulting compress_orderby to time_bucket
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "_materialized_hypertable_40" is set to ""
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
@@ -1609,7 +1609,7 @@ INSERT INTO test_setting VALUES( '2020-11-01', 20);
 --try out 2 settings here --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'false', timescaledb.compress='true');
 NOTICE:  defaulting compress_orderby to time_bucket
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "_materialized_hypertable_42" is set to ""
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
@@ -1629,7 +1629,7 @@ SELECT count(*) from test_setting_cagg ORDER BY 1;
 --now set it back to false --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'true', timescaledb.compress='true');
 NOTICE:  defaulting compress_orderby to time_bucket
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "_materialized_hypertable_42" is set to ""
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
@@ -2106,7 +2106,7 @@ CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous) AS SELECT time_buck
 NOTICE:  refreshing continuous aggregate "cagg1"
 ALTER MATERIALIZED VIEW cagg1 SET (timescaledb.compress);
 NOTICE:  defaulting compress_orderby to time_bucket
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "_materialized_hypertable_56" is set to ""
 SELECT count(compress_chunk(ch)) FROM show_chunks('cagg1') ch;
  count 

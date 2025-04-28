@@ -33,3 +33,6 @@ AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
 LANGUAGE C VOLATILE;
 
 DROP VIEW IF EXISTS timescaledb_information.hypertables;
+
+-- Rename Columnstore Policy jobs to Compression Policy
+UPDATE _timescaledb_config.bgw_job SET application_name = replace(application_name, 'Columnstore Policy', 'Compression Policy') WHERE application_name LIKE '%Columnstore Policy%';

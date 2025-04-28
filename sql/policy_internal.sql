@@ -113,7 +113,7 @@ BEGIN
           _message = MESSAGE_TEXT,
           _detail = PG_EXCEPTION_DETAIL,
           _sqlstate = RETURNED_SQLSTATE;
-      RAISE WARNING 'compressing chunk "%" failed when compression policy is executed', chunk_rec.oid::regclass::text
+      RAISE WARNING 'converting chunk "%" to columnstore failed when columnstore policy is executed', chunk_rec.oid::regclass::text
           USING DETAIL = format('Message: (%s), Detail: (%s).', _message, _detail),
                 ERRCODE = _sqlstate;
       chunks_failure := chunks_failure + 1;
@@ -133,8 +133,8 @@ BEGIN
   END LOOP;
 
   IF chunks_failure > 0 THEN
-    RAISE EXCEPTION 'compression policy failure'
-      USING DETAIL = format('Failed to compress %L chunks. Successfully compressed %L chunks.', chunks_failure, numchunks - chunks_failure);
+    RAISE EXCEPTION 'columnstore policy failure'
+      USING DETAIL = format('Failed to convert %L chunks to columnstore. Successfully converted %L chunks.', chunks_failure, numchunks - chunks_failure);
   END IF;
 END;
 $$ LANGUAGE PLPGSQL;
