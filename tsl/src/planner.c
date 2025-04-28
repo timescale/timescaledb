@@ -71,7 +71,7 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *parent)
  * Try to disable bulk decompression on DecompressChunkPath, skipping the above
  * Projection path and also handling Lists.
  */
-static void
+static Node *
 try_disable_bulk_decompression(PlannerInfo *root, Node *node, List *required_pathkeys)
 {
 	if (IsA(node, List))
@@ -79,17 +79,19 @@ try_disable_bulk_decompression(PlannerInfo *root, Node *node, List *required_pat
 		ListCell *lc;
 		foreach (lc, (List *) node)
 		{
-			try_disable_bulk_decompression(root, (Node *) lfirst(lc), required_pathkeys);
+			lfirst(lc) =
+				try_disable_bulk_decompression(root, (Node *) lfirst(lc), required_pathkeys);
 		}
-		return;
+		return node;
 	}
 
 	if (IsA(node, ProjectionPath))
 	{
-		try_disable_bulk_decompression(root,
-									   (Node *) castNode(ProjectionPath, node)->subpath,
-									   required_pathkeys);
-		return;
+		ProjectionPath *path = castNode(ProjectionPath, node);
+		path->subpath = (Path *) try_disable_bulk_decompression(root,
+																(Node *) path->subpath,
+																required_pathkeys);
+		return node;
 	}
 
 	if (IsA(node, AppendPath))
@@ -97,7 +99,7 @@ try_disable_bulk_decompression(PlannerInfo *root, Node *node, List *required_pat
 		try_disable_bulk_decompression(root,
 									   (Node *) castNode(AppendPath, node)->subpaths,
 									   required_pathkeys);
-		return;
+		return node;
 	}
 
 	if (IsA(node, MergeAppendPath))
@@ -105,12 +107,12 @@ try_disable_bulk_decompression(PlannerInfo *root, Node *node, List *required_pat
 		try_disable_bulk_decompression(root,
 									   (Node *) castNode(MergeAppendPath, node)->subpaths,
 									   required_pathkeys);
-		return;
+		return node;
 	}
 
 	if (!IsA(node, CustomPath))
 	{
-		return;
+		return node;
 	}
 
 	CustomPath *custom_child = castNode(CustomPath, node);
@@ -119,12 +121,12 @@ try_disable_bulk_decompression(PlannerInfo *root, Node *node, List *required_pat
 		try_disable_bulk_decompression(root,
 									   (Node *) custom_child->custom_paths,
 									   required_pathkeys);
-		return;
+		return node;
 	}
 
 	if (strcmp(custom_child->methods->CustomName, "DecompressChunk") != 0)
 	{
-		return;
+		return node;
 	}
 
 	/*
@@ -134,11 +136,18 @@ try_disable_bulk_decompression(PlannerInfo *root, Node *node, List *required_pat
 	 */
 	if (!pathkeys_contained_in(custom_child->path.pathkeys, required_pathkeys))
 	{
-		return;
+		return node;
 	}
 
 	DecompressChunkPath *dcpath = (DecompressChunkPath *) custom_child;
-	dcpath->enable_bulk_decompression = false;
+	if (!dcpath->enable_bulk_decompression)
+	{
+		return node;
+	}
+
+	DecompressChunkPath *path_copy = copy_decompress_chunk_path(dcpath);
+	path_copy->enable_bulk_decompression = false;
+	return (Node *) path_copy;
 }
 
 /*
@@ -182,9 +191,9 @@ check_limit_bulk_decompression(PlannerInfo *root, Node *node)
 
 			if (limit > 0 && limit < 100)
 			{
-				try_disable_bulk_decompression(root,
-											   (Node *) path->subpath,
-											   path->subpath->pathkeys);
+				path->subpath = (Path *) try_disable_bulk_decompression(root,
+																		(Node *) path->subpath,
+																		path->subpath->pathkeys);
 			}
 
 			break;
