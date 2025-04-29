@@ -208,7 +208,7 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 	Assert(orig_num_bits % 64 == 0);
 	const int orig_bits_set = pg_popcount(words_buf, orig_num_bits / 8);
 
-	if (unlikely(orig_num_bits == 0 || orig_num_bits == orig_bits_set))
+	if (unlikely(orig_bits_set == 0 || orig_bits_set == orig_num_bits))
 	{
 		/*
 		 * 1) All elements turned out to be null, don't save the empty filter in
@@ -375,6 +375,7 @@ bloom1_contains(PG_FUNCTION_ARGS)
 	 */
 	if (PG_ARGISNULL(0))
 	{
+		fprintf(stderr, "got null arg\n");
 		PG_RETURN_BOOL(true);
 	}
 
@@ -499,6 +500,8 @@ bloom1_estimate_ndistinct(bytea *bloom)
 	((int) VARATT_EXTERNAL_GET_EXTSIZE(toast_pointer) <                                            \
 	 (int) ((toast_pointer).va_rawsize - VARHDRSZ))
 
+TS_FUNCTION_INFO_V1(ts_bloom1_debug_info);
+
 /*
  * A function to output various debugging info about a bloom filter.
  *
@@ -506,8 +509,6 @@ bloom1_estimate_ndistinct(bytea *bloom)
  *
  * FIXME put under NDEBUG
  */
-TS_FUNCTION_INFO_V1(ts_bloom1_debug_info);
-
 Datum
 ts_bloom1_debug_info(PG_FUNCTION_ARGS)
 {
@@ -576,10 +577,14 @@ ts_bloom1_debug_info(PG_FUNCTION_ARGS)
 	PG_RETURN_DATUM(HeapTupleGetDatum(heap_form_tuple(tuple_desc, values, nulls)));
 }
 
-TS_FUNCTION_INFO_V1(ts_bloom1_hash);
+TS_FUNCTION_INFO_V1(ts_bloom1_debug_hash);
 
+/*
+ * A debug function to inspect the actual hash value used for the bloom filter,
+ * e.g. to find the very even hashes with many low bits equal to zero.
+ */
 Datum
-ts_bloom1_hash(PG_FUNCTION_ARGS)
+ts_bloom1_debug_hash(PG_FUNCTION_ARGS)
 {
 	Oid type_oid = get_fn_expr_argtype(fcinfo->flinfo, 0);
 	PGFunction fn = bloom1_get_hash_function(type_oid);

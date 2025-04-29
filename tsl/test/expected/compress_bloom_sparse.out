@@ -125,11 +125,11 @@ select count(*) from bloom where value =
    Output: count(*)
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=0 loops=1)
          Vectorized Filter: (_hyper_1_1_chunk.value = CASE WHEN (now() < 'Thu Jan 01 00:00:00 1970 PST'::timestamp with time zone) THEN '81b073de9370ea873f548e31b8adc081'::text ELSE NULL::text END)
-         Rows Removed by Filter: 10000
-         Batches Removed by Filter: 10
          Bulk Decompression: true
-         ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=10 loops=1)
+         ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=0 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
+               Filter: _timescaledb_functions.bloom1_contains(compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, CASE WHEN (now() < 'Thu Jan 01 00:00:00 1970 PST'::timestamp with time zone) THEN '81b073de9370ea873f548e31b8adc081'::text ELSE NULL::text END)
+               Rows Removed by Filter: 10
 (9 rows)
 
 reset timescaledb.enable_chunk_append;
@@ -148,12 +148,13 @@ select count(*) from bloom where value =
          Chunks excluded during startup: 0
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=1 loops=1)
                Vectorized Filter: (_hyper_1_1_chunk.value = CASE WHEN (now() < 'Thu Jan 01 00:00:00 1970 PST'::timestamp with time zone) THEN '81b073de9370ea873f548e31b8adc081'::text ELSE 'd1e39c9bda5c80ac3d8ea9d658163967'::text END)
-               Rows Removed by Filter: 9999
-               Batches Removed by Filter: 9
+               Rows Removed by Filter: 999
                Bulk Decompression: true
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=10 loops=1)
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=1 loops=1)
                      Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
-(13 rows)
+                     Filter: _timescaledb_functions.bloom1_contains(compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, CASE WHEN (now() < 'Thu Jan 01 00:00:00 1970 PST'::timestamp with time zone) THEN '81b073de9370ea873f548e31b8adc081'::text ELSE 'd1e39c9bda5c80ac3d8ea9d658163967'::text END)
+                     Rows Removed by Filter: 9
+(14 rows)
 
 -- Stable expression on minmax index
 explain (analyze, verbose, costs off, timing off, summary off)
@@ -170,11 +171,11 @@ select count(*) from bloom where x <
          Chunks excluded during startup: 0
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=999 loops=1)
                Vectorized Filter: (_hyper_1_1_chunk.x < CASE WHEN (now() < 'Thu Jan 01 00:00:00 1970 PST'::timestamp with time zone) THEN 1 ELSE 1000 END)
-               Rows Removed by Filter: 9001
-               Batches Removed by Filter: 9
+               Rows Removed by Filter: 1
                Bulk Decompression: true
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=10 loops=1)
+               ->  Index Scan using compress_hyper_2_2_chunk__ts_meta_min_1__ts_meta_max_1_idx on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=1 loops=1)
                      Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
+                     Index Cond: (compress_hyper_2_2_chunk._ts_meta_min_1 < CASE WHEN (now() < 'Thu Jan 01 00:00:00 1970 PST'::timestamp with time zone) THEN 1 ELSE 1000 END)
 (13 rows)
 
 -- Parameter on minmax index
@@ -240,12 +241,13 @@ execute p('2345');
          Chunks excluded during startup: 0
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=1 loops=1)
                Vectorized Filter: (_hyper_1_1_chunk.value = md5($1))
-               Rows Removed by Filter: 9999
-               Batches Removed by Filter: 9
+               Rows Removed by Filter: 999
                Bulk Decompression: true
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=10 loops=1)
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=1 loops=1)
                      Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
-(13 rows)
+                     Filter: _timescaledb_functions.bloom1_contains(compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, md5($1))
+                     Rows Removed by Filter: 9
+(14 rows)
 
 deallocate p;
 reset plan_cache_mode;
@@ -386,7 +388,7 @@ select * from corner where c = 'short';
          Rows Removed by Filter: 3
 (8 rows)
 
--- Test a cross-type equality operator.
+-- Cross-type equality operator.
 explain (analyze, verbose, costs off, timing off, summary off)
 select * from corner where c = 'short'::name;
                                                                                                                                   QUERY PLAN                                                                                                                                   
@@ -400,6 +402,7 @@ select * from corner where c = 'short'::name;
          Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.s, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk.ts, compress_hyper_4_4_chunk._ts_meta_v2_bloom1_c, compress_hyper_4_4_chunk.c
 (7 rows)
 
+-- Comparison with segmentby.
 explain (analyze, verbose, costs off, timing off, summary off)
 select * from corner where c = s;
                                                                                                                                   QUERY PLAN                                                                                                                                   
@@ -413,6 +416,46 @@ select * from corner where c = s;
          Filter: _timescaledb_functions.bloom1_contains(compress_hyper_4_4_chunk._ts_meta_v2_bloom1_c, compress_hyper_4_4_chunk.s)
          Rows Removed by Filter: 3
 (8 rows)
+
+-- Can push down only some parts of the expression but not the others, so the
+-- pushdown shouldn't work in this case.
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from corner where c = s or c = random()::text;
+                                                                                                                                     QUERY PLAN                                                                                                                                      
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on public.corner (actual rows=1 loops=1)
+   Output: corner.ts, corner.s, corner.c
+   Startup Exclusion: true
+   Runtime Exclusion: false
+   Chunks excluded during startup: 0
+   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_3_chunk (actual rows=1 loops=1)
+         Output: _hyper_3_3_chunk.ts, _hyper_3_3_chunk.s, _hyper_3_3_chunk.c
+         Filter: ((_hyper_3_3_chunk.c = _hyper_3_3_chunk.s) OR (_hyper_3_3_chunk.c = (random())::text))
+         Rows Removed by Filter: 1002
+         Bulk Decompression: true
+         ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=4 loops=1)
+               Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.s, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk.ts, compress_hyper_4_4_chunk._ts_meta_v2_bloom1_c, compress_hyper_4_4_chunk.c
+(12 rows)
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from corner where c = 'test'
+    or c = case when now() > '1970-01-01' then 'test2' else random()::text end
+;
+                                                                                                                                     QUERY PLAN                                                                                                                                      
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on public.corner (actual rows=0 loops=1)
+   Output: corner.ts, corner.s, corner.c
+   Startup Exclusion: true
+   Runtime Exclusion: false
+   Chunks excluded during startup: 0
+   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_3_chunk (actual rows=0 loops=1)
+         Output: _hyper_3_3_chunk.ts, _hyper_3_3_chunk.s, _hyper_3_3_chunk.c
+         Filter: ((_hyper_3_3_chunk.c = 'test'::text) OR (_hyper_3_3_chunk.c = CASE WHEN (now() > 'Thu Jan 01 00:00:00 1970 PST'::timestamp with time zone) THEN 'test2'::text ELSE (random())::text END))
+         Rows Removed by Filter: 1003
+         Bulk Decompression: true
+         ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=4 loops=1)
+               Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.s, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk.ts, compress_hyper_4_4_chunk._ts_meta_v2_bloom1_c, compress_hyper_4_4_chunk.c
+(12 rows)
 
 -- Cleanup
 drop table bloom;

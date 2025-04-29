@@ -165,13 +165,23 @@ select count(compress_chunk(x)) from show_chunks('corner') x;
 explain (analyze, verbose, costs off, timing off, summary off)
 select * from corner where c = 'short';
 
--- Test a cross-type equality operator.
+-- Cross-type equality operator.
 explain (analyze, verbose, costs off, timing off, summary off)
 select * from corner where c = 'short'::name;
 
+-- Comparison with segmentby.
 explain (analyze, verbose, costs off, timing off, summary off)
 select * from corner where c = s;
 
+-- Can push down only some parts of the expression but not the others, so the
+-- pushdown shouldn't work in this case.
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from corner where c = s or c = random()::text;
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from corner where c = 'test'
+    or c = case when now() > '1970-01-01' then 'test2' else random()::text end
+;
 
 
 -- Cleanup

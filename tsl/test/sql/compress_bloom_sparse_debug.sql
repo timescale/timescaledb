@@ -61,6 +61,7 @@ select (toast_header::bit(16), bits_total, filter_column_compression) kind,
 from blooms
 group by 1 order by min(bits_total);
 
+
 -- One way to inspect the IO efficiency: ratio of bytes that would have been
 -- read w/o the index to the sum of bytes read by the bloom filter check
 -- and the actual column check.
@@ -74,6 +75,7 @@ select
         2)
 from col;
 
+
 -- Compressed bytes-per-value vs bloom filter bytes-per-value.
 with col as (
     select _ts_meta_count rows, _ts_meta_v2_bloom1_:column f, :column cc
@@ -82,3 +84,10 @@ select
     round(sum(pg_column_size(cc))::numeric / sum(rows), 2) compressed_bytes_per_row,
     round(sum(pg_column_size(f))::numeric / sum(rows), 2) filter_bytes_per_row
 from col;
+
+
+-- Test the debug hash function.
+create or replace function ts_bloom1_debug_hash(in anyelement, out int8)
+as :TSL_MODULE_PATHNAME, 'ts_bloom1_debug_hash' language c immutable parallel safe;
+
+select min(ts_bloom1_debug_hash(c)) from test;

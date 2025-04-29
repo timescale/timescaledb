@@ -339,37 +339,44 @@ expr_fetch_bloom1_metadata(QualPushdownContext *context, Expr *expr, AttrNumber 
 													 "bloom1");
 }
 
+static bool
+contains_volatile_functions_checker(Oid func_id, void *context)
+{
+	return (func_volatile(func_id) == PROVOLATILE_VOLATILE);
+}
+
 static Expr *
 pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args, Oid op_oid,
 								   Oid op_collation)
 {
-	Expr *leftop, *rightop;
+	Expr *original_leftop;
+	Expr *original_rightop;
 	TypeCacheEntry *tce;
 	int strategy;
 
 	if (list_length(expr_args) != 2)
 		return NULL;
 
-	leftop = linitial(expr_args);
-	rightop = lsecond(expr_args);
+	original_leftop = linitial(expr_args);
+	original_rightop = lsecond(expr_args);
 
-	if (IsA(leftop, RelabelType))
-		leftop = ((RelabelType *) leftop)->arg;
-	if (IsA(rightop, RelabelType))
-		rightop = ((RelabelType *) rightop)->arg;
+	if (IsA(original_leftop, RelabelType))
+		original_leftop = ((RelabelType *) original_leftop)->arg;
+	if (IsA(original_rightop, RelabelType))
+		original_rightop = ((RelabelType *) original_rightop)->arg;
 
 	/* Find the side that has var with segment meta set expr to the other side */
 	AttrNumber bloom1_attno = InvalidAttrNumber;
-	expr_fetch_bloom1_metadata(context, leftop, &bloom1_attno);
+	expr_fetch_bloom1_metadata(context, original_leftop, &bloom1_attno);
 	if (bloom1_attno == InvalidAttrNumber)
 	{
 		/* No metadata for the left operand, try to commute the operator. */
 		op_oid = get_commutator(op_oid);
-		Expr *tmp = leftop;
-		leftop = rightop;
-		rightop = tmp;
+		Expr *tmp = original_leftop;
+		original_leftop = original_rightop;
+		original_rightop = tmp;
 
-		expr_fetch_bloom1_metadata(context, leftop, &bloom1_attno);
+		expr_fetch_bloom1_metadata(context, original_leftop, &bloom1_attno);
 	}
 
 	if (bloom1_attno == InvalidAttrNumber)
@@ -378,8 +385,7 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args
 		return NULL;
 	}
 
-	Var *var_with_segment_meta = castNode(Var, leftop);
-	Expr *expr = rightop;
+	Var *var_with_segment_meta = castNode(Var, original_leftop);
 
 	/*
 	 * Play it safe and don't push down if the operator collation doesn't match
@@ -405,14 +411,21 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args
 	strategy = get_op_opfamily_strategy(op_oid, tce->btree_opf);
 	if (strategy != BTEqualStrategyNumber)
 		return NULL;
+
 	/*
 	 * The btree equality operators ("mergejoinable") are supposed to be strict.
 	 */
 	Assert(op_strict(op_oid));
 
-	expr = get_pushdownsafe_expr(context, expr);
-	if (expr == NULL)
+	/*
+	 * Check if the righthand expression is safe to push down.
+	 * functions.
+	 */
+	Expr *pushed_down_rightop = get_pushdownsafe_expr(context, original_rightop);
+	if (pushed_down_rightop == NULL)
+	{
 		return NULL;
+	}
 
 	/*
 	 * var = expr implies bloom1_contains(var_bloom, expr).
@@ -432,7 +445,7 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args
 
 	return (Expr *) makeFuncExpr(func,
 								 BOOLOID,
-								 list_make2(bloom_var, expr),
+								 list_make2(bloom_var, pushed_down_rightop),
 								 /* funccollid = */ InvalidOid,
 								 /* inputcollid = */ InvalidOid,
 								 COERCE_EXPLICIT_CALL);
@@ -498,6 +511,9 @@ modify_expression(Node *node, QualPushdownContext *context)
 		case T_NullTest:
 		case T_Param:
 		case T_SQLValueFunction:
+		case T_CaseExpr:
+		case T_CaseWhen:
+		case T_FuncExpr:
 			break;
 		case T_Var:
 		{
@@ -529,6 +545,15 @@ modify_expression(Node *node, QualPushdownContext *context)
 			context->can_pushdown = false;
 			return NULL;
 			break;
+	}
+
+	if (check_functions_in_node(node,
+								contains_volatile_functions_checker,
+								/* context = */ NULL))
+	{
+		/* Cannot push down the volatile functions. */
+		context->can_pushdown = false;
+		return NULL;
 	}
 
 	return expression_tree_mutator(node, modify_expression, context);

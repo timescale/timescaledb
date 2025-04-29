@@ -96,3 +96,12 @@ from col;
                      7.26 |                 0.53
 (1 row)
 
+-- Test the debug hash function.
+create or replace function ts_bloom1_debug_hash(in anyelement, out int8)
+as :TSL_MODULE_PATHNAME, 'ts_bloom1_debug_hash' language c immutable parallel safe;
+select min(ts_bloom1_debug_hash(c)) from test;
+         min          
+----------------------
+ -9221783940407213644
+(1 row)
+

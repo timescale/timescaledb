@@ -653,6 +653,8 @@ is_not_runtime_constant_walker(Node *node, void *context)
  * Note that we do the same evaluation when doing run time chunk exclusion, but
  * there is no good way to pass the evaluated clauses to the underlying nodes
  * like this DecompressChunk node.
+ *
+ * Similar checks are performed for sparse index pushdown.
  */
 static bool
 is_not_runtime_constant(Node *node)
