@@ -82,6 +82,7 @@ select count(*) from bloom where x <
 
 
 -- Parameter on minmax index
+set timescaledb.enable_chunk_append to off;
 set plan_cache_mode to 'force_generic_plan';
 prepare p as
 select count(*) from bloom where x < $1;
@@ -99,6 +100,12 @@ select count(*) from bloom where value = $1;
 explain (analyze, verbose, costs off, timing off, summary off)
 execute p(md5('2345'));
 
+-- Null parameter on bloom index
+explain (analyze, verbose, costs off, timing off, summary off)
+execute p(null);
+
+reset timescaledb.enable_chunk_append;
+
 deallocate p;
 
 
@@ -112,6 +119,7 @@ execute p('2345');
 deallocate p;
 
 reset plan_cache_mode;
+reset timescaledb.enable_chunk_append;
 
 
 -- Scalar array operations are not yet supported
