@@ -79,6 +79,7 @@ extern TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates;
 
 /* Only settable in debug mode for testing */
 extern TSDLLEXPORT bool ts_guc_enable_null_compression;
+extern TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings;
 
 typedef enum CompressTruncateBehaviour
 {
