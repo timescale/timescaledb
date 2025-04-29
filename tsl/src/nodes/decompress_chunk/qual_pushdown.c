@@ -309,6 +309,12 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 	}
 }
 
+static bool
+contains_volatile_functions_checker(Oid func_id, void *context)
+{
+	return (func_volatile(func_id) == PROVOLATILE_VOLATILE);
+}
+
 static Node *
 modify_expression(Node *node, QualPushdownContext *context)
 {
@@ -345,6 +351,9 @@ modify_expression(Node *node, QualPushdownContext *context)
 		case T_NullTest:
 		case T_Param:
 		case T_SQLValueFunction:
+		case T_CaseExpr:
+		case T_CaseWhen:
+		case T_FuncExpr:
 			break;
 		case T_Var:
 		{
@@ -376,6 +385,15 @@ modify_expression(Node *node, QualPushdownContext *context)
 			context->can_pushdown = false;
 			return NULL;
 			break;
+	}
+
+	if (check_functions_in_node(node,
+								contains_volatile_functions_checker,
+								/* context = */ NULL))
+	{
+		/* Cannot push down the volatile functions. */
+		context->can_pushdown = false;
+		return NULL;
 	}
 
 	return expression_tree_mutator(node, modify_expression, context);
