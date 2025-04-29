@@ -686,9 +686,9 @@ SELECT _timescaledb_functions.alter_job_set_hypertable_id( :job_id, 'max_mat_vie
 (1 row)
 
 SELECT * FROM timescaledb_information.jobs WHERE job_id != 1 ORDER BY 1;
- job_id |      application_name      | schedule_interval | max_runtime | max_retries | retry_period | proc_schema |  proc_name  |       owner       | scheduled | fixed_schedule |        config        |          next_start          |        initial_start         |   hypertable_schema   |      hypertable_name       | check_schema | check_name 
---------+----------------------------+-------------------+-------------+-------------+--------------+-------------+-------------+-------------------+-----------+----------------+----------------------+------------------------------+------------------------------+-----------------------+----------------------------+--------------+------------
-   1029 | User-Defined Action [1029] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func | default_perm_user | t         | t              | {"type": "function"} | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST | _timescaledb_internal | _materialized_hypertable_6 |              | 
+ job_id |      application_name      | schedule_interval | max_runtime | max_retries | retry_period | proc_schema |  proc_name  |       owner       | scheduled | fixed_schedule |        config        |          next_start          |        initial_start         | hypertable_schema |  hypertable_name  | check_schema | check_name 
+--------+----------------------------+-------------------+-------------+-------------+--------------+-------------+-------------+-------------------+-----------+----------------+----------------------+------------------------------+------------------------------+-------------------+-------------------+--------------+------------
+   1029 | User-Defined Action [1029] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func | default_perm_user | t         | t              | {"type": "function"} | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST | public            | max_mat_view_date |              | 
 (1 row)
 
 SELECT timescaledb_experimental.remove_all_policies('max_mat_view_date', true); -- ignore custom job
@@ -1316,13 +1316,12 @@ SELECT remove_compression_policy('metrics_cagg');
 
 SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" \gset
 --verify that jobs were added for the policies ---
-SELECT materialization_hypertable_schema AS "MAT_SCHEMA_NAME",
-       materialization_hypertable_name AS "MAT_TABLE_NAME",
-       materialization_hypertable_schema || '.' || materialization_hypertable_name AS "MAT_NAME"
+SELECT materialization_hypertable_name AS "MAT_TABLE_NAME",
+       view_name AS "VIEW_NAME"
 FROM timescaledb_information.continuous_aggregates
 WHERE view_name = 'metrics_cagg' \gset
 SELECT count(*) FROM timescaledb_information.jobs
-WHERE hypertable_name = :'MAT_TABLE_NAME';
+WHERE hypertable_name = :'VIEW_NAME';
  count 
 -------
      2
@@ -1356,7 +1355,7 @@ WHERE hypertable_name = :'MAT_TABLE_NAME' ORDER BY 1;
 DROP MATERIALIZED VIEW metrics_cagg;
 NOTICE:  drop cascades to 2 other objects
 SELECT count(*) FROM timescaledb_information.jobs
-WHERE hypertable_name = :'MAT_TABLE_NAME';
+WHERE hypertable_name = :'VIEW_NAME';
  count 
 -------
      0
