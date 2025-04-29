@@ -3623,21 +3623,16 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('testtable3') ch;
 (1 row)
 
 EXPLAIN (costs off) SELECT (date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour')::timestamp as time, TT.location_id as location_id, TT.device_id as device_id, 0 as sensor_id, date_trunc('day', current_timestamp) as discovered_date FROM testtable3 TT WHERE time >= date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour' GROUP BY TT.location_id, TT.device_id;
-                                                                                 QUERY PLAN                                                                                 
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Group
+                                                                           QUERY PLAN                                                                            
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate
    Group Key: tt.location_id, tt.device_id
-   ->  Gather Merge
-         Workers Planned: 2
-         ->  Sort
-               Sort Key: tt.location_id, tt.device_id
-               ->  Partial HashAggregate
-                     Group Key: tt.location_id, tt.device_id
-                     ->  Parallel Custom Scan (ChunkAppend) on testtable3 tt
-                           Chunks excluded during startup: 1
-                           ->  Custom Scan (DecompressChunk) on _hyper_5_120_chunk tt_1
-                                 Vectorized Filter: ("time" >= (date_trunc('hour'::text, 'Tue Jan 09 00:00:00 2024 PST'::timestamp with time zone) - '@ 1 hour'::interval))
-                                 ->  Parallel Seq Scan on compress_hyper_6_122_chunk
-(13 rows)
+   ->  Custom Scan (ChunkAppend) on testtable3 tt
+         Chunks excluded during startup: 1
+         ->  Custom Scan (DecompressChunk) on _hyper_5_120_chunk tt_1
+               Vectorized Filter: ("time" >= (date_trunc('hour'::text, 'Tue Jan 09 00:00:00 2024 PST'::timestamp with time zone) - '@ 1 hour'::interval))
+               ->  Index Scan using compress_hyper_6_122_chunk_location_id__ts_meta_min_1__ts_m_idx on compress_hyper_6_122_chunk
+                     Index Cond: (_ts_meta_max_1 >= (date_trunc('hour'::text, 'Tue Jan 09 00:00:00 2024 PST'::timestamp with time zone) - '@ 1 hour'::interval))
+(8 rows)
 
 SELECT (date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour')::timestamp as time, TT.location_id as location_id, TT.device_id as device_id, 0 as sensor_id, date_trunc('day', current_timestamp) as discovered_date FROM testtable3 TT WHERE time >= date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour' GROUP BY TT.location_id, TT.device_id \g :TEST_OUTPUT_DIR/vectorized_aggregation_query_result.out
