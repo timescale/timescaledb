@@ -231,6 +231,7 @@ set(SOLO_TESTS
     hypercore
     move
     reorder
+    split_chunk
     telemetry_stats)
 
 # Check if PostgreSQL was compiled with JIT support
