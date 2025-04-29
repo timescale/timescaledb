@@ -2802,7 +2802,7 @@ COPY compressed_table (time,a,b,c) FROM stdin;
 ERROR:  duplicate key value violates unique constraint "_hyper_49_107_chunk_compressed_table_index"
 \set ON_ERROR_STOP 1
 COPY compressed_table (time,a,b,c) FROM stdin;
-SELECT * FROM compressed_table;
+SELECT * FROM compressed_table ORDER BY time, a;
                 time                | a  | b | c 
 ------------------------------------+----+---+---
  Thu Feb 29 01:00:00 2024 PST       |  5 | 1 | 1

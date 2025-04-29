@@ -1145,7 +1145,7 @@ ERROR:  duplicate key value violates unique constraint "77_3_unique_null_time_u1
 :ANALYZE INSERT INTO unique_null VALUES('2024-01-01', NULL, 1, 1.0);
                            QUERY PLAN                            
 -----------------------------------------------------------------
- Custom Scan (HypertableModify) (actual rows=0 loops=1)
+ Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
    ->  Insert on unique_null (actual rows=0 loops=1)
          ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
                ->  Result (actual rows=1 loops=1)
@@ -1160,7 +1160,7 @@ SELECT count(*) FROM unique_null;
 :ANALYZE INSERT INTO unique_null VALUES('2024-01-01', 1, NULL, 1.0);
                            QUERY PLAN                            
 -----------------------------------------------------------------
- Custom Scan (HypertableModify) (actual rows=0 loops=1)
+ Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
    ->  Insert on unique_null (actual rows=0 loops=1)
          ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
                ->  Result (actual rows=1 loops=1)
@@ -1175,7 +1175,7 @@ SELECT count(*) FROM unique_null;
 :ANALYZE INSERT INTO unique_null VALUES('2024-01-01', NULL, NULL, 1.0);
                            QUERY PLAN                            
 -----------------------------------------------------------------
- Custom Scan (HypertableModify) (actual rows=0 loops=1)
+ Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
    ->  Insert on unique_null (actual rows=0 loops=1)
          ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
                ->  Result (actual rows=1 loops=1)
