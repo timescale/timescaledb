@@ -231,10 +231,14 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 	if (strategy == InvalidStrategy)
 		return NULL;
 
-	expr = get_pushdownsafe_expr(context, expr);
+	Expr *new_expr = get_pushdownsafe_expr(context, expr);
 
-	if (expr == NULL)
+	if (new_expr == NULL)
+	{
 		return NULL;
+	}
+
+	expr = new_expr;
 
 	expr_type_id = exprType((Node *) expr);
 
@@ -309,12 +313,6 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 	}
 }
 
-static bool
-contains_volatile_functions_checker(Oid func_id, void *context)
-{
-	return (func_volatile(func_id) == PROVOLATILE_VOLATILE);
-}
-
 static Node *
 modify_expression(Node *node, QualPushdownContext *context)
 {
@@ -353,7 +351,13 @@ modify_expression(Node *node, QualPushdownContext *context)
 		case T_SQLValueFunction:
 		case T_CaseExpr:
 		case T_CaseWhen:
+			break;
 		case T_FuncExpr:
+			/*
+			 * The caller should have checked that we don't have volatile
+			 * functions in this qual.
+			 */
+			Assert(!contain_volatile_functions(node));
 			break;
 		case T_Var:
 		{
@@ -385,15 +389,6 @@ modify_expression(Node *node, QualPushdownContext *context)
 			context->can_pushdown = false;
 			return NULL;
 			break;
-	}
-
-	if (check_functions_in_node(node,
-								contains_volatile_functions_checker,
-								/* context = */ NULL))
-	{
-		/* Cannot push down the volatile functions. */
-		context->can_pushdown = false;
-		return NULL;
 	}
 
 	return expression_tree_mutator(node, modify_expression, context);
