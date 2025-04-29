@@ -46,3 +46,46 @@ CREATE PROCEDURE @extschema@.split_chunk(
     split_at "any" = NULL
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
 
+CREATE FUNCTION _timescaledb_functions.align_to_bucket(width INTERVAL, rng ANYRANGE)
+RETURNS ANYRANGE AS
+$body$
+BEGIN
+  RETURN _timescaledb_functions.make_range_from_internal_time(
+         rng,
+         @extschema@.time_bucket(width, lower(rng)),
+         @extschema@.time_bucket(width, upper(rng) - '1 microsecond'::interval) + width
+  );
+END
+$body$
+LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE
+SET search_path TO pg_catalog, pg_temp;
+
+CREATE FUNCTION _timescaledb_functions.make_multirange_from_internal_time(
+    base TSTZRANGE, low_usec BIGINT, high_usec BIGINT
+) RETURNS TSTZMULTIRANGE AS
+$body$
+  select multirange(tstzrange(_timescaledb_functions.to_timestamp(low_usec),
+			      _timescaledb_functions.to_timestamp(high_usec)));
+$body$ LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+SET search_path TO pg_catalog, pg_temp;
+
+CREATE FUNCTION _timescaledb_functions.make_multirange_from_internal_time(
+    base TSRANGE, low_usec BIGINT, high_usec BIGINT
+) RETURNS TSMULTIRANGE AS
+$body$
+  select multirange(tsrange(_timescaledb_functions.to_timestamp_without_timezone(low_usec),
+			    _timescaledb_functions.to_timestamp_without_timezone(high_usec)));
+$body$ LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+SET search_path TO pg_catalog, pg_temp;
+
+CREATE FUNCTION _timescaledb_functions.make_range_from_internal_time(
+    base ANYRANGE, low_usec ANYELEMENT, high_usec ANYELEMENT
+) RETURNS anyrange
+AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
+LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.get_internal_time_min(REGTYPE) RETURNS BIGINT
+AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.get_internal_time_max(REGTYPE) RETURNS BIGINT
+AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
