@@ -212,13 +212,17 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 	{
 		/*
 		 * 1) All elements turned out to be null, don't save the empty filter in
-		 * that case.
+		 * that case. The compressed batch will be compressed using the NULL
+		 * compression algorithm, so actually checking the rows will be efficient
+		 * enough.
+		 *
 		 * 2) All bits are set, this filter is useless. Shouldn't really happen,
 		 * but technically possible, and the following calculations will
 		 * segfault in this case.
 		 */
 		compressor->compressed_is_null[builder->bloom_attr_offset] = true;
 		compressor->compressed_values[builder->bloom_attr_offset] = PointerGetDatum(NULL);
+		return;
 	}
 
 	/*
@@ -375,7 +379,6 @@ bloom1_contains(PG_FUNCTION_ARGS)
 	 */
 	if (PG_ARGISNULL(0))
 	{
-		fprintf(stderr, "got null arg\n");
 		PG_RETURN_BOOL(true);
 	}
 
