@@ -12,6 +12,7 @@
 #include <libpq/pqformat.h>
 #include <storage/predicate.h>
 #include <utils/datum.h>
+#include <utils/elog.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
@@ -38,6 +39,14 @@
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/compression_settings.h"
+
+/*
+ * Timing parameters for truncate locking heuristics.
+ * These are the same as used by Postgres for truncate locking during lazy vacuum.
+ * https://github.com/postgres/postgres/blob/4a0650d359c5981270039eeb634c3b7427aa0af5/src/backend/access/heap/vacuumlazy.c#L82
+ */
+#define COMPRESS_TRUNCATE_LOCK_WAIT_INTERVAL 50 /* ms */
+#define COMPRESS_TRUNCATE_LOCK_TIMEOUT 5000		/* ms */
 
 StaticAssertDecl(GLOBAL_MAX_ROWS_PER_COMPRESSION >= TARGET_COMPRESSED_BATCH_SIZE,
 				 "max row numbers must be harmonized");
@@ -505,16 +514,67 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	}
 
 	row_compressor_close(&row_compressor);
-	if (!ts_guc_enable_delete_after_compression)
+
+	if (ts_guc_enable_delete_after_compression)
 	{
-		DEBUG_WAITPOINT("compression_done_before_truncate_uncompressed");
-		truncate_relation(in_table);
-		DEBUG_WAITPOINT("compression_done_after_truncate_uncompressed");
+		ereport(NOTICE,
+				(errcode(ERRCODE_WARNING_DEPRECATED_FEATURE),
+				 errmsg("timescaledb.enable_delete_after_compression is deprecated and will be "
+						"removed in a future version. Please use "
+						"timescaledb.compress_truncate_behaviour instead.")));
+		delete_relation_rows(in_table);
+		DEBUG_WAITPOINT("compression_done_after_delete_uncompressed");
 	}
 	else
 	{
-		delete_relation_rows(in_table);
-		DEBUG_WAITPOINT("compression_done_after_delete_uncompressed");
+		int lock_retry = 0;
+		switch (ts_guc_compress_truncate_behaviour)
+		{
+			case COMPRESS_TRUNCATE_ONLY:
+				DEBUG_WAITPOINT("compression_done_before_truncate_uncompressed");
+				truncate_relation(in_table);
+				DEBUG_WAITPOINT("compression_done_after_truncate_uncompressed");
+				break;
+			case COMPRESS_TRUNCATE_OR_DELETE:
+				DEBUG_WAITPOINT("compression_done_before_truncate_or_delete_uncompressed");
+				while (true)
+				{
+					if (ConditionalLockRelation(in_rel, AccessExclusiveLock))
+					{
+						truncate_relation(in_table);
+						break;
+					}
+
+					/*
+					 * Check for interrupts while trying to (re-)acquire the exclusive
+					 * lock.
+					 */
+					CHECK_FOR_INTERRUPTS();
+
+					if (++lock_retry >
+						(COMPRESS_TRUNCATE_LOCK_TIMEOUT / COMPRESS_TRUNCATE_LOCK_WAIT_INTERVAL))
+					{
+						/*
+						 * We failed to establish the lock in the specified number of
+						 * retries. This means we give up truncating and fallback to delete
+						 */
+						delete_relation_rows(in_table);
+						break;
+					}
+
+					(void) WaitLatch(MyLatch,
+									 WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
+									 COMPRESS_TRUNCATE_LOCK_WAIT_INTERVAL,
+									 WAIT_EVENT_VACUUM_TRUNCATE);
+					ResetLatch(MyLatch);
+				}
+				DEBUG_WAITPOINT("compression_done_after_truncate_or_delete_uncompressed");
+				break;
+			case COMPRESS_TRUNCATE_DISABLED:
+				delete_relation_rows(in_table);
+				DEBUG_WAITPOINT("compression_done_after_delete_uncompressed");
+				break;
+		}
 	}
 
 	table_close(out_rel, NoLock);
