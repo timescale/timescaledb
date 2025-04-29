@@ -1314,7 +1314,7 @@ relation_split_info_free(RelationSplitInfo *rsi, int ti_options)
  * for this when the tuple is rewritten.
  */
 static void
-reform_and_rewrite_tuple(HeapTuple tuple, Relation srcrel, RelationSplitInfo *rsi)
+reform_and_rewrite_tuple(HeapTuple tuple, Relation srcrel, const RelationSplitInfo *rsi)
 {
 	TupleDesc oldTupDesc = RelationGetDescr(srcrel);
 	TupleDesc newTupDesc = RelationGetDescr(rsi->targetrel);
@@ -1349,6 +1349,163 @@ reform_and_rewrite_tuple(HeapTuple tuple, Relation srcrel, RelationSplitInfo *rs
 	rewrite_heap_tuple(rsi->rwstate, tuple, tupcopy);
 
 	heap_freetuple(tupcopy);
+}
+
+static void
+copy_tuples_for_split(Relation srcrel, RelationSplitInfo *splitinfos[2], AttrNumber splitdim_attnum,
+					  Oid splitdim_type, int64 split_point, struct VacuumCutoffs *cutoffs)
+{
+	TupleTableSlot *srcslot;
+	TableScanDesc scan;
+	MemoryContext oldcxt;
+	EState *estate;
+	ExprContext *econtext;
+
+	estate = CreateExecutorState();
+
+	/* Create the tuple slot */
+	srcslot = MakeSingleTupleTableSlot(RelationGetDescr(srcrel), table_slot_callbacks(srcrel));
+
+	/*
+	 * Scan through the rows using SnapshotAny to see everything so that we
+	 * can transfer tuples that are deleted or updated but still visible to
+	 * concurrent transactions.
+	 */
+	scan = table_beginscan(srcrel, SnapshotAny, 0, NULL);
+
+	/*
+	 * Switch to per-tuple memory context and reset it for each tuple
+	 * produced, so we don't leak memory.
+	 */
+	econtext = GetPerTupleExprContext(estate);
+	oldcxt = MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
+
+	/*
+	 * Read all the data from the split relation and route the tuples to the
+	 * new partitions. Do some vacuuming and cleanup at the same
+	 * time. Transfer all visibility information to the new relations.
+	 *
+	 * Main loop inspired by heapam_relation_copy_for_cluster() used to run
+	 * CLUSTER and VACUUM FULL on a table.
+	 */
+	double num_tuples = 0.0;
+	double tups_vacuumed = 0.0;
+	double tups_recently_dead = 0.0;
+
+	BufferHeapTupleTableSlot *hslot = (BufferHeapTupleTableSlot *) srcslot;
+
+	while (table_scan_getnextslot(scan, ForwardScanDirection, srcslot))
+	{
+		const RelationSplitInfo *rsi = NULL;
+		bool isnull = true;
+		HeapTuple tuple;
+		Buffer buf;
+		bool isdead;
+
+		CHECK_FOR_INTERRUPTS();
+		ResetExprContext(econtext);
+
+		tuple = ExecFetchSlotHeapTuple(srcslot, false, NULL);
+		buf = hslot->buffer;
+
+		LockBuffer(buf, BUFFER_LOCK_SHARE);
+
+		switch (HeapTupleSatisfiesVacuum(tuple, cutoffs->OldestXmin, buf))
+		{
+			case HEAPTUPLE_DEAD:
+				/* Definitely dead */
+				isdead = true;
+				break;
+			case HEAPTUPLE_RECENTLY_DEAD:
+				tups_recently_dead += 1;
+				/* fall through */
+				TS_FALLTHROUGH;
+			case HEAPTUPLE_LIVE:
+				/* Live or recently dead, must copy it */
+				isdead = false;
+				break;
+			case HEAPTUPLE_INSERT_IN_PROGRESS:
+				/*
+				 * Since we hold exclusive lock on the relation, normally the
+				 * only way to see this is if it was inserted earlier in our
+				 * own transaction. Give a warning if this case does not
+				 * apply; in any case we better copy it.
+				 */
+				if (!TransactionIdIsCurrentTransactionId(HeapTupleHeaderGetXmin(tuple->t_data)))
+					elog(WARNING,
+						 "concurrent insert in progress within table \"%s\"",
+						 RelationGetRelationName(srcrel));
+				/* treat as live */
+				isdead = false;
+				break;
+			case HEAPTUPLE_DELETE_IN_PROGRESS:
+				/*
+				 * Similar situation to INSERT_IN_PROGRESS case.
+				 */
+				if (!TransactionIdIsCurrentTransactionId(
+						HeapTupleHeaderGetUpdateXid(tuple->t_data)))
+					elog(WARNING,
+						 "concurrent delete in progress within table \"%s\"",
+						 RelationGetRelationName(srcrel));
+				/* treat as recently dead */
+				tups_recently_dead += 1;
+				isdead = false;
+				break;
+			default:
+				elog(ERROR, "unexpected HeapTupleSatisfiesVacuum result");
+				isdead = false; /* keep compiler quiet */
+				break;
+		}
+
+		LockBuffer(buf, BUFFER_LOCK_UNLOCK);
+
+		/* Find the partition/chunk to insert the tuple into */
+		Datum value = slot_getattr(srcslot, splitdim_attnum, &isnull);
+		Assert(!isnull);
+		int64 point = ts_time_value_to_internal(value, splitdim_type);
+
+		/*
+		 * Route to partition based on new boundaries. Only 2-way split is
+		 * supported now, so routing is easy. An N-way split requires, e.g.,
+		 * binary search.
+		 */
+		if (point < split_point)
+			rsi = splitinfos[0];
+		else
+			rsi = splitinfos[1];
+
+		if (isdead)
+		{
+			tups_vacuumed += 1;
+			/* heap rewrite module still needs to see it... */
+			if (rewrite_heap_dead_tuple(rsi->rwstate, tuple))
+			{
+				/* A previous recently-dead tuple is now known dead */
+				tups_vacuumed += 1;
+				tups_recently_dead -= 1;
+			}
+			continue;
+		}
+
+		num_tuples++;
+		reform_and_rewrite_tuple(tuple, srcrel, rsi);
+	}
+
+	MemoryContextSwitchTo(oldcxt);
+
+	const char *nspname = get_namespace_name(RelationGetNamespace(srcrel));
+
+	ereport(DEBUG1,
+			(errmsg("\"%s.%s\": found %.0f removable, %.0f nonremovable row versions",
+					nspname,
+					RelationGetRelationName(srcrel),
+					tups_vacuumed,
+					num_tuples),
+			 errdetail("%.0f dead row versions cannot be removed yet.", tups_recently_dead)));
+
+	table_endscan(scan);
+	ExecDropSingleTupleTableSlot(srcslot);
+	FreeExecutorState(estate);
 }
 
 /*
@@ -1574,11 +1731,6 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 	Assert(new_chunk);
 
 	int ti_options = TABLE_INSERT_SKIP_FSM;
-	TupleTableSlot *srcslot;
-	TableScanDesc scan;
-	MemoryContext oldcxt;
-	EState *estate;
-	ExprContext *econtext;
 	RelationSplitInfo *splitinfos[2];
 	struct VacuumCutoffs cutoffs;
 	char relpersistence = srcrel->rd_rel->relpersistence;
@@ -1590,11 +1742,6 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 									   srcrel->rd_rel->relam,
 									   relpersistence,
 									   AccessExclusiveLock);
-
-	estate = CreateExecutorState();
-
-	/* Create the tuple slot */
-	srcslot = MakeSingleTupleTableSlot(RelationGetDescr(srcrel), table_slot_callbacks(srcrel));
 
 	/*
 	 * Open the new relations that will receive tuples during split. These are
@@ -1609,147 +1756,13 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 
 	DEBUG_WAITPOINT("split_chunk_before_tuple_routing");
 
-	/*
-	 * Scan through the rows using SnapshotAny to see everything so that we
-	 * can transfer tuples that are deleted or updated but still visible to
-	 * concurrent transactions.
-	 */
-	scan = table_beginscan(srcrel, SnapshotAny, 0, NULL);
-
-	/*
-	 * Switch to per-tuple memory context and reset it for each tuple
-	 * produced, so we don't leak memory.
-	 */
-	econtext = GetPerTupleExprContext(estate);
-	oldcxt = MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
-
-	/*
-	 * Read all the data from the split relation and route the tuples to the
-	 * new partitions. Do some vacuuming and cleanup at the same
-	 * time. Transfer all visibility information to the new relations.
-	 *
-	 * Main loop inspired by heapam_relation_copy_for_cluster() used to run
-	 * CLUSTER and VACUUM FULL on a table.
-	 */
-	double num_tuples = 0.0;
-	double tups_vacuumed = 0.0;
-	double tups_recently_dead = 0.0;
-
-	BufferHeapTupleTableSlot *hslot = (BufferHeapTupleTableSlot *) srcslot;
-
-	while (table_scan_getnextslot(scan, ForwardScanDirection, srcslot))
-	{
-		RelationSplitInfo *rsi = NULL;
-		bool isnull = true;
-		HeapTuple tuple;
-		Buffer buf;
-		bool isdead;
-
-		CHECK_FOR_INTERRUPTS();
-		ResetExprContext(econtext);
-
-		tuple = ExecFetchSlotHeapTuple(srcslot, false, NULL);
-		buf = hslot->buffer;
-
-		LockBuffer(buf, BUFFER_LOCK_SHARE);
-
-		switch (HeapTupleSatisfiesVacuum(tuple, cutoffs.OldestXmin, buf))
-		{
-			case HEAPTUPLE_DEAD:
-				/* Definitely dead */
-				isdead = true;
-				break;
-			case HEAPTUPLE_RECENTLY_DEAD:
-				tups_recently_dead += 1;
-				/* fall through */
-				TS_FALLTHROUGH;
-			case HEAPTUPLE_LIVE:
-				/* Live or recently dead, must copy it */
-				isdead = false;
-				break;
-			case HEAPTUPLE_INSERT_IN_PROGRESS:
-				/*
-				 * Since we hold exclusive lock on the relation, normally the
-				 * only way to see this is if it was inserted earlier in our
-				 * own transaction. Give a warning if this case does not
-				 * apply; in any case we better copy it.
-				 */
-				if (!TransactionIdIsCurrentTransactionId(HeapTupleHeaderGetXmin(tuple->t_data)))
-					elog(WARNING,
-						 "concurrent insert in progress within table \"%s\"",
-						 RelationGetRelationName(srcrel));
-				/* treat as live */
-				isdead = false;
-				break;
-			case HEAPTUPLE_DELETE_IN_PROGRESS:
-				/*
-				 * Similar situation to INSERT_IN_PROGRESS case.
-				 */
-				if (!TransactionIdIsCurrentTransactionId(
-						HeapTupleHeaderGetUpdateXid(tuple->t_data)))
-					elog(WARNING,
-						 "concurrent delete in progress within table \"%s\"",
-						 RelationGetRelationName(srcrel));
-				/* treat as recently dead */
-				tups_recently_dead += 1;
-				isdead = false;
-				break;
-			default:
-				elog(ERROR, "unexpected HeapTupleSatisfiesVacuum result");
-				isdead = false; /* keep compiler quiet */
-				break;
-		}
-
-		LockBuffer(buf, BUFFER_LOCK_UNLOCK);
-
-		/* Find the partition/chunk to insert the tuple into */
-		Datum value = slot_getattr(srcslot, splitdim_attnum, &isnull);
-		Assert(!isnull);
-		int64 point = ts_time_value_to_internal(value, splitdim_type);
-
-		/*
-		 * Route to partition based on new boundaries. Only 2-way split is
-		 * supported now, so routing is easy. An N-way split requires, e.g.,
-		 * binary search.
-		 */
-		if (point < split_point)
-			rsi = splitinfos[0];
-		else
-			rsi = splitinfos[1];
-
-		if (isdead)
-		{
-			tups_vacuumed += 1;
-			/* heap rewrite module still needs to see it... */
-			if (rewrite_heap_dead_tuple(rsi->rwstate, tuple))
-			{
-				/* A previous recently-dead tuple is now known dead */
-				tups_vacuumed += 1;
-				tups_recently_dead -= 1;
-			}
-			continue;
-		}
-
-		num_tuples++;
-		reform_and_rewrite_tuple(tuple, srcrel, rsi);
-	}
-
-	MemoryContextSwitchTo(oldcxt);
-
-	const char *nspname = get_namespace_name(RelationGetNamespace(srcrel));
-
-	ereport(DEBUG1,
-			(errmsg("\"%s.%s\": found %.0f removable, %.0f nonremovable row versions",
-					nspname,
-					RelationGetRelationName(srcrel),
-					tups_vacuumed,
-					num_tuples),
-			 errdetail("%.0f dead row versions cannot be removed yet.", tups_recently_dead)));
-
-	table_endscan(scan);
-	ExecDropSingleTupleTableSlot(srcslot);
-	FreeExecutorState(estate);
-
+	copy_tuples_for_split(srcrel,
+						  splitinfos,
+						  splitdim_attnum,
+						  splitdim_type,
+						  split_point,
+						  &cutoffs);
+	
 	table_close(srcrel, NoLock);
 
 	/* Cleanup split rel infos and reindex new chunks */
