@@ -231,3 +231,9 @@ $$ LANGUAGE PLPGSQL;
 
 -- Split chunk
 DROP PROCEDURE IF EXISTS @extschema@.split_chunk(chunk REGCLASS, split_at "any");
+DROP FUNCTION _timescaledb_functions.align_to_bucket(INTERVAL, ANYRANGE);
+DROP FUNCTION _timescaledb_functions.make_multirange_from_internal_time(TSTZRANGE, BIGINT, BIGINT);
+DROP FUNCTION _timescaledb_functions.make_multirange_from_internal_time(TSRANGE, BIGINT, BIGINT);
+DROP FUNCTION _timescaledb_functions.make_range_from_internal_time(ANYRANGE, ANYELEMENT, ANYELEMENT);
+DROP FUNCTION _timescaledb_functions.get_internal_time_min(REGTYPE);
+DROP FUNCTION _timescaledb_functions.get_internal_time_max(REGTYPE);
