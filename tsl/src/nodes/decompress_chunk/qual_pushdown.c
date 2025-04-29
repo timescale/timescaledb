@@ -339,12 +339,6 @@ expr_fetch_bloom1_metadata(QualPushdownContext *context, Expr *expr, AttrNumber 
 													 "bloom1");
 }
 
-static bool
-contains_volatile_functions_checker(Oid func_id, void *context)
-{
-	return (func_volatile(func_id) == PROVOLATILE_VOLATILE);
-}
-
 static Expr *
 pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args, Oid op_oid,
 								   Oid op_collation)
@@ -449,6 +443,12 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args
 								 /* funccollid = */ InvalidOid,
 								 /* inputcollid = */ InvalidOid,
 								 COERCE_EXPLICIT_CALL);
+}
+
+static bool
+contains_volatile_functions_checker(Oid func_id, void *context)
+{
+	return (func_volatile(func_id) == PROVOLATILE_VOLATILE);
 }
 
 static Node *
