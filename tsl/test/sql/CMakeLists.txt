@@ -42,6 +42,7 @@ set(TEST_FILES
     compress_sort_transform.sql
     create_table_with.sql
     custom_hashagg.sql
+    decompress_chunk_cost.sql
     decompress_index.sql
     foreign_keys.sql
     hypercore_columnar.sql

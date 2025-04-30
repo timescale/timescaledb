@@ -834,18 +834,18 @@ SELECT time,x3 FROM test1 ORDER BY time DESC;
 (4 rows)
 
 -- Test with projection and constants
-EXPLAIN (verbose) SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
+EXPLAIN (verbose, costs off) SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
                                                                                                                                                                                                                                                  QUERY PLAN                                                                                                                                                                                                                                                  
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Result  (cost=1.06..93.44 rows=3000 width=24)
+ Result
    Output: 1, 2, 3, _hyper_1_1_chunk."time", _hyper_1_1_chunk.x2
-   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk  (cost=1.06..63.44 rows=3000 width=12)
+   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
          Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x2
          Batch Sorted Merge: true
-         ->  Sort  (cost=1.05..1.06 rows=3 width=56)
+         ->  Sort
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
                Sort Key: compress_hyper_2_2_chunk._ts_meta_max_1 DESC
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk  (cost=0.00..1.03 rows=3 width=56)
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk
                      Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
 (10 rows)
 
@@ -859,18 +859,18 @@ SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
 (4 rows)
 
 -- Test with projection and constants
-EXPLAIN (verbose) SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC;
+EXPLAIN (verbose, costs off) SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC;
                                                                                                                                                                                                                                                  QUERY PLAN                                                                                                                                                                                                                                                  
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Result  (cost=1.06..93.44 rows=3000 width=24)
+ Result
    Output: 1, 2, 3, _hyper_1_1_chunk.x2, _hyper_1_1_chunk."time"
-   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk  (cost=1.06..63.44 rows=3000 width=12)
+   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
          Output: _hyper_1_1_chunk.x2, _hyper_1_1_chunk."time"
          Batch Sorted Merge: true
-         ->  Sort  (cost=1.05..1.06 rows=3 width=56)
+         ->  Sort
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
                Sort Key: compress_hyper_2_2_chunk._ts_meta_max_1 DESC
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk  (cost=0.00..1.03 rows=3 width=56)
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk
                      Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
 (10 rows)
 
