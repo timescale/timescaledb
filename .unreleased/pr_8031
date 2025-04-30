@@ -1,0 +1,1 @@
+Fixes: #8031 Fix reporting of deleted tuples for direct batch delete

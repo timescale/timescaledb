@@ -36,6 +36,7 @@ typedef struct ModifyHypertableState
 	int64 batches_decompressed;
 	int64 batches_filtered;
 	int64 batches_deleted;
+	int64 tuples_deleted;
 } ModifyHypertableState;
 
 extern void ts_modify_hypertable_fixup_tlist(Plan *plan);

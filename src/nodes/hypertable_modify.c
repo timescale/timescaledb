@@ -590,7 +590,11 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 				}
 			}
 		}
+		/* Account for tuples deleted via batch DELETE in compressed chunks */
+		if (operation == CMD_DELETE && ht_state->tuples_deleted > 0)
+			estate->es_processed += ht_state->tuples_deleted;
 	}
+
 	/*
 	 * Fetch rows from subplan, and execute the required table modification
 	 * for each row.
