@@ -34,3 +34,7 @@ LANGUAGE C VOLATILE;
 
 UPDATE _timescaledb_catalog.hypertable SET chunk_sizing_func_schema = '_timescaledb_functions' WHERE chunk_sizing_func_schema = '_timescaledb_internal' AND chunk_sizing_func_name = 'calculate_chunk_interval';
 
+DROP VIEW IF EXISTS timescaledb_information.hypertables;
+
+-- Rename Columnstore Policy jobs to Compression Policy
+UPDATE _timescaledb_config.bgw_job SET application_name = replace(application_name, 'Compression Policy', 'Columnstore Policy') WHERE application_name LIKE '%Compression Policy%';

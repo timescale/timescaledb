@@ -80,7 +80,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl \
-          libtest-most-perl ${{ env.extra_packages }}
+          libtest-most-perl jq ${{ env.extra_packages }}
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v4

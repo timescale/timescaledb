@@ -117,6 +117,12 @@ static const struct config_enum_entry hypercore_copy_to_options[] = {
 	{ NULL, 0, false }
 };
 
+static const struct config_enum_entry compress_truncate_behaviour_options[] = {
+	{ "truncate_only", COMPRESS_TRUNCATE_ONLY, false },
+	{ "truncate_or_delete", COMPRESS_TRUNCATE_OR_DELETE, false },
+	{ "truncate_disabled", COMPRESS_TRUNCATE_DISABLED, false },
+};
+
 bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
@@ -154,11 +160,13 @@ TSDLLEXPORT bool ts_guc_default_hypercore_use_access_method = false;
 bool ts_guc_enable_chunk_skipping = false;
 TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
 TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression = false;
-TSDLLEXPORT bool ts_guc_enable_bool_compression = false;
+TSDLLEXPORT bool ts_guc_enable_bool_compression = true;
 TSDLLEXPORT int ts_guc_compression_batch_size_limit = 1000;
+TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour = COMPRESS_TRUNCATE_ONLY;
 
 /* Only settable in debug mode for testing */
 TSDLLEXPORT bool ts_guc_enable_null_compression = true;
+TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings = true;
 
 /* Enable of disable columnar scans for columnar-oriented storage engines. If
  * disabled, regular sequence scans will be used instead. */
@@ -795,10 +803,10 @@ _guc_init(void)
 							 NULL);
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_bool_compression"),
-							 "Enable experimental bool compression functionality",
+							 "Enable bool compression functionality",
 							 "Enable bool compression",
 							 &ts_guc_enable_bool_compression,
-							 false,
+							 true,
 							 PGC_USERSET,
 							 0,
 							 NULL,
@@ -835,6 +843,16 @@ _guc_init(void)
 							 NULL);
 #endif
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compression_ratio_warnings"),
+							 "Enable warnings for poor compression ratio",
+							 "Enable warnings for poor compression ratio",
+							 &ts_guc_enable_compression_ratio_warnings,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 	/*
 	 * Define the limit on number of invalidation-based refreshes we allow per
 	 * refresh call. If this limit is exceeded, fall back to a single refresh that
@@ -1005,6 +1023,21 @@ _guc_init(void)
 							 "Delete all rows after compression instead of truncate",
 							 &ts_guc_enable_delete_after_compression,
 							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomEnumVariable(MAKE_EXTOPTION("compress_truncate_behaviour"),
+							 "Define behaviour of truncate after compression",
+							 "Defines how truncate behaves at the end of compression. "
+							 "'truncate_only' forces truncation. 'truncate_disabled' deletes rows "
+							 "instead of truncate. 'truncate_or_delete' allows falling back to "
+							 "deletion.",
+							 (int *) &ts_guc_compress_truncate_behaviour,
+							 COMPRESS_TRUNCATE_ONLY,
+							 compress_truncate_behaviour_options,
 							 PGC_USERSET,
 							 0,
 							 NULL,

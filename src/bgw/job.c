@@ -644,7 +644,7 @@ ts_bgw_job_find(int32 bgw_job_id, MemoryContext mctx, bool fail_if_not_found)
 	}
 
 	if (num_found == 0 && fail_if_not_found)
-		elog(ERROR, "job %d not found", bgw_job_id);
+		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("job %d not found", bgw_job_id)));
 
 	return job;
 }
@@ -1192,7 +1192,9 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 									&got_lock);
 	if (job == NULL)
 		/* If the job is not found, we can't proceed */
-		elog(ERROR, "job %d not found when running the background worker", params.job_id);
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("job %d not found when running the background worker", params.job_id)));
 
 	/* get parameters from bgworker */
 	job->job_history.id = params.job_history_id;
@@ -1224,9 +1226,10 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 		/* The job is responsible for committing or aborting it's own txns */
 		if (IsTransactionState())
-			elog(ERROR,
-				 "TimescaleDB background job \"%s\" failed to end the transaction",
-				 NameStr(job->fd.application_name));
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_TRANSACTION_STATE),
+					 errmsg("TimescaleDB background job \"%s\" failed to end the transaction",
+							NameStr(job->fd.application_name))));
 	}
 	PG_CATCH();
 	{

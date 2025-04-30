@@ -1520,7 +1520,7 @@ INSERT INTO test_setting VALUES( '2020-11-01', 20);
 --try out 2 settings here --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'true', timescaledb.compress='true');
 NOTICE:  defaulting compress_orderby to time_bucket
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "_materialized_hypertable_40" is set to ""
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
@@ -1540,7 +1540,7 @@ SELECT count(*) from test_setting_cagg ORDER BY 1;
 --now set it back to false --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'false', timescaledb.compress='true');
 NOTICE:  defaulting compress_orderby to time_bucket
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "_materialized_hypertable_40" is set to ""
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
@@ -1609,7 +1609,7 @@ INSERT INTO test_setting VALUES( '2020-11-01', 20);
 --try out 2 settings here --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'false', timescaledb.compress='true');
 NOTICE:  defaulting compress_orderby to time_bucket
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "_materialized_hypertable_42" is set to ""
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
@@ -1629,7 +1629,7 @@ SELECT count(*) from test_setting_cagg ORDER BY 1;
 --now set it back to false --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'true', timescaledb.compress='true');
 NOTICE:  defaulting compress_orderby to time_bucket
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "_materialized_hypertable_42" is set to ""
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
@@ -2106,7 +2106,7 @@ CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous) AS SELECT time_buck
 NOTICE:  refreshing continuous aggregate "cagg1"
 ALTER MATERIALIZED VIEW cagg1 SET (timescaledb.compress);
 NOTICE:  defaulting compress_orderby to time_bucket
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "_materialized_hypertable_56" is set to ""
 SELECT count(compress_chunk(ch)) FROM show_chunks('cagg1') ch;
  count 
@@ -2215,3 +2215,18 @@ CREATE MATERIALIZED VIEW cagg_window_4 WITH (tsdb.continuous)
 AS SELECT time_bucket('1week', time), rank() OVER w FROM conditions GROUP BY 1, location WINDOW w AS (PARTITION BY time_bucket('1 week',time));
 WARNING:  window function support is experimental and may result in unexpected results depending on the functions used.
 NOTICE:  refreshing continuous aggregate "cagg_window_4"
+-- test setting chunk_time_interval on a cagg
+CREATE MATERIALIZED VIEW cagg_chunk_time_interval WITH (tsdb.continuous, tsdb.chunk_time_interval='1000 day') AS SELECT time_bucket('1 week', time) FROM conditions GROUP BY 1 WITH NO DATA;
+SELECT time_interval from timescaledb_information.continuous_aggregates cagg INNER JOIN timescaledb_information.dimensions dim ON cagg.materialization_hypertable_name = dim.hypertable_name  WHERE view_name='cagg_chunk_time_interval';
+ time_interval 
+---------------
+ @ 1000 days
+(1 row)
+
+ALTER MATERIALIZED VIEW cagg_chunk_time_interval SET (tsdb.chunk_time_interval='110 day');
+SELECT time_interval from timescaledb_information.continuous_aggregates cagg INNER JOIN timescaledb_information.dimensions dim ON cagg.materialization_hypertable_name = dim.hypertable_name  WHERE view_name='cagg_chunk_time_interval';
+ time_interval 
+---------------
+ @ 110 days
+(1 row)
+

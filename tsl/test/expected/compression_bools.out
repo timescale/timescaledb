@@ -41,7 +41,7 @@ SELECT max(ts) FROM t;
 (1 row)
 
 ALTER TABLE t SET (timescaledb.compress, timescaledb.compress_orderby = 'ts');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "t" is set to ""
 SELECT compress_chunk(show_chunks('t'));
              compress_chunk             
