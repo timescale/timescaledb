@@ -70,6 +70,17 @@ static bool can_vectorize_constraint_checks(tuple_filtering_constraints *constra
 											CompressionSettings *settings, Relation chunk_rel,
 											Oid ht_relid, TupleTableSlot *slot);
 
+static AttrNumber
+TupleDescGetAttrNumber(TupleDesc desc, const char *name)
+{
+	for (int i = 0; i < desc->natts; i++)
+	{
+		if (strcmp(name, NameStr(desc->attrs[i].attname)) == 0)
+			return desc->attrs[i].attnum;
+	}
+	return InvalidAttrNumber;
+}
+
 void
 decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 {
@@ -333,6 +344,7 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 	ht_state->batches_filtered += stats.batches_filtered;
 	ht_state->batches_decompressed += stats.batches_decompressed;
 	ht_state->tuples_decompressed += stats.tuples_decompressed;
+	ht_state->tuples_deleted += stats.tuples_deleted;
 
 	return stats.batches_decompressed > 0;
 }
@@ -424,6 +436,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 	DecompressBatchScanDesc scan = NULL;
 	BatchMatcher *batch_matcher =
 		constraints && constraints->vectorized_filtering ? batch_matches_vectorized : batch_matches;
+	AttrNumber meta_count_attno = InvalidAttrNumber;
 
 	struct decompress_batches_stats stats = { 0 };
 
@@ -511,6 +524,9 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 			decompressor = build_decompressor(in_rel, out_rel);
 			decompressor.delete_only = delete_only;
 			decompressor_initialized = true;
+			meta_count_attno = TupleDescGetAttrNumber(decompressor.in_desc,
+													  COMPRESSION_COLUMN_METADATA_COUNT_NAME);
+			Assert(meta_count_attno != InvalidAttrNumber);
 		}
 
 		heap_deform_tuple(compressed_tuple,
@@ -561,6 +577,8 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 		if (decompressor.delete_only)
 		{
 			stats.batches_deleted++;
+			stats.tuples_deleted += DatumGetInt32(
+				decompressor.compressed_datums[AttrNumberGetAttrOffset(meta_count_attno)]);
 		}
 		else
 		{
