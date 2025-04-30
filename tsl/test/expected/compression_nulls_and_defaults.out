@@ -84,8 +84,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "t" is set to ""
 alter table t add column a double precision default 7.1;
 insert into t (ts,c1) values (6,6);
 select compress_chunk(show_chunks('t'));
@@ -191,8 +189,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "t" is set to ""
 alter table t add column a double precision default 7.1;
 insert into t (ts,c1) values (6,6);
 select compress_chunk(show_chunks('t'));
@@ -282,8 +278,6 @@ NOTICE:  adding not-null constraint to column "ts"
 
 insert into t values (1);
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "t" is set to ""
 select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
@@ -392,8 +386,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "t" is set to ""
 insert into t (ts,c1) values (6,6);
 select compress_chunk(show_chunks('t'));
               compress_chunk              
@@ -471,8 +463,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "t" is set to ""
 insert into t (ts,c1) values (6,6);
 select compress_chunk(show_chunks('t'));
               compress_chunk              
@@ -546,8 +536,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "t" is set to ""
 insert into t (ts,c1) values (1,1);
 select compress_chunk(show_chunks('t'));
               compress_chunk              
@@ -681,8 +669,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table codecov set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "codecov" is set to ""
 insert into codecov (ts,c1) values (1,NULL);
 select compress_chunk(show_chunks('codecov'));
               compress_chunk              

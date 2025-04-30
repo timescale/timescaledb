@@ -236,8 +236,6 @@ INSERT INTO test3 SELECT t, 3, gen_rand_minstd(), gen_rand_minstd() FROM generat
 -- Compression is set to merge those 25 chunks into 12 2 hour chunks and a single 1 hour chunks on a different space dimensions.
 \set VERBOSITY default
 ALTER TABLE test3 set (timescaledb.compress, timescaledb.compress_orderby='loc,"Time"', timescaledb.compress_chunk_time_interval='2 hours');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "test3" is set to ""
 WARNING:  compress_chunk_time_interval configured and primary dimension not first column in compress_orderby
 HINT:  consider setting "Time" as first compress_orderby column
 \set VERBOSITY terse
@@ -303,8 +301,6 @@ NOTICE:  adding not-null constraint to column "Time"
 \set VERBOSITY default
 ALTER TABLE test4 set (timescaledb.compress, timescaledb.compress_orderby='loc,"Time"', timescaledb.compress_chunk_time_interval='90 minutes');
 WARNING:  compress chunk interval is not a multiple of chunk interval, you should use a factor of chunk interval to merge as much as possible
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "test4" is set to ""
 WARNING:  compress_chunk_time_interval configured and primary dimension not first column in compress_orderby
 HINT:  consider setting "Time" as first compress_orderby column
 \set VERBOSITY terse

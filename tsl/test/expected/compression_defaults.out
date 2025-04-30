@@ -538,8 +538,6 @@ SELECT public.create_hypertable('public.t1', 'time');
 (1 row)
 
 ALTER TABLE public.t1 SET (timescaledb.compress, timescaledb.compress_orderby = 'segment_value');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "t1" is set to ""
 RESET search_path;
 -- test same named objects in different schemas with default orderbys/segmentbys
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -596,8 +594,6 @@ ALTER TABLE schema1.page_events2 SET (
  timescaledb.compress,
  timescaledb.compress_orderby = 'time desc, id asc'
 );
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "page_events2" is set to ""
 CREATE TABLE schema2.page_events2 (
  time        TIMESTAMPTZ         NOT NULL UNIQUE,
  id          BIGSERIAL           NOT NULL,
@@ -613,5 +609,31 @@ ALTER TABLE schema2.page_events2 SET (
  timescaledb.compress,
  timescaledb.compress_orderby = 'time desc'
 );
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "page_events2" is set to ""
+-- test default segmentby diabled when orderby is specified
+CREATE TABLE test_table (
+    ts   INT     NOT NULL,
+    uuid BIGINT  NOT NULL,
+    val  FLOAT
+);
+CREATE UNIQUE INDEX test_idx ON test_table (uuid, ts);
+SELECT create_hypertable(
+    'test_table',
+    'ts',
+    chunk_time_interval => 1500000
+);
+    create_hypertable     
+--------------------------
+ (26,public,test_table,t)
+(1 row)
+
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_table');
+                                                       get_segmentby_defaults                                                       
+------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": ["uuid"], "message": "Please make sure uuid is not a unique column and appropriate for a segment by", "confidence": 5}
+(1 row)
+
+ALTER TABLE test_table SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'uuid'
+);
+DROP TABLE test_table;

@@ -683,8 +683,6 @@ INSERT INTO test1 SELECT '2018-03-02 1:05'::TIMESTAMPTZ, 2;
 NOTICE:   raise notice test1_print_trigger called 
 NOTICE:   raise notice test1_print_trigger called 
 ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_orderby = '"Time" DESC');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "test1" is set to ""
 SELECT count(compress_chunk(ch)) FROM show_chunks('test1') ch;
  count 
 -------

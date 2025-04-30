@@ -353,7 +353,6 @@ NOTICE:  continuous aggregate "comp_rename_cagg" is already up-to-date
 ALTER MATERIALIZED VIEW comp_rename_cagg RENAME COLUMN bucket to "time";
 SET client_min_messages TO WARNING;
 ALTER MATERIALIZED VIEW comp_rename_cagg SET ( timescaledb.compress='true');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 RESET client_min_messages;
 DROP TABLE comp_rename CASCADE;
 NOTICE:  drop cascades to 3 other objects

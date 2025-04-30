@@ -102,8 +102,6 @@ NOTICE:  adding not-null constraint to column "fmid"
 (1 row)
 
 ALTER TABLE metaseg_tab SET (timescaledb.compress, timescaledb.compress_orderby= 'end_dt');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "metaseg_tab" is set to ""
 INSERT INTO metaseg_tab values (56,0,'2012-12-10 09:45:00','2012-12-10 09:50:00',1,0.1,'2012-12-10');
 SELECT compress_chunk(i) from show_chunks('metaseg_tab') i;
              compress_chunk             
