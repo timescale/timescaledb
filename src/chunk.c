@@ -718,25 +718,22 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 	int sec_ctx;
 
 	/*
-	 * The CreateForeignTableStmt embeds a regular CreateStmt, so we can use
-	 * it to create both regular and foreign tables
+	 * CreateStmt node to create the chunk table
 	 */
-	CreateForeignTableStmt stmt = {
-		.base.type = T_CreateStmt,
-		.base.relation = makeRangeVar((char *) NameStr(chunk->fd.schema_name),
-									  (char *) NameStr(chunk->fd.table_name),
-									  0),
-		.base.inhRelations = list_make1(makeRangeVar((char *) NameStr(ht->fd.schema_name),
-													 (char *) NameStr(ht->fd.table_name),
-													 0)),
-		.base.tablespacename = tablespacename ? (char *) tablespacename : NULL,
-		/* Propagate storage options of the main table to a regular chunk
-		 * table, but avoid using it for a foreign chunk table. */
-		.base.options =
+	CreateStmt stmt = {
+		.type = T_CreateStmt,
+		.relation = makeRangeVar((char *) NameStr(chunk->fd.schema_name),
+								 (char *) NameStr(chunk->fd.table_name),
+								 0),
+		.inhRelations = list_make1(makeRangeVar((char *) NameStr(ht->fd.schema_name),
+												(char *) NameStr(ht->fd.table_name),
+												0)),
+		.tablespacename = tablespacename ? (char *) tablespacename : NULL,
+		.options =
 			(chunk->relkind == RELKIND_RELATION) ? ts_get_reloptions(ht->main_table_relid) : NIL,
-		.base.accessMethod = (chunk->relkind == RELKIND_RELATION) ?
-								 get_am_name(ts_get_rel_am(chunk->hypertable_relid)) :
-								 NULL,
+		.accessMethod = (chunk->relkind == RELKIND_RELATION) ?
+							get_am_name(ts_get_rel_am(chunk->hypertable_relid)) :
+							NULL,
 	};
 	Oid uid, saved_uid;
 
@@ -762,16 +759,16 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 	if (ts_guc_enable_event_triggers)
 	{
 		EventTriggerBeginCompleteQuery();
-		EventTriggerDDLCommandStart((Node *) &stmt.base);
+		EventTriggerDDLCommandStart((Node *) &stmt);
 	}
 
-	address = DefineRelation(&stmt.base, chunk->relkind, rel->rd_rel->relowner, NULL, NULL);
+	address = DefineRelation(&stmt, chunk->relkind, rel->rd_rel->relowner, NULL, NULL);
 
 	/* Invoke ddl_command_end triggers and clean up the event trigger state */
 	if (ts_guc_enable_event_triggers)
 	{
 		EventTriggerCollectSimpleCommand(address, InvalidObjectAddress, (Node *) &stmt);
-		EventTriggerDDLCommandEnd((Node *) &stmt.base);
+		EventTriggerDDLCommandEnd((Node *) &stmt);
 		EventTriggerEndCompleteQuery();
 	}
 
@@ -788,7 +785,7 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 		 * need to create a toast table explicitly for some of the option
 		 * setting to work
 		 */
-		create_toast_table(&stmt.base, address.objectId);
+		create_toast_table(&stmt, address.objectId);
 
 		/*
 		 * Some options require being table owner to set for example statistics
