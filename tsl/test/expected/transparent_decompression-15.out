@@ -2505,26 +2505,26 @@ FROM :TEST_TABLE m1
 --------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Merge Join (actual rows=10 loops=1)
-         Merge Cond: (m2."time" = m1_1."time")
-         Join Filter: (m1_1.device_id = m2.device_id)
+         Merge Cond: (m1."time" = m2_1."time")
+         Join Filter: (m2_1.device_id = m1.device_id)
          Rows Removed by Join Filter: 40
-         ->  Custom Scan (ChunkAppend) on metrics m2 (actual rows=10 loops=1)
-               Order: m2."time", m2.device_id
+         ->  Custom Scan (ChunkAppend) on metrics m1 (actual rows=10 loops=1)
+               Order: m1."time", m1.device_id
                ->  Sort (actual rows=10 loops=1)
-                     Sort Key: m2_1."time", m2_1.device_id
+                     Sort Key: m1_1."time", m1_1.device_id
                      Sort Method: quicksort 
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m2_1 (actual rows=3600 loops=1)
-                           ->  Seq Scan on compress_hyper_5_15_chunk compress_hyper_5_15_chunk_1 (actual rows=5 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m1_1 (actual rows=3600 loops=1)
+                           ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=5 loops=1)
                ->  Sort (never executed)
-                     Sort Key: m2_2."time", m2_2.device_id
-                     ->  Seq Scan on _hyper_1_2_chunk m2_2 (never executed)
+                     Sort Key: m1_2."time", m1_2.device_id
+                     ->  Seq Scan on _hyper_1_2_chunk m1_2 (never executed)
                ->  Sort (never executed)
-                     Sort Key: m2_3."time", m2_3.device_id
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m2_3 (never executed)
-                           ->  Seq Scan on compress_hyper_5_16_chunk compress_hyper_5_16_chunk_1 (never executed)
+                     Sort Key: m1_3."time", m1_3.device_id
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m1_3 (never executed)
+                           ->  Seq Scan on compress_hyper_5_16_chunk (never executed)
          ->  Materialize (actual rows=50 loops=1)
                ->  Nested Loop (actual rows=11 loops=1)
-                     Join Filter: (m1_1."time" = m3_1."time")
+                     Join Filter: (m2_1."time" = m3_1."time")
                      Rows Removed by Join Filter: 17272
                      ->  Merge Append (actual rows=3 loops=1)
                            Sort Key: m3_1."time"
@@ -2547,11 +2547,11 @@ FROM :TEST_TABLE m1
                                              Rows Removed by Filter: 4
                      ->  Materialize (actual rows=5761 loops=3)
                            ->  Append (actual rows=8640 loops=1)
-                                 ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m1_1 (actual rows=3600 loops=1)
-                                       ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=5 loops=1)
-                                 ->  Seq Scan on _hyper_1_2_chunk m1_2 (actual rows=3360 loops=1)
-                                 ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m1_3 (actual rows=1680 loops=1)
-                                       ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=5 loops=1)
+                                 ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m2_1 (actual rows=3600 loops=1)
+                                       ->  Seq Scan on compress_hyper_5_15_chunk compress_hyper_5_15_chunk_1 (actual rows=5 loops=1)
+                                 ->  Seq Scan on _hyper_1_2_chunk m2_2 (actual rows=3360 loops=1)
+                                 ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m2_3 (actual rows=1680 loops=1)
+                                       ->  Seq Scan on compress_hyper_5_16_chunk compress_hyper_5_16_chunk_1 (actual rows=5 loops=1)
 (49 rows)
 
 :PREFIX
