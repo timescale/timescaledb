@@ -951,8 +951,6 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as unique_chunk
  order by unique_chunk asc
  limit 1 \gset
 alter table uniquetable set (timescaledb.compress_orderby='time');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "uniquetable" is set to ""
 -- Create a non-Hypercore TAM compressed chunk
 select * from compress_chunk(:'unique_chunk');
              compress_chunk              

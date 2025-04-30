@@ -526,13 +526,9 @@ NOTICE:  defaulting compress_orderby to bucket
 ERROR:  cannot use column "bucket" for both ordering and segmenting
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress,
 timescaledb.compress_orderby = 'bucket');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "_materialized_hypertable_14" is set to ""
 --enable compression and test re-enabling compression
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress);
 NOTICE:  defaulting compress_orderby to bucket
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "_materialized_hypertable_14" is set to ""
 insert into i2980 select now();
 call refresh_continuous_aggregate('i2980_cagg2', NULL, NULL);
 SELECT compress_chunk(ch) FROM show_chunks('i2980_cagg2') ch;
@@ -545,8 +541,6 @@ ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress = 'false');
 ERROR:  cannot disable columnstore on hypertable with columnstore chunks
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress = 'true');
 NOTICE:  defaulting compress_orderby to bucket
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "_materialized_hypertable_14" is set to ""
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress, timescaledb.compress_segmentby = 'bucket');
 NOTICE:  defaulting compress_orderby to bucket
 ERROR:  cannot use column "bucket" for both ordering and segmenting
@@ -561,8 +555,6 @@ SELECT add_compression_policy('i2980_cagg', '8 day'::interval);
 ERROR:  columnstore not enabled on continuous aggregate "i2980_cagg"
 ALTER MATERIALIZED VIEW i2980_cagg SET ( timescaledb.compress );
 NOTICE:  defaulting compress_orderby to time_bucket
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "_materialized_hypertable_13" is set to ""
 SELECT add_continuous_aggregate_policy('i2980_cagg2', '10 day'::interval, '6 day'::interval);
 ERROR:  function add_continuous_aggregate_policy(unknown, interval, interval) does not exist at character 8
 SELECT add_compression_policy('i2980_cagg2', '3'::integer);

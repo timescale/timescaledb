@@ -536,8 +536,6 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 ALTER TABLE plan_inval SET (timescaledb.compress,timescaledb.compress_orderby='time desc');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "plan_inval" is set to ""
 -- create 2 chunks
 INSERT INTO plan_inval SELECT * FROM (VALUES ('2000-01-01'::timestamptz,1), ('2000-01-07'::timestamptz,1)) v(time,device_id);
 SET max_parallel_workers_per_gather to 0;

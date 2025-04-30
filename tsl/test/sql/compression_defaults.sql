@@ -364,3 +364,26 @@ ALTER TABLE schema2.page_events2 SET (
  timescaledb.compress,
  timescaledb.compress_orderby = 'time desc'
 );
+
+-- test default segmentby diabled when orderby is specified
+CREATE TABLE test_table (
+    ts   INT     NOT NULL,
+    uuid BIGINT  NOT NULL,
+    val  FLOAT
+);
+CREATE UNIQUE INDEX test_idx ON test_table (uuid, ts);
+
+SELECT create_hypertable(
+    'test_table',
+    'ts',
+    chunk_time_interval => 1500000
+);
+
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_table');
+
+ALTER TABLE test_table SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'uuid'
+);
+
+DROP TABLE test_table;

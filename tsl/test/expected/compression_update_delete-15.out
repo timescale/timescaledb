@@ -2719,8 +2719,6 @@ ALTER TABLE test_limit SET (
     timescaledb.compress,
     timescaledb.compress_orderby = 'timestamp'
 );
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "test_limit" is set to ""
 SELECT count(compress_chunk(ch)) FROM show_chunks('test_limit') ch;
  count 
 -------

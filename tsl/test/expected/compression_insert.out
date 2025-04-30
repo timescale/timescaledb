@@ -772,8 +772,6 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 ALTER TABLE test_ordering SET (timescaledb.compress,timescaledb.compress_orderby='time desc');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "test_ordering" is set to ""
 INSERT INTO test_ordering VALUES (5),(4),(3);
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;

@@ -429,8 +429,6 @@ ORDER BY time;
 -- this will not work with chunks which have sequence numbers
 -- since the last chunk has sequence numbers, new chunks will be only rolled up together
 ALTER TABLE hyper SET (timescaledb.compress_chunk_time_interval = '30');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "hyper" is set to ""
 INSERT INTO hyper VALUES (41, 1, 1), (42, 2, 1), (43, 3, 1), (50, 3, 2), (51, 4, 2), (51, 5, 2);
 -- compression should leave the previous 4 chunks alone
 -- and roll up the two new chunks into a single chunk

@@ -330,8 +330,6 @@ insert into test2 select t, 'second'::text, 120, 1 from generate_series(11, 15) 
 alter table test2
       set access method hypercore,
       set (timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'c, itime desc');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "test2" is set to ""
 select compress_chunk(show_chunks('test2'));
              compress_chunk              
 -----------------------------------------

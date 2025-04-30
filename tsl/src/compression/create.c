@@ -1203,7 +1203,8 @@ compression_settings_update(Hypertable *ht, CompressionSettings *settings,
 	{
 		settings->fd.segmentby = ts_compress_hypertable_parse_segment_by(with_clause_options, ht);
 	}
-	else if (!settings->fd.segmentby)
+	else if (!settings->fd.segmentby && !settings->fd.orderby &&
+			 with_clause_options[AlterTableFlagCompressOrderBy].is_default)
 	{
 		settings->fd.segmentby = compression_setting_segmentby_get_default(ht);
 	}

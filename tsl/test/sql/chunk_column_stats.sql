@@ -86,7 +86,8 @@ SELECT * FROM enable_chunk_skipping('sample_table', 'sensor_id', true);
 -- enable compression
 ALTER TABLE sample_table SET (
 	timescaledb.compress,
-    timescaledb.compress_orderby = 'time'
+    timescaledb.compress_orderby = 'time',
+    timescaledb.compress_segmentby = 'sensor_id'
 );
 
 --
@@ -303,7 +304,7 @@ ALTER TABLE sample_table DROP COLUMN sensor_id;
 INSERT INTO sample_table VALUES
     (now(), 1, 366),
     (now(), 2, 501);
-ALTER TABLE sample_table SET (timescaledb.compress, timescaledb.compress_orderby='time');
+ALTER TABLE sample_table SET (timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='temperature');
 set timescaledb.enable_chunk_skipping = on;
 SELECT enable_chunk_skipping('sample_table', 'temperature');
 SELECT show_chunks('sample_table') AS "CH_NAME" order by 1 limit 1 \gset
