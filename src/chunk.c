@@ -714,7 +714,7 @@ Oid
 ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tablespacename)
 {
 	Relation rel;
-	ObjectAddress objaddr;
+	ObjectAddress address;
 	int sec_ctx;
 
 	/*
@@ -765,12 +765,12 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 		EventTriggerDDLCommandStart((Node *) &stmt.base);
 	}
 
-	objaddr = DefineRelation(&stmt.base, chunk->relkind, rel->rd_rel->relowner, NULL, NULL);
+	address = DefineRelation(&stmt.base, chunk->relkind, rel->rd_rel->relowner, NULL, NULL);
 
 	/* Invoke ddl_command_end triggers and clean up the event trigger state */
 	if (ts_guc_enable_event_triggers)
 	{
-		EventTriggerCollectSimpleCommand(objaddr, InvalidObjectAddress, (Node *) &stmt);
+		EventTriggerCollectSimpleCommand(address, InvalidObjectAddress, (Node *) &stmt);
 		EventTriggerDDLCommandEnd((Node *) &stmt.base);
 		EventTriggerEndCompleteQuery();
 	}
@@ -780,7 +780,7 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 	CommandCounterIncrement();
 
 	/* Copy acl from hypertable to chunk relation record */
-	copy_hypertable_acl_to_relid(ht, rel->rd_rel->relowner, objaddr.objectId);
+	copy_hypertable_acl_to_relid(ht, rel->rd_rel->relowner, address.objectId);
 
 	if (chunk->relkind == RELKIND_RELATION)
 	{
@@ -788,13 +788,13 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 		 * need to create a toast table explicitly for some of the option
 		 * setting to work
 		 */
-		create_toast_table(&stmt.base, objaddr.objectId);
+		create_toast_table(&stmt.base, address.objectId);
 
 		/*
 		 * Some options require being table owner to set for example statistics
 		 * so we have to set them before restoring security context
 		 */
-		set_attoptions(rel, objaddr.objectId);
+		set_attoptions(rel, address.objectId);
 
 		if (uid != saved_uid)
 			SetUserIdAndSecContext(saved_uid, sec_ctx);
@@ -804,7 +804,7 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 
 	table_close(rel, AccessShareLock);
 
-	return objaddr.objectId;
+	return address.objectId;
 }
 
 static int32
