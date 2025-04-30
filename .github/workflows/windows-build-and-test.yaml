@@ -198,6 +198,8 @@ jobs:
 
     - name: Run tests
       shell: wsl-bash {0}
+      env:
+        WSLENV: "IGNORES:SKIPS"
       run: |
         export TEST_TABLESPACE1_PREFIX='${{ env.TABLESPACE1 }}'
         export TEST_TABLESPACE2_PREFIX='${{ env.TABLESPACE2 }}'
@@ -220,6 +222,8 @@ jobs:
 
     - name: Run TSL tests
       shell: wsl-bash {0}
+      env:
+        WSLENV: "IGNORES:SKIPS"
       run: |
         export TEST_TABLESPACE1_PREFIX='${{ env.TABLESPACE1 }}'
         export TEST_TABLESPACE2_PREFIX='${{ env.TABLESPACE2 }}'
