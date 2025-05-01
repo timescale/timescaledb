@@ -459,5 +459,5 @@ cagg_sort_pushdown(Query *parse, int *cursor_opts)
 		parse->sortClause = NIL;
 		rte->subquery->sortClause = NIL;
 	}
-	ts_cache_release(cache);
+	ts_cache_release(&cache);
 }
