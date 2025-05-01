@@ -47,3 +47,39 @@ RESET timescaledb.enable_skipscan;
 -- compare SkipScan results on hypertable
 :DIFF_CMD
 
+-- run tests on compressed hypertable with different compression settings and diff results
+SELECT format('include/%s_comp_query.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME" \gset
+
+\set TABLE skip_scan_htc
+\set PREFIX ''
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+
+SET timescaledb.enable_compressed_skipscan TO false;
+\o :TEST_RESULTS_UNOPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+RESET timescaledb.enable_compressed_skipscan;
+
+-- compare SkipScan results on hypertable
+:DIFF_CMD
+
+-- run tests on compressed hypertable with different layouts of compressed chunks
+SELECT format('include/%s_load_comp_query.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME" \gset
+
+\set TABLE skip_scan_htcl
+\set PREFIX ''
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+
+SET timescaledb.enable_compressed_skipscan TO false;
+\o :TEST_RESULTS_UNOPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+RESET timescaledb.enable_compressed_skipscan;
+
+-- compare SkipScan results on hypertable
+:DIFF_CMD
+

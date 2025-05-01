@@ -15,6 +15,14 @@
 \ir include/skip_scan_query.sql
 \ir include/skip_scan_query_ht.sql
 
+-- run tests on compressed hypertable with different compression settings
+\set TABLE skip_scan_htc
+\ir include/skip_scan_comp_query.sql
+
+-- run tests on compressed hypertable with different layouts of compressed chunks
+\set TABLE skip_scan_htcl
+\ir include/skip_scan_load_comp_query.sql
+
 -- try one query with EXPLAIN only for coverage
 EXPLAIN (costs off, timing off, summary off) SELECT DISTINCT ON (dev_name) dev_name FROM skip_scan;
 EXPLAIN (costs off, timing off, summary off) SELECT DISTINCT ON (dev_name) dev_name FROM skip_scan_ht;
@@ -37,4 +45,3 @@ FROM generate_series('2000-01-01'::timestamptz,'2000-01-03'::timestamptz, '10 mi
 CREATE INDEX ON i3720(data, time);
 ANALYZE i3720;
 :PREFIX SELECT DISTINCT ON(data) * FROM i3720;
-
