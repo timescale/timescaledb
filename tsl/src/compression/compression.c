@@ -1700,7 +1700,7 @@ ArrowArray *
 decompress_single_column(RowDecompressor *decompressor, AttrNumber attno, bool *default_value)
 {
 	int16 target_col = -1;
-	PerCompressedColumn *column_info;
+	PerCompressedColumn *column_info = NULL;
 
 	for (int16 col = 0; col < decompressor->num_compressed_columns; col++)
 	{
@@ -1714,7 +1714,7 @@ decompress_single_column(RowDecompressor *decompressor, AttrNumber attno, bool *
 			break;
 		}
 	}
-	Assert(target_col > -1);
+	Assert(column_info && target_col > -1);
 
 	if (decompressor->compressed_is_nulls[target_col])
 	{
