@@ -84,7 +84,9 @@ ts_hist_sfunc(PG_FUNCTION_ARGS)
 	 */
 	nbuckets = state->nbuckets - 2;
 	if (nbuckets != PG_GETARG_INT32(4))
-		elog(ERROR, "number of buckets must not change between calls");
+		ereport(ERROR,
+				(errcode(ERRCODE_DATA_EXCEPTION),
+				 errmsg("number of buckets must not change between calls")));
 
 	int32 bucket = DatumGetInt32(DirectFunctionCall4(width_bucket_float8,
 													 val_datum,
@@ -95,11 +97,11 @@ ts_hist_sfunc(PG_FUNCTION_ARGS)
 	/* Increment the proper histogram bucket */
 	if (bucket < 0 || bucket >= state->nbuckets)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_DATA_EXCEPTION),
 				 errmsg("index %d from \"width_bucket\" out of range", bucket),
 				 errhint("You probably have a floating point overflow.")));
 	if (DatumGetInt32(state->buckets[bucket]) >= PG_INT32_MAX - 1)
-		elog(ERROR, "overflow in histogram");
+		ereport(ERROR, (errcode(ERRCODE_DATA_EXCEPTION), errmsg("overflow in histogram")));
 
 	state->buckets[bucket] = Int32GetDatum(DatumGetInt32(state->buckets[bucket]) + 1);
 

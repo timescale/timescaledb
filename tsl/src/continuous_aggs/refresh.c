@@ -94,7 +94,7 @@ cagg_get_hypertable_or_fail(int32 hypertable_id)
 
 	if (NULL == ht)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_UNEXPECTED),
 				 errmsg("invalid continuous aggregate state"),
 				 errdetail("A continuous aggregate references a hypertable that does not exist.")));
 
@@ -808,7 +808,9 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	/* Connect to SPI manager due to the underlying SPI calls */
 	int rc = SPI_connect_ext(SPI_OPT_NONATOMIC);
 	if (rc != SPI_OK_CONNECT)
-		elog(ERROR, "SPI_connect failed: %s", SPI_result_code_string(rc));
+		ereport(ERROR,
+				(errcode(ERRCODE_CONNECTION_EXCEPTION),
+				 errmsg("SPI_connect failed: %s", SPI_result_code_string(rc))));
 
 	/* Lock down search_path */
 	int save_nestlevel = NewGUCNestLevel();
@@ -895,7 +897,9 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 
 		rc = SPI_finish();
 		if (rc != SPI_OK_FINISH)
-			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
+			ereport(ERROR,
+					(errcode(ERRCODE_CONNECTION_EXCEPTION),
+					 errmsg("SPI_finish failed: %s", SPI_result_code_string(rc))));
 
 		return;
 	}
@@ -922,7 +926,9 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 
 	rc = SPI_finish();
 	if (rc != SPI_OK_FINISH)
-		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
+		ereport(ERROR,
+				(errcode(ERRCODE_CONNECTION_EXCEPTION),
+				 errmsg("SPI_finish failed: %s", SPI_result_code_string(rc))));
 }
 
 static void
@@ -1162,7 +1168,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	MemoryContext oldcontext = CurrentMemoryContext;
 
 	if (SPI_connect() != SPI_OK_CONNECT)
-		elog(ERROR, "could not connect to SPI");
+		ereport(ERROR, (errcode(ERRCODE_CONNECTION_EXCEPTION), errmsg("could not connect to SPI")));
 
 	/* Lock down search_path */
 	int save_nestlevel = NewGUCNestLevel();
@@ -1192,7 +1198,9 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 
 		res = SPI_finish();
 		if (res != SPI_OK_FINISH)
-			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+			ereport(ERROR,
+					(errcode(ERRCODE_CONNECTION_EXCEPTION),
+					 errmsg("SPI_finish failed: %s", SPI_result_code_string(res))));
 
 		return NIL;
 	}
@@ -1253,7 +1261,9 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
-		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+		ereport(ERROR,
+				(errcode(ERRCODE_CONNECTION_EXCEPTION),
+				 errmsg("SPI_finish failed: %s", SPI_result_code_string(res))));
 
 	if (refresh_window_list == NIL)
 	{

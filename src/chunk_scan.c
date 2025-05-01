@@ -190,7 +190,9 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 														   /* tuplock = */ NULL);
 			if (slice_ptr == NULL)
 			{
-				elog(ERROR, "dimension slice %d is not found", slice_id);
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_OBJECT),
+						 errmsg("dimension slice %d is not found", slice_id)));
 			}
 			MemoryContextSwitchTo(orig_mcxt);
 			DimensionSlice *slice_copy = ts_dimension_slice_create(slice_ptr->fd.dimension_id,
@@ -205,7 +207,7 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 		if (cube->num_slices == 0)
 		{
 			ereport(ERROR,
-					(errcode(ERRCODE_INTERNAL_ERROR),
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
 					 errmsg("chunk %s has no dimension slices", get_rel_name(chunk->table_id))));
 		}
 

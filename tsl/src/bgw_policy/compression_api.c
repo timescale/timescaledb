@@ -62,7 +62,7 @@ policy_compression_get_hypertable_id(const Jsonb *config)
 
 	if (!found)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("could not find hypertable_id in config for job")));
 
 	return hypertable_id;
@@ -77,7 +77,7 @@ policy_recompression_get_recompress_after_int(const Jsonb *config)
 
 	if (!found)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("could not find %s in config for job",
 						POL_RECOMPRESSION_CONF_KEY_RECOMPRESS_AFTER)));
 
@@ -92,7 +92,7 @@ policy_recompression_get_recompress_after_interval(const Jsonb *config)
 
 	if (interval == NULL)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("could not find %s in config for job",
 						POL_RECOMPRESSION_CONF_KEY_RECOMPRESS_AFTER)));
 

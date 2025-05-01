@@ -181,7 +181,7 @@ cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry, Oid chun
 	if (modified_tuple_chunk == NULL)
 	{
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_UNEXPECTED),
 				 errmsg("continuous agg trigger function must be called on hypertable chunks only"),
 				 errdetail("Called on '%s'.", get_rel_name(chunk_reloid))));
 	}
@@ -194,7 +194,7 @@ cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry, Oid chun
 	if (cache_entry->previous_chunk_open_dimension == InvalidAttrNumber)
 	{
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_UNEXPECTED),
 				 errmsg("open dimension '%s' not found in chunk %s",
 						NameStr(cache_entry->hypertable_open_dimension.fd.column_name),
 						get_rel_name(chunk_relation->rd_id))));
@@ -230,20 +230,35 @@ continuous_agg_trigfn(PG_FUNCTION_ARGS)
 	int32 hypertable_id;
 
 	if (trigdata == NULL || trigdata->tg_trigger == NULL || trigdata->tg_trigger->tgnargs < 0)
-		elog(ERROR, "must supply hypertable id");
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("must supply hypertable id")));
+	}
 
 	hypertable_id_str = trigdata->tg_trigger->tgargs[0];
 	hypertable_id = atol(hypertable_id_str);
 
 	if (!CALLED_AS_TRIGGER(fcinfo))
-		elog(ERROR, "continuous agg trigger function must be called by trigger manager");
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("continuous agg trigger function must be called by trigger manager")));
+	}
+
 	if (!TRIGGER_FIRED_AFTER(trigdata->tg_event) || !TRIGGER_FIRED_FOR_ROW(trigdata->tg_event))
-		elog(ERROR, "continuous agg trigger function must be called in per row after trigger");
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("must supply hypertable continuous agg trigger function must be called in "
+						"per row after trigger")));
+	}
+
 	execute_cagg_trigger(hypertable_id,
 						 trigdata->tg_relation,
 						 trigdata->tg_trigtuple,
 						 trigdata->tg_newtuple,
 						 TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event));
+
 	if (!TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event))
 		return PointerGetDatum(trigdata->tg_trigtuple);
 	else

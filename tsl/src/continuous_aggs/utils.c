@@ -108,7 +108,7 @@ continuous_agg_validate_query(PG_FUNCTION_ARGS)
 		if (tree == NIL)
 		{
 			edata->elevel = ERROR;
-			edata->sqlerrcode = ERRCODE_INTERNAL_ERROR;
+			edata->sqlerrcode = ERRCODE_TS_UNEXPECTED;
 			edata->message = "failed to parse query";
 		}
 		else if (list_length(tree) > 1)

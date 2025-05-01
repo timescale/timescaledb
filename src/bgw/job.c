@@ -618,7 +618,7 @@ ts_bgw_job_get_share_lock(int32 bgw_job_id, MemoryContext mctx)
 		{
 			/* since we blocked for a lock , this is an unexpected condition */
 			ereport(ERROR,
-					(errcode(ERRCODE_INTERNAL_ERROR),
+					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
 					 errmsg("could not acquire share lock for job=%d", bgw_job_id)));
 		}
 		pfree(job);
@@ -1074,10 +1074,12 @@ zero_guc(const char *guc_name)
 
 	if (config_change == 0)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("guc \"%s\" does not exist", guc_name)));
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("guc \"%s\" does not exist", guc_name)));
 	else if (config_change < 0)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("could not set \"%s\" guc", guc_name)));
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("could not set \"%s\" guc", guc_name)));
 }
 
 Oid

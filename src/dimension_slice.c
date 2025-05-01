@@ -152,7 +152,7 @@ lock_dimension_slice_tuple(int32 dimension_slice_id, ItemPointer tid,
 			else
 			{
 				ereport(ERROR,
-						(errcode(ERRCODE_INTERNAL_ERROR),
+						(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
 						 errmsg("unable to lock hypertable catalog tuple, lock result is %d for "
 								"hypertable "
 								"ID (%d)",
@@ -767,7 +767,7 @@ dimension_slice_tuple_delete(TupleInfo *ti, void *data)
 		else
 		{
 			ereport(ERROR,
-					(errcode(ERRCODE_INTERNAL_ERROR),
+					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
 					 errmsg("unable to lock hypertable catalog tuple, lock result is %d for "
 							"hypertable "
 							"ID (%d)",

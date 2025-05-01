@@ -105,7 +105,7 @@ makeMaterializedTableName(char *buf, const char *prefix, int hypertable_id)
 	if (ret < 0 || ret > NAMEDATALEN)
 	{
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("bad materialization internal name")));
+				(errcode(ERRCODE_TS_UNEXPECTED), errmsg("bad materialization internal name")));
 	}
 }
 
@@ -294,7 +294,7 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
 											 chunk_sizing_info);
 	if (!created)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_UNEXPECTED),
 				 errmsg("could not create materialization hypertable")));
 }
 
@@ -336,7 +336,7 @@ cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id)
 	objaddr = ts_hypertable_create_trigger(ht, &local_stmt, NULL);
 	if (!OidIsValid(objaddr.objectId))
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_UNEXPECTED),
 				 errmsg("could not create continuous aggregate trigger")));
 	ts_cache_release(hcache);
 }

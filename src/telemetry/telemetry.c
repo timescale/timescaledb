@@ -361,7 +361,7 @@ add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 								 "GROUP BY q.job_type";
 
 	if (SPI_connect() != SPI_OK_CONNECT)
-		elog(ERROR, "could not connect to SPI");
+		ereport(ERROR, (errcode(ERRCODE_CONNECTION_EXCEPTION), errmsg("could not connect to SPI")));
 
 	/* Lock down search_path */
 	int save_nestlevel = NewGUCNestLevel();
@@ -373,7 +373,7 @@ add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 	res = SPI_execute(command->data, true /*read only*/, 0 /* count */);
 	if (res < 0)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_DATA_EXCEPTION),
 				 (errmsg("could not get errors by sqlerrcode and job type"))));
 
 	/* we expect about 6 rows returned, each row is a record (TEXT, JSONB) */
@@ -465,7 +465,7 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 		"ORDER BY job_type";
 
 	if (SPI_connect() != SPI_OK_CONNECT)
-		elog(ERROR, "could not connect to SPI");
+		ereport(ERROR, (errcode(ERRCODE_CONNECTION_EXCEPTION), errmsg("could not connect to SPI")));
 
 	/* Lock down search_path */
 	int save_nestlevel = NewGUCNestLevel();
@@ -477,7 +477,7 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 	res = SPI_execute(command->data, true /* read_only */, 0 /*count*/);
 	if (res < 0)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_DATA_EXCEPTION),
 				 (errmsg("could not get job statistics by job type"))));
 	/*
 	 * a row returned looks like this:
@@ -801,7 +801,7 @@ add_query_result_dict(JsonbParseState *state, const char *query)
 
 	int res;
 	if (SPI_connect() != SPI_OK_CONNECT)
-		elog(ERROR, "could not connect to SPI");
+		ereport(ERROR, (errcode(ERRCODE_CONNECTION_EXCEPTION), errmsg("could not connect to SPI")));
 
 	/* Lock down search_path */
 	int save_nestlevel = NewGUCNestLevel();
@@ -1093,7 +1093,7 @@ ts_telemetry_connect(const char *host, const char *service)
 			conn = NULL;
 
 			ereport(NOTICE,
-					(errcode(ERRCODE_INTERNAL_ERROR),
+					(errcode(ERRCODE_CONNECTION_FAILURE),
 					 errmsg("telemetry could not connect to \"%s\"", host),
 					 errdetail("%s", errstr)));
 		}

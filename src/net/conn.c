@@ -55,7 +55,7 @@ ts_connection_create(ConnectionType type)
 	if (NULL != conn->ops->init)
 		if (conn->ops->init(conn) < 0)
 			ereport(ERROR,
-					(errcode(ERRCODE_INTERNAL_ERROR),
+					(errcode(ERRCODE_CONNECTION_FAILURE),
 					 errmsg("%s connection could not be initialized", conn_names[type])));
 
 	return conn;

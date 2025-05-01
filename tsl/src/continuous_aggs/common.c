@@ -481,7 +481,9 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 	}
 
 	if (!found)
-		elog(ERROR, "continuous aggregate view must include a valid time bucket function");
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("continuous aggregate view must include a valid time bucket function")));
 }
 
 /*

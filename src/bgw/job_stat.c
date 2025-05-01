@@ -12,6 +12,7 @@
 #include <utils/fmgrprotos.h>
 #include <utils/resowner.h>
 
+#include "errors.h"
 #include "guc.h"
 #include "job_stat.h"
 #include "job_stat_history.h"
@@ -413,7 +414,7 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 		ErrorData *errdata = CopyErrorData();
 		FlushErrorState();
 		ereport(LOG,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_UNEXPECTED),
 				 errmsg("could not calculate next start on failure: resetting value"),
 				 errdetail("Error: %s.", errdata->message)));
 		FreeErrorData(errdata);

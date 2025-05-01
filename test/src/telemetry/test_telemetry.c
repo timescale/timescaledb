@@ -263,7 +263,7 @@ ts_test_telemetry(PG_FUNCTION_ARGS)
 		ts_connection_destroy(conn);
 
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_CONNECTION_FAILURE),
 				 errmsg("could not make a connection to %s://%s", servname, host),
 				 errdetail("%s", errstr)));
 	}

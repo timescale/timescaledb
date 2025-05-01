@@ -797,7 +797,9 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 			SetUserIdAndSecContext(saved_uid, sec_ctx);
 	}
 	else
-		elog(ERROR, "invalid relkind \"%c\" when creating chunk", chunk->relkind);
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid relkind \"%c\" when creating chunk", chunk->relkind)));
 
 	table_close(rel, AccessShareLock);
 
@@ -863,7 +865,7 @@ chunk_create_object(const Hypertable *ht, Hypercube *cube, const char *schema_na
 					   chunk->fd.id);
 
 		if (len >= NAMEDATALEN)
-			elog(ERROR, "chunk table name too long");
+			ereport(ERROR, (errcode(ERRCODE_NAME_TOO_LONG), errmsg("chunk table name too long")));
 	}
 	else
 		namestrcpy(&chunk->fd.table_name, table_name);
@@ -1613,7 +1615,9 @@ chunk_create_from_stub(ChunkStubScanCtx *stubctx)
 	}
 
 	if (num_found != 1)
-		elog(ERROR, "no chunk found with ID %d", stubctx->stub->id);
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("no chunk found with ID %d", stubctx->stub->id)));
 
 	Assert(NULL != stubctx->chunk);
 
@@ -2162,7 +2166,9 @@ get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than, Mem
 				 errhint("The start of the time range must be before the end.")));
 
 	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
-		elog(ERROR, "invalid operation on compressed hypertable");
+		ereport(ERROR,
+				(errcode(ERRCODE_DATA_EXCEPTION),
+				 errmsg("invalid operation on compressed hypertable")));
 
 	start_strategy = (newer_than == PG_INT64_MIN) ? InvalidStrategy : BTGreaterEqualStrategyNumber;
 	end_strategy = (older_than == PG_INT64_MAX) ? InvalidStrategy : BTLessStrategyNumber;
@@ -2409,7 +2415,9 @@ chunk_scan_find(int indexid, ScanKeyData scankey[], int nkeys, MemoryContext mct
 			ASSERT_IS_VALID_CHUNK(chunk);
 			break;
 		default:
-			elog(ERROR, "expected a single chunk, found %d", num_found);
+			ereport(ERROR,
+					(errcode(ERRCODE_DATA_EXCEPTION),
+					 errmsg("expected a single chunk, found %d", num_found)));
 	}
 
 	return chunk;
@@ -3173,7 +3181,9 @@ chunk_recreate_constraint(ChunkScanCtx *ctx, ChunkStub *stub)
 	Chunk *chunk = chunk_create_from_stub(&stubctx);
 
 	if (stubctx.is_dropped)
-		elog(ERROR, "should not be recreating constraints on dropped chunks");
+		ereport(ERROR,
+				(errcode(ERRCODE_DATA_EXCEPTION),
+				 errmsg("should not be recreating constraints on dropped chunks")));
 
 	ts_chunk_constraints_recreate(ctx->ht, chunk);
 
@@ -3288,7 +3298,7 @@ lock_chunk_tuple(int32 chunk_id, ItemPointer tid, FormData_chunk *form)
 			else
 			{
 				ereport(ERROR,
-						(errcode(ERRCODE_INTERNAL_ERROR),
+						(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
 						 errmsg("unable to lock chunk catalog tuple, lock result is %d for chunk "
 								"ID (%d)",
 								ti->lockresult,
@@ -3403,7 +3413,7 @@ ts_chunk_clear_status(Chunk *chunk, int32 status)
 	{
 		/* chunk in frozen state cannot be modified */
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot modify frozen chunk status"),
 				 errdetail("chunk id = %d attempt to clear status %d , current status %x ",
 						   chunk->fd.id,
@@ -3438,7 +3448,7 @@ ts_chunk_add_status(Chunk *chunk, int32 status)
 	{
 		/* chunk in frozen state cannot be modified */
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot modify frozen chunk status"),
 				 errdetail("chunk id = %d attempt to set status %d , current status %x ",
 						   chunk->fd.id,
@@ -3457,7 +3467,7 @@ ts_chunk_add_status(Chunk *chunk, int32 status)
 	{
 		/* chunk in frozen state cannot be modified */
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot modify frozen chunk status"),
 				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
 						   chunk->fd.id,
@@ -3490,7 +3500,7 @@ ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id)
 	{
 		/* chunk in frozen state cannot be modified */
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot modify frozen chunk status"),
 				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
 						   chunk->fd.id,
@@ -3510,7 +3520,7 @@ ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id)
 	{
 		/* chunk in frozen state cannot be modified */
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot modify frozen chunk status"),
 				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
 						   chunk->fd.id,
@@ -3540,7 +3550,7 @@ ts_chunk_clear_compressed_chunk(Chunk *chunk)
 	{
 		/* chunk in frozen state cannot be modified */
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot modify frozen chunk status"),
 				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
 						   chunk->fd.id,
@@ -3560,7 +3570,7 @@ ts_chunk_clear_compressed_chunk(Chunk *chunk)
 	{
 		/* chunk in frozen state cannot be modified */
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot modify frozen chunk status"),
 				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
 						   chunk->fd.id,
@@ -4100,7 +4110,9 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
 
 	if (!time_dim)
-		elog(ERROR, "hypertable has no open partitioning dimension");
+		ereport(ERROR,
+				(errcode(ERRCODE_DATA_EXCEPTION),
+				 errmsg("hypertable has no open partitioning dimension")));
 
 	time_type = ts_dimension_get_partition_type(time_dim);
 
@@ -4371,10 +4383,11 @@ ts_chunk_validate_chunk_status_for_operation(const Chunk *chunk, ChunkOperation 
 
 			default:
 				if (throw_error)
-					elog(ERROR,
-						 "%s not permitted on tiered chunk \"%s\" ",
-						 get_chunk_operation_str(cmd),
-						 get_rel_name(chunk_relid));
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("%s not permitted on tiered chunk \"%s\" ",
+									get_chunk_operation_str(cmd),
+									get_rel_name(chunk_relid))));
 				return false;
 				break;
 		}
@@ -4394,10 +4407,12 @@ ts_chunk_validate_chunk_status_for_operation(const Chunk *chunk, ChunkOperation 
 			case CHUNK_DROP:
 			{
 				if (throw_error)
-					elog(ERROR,
-						 "%s not permitted on frozen chunk \"%s\" ",
-						 get_chunk_operation_str(cmd),
-						 get_rel_name(chunk_relid));
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("%s not permitted on frozen chunk \"%s\" ",
+									get_chunk_operation_str(cmd),
+									get_rel_name(chunk_relid))));
+
 				return false;
 				break;
 			}
@@ -4582,8 +4597,11 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 
 	Assert(get_rel_relkind(relid) == RELKIND_FOREIGN_TABLE);
 	if (hs->num_dimensions > 1)
-		elog(ERROR,
-			 "cannot attach a  foreign table to a hypertable that has more than 1 dimension");
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot attach a foreign table to a hypertable that has more than 1 "
+						"dimension")));
+
 	/* Create a new chunk based on the hypercube */
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	chunk = ts_chunk_create_base(ts_catalog_table_next_seq_id(catalog, CHUNK),
@@ -4649,7 +4667,8 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 
 	if (chunk->hypertable_relid != merge_chunk->hypertable_relid)
 		ereport(ERROR,
-				(errmsg("cannot merge chunks from different hypertables"),
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot merge chunks from different hypertables"),
 				 errhint("chunk 1: \"%s\", chunk 2: \"%s\"",
 						 get_rel_name(chunk->table_id),
 						 get_rel_name(merge_chunk->table_id))));
@@ -4666,7 +4685,8 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 		{
 			/* If the slices do not match (except on time dimension), we cannot merge the chunks. */
 			ereport(ERROR,
-					(errmsg("cannot merge chunks with different partitioning schemas"),
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot merge chunks with different partitioning schemas"),
 					 errhint("chunk 1: \"%s\", chunk 2: \"%s\" have different slices on "
 							 "dimension ID %d",
 							 get_rel_name(chunk->table_id),
@@ -4677,7 +4697,8 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 
 	if (!dimension_slice_found)
 		ereport(ERROR,
-				(errmsg("cannot find slice for merging dimension"),
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("cannot find slice for merging dimension"),
 				 errhint("chunk 1: \"%s\", chunk 2: \"%s\", dimension ID %d",
 						 get_rel_name(chunk->table_id),
 						 get_rel_name(merge_chunk->table_id),
@@ -4685,7 +4706,8 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 
 	if (slice->fd.range_end != merge_slice->fd.range_start)
 		ereport(ERROR,
-				(errmsg("cannot merge non-adjacent chunks over supplied dimension"),
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot merge non-adjacent chunks over supplied dimension"),
 				 errhint("chunk 1: \"%s\", chunk 2: \"%s\", dimension ID %d",
 						 get_rel_name(chunk->table_id),
 						 get_rel_name(merge_chunk->table_id),
@@ -4699,7 +4721,8 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 	 */
 	if (num_ccs <= 0)
 		ereport(ERROR,
-				(errmsg("missing chunk constraint for dimension slice"),
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("missing chunk constraint for dimension slice"),
 				 errhint("chunk: \"%s\", slice ID %d",
 						 get_rel_name(chunk->table_id),
 						 slice->fd.id)));
@@ -4746,7 +4769,8 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 
 	if (num_ccs <= 0)
 		ereport(ERROR,
-				(errmsg("missing chunk constraint for merged dimension slice"),
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("missing chunk constraint for merged dimension slice"),
 				 errhint("chunk: \"%s\", slice ID %d",
 						 get_rel_name(chunk->table_id),
 						 new_slice->fd.id)));
@@ -4816,7 +4840,9 @@ ts_chunk_attach_osm_table_chunk(PG_FUNCTION_ARGS)
 		if (!name)
 			ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("invalid Oid")));
 		else
-			elog(ERROR, "\"%s\" is not a hypertable", name);
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("\"%s\" is not a hypertable", name)));
 	}
 
 	if (get_rel_relkind(ftable_relid) == RELKIND_FOREIGN_TABLE)

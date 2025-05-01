@@ -223,7 +223,7 @@ get_hypertable_or_cagg_name(Hypertable *ht, Name objname)
 	else
 	{
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_DATA_EXCEPTION),
 				 errmsg("unexpected hypertable status for %s %d",
 						NameStr(ht->fd.table_name),
 						status)));
@@ -254,14 +254,13 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 	compress_ht = ts_hypertable_get_by_id(srcht->fd.compressed_hypertable_id);
 	if (compress_ht == NULL)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("missing columnstore-enabled hypertable")));
+				(errcode(ERRCODE_TS_UNEXPECTED), errmsg("missing columnstore-enabled hypertable")));
 	/* user has to be the owner of the compression table too */
 	ts_hypertable_permissions_check(compress_ht->main_table_relid, GetUserId());
 
 	if (!srcht->space) /* something is wrong */
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing hyperspace for hypertable")));
+				(errcode(ERRCODE_TS_UNEXPECTED), errmsg("missing hyperspace for hypertable")));
 	/* refetch the srcchunk with all attributes filled in */
 	srcchunk = ts_chunk_get_by_relid(chunk_relid, true);
 	ts_chunk_validate_chunk_status_for_operation(srcchunk, CHUNK_COMPRESS, true);
@@ -604,7 +603,7 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 
 	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(uncompressed_hypertable))
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_UNEXPECTED),
 				 errmsg(
 					 "convert_to_rowstore must not be called on the internal columnstore chunk")));
 
@@ -612,8 +611,7 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 		ts_hypertable_get_by_id(uncompressed_hypertable->fd.compressed_hypertable_id);
 	if (compressed_hypertable == NULL)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("missing columnstore-enabled hypertable")));
+				(errcode(ERRCODE_TS_UNEXPECTED), errmsg("missing columnstore-enabled hypertable")));
 
 	if (uncompressed_chunk->fd.hypertable_id != uncompressed_hypertable->fd.id)
 		elog(ERROR, "hypertable and chunk do not match");
@@ -1029,8 +1027,7 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 
 	if (!ht->fd.compressed_hypertable_id)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("missing columnstore-enabled hypertable")));
+				(errcode(ERRCODE_TS_UNEXPECTED), errmsg("missing columnstore-enabled hypertable")));
 
 	if (ts_is_hypercore_am(uncompressed_chunk->amoid))
 		set_access_method(uncompressed_chunk_id, "heap");

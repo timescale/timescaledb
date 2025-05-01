@@ -734,7 +734,7 @@ ts_get_appendrelinfo(PlannerInfo *root, Index rti, bool missing_ok)
 			return root->append_rel_array[rti];
 		if (!missing_ok)
 			ereport(ERROR,
-					(errcode(ERRCODE_INTERNAL_ERROR),
+					(errcode(ERRCODE_DATA_EXCEPTION),
 					 errmsg("no appendrelinfo found for index %d", rti)));
 		return NULL;
 	}
@@ -747,7 +747,7 @@ ts_get_appendrelinfo(PlannerInfo *root, Index rti, bool missing_ok)
 	}
 	if (!missing_ok)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_DATA_EXCEPTION),
 				 errmsg("no appendrelinfo found for index %d", rti)));
 	return NULL;
 }
