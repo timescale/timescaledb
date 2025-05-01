@@ -121,6 +121,7 @@ static const struct config_enum_entry compress_truncate_behaviour_options[] = {
 	{ "truncate_only", COMPRESS_TRUNCATE_ONLY, false },
 	{ "truncate_or_delete", COMPRESS_TRUNCATE_OR_DELETE, false },
 	{ "truncate_disabled", COMPRESS_TRUNCATE_DISABLED, false },
+	{ NULL, 0, false }
 };
 
 bool ts_guc_enable_deprecation_warnings = true;
