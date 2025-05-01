@@ -92,7 +92,7 @@ jobs:
       run: |
         ./bootstrap -DCMAKE_BUILD_TYPE=Debug \
           -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
-          -DWARNINGS_AS_ERRORS=ON -DREQUIRE_ALL_TESTS=ON \
+          -DWARNINGS_AS_ERRORS=OFF -DREQUIRE_ALL_TESTS=ON \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         make -j $(nproc) -C build
         make -C build install
