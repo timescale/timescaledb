@@ -290,7 +290,7 @@ delta_delta_compressor_alloc(void)
 {
 	DeltaDeltaCompressor *compressor = palloc0(sizeof(*compressor));
 	simple8brle_compressor_init(&compressor->delta_delta);
-	simple8brle_compressor_init(&compressor->nulls);
+	simple8brle_compressor_init_zero(&compressor->nulls);
 	return compressor;
 }
 
@@ -375,7 +375,29 @@ tsl_deltadelta_compressor_finish(PG_FUNCTION_ARGS)
 void
 delta_delta_compressor_append_null(DeltaDeltaCompressor *compressor)
 {
-	compressor->has_nulls = true;
+	if (!compressor->has_nulls)
+	{
+		/*
+		 * So far no nulls appeared, this is the first one so
+		 * this is time to initialize the null bits
+		 */
+		compressor->has_nulls = true;
+		uint16 elements_so_far = compressor->delta_delta.num_elements + compressor->delta_delta.num_uncompressed_elements;
+
+		if (elements_so_far > 0)
+		{
+			/* Add as many non-nulls as we have seen so far */
+			simple8brle_compressor_init_bits(
+				&compressor->nulls,
+				elements_so_far,
+				0);
+		}
+		else
+		{
+			/* Need to initialze the null compressor */
+			simple8brle_compressor_init(&compressor->nulls);
+		}
+	}
 	simple8brle_compressor_append(&compressor->nulls, 1);
 }
 
@@ -405,7 +427,8 @@ delta_delta_compressor_append_value(DeltaDeltaCompressor *compressor, int64 next
 
 	/* step 3: simple8b/RTE */
 	simple8brle_compressor_append(&compressor->delta_delta, encoded);
-	simple8brle_compressor_append(&compressor->nulls, 0);
+	if (compressor->has_nulls)
+		simple8brle_compressor_append(&compressor->nulls, 0);
 }
 
 /**********************************************************************************/

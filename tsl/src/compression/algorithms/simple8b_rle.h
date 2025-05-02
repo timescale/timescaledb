@@ -136,6 +136,9 @@ typedef struct Simple8bRleDecompressResult
 } Simple8bRleDecompressResult;
 
 static inline void simple8brle_compressor_init(Simple8bRleCompressor *compressor);
+static inline void simple8brle_compressor_init_zero(Simple8bRleCompressor *compressor);
+static inline void simple8brle_compressor_init_bits(Simple8bRleCompressor *compressor, uint16 num_bits, bool value);
+
 static inline Simple8bRleSerialized *
 simple8brle_compressor_finish(Simple8bRleCompressor *compressor);
 static inline void simple8brle_compressor_append(Simple8bRleCompressor *compressor, uint64 val);
@@ -318,6 +321,54 @@ simple8brle_compressor_init(Simple8bRleCompressor *compressor)
 				   /* expected_bits = */ (GLOBAL_MAX_ROWS_PER_COMPRESSION *
 										  SIMPLE8B_BITS_PER_SELECTOR) /
 					   expected_compression_ratio);
+}
+
+static void
+simple8brle_compressor_init_zero(Simple8bRleCompressor *compressor)
+{
+	memset(compressor, 0, sizeof(*compressor));
+}
+
+inline void
+simple8brle_compressor_init_bits(Simple8bRleCompressor *compressor, uint16 num_bits, bool value)
+{
+	/*
+	 * This function is used to allocate the compressor with a specific number of
+	 * bits. This is used in a specific scenario where the compressor is used to
+	 * store NULL/validity bitmaps. In this case all values are bits and it offers
+	 * a few simplifications:
+	 * - we can place an upper bound on memory we need to store the bitmap
+	 * - we don't need to check the size of the values on insertion
+	 */
+	Assert(compressor->num_elements == 0);
+	Assert(compressor->num_uncompressed_elements == 0);
+
+	Assert(num_bits > 0 && num_bits <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+	int n_expected_blocks = 1 + (TARGET_COMPRESSED_BATCH_SIZE - num_bits) / 64;
+	uint64_vec_init(&compressor->compressed_data,
+					 CurrentMemoryContext,
+					 n_expected_blocks);
+	bit_array_init(&compressor->selectors,
+				   /* expected_bits = */ n_expected_blocks * SIMPLE8B_BITS_PER_SELECTOR);
+
+	if (num_bits < 64)
+	{
+		/* Add the bits to the uncompressed elements */
+		for (int i = 0; i < num_bits; i++)
+		{
+			compressor->uncompressed_elements[i] = value;
+			compressor->num_uncompressed_elements++;
+		}
+	}
+	else
+	{
+		/* Generate an RLE block and add it */
+		Assert(compressor->last_block_set == false);
+		simple8brle_compressor_push_block(
+			compressor,
+			simple8brle_block_create_rle(num_bits, (uint64)value));
+		compressor->num_elements += num_bits;
+	}
 }
 
 static void

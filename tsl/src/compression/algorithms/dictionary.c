@@ -167,14 +167,36 @@ dictionary_compressor_alloc(Oid type)
 	compressor->dictionary_items = dictionary_hash_alloc(tentry);
 
 	simple8brle_compressor_init(&compressor->dictionary_indexes);
-	simple8brle_compressor_init(&compressor->nulls);
+	simple8brle_compressor_init_zero(&compressor->nulls);
 	return compressor;
 }
 
 void
 dictionary_compressor_append_null(DictionaryCompressor *compressor)
 {
-	compressor->has_nulls = true;
+	if (!compressor->has_nulls)
+	{
+		/*
+		 * So far no nulls appeared, this is the first one so
+		 * this is time to initialize the null bits
+		 */
+		compressor->has_nulls = true;
+		uint16 elements_so_far = compressor->dictionary_indexes.num_elements + compressor->dictionary_indexes.num_uncompressed_elements;
+
+		if (elements_so_far > 0)
+		{
+			/* Add as many non-nulls as we have seen so far */
+			simple8brle_compressor_init_bits(
+				&compressor->nulls,
+				elements_so_far,
+				0);
+		}
+		else
+		{
+			/* Need to initialze the null compressor */
+			simple8brle_compressor_init(&compressor->nulls);
+		}
+	}
 	simple8brle_compressor_append(&compressor->nulls, 1);
 }
 
@@ -198,7 +220,8 @@ dictionary_compressor_append(DictionaryCompressor *compressor, Datum val)
 	}
 
 	simple8brle_compressor_append(&compressor->dictionary_indexes, dict_item->index);
-	simple8brle_compressor_append(&compressor->nulls, 0);
+	if (compressor->has_nulls)
+		simple8brle_compressor_append(&compressor->nulls, 0);
 }
 
 typedef struct DictionaryCompressorSerializationInfo

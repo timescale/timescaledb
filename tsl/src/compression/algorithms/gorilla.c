@@ -274,7 +274,7 @@ gorilla_compressor_alloc(void)
 	 */
 	bit_array_init(&compressor->xors,
 				   /* expected_bits = */ GLOBAL_MAX_ROWS_PER_COMPRESSION * 12);
-	simple8brle_compressor_init(&compressor->nulls);
+	simple8brle_compressor_init_zero(&compressor->nulls);
 	compressor->has_nulls = false;
 	compressor->prev_leading_zeroes = 0;
 	compressor->prev_trailing_zeros = 0;
@@ -334,8 +334,30 @@ tsl_gorilla_compressor_finish(PG_FUNCTION_ARGS)
 void
 gorilla_compressor_append_null(GorillaCompressor *compressor)
 {
+	if (!compressor->has_nulls)
+	{
+		/*
+		 * So far no nulls appeared, this is the first one so
+		 * this is time to initialize the null bits
+		 */
+		compressor->has_nulls = true;
+		uint16 elements_so_far = compressor->tag0s.num_elements + compressor->tag0s.num_uncompressed_elements;
+
+		if (elements_so_far > 0)
+		{
+			/* Add as many non-nulls as we have seen so far */
+			simple8brle_compressor_init_bits(
+				&compressor->nulls,
+				elements_so_far,
+				0);
+		}
+		else
+		{
+			/* Need to initialze the null compressor */
+			simple8brle_compressor_init(&compressor->nulls);
+		}
+	}
 	simple8brle_compressor_append(&compressor->nulls, 1);
-	compressor->has_nulls = true;
 }
 
 void
@@ -343,7 +365,8 @@ gorilla_compressor_append_value(GorillaCompressor *compressor, uint64 val)
 {
 	bool has_values;
 	uint64 xor = compressor->prev_val ^ val;
-	simple8brle_compressor_append(&compressor->nulls, 0);
+	if (compressor->has_nulls)
+		simple8brle_compressor_append(&compressor->nulls, 0);
 
 	/* for the first value we store the bitsize even if the xor is all zeroes,
 	 * this ensures that the bits-per-xor isn't empty, and that we can calculate
@@ -473,7 +496,6 @@ gorilla_compressor_finish(GorillaCompressor *compressor)
 	Assert(data.num_bits_used_per_xor != NULL);
 	data.xors = compressor->xors;
 	data.nulls = simple8brle_compressor_finish(&compressor->nulls);
-	Assert(compressor->has_nulls || data.nulls != NULL);
 
 	return compressed_gorilla_data_serialize(&data);
 }

@@ -174,7 +174,7 @@ array_compressor_alloc(Oid type_to_compress)
 	ArrayCompressor *compressor = palloc(sizeof(*compressor));
 	compressor->has_nulls = false;
 
-	simple8brle_compressor_init(&compressor->nulls);
+	simple8brle_compressor_init_zero(&compressor->nulls);
 	simple8brle_compressor_init(&compressor->sizes);
 	char_vec_init(&compressor->data, CurrentMemoryContext, 0);
 
@@ -186,7 +186,29 @@ array_compressor_alloc(Oid type_to_compress)
 void
 array_compressor_append_null(ArrayCompressor *compressor)
 {
-	compressor->has_nulls = true;
+	if (!compressor->has_nulls)
+	{
+		/*
+		 * So far no nulls appeared, this is the first one so
+		 * this is time to initialize the null bits
+		 */
+		compressor->has_nulls = true;
+		uint16 elements_so_far = compressor->sizes.num_elements + compressor->sizes.num_uncompressed_elements;
+
+		if (elements_so_far > 0)
+		{
+			/* Add as many non-nulls as we have seen so far */
+			simple8brle_compressor_init_bits(
+				&compressor->nulls,
+				elements_so_far,
+				0);
+		}
+		else
+		{
+			/* Need to initialze the null compressor */
+			simple8brle_compressor_init(&compressor->nulls);
+		}
+	}
 	simple8brle_compressor_append(&compressor->nulls, 1);
 }
 
@@ -195,7 +217,9 @@ array_compressor_append(ArrayCompressor *compressor, Datum val)
 {
 	Size datum_size_and_align;
 	char *start_ptr;
-	simple8brle_compressor_append(&compressor->nulls, 0);
+	if (compressor->has_nulls)
+		simple8brle_compressor_append(&compressor->nulls, 0);
+
 	if (datum_serializer_value_may_be_toasted(compressor->serializer))
 		val = PointerGetDatum(PG_DETOAST_DATUM_PACKED(val));
 

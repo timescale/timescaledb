@@ -71,7 +71,7 @@ bool_compressor_alloc(void)
 {
 	BoolCompressor *compressor = palloc0(sizeof(*compressor));
 	simple8brle_compressor_init(&compressor->values);
-	simple8brle_compressor_init(&compressor->validity_bitmap);
+	simple8brle_compressor_init_zero(&compressor->validity_bitmap);
 	return compressor;
 }
 
@@ -84,7 +84,29 @@ bool_compressor_append_null(BoolCompressor *compressor)
 	 * the particular value that goes into the values bitmap doesn't matter, so
 	 * we add the last seen value, not to break the RLE sequences.
 	 */
-	compressor->has_nulls = true;
+	if (!compressor->has_nulls)
+	{
+		/*
+		 * So far no nulls appeared, this is the first one so
+		 * this is time to initialize the null bits
+		 */
+		compressor->has_nulls = true;
+		uint16 elements_so_far = compressor->values.num_elements + compressor->values.num_uncompressed_elements;
+
+		if (elements_so_far > 0)
+		{
+			/* Add as many valid values as we have seen so far */
+			simple8brle_compressor_init_bits(
+				&compressor->validity_bitmap,
+				elements_so_far,
+				1);
+		}
+		else
+		{
+			/* Need to initialze the null compressor */
+			simple8brle_compressor_init(&compressor->validity_bitmap);
+		}
+	}
 	simple8brle_compressor_append(&compressor->values, compressor->last_value);
 	simple8brle_compressor_append(&compressor->validity_bitmap, 0);
 }
@@ -94,7 +116,8 @@ bool_compressor_append_value(BoolCompressor *compressor, bool next_val)
 {
 	compressor->last_value = next_val;
 	simple8brle_compressor_append(&compressor->values, next_val);
-	simple8brle_compressor_append(&compressor->validity_bitmap, 1);
+	if (compressor->has_nulls)
+		simple8brle_compressor_append(&compressor->validity_bitmap, 1);
 }
 
 extern void *
