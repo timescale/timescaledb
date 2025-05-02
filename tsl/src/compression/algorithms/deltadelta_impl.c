@@ -33,11 +33,15 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	uint32 num_deltas;
 	const uint64 *deltas_zigzag = simple8brle_decompress_all_uint64(deltas_compressed, &num_deltas);
 
-	Simple8bRleBitmap nulls = { 0 };
+	Simple8bRleBitArray validity_bits = { 0 };
 	if (has_nulls)
 	{
 		Simple8bRleSerialized *nulls_compressed = bytes_deserialize_simple8b_and_advance(&si);
-		nulls = simple8brle_bitmap_decompress(nulls_compressed);
+		MemoryContext old_context = MemoryContextSwitchTo(dest_mctx);
+		/* Decompress the nulls */
+		validity_bits =
+			simple8brle_bitarray_decompress(nulls_compressed, /* inverted*/ true);
+		MemoryContextSwitchTo(old_context);
 	}
 
 	/*
@@ -46,7 +50,7 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	 */
 #define INNER_LOOP_SIZE_LOG2 3
 #define INNER_LOOP_SIZE (1 << INNER_LOOP_SIZE_LOG2)
-	const uint32 n_total = has_nulls ? nulls.num_elements : num_deltas;
+	const uint32 n_total = has_nulls ? validity_bits.num_elements : num_deltas;
 	const uint32 n_total_padded = pad_to_multiple(INNER_LOOP_SIZE, n_total);
 	const uint32 n_notnull = num_deltas;
 	const uint32 n_notnull_padded = pad_to_multiple(INNER_LOOP_SIZE, n_notnull);
@@ -91,40 +95,16 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	uint64 *restrict validity_bitmap = NULL;
 	if (has_nulls)
 	{
-		/* Now move the data to account for nulls, and fill the validity bitmap. */
-		const int validity_bitmap_bytes = sizeof(uint64) * ((n_total + 64 - 1) / 64);
-		validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
-
-		/*
-		 * First, mark all data as valid, we will fill the nulls later if needed.
-		 * Note that the validity bitmap size is a multiple of 64 bits. We have to
-		 * fill the tail bits with zeros, because the corresponding elements are not
-		 * valid.
-		 *
-		 */
-		memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
-		if (n_total % 64)
-		{
-			const uint64 tail_mask = ~0ULL >> (64 - n_total % 64);
-			validity_bitmap[n_total / 64] &= tail_mask;
-		}
-
-		/*
-		 * The number of not-null elements we have must be consistent with the
-		 * nulls bitmap.
-		 */
-		CheckCompressedData(n_notnull + simple8brle_bitmap_num_ones(&nulls) == n_total);
+		validity_bitmap = validity_bits.data;
+		CheckCompressedData(n_notnull == validity_bits.num_ones);
+		CheckCompressedData(n_total == validity_bits.num_elements);
 
 		int current_notnull_element = n_notnull - 1;
 		for (int i = n_total - 1; i >= 0; i--)
 		{
 			Assert(i >= current_notnull_element);
 
-			if (simple8brle_bitmap_get_at(&nulls, i))
-			{
-				arrow_set_row_validity(validity_bitmap, i, false);
-			}
-			else
+			if (arrow_row_is_valid(validity_bitmap, i))
 			{
 				Assert(current_notnull_element >= 0);
 				decompressed_values[i] = decompressed_values[current_notnull_element];

@@ -24,7 +24,7 @@
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
 #include "simple8b_rle.h"
-#include "simple8b_rle_bitmap.h"
+#include "simple8b_rle_bitarray.h"
 
 static uint64 zig_zag_encode(uint64 value);
 static uint64 zig_zag_decode(uint64 value);

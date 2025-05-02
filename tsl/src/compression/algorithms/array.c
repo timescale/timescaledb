@@ -19,7 +19,6 @@
 #include "datum_serialize.h"
 #include "simple8b_rle.h"
 #include "simple8b_rle_bitarray.h"
-#include "simple8b_rle_bitmap.h"
 
 #include "compression/arrow_c_data_interface.h"
 
@@ -687,29 +686,15 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 	uint64 *restrict validity_bitmap = NULL;
 	if (has_nulls)
 	{
-		const int validity_bitmap_bytes = sizeof(uint64) * (pad_to_multiple(64, n_total) / 64);
-		validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
+		MemoryContext old_context = MemoryContextSwitchTo(dest_mctx);
+		/* Decompress the nulls */
+		Simple8bRleBitArray validity_bits =
+			simple8brle_bitarray_decompress(nulls_serialized, /* inverted*/ true);
+		validity_bitmap = validity_bits.data;
+		MemoryContextSwitchTo(old_context);
 
-		/*
-		 * First, mark all data as valid, we will fill the nulls later if needed.
-		 * Note that the validity bitmap size is a multiple of 64 bits. We have to
-		 * fill the tail bits with zeros, because the corresponding elements are not
-		 * valid.
-		 *
-		 */
-		memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
-		if (n_total % 64)
-		{
-			const uint64 tail_mask = ~0ULL >> (64 - n_total % 64);
-			validity_bitmap[n_total / 64] &= tail_mask;
-		}
-
-		/*
-		 * We have decompressed the data with nulls skipped, reshuffle it
-		 * according to the nulls bitmap.
-		 */
-		const Simple8bRleBitmap nulls = simple8brle_bitmap_decompress(nulls_serialized);
-		CheckCompressedData(n_notnull + simple8brle_bitmap_num_ones(&nulls) == n_total);
+		CheckCompressedData(n_notnull == validity_bits.num_ones);
+		CheckCompressedData(n_total == validity_bits.num_elements);
 
 		int current_notnull_element = n_notnull - 1;
 		for (int i = n_total - 1; i >= 0; i--)
@@ -729,11 +714,7 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 			Assert(current_notnull_element + 1 >= 0);
 			offsets[i + 1] = offsets[current_notnull_element + 1];
 
-			if (simple8brle_bitmap_get_at(&nulls, i))
-			{
-				arrow_set_row_validity(validity_bitmap, i, false);
-			}
-			else
+			if (arrow_row_is_valid(validity_bitmap, i))
 			{
 				Assert(current_notnull_element >= 0);
 				current_notnull_element--;

@@ -27,7 +27,6 @@
 #include "dictionary_hash.h"
 #include "simple8b_rle.h"
 #include "simple8b_rle_bitarray.h"
-#include "simple8b_rle_bitmap.h"
 
 /*
  * A compression bitmap is stored as
@@ -571,30 +570,15 @@ tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 	uint64 *restrict validity_bitmap = NULL;
 	if (header->has_nulls)
 	{
-		/* Fill validity and indices of the array elements, reshuffling for nulls if needed. */
-		const int validity_bitmap_bytes = sizeof(uint64) * pad_to_multiple(64, n_total) / 64;
-		validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
+		MemoryContext old_context = MemoryContextSwitchTo(dest_mctx);
+		/* Decompress the nulls */
+		Simple8bRleBitArray validity_bits =
+			simple8brle_bitarray_decompress(nulls_serialized, /* inverted*/ true);
+		validity_bitmap = validity_bits.data;
+		MemoryContextSwitchTo(old_context);
 
-		/*
-		 * First, mark all data as valid, we will fill the nulls later if needed.
-		 * Note that the validity bitmap size is a multiple of 64 bits. We have to
-		 * fill the tail bits with zeros, because the corresponding elements are not
-		 * valid.
-		 *
-		 */
-		memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
-		if (n_total % 64)
-		{
-			const uint64 tail_mask = ~0ULL >> (64 - n_total % 64);
-			validity_bitmap[n_total / 64] &= tail_mask;
-		}
-
-		/*
-		 * We have decompressed the data with nulls skipped, reshuffle it
-		 * according to the nulls bitmap.
-		 */
-		Simple8bRleBitmap nulls = simple8brle_bitmap_decompress(nulls_serialized);
-		CheckCompressedData(n_notnull + simple8brle_bitmap_num_ones(&nulls) == n_total);
+		CheckCompressedData(n_notnull == validity_bits.num_ones);
+		CheckCompressedData(n_total == validity_bits.num_elements);
 
 		/* current_notnull_element needs to go below 0, so use signed type */
 		int64 current_notnull_element = n_notnull - 1;
@@ -602,9 +586,8 @@ tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 		{
 			Assert(i >= current_notnull_element);
 
-			if (simple8brle_bitmap_get_at(&nulls, i))
+			if (arrow_row_is_valid(validity_bitmap, i) == false)
 			{
-				arrow_set_row_validity(validity_bitmap, i, false);
 				indices[i] = 0;
 			}
 			else
