@@ -15,13 +15,21 @@
 #include <postgres.h>
 #include <funcapi.h>
 #include <utils/typcache.h>
+#include <access/detoast.h>
+#include <common/hashfn.h>
 
 #include "compat/compat.h"
+
+typedef uint32 (*bitwise_hash_func)(Datum key);
+typedef bool (*bitwise_eq_func)(Datum a, Datum b);
 
 typedef struct HashMeta
 {
 	FunctionCallInfo hash_info;
 	FunctionCallInfo eq_info;
+	/* Override the default hash and eq functions */
+	bitwise_hash_func hash_func;
+	bitwise_eq_func eq_func;
 } HashMeta;
 
 typedef struct DictionaryHashItem
@@ -54,6 +62,10 @@ static uint32
 datum_hash(dictionary_hash *tb, Datum key)
 {
 	HashMeta *meta = (HashMeta *) tb->private_data;
+
+	if (meta->hash_func != NULL)
+		return meta->hash_func(key);
+
 	FunctionCallInfo fcinfo = meta->hash_info;
 	Datum value;
 
@@ -70,6 +82,10 @@ static bool
 datum_eq(dictionary_hash *tb, Datum a, Datum b)
 {
 	HashMeta *meta = (HashMeta *) tb->private_data;
+
+	if (meta->eq_func != NULL)
+		return meta->eq_func(a, b);
+
 	FunctionCallInfo fcinfo = meta->eq_info;
 	Datum value;
 
@@ -83,12 +99,39 @@ datum_eq(dictionary_hash *tb, Datum a, Datum b)
 	return DatumGetBool(value);
 }
 
-static dictionary_hash *
-dictionary_hash_alloc(TypeCacheEntry *tentry)
+static inline uint32
+bitwise_datum_hash(Datum key)
 {
-	HashMeta *meta = palloc(sizeof(*meta));
+	Size len = toast_raw_datum_size(key);
+	return hash_any((unsigned char *) VARDATA_ANY(key), len - VARHDRSZ);
+}
+
+static bool
+bitwise_datum_eq(Datum a, Datum b)
+{
+	Size len_a = toast_raw_datum_size(a);
+	Size len_b = toast_raw_datum_size(b);
+
+	if (len_a != len_b)
+		return false;
+
+	return memcmp(VARDATA_ANY(a), VARDATA_ANY(b), len_a - VARHDRSZ) == 0;
+}
+
+static dictionary_hash *
+dictionary_hash_alloc(TypeCacheEntry *tentry, uint32 initial_size)
+{
+	HashMeta *meta = palloc0(sizeof(*meta));
 	Oid collation = InvalidOid;
 	collation = tentry->typcollation;
+
+	if (tentry->typlen == -1)
+	{
+		/* TODO dbeck : comment this */
+		meta->hash_func = bitwise_datum_hash;
+		meta->eq_func = bitwise_datum_eq;
+		return dictionary_create(CurrentMemoryContext, initial_size, meta);
+	}
 
 	if (tentry->hash_proc_finfo.fn_addr == NULL || tentry->eq_opr_finfo.fn_addr == NULL)
 		elog(ERROR,
@@ -106,5 +149,5 @@ dictionary_hash_alloc(TypeCacheEntry *tentry)
 	meta->hash_info = HEAP_FCINFO(2);
 	InitFunctionCallInfoData(*meta->hash_info, &tentry->hash_proc_finfo, 1, collation, NULL, NULL);
 
-	return dictionary_create(CurrentMemoryContext, 10, meta);
+	return dictionary_create(CurrentMemoryContext, initial_size, meta);
 }

@@ -9,7 +9,6 @@
 #include "compression/compression.h"
 #include "simple8b_rle.h"
 #include "simple8b_rle_bitarray.h"
-#include "simple8b_rle_bitmap.h"
 
 typedef struct BoolCompressed
 {
@@ -22,8 +21,8 @@ typedef struct BoolCompressed
 typedef struct BoolDecompressionIterator
 {
 	DecompressionIterator base;
-	Simple8bRleBitmap values;
-	Simple8bRleBitmap validity_bitmap;
+	Simple8bRleBitArray values;
+	Simple8bRleBitArray validity_bitmap;
 	int32 position;
 } BoolDecompressionIterator;
 
@@ -72,8 +71,8 @@ extern BoolCompressor *
 bool_compressor_alloc(void)
 {
 	BoolCompressor *compressor = palloc0(sizeof(*compressor));
-	simple8brle_compressor_init(&compressor->values);
-	simple8brle_compressor_init(&compressor->validity_bitmap);
+	simple8brle_compressor_init(&compressor->values, SIMPLE8B_UNLIMITED_BIT_LIMIT);
+	simple8brle_compressor_init_zero(&compressor->validity_bitmap);
 	return compressor;
 }
 
@@ -86,7 +85,27 @@ bool_compressor_append_null(BoolCompressor *compressor)
 	 * the particular value that goes into the values bitmap doesn't matter, so
 	 * we add the last seen value, not to break the RLE sequences.
 	 */
-	compressor->has_nulls = true;
+	if (!compressor->has_nulls)
+	{
+		/*
+		 * So far no nulls appeared, this is the first one so
+		 * this is time to initialize the null bits
+		 */
+		compressor->has_nulls = true;
+		uint16 elements_so_far =
+			compressor->values.num_elements + compressor->values.num_uncompressed_elements;
+
+		if (elements_so_far > 0)
+		{
+			/* Add as many valid values as we have seen so far */
+			simple8brle_compressor_init_bits(&compressor->validity_bitmap, elements_so_far, 1);
+		}
+		else
+		{
+			/* Need to initialze the null compressor */
+			simple8brle_compressor_init(&compressor->validity_bitmap, /*bit_limit*/ 1);
+		}
+	}
 	simple8brle_compressor_append(&compressor->values, compressor->last_value);
 	simple8brle_compressor_append(&compressor->validity_bitmap, 0);
 	compressor->num_nulls++;
@@ -97,7 +116,8 @@ bool_compressor_append_value(BoolCompressor *compressor, bool next_val)
 {
 	compressor->last_value = next_val;
 	simple8brle_compressor_append(&compressor->values, next_val);
-	simple8brle_compressor_append(&compressor->validity_bitmap, 1);
+	if (compressor->has_nulls)
+		simple8brle_compressor_append(&compressor->validity_bitmap, 1);
 }
 
 extern void *
@@ -138,7 +158,7 @@ bool_decompression_iterator_try_next_forward(DecompressionIterator *iter)
 
 	BoolDecompressionIterator *bool_iter = (BoolDecompressionIterator *) iter;
 
-	if (bool_iter->position >= bool_iter->values.num_elements)
+	if (bool_iter->position >= (int32) bool_iter->values.num_elements)
 		return (DecompressResult){
 			.is_done = true,
 		};
@@ -146,7 +166,7 @@ bool_decompression_iterator_try_next_forward(DecompressionIterator *iter)
 	/* check nulls */
 	if (bool_iter->validity_bitmap.num_elements > 0)
 	{
-		bool is_null = !simple8brle_bitmap_get_at(&bool_iter->validity_bitmap, bool_iter->position);
+		bool is_null = !arrow_row_is_valid(bool_iter->validity_bitmap.data, bool_iter->position);
 		if (is_null)
 		{
 			bool_iter->position++;
@@ -156,7 +176,7 @@ bool_decompression_iterator_try_next_forward(DecompressionIterator *iter)
 		}
 	}
 
-	bool val = simple8brle_bitmap_get_at(&bool_iter->values, bool_iter->position);
+	bool val = arrow_row_is_valid(bool_iter->values.data, bool_iter->position);
 	bool_iter->position++;
 
 	return (DecompressResult){
@@ -191,7 +211,7 @@ bool_decompression_iterator_try_next_reverse(DecompressionIterator *iter)
 	/* check nulls */
 	if (bool_iter->validity_bitmap.num_elements > 0)
 	{
-		bool is_null = !simple8brle_bitmap_get_at(&bool_iter->validity_bitmap, bool_iter->position);
+		bool is_null = !arrow_row_is_valid(bool_iter->validity_bitmap.data, bool_iter->position);
 		if (is_null)
 		{
 			bool_iter->position--;
@@ -201,7 +221,7 @@ bool_decompression_iterator_try_next_reverse(DecompressionIterator *iter)
 		}
 	}
 
-	bool val = simple8brle_bitmap_get_at(&bool_iter->values, bool_iter->position);
+	bool val = arrow_row_is_valid(bool_iter->values.data, bool_iter->position);
 	bool_iter->position--;
 
 	return (DecompressResult){
@@ -480,12 +500,13 @@ decompression_iterator_init(BoolDecompressionIterator *iter, void *compressed, O
 		.position = 0,
 	};
 
-	iter->values = simple8brle_bitmap_decompress(values);
+	iter->values = simple8brle_bitarray_decompress(values, /* inverted*/ false);
 
 	if (has_nulls)
 	{
 		Simple8bRleSerialized *validity_bitmap = bytes_deserialize_simple8b_and_advance(&si);
-		iter->validity_bitmap = simple8brle_bitmap_decompress(validity_bitmap);
+		iter->validity_bitmap =
+			simple8brle_bitarray_decompress(validity_bitmap, /* inverted*/ false);
 		CheckCompressedData(iter->validity_bitmap.num_elements == iter->values.num_elements);
 	}
 
