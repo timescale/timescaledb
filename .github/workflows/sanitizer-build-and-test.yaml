@@ -36,16 +36,16 @@ env:
   # static sanitizer clang LDFLAGS or dynamic sanitizer gcc LDFLAGS
   LDFLAGS: "-fsanitize=address,undefined"
   ASAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_asan.txt
-    detect_odr_violation=0 log_path=${{ github.workspace }}/sanitizer
+    detect_odr_violation=0 log_path=${{ github.workspace }}/sanitizer_logs/sanitizer
     log_exe_name=true print_suppressions=false exitcode=27
     detect_leaks=0 abort_on_error=1
 
   LSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_leak.txt
-    print_suppressions=0 log_path=${{ github.workspace }}/sanitizer
+    print_suppressions=0 log_path=${{ github.workspace }}/sanitizer_logs/sanitizer
     log_exe_name=true print_suppressions=false exitcode=27
 
   UBSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_ub.txt
-    print_stacktrace=1 halt_on_error=1 log_path=${{ github.workspace }}/sanitizer
+    print_stacktrace=1 halt_on_error=1 log_path=${{ github.workspace }}/sanitizer_logs/sanitizer
     log_exe_name=true print_suppressions=false exitcode=27
 
   IGNORES: "bgw_db_scheduler bgw_db_scheduler_fixed"
@@ -96,7 +96,7 @@ jobs:
     # ASAN_OPTIONS, LSAN_OPTIONS, and UBSAN_OPTIONS
     - name: Create sanitizer log directory
       run: |
-        mkdir ${{ github.workspace }}/sanitizer
+        mkdir ${{ github.workspace }}/sanitizer_logs
 
     # we cache the build directory instead of the install directory here
     # because extension installation will write files to install directory
@@ -211,7 +211,7 @@ jobs:
     - name: Show sanitizer logs
       if: always()
       run: |
-        tail -vn +1 sanitizer* || :
+        tail -vn +1 ${{ github.workspace }}/sanitizer_logs/sanitizer* || :
 
     - name: Coredumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
@@ -227,7 +227,7 @@ jobs:
         name: sanitizer logs ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
         # The log_path sanitizer option means "Write logs to 'log_path.pid'".
         # https://github.com/google/sanitizers/wiki/SanitizerCommonFlags
-        path: ${{ github.workspace }}/sanitizer*
+        path: ${{ github.workspace }}/sanitizer_logs/*
 
     - name: Upload test results to the database
       if: always()
