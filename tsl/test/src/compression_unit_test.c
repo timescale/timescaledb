@@ -751,6 +751,7 @@ test_bool_array(bool nulls, int run_length, int expected_size)
 			}
 			else
 			{
+				TestAssertTrue(r.is_null == false);
 				TestAssertTrue(DatumGetBool(r.val) == val);
 				const int16 block = i / 64;
 				const int16 offset = i % 64;
@@ -825,6 +826,7 @@ test_bool_dictionary(bool nulls, int run_length, int expected_size)
 			else
 			{
 				TestAssertTrue(DatumGetBool(r.val) == val);
+				TestAssertTrue(r.is_null == false);
 				const int16 block = i / 64;
 				const int16 offset = i % 64;
 				TestAssertTrue(((bulk_data[block] >> offset) & 1UL) == (int) val);
