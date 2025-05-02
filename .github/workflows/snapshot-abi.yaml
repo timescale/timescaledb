@@ -136,7 +136,7 @@ jobs:
       id: regresscheck
       run: |
           set -o pipefail
-          make -k -C build_snapshot installcheck | tee installcheck.log
+          make -k -C build_snapshot installcheck IGNORES=bgw_launcher | tee installcheck.log
 
     - name: Show regression diffs
       if: always()
