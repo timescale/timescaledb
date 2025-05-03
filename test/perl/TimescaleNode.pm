@@ -56,4 +56,19 @@ sub psql_is
 		"$testname: psql output check");
 }
 
+# remove leading and trailing whitespace
+sub strip
+{
+	my ($str) = @_;
+	$str =~ s/^\s+|\s+$//g;
+	return $str;
+}
+
+sub safe_psql
+{
+	my ($self, $db, $query) = @_;
+	my $psql_out = $self->SUPER::safe_psql($db, $query);
+	return strip($psql_out);
+}
+
 1;
