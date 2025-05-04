@@ -24,7 +24,7 @@
 #include "import/planner.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/chunk_append/transform.h"
-#include "nodes/hypertable_modify.h"
+#include "nodes/modify_hypertable.h"
 #include "nodes/vector_agg.h"
 
 static Sort *make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx, Oid *sortOperators,

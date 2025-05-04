@@ -31,7 +31,7 @@
 #include <nodes/chunk_dispatch/chunk_insert_state.h>
 #include <nodes/decompress_chunk/vector_dict.h>
 #include <nodes/decompress_chunk/vector_predicates.h>
-#include <nodes/hypertable_modify.h>
+#include <nodes/modify_hypertable.h>
 #include <ts_catalog/array_utils.h>
 
 static struct decompress_batches_stats
