@@ -61,6 +61,25 @@ get_input_offset_decompress_chunk(const DecompressChunkState *decompress_state, 
 	return index;
 }
 
+static int
+grouping_column_comparator(const void *a_ptr, const void *b_ptr)
+{
+	const GroupingColumn *a = (GroupingColumn *) a_ptr;
+	const GroupingColumn *b = (GroupingColumn *) b_ptr;
+
+	if (a->value_bytes == b->value_bytes)
+	{
+		return 0;
+	}
+
+	if (a->value_bytes > b->value_bytes)
+	{
+		return -1;
+	}
+
+	return 1;
+}
+
 static void
 get_column_storage_properties_decompress_chunk(const DecompressChunkState *state, int input_offset,
 											   GroupingColumn *result)
@@ -237,6 +256,16 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 			get_column_storage_properties(childstate, col->input_offset, col);
 		}
 	}
+
+	/*
+	 * Sort grouping columns by descending column size, variable size last. This
+	 * helps improve branch predictability and key packing when we use hashed
+	 * serialized multi-column keys.
+	 */
+	qsort(vector_agg_state->grouping_columns,
+		  vector_agg_state->num_grouping_columns,
+		  sizeof(GroupingColumn),
+		  grouping_column_comparator);
 
 	/*
 	 * Create the grouping policy chosen at plan time.

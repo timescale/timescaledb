@@ -21,7 +21,14 @@ typedef struct BatchHashingParams
 	int num_grouping_columns;
 	const CompressedColumnValues *grouping_column_values;
 
-	GroupingPolicyHash *policy;
+	/*
+	 * Whether we have any scalar or nullable grouping columns in the current
+	 * batch. This is used to select the more efficient implementation when we
+	 * have none.
+	 */
+	bool have_scalar_or_nullable_columns;
+
+	GroupingPolicyHash *restrict policy;
 	HashingStrategy *restrict hashing;
 
 	uint32 *restrict result_key_indexes;
@@ -44,6 +51,14 @@ build_batch_hashing_params(GroupingPolicyHash *policy, TupleTableSlot *vector_sl
 	if (policy->num_grouping_columns == 1)
 	{
 		params.single_grouping_column = policy->current_batch_grouping_column_values[0];
+	}
+
+	for (int i = 0; i < policy->num_grouping_columns; i++)
+	{
+		params.have_scalar_or_nullable_columns =
+			params.have_scalar_or_nullable_columns ||
+			(policy->current_batch_grouping_column_values[i].decompression_type == DT_Scalar ||
+			 policy->current_batch_grouping_column_values[i].buffers[0] != NULL);
 	}
 
 	return params;
