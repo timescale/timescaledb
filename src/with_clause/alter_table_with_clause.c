@@ -24,6 +24,10 @@
 #include "alter_table_with_clause.h"
 
 static const WithClauseDefinition alter_table_with_clause_def[] = {
+		[AlterTableFlagChunkTimeInterval] = {
+			.arg_names = {"chunk_time_interval", NULL},
+			 .type_id = TEXTOID,
+		},
 		[AlterTableFlagCompressEnabled] = {
 			.arg_names = {"compress", "columnstore", "enable_columnstore", NULL},
 			.type_id = BOOLOID,

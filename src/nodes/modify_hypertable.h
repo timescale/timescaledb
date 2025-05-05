@@ -10,10 +10,10 @@
 #include <nodes/execnodes.h>
 
 #include "hypertable.h"
-#include "import/ht_hypertable_modify.h"
 
 /* Forward declarations */
 struct ChunkDispatchState;
+struct ModifyTableContext;
 
 typedef struct ModifyHypertablePath
 {
@@ -36,6 +36,7 @@ typedef struct ModifyHypertableState
 	int64 batches_decompressed;
 	int64 batches_filtered;
 	int64 batches_deleted;
+	int64 tuples_deleted;
 } ModifyHypertableState;
 
 extern void ts_modify_hypertable_fixup_tlist(Plan *plan);
@@ -43,6 +44,6 @@ extern Path *ts_modify_hypertable_path_create(PlannerInfo *root, ModifyTablePath
 											  Hypertable *ht, RelOptInfo *input_rel);
 extern List *ts_replace_rowid_vars(PlannerInfo *root, List *tlist, int varno);
 
-extern TupleTableSlot *ExecInsert(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
-								  struct ChunkDispatchState *cds, TupleTableSlot *slot,
-								  bool canSetTag);
+TupleTableSlot *ExecModifyTable(CustomScanState *cs_node, PlanState *pstate);
+TupleTableSlot *ExecInsert(struct ModifyTableContext *context, ResultRelInfo *resultRelInfo,
+						   struct ChunkDispatchState *cds, TupleTableSlot *slot, bool canSetTag);

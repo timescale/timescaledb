@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
 \set TEST_BASE_NAME cagg_planning
-SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') AS "TEST_LOAD_NAME",
+SELECT
     format('include/%s_query.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME",
     format('%s/results/%s_results_baseline.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_BASELINE",
     format('%s/results/%s_results_optimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_OPTIMIZED" \gset
@@ -381,3 +381,449 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
  (1 row)
  
    label   |         time_bucket          | avg 
+--dump & restore
+\c postgres :ROLE_SUPERUSER
+\! utils/pg_dump_aux_dump.sh dump/pg_dump.sql
+\c :TEST_DBNAME
+SET client_min_messages = ERROR;
+CREATE EXTENSION timescaledb CASCADE;
+RESET client_min_messages;
+SELECT timescaledb_pre_restore();
+ timescaledb_pre_restore 
+-------------------------
+ t
+(1 row)
+
+\! utils/pg_dump_aux_restore.sh dump/pg_dump.sql
+SELECT timescaledb_post_restore();
+ timescaledb_post_restore 
+--------------------------
+ t
+(1 row)
+
+SELECT _timescaledb_functions.stop_background_workers();
+ stop_background_workers 
+-------------------------
+ t
+(1 row)
+
+-- Repeat tests after restore
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set TEST_BASE_NAME cagg_planning
+SELECT
+    format('include/%s_query.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME",
+    format('%s/results/%s_results_baseline_after_restore.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_BASELINE_AFTER_RESTORE",
+    format('%s/results/%s_results_optimized_after_restore.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_OPTIMIZED_AFTER_RESTORE" \gset
+SELECT format('\! diff -u --label Baseline --label Optimized %s %s', :'TEST_RESULTS_BASELINE_AFTER_RESTORE', :'TEST_RESULTS_OPTIMIZED_AFTER_RESTORE') AS "DIFF_CMD" \gset
+SET timezone TO PST8PDT;
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SHOW timescaledb.enable_cagg_sort_pushdown;
+ timescaledb.enable_cagg_sort_pushdown 
+---------------------------------------
+ on
+(1 row)
+
+:PREFIX SELECT 'query 01' AS label, * FROM cagg1 ORDER BY time_bucket;
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
+ Result (actual rows=6 loops=1)
+   ->  Append (actual rows=6 loops=1)
+         ->  Sort (actual rows=4 loops=1)
+               Sort Key: _hyper_2_4_chunk.time_bucket
+               Sort Method: quicksort 
+               ->  Append (actual rows=4 loops=1)
+                     ->  Seq Scan on _hyper_2_4_chunk (actual rows=3 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                     ->  Seq Scan on _hyper_2_5_chunk (actual rows=1 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+         ->  Sort (actual rows=2 loops=1)
+               Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"))
+               Sort Method: quicksort 
+               ->  Finalize HashAggregate (actual rows=2 loops=1)
+                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"))
+                     Batches: 1 
+                     ->  Append (actual rows=3 loops=1)
+                           ->  Partial HashAggregate (actual rows=2 loops=1)
+                                 Group Key: time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")
+                                 Batches: 1 
+                                 ->  Seq Scan on _hyper_1_3_chunk (actual rows=4 loops=1)
+                                       Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                                       Rows Removed by Filter: 3
+                           ->  Partial HashAggregate (actual rows=1 loops=1)
+                                 Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
+                                 Batches: 1 
+                                 ->  Seq Scan on _hyper_1_14_chunk (actual rows=2 loops=1)
+                                       Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+(28 rows)
+
+:PREFIX SELECT 'query 02' AS label, * FROM cagg1 ORDER BY time_bucket DESC;
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
+ Result (actual rows=6 loops=1)
+   ->  Append (actual rows=6 loops=1)
+         ->  Sort (actual rows=2 loops=1)
+               Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")) DESC
+               Sort Method: quicksort 
+               ->  Finalize HashAggregate (actual rows=2 loops=1)
+                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time"))
+                     Batches: 1 
+                     ->  Append (actual rows=3 loops=1)
+                           ->  Partial HashAggregate (actual rows=1 loops=1)
+                                 Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
+                                 Batches: 1 
+                                 ->  Seq Scan on _hyper_1_14_chunk (actual rows=2 loops=1)
+                                       Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                           ->  Partial HashAggregate (actual rows=2 loops=1)
+                                 Group Key: time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")
+                                 Batches: 1 
+                                 ->  Seq Scan on _hyper_1_3_chunk (actual rows=4 loops=1)
+                                       Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                                       Rows Removed by Filter: 3
+         ->  Sort (actual rows=4 loops=1)
+               Sort Key: _hyper_2_5_chunk.time_bucket DESC
+               Sort Method: quicksort 
+               ->  Append (actual rows=4 loops=1)
+                     ->  Seq Scan on _hyper_2_5_chunk (actual rows=1 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                     ->  Seq Scan on _hyper_2_4_chunk (actual rows=3 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+(28 rows)
+
+:PREFIX SELECT 'query 03' AS label, * FROM cagg1_ordered_asc ORDER BY time_bucket;
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
+ Result (actual rows=6 loops=1)
+   ->  Append (actual rows=6 loops=1)
+         ->  Sort (actual rows=4 loops=1)
+               Sort Key: _hyper_3_6_chunk.time_bucket
+               Sort Method: quicksort 
+               ->  Append (actual rows=4 loops=1)
+                     ->  Seq Scan on _hyper_3_6_chunk (actual rows=3 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+         ->  Sort (actual rows=2 loops=1)
+               Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"))
+               Sort Method: quicksort 
+               ->  Finalize HashAggregate (actual rows=2 loops=1)
+                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"))
+                     Batches: 1 
+                     ->  Append (actual rows=3 loops=1)
+                           ->  Partial HashAggregate (actual rows=2 loops=1)
+                                 Group Key: time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")
+                                 Batches: 1 
+                                 ->  Seq Scan on _hyper_1_3_chunk (actual rows=4 loops=1)
+                                       Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                                       Rows Removed by Filter: 3
+                           ->  Partial HashAggregate (actual rows=1 loops=1)
+                                 Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
+                                 Batches: 1 
+                                 ->  Seq Scan on _hyper_1_14_chunk (actual rows=2 loops=1)
+                                       Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+(28 rows)
+
+:PREFIX SELECT 'query 04' AS label, * FROM cagg1_ordered_asc ORDER BY time_bucket DESC;
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
+ Result (actual rows=6 loops=1)
+   ->  Append (actual rows=6 loops=1)
+         ->  Sort (actual rows=2 loops=1)
+               Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")) DESC
+               Sort Method: quicksort 
+               ->  Finalize HashAggregate (actual rows=2 loops=1)
+                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time"))
+                     Batches: 1 
+                     ->  Append (actual rows=3 loops=1)
+                           ->  Partial HashAggregate (actual rows=1 loops=1)
+                                 Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
+                                 Batches: 1 
+                                 ->  Seq Scan on _hyper_1_14_chunk (actual rows=2 loops=1)
+                                       Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                           ->  Partial HashAggregate (actual rows=2 loops=1)
+                                 Group Key: time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")
+                                 Batches: 1 
+                                 ->  Seq Scan on _hyper_1_3_chunk (actual rows=4 loops=1)
+                                       Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                                       Rows Removed by Filter: 3
+         ->  Sort (actual rows=4 loops=1)
+               Sort Key: _hyper_3_7_chunk.time_bucket DESC
+               Sort Method: quicksort 
+               ->  Append (actual rows=4 loops=1)
+                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                     ->  Seq Scan on _hyper_3_6_chunk (actual rows=3 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+(28 rows)
+
+:PREFIX SELECT 'query 05' AS label, * FROM cagg1_ordered_desc ORDER BY time_bucket;
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
+ Result (actual rows=6 loops=1)
+   ->  Append (actual rows=6 loops=1)
+         ->  Sort (actual rows=4 loops=1)
+               Sort Key: _hyper_4_9_chunk.time_bucket
+               Sort Method: quicksort 
+               ->  Append (actual rows=4 loops=1)
+                     ->  Seq Scan on _hyper_4_9_chunk (actual rows=3 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                     ->  Seq Scan on _hyper_4_8_chunk (actual rows=1 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+         ->  Sort (actual rows=2 loops=1)
+               Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"))
+               Sort Method: quicksort 
+               ->  Finalize HashAggregate (actual rows=2 loops=1)
+                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"))
+                     Batches: 1 
+                     ->  Append (actual rows=3 loops=1)
+                           ->  Partial HashAggregate (actual rows=2 loops=1)
+                                 Group Key: time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")
+                                 Batches: 1 
+                                 ->  Seq Scan on _hyper_1_3_chunk (actual rows=4 loops=1)
+                                       Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                                       Rows Removed by Filter: 3
+                           ->  Partial HashAggregate (actual rows=1 loops=1)
+                                 Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
+                                 Batches: 1 
+                                 ->  Seq Scan on _hyper_1_14_chunk (actual rows=2 loops=1)
+                                       Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+(28 rows)
+
+:PREFIX SELECT 'query 06' AS label, * FROM cagg1_ordered_desc ORDER BY time_bucket DESC;
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
+ Result (actual rows=6 loops=1)
+   ->  Append (actual rows=6 loops=1)
+         ->  Sort (actual rows=2 loops=1)
+               Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")) DESC
+               Sort Method: quicksort 
+               ->  Finalize HashAggregate (actual rows=2 loops=1)
+                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time"))
+                     Batches: 1 
+                     ->  Append (actual rows=3 loops=1)
+                           ->  Partial HashAggregate (actual rows=1 loops=1)
+                                 Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
+                                 Batches: 1 
+                                 ->  Seq Scan on _hyper_1_14_chunk (actual rows=2 loops=1)
+                                       Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                           ->  Partial HashAggregate (actual rows=2 loops=1)
+                                 Group Key: time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")
+                                 Batches: 1 
+                                 ->  Seq Scan on _hyper_1_3_chunk (actual rows=4 loops=1)
+                                       Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                                       Rows Removed by Filter: 3
+         ->  Sort (actual rows=4 loops=1)
+               Sort Key: _hyper_4_8_chunk.time_bucket DESC
+               Sort Method: quicksort 
+               ->  Append (actual rows=4 loops=1)
+                     ->  Seq Scan on _hyper_4_8_chunk (actual rows=1 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                     ->  Seq Scan on _hyper_4_9_chunk (actual rows=3 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+(28 rows)
+
+:PREFIX SELECT 'query 07' AS label, * FROM cagg2 ORDER BY time_bucket;
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Result (actual rows=6 loops=1)
+   ->  Append (actual rows=6 loops=1)
+         ->  Sort (actual rows=4 loops=1)
+               Sort Key: _hyper_5_10_chunk.time_bucket
+               Sort Method: quicksort 
+               ->  Append (actual rows=4 loops=1)
+                     ->  Seq Scan on _hyper_5_10_chunk (actual rows=3 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                     ->  Seq Scan on _hyper_5_11_chunk (actual rows=1 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+         ->  Sort (actual rows=2 loops=1)
+               Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"))
+               Sort Method: quicksort 
+               ->  Finalize HashAggregate (actual rows=2 loops=1)
+                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")), _hyper_1_3_chunk.device
+                     Batches: 1 
+                     ->  Append (actual rows=3 loops=1)
+                           ->  Partial HashAggregate (actual rows=2 loops=1)
+                                 Group Key: time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"), _hyper_1_3_chunk.device
+                                 Batches: 1 
+                                 ->  Seq Scan on _hyper_1_3_chunk (actual rows=4 loops=1)
+                                       Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                                       Rows Removed by Filter: 3
+                           ->  Partial HashAggregate (actual rows=1 loops=1)
+                                 Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time"), _hyper_1_14_chunk.device
+                                 Batches: 1 
+                                 ->  Seq Scan on _hyper_1_14_chunk (actual rows=2 loops=1)
+                                       Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+(28 rows)
+
+:PREFIX SELECT 'query 08' AS label, * FROM cagg2 ORDER BY time_bucket DESC;
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Result (actual rows=6 loops=1)
+   ->  Append (actual rows=6 loops=1)
+         ->  Sort (actual rows=2 loops=1)
+               Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")) DESC
+               Sort Method: quicksort 
+               ->  Finalize HashAggregate (actual rows=2 loops=1)
+                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")), _hyper_1_14_chunk.device
+                     Batches: 1 
+                     ->  Append (actual rows=3 loops=1)
+                           ->  Partial HashAggregate (actual rows=1 loops=1)
+                                 Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time"), _hyper_1_14_chunk.device
+                                 Batches: 1 
+                                 ->  Seq Scan on _hyper_1_14_chunk (actual rows=2 loops=1)
+                                       Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                           ->  Partial HashAggregate (actual rows=2 loops=1)
+                                 Group Key: time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"), _hyper_1_3_chunk.device
+                                 Batches: 1 
+                                 ->  Seq Scan on _hyper_1_3_chunk (actual rows=4 loops=1)
+                                       Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                                       Rows Removed by Filter: 3
+         ->  Sort (actual rows=4 loops=1)
+               Sort Key: _hyper_5_11_chunk.time_bucket DESC
+               Sort Method: quicksort 
+               ->  Append (actual rows=4 loops=1)
+                     ->  Seq Scan on _hyper_5_11_chunk (actual rows=1 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                     ->  Seq Scan on _hyper_5_10_chunk (actual rows=3 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+(28 rows)
+
+:PREFIX SELECT 'query 07' AS label, * FROM cagg3 ORDER BY time_bucket;
+                                                                    QUERY PLAN                                                                     
+---------------------------------------------------------------------------------------------------------------------------------------------------
+ Result (actual rows=6 loops=1)
+   ->  Append (actual rows=6 loops=1)
+         ->  Sort (actual rows=4 loops=1)
+               Sort Key: _hyper_6_12_chunk.time_bucket
+               Sort Method: quicksort 
+               ->  Append (actual rows=4 loops=1)
+                     ->  Seq Scan on _hyper_6_12_chunk (actual rows=3 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                     ->  Seq Scan on _hyper_6_13_chunk (actual rows=1 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+         ->  Subquery Scan on "*SELECT* 2" (actual rows=2 loops=1)
+               ->  GroupAggregate (actual rows=2 loops=1)
+                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")), _hyper_1_3_chunk.device
+                     ->  Sort (actual rows=6 loops=1)
+                           Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")), _hyper_1_3_chunk.device, _hyper_1_3_chunk.value
+                           Sort Method: quicksort 
+                           ->  Result (actual rows=6 loops=1)
+                                 ->  Append (actual rows=6 loops=1)
+                                       ->  Seq Scan on _hyper_1_3_chunk (actual rows=4 loops=1)
+                                             Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                                             Rows Removed by Filter: 3
+                                       ->  Seq Scan on _hyper_1_14_chunk (actual rows=2 loops=1)
+                                             Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+(23 rows)
+
+:PREFIX SELECT 'query 08' AS label, * FROM cagg3 ORDER BY time_bucket DESC;
+                                                                        QUERY PLAN                                                                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+ Result (actual rows=6 loops=1)
+   ->  Append (actual rows=6 loops=1)
+         ->  Subquery Scan on "*SELECT* 2" (actual rows=2 loops=1)
+               ->  GroupAggregate (actual rows=2 loops=1)
+                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")), _hyper_1_14_chunk.device
+                     ->  Sort (actual rows=6 loops=1)
+                           Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")) DESC, _hyper_1_14_chunk.device, _hyper_1_14_chunk.value
+                           Sort Method: quicksort 
+                           ->  Result (actual rows=6 loops=1)
+                                 ->  Append (actual rows=6 loops=1)
+                                       ->  Seq Scan on _hyper_1_14_chunk (actual rows=2 loops=1)
+                                             Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                                       ->  Seq Scan on _hyper_1_3_chunk (actual rows=4 loops=1)
+                                             Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                                             Rows Removed by Filter: 3
+         ->  Sort (actual rows=4 loops=1)
+               Sort Key: _hyper_6_13_chunk.time_bucket DESC
+               Sort Method: quicksort 
+               ->  Append (actual rows=4 loops=1)
+                     ->  Seq Scan on _hyper_6_13_chunk (actual rows=1 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                     ->  Seq Scan on _hyper_6_12_chunk (actual rows=3 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+(23 rows)
+
+-- not optimized atm
+:PREFIX SELECT 'query 101' AS label, * FROM cagg2 ORDER BY time_bucket::date;
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Sort (actual rows=6 loops=1)
+   Sort Key: ((_hyper_5_10_chunk.time_bucket)::date)
+   Sort Method: quicksort 
+   ->  Result (actual rows=6 loops=1)
+         ->  Append (actual rows=6 loops=1)
+               ->  Append (actual rows=4 loops=1)
+                     ->  Seq Scan on _hyper_5_10_chunk (actual rows=3 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                     ->  Seq Scan on _hyper_5_11_chunk (actual rows=1 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+               ->  Finalize HashAggregate (actual rows=2 loops=1)
+                     Group Key: _hyper_1_14_chunk.device, (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time"))
+                     Batches: 1 
+                     ->  Append (actual rows=3 loops=1)
+                           ->  Partial HashAggregate (actual rows=1 loops=1)
+                                 Group Key: _hyper_1_14_chunk.device, time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
+                                 Batches: 1 
+                                 ->  Seq Scan on _hyper_1_14_chunk (actual rows=2 loops=1)
+                                       Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                           ->  Partial HashAggregate (actual rows=2 loops=1)
+                                 Group Key: _hyper_1_3_chunk.device, time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")
+                                 Batches: 1 
+                                 ->  Seq Scan on _hyper_1_3_chunk (actual rows=4 loops=1)
+                                       Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                                       Rows Removed by Filter: 3
+(25 rows)
+
+:PREFIX SELECT 'query 102' AS label, * FROM cagg2 ORDER BY time_bucket::date DESC;
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Sort (actual rows=6 loops=1)
+   Sort Key: ((_hyper_5_10_chunk.time_bucket)::date) DESC
+   Sort Method: quicksort 
+   ->  Result (actual rows=6 loops=1)
+         ->  Append (actual rows=6 loops=1)
+               ->  Append (actual rows=4 loops=1)
+                     ->  Seq Scan on _hyper_5_10_chunk (actual rows=3 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                     ->  Seq Scan on _hyper_5_11_chunk (actual rows=1 loops=1)
+                           Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+               ->  Finalize HashAggregate (actual rows=2 loops=1)
+                     Group Key: _hyper_1_14_chunk.device, (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time"))
+                     Batches: 1 
+                     ->  Append (actual rows=3 loops=1)
+                           ->  Partial HashAggregate (actual rows=1 loops=1)
+                                 Group Key: _hyper_1_14_chunk.device, time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
+                                 Batches: 1 
+                                 ->  Seq Scan on _hyper_1_14_chunk (actual rows=2 loops=1)
+                                       Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                           ->  Partial HashAggregate (actual rows=2 loops=1)
+                                 Group Key: _hyper_1_3_chunk.device, time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")
+                                 Batches: 1 
+                                 ->  Seq Scan on _hyper_1_3_chunk (actual rows=4 loops=1)
+                                       Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
+                                       Rows Removed by Filter: 3
+(25 rows)
+
+\set ECHO none
+-- diff baseline and optimized results
+:DIFF_CMD
+--- Baseline
++++ Optimized
+@@ -1,6 +1,6 @@
+  timescaledb.enable_cagg_sort_pushdown 
+ ---------------------------------------
+- off
++ on
+ (1 row)
+ 
+   label   |         time_bucket          | avg 
+-- diff baseline before and after restore
+SELECT format('\! diff -u --label Baseline --label Baseline_After_Restore %s %s', :'TEST_RESULTS_BASELINE', :'TEST_RESULTS_BASELINE_AFTER_RESTORE') AS "DIFF_CMD" \gset
+:DIFF_CMD
+-- diff optimized before and after restore
+SELECT format('\! diff -u --label Optimized --label Optimized_After_Restore %s %s', :'TEST_RESULTS_OPTIMIZED', :'TEST_RESULTS_OPTIMIZED_AFTER_RESTORE') AS "DIFF_CMD" \gset
+:DIFF_CMD

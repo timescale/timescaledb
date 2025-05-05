@@ -882,8 +882,6 @@ INSERT INTO sensor_data
 		time;
 -- enable compression
 ALTER TABLE sensor_data SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "sensor_data" is set to ""
 -- create new chunks
 INSERT INTO sensor_data
 	SELECT
@@ -924,7 +922,7 @@ SELECT count(*) > 1
 -- is dynamic and it will be printed in those messages.
 SET client_min_messages TO ERROR;
 CALL run_job(:compressjob_id);
-ERROR:  compression policy failure
+ERROR:  columnstore policy failure
 SET client_min_messages TO NOTICE;
 -- check compression status is not changed for the chunk whose status was manually updated
 SELECT status FROM _timescaledb_catalog.chunk where table_name = :'new_uncompressed_chunk_name';

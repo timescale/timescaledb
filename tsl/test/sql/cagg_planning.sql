@@ -5,7 +5,7 @@
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
 
 \set TEST_BASE_NAME cagg_planning
-SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') AS "TEST_LOAD_NAME",
+SELECT
     format('include/%s_query.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME",
     format('%s/results/%s_results_baseline.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_BASELINE",
     format('%s/results/%s_results_optimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_OPTIMIZED" \gset
@@ -61,3 +61,60 @@ RESET timescaledb.enable_cagg_sort_pushdown;
 -- diff baseline and optimized results
 :DIFF_CMD
 
+--dump & restore
+\c postgres :ROLE_SUPERUSER
+
+\! utils/pg_dump_aux_dump.sh dump/pg_dump.sql
+
+\c :TEST_DBNAME
+SET client_min_messages = ERROR;
+CREATE EXTENSION timescaledb CASCADE;
+RESET client_min_messages;
+
+SELECT timescaledb_pre_restore();
+\! utils/pg_dump_aux_restore.sh dump/pg_dump.sql
+SELECT timescaledb_post_restore();
+SELECT _timescaledb_functions.stop_background_workers();
+
+-- Repeat tests after restore
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+
+\set TEST_BASE_NAME cagg_planning
+SELECT
+    format('include/%s_query.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME",
+    format('%s/results/%s_results_baseline_after_restore.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_BASELINE_AFTER_RESTORE",
+    format('%s/results/%s_results_optimized_after_restore.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_OPTIMIZED_AFTER_RESTORE" \gset
+
+SELECT format('\! diff -u --label Baseline --label Optimized %s %s', :'TEST_RESULTS_BASELINE_AFTER_RESTORE', :'TEST_RESULTS_OPTIMIZED_AFTER_RESTORE') AS "DIFF_CMD" \gset
+
+SET timezone TO PST8PDT;
+
+\ir :TEST_QUERY_NAME
+
+\set ECHO none
+\set PREFIX ''
+
+SET timescaledb.enable_cagg_sort_pushdown TO off;
+\o :TEST_RESULTS_BASELINE_AFTER_RESTORE
+\ir :TEST_QUERY_NAME
+\o
+
+RESET timescaledb.enable_cagg_sort_pushdown;
+\o :TEST_RESULTS_OPTIMIZED_AFTER_RESTORE
+\ir :TEST_QUERY_NAME
+\o
+
+\set ECHO all
+
+-- diff baseline and optimized results
+:DIFF_CMD
+
+-- diff baseline before and after restore
+SELECT format('\! diff -u --label Baseline --label Baseline_After_Restore %s %s', :'TEST_RESULTS_BASELINE', :'TEST_RESULTS_BASELINE_AFTER_RESTORE') AS "DIFF_CMD" \gset
+:DIFF_CMD
+
+-- diff optimized before and after restore
+SELECT format('\! diff -u --label Optimized --label Optimized_After_Restore %s %s', :'TEST_RESULTS_OPTIMIZED', :'TEST_RESULTS_OPTIMIZED_AFTER_RESTORE') AS "DIFF_CMD" \gset
+:DIFF_CMD

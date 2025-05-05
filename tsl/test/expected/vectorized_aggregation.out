@@ -1197,9 +1197,9 @@ SELECT sum(float_value) FROM testtable;
 -- Tests with all chunks compressed
 ---
 SELECT compress_chunk(ch, if_not_compressed => true) FROM show_chunks('testtable') ch;
-NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_2_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_3_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_2_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_3_chunk" is already converted to columnstore
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk

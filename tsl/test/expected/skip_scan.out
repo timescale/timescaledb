@@ -40,6 +40,24 @@ INSERT INTO skip_scan_ht(time,dev,dev_name,val) SELECT t, d, 'device_' || d::tex
 INSERT INTO skip_scan_ht(time,dev,dev_name,val) SELECT t, NULL, NULL, NULL FROM generate_series(0, 999, 50) t;
 ANALYZE skip_scan_ht;
 ALTER TABLE skip_scan_ht SET (timescaledb.compress,timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
+-- create compressed hypertable with different physical layouts in the chunks
+CREATE TABLE skip_scan_htc(f1 int, f2 int, f3 int, time int NOT NULL, dev int, dev_name text, val int);
+SELECT create_hypertable('skip_scan_htc', 'time', chunk_time_interval => 250, create_default_indexes => false);
+     create_hypertable      
+----------------------------
+ (3,public,skip_scan_htc,t)
+(1 row)
+
+ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
+INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(0, 249) t, generate_series(1, 10) d;
+ALTER TABLE skip_scan_htc DROP COLUMN f1;
+INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(250, 499) t, generate_series(1, 10) d;
+ALTER TABLE skip_scan_htc DROP COLUMN f2;
+INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(500, 749) t, generate_series(1, 10) d;
+ALTER TABLE skip_scan_htc DROP COLUMN f3;
+INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(750, 999) t, generate_series(1, 10) d;
+INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, NULL, NULL, NULL FROM generate_series(0, 999, 50) t;
+ANALYZE skip_scan_htc;
 CREATE TABLE skip_scan_insert(time int, dev int, dev_name text, val int, query text);
 CREATE OR REPLACE FUNCTION int_func_immutable() RETURNS int LANGUAGE SQL IMMUTABLE SECURITY DEFINER AS $$SELECT 1; $$;
 CREATE OR REPLACE FUNCTION int_func_stable() RETURNS int LANGUAGE SQL STABLE SECURITY DEFINER AS $$ SELECT 2; $$;
@@ -52,11 +70,55 @@ UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan
 UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan_nulls'::regclass;
 UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan_ht'::regclass;
 UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid IN (select inhrelid from pg_inherits where inhparent='skip_scan_ht'::regclass);
+UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan_htc'::regclass;
+UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid IN (select inhrelid from pg_inherits where inhparent='skip_scan_htc'::regclass);
 -- Turn off autovacuum to not trigger new vacuums that restores the
 -- adjusted statistics
 alter table skip_scan set (autovacuum_enabled = off);
 alter table skip_scan_nulls set (autovacuum_enabled = off);
 alter table skip_scan_ht set (autovacuum_enabled = off);
+alter table skip_scan_htc set (autovacuum_enabled = off);
+-- create compressed hypertable with different physical layouts in the compressed chunks
+CREATE TABLE skip_scan_htcl(f1 int, f2 int, f3 int, time int NOT NULL, dev int, dev_name text, val int);
+SELECT create_hypertable('skip_scan_htcl', 'time', chunk_time_interval => 250, create_default_indexes => false);
+      create_hypertable      
+-----------------------------
+ (5,public,skip_scan_htcl,t)
+(1 row)
+
+ALTER TABLE skip_scan_htcl SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
+INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(0, 249) t, generate_series(1, 10) d;
+-- Make sure 1st compressed chunk has columns which will be dropped later, it also doesn't have NULLs
+SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htcl') ch;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_5_9_chunk
+(1 row)
+
+ALTER TABLE skip_scan_htcl DROP COLUMN f1;
+INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(250, 499) t, generate_series(1, 10) d;
+ALTER TABLE skip_scan_htcl DROP COLUMN f2;
+INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(500, 749) t, generate_series(1, 10) d;
+ALTER TABLE skip_scan_htcl DROP COLUMN f3;
+INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(750, 999) t, generate_series(1, 10) d;
+INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, NULL, NULL, NULL FROM generate_series(0, 999, 50) t;
+-- The rest of the compressed chunks do not have dropped columns
+-- compressed chunks #2 and #3 have attnos out of sync with uncompressed chunks
+SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htcl') ch order by 1 desc limit 3;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_5_13_chunk
+ _timescaledb_internal._hyper_5_12_chunk
+ _timescaledb_internal._hyper_5_11_chunk
+(3 rows)
+
+ANALYZE skip_scan_htcl;
+-- adjust statistics so we get skipscan plans
+UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan_htcl'::regclass;
+UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid IN (select inhrelid from pg_inherits where inhparent='skip_scan_htcl'::regclass);
+-- Turn off autovacuum to not trigger new vacuums that restores the
+-- adjusted statistics
+alter table skip_scan_htcl set (autovacuum_enabled = off);
 -- run tests on normal table and diff results
 \set TABLE skip_scan
 \set PREFIX ''
@@ -898,6 +960,724 @@ RESET timescaledb.enable_skipscan;
 @@ -1,6 +1,6 @@
   enable_skipscan 
  -----------------
+- off
++ on
+ (1 row)
+ 
+  dev 
+-- run tests on compressed hypertable with different compression settings and diff results
+SELECT format('include/%s_comp_query.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME" \gset
+\set TABLE skip_scan_htc
+\set PREFIX ''
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- canary for result diff
+SELECT current_setting('timescaledb.enable_compressed_skipscan') AS enable_compressed_skipscan;
+-- To avoid ambiguity in test EXPLAIN outputs due to mixing of chunk plans with no SkipScan
+SET max_parallel_workers_per_gather = 0;
+-- test different compression configurations
+-- compressed index on "segmentby='dev'" has default "dev ASC, NULLS LAST" sort order
+ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
+SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+-- SkipScan used when sort order on distinct column "dev" matches "segmentby" sort order
+:PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
+:PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC;
+:PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC NULLS FIRST;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+-- NULLS FIRST doesn't match segmentby NULL direction
+:PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev NULLS FIRST;
+-- multicolumn sort with dev as leading column matching (segmentby dev, order by time DESC) compression index
+:PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev, time DESC;
+:PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev DESC, time;
+-- multicolumn sort not matching compression index
+:PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev DESC, time DESC;
+-- same result when we use compressed IndexPath with pathkeys not matching DecompressChunk path required path keys
+SET enable_seqscan TO false;
+:PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev DESC, time DESC;
+RESET enable_seqscan;
+-- Distinct column not a segmentby column: should be no SkipScan
+:PREFIX SELECT DISTINCT time FROM :TABLE WHERE dev = 1 ORDER BY time DESC;
+-- multicolumn sort with dev as non-leading column and with leading column pinned
+-- TODO: should be able to apply SkipScan here, issue created: #7998
+:PREFIX SELECT DISTINCT time, dev FROM :TABLE WHERE time = 100 ORDER BY time, dev;
+-- multicolumn "segmentby = 'dev, dev_name'"
+SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev,dev_name');
+SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+-- dev is leading column
+:PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, dev_name FROM :TABLE ORDER BY dev, dev_name;
+:PREFIX SELECT DISTINCT ON (dev) dev, dev_name FROM :TABLE ORDER BY dev DESC, dev_name DESC;
+-- query sort doesn't match "segmentby" sort
+:PREFIX SELECT DISTINCT ON (dev) dev, dev_name FROM :TABLE ORDER BY dev, dev_name DESC;
+-- dev_name is not a leading column
+:PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE dev = 1 ORDER BY dev_name;
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev = 1;
+-- Basic tests for "segmentby = 'dev'"
+-----------------------------------------
+SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
+SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+\qecho basic DISTINCT queries on :TABLE
+:PREFIX SELECT DISTINCT dev, 'q1_1' FROM :TABLE ORDER BY dev;
+:PREFIX SELECT DISTINCT dev, 'q1_3', NULL FROM :TABLE ORDER BY dev;
+\qecho stable expression in targetlist on :TABLE
+:PREFIX SELECT DISTINCT dev, 'q1_4', length(md5(now()::text)) FROM :TABLE ORDER BY dev;
+-- volatile expression in targetlist counts as extra distinct column, no SkipScan
+:PREFIX SELECT DISTINCT dev, 'q1_6', length(md5(random()::text)) FROM :TABLE ORDER BY dev;
+-- queries without skipscan because distinct is not limited to specific column
+:PREFIX SELECT DISTINCT * FROM :TABLE ORDER BY dev;
+:PREFIX SELECT DISTINCT *, 'q1_9' FROM :TABLE ORDER BY dev;
+:PREFIX SELECT DISTINCT dev, time, 'q1_10' FROM :TABLE ORDER BY dev;
+-- use SkipScan as only one non-const distinct column
+:PREFIX SELECT DISTINCT dev, NULL, 'q1_11' FROM :TABLE ORDER BY dev;
+-- distinct on expressions not supported
+:PREFIX SELECT DISTINCT dev + 1, 'q1_13' FROM :TABLE;
+-- DISTINCT ON queries
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, 'q2_2' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, 'q2_3', NULL FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, 'q2_4', length(md5(now()::text)) FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, 'q2_5', length(md5(random()::text)) FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) *, 'q2_7' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, time, 'q2_8' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, NULL, 'q2_9' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) time, 'q2_10' FROM :TABLE ORDER by dev, time DESC;
+:PREFIX SELECT DISTINCT ON (dev) dev, tableoid::regclass, 'q2_11' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, int_func_immutable(), 'q2_12' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, int_func_stable(), 'q2_13' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, int_func_volatile(), 'q2_14' FROM :TABLE;
+\qecho DISTINCT with wholerow var
+:PREFIX SELECT DISTINCT ON (dev) :TABLE FROM :TABLE;
+-- should not use SkipScan since we only support SkipScan on single-column distinct
+:PREFIX SELECT DISTINCT :TABLE FROM :TABLE;
+\qecho LIMIT queries on :TABLE
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE LIMIT 3;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev DESC, time LIMIT 3;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev, time DESC LIMIT 3;
+\qecho range queries on :TABLE
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time BETWEEN 100 AND 300;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time < 200;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time > 800;
+-- Basic tests for text index "segmentby = 'dev_name'"
+------------------------------------------------------
+SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev_name');
+SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+:PREFIX SELECT DISTINCT dev_name, 'q1_2' FROM :TABLE ORDER BY dev_name;
+\qecho stable expression in targetlist on :TABLE
+:PREFIX SELECT DISTINCT dev_name, 'q1_5', length(md5(now()::text)) FROM :TABLE ORDER BY dev_name;
+-- volatile expression in targetlist counts as extra distinct column, no SkipScan
+:PREFIX SELECT DISTINCT dev_name, 'q1_7', length(md5(random()::text)) FROM :TABLE ORDER BY dev_name;
+-- distinct on expressions not supported
+:PREFIX SELECT DISTINCT 'Device ' || dev_name FROM :TABLE;
+-- DISTINCT ON queries on TEXT column
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_2' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_3', NULL FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_4', length(md5(now()::text)) FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_5', length(md5(random()::text)) FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) * FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) *, 'q3_7' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name, time, 'q3_8' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name, NULL, 'q3_9' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) time, 'q3_10' FROM :TABLE ORDER by dev_name, time DESC;
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name, tableoid::regclass, 'q3_11' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name::varchar) dev_name::varchar FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) dev, int_func_immutable(), 'q3_13' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) dev, int_func_stable(), 'q3_14' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) dev, int_func_volatile(), 'q3_15' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev_name IS NULL;
+-- Various tests for "segmentby = 'dev'"
+---------------------------------------
+SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='dev');
+SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+\qecho SUBSELECTS on :TABLE
+:PREFIX SELECT time, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a;
+:PREFIX SELECT NULL, dev, NULL, 'q4_3' FROM (SELECT DISTINCT ON (dev) dev FROM :TABLE) a;
+:PREFIX SELECT time, dev, NULL, 'q4_4' FROM (SELECT DISTINCT ON (dev) dev, time FROM :TABLE) a;
+\qecho ORDER BY
+:PREFIX SELECT time, dev, val, 'q5_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE ORDER BY dev, time) a;
+:PREFIX SELECT time, dev, val, 'q5_2' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE ORDER BY dev DESC, time DESC) a;
+\qecho WHERE CLAUSES
+:PREFIX SELECT time, dev, val, 'q6_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > 5) a;
+:PREFIX SELECT time, dev, val, 'q6_2' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE WHERE time > 5) a;
+:PREFIX SELECT time, dev, val, 'q6_3' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a WHERE dev > 5;
+:PREFIX SELECT time, dev, val, 'q6_4' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a WHERE time > 5;
+--\qecho immutable func in WHERE clause on :TABLE
+:PREFIX SELECT DISTINCT ON (dev) *, 'q6_5' FROM :TABLE WHERE dev > int_func_immutable();
+--\qecho stable func in WHERE clause on :TABLE
+:PREFIX SELECT DISTINCT ON (dev) *, 'q6_6' FROM :TABLE WHERE dev > int_func_stable();
+--\qecho volatile func in WHERE clause on :TABLE
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > int_func_volatile();
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = ANY(inta_func_immutable());
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = ANY(inta_func_stable());
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = ANY(inta_func_volatile());
+-- RowCompareExpr
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE (dev, time) > (5,100);
+-- always false expr similar to our initial skip qual
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > NULL;
+-- no tuples matching
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > 20;
+-- multiple constraints in WHERE clause
+:PREFIX SELECT DISTINCT ON (dev) dev,time FROM :TABLE WHERE dev > 5 AND time = 100;
+:PREFIX SELECT DISTINCT ON (dev) dev,time FROM :TABLE WHERE dev > 5 AND time > 200;
+:PREFIX SELECT DISTINCT ON (dev) dev,time FROM :TABLE WHERE dev >= 5 AND dev < 7 AND dev >= 2;
+:PREFIX SELECT DISTINCT ON (dev) dev,time,val FROM :TABLE WHERE time > 100 AND time < 200 AND val > 10 AND val < 10000 AND dev > 2 AND dev < 7 ORDER BY dev,time;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE dev IS NULL;
+-- test constants in ORDER BY
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = 1 ORDER BY dev, time DESC;
+-- CTE
+:PREFIX WITH devices AS (
+	SELECT DISTINCT ON (dev) dev FROM :TABLE
+)
+SELECT * FROM devices;
+:PREFIX WITH devices AS (
+	SELECT DISTINCT dev FROM :TABLE
+)
+SELECT * FROM devices ORDER BY dev;
+-- prepared statements
+PREPARE prep AS SELECT DISTINCT ON (dev) dev FROM :TABLE;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+DEALLOCATE prep;
+-- ReScan tests
+-- no SkipScan as distinct is over subquery
+:PREFIX SELECT time, dev, val, 'q7_1' FROM (SELECT DISTINCT ON (dev) * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT * FROM :TABLE WHERE time != a.v) b) a;
+-- have SkipScan as Distinct is over index
+:PREFIX SELECT time, dev, val, 'q7_2' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev != a.v) b) a;
+-- RuntimeKeys
+:PREFIX SELECT time, dev, val, 'q8_1' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev >= a.v) b) c;
+-- Emulate multi-column DISTINCT using multiple SkipSkans
+-- "segmentby = 'dev, val'"
+---------------------------------------
+SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='dev, val');
+SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+:PREFIX SELECT time, dev, val, 'q9_1' FROM (SELECT b.* FROM
+    (SELECT DISTINCT ON (dev) dev FROM :TABLE) a,
+    LATERAL (SELECT DISTINCT ON (val) * FROM :TABLE WHERE dev = a.dev) b) c;
+:PREFIX SELECT val, dev, NULL, 'q9_2' FROM (SELECT b.* FROM
+    (SELECT DISTINCT ON (dev) dev FROM :TABLE) a,
+    LATERAL (SELECT DISTINCT ON (val) dev, val FROM :TABLE WHERE dev = a.dev) b) c;
+-- Test that the multi-column DISTINCT emulation is equivalent to a real multi-column DISTINCT
+:PREFIX SELECT * FROM
+   (SELECT DISTINCT ON (dev) dev FROM :TABLE) a,
+   LATERAL (SELECT DISTINCT ON (val) dev, val FROM :TABLE WHERE dev = a.dev) b;
+-- no SkipScan: 2 distinct columns
+:PREFIX SELECT DISTINCT ON (dev, val) dev, val FROM :TABLE WHERE dev IS NOT NULL;
+:PREFIX SELECT DISTINCT ON (dev, val) dev, val FROM :TABLE WHERE dev IS NOT NULL
+UNION SELECT b.* FROM
+   (SELECT DISTINCT ON (dev) dev FROM :TABLE) a,
+   LATERAL (SELECT DISTINCT ON (val) dev, val FROM :TABLE WHERE dev = a.dev) b;
+-- SkipScan into INSERT
+:PREFIX INSERT INTO skip_scan_insert(time, dev, val, query) SELECT time, dev, val, 'q10_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a;
+-- parallel query
+RESET max_parallel_workers_per_gather;
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+:PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+TRUNCATE skip_scan_insert;
+-- table with only nulls
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE where val IS NULL;
+-- no tuples in resultset
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE val IS NULL AND dev > 100;
+SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+\o
+SET timescaledb.enable_compressed_skipscan TO false;
+\o :TEST_RESULTS_UNOPTIMIZED
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- canary for result diff
+SELECT current_setting('timescaledb.enable_compressed_skipscan') AS enable_compressed_skipscan;
+-- To avoid ambiguity in test EXPLAIN outputs due to mixing of chunk plans with no SkipScan
+SET max_parallel_workers_per_gather = 0;
+-- test different compression configurations
+-- compressed index on "segmentby='dev'" has default "dev ASC, NULLS LAST" sort order
+ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
+SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+-- SkipScan used when sort order on distinct column "dev" matches "segmentby" sort order
+:PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
+:PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC;
+:PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC NULLS FIRST;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+-- NULLS FIRST doesn't match segmentby NULL direction
+:PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev NULLS FIRST;
+-- multicolumn sort with dev as leading column matching (segmentby dev, order by time DESC) compression index
+:PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev, time DESC;
+:PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev DESC, time;
+-- multicolumn sort not matching compression index
+:PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev DESC, time DESC;
+-- same result when we use compressed IndexPath with pathkeys not matching DecompressChunk path required path keys
+SET enable_seqscan TO false;
+:PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev DESC, time DESC;
+RESET enable_seqscan;
+-- Distinct column not a segmentby column: should be no SkipScan
+:PREFIX SELECT DISTINCT time FROM :TABLE WHERE dev = 1 ORDER BY time DESC;
+-- multicolumn sort with dev as non-leading column and with leading column pinned
+-- TODO: should be able to apply SkipScan here, issue created: #7998
+:PREFIX SELECT DISTINCT time, dev FROM :TABLE WHERE time = 100 ORDER BY time, dev;
+-- multicolumn "segmentby = 'dev, dev_name'"
+SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev,dev_name');
+SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+-- dev is leading column
+:PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, dev_name FROM :TABLE ORDER BY dev, dev_name;
+:PREFIX SELECT DISTINCT ON (dev) dev, dev_name FROM :TABLE ORDER BY dev DESC, dev_name DESC;
+-- query sort doesn't match "segmentby" sort
+:PREFIX SELECT DISTINCT ON (dev) dev, dev_name FROM :TABLE ORDER BY dev, dev_name DESC;
+-- dev_name is not a leading column
+:PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE dev = 1 ORDER BY dev_name;
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev = 1;
+-- Basic tests for "segmentby = 'dev'"
+-----------------------------------------
+SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
+SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+\qecho basic DISTINCT queries on :TABLE
+:PREFIX SELECT DISTINCT dev, 'q1_1' FROM :TABLE ORDER BY dev;
+:PREFIX SELECT DISTINCT dev, 'q1_3', NULL FROM :TABLE ORDER BY dev;
+\qecho stable expression in targetlist on :TABLE
+:PREFIX SELECT DISTINCT dev, 'q1_4', length(md5(now()::text)) FROM :TABLE ORDER BY dev;
+-- volatile expression in targetlist counts as extra distinct column, no SkipScan
+:PREFIX SELECT DISTINCT dev, 'q1_6', length(md5(random()::text)) FROM :TABLE ORDER BY dev;
+-- queries without skipscan because distinct is not limited to specific column
+:PREFIX SELECT DISTINCT * FROM :TABLE ORDER BY dev;
+:PREFIX SELECT DISTINCT *, 'q1_9' FROM :TABLE ORDER BY dev;
+:PREFIX SELECT DISTINCT dev, time, 'q1_10' FROM :TABLE ORDER BY dev;
+-- use SkipScan as only one non-const distinct column
+:PREFIX SELECT DISTINCT dev, NULL, 'q1_11' FROM :TABLE ORDER BY dev;
+-- distinct on expressions not supported
+:PREFIX SELECT DISTINCT dev + 1, 'q1_13' FROM :TABLE;
+-- DISTINCT ON queries
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, 'q2_2' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, 'q2_3', NULL FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, 'q2_4', length(md5(now()::text)) FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, 'q2_5', length(md5(random()::text)) FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) *, 'q2_7' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, time, 'q2_8' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, NULL, 'q2_9' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) time, 'q2_10' FROM :TABLE ORDER by dev, time DESC;
+:PREFIX SELECT DISTINCT ON (dev) dev, tableoid::regclass, 'q2_11' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, int_func_immutable(), 'q2_12' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, int_func_stable(), 'q2_13' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, int_func_volatile(), 'q2_14' FROM :TABLE;
+\qecho DISTINCT with wholerow var
+:PREFIX SELECT DISTINCT ON (dev) :TABLE FROM :TABLE;
+-- should not use SkipScan since we only support SkipScan on single-column distinct
+:PREFIX SELECT DISTINCT :TABLE FROM :TABLE;
+\qecho LIMIT queries on :TABLE
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE LIMIT 3;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev DESC, time LIMIT 3;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev, time DESC LIMIT 3;
+\qecho range queries on :TABLE
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time BETWEEN 100 AND 300;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time < 200;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time > 800;
+-- Basic tests for text index "segmentby = 'dev_name'"
+------------------------------------------------------
+SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev_name');
+SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+:PREFIX SELECT DISTINCT dev_name, 'q1_2' FROM :TABLE ORDER BY dev_name;
+\qecho stable expression in targetlist on :TABLE
+:PREFIX SELECT DISTINCT dev_name, 'q1_5', length(md5(now()::text)) FROM :TABLE ORDER BY dev_name;
+-- volatile expression in targetlist counts as extra distinct column, no SkipScan
+:PREFIX SELECT DISTINCT dev_name, 'q1_7', length(md5(random()::text)) FROM :TABLE ORDER BY dev_name;
+-- distinct on expressions not supported
+:PREFIX SELECT DISTINCT 'Device ' || dev_name FROM :TABLE;
+-- DISTINCT ON queries on TEXT column
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_2' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_3', NULL FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_4', length(md5(now()::text)) FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_5', length(md5(random()::text)) FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) * FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) *, 'q3_7' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name, time, 'q3_8' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name, NULL, 'q3_9' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) time, 'q3_10' FROM :TABLE ORDER by dev_name, time DESC;
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name, tableoid::regclass, 'q3_11' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name::varchar) dev_name::varchar FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) dev, int_func_immutable(), 'q3_13' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) dev, int_func_stable(), 'q3_14' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) dev, int_func_volatile(), 'q3_15' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev_name IS NULL;
+-- Various tests for "segmentby = 'dev'"
+---------------------------------------
+SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='dev');
+SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+\qecho SUBSELECTS on :TABLE
+:PREFIX SELECT time, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a;
+:PREFIX SELECT NULL, dev, NULL, 'q4_3' FROM (SELECT DISTINCT ON (dev) dev FROM :TABLE) a;
+:PREFIX SELECT time, dev, NULL, 'q4_4' FROM (SELECT DISTINCT ON (dev) dev, time FROM :TABLE) a;
+\qecho ORDER BY
+:PREFIX SELECT time, dev, val, 'q5_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE ORDER BY dev, time) a;
+:PREFIX SELECT time, dev, val, 'q5_2' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE ORDER BY dev DESC, time DESC) a;
+\qecho WHERE CLAUSES
+:PREFIX SELECT time, dev, val, 'q6_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > 5) a;
+:PREFIX SELECT time, dev, val, 'q6_2' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE WHERE time > 5) a;
+:PREFIX SELECT time, dev, val, 'q6_3' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a WHERE dev > 5;
+:PREFIX SELECT time, dev, val, 'q6_4' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a WHERE time > 5;
+--\qecho immutable func in WHERE clause on :TABLE
+:PREFIX SELECT DISTINCT ON (dev) *, 'q6_5' FROM :TABLE WHERE dev > int_func_immutable();
+--\qecho stable func in WHERE clause on :TABLE
+:PREFIX SELECT DISTINCT ON (dev) *, 'q6_6' FROM :TABLE WHERE dev > int_func_stable();
+--\qecho volatile func in WHERE clause on :TABLE
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > int_func_volatile();
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = ANY(inta_func_immutable());
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = ANY(inta_func_stable());
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = ANY(inta_func_volatile());
+-- RowCompareExpr
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE (dev, time) > (5,100);
+-- always false expr similar to our initial skip qual
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > NULL;
+-- no tuples matching
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > 20;
+-- multiple constraints in WHERE clause
+:PREFIX SELECT DISTINCT ON (dev) dev,time FROM :TABLE WHERE dev > 5 AND time = 100;
+:PREFIX SELECT DISTINCT ON (dev) dev,time FROM :TABLE WHERE dev > 5 AND time > 200;
+:PREFIX SELECT DISTINCT ON (dev) dev,time FROM :TABLE WHERE dev >= 5 AND dev < 7 AND dev >= 2;
+:PREFIX SELECT DISTINCT ON (dev) dev,time,val FROM :TABLE WHERE time > 100 AND time < 200 AND val > 10 AND val < 10000 AND dev > 2 AND dev < 7 ORDER BY dev,time;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE dev IS NULL;
+-- test constants in ORDER BY
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = 1 ORDER BY dev, time DESC;
+-- CTE
+:PREFIX WITH devices AS (
+	SELECT DISTINCT ON (dev) dev FROM :TABLE
+)
+SELECT * FROM devices;
+:PREFIX WITH devices AS (
+	SELECT DISTINCT dev FROM :TABLE
+)
+SELECT * FROM devices ORDER BY dev;
+-- prepared statements
+PREPARE prep AS SELECT DISTINCT ON (dev) dev FROM :TABLE;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+DEALLOCATE prep;
+-- ReScan tests
+-- no SkipScan as distinct is over subquery
+:PREFIX SELECT time, dev, val, 'q7_1' FROM (SELECT DISTINCT ON (dev) * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT * FROM :TABLE WHERE time != a.v) b) a;
+-- have SkipScan as Distinct is over index
+:PREFIX SELECT time, dev, val, 'q7_2' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev != a.v) b) a;
+-- RuntimeKeys
+:PREFIX SELECT time, dev, val, 'q8_1' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev >= a.v) b) c;
+-- Emulate multi-column DISTINCT using multiple SkipSkans
+-- "segmentby = 'dev, val'"
+---------------------------------------
+SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='dev, val');
+SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+:PREFIX SELECT time, dev, val, 'q9_1' FROM (SELECT b.* FROM
+    (SELECT DISTINCT ON (dev) dev FROM :TABLE) a,
+    LATERAL (SELECT DISTINCT ON (val) * FROM :TABLE WHERE dev = a.dev) b) c;
+:PREFIX SELECT val, dev, NULL, 'q9_2' FROM (SELECT b.* FROM
+    (SELECT DISTINCT ON (dev) dev FROM :TABLE) a,
+    LATERAL (SELECT DISTINCT ON (val) dev, val FROM :TABLE WHERE dev = a.dev) b) c;
+-- Test that the multi-column DISTINCT emulation is equivalent to a real multi-column DISTINCT
+:PREFIX SELECT * FROM
+   (SELECT DISTINCT ON (dev) dev FROM :TABLE) a,
+   LATERAL (SELECT DISTINCT ON (val) dev, val FROM :TABLE WHERE dev = a.dev) b;
+-- no SkipScan: 2 distinct columns
+:PREFIX SELECT DISTINCT ON (dev, val) dev, val FROM :TABLE WHERE dev IS NOT NULL;
+:PREFIX SELECT DISTINCT ON (dev, val) dev, val FROM :TABLE WHERE dev IS NOT NULL
+UNION SELECT b.* FROM
+   (SELECT DISTINCT ON (dev) dev FROM :TABLE) a,
+   LATERAL (SELECT DISTINCT ON (val) dev, val FROM :TABLE WHERE dev = a.dev) b;
+-- SkipScan into INSERT
+:PREFIX INSERT INTO skip_scan_insert(time, dev, val, query) SELECT time, dev, val, 'q10_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a;
+-- parallel query
+RESET max_parallel_workers_per_gather;
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+:PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+TRUNCATE skip_scan_insert;
+-- table with only nulls
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE where val IS NULL;
+-- no tuples in resultset
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE val IS NULL AND dev > 100;
+SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+\o
+RESET timescaledb.enable_compressed_skipscan;
+-- compare SkipScan results on hypertable
+:DIFF_CMD
+--- Unoptimized results
++++ Optimized results
+@@ -1,6 +1,6 @@
+  enable_compressed_skipscan 
+ ----------------------------
+- off
++ on
+ (1 row)
+ 
+              compress_chunk             
+-- run tests on compressed hypertable with different layouts of compressed chunks
+SELECT format('include/%s_load_comp_query.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME" \gset
+\set TABLE skip_scan_htcl
+\set PREFIX ''
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- canary for result diff
+SELECT current_setting('timescaledb.enable_compressed_skipscan') AS enable_compressed_skipscan;
+-- To avoid ambiguity in test EXPLAIN outputs due to mixing of chunk plans with no SkipScan
+SET max_parallel_workers_per_gather = 0;
+-- To avoid choosing SeqScan under DecompressChunks before SkipScan can evaluate it,
+-- as cost of scanning and sorting a small dataset can be less than scanning an index
+-- TODO: address an issue of not preserving IndexPaths under DecompressChunks in "add_path"
+SET enable_seqscan = false;
+-- Run SkipScan queries on the provided compression layout
+-- compressed index on "segmentby='dev'" has default "dev ASC, NULLS LAST" sort order
+-- SkipScan used when sort order on distinct column "dev" matches "segmentby" sort order
+:PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
+:PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC;
+:PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC NULLS FIRST;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+-- multicolumn sort with dev as leading column matching (segmentby dev, order by time DESC) compression index
+:PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev, time DESC;
+:PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev DESC, time;
+\qecho stable expression in targetlist on :TABLE
+:PREFIX SELECT DISTINCT dev, 'q1_4', length(md5(now()::text)) FROM :TABLE ORDER BY dev;
+-- DISTINCT ON queries
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, 'q2_2' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, 'q2_3', NULL FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, 'q2_4', length(md5(now()::text)) FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, 'q2_5', length(md5(random()::text)) FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) *, 'q2_7' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, time, 'q2_8' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, NULL, 'q2_9' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) time, 'q2_10' FROM :TABLE ORDER by dev, time DESC;
+:PREFIX SELECT DISTINCT ON (dev) dev, tableoid::regclass, 'q2_11' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, int_func_immutable(), 'q2_12' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, int_func_stable(), 'q2_13' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, int_func_volatile(), 'q2_14' FROM :TABLE;
+\qecho DISTINCT with wholerow var
+:PREFIX SELECT DISTINCT ON (dev) :TABLE FROM :TABLE;
+\qecho LIMIT queries on :TABLE
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE LIMIT 3;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev DESC, time LIMIT 3;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev, time DESC LIMIT 3;
+\qecho range queries on :TABLE
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time BETWEEN 100 AND 300;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time < 200;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time > 800;
+-- Various tests for "segmentby = 'dev'"
+---------------------------------------
+\qecho SUBSELECTS on :TABLE
+:PREFIX SELECT time, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a;
+:PREFIX SELECT NULL, dev, NULL, 'q4_3' FROM (SELECT DISTINCT ON (dev) dev FROM :TABLE) a;
+:PREFIX SELECT time, dev, NULL, 'q4_4' FROM (SELECT DISTINCT ON (dev) dev, time FROM :TABLE) a;
+\qecho ORDER BY
+:PREFIX SELECT time, dev, val, 'q5_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE ORDER BY dev, time DESC) a;
+:PREFIX SELECT time, dev, val, 'q5_2' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE ORDER BY dev DESC, time) a;
+\qecho WHERE CLAUSES
+:PREFIX SELECT time, dev, val, 'q6_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > 5) a;
+:PREFIX SELECT time, dev, val, 'q6_2' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE WHERE time > 5) a;
+:PREFIX SELECT time, dev, val, 'q6_3' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a WHERE dev > 5;
+:PREFIX SELECT time, dev, val, 'q6_4' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a WHERE time > 5;
+--\qecho immutable func in WHERE clause on :TABLE
+:PREFIX SELECT DISTINCT ON (dev) *, 'q6_5' FROM :TABLE WHERE dev > int_func_immutable();
+--\qecho stable func in WHERE clause on :TABLE
+:PREFIX SELECT DISTINCT ON (dev) *, 'q6_6' FROM :TABLE WHERE dev > int_func_stable();
+--\qecho volatile func in WHERE clause on :TABLE
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > int_func_volatile();
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = ANY(inta_func_immutable());
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = ANY(inta_func_stable());
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = ANY(inta_func_volatile());
+-- RowCompareExpr
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE (dev, time) > (5,100);
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > NULL;
+-- no tuples matching
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > 20;
+-- multiple constraints in WHERE clause
+:PREFIX SELECT DISTINCT ON (dev) dev,time FROM :TABLE WHERE dev > 5 AND time = 100;
+:PREFIX SELECT DISTINCT ON (dev) dev,time FROM :TABLE WHERE dev > 5 AND time > 200;
+:PREFIX SELECT DISTINCT ON (dev) dev,time FROM :TABLE WHERE dev >= 5 AND dev < 7 AND dev >= 2;
+:PREFIX SELECT DISTINCT ON (dev) dev,time,val FROM :TABLE WHERE time > 100 AND time < 200 AND val > 10 AND val < 10000 AND dev > 2 AND dev < 7 ORDER BY dev,time DESC;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE dev IS NULL;
+-- test constants in ORDER BY
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = 1 ORDER BY dev, time DESC;
+-- CTE
+:PREFIX WITH devices AS (
+	SELECT DISTINCT ON (dev) dev FROM :TABLE
+)
+SELECT * FROM devices;
+:PREFIX WITH devices AS (
+	SELECT DISTINCT dev FROM :TABLE
+)
+SELECT * FROM devices ORDER BY dev;
+-- prepared statements
+PREPARE prep AS SELECT DISTINCT ON (dev) dev FROM :TABLE;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+DEALLOCATE prep;
+-- ReScan tests
+-- have SkipScan as Distinct is over index
+:PREFIX SELECT time, dev, val, 'q7_2' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev != a.v) b) a;
+-- RuntimeKeys
+:PREFIX SELECT time, dev, val, 'q8_1' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev >= a.v) b) c;
+RESET max_parallel_workers_per_gather;
+RESET enable_seqscan;
+\o
+SET timescaledb.enable_compressed_skipscan TO false;
+\o :TEST_RESULTS_UNOPTIMIZED
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- canary for result diff
+SELECT current_setting('timescaledb.enable_compressed_skipscan') AS enable_compressed_skipscan;
+-- To avoid ambiguity in test EXPLAIN outputs due to mixing of chunk plans with no SkipScan
+SET max_parallel_workers_per_gather = 0;
+-- To avoid choosing SeqScan under DecompressChunks before SkipScan can evaluate it,
+-- as cost of scanning and sorting a small dataset can be less than scanning an index
+-- TODO: address an issue of not preserving IndexPaths under DecompressChunks in "add_path"
+SET enable_seqscan = false;
+-- Run SkipScan queries on the provided compression layout
+-- compressed index on "segmentby='dev'" has default "dev ASC, NULLS LAST" sort order
+-- SkipScan used when sort order on distinct column "dev" matches "segmentby" sort order
+:PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
+:PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC;
+:PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC NULLS FIRST;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+-- multicolumn sort with dev as leading column matching (segmentby dev, order by time DESC) compression index
+:PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev, time DESC;
+:PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev DESC, time;
+\qecho stable expression in targetlist on :TABLE
+:PREFIX SELECT DISTINCT dev, 'q1_4', length(md5(now()::text)) FROM :TABLE ORDER BY dev;
+-- DISTINCT ON queries
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, 'q2_2' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, 'q2_3', NULL FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, 'q2_4', length(md5(now()::text)) FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, 'q2_5', length(md5(random()::text)) FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) *, 'q2_7' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, time, 'q2_8' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, NULL, 'q2_9' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) time, 'q2_10' FROM :TABLE ORDER by dev, time DESC;
+:PREFIX SELECT DISTINCT ON (dev) dev, tableoid::regclass, 'q2_11' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, int_func_immutable(), 'q2_12' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, int_func_stable(), 'q2_13' FROM :TABLE;
+:PREFIX SELECT DISTINCT ON (dev) dev, int_func_volatile(), 'q2_14' FROM :TABLE;
+\qecho DISTINCT with wholerow var
+:PREFIX SELECT DISTINCT ON (dev) :TABLE FROM :TABLE;
+\qecho LIMIT queries on :TABLE
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE LIMIT 3;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev DESC, time LIMIT 3;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev, time DESC LIMIT 3;
+\qecho range queries on :TABLE
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time BETWEEN 100 AND 300;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time < 200;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time > 800;
+-- Various tests for "segmentby = 'dev'"
+---------------------------------------
+\qecho SUBSELECTS on :TABLE
+:PREFIX SELECT time, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a;
+:PREFIX SELECT NULL, dev, NULL, 'q4_3' FROM (SELECT DISTINCT ON (dev) dev FROM :TABLE) a;
+:PREFIX SELECT time, dev, NULL, 'q4_4' FROM (SELECT DISTINCT ON (dev) dev, time FROM :TABLE) a;
+\qecho ORDER BY
+:PREFIX SELECT time, dev, val, 'q5_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE ORDER BY dev, time DESC) a;
+:PREFIX SELECT time, dev, val, 'q5_2' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE ORDER BY dev DESC, time) a;
+\qecho WHERE CLAUSES
+:PREFIX SELECT time, dev, val, 'q6_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > 5) a;
+:PREFIX SELECT time, dev, val, 'q6_2' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE WHERE time > 5) a;
+:PREFIX SELECT time, dev, val, 'q6_3' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a WHERE dev > 5;
+:PREFIX SELECT time, dev, val, 'q6_4' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a WHERE time > 5;
+--\qecho immutable func in WHERE clause on :TABLE
+:PREFIX SELECT DISTINCT ON (dev) *, 'q6_5' FROM :TABLE WHERE dev > int_func_immutable();
+--\qecho stable func in WHERE clause on :TABLE
+:PREFIX SELECT DISTINCT ON (dev) *, 'q6_6' FROM :TABLE WHERE dev > int_func_stable();
+--\qecho volatile func in WHERE clause on :TABLE
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > int_func_volatile();
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = ANY(inta_func_immutable());
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = ANY(inta_func_stable());
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = ANY(inta_func_volatile());
+-- RowCompareExpr
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE (dev, time) > (5,100);
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > NULL;
+-- no tuples matching
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > 20;
+-- multiple constraints in WHERE clause
+:PREFIX SELECT DISTINCT ON (dev) dev,time FROM :TABLE WHERE dev > 5 AND time = 100;
+:PREFIX SELECT DISTINCT ON (dev) dev,time FROM :TABLE WHERE dev > 5 AND time > 200;
+:PREFIX SELECT DISTINCT ON (dev) dev,time FROM :TABLE WHERE dev >= 5 AND dev < 7 AND dev >= 2;
+:PREFIX SELECT DISTINCT ON (dev) dev,time,val FROM :TABLE WHERE time > 100 AND time < 200 AND val > 10 AND val < 10000 AND dev > 2 AND dev < 7 ORDER BY dev,time DESC;
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE dev IS NULL;
+-- test constants in ORDER BY
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = 1 ORDER BY dev, time DESC;
+-- CTE
+:PREFIX WITH devices AS (
+	SELECT DISTINCT ON (dev) dev FROM :TABLE
+)
+SELECT * FROM devices;
+:PREFIX WITH devices AS (
+	SELECT DISTINCT dev FROM :TABLE
+)
+SELECT * FROM devices ORDER BY dev;
+-- prepared statements
+PREPARE prep AS SELECT DISTINCT ON (dev) dev FROM :TABLE;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+DEALLOCATE prep;
+-- ReScan tests
+-- have SkipScan as Distinct is over index
+:PREFIX SELECT time, dev, val, 'q7_2' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev != a.v) b) a;
+-- RuntimeKeys
+:PREFIX SELECT time, dev, val, 'q8_1' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev >= a.v) b) c;
+RESET max_parallel_workers_per_gather;
+RESET enable_seqscan;
+\o
+RESET timescaledb.enable_compressed_skipscan;
+-- compare SkipScan results on hypertable
+:DIFF_CMD
+--- Unoptimized results
++++ Optimized results
+@@ -1,6 +1,6 @@
+  enable_compressed_skipscan 
+ ----------------------------
 - off
 + on
  (1 row)

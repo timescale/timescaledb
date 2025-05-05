@@ -42,6 +42,7 @@ set(TEST_FILES
     compress_sort_transform.sql
     create_table_with.sql
     custom_hashagg.sql
+    decompress_chunk_cost.sql
     decompress_index.sql
     foreign_keys.sql
     hypercore_columnar.sql
@@ -72,6 +73,7 @@ set(TEST_FILES
     reorder.sql
     size_utils_tsl.sql
     skip_scan.sql
+    split_chunk.sql
     transparent_decompression_join_index.sql
     vector_agg_functions.sql
     vector_agg_groupagg.sql

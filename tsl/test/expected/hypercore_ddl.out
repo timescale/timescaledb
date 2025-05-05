@@ -106,10 +106,10 @@ select count(*) from readings where location is null;
 (1 row)
 
 select compress_chunk(show_chunks('readings'), hypercore_use_access_method => true);
-NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_2_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_3_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_4_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_2_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_3_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_4_chunk" is already converted to columnstore
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
