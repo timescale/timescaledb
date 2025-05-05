@@ -443,7 +443,6 @@ bloom1_contains(PG_FUNCTION_ARGS)
 static int
 bloom1_varlena_alloc_size(int num_bits)
 {
-	Assert(num_bits % 8 == 0);
 	Assert(num_bits % 64 == 0);
 	return VARHDRSZ + num_bits / 8;
 }
