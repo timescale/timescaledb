@@ -1102,6 +1102,17 @@ WHERE CLAUSES
          Index Cond: (dev_name = 'device_1'::text)
 (4 rows)
 
+-- test distinct PathKey with sortref = 0 in PG15 due to FALSE filter not pushed into relation (should not crash in PG15)
+:PREFIX SELECT DISTINCT sq.dev FROM (SELECT dev FROM :TABLE) sq JOIN :TABLE ref ON (sq.dev = ref.dev) WHERE 1 > 2;
+              QUERY PLAN               
+---------------------------------------
+ HashAggregate (actual rows=0 loops=1)
+   Group Key: skip_scan.dev
+   Batches: 1 
+   ->  Result (actual rows=0 loops=1)
+         One-Time Filter: false
+(5 rows)
+
 -- test multiple distincts with all but one pinned: #7998
 :PREFIX SELECT DISTINCT dev, dev FROM :TABLE ORDER BY 1;
                                            QUERY PLAN                                            
@@ -3203,6 +3214,17 @@ WHERE CLAUSES
                ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_name_idx on _hyper_1_4_chunk (actual rows=250 loops=1)
                      Index Cond: (dev_name = 'device_1'::text)
 (15 rows)
+
+-- test distinct PathKey with sortref = 0 in PG15 due to FALSE filter not pushed into relation (should not crash in PG15)
+:PREFIX SELECT DISTINCT sq.dev FROM (SELECT dev FROM :TABLE) sq JOIN :TABLE ref ON (sq.dev = ref.dev) WHERE 1 > 2;
+              QUERY PLAN               
+---------------------------------------
+ HashAggregate (actual rows=0 loops=1)
+   Group Key: skip_scan_ht.dev
+   Batches: 1 
+   ->  Result (actual rows=0 loops=1)
+         One-Time Filter: false
+(5 rows)
 
 -- test multiple distincts with all but one pinned: #7998
 :PREFIX SELECT DISTINCT dev, dev FROM :TABLE ORDER BY 1;
