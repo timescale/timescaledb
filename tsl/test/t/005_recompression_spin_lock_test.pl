@@ -136,6 +136,9 @@ $s1->query_until(
     SELECT compress_chunk(show_chunks('sensor_data'));
 });
 
+# Sleep for 0.5 seconds to ensure that at the end of recompression, an attempt to get the ExclusiveLock on the table is blocked and a retry happens
+sleep(0.5);
+
 # Session 2 immediately aborts, releasing the RowExclusiveLock on the table
 $result = $s2->query_safe("ABORT");
 
