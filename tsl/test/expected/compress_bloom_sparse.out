@@ -29,6 +29,7 @@ select count(compress_chunk(x)) from show_chunks('bloom') x;
      1
 (1 row)
 
+vacuum full analyze bloom;
 select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
     where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
         where hypertable_id = (select id from _timescaledb_catalog.hypertable
@@ -78,6 +79,7 @@ select count(*) from bloom where value = md5(7248::text);
 -- The join condition is not pushed down to the compressed scan for some reason.
 set enable_mergejoin to off;
 set enable_hashjoin to off;
+set enable_material to off;
 explain (analyze, verbose, costs off, timing off, summary off)
 with query(value) as materialized (values (md5(3516::text)), (md5(9347::text)),
     (md5(5773::text)))
@@ -113,6 +115,7 @@ select count(*) from bloom natural join query;
 ;
 reset enable_mergejoin;
 reset enable_hashjoin;
+reset enable_material;
 -- Stable expression that yields null
 set timescaledb.enable_chunk_append to off;
 explain (analyze, verbose, costs off, timing off, summary off)
@@ -192,10 +195,11 @@ execute p(1000);
          Vectorized Filter: (_hyper_1_1_chunk.x < $1)
          Rows Removed by Filter: 1
          Bulk Decompression: true
-         ->  Index Scan using compress_hyper_2_2_chunk__ts_meta_min_1__ts_meta_max_1_idx on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=1 loops=1)
+         ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=1 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
-               Index Cond: (compress_hyper_2_2_chunk._ts_meta_min_1 < $1)
-(9 rows)
+               Filter: (compress_hyper_2_2_chunk._ts_meta_min_1 < $1)
+               Rows Removed by Filter: 9
+(10 rows)
 
 deallocate p;
 -- Parameter on bloom index
@@ -383,6 +387,7 @@ select count(compress_chunk(x)) from show_chunks('corner') x;
      1
 (1 row)
 
+vacuum full analyze corner;
 explain (analyze, verbose, costs off, timing off, summary off)
 select * from corner where c = 'short';
                                                                                                                                   QUERY PLAN                                                                                                                                   

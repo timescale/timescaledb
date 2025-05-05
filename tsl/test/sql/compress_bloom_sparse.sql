@@ -22,6 +22,7 @@ alter table bloom set (timescaledb.compress,
     timescaledb.compress_segmentby = '',
     timescaledb.compress_orderby = 'x');
 select count(compress_chunk(x)) from show_chunks('bloom') x;
+vacuum full analyze bloom;
 
 select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
     where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
@@ -40,6 +41,7 @@ select count(*) from bloom where value = md5(7248::text);
 -- The join condition is not pushed down to the compressed scan for some reason.
 set enable_mergejoin to off;
 set enable_hashjoin to off;
+set enable_material to off;
 
 explain (analyze, verbose, costs off, timing off, summary off)
 with query(value) as materialized (values (md5(3516::text)), (md5(9347::text)),
@@ -54,6 +56,7 @@ select count(*) from bloom natural join query;
 
 reset enable_mergejoin;
 reset enable_hashjoin;
+reset enable_material;
 
 
 -- Stable expression that yields null
@@ -169,6 +172,8 @@ insert into corner select 4, 'longheader', generate_series(1, 1000)::text;
 create index on corner(c);
 
 select count(compress_chunk(x)) from show_chunks('corner') x;
+
+vacuum full analyze corner;
 
 explain (analyze, verbose, costs off, timing off, summary off)
 select * from corner where c = 'short';
