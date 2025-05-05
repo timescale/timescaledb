@@ -37,7 +37,7 @@ RESET enable_seqscan;
 :PREFIX SELECT DISTINCT time FROM :TABLE WHERE dev = 1 ORDER BY time DESC;
 
 -- multicolumn sort with dev as non-leading column and with leading column pinned
--- TODO: should be able to apply SkipScan here, issue created: #7998
+-- we are able to apply SkipScan here after resolving #7998
 :PREFIX SELECT DISTINCT time, dev FROM :TABLE WHERE time = 100 ORDER BY time, dev;
 
 -- multicolumn "segmentby = 'dev, dev_name'"

@@ -271,6 +271,14 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev_name IS NULL;
 -- test constants in ORDER BY
 :PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = 1 ORDER BY dev, time DESC;
+:PREFIX SELECT DISTINCT dev, time FROM :TABLE WHERE dev = 1 and time = 100 ORDER BY dev, time DESC;
+:PREFIX SELECT DISTINCT dev_name::varchar FROM :TABLE  WHERE dev_name::varchar = 'device_1' ORDER BY 1;
+-- test multiple distincts with all but one pinned: #7998
+:PREFIX SELECT DISTINCT dev, dev FROM :TABLE ORDER BY 1;
+:PREFIX SELECT DISTINCT dev, time FROM :TABLE WHERE time = 100 ORDER BY 1;
+:PREFIX SELECT DISTINCT dev, time, val FROM :TABLE WHERE time = 100 and val = 100 ORDER BY 1;
+:PREFIX SELECT DISTINCT ON (dev, time) * FROM :TABLE WHERE time = 100 ORDER BY dev;
+:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev = 1 AND time < 20 ORDER BY dev, time;
 -- CTE
 :PREFIX WITH devices AS (
 	SELECT DISTINCT ON (dev) dev FROM :TABLE
@@ -475,6 +483,14 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev_name IS NULL;
 -- test constants in ORDER BY
 :PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = 1 ORDER BY dev, time DESC;
+:PREFIX SELECT DISTINCT dev, time FROM :TABLE WHERE dev = 1 and time = 100 ORDER BY dev, time DESC;
+:PREFIX SELECT DISTINCT dev_name::varchar FROM :TABLE  WHERE dev_name::varchar = 'device_1' ORDER BY 1;
+-- test multiple distincts with all but one pinned: #7998
+:PREFIX SELECT DISTINCT dev, dev FROM :TABLE ORDER BY 1;
+:PREFIX SELECT DISTINCT dev, time FROM :TABLE WHERE time = 100 ORDER BY 1;
+:PREFIX SELECT DISTINCT dev, time, val FROM :TABLE WHERE time = 100 and val = 100 ORDER BY 1;
+:PREFIX SELECT DISTINCT ON (dev, time) * FROM :TABLE WHERE time = 100 ORDER BY dev;
+:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev = 1 AND time < 20 ORDER BY dev, time;
 -- CTE
 :PREFIX WITH devices AS (
 	SELECT DISTINCT ON (dev) dev FROM :TABLE
@@ -694,6 +710,14 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev_name IS NULL;
 -- test constants in ORDER BY
 :PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = 1 ORDER BY dev, time DESC;
+:PREFIX SELECT DISTINCT dev, time FROM :TABLE WHERE dev = 1 and time = 100 ORDER BY dev, time DESC;
+:PREFIX SELECT DISTINCT dev_name::varchar FROM :TABLE  WHERE dev_name::varchar = 'device_1' ORDER BY 1;
+-- test multiple distincts with all but one pinned: #7998
+:PREFIX SELECT DISTINCT dev, dev FROM :TABLE ORDER BY 1;
+:PREFIX SELECT DISTINCT dev, time FROM :TABLE WHERE time = 100 ORDER BY 1;
+:PREFIX SELECT DISTINCT dev, time, val FROM :TABLE WHERE time = 100 and val = 100 ORDER BY 1;
+:PREFIX SELECT DISTINCT ON (dev, time) * FROM :TABLE WHERE time = 100 ORDER BY dev;
+:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev = 1 AND time < 20 ORDER BY dev, time;
 -- CTE
 :PREFIX WITH devices AS (
 	SELECT DISTINCT ON (dev) dev FROM :TABLE
@@ -898,6 +922,14 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev_name IS NULL;
 -- test constants in ORDER BY
 :PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = 1 ORDER BY dev, time DESC;
+:PREFIX SELECT DISTINCT dev, time FROM :TABLE WHERE dev = 1 and time = 100 ORDER BY dev, time DESC;
+:PREFIX SELECT DISTINCT dev_name::varchar FROM :TABLE  WHERE dev_name::varchar = 'device_1' ORDER BY 1;
+-- test multiple distincts with all but one pinned: #7998
+:PREFIX SELECT DISTINCT dev, dev FROM :TABLE ORDER BY 1;
+:PREFIX SELECT DISTINCT dev, time FROM :TABLE WHERE time = 100 ORDER BY 1;
+:PREFIX SELECT DISTINCT dev, time, val FROM :TABLE WHERE time = 100 and val = 100 ORDER BY 1;
+:PREFIX SELECT DISTINCT ON (dev, time) * FROM :TABLE WHERE time = 100 ORDER BY dev;
+:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev = 1 AND time < 20 ORDER BY dev, time;
 -- CTE
 :PREFIX WITH devices AS (
 	SELECT DISTINCT ON (dev) dev FROM :TABLE
@@ -1001,7 +1033,7 @@ RESET enable_seqscan;
 -- Distinct column not a segmentby column: should be no SkipScan
 :PREFIX SELECT DISTINCT time FROM :TABLE WHERE dev = 1 ORDER BY time DESC;
 -- multicolumn sort with dev as non-leading column and with leading column pinned
--- TODO: should be able to apply SkipScan here, issue created: #7998
+-- we are able to apply SkipScan here after resolving #7998
 :PREFIX SELECT DISTINCT time, dev FROM :TABLE WHERE time = 100 ORDER BY time, dev;
 -- multicolumn "segmentby = 'dev, dev_name'"
 SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
@@ -1230,7 +1262,7 @@ RESET enable_seqscan;
 -- Distinct column not a segmentby column: should be no SkipScan
 :PREFIX SELECT DISTINCT time FROM :TABLE WHERE dev = 1 ORDER BY time DESC;
 -- multicolumn sort with dev as non-leading column and with leading column pinned
--- TODO: should be able to apply SkipScan here, issue created: #7998
+-- we are able to apply SkipScan here after resolving #7998
 :PREFIX SELECT DISTINCT time, dev FROM :TABLE WHERE time = 100 ORDER BY time, dev;
 -- multicolumn "segmentby = 'dev, dev_name'"
 SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
