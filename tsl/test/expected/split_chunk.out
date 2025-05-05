@@ -1,0 +1,408 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE ACCESS METHOD testam TYPE TABLE HANDLER heap_tableam_handler;
+set role :ROLE_DEFAULT_PERM_USER;
+create view chunk_slices as
+select
+    h.table_name as hypertable_name,
+    c.table_name as chunk_name,
+    _timescaledb_functions.to_timestamp(ds.range_start) as range_start,
+    _timescaledb_functions.to_timestamp(ds.range_end) as range_end
+from _timescaledb_catalog.chunk c
+join _timescaledb_catalog.chunk_constraint cc on (cc.chunk_id = c.id)
+join _timescaledb_catalog.dimension_slice ds on (ds.id = cc.dimension_slice_id)
+join _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
+order by range_start, range_end;
+create table splitme (time timestamptz not null, device int, location int, temp float, comment text);
+select create_hypertable('splitme', 'time', chunk_time_interval => interval '1 week');
+  create_hypertable   
+----------------------
+ (1,public,splitme,t)
+(1 row)
+
+alter table splitme set (timescaledb.compress_orderby='time', timescaledb.compress_segmentby='device');
+--
+-- Insert data to create two chunks with time ranges like this:
+-- _____________
+-- |     |     |
+-- |  1  |  2  |
+-- |_____|_____|
+---
+--- Make sure we have a long text value to create toast table
+insert into splitme values
+       ('2024-01-03 22:00', 1, 1, 1.0, 'foo'),
+       ('2024-01-09 15:00', 1, 2, 2.0, 'barbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbarbar');
+-- Remove a column to ensure that split can handle it
+alter table splitme drop column location;
+-- All data in single chunk
+select chunk_name, range_start, range_end
+from timescaledb_information.chunks
+order by chunk_name, range_start, range_end;
+    chunk_name    |         range_start          |          range_end           
+------------------+------------------------------+------------------------------
+ _hyper_1_1_chunk | Wed Jan 03 16:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
+(1 row)
+
+select time, device, temp from _timescaledb_internal._hyper_1_1_chunk order by time;
+             time             | device | temp 
+------------------------------+--------+------
+ Wed Jan 03 22:00:00 2024 PST |      1 |    1
+ Tue Jan 09 15:00:00 2024 PST |      1 |    2
+(2 rows)
+
+select * from chunk_slices where hypertable_name = 'splitme';
+ hypertable_name |    chunk_name    |         range_start          |          range_end           
+-----------------+------------------+------------------------------+------------------------------
+ splitme         | _hyper_1_1_chunk | Wed Jan 03 16:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
+(1 row)
+
+\set ON_ERROR_STOP 0
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk', split_at => 1);
+ERROR:  invalid type 'integer' for split_at argument
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk', split_at => 1::int);
+ERROR:  invalid type 'integer' for split_at argument
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk', split_at => '2024-01-04 00:00'::timestamp);
+ERROR:  invalid type 'timestamp without time zone' for split_at argument
+-- Split at start of chunk range
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk', split_at => 'Wed Jan 03 16:00:00 2024 PST');
+ERROR:  cannot split chunk at Wed Jan 03 16:00:00 2024 PST
+-- Split at end of chunk range
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk', split_at => 'Wed Jan 10 16:00:00 2024 PST');
+ERROR:  cannot split chunk at Wed Jan 10 16:00:00 2024 PST
+-- Split at multiple points. Not supported yet.
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk', split_at => '{ 2024-01-04 10:00, 2024-01-07 12:00 }'::timestamptz[]);
+ERROR:  invalid type 'timestamp with time zone[]' for split_at argument
+-- Try to split something which is not a chunk
+call split_chunk('splitme');
+ERROR:  chunk not found
+-- Split a chunk with unsupported access method
+alter table _timescaledb_internal._hyper_1_1_chunk set access method testam;
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
+ERROR:  access method "testam" is not supported for split
+alter table _timescaledb_internal._hyper_1_1_chunk set access method heap;
+-- Split an OSM chunk is not supported
+reset role;
+update _timescaledb_catalog.chunk ch set osm_chunk = true where table_name = '_hyper_1_1_chunk';
+set role :ROLE_DEFAULT_PERM_USER;
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
+ERROR:  cannot split OSM chunks
+reset role;
+update _timescaledb_catalog.chunk ch set osm_chunk = false where table_name = '_hyper_1_1_chunk';
+set role :ROLE_DEFAULT_PERM_USER;
+-- Split a frozen chunk is not supported
+select _timescaledb_functions.freeze_chunk('_timescaledb_internal._hyper_1_1_chunk');
+ freeze_chunk 
+--------------
+ t
+(1 row)
+
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
+ERROR:  cannot split frozen chunk "_timescaledb_internal._hyper_1_1_chunk" scheduled for tiering
+select _timescaledb_functions.unfreeze_chunk('_timescaledb_internal._hyper_1_1_chunk');
+ unfreeze_chunk 
+----------------
+ t
+(1 row)
+
+-- Split a compressed/columnstore chunk is not supported
+begin;
+call convert_to_columnstore('_timescaledb_internal._hyper_1_1_chunk');
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
+ERROR:  splitting a compressed chunk is not supported
+rollback;
+-- Split by non-owner is not allowed
+set role :ROLE_1;
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
+ERROR:  must be owner of table _hyper_1_1_chunk
+set role :ROLE_DEFAULT_PERM_USER;
+\set ON_ERROR_STOP 1
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk', split_at => '2024-01-04 00:00');
+select chunk_name, range_start, range_end
+from timescaledb_information.chunks
+order by chunk_name, range_start, range_end;
+    chunk_name    |         range_start          |          range_end           
+------------------+------------------------------+------------------------------
+ _hyper_1_1_chunk | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 00:00:00 2024 PST
+ _hyper_1_3_chunk | Thu Jan 04 00:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
+(2 rows)
+
+select * from chunk_slices where hypertable_name = 'splitme';
+ hypertable_name |    chunk_name    |         range_start          |          range_end           
+-----------------+------------------+------------------------------+------------------------------
+ splitme         | _hyper_1_1_chunk | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 00:00:00 2024 PST
+ splitme         | _hyper_1_3_chunk | Thu Jan 04 00:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
+(2 rows)
+
+-- Show that the two tuples ended up in different chunks
+select time, device, temp from _timescaledb_internal._hyper_1_1_chunk order by time;
+             time             | device | temp 
+------------------------------+--------+------
+ Wed Jan 03 22:00:00 2024 PST |      1 |    1
+(1 row)
+
+select time, device, temp from _timescaledb_internal._hyper_1_3_chunk order by time;
+             time             | device | temp 
+------------------------------+--------+------
+ Tue Jan 09 15:00:00 2024 PST |      1 |    2
+(1 row)
+
+select setseed(0.2);
+ setseed 
+---------
+ 
+(1 row)
+
+-- Test split with bigger data set and chunks with more blocks
+insert into splitme (time, device, temp)
+select t, ceil(random()*10), random()*40
+from generate_series('2024-01-03 23:00'::timestamptz, '2024-01-10 01:00', '10s') t;
+select count(*) from splitme;
+ count 
+-------
+ 52563
+(1 row)
+
+-- Add back location just to make things more difficult
+alter table splitme add column location int default 1;
+-- There are two space partitions (device), so several chunks will
+-- have the same time ranges
+select chunk_name, range_start, range_end
+from timescaledb_information.chunks
+order by chunk_name, range_start, range_end;
+    chunk_name    |         range_start          |          range_end           
+------------------+------------------------------+------------------------------
+ _hyper_1_1_chunk | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 00:00:00 2024 PST
+ _hyper_1_3_chunk | Thu Jan 04 00:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
+(2 rows)
+
+-- Split chunk 2. Save count to compare after split.
+select count(*) from _timescaledb_internal._hyper_1_3_chunk;
+ count 
+-------
+ 52202
+(1 row)
+
+select count(*) orig_count from _timescaledb_internal._hyper_1_3_chunk \gset
+-- Generate some garbage so that we can see that it gets cleaned up
+-- during split
+update  _timescaledb_internal._hyper_1_3_chunk set temp = temp+1 where temp > 10;
+-- This will split in two equal size chunks
+call split_chunk('_timescaledb_internal._hyper_1_3_chunk');
+select chunk_name, range_start, range_end
+from timescaledb_information.chunks
+order by chunk_name, range_start, range_end;
+    chunk_name    |         range_start          |          range_end           
+------------------+------------------------------+------------------------------
+ _hyper_1_1_chunk | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 00:00:00 2024 PST
+ _hyper_1_3_chunk | Thu Jan 04 00:00:00 2024 PST | Sun Jan 07 08:00:00 2024 PST
+ _hyper_1_4_chunk | Sun Jan 07 08:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
+(3 rows)
+
+-- Check that the counts in the two result partitions is the same as
+-- in the original partition and that the tuple counts are roughly the
+-- same across the partitions.
+with counts as (
+    select (select count(*) from _timescaledb_internal._hyper_1_3_chunk) count1,
+            (select count(*) from _timescaledb_internal._hyper_1_4_chunk) count2
+) select
+  c.count1, c.count2,
+  c.count1 + c.count2 as total_count,
+  (c.count1 + c.count2) = :orig_count as is_same_count
+from counts c;
+ count1 | count2 | total_count | is_same_count 
+--------+--------+-------------+---------------
+  28800 |  23402 |       52202 | t
+(1 row)
+
+-- Check that both rels return proper data and no columns are messed
+-- up
+select time, device, location, temp from _timescaledb_internal._hyper_1_3_chunk order by time, device limit 3;
+             time             | device | location |       temp       
+------------------------------+--------+----------+------------------
+ Thu Jan 04 00:00:00 2024 PST |      2 |        1 | 25.6730424335366
+ Thu Jan 04 00:00:10 2024 PST |      6 |        1 | 15.0341761730165
+ Thu Jan 04 00:00:20 2024 PST |      6 |        1 | 27.5663547962209
+(3 rows)
+
+select time, device, location, temp from _timescaledb_internal._hyper_1_4_chunk order by time, device limit 3;
+             time             | device | location |       temp       
+------------------------------+--------+----------+------------------
+ Sun Jan 07 08:00:00 2024 PST |     10 |        1 | 4.03503358112434
+ Sun Jan 07 08:00:10 2024 PST |      8 |        1 |  17.726969596003
+ Sun Jan 07 08:00:20 2024 PST |      6 |        1 | 9.63191118430237
+(3 rows)
+
+--
+-- Test split with integer time
+--
+create table splitme_int (time int not null, device int, temp float);
+select create_hypertable('splitme_int', 'time', chunk_time_interval => 10::int);
+    create_hypertable     
+--------------------------
+ (3,public,splitme_int,t)
+(1 row)
+
+insert into splitme_int values (1, 1, 1.0), (8, 8, 8.0);
+select ch as int_chunk from show_chunks('splitme_int') ch order by ch limit 1 \gset
+select * from chunk_slices where hypertable_name = 'splitme_int';
+ hypertable_name |    chunk_name    |         range_start          |             range_end              
+-----------------+------------------+------------------------------+------------------------------------
+ splitme_int     | _hyper_3_5_chunk | Wed Dec 31 16:00:00 1969 PST | Wed Dec 31 16:00:00.00001 1969 PST
+(1 row)
+
+\set ON_ERROR_STOP 0
+call split_chunk(:'int_chunk', split_at => 0);
+ERROR:  cannot split chunk at 0
+call split_chunk(:'int_chunk', split_at => 10);
+ERROR:  cannot split chunk at 10
+\set ON_ERROR_STOP 1
+call split_chunk(:'int_chunk', split_at => '5');
+select * from chunk_slices where hypertable_name = 'splitme_int';
+ hypertable_name |    chunk_name    |             range_start             |              range_end              
+-----------------+------------------+-------------------------------------+-------------------------------------
+ splitme_int     | _hyper_3_5_chunk | Wed Dec 31 16:00:00 1969 PST        | Wed Dec 31 16:00:00.000005 1969 PST
+ splitme_int     | _hyper_3_6_chunk | Wed Dec 31 16:00:00.000005 1969 PST | Wed Dec 31 16:00:00.00001 1969 PST
+(2 rows)
+
+select * from :int_chunk order by time;
+ time | device | temp 
+------+--------+------
+    1 |      1 |    1
+(1 row)
+
+select * from splitme_int order by time;
+ time | device | temp 
+------+--------+------
+    1 |      1 |    1
+    8 |      8 |    8
+(2 rows)
+
+-- Split with one empty chunk
+call split_chunk(:'int_chunk', split_at => 3);
+select * from chunk_slices where hypertable_name = 'splitme_int';
+ hypertable_name |    chunk_name    |             range_start             |              range_end              
+-----------------+------------------+-------------------------------------+-------------------------------------
+ splitme_int     | _hyper_3_5_chunk | Wed Dec 31 16:00:00 1969 PST        | Wed Dec 31 16:00:00.000003 1969 PST
+ splitme_int     | _hyper_3_7_chunk | Wed Dec 31 16:00:00.000003 1969 PST | Wed Dec 31 16:00:00.000005 1969 PST
+ splitme_int     | _hyper_3_6_chunk | Wed Dec 31 16:00:00.000005 1969 PST | Wed Dec 31 16:00:00.00001 1969 PST
+(3 rows)
+
+select * from :int_chunk order by time;
+ time | device | temp 
+------+--------+------
+    1 |      1 |    1
+(1 row)
+
+select ch as int_chunk from show_chunks('splitme_int') ch order by ch limit 1 offset 2 \gset
+\echo :int_chunk
+_timescaledb_internal._hyper_3_7_chunk
+select * from :int_chunk order by time;
+ time | device | temp 
+------+--------+------
+(0 rows)
+
+-- Insert data into the empty chunk
+insert into splitme_int values (4, 4, 4.0);
+select * from :int_chunk order by time;
+ time | device | temp 
+------+--------+------
+    4 |      4 |    4
+(1 row)
+
+--
+-- Try with more data after split
+--
+create view chunk_info as
+select relname as chunk, amname as tam, con.conname, pg_get_expr(conbin, ch) checkconstraint
+from pg_class cl
+join pg_am am on (cl.relam = am.oid)
+join show_chunks('splitme') ch on (cl.oid = ch)
+join pg_constraint con on (con.conrelid = ch)
+where con.contype = 'c'
+order by 1,2,3 desc;
+-- Remove comment column to generate dropped column
+alter table splitme drop column comment;
+select * from chunk_info;
+      chunk       | tam  |   conname    |                                                                checkconstraint                                                                 
+------------------+------+--------------+------------------------------------------------------------------------------------------------------------------------------------------------
+ _hyper_1_1_chunk | heap | constraint_1 | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_3_chunk | heap | constraint_3 | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_4_chunk | heap | constraint_5 | (("time" >= 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone))
+(3 rows)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+set role :ROLE_DEFAULT_PERM_USER;
+select * from chunk_slices where hypertable_name = 'splitme';
+ hypertable_name |    chunk_name    |         range_start          |          range_end           
+-----------------+------------------+------------------------------+------------------------------
+ splitme         | _hyper_1_1_chunk | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 00:00:00 2024 PST
+ splitme         | _hyper_1_3_chunk | Thu Jan 04 00:00:00 2024 PST | Sun Jan 07 08:00:00 2024 PST
+ splitme         | _hyper_1_4_chunk | Sun Jan 07 08:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
+(3 rows)
+
+insert into splitme (time, device, location, temp)
+select t, ceil(random()*10), ceil(random()*20), random()*40
+from generate_series('2024-01-03'::timestamptz, '2024-01-10', '10s') t;
+select * from chunk_info;
+      chunk       | tam  |    conname    |                                                                checkconstraint                                                                 
+------------------+------+---------------+------------------------------------------------------------------------------------------------------------------------------------------------
+ _hyper_1_1_chunk | heap | constraint_1  | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_3_chunk | heap | constraint_3  | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_4_chunk | heap | constraint_5  | (("time" >= 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_8_chunk | heap | constraint_11 | (("time" >= 'Wed Dec 27 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone))
+(4 rows)
+
+call split_chunk('_timescaledb_internal._hyper_1_3_chunk');
+select * from chunk_info;
+      chunk       | tam  |    conname    |                                                                checkconstraint                                                                 
+------------------+------+---------------+------------------------------------------------------------------------------------------------------------------------------------------------
+ _hyper_1_1_chunk | heap | constraint_1  | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_3_chunk | heap | constraint_3  | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_4_chunk | heap | constraint_5  | (("time" >= 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_8_chunk | heap | constraint_11 | (("time" >= 'Wed Dec 27 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_9_chunk | heap | constraint_13 | (("time" >= 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone))
+(5 rows)
+
+--
+-- Test multi-dimensional hypertable
+--
+-- Currently not supported because the subspace cache cannot handle
+-- tuple routing when there are two overlapping primary dimension
+-- ranges. This can happen when the "time" range is split in one space
+-- partition but not the other.
+--
+create table splitme_md (time timestamptz not null, device int, location int, temp float);
+select create_hypertable('splitme_md', 'time', 'device', 2, chunk_time_interval => interval '1 week');
+    create_hypertable    
+-------------------------
+ (4,public,splitme_md,t)
+(1 row)
+
+insert into splitme_md values
+       ('2024-01-03 22:00', 1, 1, 1.0),
+       ('2024-01-09 15:00', 1, 2, 2.0);
+select ch as chunk_md from show_chunks('splitme_md') ch limit 1 \gset
+select * from chunk_slices where hypertable_name = 'splitme_md';
+ hypertable_name |    chunk_name     |         range_start          |              range_end              
+-----------------+-------------------+------------------------------+-------------------------------------
+ splitme_md      | _hyper_4_10_chunk | -infinity                    | Wed Dec 31 16:17:53.741823 1969 PST
+ splitme_md      | _hyper_4_10_chunk | Wed Jan 03 16:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
+(2 rows)
+
+\set ON_ERROR_STOP 0
+-- Currently can't split multi-dimensional chunks due to bug/limitation in subspace store.
+call split_chunk(:'chunk_md');
+ERROR:  cannot split chunk in multi-dimensional hypertable
+\set ON_ERROR_STOP 1
+-- Split when insert in progress
+begin;
+insert into splitme values ('2024-01-04 22:00', 20, 20, 20.0);
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
+rollback;
+-- Split when delete in progress
+begin;
+delete from splitme where device = 1;
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
+rollback;

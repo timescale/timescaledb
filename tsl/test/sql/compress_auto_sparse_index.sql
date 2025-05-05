@@ -17,7 +17,7 @@ explain (costs off) select * from sparse where value = 1;
 -- Should be disabled with the GUC
 set timescaledb.auto_sparse_indexes to off;
 select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
-explain select * from sparse where value = 1;
+explain (costs off) select * from sparse where value = 1;
 reset timescaledb.auto_sparse_indexes;
 select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
 explain (costs off) select * from sparse where value = 1;
@@ -25,7 +25,7 @@ explain (costs off) select * from sparse where value = 1;
 
 -- Should survive renames.
 alter table sparse rename column value to wert;
-explain select * from sparse where wert = 1;
+explain (costs off) select * from sparse where wert = 1;
 alter table sparse rename column wert to value;
 explain (costs off) select * from sparse where value = 1;
 

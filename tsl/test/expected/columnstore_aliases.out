@@ -101,8 +101,8 @@ ALTER TABLE test2 set (
       timescaledb.orderby = 'ts desc'
 );
 SELECT * FROM timescaledb_information.hypertables WHERE hypertable_name = 'test2';
- hypertable_schema | hypertable_name |       owner       | num_dimensions | num_chunks | compression_enabled | tablespaces 
--------------------+-----------------+-------------------+----------------+------------+---------------------+-------------
- public            | test2           | default_perm_user |              1 |          4 | t                   | 
+ hypertable_schema | hypertable_name |       owner       | num_dimensions | num_chunks | compression_enabled | tablespaces | primary_dimension |  primary_dimension_type  
+-------------------+-----------------+-------------------+----------------+------------+---------------------+-------------+-------------------+--------------------------
+ public            | test2           | default_perm_user |              1 |          4 | t                   |             | ts                | timestamp with time zone
 (1 row)
 

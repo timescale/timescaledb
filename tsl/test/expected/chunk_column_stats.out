@@ -110,10 +110,9 @@ NOTICE:  already enabled for column "sensor_id", skipping
 -- enable compression
 ALTER TABLE sample_table SET (
 	timescaledb.compress,
-    timescaledb.compress_orderby = 'time'
+    timescaledb.compress_orderby = 'time',
+    timescaledb.compress_segmentby = 'sensor_id'
 );
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: Please make sure sensor_id is not a unique column and appropriate for a segment by
-NOTICE:  default segment by for hypertable "sample_table" is set to "sensor_id"
 --
 -- compress one chunk
 SELECT show_chunks('sample_table') AS "CH_NAME" order by 1 limit 1 \gset
@@ -799,9 +798,7 @@ ALTER TABLE sample_table DROP COLUMN sensor_id;
 INSERT INTO sample_table VALUES
     (now(), 1, 366),
     (now(), 2, 501);
-ALTER TABLE sample_table SET (timescaledb.compress, timescaledb.compress_orderby='time');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: Please make sure temperature is not a unique column and appropriate for a segment by
-NOTICE:  default segment by for hypertable "sample_table" is set to "temperature"
+ALTER TABLE sample_table SET (timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='temperature');
 set timescaledb.enable_chunk_skipping = on;
 SELECT enable_chunk_skipping('sample_table', 'temperature');
  enable_chunk_skipping 

@@ -170,6 +170,7 @@ typedef struct CrossModuleFunctions
 
 	void (*preprocess_query_tsl)(Query *parse, int *cursor_opts);
 	PGFunction merge_chunks;
+	PGFunction split_chunk;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

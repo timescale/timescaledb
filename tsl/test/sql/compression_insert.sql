@@ -776,6 +776,7 @@ SELECT count(*) FROM unique_null;
 DROP TABLE unique_null;
 
 -- test insert with UNIQUE constraint and all compression algorithms
+set timescaledb.enable_bool_compression = on;
 
 CREATE TABLE unique_all(
 	time timestamptz NOT NULL,
@@ -837,3 +838,45 @@ INSERT INTO unique_all VALUES('2024-01-01 00:04', 1, true, 1.0, 3.0, 'first', 1,
 INSERT INTO unique_all VALUES('2024-01-01 00:05', 1, true, 1.0, 1.0, 'third', 1, '{"first":true}');
 INSERT INTO unique_all VALUES('2024-01-01 00:06', 1, true, 1.0, 1.0, 'first', 3, '{"first":true}');
 INSERT INTO unique_all VALUES('2024-01-01 00:07', 1, true, 1.0, 1.0, 'first', 1, '{"third":true}');
+
+-- test non-duplicates with non-NULL default values
+ALTER TABLE unique_all ADD COLUMN added_non_null int DEFAULT 4;
+
+DROP INDEX ultimate_unique;
+CREATE UNIQUE INDEX ultimate_unique ON unique_all(time, device_id, bool_type, numeric_type, float_type, text_type, bigint_type, jsonb_type, added_non_null) NULLS NOT DISTINCT;
+
+\set ON_ERROR_STOP 0
+INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 4);
+\set ON_ERROR_STOP 1
+INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 5);
+
+-- make sure everything is correct after recompressing the chunk
+SELECT count(decompress_chunk(c)) FROM show_chunks('unique_all') c;
+SELECT count(compress_chunk(c)) FROM show_chunks('unique_all') c;
+
+\set ON_ERROR_STOP 0
+INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 4);
+\set ON_ERROR_STOP 1
+
+-- test non-duplicates with NULL default values
+ALTER TABLE unique_all ADD COLUMN added_null int DEFAULT NULL;
+DROP INDEX ultimate_unique;
+CREATE UNIQUE INDEX ultimate_unique ON unique_all(time, device_id, bool_type, numeric_type, float_type, text_type, bigint_type, jsonb_type, added_non_null, added_null) NULLS NOT DISTINCT;
+
+\set ON_ERROR_STOP 0
+INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 4, NULL);
+INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 5, NULL);
+\set ON_ERROR_STOP 1
+
+INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 6, NULL);
+
+-- make sure everything is correct after recompressing the chunk
+SELECT count(decompress_chunk(c)) FROM show_chunks('unique_all') c;
+SELECT count(compress_chunk(c)) FROM show_chunks('unique_all') c;
+
+\set ON_ERROR_STOP 0
+INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 4, NULL);
+INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 5, NULL);
+\set ON_ERROR_STOP 1
+
+DROP TABLE unique_all;

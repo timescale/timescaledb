@@ -91,16 +91,20 @@ jobs:
     - name: Setup WSL
       uses: Vampire/setup-wsl@v3.1.4
       with:
-        additional-packages:
-          cmake
-          gawk
-          gcc
-          git
-          gnupg
-          make
-          postgresql-client
-          postgresql-common
-          tree
+        distribution: Debian
+
+    - name: Configure apt retries and timeout in WSL
+      shell: wsl-bash {0}
+      run: |
+        echo 'Acquire::Retries "10";' >> /etc/apt/apt.conf.d/99retries
+        echo 'Acquire::http::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
+        echo 'Acquire::https::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
+
+    - name: Install additional packages in WSL
+      shell: wsl-bash {0}
+      run: |
+        apt-get update
+        apt-get install --yes --no-install-recommends cmake gawk gcc git gnupg jq make postgresql-client postgresql-common tree
 
     - name: Configure git
       # Since we want to reuse the checkout in the WSL environment
@@ -194,6 +198,9 @@ jobs:
       shell: wsl-bash {0}
       run: |
         yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh || true
+        echo 'Acquire::Retries "10";' >> /etc/apt/apt.conf.d/99retries
+        echo 'Acquire::http::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
+        echo 'Acquire::https::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
         apt-get install -y --force-yes postgresql-server-dev-${{ matrix.pg }}
 
     - name: Run tests

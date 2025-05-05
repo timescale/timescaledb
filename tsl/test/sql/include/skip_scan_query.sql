@@ -71,6 +71,7 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT DISTINCT *, 'q1_9' FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT dev, time, 'q1_10' FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT dev, NULL, 'q1_11' FROM :TABLE ORDER BY dev;
+
 -- distinct on expressions not supported
 :PREFIX SELECT DISTINCT time_bucket(10,time), 'q1_12' FROM :TABLE;
 :PREFIX SELECT DISTINCT length(dev_name), 'q1_13' FROM :TABLE;

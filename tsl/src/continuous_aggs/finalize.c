@@ -67,6 +67,9 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo
 		TargetEntry *tle = (TargetEntry *) lfirst(lc);
 		TargetEntry *modte = copyObject(tle);
 
+		if (!orig_query->sortClause)
+			modte->ressortgroupref = 0;
+
 		/*
 		 * We need columns for non-aggregate targets.
 		 * If it is not a resjunk OR appears in the grouping clause.

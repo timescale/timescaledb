@@ -80,7 +80,7 @@ jobs:
     - name: Install 64-bit libraries for GitHub actions
       run: |
         apt-get update
-        apt-get install -y lib64atomic1 lib64gcc-s1 lib64stdc++6 libc6-amd64
+        apt-get install -y lib64atomic1 lib64gcc-s1 lib64stdc++6 libc6-amd64 jq
 
     - name: Install build dependencies
       run: |

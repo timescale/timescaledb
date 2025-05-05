@@ -30,12 +30,12 @@ ts_create_table_with_clause_parse(const List *defelems)
 }
 
 Datum
-ts_create_table_parse_chunk_time_interval(WithClauseResult *parsed_options, Oid column_type,
+ts_create_table_parse_chunk_time_interval(WithClauseResult option, Oid column_type,
 										  Oid *interval_type)
 {
-	if (parsed_options[CreateTableFlagChunkTimeInterval].is_default == false)
+	if (option.is_default == false)
 	{
-		Datum textarg = parsed_options[CreateTableFlagChunkTimeInterval].parsed;
+		Datum textarg = option.parsed;
 		switch (column_type)
 		{
 			case INT2OID:

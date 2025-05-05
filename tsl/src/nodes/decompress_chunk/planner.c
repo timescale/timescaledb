@@ -44,6 +44,14 @@ static CustomScanMethods decompress_chunk_plan_methods = {
 	.CreateCustomScanState = decompress_chunk_state_create,
 };
 
+/* Check if the provided plan is a DecompressChunkPlan */
+bool
+ts_is_decompress_chunk_plan(Plan *plan)
+{
+	return IsA(plan, CustomScan) &&
+		   castNode(CustomScan, plan)->methods == &decompress_chunk_plan_methods;
+}
+
 void
 _decompress_chunk_init(void)
 {
