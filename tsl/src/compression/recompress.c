@@ -5,6 +5,7 @@
  */
 
 #include <postgres.h>
+#include "debug_point.h"
 #include <parser/parse_coerce.h>
 #include <parser/parse_relation.h>
 #include <utils/inval.h>
@@ -592,6 +593,7 @@ finish:
 							 RECOMPRESS_EXCLUSIVE_LOCK_WAIT_INTERVAL,
 							 WAIT_EVENT_VACUUM_TRUNCATE);
 			ResetLatch(MyLatch);
+			DEBUG_WAITPOINT("chunk_recompress_after_latch");
 		}
 	}
 

@@ -98,6 +98,7 @@ is($result, '', 'insert more data to make the chunk partial');
 # Create psql sessions
 my $s1 = $node->background_psql('postgres');
 my $s2 = $node->background_psql('postgres');
+my $s3 = $node->background_psql('postgres');
 
 # Enable segmentwise recompression
 $s1->query_safe("SET timescaledb.enable_segmentwise_recompression TO on;");
@@ -107,12 +108,19 @@ $s1->query_safe("SET timescaledb.enable_recompress_waiting TO on;");
 
 # TEST 1:
 # Session 1 tries to acquire an exclusive lock at the end of recompression but is blocked due to the inserts by Session 2
-# However
-# Begin txns in both sessions
+# We use session 3 to set up debug waitpoints
+# Begin txns in all sessions
 
-$result = $s1->query_safe("BEGIN;");
+$s1->query_safe("BEGIN;");
+$s2->query_safe("BEGIN;");
+$s3->query_safe("BEGIN;");
 
-$result = $s2->query_safe("BEGIN;");
+# We enable the debug_waitpoint after the latch and release it after s2 aborts
+# This allows s1 to successfully acquire the lock the second time around
+
+$s3->query_safe(
+	"SELECT debug_waitpoint_enable('chunk_recompress_after_latch');");
+
 
 # Get lock data
 $result = $node->safe_psql('postgres',
@@ -130,17 +138,17 @@ $s2->query_until(
 });
 
 # We have to use 'query_until('', ...)' so that the test immediately fires the next query
-# Otherwise s1 times out throws an error
 $s1->query_until(
 	'', q{
     SELECT compress_chunk(show_chunks('sensor_data'));
 });
 
-# Sleep for 0.5 seconds to ensure that at the end of recompression, an attempt to get the ExclusiveLock on the table is blocked and a retry happens
-sleep(0.5);
-
 # Session 2 immediately aborts, releasing the RowExclusiveLock on the table
-$result = $s2->query_safe("ABORT");
+$s2->query_safe("ABORT");
+
+# Release the debug waitpoint so that recompression succeeds
+$s3->query_safe(
+	"SELECT debug_waitpoint_release('chunk_recompress_after_latch');");
 
 # Verify ExclusiveLock on uncompressed chunk
 $result = $node->safe_psql('postgres',
@@ -159,7 +167,10 @@ is( $result,
 	"verify AccessShareLock on internal compressed chunk");
 
 # Clean up
-$result = $s1->query_safe("ROLLBACK;");
+$s1->query_safe("ROLLBACK;");
+
+$s3->query_safe("ROLLBACK;");
+$s3->quit();
 
 $s2->quit();
 $s1->quit();
