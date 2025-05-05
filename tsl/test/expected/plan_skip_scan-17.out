@@ -5513,8 +5513,8 @@ WHERE CLAUSES
 
 --\qecho stable func in WHERE clause on :TABLE
 :PREFIX SELECT DISTINCT ON (dev) *, 'q6_6' FROM :TABLE WHERE dev > int_func_stable();
-                                                                                 QUERY PLAN                                                                                 
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                QUERY PLAN                                                                                 
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=8 loops=1)
    ->  Unique (actual rows=8 loops=1)
          ->  Custom Scan (ConstraintAwareAppend) (actual rows=32 loops=1)
@@ -5524,25 +5524,21 @@ WHERE CLAUSES
                      Sort Key: _hyper_3_5_chunk.dev
                      ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=8 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=8 loops=1)
-                                 Filter: (dev > int_func_stable())
-                                 Rows Removed by Filter: 505
-                                 ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=11 loops=1)
+                                 ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=8 loops=1)
+                                       Index Cond: (dev > int_func_stable())
                      ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=8 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=8 loops=1)
-                                 Filter: (dev > int_func_stable())
-                                 Rows Removed by Filter: 505
-                                 ->  Index Scan using compress_hyper_4_35_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_35_chunk (actual rows=11 loops=1)
+                                 ->  Index Scan using compress_hyper_4_35_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_35_chunk (actual rows=8 loops=1)
+                                       Index Cond: (dev > int_func_stable())
                      ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=8 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=8 loops=1)
-                                 Filter: (dev > int_func_stable())
-                                 Rows Removed by Filter: 505
-                                 ->  Index Scan using compress_hyper_4_36_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_36_chunk (actual rows=11 loops=1)
+                                 ->  Index Scan using compress_hyper_4_36_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_36_chunk (actual rows=8 loops=1)
+                                       Index Cond: (dev > int_func_stable())
                      ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=8 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=8 loops=1)
-                                 Filter: (dev > int_func_stable())
-                                 Rows Removed by Filter: 505
-                                 ->  Index Scan using compress_hyper_4_37_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_37_chunk (actual rows=11 loops=1)
-(27 rows)
+                                 ->  Index Scan using compress_hyper_4_37_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_37_chunk (actual rows=8 loops=1)
+                                       Index Cond: (dev > int_func_stable())
+(23 rows)
 
 --\qecho volatile func in WHERE clause on :TABLE
 :PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > int_func_volatile();
@@ -5601,8 +5597,8 @@ WHERE CLAUSES
 (19 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = ANY(inta_func_stable());
-                                                                              QUERY PLAN                                                                              
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                             QUERY PLAN                                                                              
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=3 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=12 loops=1)
          Hypertable: skip_scan_htc
@@ -5611,25 +5607,21 @@ WHERE CLAUSES
                Sort Key: _hyper_3_5_chunk.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=3 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=3 loops=1)
-                           Filter: (dev = ANY (inta_func_stable()))
-                           Rows Removed by Filter: 1755
-                           ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=3 loops=1)
+                                 Index Cond: (dev = ANY (inta_func_stable()))
                ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=3 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=3 loops=1)
-                           Filter: (dev = ANY (inta_func_stable()))
-                           Rows Removed by Filter: 1755
-                           ->  Index Scan using compress_hyper_4_35_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_35_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_35_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_35_chunk (actual rows=3 loops=1)
+                                 Index Cond: (dev = ANY (inta_func_stable()))
                ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=3 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=3 loops=1)
-                           Filter: (dev = ANY (inta_func_stable()))
-                           Rows Removed by Filter: 1755
-                           ->  Index Scan using compress_hyper_4_36_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_36_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_4_36_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_36_chunk (actual rows=3 loops=1)
+                                 Index Cond: (dev = ANY (inta_func_stable()))
                ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=3 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=3 loops=1)
-                           Filter: (dev = ANY (inta_func_stable()))
-                           Rows Removed by Filter: 1755
-                           ->  Index Scan using compress_hyper_4_37_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_37_chunk (actual rows=11 loops=1)
-(26 rows)
+                           ->  Index Scan using compress_hyper_4_37_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_37_chunk (actual rows=3 loops=1)
+                                 Index Cond: (dev = ANY (inta_func_stable()))
+(22 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = ANY(inta_func_volatile());
                                                                               QUERY PLAN                                                                              
@@ -7243,8 +7235,8 @@ WHERE CLAUSES
 
 --\qecho stable func in WHERE clause on :TABLE
 :PREFIX SELECT DISTINCT ON (dev) *, 'q6_6' FROM :TABLE WHERE dev > int_func_stable();
-                                                                                 QUERY PLAN                                                                                 
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                QUERY PLAN                                                                                 
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=8 loops=1)
    ->  Unique (actual rows=8 loops=1)
          ->  Custom Scan (ConstraintAwareAppend) (actual rows=32 loops=1)
@@ -7254,25 +7246,21 @@ WHERE CLAUSES
                      Sort Key: _hyper_5_9_chunk.dev
                      ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=8 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=8 loops=1)
-                                 Filter: (dev > int_func_stable())
-                                 Rows Removed by Filter: 505
-                                 ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
+                                 ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=8 loops=1)
+                                       Index Cond: (dev > int_func_stable())
                      ->  Custom Scan (SkipScan) on _hyper_5_11_chunk (actual rows=8 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_5_11_chunk (actual rows=8 loops=1)
-                                 Filter: (dev > int_func_stable())
-                                 Rows Removed by Filter: 505
-                                 ->  Index Scan using compress_hyper_6_14_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_14_chunk (actual rows=11 loops=1)
+                                 ->  Index Scan using compress_hyper_6_14_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_14_chunk (actual rows=8 loops=1)
+                                       Index Cond: (dev > int_func_stable())
                      ->  Custom Scan (SkipScan) on _hyper_5_12_chunk (actual rows=8 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_5_12_chunk (actual rows=8 loops=1)
-                                 Filter: (dev > int_func_stable())
-                                 Rows Removed by Filter: 505
-                                 ->  Index Scan using compress_hyper_6_15_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_15_chunk (actual rows=11 loops=1)
+                                 ->  Index Scan using compress_hyper_6_15_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_15_chunk (actual rows=8 loops=1)
+                                       Index Cond: (dev > int_func_stable())
                      ->  Custom Scan (SkipScan) on _hyper_5_13_chunk (actual rows=8 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_5_13_chunk (actual rows=8 loops=1)
-                                 Filter: (dev > int_func_stable())
-                                 Rows Removed by Filter: 505
-                                 ->  Index Scan using compress_hyper_6_16_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_16_chunk (actual rows=11 loops=1)
-(27 rows)
+                                 ->  Index Scan using compress_hyper_6_16_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_16_chunk (actual rows=8 loops=1)
+                                       Index Cond: (dev > int_func_stable())
+(23 rows)
 
 --\qecho volatile func in WHERE clause on :TABLE
 :PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > int_func_volatile();
@@ -7331,8 +7319,8 @@ WHERE CLAUSES
 (19 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = ANY(inta_func_stable());
-                                                                              QUERY PLAN                                                                              
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                             QUERY PLAN                                                                              
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=3 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=12 loops=1)
          Hypertable: skip_scan_htcl
@@ -7341,25 +7329,21 @@ WHERE CLAUSES
                Sort Key: _hyper_5_9_chunk.dev
                ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=3 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=3 loops=1)
-                           Filter: (dev = ANY (inta_func_stable()))
-                           Rows Removed by Filter: 1755
-                           ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=3 loops=1)
+                                 Index Cond: (dev = ANY (inta_func_stable()))
                ->  Custom Scan (SkipScan) on _hyper_5_11_chunk (actual rows=3 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_11_chunk (actual rows=3 loops=1)
-                           Filter: (dev = ANY (inta_func_stable()))
-                           Rows Removed by Filter: 1755
-                           ->  Index Scan using compress_hyper_6_14_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_14_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_6_14_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_14_chunk (actual rows=3 loops=1)
+                                 Index Cond: (dev = ANY (inta_func_stable()))
                ->  Custom Scan (SkipScan) on _hyper_5_12_chunk (actual rows=3 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_12_chunk (actual rows=3 loops=1)
-                           Filter: (dev = ANY (inta_func_stable()))
-                           Rows Removed by Filter: 1755
-                           ->  Index Scan using compress_hyper_6_15_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_15_chunk (actual rows=11 loops=1)
+                           ->  Index Scan using compress_hyper_6_15_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_15_chunk (actual rows=3 loops=1)
+                                 Index Cond: (dev = ANY (inta_func_stable()))
                ->  Custom Scan (SkipScan) on _hyper_5_13_chunk (actual rows=3 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_13_chunk (actual rows=3 loops=1)
-                           Filter: (dev = ANY (inta_func_stable()))
-                           Rows Removed by Filter: 1755
-                           ->  Index Scan using compress_hyper_6_16_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_16_chunk (actual rows=11 loops=1)
-(26 rows)
+                           ->  Index Scan using compress_hyper_6_16_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_16_chunk (actual rows=3 loops=1)
+                                 Index Cond: (dev = ANY (inta_func_stable()))
+(22 rows)
 
 :PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = ANY(inta_func_volatile());
                                                                               QUERY PLAN                                                                              

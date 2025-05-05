@@ -505,13 +505,13 @@ SET timescaledb.enable_chunk_skipping to ON;
 
 -- Scan both chunks
 :PREFIX SELECT * FROM sample_table  WHERE sensor_id > length(substring(version(),1,6));
-                             QUERY PLAN                             
---------------------------------------------------------------------
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on sample_table
    Chunks excluded during startup: 0
    ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-         Filter: (sensor_id > length("substring"(version(), 1, 6)))
-         ->  Seq Scan on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+               Index Cond: (sensor_id > length("substring"(version(), 1, 6)))
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: (sensor_id > length("substring"(version(), 1, 6)))
 (7 rows)

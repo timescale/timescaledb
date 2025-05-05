@@ -231,10 +231,14 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 	if (strategy == InvalidStrategy)
 		return NULL;
 
-	expr = get_pushdownsafe_expr(context, expr);
+	Expr *new_expr = get_pushdownsafe_expr(context, expr);
 
-	if (expr == NULL)
+	if (new_expr == NULL)
+	{
 		return NULL;
+	}
+
+	expr = new_expr;
 
 	expr_type_id = exprType((Node *) expr);
 
@@ -345,6 +349,15 @@ modify_expression(Node *node, QualPushdownContext *context)
 		case T_NullTest:
 		case T_Param:
 		case T_SQLValueFunction:
+		case T_CaseExpr:
+		case T_CaseWhen:
+			break;
+		case T_FuncExpr:
+			/*
+			 * The caller should have checked that we don't have volatile
+			 * functions in this qual.
+			 */
+			Assert(!contain_volatile_functions(node));
 			break;
 		case T_Var:
 		{

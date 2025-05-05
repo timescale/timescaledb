@@ -166,16 +166,17 @@ explain (costs off) select sum(a), sum(b), sum(c) from dvagg where b in (0, 1, 3
 reset timescaledb.enable_vectorized_aggregation;
 -- The runtime chunk exclusion should work.
 explain (costs off) select sum(c) from dvagg where a < stable_abs(1000);
-                             QUERY PLAN                              
----------------------------------------------------------------------
+                                                           QUERY PLAN                                                            
+---------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
    ->  Custom Scan (ChunkAppend) on dvagg
          Chunks excluded during startup: 1
          ->  Custom Scan (VectorAgg)
                ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
                      Vectorized Filter: (a < stable_abs(1000))
-                     ->  Seq Scan on compress_hyper_2_2_chunk
-(7 rows)
+                     ->  Index Scan using compress_hyper_2_2_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_2_2_chunk
+                           Index Cond: (_ts_meta_min_1 < stable_abs(1000))
+(8 rows)
 
 -- The case with HAVING can still be vectorized because it is applied after
 -- final aggregation.
