@@ -98,6 +98,7 @@ GROUP BY 2, 3;
                            Sort Key: compress_hyper_4_10_chunk.device_id, compress_hyper_4_10_chunk.measure_id
                            Sort Method: quicksort 
                            ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=1 loops=1)
+                                 Filter: (_ts_meta_min_1 < now())
                ->  Sort (actual rows=168 loops=1)
                      Sort Key: _hyper_3_6_chunk.device_id, _hyper_3_6_chunk.measure_id
                      Sort Method: quicksort 
@@ -118,7 +119,7 @@ GROUP BY 2, 3;
                      Sort Method: quicksort 
                      ->  Seq Scan on _hyper_3_9_chunk (actual rows=121 loops=1)
                            Filter: ("time" < now())
-(33 rows)
+(34 rows)
 
 -- this should exclude the decompressed chunk
 EXPLAIN (analyze,costs off,timing off,summary off) SELECT

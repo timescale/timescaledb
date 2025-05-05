@@ -2550,17 +2550,20 @@ QUERY PLAN
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
                      Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
+                           Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
          ->  Sort (never executed)
                Sort Key: _hyper_X_X_chunk."time" DESC
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                      Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                      ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                           Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
          ->  Sort (never executed)
                Sort Key: _hyper_X_X_chunk."time" DESC
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                      Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                      ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
-(20 rows)
+                           Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
+(23 rows)
 
 -- test CTE
 :PREFIX WITH i AS (
@@ -2583,17 +2586,20 @@ QUERY PLAN
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
                      Vectorized Filter: ("time" < now())
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
+                           Filter: (_ts_meta_min_1 < now())
          ->  Sort (never executed)
                Sort Key: _hyper_X_X_chunk."time" DESC
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                      Vectorized Filter: ("time" < now())
                      ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                           Filter: (_ts_meta_min_1 < now())
          ->  Sort (never executed)
                Sort Key: _hyper_X_X_chunk."time" DESC
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                      Vectorized Filter: ("time" < now())
                      ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
-(20 rows)
+                           Filter: (_ts_meta_min_1 < now())
+(23 rows)
 
 -- test CTE
 -- no chunk exclusion for CTE because cte query is not pulled up
@@ -4327,18 +4333,21 @@ QUERY PLAN
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                            Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                 Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
                ->  Sort (actual rows=1 loops=1)
                      Sort Key: _hyper_X_X_chunk."time" DESC
                      Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
                            Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
+                                 Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
                ->  Sort (actual rows=1 loops=1)
                      Sort Key: _hyper_X_X_chunk."time" DESC
                      Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                            Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                 Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
          ->  Merge Append (never executed)
                Sort Key: _hyper_X_X_chunk."time" DESC
                ->  Sort (never executed)
@@ -4346,16 +4355,19 @@ QUERY PLAN
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                            ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                                 Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
                ->  Sort (never executed)
                      Sort Key: _hyper_X_X_chunk."time" DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                            ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                                 Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
                ->  Sort (never executed)
                      Sort Key: _hyper_X_X_chunk."time" DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                            ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                                 Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
          ->  Merge Append (never executed)
                Sort Key: _hyper_X_X_chunk."time" DESC
                ->  Sort (never executed)
@@ -4363,17 +4375,20 @@ QUERY PLAN
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                            ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                                 Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
                ->  Sort (never executed)
                      Sort Key: _hyper_X_X_chunk."time" DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                            ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                                 Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
                ->  Sort (never executed)
                      Sort Key: _hyper_X_X_chunk."time" DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                            ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
-(57 rows)
+                                 Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
+(66 rows)
 
 -- test CTE
 :PREFIX WITH i AS (
@@ -4397,18 +4412,21 @@ QUERY PLAN
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                            Vectorized Filter: ("time" < now())
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                 Filter: (_ts_meta_min_1 < now())
                ->  Sort (actual rows=60 loops=1)
                      Sort Key: _hyper_X_X_chunk."time" DESC
                      Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
                            Vectorized Filter: ("time" < now())
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
+                                 Filter: (_ts_meta_min_1 < now())
                ->  Sort (actual rows=21 loops=1)
                      Sort Key: _hyper_X_X_chunk."time" DESC
                      Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                            Vectorized Filter: ("time" < now())
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                 Filter: (_ts_meta_min_1 < now())
          ->  Merge Append (never executed)
                Sort Key: _hyper_X_X_chunk."time" DESC
                ->  Sort (never executed)
@@ -4416,16 +4434,19 @@ QUERY PLAN
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Vectorized Filter: ("time" < now())
                            ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                                 Filter: (_ts_meta_min_1 < now())
                ->  Sort (never executed)
                      Sort Key: _hyper_X_X_chunk."time" DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Vectorized Filter: ("time" < now())
                            ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                                 Filter: (_ts_meta_min_1 < now())
                ->  Sort (never executed)
                      Sort Key: _hyper_X_X_chunk."time" DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Vectorized Filter: ("time" < now())
                            ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                                 Filter: (_ts_meta_min_1 < now())
          ->  Merge Append (never executed)
                Sort Key: _hyper_X_X_chunk."time" DESC
                ->  Sort (never executed)
@@ -4433,17 +4454,20 @@ QUERY PLAN
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Vectorized Filter: ("time" < now())
                            ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                                 Filter: (_ts_meta_min_1 < now())
                ->  Sort (never executed)
                      Sort Key: _hyper_X_X_chunk."time" DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Vectorized Filter: ("time" < now())
                            ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                                 Filter: (_ts_meta_min_1 < now())
                ->  Sort (never executed)
                      Sort Key: _hyper_X_X_chunk."time" DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Vectorized Filter: ("time" < now())
                            ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
-(57 rows)
+                                 Filter: (_ts_meta_min_1 < now())
+(66 rows)
 
 -- test CTE
 -- no chunk exclusion for CTE because cte query is not pulled up

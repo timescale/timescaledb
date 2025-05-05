@@ -1880,14 +1880,14 @@ QUERY PLAN
                                  Filter: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                                  Vectorized Filter: ("time" < now())
                                  ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
-                                       Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
+                                       Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_min_1 < now()))
                      ->  Sort (never executed)
                            Sort Key: o_2."time" DESC
                            ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o_2 (never executed)
                                  Filter: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                                  Vectorized Filter: ("time" < now())
                                  ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
-                                       Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
+                                       Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_min_1 < now()))
                      ->  Sort (actual rows=1 loops=3)
                            Sort Key: o_3."time" DESC
                            Sort Method: top-N heapsort 
@@ -1896,7 +1896,7 @@ QUERY PLAN
                                  Rows Removed by Filter: 4063
                                  Vectorized Filter: ("time" < now())
                                  ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=8 loops=3)
-                                       Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
+                                       Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_min_1 < now()))
                                        Rows Removed by Filter: 12
 (32 rows)
 
@@ -2998,7 +2998,7 @@ QUERY PLAN
                                        Filter: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                                        Vectorized Filter: ("time" < now())
                                        ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=3)
-                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
+                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_min_1 < now()))
                                              Rows Removed by Filter: 6
                            ->  Sort (actual rows=0 loops=3)
                                  Sort Key: o_2."time" DESC
@@ -3007,7 +3007,7 @@ QUERY PLAN
                                        Filter: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                                        Vectorized Filter: ("time" < now())
                                        ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=3)
-                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
+                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_min_1 < now()))
                                              Rows Removed by Filter: 18
                            ->  Sort (actual rows=0 loops=3)
                                  Sort Key: o_3."time" DESC
@@ -3016,7 +3016,7 @@ QUERY PLAN
                                        Filter: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                                        Vectorized Filter: ("time" < now())
                                        ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=3)
-                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
+                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_min_1 < now()))
                                              Rows Removed by Filter: 6
                      ->  Merge Append (actual rows=0 loops=3)
                            Sort Key: o_4."time" DESC
@@ -3027,7 +3027,7 @@ QUERY PLAN
                                        Filter: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                                        Vectorized Filter: ("time" < now())
                                        ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=3)
-                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
+                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_min_1 < now()))
                                              Rows Removed by Filter: 6
                            ->  Sort (actual rows=0 loops=3)
                                  Sort Key: o_5."time" DESC
@@ -3036,7 +3036,7 @@ QUERY PLAN
                                        Filter: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                                        Vectorized Filter: ("time" < now())
                                        ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=3)
-                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
+                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_min_1 < now()))
                                              Rows Removed by Filter: 18
                            ->  Sort (actual rows=0 loops=3)
                                  Sort Key: o_6."time" DESC
@@ -3045,7 +3045,7 @@ QUERY PLAN
                                        Filter: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                                        Vectorized Filter: ("time" < now())
                                        ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=3)
-                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
+                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_min_1 < now()))
                                              Rows Removed by Filter: 6
                      ->  Merge Append (actual rows=1 loops=3)
                            Sort Key: o_7."time" DESC
@@ -3057,7 +3057,7 @@ QUERY PLAN
                                        Rows Removed by Filter: 813
                                        Vectorized Filter: ("time" < now())
                                        ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=2 loops=3)
-                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
+                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_min_1 < now()))
                                              Rows Removed by Filter: 2
                            ->  Sort (actual rows=1 loops=3)
                                  Sort Key: o_8."time" DESC
@@ -3067,7 +3067,7 @@ QUERY PLAN
                                        Rows Removed by Filter: 2438
                                        Vectorized Filter: ("time" < now())
                                        ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=3)
-                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
+                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_min_1 < now()))
                                              Rows Removed by Filter: 7
                            ->  Sort (actual rows=1 loops=3)
                                  Sort Key: o_9."time" DESC
@@ -3077,7 +3077,7 @@ QUERY PLAN
                                        Rows Removed by Filter: 813
                                        Vectorized Filter: ("time" < now())
                                        ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=2 loops=3)
-                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
+                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_min_1 < now()))
                                              Rows Removed by Filter: 2
 (96 rows)
 
@@ -3111,7 +3111,7 @@ QUERY PLAN
                                        Filter: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                                        Vectorized Filter: ("time" > now())
                                        ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=3)
-                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
+                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_max_1 > now()))
                                              Rows Removed by Filter: 6
                            ->  Sort (actual rows=0 loops=3)
                                  Sort Key: o_2."time" DESC
@@ -3120,7 +3120,7 @@ QUERY PLAN
                                        Filter: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                                        Vectorized Filter: ("time" > now())
                                        ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=3)
-                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
+                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_max_1 > now()))
                                              Rows Removed by Filter: 18
                            ->  Sort (actual rows=0 loops=3)
                                  Sort Key: o_3."time" DESC
@@ -3129,7 +3129,7 @@ QUERY PLAN
                                        Filter: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                                        Vectorized Filter: ("time" > now())
                                        ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=3)
-                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
+                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_max_1 > now()))
                                              Rows Removed by Filter: 6
                      ->  Merge Append (actual rows=0 loops=3)
                            Sort Key: o_4."time" DESC
@@ -3140,7 +3140,7 @@ QUERY PLAN
                                        Filter: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                                        Vectorized Filter: ("time" > now())
                                        ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=3)
-                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
+                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_max_1 > now()))
                                              Rows Removed by Filter: 6
                            ->  Sort (actual rows=0 loops=3)
                                  Sort Key: o_5."time" DESC
@@ -3149,7 +3149,7 @@ QUERY PLAN
                                        Filter: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                                        Vectorized Filter: ("time" > now())
                                        ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=3)
-                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
+                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_max_1 > now()))
                                              Rows Removed by Filter: 18
                            ->  Sort (actual rows=0 loops=3)
                                  Sort Key: o_6."time" DESC
@@ -3158,7 +3158,7 @@ QUERY PLAN
                                        Filter: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                                        Vectorized Filter: ("time" > now())
                                        ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=3)
-                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
+                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_max_1 > now()))
                                              Rows Removed by Filter: 6
                      ->  Merge Append (actual rows=0 loops=3)
                            Sort Key: o_7."time" DESC
@@ -3167,32 +3167,29 @@ QUERY PLAN
                                  Sort Method: quicksort 
                                  ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o_7 (actual rows=0 loops=3)
                                        Filter: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
-                                       Rows Removed by Filter: 1533
                                        Vectorized Filter: ("time" > now())
-                                       ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=2 loops=3)
-                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
-                                             Rows Removed by Filter: 2
+                                       ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=3)
+                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_max_1 > now()))
+                                             Rows Removed by Filter: 4
                            ->  Sort (actual rows=0 loops=3)
                                  Sort Key: o_8."time" DESC
                                  Sort Method: quicksort 
                                  ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o_8 (actual rows=0 loops=3)
                                        Filter: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
-                                       Rows Removed by Filter: 4598
                                        Vectorized Filter: ("time" > now())
-                                       ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=3)
-                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
-                                             Rows Removed by Filter: 7
+                                       ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=3)
+                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_max_1 > now()))
+                                             Rows Removed by Filter: 12
                            ->  Sort (actual rows=0 loops=3)
                                  Sort Key: o_9."time" DESC
                                  Sort Method: quicksort 
                                  ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o_9 (actual rows=0 loops=3)
                                        Filter: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
-                                       Rows Removed by Filter: 1533
                                        Vectorized Filter: ("time" > now())
-                                       ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=2 loops=3)
-                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
-                                             Rows Removed by Filter: 2
-(96 rows)
+                                       ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=3)
+                                             Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_max_1 > now()))
+                                             Rows Removed by Filter: 4
+(93 rows)
 
 -- test JOIN
 -- no exclusion on joined table because quals are not propagated yet

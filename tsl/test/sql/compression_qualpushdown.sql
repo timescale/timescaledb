@@ -45,6 +45,27 @@ SELECT *
 FROM hyper
 WHERE time = 3::bigint;
 
+-- Test some volatile and stable functions
+SET timescaledb.enable_chunk_append TO OFF;
+SET timescaledb.enable_constraint_aware_append TO OFF;
+
+EXPLAIN (COSTS OFF)
+SELECT * FROM hyper WHERE time = device_id;
+
+EXPLAIN (COSTS OFF)
+SELECT * FROM hyper WHERE time = random()::int;
+
+EXPLAIN (COSTS OFF)
+SELECT * FROM hyper WHERE time
+    = CASE WHEN now() > '1970-01-01' THEN random()::int ELSE device_id END;
+
+EXPLAIN (COSTS OFF)
+SELECT * FROM hyper WHERE time
+    = CASE WHEN now() > '1970-01-01' THEN 1 ELSE device_id END;
+
+RESET timescaledb.enable_chunk_append;
+RESET timescaledb.enable_constraint_aware_append;
+
 --- github issue 1855
 --- TESTs for meta column pushdown filters on exprs with casts.
 CREATE TABLE metaseg_tab (
