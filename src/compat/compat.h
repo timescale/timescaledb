@@ -32,12 +32,9 @@
  * that was reverted in the following release.
  */
 
-#define is_supported_pg_version_15(version)                                                        \
-	((version >= 150000) && (version < 160000) && (version != 150009))
-#define is_supported_pg_version_16(version)                                                        \
-	((version >= 160000) && (version < 170000) && (version != 160005))
-#define is_supported_pg_version_17(version)                                                        \
-	((version >= 170000) && (version < 180000) && (version != 170001))
+#define is_supported_pg_version_15(version) ((version >= 150010) && (version < 160000))
+#define is_supported_pg_version_16(version) ((version >= 160006) && (version < 170000))
+#define is_supported_pg_version_17(version) ((version >= 170002) && (version < 180000))
 
 /*
  * PG16 support is a WIP and not complete yet.
