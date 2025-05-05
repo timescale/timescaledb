@@ -57,8 +57,8 @@ typedef struct Bloom1MetadataBuilder
 
 	int16 bloom_attr_offset;
 
-	int allocated_bytea_bytes;
-	bytea *bloom_bytea;
+	int allocated_varlena_bytes;
+	struct varlena *bloom_varlena;
 
 	PGFunction hash_function;
 } Bloom1MetadataBuilder;
@@ -176,22 +176,22 @@ bloom1_reset(void *builder_, RowCompressor *compressor)
 {
 	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
 
-	bytea *bloom = builder->bloom_bytea;
-	memset(bloom, 0, builder->allocated_bytea_bytes);
-	SET_VARSIZE(bloom, builder->allocated_bytea_bytes);
+	struct varlena *bloom = builder->bloom_varlena;
+	memset(bloom, 0, builder->allocated_varlena_bytes);
+	SET_VARSIZE(bloom, builder->allocated_varlena_bytes);
 
 	compressor->compressed_is_null[builder->bloom_attr_offset] = true;
 	compressor->compressed_values[builder->bloom_attr_offset] = 0;
 }
 
 static char *
-bloom1_words_buf(bytea *bloom)
+bloom1_words_buf(struct varlena *bloom)
 {
 	return VARDATA_ANY(bloom);
 }
 
 static int
-bloom1_num_bits(const bytea *bloom)
+bloom1_num_bits(const struct varlena *bloom)
 {
 	return 8 * VARSIZE_ANY_EXHDR(bloom);
 }
@@ -200,7 +200,7 @@ static void
 bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 {
 	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
-	bytea *bloom = builder->bloom_bytea;
+	struct varlena *bloom = builder->bloom_varlena;
 	char *restrict words_buf = bloom1_words_buf(bloom);
 
 	const int orig_num_bits = bloom1_num_bits(bloom);
@@ -338,8 +338,8 @@ bloom1_update_val(void *builder_, Datum needle)
 {
 	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
 
-	char *restrict words_buf = bloom1_words_buf(builder->bloom_bytea);
-	const uint32 num_bits = bloom1_num_bits(builder->bloom_bytea);
+	char *restrict words_buf = bloom1_words_buf(builder->bloom_varlena);
+	const uint32 num_bits = bloom1_num_bits(builder->bloom_varlena);
 
 	/*
 	 * These calculations are a little inconvenient, but I had to switch to
@@ -368,7 +368,7 @@ bloom1_update_val(void *builder_, Datum needle)
 /*
  * Checks whether the given element can be present in the given bloom filter.
  * This is what we use in predicate pushdown. The SQL signature is:
- * _timescaledb_functions.bloom1_contains(bytea, anyelement)
+ * _timescaledb_functions.bloom1_contains(bloom1, anyelement)
  */
 Datum
 bloom1_contains(PG_FUNCTION_ARGS)
@@ -406,7 +406,7 @@ bloom1_contains(PG_FUNCTION_ARGS)
 						format_type_be(type_oid))));
 	}
 
-	bytea *bloom = PG_GETARG_VARLENA_P(0);
+	struct varlena *bloom = PG_GETARG_VARLENA_P(0);
 	const char *words_buf = bloom1_words_buf(bloom);
 	const uint32 num_bits = bloom1_num_bits(bloom);
 
@@ -441,7 +441,7 @@ bloom1_contains(PG_FUNCTION_ARGS)
 }
 
 static int
-bloom1_bytea_alloc_size(int num_bits)
+bloom1_varlena_alloc_size(int num_bits)
 {
 	Assert(num_bits % 8 == 0);
 	Assert(num_bits % 64 == 0);
@@ -460,7 +460,7 @@ batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
 	const int lowest_power = pg_leftmost_one_pos32(expected_elements * 2 - 1);
 	Assert(lowest_power <= 16);
 	const int desired_bits = 1ULL << lowest_power;
-	const int bytea_bytes = bloom1_bytea_alloc_size(desired_bits);
+	const int varlena_bytes = bloom1_varlena_alloc_size(desired_bits);
 
 	Bloom1MetadataBuilder *builder = palloc(sizeof(*builder));
 	*builder = (Bloom1MetadataBuilder){
@@ -472,7 +472,7 @@ batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
 				.reset = bloom1_reset,
 			},
 		.bloom_attr_offset = bloom_attr_offset,
-		.allocated_bytea_bytes = bytea_bytes,
+		.allocated_varlena_bytes = varlena_bytes,
 	};
 
 	builder->hash_function = bloom1_get_hash_function(type_oid);
@@ -480,14 +480,14 @@ batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
 	/*
 	 * Initialize the bloom filter.
 	 */
-	builder->bloom_bytea = palloc0(bytea_bytes);
-	SET_VARSIZE(builder->bloom_bytea, bytea_bytes);
+	builder->bloom_varlena = palloc0(varlena_bytes);
+	SET_VARSIZE(builder->bloom_varlena, varlena_bytes);
 
 	return &builder->functions;
 }
 
 static int
-bloom1_estimate_ndistinct(bytea *bloom)
+bloom1_estimate_ndistinct(struct varlena *bloom)
 {
 	const double m = bloom1_num_bits(bloom);
 	const double t = pg_popcount(bloom1_words_buf(bloom), m / 8);
@@ -542,7 +542,7 @@ ts_bloom1_debug_info(PG_FUNCTION_ARGS)
 	values[out_toast_header] = Int32GetDatum(((varattrib_1b *) toasted)->va_header);
 	values[out_toasted_bytes] = Int32GetDatum(VARSIZE_ANY_EXHDR(toasted));
 
-	bytea *detoasted = PG_DETOAST_DATUM(toasted);
+	struct varlena *detoasted = PG_DETOAST_DATUM(toasted);
 	values[out_detoasted_bytes] = Int32GetDatum(VARSIZE_ANY_EXHDR(detoasted));
 
 	const int bits_total = bloom1_num_bits(detoasted);
