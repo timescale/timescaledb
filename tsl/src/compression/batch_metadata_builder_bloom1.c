@@ -443,6 +443,9 @@ bloom1_contains(PG_FUNCTION_ARGS)
 static int
 bloom1_varlena_alloc_size(int num_bits)
 {
+	/*
+	 * We are not supposed to go below 64 bits because we work in 64-bit words.
+	 */
 	Assert(num_bits % 64 == 0);
 	return VARHDRSZ + num_bits / 8;
 }
