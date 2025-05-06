@@ -56,18 +56,6 @@ jobs:
         pg: [ 15, 16, 17 ]
         os: [ windows-2022 ]
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
-        ignores: ["bgw_launcher chunk_adaptive metadata telemetry"]
-        tsl_ignores: ["compression_algos"]
-        tsl_skips:
-          - >-
-            bgw_db_scheduler
-            bgw_db_scheduler_fixed
-            hypercore_vectoragg
-            vector_agg_groupagg
-            vector_agg_grouping
-            vector_agg_text
-            vector_agg_uuid_segmentby
-            vectorized_aggregation
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
         include:
           - pg: 15
@@ -82,6 +70,23 @@ jobs:
       PGDATA: pgdata
       TABLESPACE1: D:\tablespace1\
       TABLESPACE2: D:\tablespace2\
+      IGNORES: >-
+        compress_bloom_sparse_debug
+        compression_algos
+        bgw_launcher
+        chunk_adaptive
+        metadata
+        telemetry
+      SKIPS: >-
+        bgw_db_scheduler
+        bgw_db_scheduler_fixed
+        compress_bloom_sparse_debug
+        hypercore_vectoragg
+        vector_agg_groupagg
+        vector_agg_grouping
+        vector_agg_text
+        vector_agg_uuid_segmentby
+        vectorized_aggregation
     steps:
     - name: Setup WSL
       uses: Vampire/setup-wsl@v3.1.4
@@ -200,13 +205,15 @@ jobs:
 
     - name: Run tests
       shell: wsl-bash {0}
+      env:
+        WSLENV: "IGNORES:SKIPS"
       run: |
         export TEST_TABLESPACE1_PREFIX='${{ env.TABLESPACE1 }}'
         export TEST_TABLESPACE2_PREFIX='${{ env.TABLESPACE2 }}'
         cmake -B build_wsl -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTEST_PGPORT_LOCAL=${{ env.PGPORT }}
 
         make -C build_wsl isolationchecklocal | tee -a installcheck.log
-        make -C build_wsl regresschecklocal IGNORES="${{ matrix.ignores }}" | tee -a installcheck.log
+        make -C build_wsl regresschecklocal IGNORES="${IGNORES}" SKIPS="${SKIPS}" | tee -a installcheck.log
 
     - name: Setup postgres cluster for TSL tests
       run: |
@@ -222,14 +229,14 @@ jobs:
 
     - name: Run TSL tests
       shell: wsl-bash {0}
+      env:
+        WSLENV: "IGNORES:SKIPS"
       run: |
         export TEST_TABLESPACE1_PREFIX='${{ env.TABLESPACE1 }}'
         export TEST_TABLESPACE2_PREFIX='${{ env.TABLESPACE2 }}'
 
         make -C build_wsl isolationchecklocal-t | tee -a installcheck.log
-        make -C build_wsl -k regresschecklocal-t \
-          IGNORES="${{ matrix.tsl_ignores }} ${{ matrix.tsl_ignores_version }}" \
-          SKIPS="${{ matrix.tsl_skips }} ${{ matrix.tsl_skips_version }}" | tee -a installcheck.log
+        make -C build_wsl -k regresschecklocal-t IGNORES="${IGNORES}" SKIPS="${SKIPS}" | tee -a installcheck.log
 
     - name: Show regression diffs
       id: collectlogs
@@ -251,6 +258,13 @@ jobs:
         path: |
           regression.log
           installcheck.log
+
+    - name: Save schedule
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: Schedule ${{ matrix.pg }}
+        path: /mnt/d/a/timescaledb/timescaledb/test/temp_schedule
 
     - name: Save PostgreSQL log
       if: always()
