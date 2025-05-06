@@ -478,7 +478,7 @@ chunk_dispatch_end(CustomScanState *node)
 
 	ExecEndNode(substate);
 	ts_chunk_dispatch_destroy(state->dispatch);
-	ts_cache_release(state->hypertable_cache);
+	ts_cache_release(&state->hypertable_cache);
 }
 
 static void

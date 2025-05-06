@@ -42,6 +42,7 @@ SELECT add_job(-1, '1h');
 SELECT add_job('invalid_func', '1h');
 SELECT add_job('custom_func', NULL);
 SELECT add_job('custom_func', 'invalid interval');
+SELECT add_job('custom_func', '1h', job_name := 'this_is_a_really_really_really_long_application_name_to_overflow');
 \set ON_ERROR_STOP 1
 
 select '2000-01-01 00:00:00+00' as time_zero \gset
@@ -51,7 +52,7 @@ SELECT add_job('custom_proc','1h', config:='{"type":"procedure"}'::jsonb, initia
 SELECT add_job('custom_proc2','1h', config:= '{"type":"procedure"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
 
 SELECT add_job('custom_func', '1h', config:='{"type":"function"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
-SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
+SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ, job_name := 'custom_job_name');
 
 -- exclude internal jobs
 SELECT * FROM timescaledb_information.jobs WHERE job_id >= 1000 ORDER BY 1;
@@ -64,11 +65,11 @@ CALL run_job(NULL);
 CALL run_job(-1);
 \set ON_ERROR_STOP 1
 
-CALL run_job(1000);
 CALL run_job(1001);
 CALL run_job(1002);
 CALL run_job(1003);
 CALL run_job(1004);
+CALL run_job(1005);
 
 SELECT * FROM custom_log ORDER BY job_id, extra;
 
@@ -78,40 +79,57 @@ SELECT delete_job(NULL);
 SELECT delete_job(-1);
 \set ON_ERROR_STOP 1
 
--- We keep job 1000 for some additional checks.
-SELECT delete_job(1001);
+-- We keep job 1001 for some additional checks.
 SELECT delete_job(1002);
 SELECT delete_job(1003);
 SELECT delete_job(1004);
+SELECT delete_job(1005);
 
 -- check jobs got removed
-SELECT count(*) FROM timescaledb_information.jobs WHERE job_id >= 1001;
+SELECT count(*) FROM timescaledb_information.jobs WHERE job_id >= 1002;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+
+-- create a new job with longer id
+SELECT nextval('_timescaledb_config.bgw_job_id_seq') as nextval \gset
+SELECT setval('_timescaledb_config.bgw_job_id_seq', 2147483647, false);
+SELECT add_job('custom_func', '1h', config:='{"type":"function"}'::jsonb, job_name := 'custom_job_name');
 
 \set ON_ERROR_STOP 0
 -- test bad input
 SELECT alter_job(NULL, if_exists => false);
 SELECT alter_job(-1, if_exists => false);
+SELECT alter_job(1001, job_name => 'this_is_a_really_really_really_long_application_name_to_overflow');
+SELECT alter_job(2147483647, job_name => 'this_is_a_really_really_really_long_application_name_to_overflow');
 \set ON_ERROR_STOP 1
 -- test bad input but don't fail
 SELECT alter_job(NULL, if_exists => true);
 SELECT alter_job(-1, if_exists => true);
 
+
 -- test altering job with NULL config
-SELECT job_id FROM alter_job(1000,scheduled:=false);
-SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1000;
+SELECT job_id FROM alter_job(1001,scheduled:=false);
+SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1001;
 
 -- test updating job settings
-SELECT job_id FROM alter_job(1000,config:='{"test":"test"}');
-SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1000;
-SELECT job_id FROM alter_job(1000,scheduled:=true);
-SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1000;
-SELECT job_id FROM alter_job(1000,scheduled:=false);
-SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1000;
+SELECT job_id FROM alter_job(1001,config:='{"test":"test"}');
+SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1001;
+SELECT job_id FROM alter_job(1001,scheduled:=true);
+SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1001;
+SELECT job_id FROM alter_job(1001,scheduled:=false);
+SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1001;
 
--- Done with job 1000 now, so remove it.
-SELECT delete_job(1000);
+-- test updating the job name
+SELECT job_id, application_name FROM alter_job(1001,job_name:='custom_name_2');
+SELECT job_id, application_name FROM alter_job(2147483647,job_name:='short_name_to_fit');
+SELECT application_name FROM timescaledb_information.jobs WHERE job_id >= 1001;
+
+-- Done with jobs now, so remove it.
+SELECT delete_job(1001);
+SELECT delete_job(2147483647);
+
+-- reset the sequence to its previous value
+SELECT setval('_timescaledb_config.bgw_job_id_seq', :nextval, false);
 
 --test for #2793
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -120,9 +138,9 @@ SELECT add_job( proc=>'custom_func',
      schedule_interval=>'1h', initial_start =>'2018-01-01 10:00:00-05') AS job_id_1 \gset
 
 SELECT job_id, next_start, scheduled, schedule_interval
-FROM timescaledb_information.jobs WHERE job_id > 1000;
+FROM timescaledb_information.jobs WHERE job_id > 1001;
 \x
-SELECT * FROM timescaledb_information.job_stats WHERE job_id > 1000;
+SELECT * FROM timescaledb_information.job_stats WHERE job_id > 1001;
 \x
 
 SELECT delete_job(:job_id_1);

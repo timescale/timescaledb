@@ -4,6 +4,10 @@ DROP TYPE _timescaledb_internal.bloom1 CASCADE;
 
 CREATE FUNCTION _timescaledb_internal.create_chunk_table(hypertable REGCLASS, slices JSONB, schema_name NAME, table_name NAME) RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE;
 CREATE FUNCTION _timescaledb_functions.create_chunk_table(hypertable REGCLASS, slices JSONB, schema_name NAME, table_name NAME) RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE;
+DROP FUNCTION _timescaledb_functions.get_hypertable_id(REGCLASS, REGTYPE);
+DROP FUNCTION _timescaledb_functions.get_hypertable_invalidations(REGCLASS, TIMESTAMPTZ, INTERVAL[]);
+DROP FUNCTION _timescaledb_functions.get_hypertable_invalidations(REGCLASS, TIMESTAMP, INTERVAL[]);
+DROP PROCEDURE _timescaledb_functions.accept_hypertable_invalidations(REGCLASS, TEXT);
 
 -- Revert new option `refresh_newest_first` from incremental cagg refresh policy
 DROP FUNCTION @extschema@.add_continuous_aggregate_policy(
@@ -235,3 +239,78 @@ $$ LANGUAGE PLPGSQL;
 
 -- Split chunk
 DROP PROCEDURE IF EXISTS @extschema@.split_chunk(chunk REGCLASS, split_at "any");
+DROP FUNCTION _timescaledb_functions.align_to_bucket(INTERVAL, ANYRANGE);
+DROP FUNCTION _timescaledb_functions.make_multirange_from_internal_time(TSTZRANGE, BIGINT, BIGINT);
+DROP FUNCTION _timescaledb_functions.make_multirange_from_internal_time(TSRANGE, BIGINT, BIGINT);
+DROP FUNCTION _timescaledb_functions.make_range_from_internal_time(ANYRANGE, ANYELEMENT, ANYELEMENT);
+DROP FUNCTION _timescaledb_functions.get_internal_time_min(REGTYPE);
+DROP FUNCTION _timescaledb_functions.get_internal_time_max(REGTYPE);
+DROP PROCEDURE _timescaledb_functions.add_materialization_invalidations(REGCLASS,TSRANGE);
+DROP PROCEDURE _timescaledb_functions.add_materialization_invalidations(REGCLASS,TSTZRANGE);
+DROP FUNCTION _timescaledb_functions.get_raw_materialization_ranges(REGTYPE);
+DROP FUNCTION _timescaledb_functions.get_materialization_invalidations(REGCLASS, TSTZRANGE);
+DROP FUNCTION _timescaledb_functions.get_materialization_invalidations(REGCLASS, TSRANGE);
+DROP FUNCTION _timescaledb_functions.get_materialization_info(REGCLASS);
+
+DROP FUNCTION IF EXISTS @extschema@.add_job(
+  proc REGPROC,
+  schedule_interval INTERVAL,
+  config JSONB,
+  initial_start TIMESTAMPTZ,
+  scheduled BOOL,
+  check_config REGPROC,
+  fixed_schedule BOOL,
+  timezone TEXT,
+  job_name TEXT
+);
+
+CREATE FUNCTION @extschema@.add_job(
+  proc REGPROC,
+  schedule_interval INTERVAL,
+  config JSONB DEFAULT NULL,
+  initial_start TIMESTAMPTZ DEFAULT NULL,
+  scheduled BOOL DEFAULT true,
+  check_config REGPROC DEFAULT NULL,
+  fixed_schedule BOOL DEFAULT TRUE,
+  timezone TEXT DEFAULT NULL
+)
+RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
+LANGUAGE C VOLATILE;
+
+DROP FUNCTION IF EXISTS @extschema@.alter_job(
+    job_id INTEGER,
+    schedule_interval INTERVAL,
+    max_runtime INTERVAL,
+    max_retries INTEGER,
+    retry_period INTERVAL,
+    scheduled BOOL,
+    config JSONB,
+    next_start TIMESTAMPTZ,
+    if_exists BOOL,
+    check_config REGPROC,
+    fixed_schedule BOOL,
+    initial_start TIMESTAMPTZ,
+    timezone TEXT,
+    job_name TEXT
+);
+
+CREATE FUNCTION @extschema@.alter_job(
+    job_id INTEGER,
+    schedule_interval INTERVAL = NULL,
+    max_runtime INTERVAL = NULL,
+    max_retries INTEGER = NULL,
+    retry_period INTERVAL = NULL,
+    scheduled BOOL = NULL,
+    config JSONB = NULL,
+    next_start TIMESTAMPTZ = NULL,
+    if_exists BOOL = FALSE,
+    check_config REGPROC = NULL,
+    fixed_schedule BOOL = NULL,
+    initial_start TIMESTAMPTZ = NULL,
+    timezone TEXT DEFAULT NULL
+)
+RETURNS TABLE (job_id INTEGER, schedule_interval INTERVAL, max_runtime INTERVAL, max_retries INTEGER, retry_period INTERVAL, scheduled BOOL, config JSONB,
+next_start TIMESTAMPTZ, check_config TEXT, fixed_schedule BOOL, initial_start TIMESTAMPTZ, timezone TEXT)
+AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
+LANGUAGE C VOLATILE;

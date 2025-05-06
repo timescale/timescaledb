@@ -227,7 +227,7 @@ planner_hcache_pop(bool release)
 
 	if (release)
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		/* If we pop a stack and discover a new hypertable cache, the basrel
 		 * cache can contain invalid entries, so we reset it. */
 		if (planner_hcaches != NIL && hcache != linitial(planner_hcaches))

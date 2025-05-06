@@ -422,7 +422,7 @@ ts_modify_hypertable_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hyp
 	if (subpath)
 		mtpath->subpath = subpath;
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	return path;
 }

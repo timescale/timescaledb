@@ -344,16 +344,18 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 						 errdetail("Could not identify a less-than operator for the type.")));
 
 			/* segment_meta min and max columns */
-			compressed_column_defs = lappend(compressed_column_defs,
-											 makeColumnDef(column_segment_min_name(index),
-														   attr->atttypid,
-														   attr->atttypmod,
-														   attr->attcollation));
-			compressed_column_defs = lappend(compressed_column_defs,
-											 makeColumnDef(column_segment_max_name(index),
-														   attr->atttypid,
-														   attr->atttypmod,
-														   attr->attcollation));
+			ColumnDef *def = makeColumnDef(column_segment_min_name(index),
+										   attr->atttypid,
+										   attr->atttypmod,
+										   attr->attcollation);
+			def->storage = TYPSTORAGE_PLAIN;
+			compressed_column_defs = lappend(compressed_column_defs, def);
+			def = makeColumnDef(column_segment_max_name(index),
+								attr->atttypid,
+								attr->atttypmod,
+								attr->attcollation);
+			def->storage = TYPSTORAGE_PLAIN;
+			compressed_column_defs = lappend(compressed_column_defs, def);
 		}
 		else if (bms_is_member(attr->attnum, index_columns))
 		{
@@ -393,22 +395,20 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 				/*
 				 * Add minmax sparse index for this column.
 				 */
-				compressed_column_defs =
-					lappend(compressed_column_defs,
-							makeColumnDef(compressed_column_metadata_name_v2("min",
-																			 NameStr(
-																				 attr->attname)),
-										  attr->atttypid,
-										  attr->atttypmod,
-										  attr->attcollation));
-				compressed_column_defs =
-					lappend(compressed_column_defs,
-							makeColumnDef(compressed_column_metadata_name_v2("max",
-																			 NameStr(
-																				 attr->attname)),
-										  attr->atttypid,
-										  attr->atttypmod,
-										  attr->attcollation));
+				ColumnDef *def =
+					makeColumnDef(compressed_column_metadata_name_v2("min", NameStr(attr->attname)),
+								  attr->atttypid,
+								  attr->atttypmod,
+								  attr->attcollation);
+				compressed_column_defs = lappend(compressed_column_defs, def);
+				def->storage = TYPSTORAGE_MAIN;
+				def =
+					makeColumnDef(compressed_column_metadata_name_v2("max", NameStr(attr->attname)),
+								  attr->atttypid,
+								  attr->atttypmod,
+								  attr->attcollation);
+				def->storage = TYPSTORAGE_MAIN;
+				compressed_column_defs = lappend(compressed_column_defs, def);
 			}
 		}
 

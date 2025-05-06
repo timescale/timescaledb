@@ -338,7 +338,7 @@ cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("could not create continuous aggregate trigger")));
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 /*
@@ -478,7 +478,7 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	 */
 	orig_ht = ts_hypertable_cache_get_entry(hcache, bucket_info->htoid, CACHE_FLAG_NONE);
 	continuous_agg_invalidate_mat_ht(orig_ht, mat_ht, TS_TIME_NOBEGIN, TS_TIME_NOEND);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	return mat_htid;
 }
 

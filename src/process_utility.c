@@ -496,7 +496,7 @@ process_drop_trigger_start(ProcessUtilityArgs *args, DropStmt *stmt)
 		}
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 static DDLResult
@@ -766,7 +766,7 @@ process_altertableschema(ProcessUtilityArgs *args)
 		{
 			alterstmt->objectType = OBJECT_MATVIEW;
 			process_alterviewschema(args);
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			return;
 		}
 
@@ -782,7 +782,7 @@ process_altertableschema(ProcessUtilityArgs *args)
 		add_hypertable_to_process_args(args, ht);
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 /* Change the schema of a hypertable or a chunk */
@@ -836,7 +836,7 @@ process_copy(ProcessUtilityArgs *args)
 
 		if (ht == NULL)
 		{
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			return DDL_CONTINUE;
 		}
 	}
@@ -855,7 +855,7 @@ process_copy(ProcessUtilityArgs *args)
 					 errhint("Use \"COPY (SELECT * FROM <hypertable>) TO ...\" to copy all data in "
 							 "hypertable, or copy each chunk individually.")));
 		if (hcache)
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 
 		return DDL_CONTINUE;
 	}
@@ -870,7 +870,7 @@ process_copy(ProcessUtilityArgs *args)
 
 	add_hypertable_to_process_args(args, ht);
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	ts_end_tss_store_callback(args->query_string,
 							  args->pstmt->stmt_location,
@@ -929,7 +929,7 @@ foreach_chunk_multitransaction(Oid relid, MemoryContext mctx, mt_process_chunk_t
 	ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
 	if (NULL == ht)
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		CommitTransactionCommand();
 		return -1;
 	}
@@ -937,7 +937,7 @@ foreach_chunk_multitransaction(Oid relid, MemoryContext mctx, mt_process_chunk_t
 	hypertable_id = ht->fd.id;
 	chunks = find_inheritance_children(ht->main_table_relid, NoLock);
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	CommitTransactionCommand();
 
 	num_chunks = list_length(chunks);
@@ -1037,7 +1037,7 @@ ts_get_all_vacuum_rels(bool is_vacuumcmd)
 
 	table_endscan(scan);
 	table_close(pgclass, AccessShareLock);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	return vacrels;
 }
@@ -1105,7 +1105,7 @@ process_vacuum(ProcessUtilityArgs *args)
 			}
 			vacuum_rels = lappend(vacuum_rels, vacuum_rel);
 		}
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 	}
 
 	stmt->rels = list_concat(ctx.chunk_rels, vacuum_rels);
@@ -1409,7 +1409,7 @@ process_truncate(ProcessUtilityArgs *args)
 		ts_cagg_watermark_update(mat_ht, watermark, isnull, true);
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	return DDL_DONE;
 }
@@ -1480,7 +1480,7 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 		}
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 /*
@@ -1561,7 +1561,7 @@ process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 		}
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	return result;
 }
@@ -1605,7 +1605,7 @@ process_drop_hypertable_index(ProcessUtilityArgs *args, DropStmt *stmt)
 		}
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 /* Note that DROP TABLESPACE does not have a hook in event triggers so cannot go
@@ -1850,7 +1850,7 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 					}
 				}
 
-				ts_cache_release(hcache);
+				ts_cache_release(&hcache);
 
 				result = DDL_DONE;
 				if (stmt->objects != NIL)
@@ -2131,7 +2131,7 @@ process_reindex(ProcessUtilityArgs *args)
 			break;
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	return result;
 }
@@ -2483,7 +2483,7 @@ process_rename(ProcessUtilityArgs *args)
 			break;
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	return DDL_CONTINUE;
 }
 
@@ -2971,7 +2971,7 @@ verify_constraint(RangeVar *relation, Constraint *constr)
 	if (ht)
 		verify_constraint_hypertable(ht, (Node *) constr);
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 static void
@@ -3267,7 +3267,7 @@ process_index_start(ProcessUtilityArgs *args)
 			}
 			else
 			{
-				ts_cache_release(hcache);
+				ts_cache_release(&hcache);
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("operation not supported on continuous aggregates that are not "
@@ -3281,7 +3281,7 @@ process_index_start(ProcessUtilityArgs *args)
 
 		if (!ht)
 		{
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			return DDL_CONTINUE;
 		}
 
@@ -3359,7 +3359,7 @@ process_index_start(ProcessUtilityArgs *args)
 	 * to do here. */
 	if (!OidIsValid(root_table_index.objectId) && stmt->if_not_exists)
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		return DDL_DONE;
 	}
 	Assert(OidIsValid(root_table_index.objectId));
@@ -3367,7 +3367,7 @@ process_index_start(ProcessUtilityArgs *args)
 	/* support ONLY ON clause, index on root table already created */
 	if (!stmt->relation->inh)
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		return DDL_DONE;
 	}
 
@@ -3399,7 +3399,7 @@ process_index_start(ProcessUtilityArgs *args)
 		foreach_chunk(ht, process_index_chunk, &info);
 
 		ts_catalog_restore_user(&sec_ctx);
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 
 		return DDL_DONE;
 	}
@@ -3426,7 +3426,7 @@ process_index_start(ProcessUtilityArgs *args)
 	CacheInvalidateRelcacheByRelid(info.main_table_relid);
 	CacheInvalidateRelcacheByRelid(info.obj.objectId);
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	/* we need a long-lived context in which to store the list of chunks since the per-transaction
 	 * context will get freed at the end of each transaction. Fortunately we're within just such a
@@ -3557,7 +3557,7 @@ process_cluster_start(ProcessUtilityArgs *args)
 		if (!OidIsValid(index_relid))
 		{
 			/* Let regular process utility handle */
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			return DDL_CONTINUE;
 		}
 
@@ -3663,7 +3663,7 @@ process_cluster_start(ProcessUtilityArgs *args)
 		result = DDL_DONE;
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	return result;
 }
 
@@ -4074,7 +4074,7 @@ process_altertable_end_index(Node *parsetree, CollectedCommand *cmd)
 		}
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 static inline void
@@ -4131,7 +4131,7 @@ process_set_access_method(AlterTableCmd *cmd, ProcessUtilityArgs *args)
 		cmd->def = (Node *) list_make1(elem);
 		stmt->cmds = lappend(stmt->cmds, cmd);
 	}
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 static DDLResult
@@ -4265,7 +4265,7 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 		}
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	/* If there are any commands remaining in the list, we need to deal with
 	 * them. Otherwise, we just skip the rest. */
@@ -4333,7 +4333,7 @@ alter_hypertable_by_id(int32 hypertable_id, AlterTableStmt *stmt, AlterTableCmd 
 	relation_not_only(stmt->relation);
 	AlterTableInternal(ht->main_table_relid, list_make1(cmd), false);
 	(*extra)(ht, cmd);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 static DDLResult
@@ -4729,7 +4729,7 @@ process_altertable_end_table(Node *parsetree, CollectedCommand *cmd)
 		}
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 static void
@@ -4770,7 +4770,7 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 	ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
 	if (ht == NULL)
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		/* check if it's a cagg. We don't support triggers on them yet */
 		if (ts_continuous_agg_find_by_relid(relid) != NULL)
 			ereport(ERROR,
@@ -4794,7 +4794,7 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 	 */
 	if (stmt->transitionRels && TRIGGER_FOR_ROW(tgtype))
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("ROW triggers with transition tables are not supported on hypertables")));
@@ -4809,7 +4809,7 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 	if (stmt->transitionRels && TRIGGER_FOR_DELETE(tgtype) &&
 		TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht) && !ts_is_hypercore_am(ht->amoid))
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("DELETE triggers with transition tables not supported"),
@@ -4825,14 +4825,14 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 	 */
 	if (!stmt->row)
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		return DDL_CONTINUE;
 	}
 
 	address = ts_hypertable_create_trigger(ht, stmt, args->query_string);
 	Assert(OidIsValid(address.objectId));
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	return DDL_DONE;
 }
 

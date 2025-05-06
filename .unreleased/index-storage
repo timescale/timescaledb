@@ -1,0 +1,1 @@
+Implements: #7762 Speed up the queries that use minmax sparse indexes on compressed tables by changing the index TOAST storage type to MAIN. This applies to newly compressed chunks.

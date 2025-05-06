@@ -7,6 +7,7 @@ set(TEST_FILES
     bgw_job_ddl.sql
     bgw_policy.sql
     bgw_security.sql
+    cagg_api.sql
     cagg_deprecated_bucket_ng.sql
     cagg_errors.sql
     cagg_invalidation.sql

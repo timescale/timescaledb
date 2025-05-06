@@ -938,7 +938,7 @@ ts_subtract_integer_from_now(PG_FUNCTION_ARGS)
 		elog(ERROR, "could not find valid integer_now function for hypertable");
 
 	int64 res = ts_sub_integer_from_now(lag, partitioning_type, now_func);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	return Int64GetDatum(res);
 }
 
@@ -1212,7 +1212,7 @@ ts_hypertable_approximate_size(PG_FUNCTION_ARGS)
 	ht = ts_resolve_hypertable_from_table_or_cagg(hcache, relid, true);
 	if (ht == NULL)
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		PG_RETURN_NULL();
 	}
 
@@ -1274,7 +1274,7 @@ ts_hypertable_approximate_size(PG_FUNCTION_ARGS)
 	values[3] = Int64GetDatum(total_relsize.total_size);
 
 	tuple = heap_form_tuple(tupdesc, values, nulls);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	return HeapTupleGetDatum(tuple);
 }

@@ -216,25 +216,78 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 
 	if (stage == UPPERREL_DISTINCT && root->parse->distinctClause)
 	{
-		foreach (lc, root->parse->distinctClause)
+		/* Obtain Distinct key from the target list, we ruled out numkeys > 1 cases before.
+		 * Examples of queries with 1 Distinct key but multiple target entries:
+		 * SELECT dev, dev FROM t; SELECT 1, dev FROM t; SELECT dev, time FROM t WHERE time = 100;
+		 */
+		if (root->distinct_pathkeys)
 		{
-			SortGroupClause *clause = lfirst_node(SortGroupClause, lc);
-			Node *expr = get_sortgroupclause_expr(clause, root->parse->targetList);
+			SortGroupClause *distinct_clause = NULL;
+#if PG16_GE
+			distinct_clause = linitial(root->processed_distinctClause);
+#else
+			PathKey *pathkey = linitial(root->distinct_pathkeys);
+			if (pathkey->pk_eclass->ec_sortref)
+			{
+				foreach (lc, root->parse->distinctClause)
+				{
+					SortGroupClause *clause = lfirst_node(SortGroupClause, lc);
+					if (clause->tleSortGroupRef == pathkey->pk_eclass->ec_sortref)
+					{
+						distinct_clause = clause;
+						break;
+					}
+				}
+			}
+			/* We can get PathKey with ec_sortref = 0 in PG15
+			 * when False filter is not pushed into a relation with distinct column (i.e. it's on
+			 * top of a join), so need to support this case in PG15
+			 */
+			else
+				return NULL;
+#endif
+			Node *expr = get_sortgroupclause_expr(distinct_clause, root->parse->targetList);
 
 			/* we ignore any columns that can be constified to allow for cases like DISTINCT 'abc',
 			 * column */
 			if (IsA(estimate_expression_value(root, expr), Const))
-				continue;
-
-			num_vars++;
-			if (num_vars > 1)
 				return NULL;
 
 			/* We ignore binary-compatible relabeling */
 			tlexpr = (Expr *) expr;
 			while (tlexpr && IsA(tlexpr, RelabelType))
 				tlexpr = ((RelabelType *) tlexpr)->arg;
+
+			num_vars = 1;
 		}
+#if PG16_LT
+		/* In PG16+ we use LIMIT instead of UpperUniquePath for (numkeys = 0),
+		 * but in PG15- we would still create UpperUniquePath for (numkeys = 0), so handle this case
+		 * here
+		 */
+		else
+		{
+			foreach (lc, root->parse->distinctClause)
+			{
+				SortGroupClause *clause = lfirst_node(SortGroupClause, lc);
+				Node *expr = get_sortgroupclause_expr(clause, root->parse->targetList);
+
+				/* we ignore any columns that can be constified to allow for cases like DISTINCT
+				 * 'abc', column */
+				if (IsA(estimate_expression_value(root, expr), Const))
+					continue;
+
+				num_vars++;
+				if (num_vars > 1)
+					return NULL;
+
+				/* We ignore binary-compatible relabeling */
+				tlexpr = (Expr *) expr;
+				while (tlexpr && IsA(tlexpr, RelabelType))
+					tlexpr = ((RelabelType *) tlexpr)->arg;
+			}
+		}
+#endif
 	}
 #if PG16_GE
 	else if (stage == UPPERREL_GROUP_AGG)
@@ -336,6 +389,12 @@ obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPa
 				if (unique->numkeys > 1)
 					return;
 
+#if PG16_GE
+				/* since PG16+ we no longer create UpperUniquePath with 0 numkeys,
+				 * we create LIMIT path instead, so shouldn't be here with 0 numkeys
+				 */
+				Assert(unique->numkeys == 1);
+#endif
 				dpinfo->unique_path = (Path *) unique;
 				break;
 			}
@@ -705,7 +764,12 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 
 	/* Also true for SkipScan over compressed chunks as can't have more distinct segmentby values
 	 * than number of batches */
-	int ndistinct = Min(dpinfo->unique_path->rows, indexscan_rows);
+	int ndistinct = indexscan_rows;
+	/* For SELECT DISTINCT path, #rows can cap "ndistinct",
+	 * but for Distinct aggregates #rows = 1 usually, i.e. we can't cap "ndistinct" in this case.
+	 */
+	if (dpinfo->stage == UPPERREL_DISTINCT)
+		ndistinct = Min(ndistinct, dpinfo->unique_path->rows);
 
 	/* If we are on a chunk rather than on a PG table, we want to get "ndistinct" for this chunk,
 	 * as Unique path rows may combine rows from each chunk and may not represent a true

@@ -2136,7 +2136,7 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 															  &funcctx->max_calls,
 															  NULL);
 		}
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 	}
 
 	return show_chunks_return_srf(fcinfo);
@@ -4230,11 +4230,11 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 		if (edata->sqlerrcode == ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST)
 			edata->hint = pstrdup("Use DROP ... to drop the dependent objects.");
 
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		ReThrowError(edata);
 	}
 	PG_END_TRY();
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	dc_names = list_concat(dc_names, dc_temp);
 
 	MemoryContextSwitchTo(oldcontext);
@@ -4824,7 +4824,7 @@ ts_chunk_attach_osm_table_chunk(PG_FUNCTION_ARGS)
 		add_foreign_table_as_chunk(ftable_relid, ht);
 		ret = true;
 	}
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	PG_RETURN_BOOL(ret);
 }
@@ -5150,7 +5150,7 @@ ts_chunk_drop_osm_chunk(PG_FUNCTION_ARGS)
 		ts_clear_flags_32(ht->fd.status,
 						  HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
 	ts_hypertable_update_status_osm(ht);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	PG_RETURN_BOOL(true);
 }
 

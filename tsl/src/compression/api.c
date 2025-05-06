@@ -585,7 +585,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		}
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	return result_chunk_id;
 }
 
@@ -620,7 +620,7 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 
 	if (uncompressed_chunk->fd.compressed_chunk_id == INVALID_CHUNK_ID)
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		ereport((if_compressed ? NOTICE : ERROR),
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("chunk \"%s\" is not converted to columnstore",
@@ -698,7 +698,7 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	LockRelationOid(uncompressed_chunk->table_id, AccessExclusiveLock);
 	LockRelationOid(compressed_chunk->table_id, AccessExclusiveLock);
 	ts_chunk_drop(compressed_chunk, DROP_RESTRICT, -1);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	write_logical_replication_msg_decompression_end();
 }
 
@@ -778,7 +778,7 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 		 */
 		ts_chunk_set_partial(cxt.srcht_chunk);
 	}
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	PG_RETURN_OID(chunk_relid);
 }

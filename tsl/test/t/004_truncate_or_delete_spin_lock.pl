@@ -27,15 +27,14 @@ my $result = $node->safe_psql(
 	temperature double precision null);
 	}
 );
-is($result, '', 'create table');
 
 # Create hypertable
 $result = $node->safe_psql(
 	'postgres', q{
-   SELECT FROM create_hypertable('sensor_data','time', chunk_time_interval => INTERVAL '1 month');
+   SELECT table_name FROM create_hypertable('sensor_data','time', chunk_time_interval => INTERVAL '1 month');
 	}
 );
-is($result, '', 'create hypertable');
+is($result, 'sensor_data', 'create hypertable');
 
 # Insert data
 $result = $node->safe_psql(
@@ -52,7 +51,6 @@ $result = $node->safe_psql(
    ORDER BY time;
 	}
 );
-is($result, '', 'insert data');
 
 # Define count query
 my $count_query = "SELECT count(*) FROM sensor_data;";
@@ -72,7 +70,6 @@ $result = $node->safe_psql(
    ALTER TABLE sensor_data SET (timescaledb.compress, timescaledb.compress_segmentby = 'sensor_id');
 	}
 );
-is($result, '', 'enable compression');
 
 # Get number of chunks
 my $n_chunks = $node->safe_psql(
@@ -87,7 +84,6 @@ my $s2 = $node->background_psql('postgres');
 # SET session 1 behaviour to `truncate_or_delete`
 $result = $s1->query_safe(
 	"SET timescaledb.compress_truncate_behaviour TO truncate_or_delete;");
-isnt($result, '', "session 1: set truncate_or_delete");
 
 # Run tests
 
@@ -97,10 +93,8 @@ isnt($result, '', "session 1: set truncate_or_delete");
 
 # Begin txns in both sessions
 $result = $s1->query_safe("BEGIN");
-isnt($result, '', "session 1: begin");
 
 $result = $s2->query_safe("BEGIN");
-isnt($result, '', "session 2: begin");
 
 # The aggregation query takes an AccessShareLock on the chunk, preventing truncate
 $result = $s2->query_safe($count_query);
@@ -123,7 +117,6 @@ $result = $node->safe_psql('postgres', $count_query);
 is($result, $num_rows, "session 2: validate row count again");
 
 $result = $s2->query_safe("COMMIT");
-isnt($result, '', "session 2: commit");
 
 # No AccessExclusiveLock on the uncompressed chunk
 $result = $s1->query_safe(
@@ -134,7 +127,6 @@ is($result, $expected, "verify AccessExclusiveLock was not taken");
 
 
 $result = $s1->query_safe("ROLLBACK");
-isnt($result, '', "session 1: rollback");
 
 ##########################################################################
 
@@ -143,10 +135,8 @@ isnt($result, '', "session 1: rollback");
 
 # Begin txns in both sessions
 $result = $s1->query_safe("BEGIN");
-isnt($result, '', "session 1: begin");
 
 $result = $s2->query_safe("BEGIN");
-isnt($result, '', "session 2: begin");
 
 $result = $s2->query_safe($count_query);
 is($result, $num_rows, "session 2: validate row count");
@@ -157,7 +147,6 @@ $s1->query_until('', $compress_query);
 
 # Session 2 immediately commits, releasing the AccessShareLock on the table
 $result = $s2->query_safe("COMMIT");
-isnt($result, '', "session 2: commit");
 
 # The result from the previous query_until() is returned with the next query
 # so perform a dummy query on s1 to discard the result
@@ -179,7 +168,6 @@ _timescaledb_internal.compress_hyper_2_3_chunk";
 is($result, $expected, "verify AccessExclusiveLock was taken");
 
 $result = $s1->query_safe("ROLLBACK");
-isnt($result, '', "session 1: rollback");
 
 $s1->quit();
 $s2->quit();

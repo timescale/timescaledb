@@ -8,6 +8,7 @@ set(PROVE_DEBUG_TEST_FILES 003_mvcc_cagg.pl)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
   list(APPEND PROVE_TEST_FILES 004_truncate_or_delete_spin_lock.pl)
+  list(APPEND PROVE_DEBUG_TEST_FILES 005_recompression_spin_lock_test.pl)
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
