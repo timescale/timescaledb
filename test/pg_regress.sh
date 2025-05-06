@@ -164,8 +164,6 @@ else
     for test_name in ${ALL_TESTS}; do
       if ! matches "${SKIPS}" "${test_name}"; then
         if [[ $test_name == $test_pattern ]]; then
-          echo "(2) test pattern is '${test_pattern}'"
-          echo "ignore: ${test_name}"
           echo "ignore: ${test_name}" >> ${TEMP_SCHEDULE}
         fi
       fi
@@ -185,7 +183,7 @@ function cleanup() {
   rm -rf ${TEST_TABLESPACE1_PREFIX}
   rm -rf ${TEST_TABLESPACE2_PREFIX}
   rm -rf ${TEST_TABLESPACE3_PREFIX}
-  # rm -f ${TEMP_SCHEDULE}
+  rm -f ${TEMP_SCHEDULE}
   cat <<EOF | ${PSQL} -U ${USER} -h ${TEST_PGHOST} -p ${TEST_PGPORT} -d template1 >/dev/null 2>&1
     DROP TABLESPACE IF EXISTS tablespace1;
     DROP TABLESPACE IF EXISTS tablespace2;

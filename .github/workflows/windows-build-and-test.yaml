@@ -80,7 +80,6 @@ jobs:
       SKIPS: >-
         bgw_db_scheduler
         bgw_db_scheduler_fixed
-        compress_bloom_sparse_debug
         hypercore_vectoragg
         vector_agg_groupagg
         vector_agg_grouping
@@ -258,14 +257,6 @@ jobs:
         path: |
           regression.log
           installcheck.log
-
-    - name: Save schedule
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: Schedule ${{ matrix.pg }}
-        # path: /mnt/d/a/timescaledb/timescaledb/test/temp_schedule
-        path: D:\a\timescaledb\timescaledb\test\temp_schedule
 
     - name: Save PostgreSQL log
       if: always()

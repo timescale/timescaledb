@@ -36,14 +36,8 @@
  * Calculator: https://hur.st/bloomfilter/?p=0.02&m=64
  */
 
-//#define BLOOM1_FALSE_POSITIVES 0.05
-//#define BLOOM1_HASHES 4
-
 #define BLOOM1_FALSE_POSITIVES 0.022
 #define BLOOM1_HASHES 6
-
-//#define BLOOM1_FALSE_POSITIVES 0.001
-//#define BLOOM1_HASHES 8
 
 /*
  * Limit the bits belonging to the particular elements to a small contiguous
