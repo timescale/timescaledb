@@ -177,7 +177,7 @@ function cleanup() {
   rm -rf ${TEST_TABLESPACE1_PREFIX}
   rm -rf ${TEST_TABLESPACE2_PREFIX}
   rm -rf ${TEST_TABLESPACE3_PREFIX}
-  rm -f ${TEMP_SCHEDULE}
+  # rm -f ${TEMP_SCHEDULE}
   cat <<EOF | ${PSQL} -U ${USER} -h ${TEST_PGHOST} -p ${TEST_PGPORT} -d template1 >/dev/null 2>&1
     DROP TABLESPACE IF EXISTS tablespace1;
     DROP TABLESPACE IF EXISTS tablespace2;

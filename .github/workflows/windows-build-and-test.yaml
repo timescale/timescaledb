@@ -264,7 +264,8 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: Schedule ${{ matrix.pg }}
-        path: /mnt/d/a/timescaledb/timescaledb/test/temp_schedule
+        # path: /mnt/d/a/timescaledb/timescaledb/test/temp_schedule
+        path: D:\a\timescaledb\timescaledb\test\temp_schedule
 
     - name: Save PostgreSQL log
       if: always()
