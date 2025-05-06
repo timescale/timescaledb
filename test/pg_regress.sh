@@ -51,7 +51,7 @@ if [[ -z ${TEST_SCHEDULE} ]];  then
 fi
 
 # PG16 removed the `ignore` feature from `pg_regress`
-# so as an wraparound if we have any IGNORES entry then
+# so as an workaround if we have any IGNORES entry then
 # we merge it together with SKIPS and cleanup the IGNORES
 # https://github.com/postgres/postgres/commit/bd8d453e9b5f8b632a400a9e796fc041aed76d82
 if [[ ${PG_VERSION_MAJOR} -ge 16 ]]; then
@@ -93,6 +93,10 @@ elif [[ -z ${TESTS} && ( -n ${SKIPS} || -n ${IGNORES} ) ]]; then
     for test_pattern in ${IGNORES}; do
       for test_name in ${ALL_TESTS}; do
         if [[ -n ${test_name} ]] && [[ $test_name == $test_pattern ]]; then
+          echo "test name is '${test_name}'" > /dev/stderr
+          echo "test pattern is '${test_pattern}'" > /dev/stderr
+          echo "ignore: ${test_name}" > /dev/stderr
+          echo "ignore: ${test_name}" >> ${TEMP_SCHEDULE}
           echo "ignore: ${test_name}" >> ${TEMP_SCHEDULE}
         fi
       done
@@ -156,7 +160,7 @@ else
     for test_name in ${ALL_TESTS}; do
       if ! matches "${SKIPS}" "${test_name}"; then
         if [[ $test_name == $test_pattern ]]; then
-          echo "test pattern is '${test_pattern}'" > /dev/stderr
+          echo "(2) test pattern is '${test_pattern}'" > /dev/stderr
           echo "ignore: ${test_name}" > /dev/stderr
           echo "ignore: ${test_name}" >> ${TEMP_SCHEDULE}
         fi
