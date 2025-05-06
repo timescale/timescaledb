@@ -464,7 +464,7 @@ modify_expression(Node *node, QualPushdownContext *context)
 			{
 				Expr *pd = NULL;
 
-				if (ts_guc_enable_sparse_index_bloom1)
+				if (ts_guc_enable_sparse_index_bloom)
 				{
 					/*
 					 * Try bloom1 sparse index.

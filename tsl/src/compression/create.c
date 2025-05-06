@@ -166,15 +166,15 @@ compressed_column_metadata_attno(const CompressionSettings *settings, Oid chunk_
 }
 
 /*
- * The heuristic for whether we should use the bloom1 sparse index.
+ * The heuristic for whether we should use the bloom filter sparse index.
  */
 static bool
-should_use_bloom1(Form_pg_attribute attr, TypeCacheEntry *type, Oid src_reloid)
+should_create_bloom_sparse_index(Form_pg_attribute attr, TypeCacheEntry *type, Oid src_reloid)
 {
 	/*
 	 * The index must be enabled by the GUC.
 	 */
-	if (!ts_guc_enable_sparse_index_bloom1)
+	if (!ts_guc_enable_sparse_index_bloom)
 	{
 		return false;
 	}
@@ -215,7 +215,7 @@ should_use_bloom1(Form_pg_attribute attr, TypeCacheEntry *type, Oid src_reloid)
 	 * one byte per element, so there's no point in using them for smaller data
 	 * types that typically compress to less than that.
 	 */
-	if (type->typlen > 0 && type->typlen <= 4)
+	if (type->typlen > 0 && type->typlen < 4)
 	{
 		return false;
 	}
@@ -370,7 +370,7 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 			 */
 			bool can_use_minmax = OidIsValid(type->lt_opr);
 
-			if (should_use_bloom1(attr, type, src_reloid))
+			if (should_create_bloom_sparse_index(attr, type, src_reloid))
 			{
 				/*
 				 * Add bloom filter sparse index for this column.

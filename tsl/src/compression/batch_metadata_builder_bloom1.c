@@ -79,6 +79,12 @@ bloom1_hash_8(PG_FUNCTION_ARGS)
 	PG_RETURN_UINT64(bloom1_hash64(PG_GETARG_INT64(0)));
 }
 
+static Datum
+bloom1_hash_4(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_UINT64(bloom1_hash64(PG_GETARG_INT32(0)));
+}
+
 #ifdef TS_USE_UMASH
 static struct umash_params *
 hashing_params()
@@ -130,28 +136,11 @@ bloom1_hash_16(PG_FUNCTION_ARGS)
 PGFunction
 bloom1_get_hash_function(Oid type, FmgrInfo **finfo)
 {
-	/*
-	 * For some types we use our custom hash functions. We only do it for the
-	 * builtin Postgres types to be on the safe side, and also simplify the
-	 * testing by creating bad hash functions from SQL tests. If you change this,
-	 * you might have to change the bad hash testing in compress_bloom_sparse.sql.
-	 */
 	*finfo = NULL;
-	switch (type)
-	{
-#ifdef TS_USE_UMASH
-		case TEXTOID:
-			return bloom1_hash_varlena;
-		case UUIDOID:
-			return bloom1_hash_16;
-#endif
-		case INT8OID:
-			return bloom1_hash_8;
-	}
 
 	/*
-	 * Fall back to the Postgres extended hashing functions, so that we can use
-	 * bloom filters for any types.
+	 * By default, we use the Postgres extended hashing functions, so that we
+	 * can use bloom filters for any types.
 	 * We request also the opfamily info and the equality operator, because
 	 * otherwise the Postgres type cache code fails obtusely on types with
 	 * improper opclasses. It picks up the btree opclass from a binary compatible
@@ -164,6 +153,32 @@ bloom1_get_hash_function(Oid type, FmgrInfo **finfo)
 	TypeCacheEntry *entry = lookup_type_cache(type,
 											  TYPECACHE_EQ_OPR | TYPECACHE_BTREE_OPFAMILY |
 												  TYPECACHE_HASH_EXTENDED_PROC_FINFO);
+	/*
+	 * For some types we use our custom hash functions. We only do it for the
+	 * builtin Postgres types to be on the safe side, and also simplify the
+	 * testing by creating bad hash functions from SQL tests. If you change this,
+	 * you might have to change the bad hash testing in compress_bloom_sparse.sql.
+	 */
+	switch (entry->hash_extended_proc)
+	{
+#ifdef TS_USE_UMASH
+		case F_HASHTEXTEXTENDED:
+			return bloom1_hash_varlena;
+
+		case F_UUID_HASH_EXTENDED:
+			return bloom1_hash_16;
+#endif
+		case F_HASHINT8EXTENDED:
+			return bloom1_hash_8;
+
+		case F_HASHINT4EXTENDED:
+			return bloom1_hash_4;
+	}
+
+	/*
+	 * For the Postgres hash function, finfo might be required, for example for
+	 * functions defined in procedural languages.
+	 */
 	*finfo = &entry->hash_extended_proc_finfo;
 	return entry->hash_extended_proc_finfo.fn_addr;
 }

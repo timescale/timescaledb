@@ -105,3 +105,71 @@ select min(ts_bloom1_debug_hash(c)) from test;
  -9221783940407213644
 (1 row)
 
+-- This shouldn't change compared to what was released in 2.20, not to break the
+-- binary compatibility.
+select ts_bloom1_debug_hash('test'::text);
+ ts_bloom1_debug_hash 
+----------------------
+   505112506223281103
+(1 row)
+
+select ts_bloom1_debug_hash('test'::varchar);
+ ts_bloom1_debug_hash 
+----------------------
+   505112506223281103
+(1 row)
+
+select ts_bloom1_debug_hash('test'::bpchar);
+ ts_bloom1_debug_hash 
+----------------------
+ -8127218844099566047
+(1 row)
+
+select ts_bloom1_debug_hash('c9757a73-7632-462e-bcfa-d5d9659e498f'::uuid);
+ ts_bloom1_debug_hash 
+----------------------
+ -1807136374307054089
+(1 row)
+
+select ts_bloom1_debug_hash(1::int4);
+ ts_bloom1_debug_hash 
+----------------------
+  4717996019076358352
+(1 row)
+
+select ts_bloom1_debug_hash(1::int8);
+ ts_bloom1_debug_hash 
+----------------------
+  4717996019076358352
+(1 row)
+
+select ts_bloom1_debug_hash(1::float4);
+ ts_bloom1_debug_hash 
+----------------------
+  4033440226552636220
+(1 row)
+
+select ts_bloom1_debug_hash(1::float8);
+ ts_bloom1_debug_hash 
+----------------------
+  4033440226552636220
+(1 row)
+
+select ts_bloom1_debug_hash('2025-05-05'::date);
+ ts_bloom1_debug_hash 
+----------------------
+ -5348595084310508225
+(1 row)
+
+select ts_bloom1_debug_hash('2025-05-05'::timestamp);
+ ts_bloom1_debug_hash 
+----------------------
+  6141104473732294652
+(1 row)
+
+select ts_bloom1_debug_hash('2025-05-05'::timestamptz);
+ ts_bloom1_debug_hash 
+----------------------
+  2448302731963240730
+(1 row)
+

@@ -157,7 +157,7 @@ bool ts_guc_enable_custom_hashagg = false;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = false;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
-TSDLLEXPORT bool ts_guc_enable_sparse_index_bloom1 = true;
+TSDLLEXPORT bool ts_guc_enable_sparse_index_bloom = true;
 TSDLLEXPORT bool ts_guc_default_hypercore_use_access_method = false;
 bool ts_guc_enable_chunk_skipping = false;
 TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
@@ -998,11 +998,11 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_sparse_index_bloom1"),
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_sparse_index_bloom"),
 							 "Enable creation of the bloom1 sparse index on compressed chunks",
 							 "This sparse index speeds up the equality queries on compressed "
 							 "columns, and can be disabled when not desired.",
-							 &ts_guc_enable_sparse_index_bloom1,
+							 &ts_guc_enable_sparse_index_bloom,
 							 true,
 							 PGC_USERSET,
 							 0,

@@ -91,3 +91,18 @@ create or replace function ts_bloom1_debug_hash(in anyelement, out int8)
 as :TSL_MODULE_PATHNAME, 'ts_bloom1_debug_hash' language c immutable parallel safe;
 
 select min(ts_bloom1_debug_hash(c)) from test;
+
+
+-- This shouldn't change compared to what was released in 2.20, not to break the
+-- binary compatibility.
+select ts_bloom1_debug_hash('test'::text);
+select ts_bloom1_debug_hash('test'::varchar);
+select ts_bloom1_debug_hash('test'::bpchar);
+select ts_bloom1_debug_hash('c9757a73-7632-462e-bcfa-d5d9659e498f'::uuid);
+select ts_bloom1_debug_hash(1::int4);
+select ts_bloom1_debug_hash(1::int8);
+select ts_bloom1_debug_hash(1::float4);
+select ts_bloom1_debug_hash(1::float8);
+select ts_bloom1_debug_hash('2025-05-05'::date);
+select ts_bloom1_debug_hash('2025-05-05'::timestamp);
+select ts_bloom1_debug_hash('2025-05-05'::timestamptz);
