@@ -93,9 +93,9 @@ elif [[ -z ${TESTS} && ( -n ${SKIPS} || -n ${IGNORES} ) ]]; then
     for test_pattern in ${IGNORES}; do
       for test_name in ${ALL_TESTS}; do
         if [[ -n ${test_name} ]] && [[ $test_name == $test_pattern ]]; then
-          echo "test name is '${test_name}'" > /dev/stderr
-          echo "test pattern is '${test_pattern}'" > /dev/stderr
-          echo "ignore: ${test_name}" > /dev/stderr
+          echo "test name is '${test_name}'"
+          echo "test pattern is '${test_pattern}'"
+          echo "ignore: ${test_name}"
           echo "ignore: ${test_name}" >> ${TEMP_SCHEDULE}
           echo "ignore: ${test_name}" >> ${TEMP_SCHEDULE}
         fi
@@ -160,8 +160,8 @@ else
     for test_name in ${ALL_TESTS}; do
       if ! matches "${SKIPS}" "${test_name}"; then
         if [[ $test_name == $test_pattern ]]; then
-          echo "(2) test pattern is '${test_pattern}'" > /dev/stderr
-          echo "ignore: ${test_name}" > /dev/stderr
+          echo "(2) test pattern is '${test_pattern}'"
+          echo "ignore: ${test_name}"
           echo "ignore: ${test_name}" >> ${TEMP_SCHEDULE}
         fi
       fi
