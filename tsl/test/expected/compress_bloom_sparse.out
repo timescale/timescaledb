@@ -2,6 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
+-- helper function: float -> pseudorandom float [-0.5..0.5]
+create or replace function mix(x anyelement) returns float8 as $$
+    select hashfloat8(x::float8) / pow(2, 32)
+$$ language sql;
 create table bloom(x int, value text, u uuid, ts timestamp);
 select create_hypertable('bloom', 'x');
 WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
@@ -720,7 +724,45 @@ select exists (select * from badtable where b = v_badint.b) from v_badint;
 (9 rows)
 
 ;
+-- Test a non-by-value 8-byte type.
+create table byref(ts int, x macaddr8);
+select create_hypertable('byref', 'ts');
+NOTICE:  adding not-null constraint to column "ts"
+ create_hypertable  
+--------------------
+ (7,public,byref,t)
+(1 row)
+
+create index on byref(x);
+alter table byref set (timescaledb.compress, timescaledb.compress_segmentby = '',
+    timescaledb.compress_orderby = 'ts');
+create function float8tomacaddr8(x float8) returns macaddr8 as $$
+    select to_hex(right(float8send(x)::text, -1)::bit(64)::bigint)::macaddr8;
+$$ language sql immutable parallel safe strict;
+insert into byref select x, float8tomacaddr8(mix(x)) from generate_series(1, 10000) x;
+select count(compress_chunk(x)) from show_chunks('byref') x;
+ count 
+-------
+     1
+(1 row)
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from byref where x = float8tomacaddr8(mix(1));
+                                                                                                                    QUERY PLAN                                                                                                                     
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_7_8_chunk (actual rows=1 loops=1)
+   Output: _hyper_7_8_chunk.ts, _hyper_7_8_chunk.x
+   Filter: (_hyper_7_8_chunk.x = '3f:b6:70:e3:3c:00:00:00'::macaddr8)
+   Rows Removed by Filter: 999
+   Bulk Decompression: true
+   ->  Seq Scan on _timescaledb_internal.compress_hyper_8_9_chunk (actual rows=1 loops=1)
+         Output: compress_hyper_8_9_chunk._ts_meta_count, compress_hyper_8_9_chunk._ts_meta_min_1, compress_hyper_8_9_chunk._ts_meta_max_1, compress_hyper_8_9_chunk.ts, compress_hyper_8_9_chunk._ts_meta_v2_bloom1_x, compress_hyper_8_9_chunk.x
+         Filter: _timescaledb_functions.bloom1_contains(compress_hyper_8_9_chunk._ts_meta_v2_bloom1_x, '3f:b6:70:e3:3c:00:00:00'::macaddr8)
+         Rows Removed by Filter: 9
+(9 rows)
+
 -- Cleanup
 drop table bloom;
 drop table corner;
 drop table badtable;
+drop table byref;

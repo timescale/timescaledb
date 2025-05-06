@@ -4,6 +4,11 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
+-- helper function: float -> pseudorandom float [-0.5..0.5]
+create or replace function mix(x anyelement) returns float8 as $$
+    select hashfloat8(x::float8) / pow(2, 32)
+$$ language sql;
+
 create table bloom(x int, value text, u uuid, ts timestamp);
 select create_hypertable('bloom', 'x');
 
@@ -349,9 +354,28 @@ select exists (select * from badtable where b = v_badint.b) from v_badint;
 ;
 
 
+-- Test a non-by-value 8-byte type.
+create table byref(ts int, x macaddr8);
+select create_hypertable('byref', 'ts');
+create index on byref(x);
+alter table byref set (timescaledb.compress, timescaledb.compress_segmentby = '',
+    timescaledb.compress_orderby = 'ts');
+
+create function float8tomacaddr8(x float8) returns macaddr8 as $$
+    select to_hex(right(float8send(x)::text, -1)::bit(64)::bigint)::macaddr8;
+$$ language sql immutable parallel safe strict;
+
+insert into byref select x, float8tomacaddr8(mix(x)) from generate_series(1, 10000) x;
+select count(compress_chunk(x)) from show_chunks('byref') x;
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from byref where x = float8tomacaddr8(mix(1));
+
+
 -- Cleanup
 drop table bloom;
 drop table corner;
 drop table badtable;
+drop table byref;
 
 
