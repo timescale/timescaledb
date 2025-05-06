@@ -227,17 +227,25 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 			distinct_clause = linitial(root->processed_distinctClause);
 #else
 			PathKey *pathkey = linitial(root->distinct_pathkeys);
-			foreach (lc, root->parse->distinctClause)
+			if (pathkey->pk_eclass->ec_sortref)
 			{
-				SortGroupClause *clause = lfirst_node(SortGroupClause, lc);
-				if (clause->tleSortGroupRef == pathkey->pk_eclass->ec_sortref)
+				foreach (lc, root->parse->distinctClause)
 				{
-					distinct_clause = clause;
-					break;
+					SortGroupClause *clause = lfirst_node(SortGroupClause, lc);
+					if (clause->tleSortGroupRef == pathkey->pk_eclass->ec_sortref)
+					{
+						distinct_clause = clause;
+						break;
+					}
 				}
 			}
+			/* We can get PathKey with ec_sortref = 0 in PG15
+			 * when False filter is not pushed into a relation with distinct column (i.e. it's on
+			 * top of a join), so need to support this case in PG15
+			 */
+			else
+				return NULL;
 #endif
-			Assert(distinct_clause);
 			Node *expr = get_sortgroupclause_expr(distinct_clause, root->parse->targetList);
 
 			/* we ignore any columns that can be constified to allow for cases like DISTINCT 'abc',
