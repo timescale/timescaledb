@@ -211,16 +211,17 @@ jobs:
 
     - name: Send coverage report to Codecov.io app
       if: matrix.coverage
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       with:
-        file: ./build/codecov/timescaledb-codecov.info
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: ./build/coverage/timescaledb-coverage.info
 
     - name: Save LCOV coverage report
       if: matrix.coverage
       uses: actions/upload-artifact@v4
       with:
         name: LCOV coverage report ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
-        path: ./build/codecov/codecov-report
+        path: ./build/coverage/lcov-report
 
     - name: Show regression diffs
       if: always()
