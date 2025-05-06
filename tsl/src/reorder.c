@@ -234,13 +234,13 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 	{
 		Oid main_table_relid = ht->main_table_relid;
 
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_TABLE, get_rel_name(main_table_relid));
 	}
 
 	if (!chunk_get_reorder_index(ht, chunk, index_id, &cim))
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		if (OidIsValid(index_id))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -295,7 +295,7 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 				wait_id,
 				destination_tablespace,
 				index_tablespace);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 /*

@@ -580,7 +580,7 @@ chunk_update_constraints(const Chunk *chunk, const Hypercube *new_cube)
 		table_close(rel, NoLock);
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 static void
@@ -1509,7 +1509,7 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 	CommandCounterIncrement();
 
 	/* Reread hypertable after constraints changed */
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	ht = ts_hypertable_cache_get_cache_and_entry(chunk->hypertable_relid, CACHE_FLAG_NONE, &hcache);
 	bool created = false;
 	Chunk *new_chunk = ts_chunk_find_or_create_without_cuts(ht,
@@ -1518,7 +1518,7 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 															NULL,
 															InvalidOid,
 															&created);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	Ensure(created, "could not create chunk for split");
 	Assert(new_chunk);

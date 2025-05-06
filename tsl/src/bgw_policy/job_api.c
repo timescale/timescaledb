@@ -582,6 +582,6 @@ job_alter_set_hypertable_id(PG_FUNCTION_ARGS)
 	job->fd.hypertable_id = (ht != NULL ? ht->fd.id : 0);
 	ts_bgw_job_update_by_id(job_id, job);
 	if (hcache)
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 	PG_RETURN_INT32(job_id);
 }

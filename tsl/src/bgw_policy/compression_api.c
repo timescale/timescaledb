@@ -149,7 +149,7 @@ policy_compression_check(PG_FUNCTION_ARGS)
 	}
 
 	policy_compression_read_and_validate_config(PG_GETARG_JSONB_P(0), &policy_data);
-	ts_cache_release(policy_data.hcache);
+	ts_cache_release(&policy_data.hcache);
 
 	PG_RETURN_VOID();
 }
@@ -199,7 +199,7 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 
 		if (!if_not_exists)
 		{
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			ereport(ERROR,
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
 					 errmsg("columnstore policy already exists for hypertable or continuous "
@@ -233,7 +233,7 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 		if (is_equal)
 		{
 			/* If all arguments are the same, do nothing */
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			ereport(NOTICE,
 					(errmsg("columnstore policy already exists for hypertable \"%s\", skipping",
 							get_rel_name(user_rel_oid))));
@@ -241,7 +241,7 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 		}
 		else
 		{
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			ereport(WARNING,
 					(errmsg("columnstore policy already exists for hypertable \"%s\"",
 							get_rel_name(user_rel_oid)),
@@ -359,7 +359,7 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 										initial_start,
 										timezone);
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	PG_RETURN_INT32(job_id);
 }
 
@@ -466,7 +466,7 @@ policy_compression_remove_internal(Oid user_rel_oid, bool if_exists)
 														   FUNCTIONS_SCHEMA_NAME,
 														   ht->fd.id);
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	if (jobs == NIL)
 	{
@@ -551,7 +551,7 @@ validate_compress_chunks_hypertable(Cache *hcache, Oid user_htoid, bool *is_cagg
 
 		if (cagg == NULL)
 		{
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			const char *relname = get_rel_name(user_htoid);
 			if (relname)
 				ereport(ERROR,

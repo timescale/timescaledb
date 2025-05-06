@@ -236,7 +236,7 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 		if (is_equal)
 		{
 			/* If all arguments are the same, do nothing */
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			ereport(NOTICE,
 					(errmsg("retention policy already exists for hypertable \"%s\", skipping",
 							get_rel_name(ht_oid))));
@@ -244,7 +244,7 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 		}
 		else
 		{
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			ereport(WARNING,
 					(errmsg("retention policy already exists for hypertable \"%s\"",
 							get_rel_name(ht_oid)),
@@ -352,7 +352,7 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 										initial_start,
 										timezone);
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	PG_RETURN_INT32(job_id);
 }
@@ -446,7 +446,7 @@ policy_retention_remove_internal(Oid table_oid, bool if_exists)
 
 	Assert(hypertable != NULL);
 	int32 ht_id = hypertable->fd.id;
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	ts_hypertable_permissions_check(table_oid, GetUserId());
 
 	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_RETENTION_PROC_NAME,

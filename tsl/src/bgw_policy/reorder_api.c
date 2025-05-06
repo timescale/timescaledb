@@ -210,7 +210,7 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 		schedule_interval.month = 0;
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	if (jobs != NIL)
 	{
@@ -308,7 +308,7 @@ policy_reorder_remove(PG_FUNCTION_ARGS)
 	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REORDER_PROC_NAME,
 														   FUNCTIONS_SCHEMA_NAME,
 														   ht->fd.id);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	if (jobs == NIL)
 	{
