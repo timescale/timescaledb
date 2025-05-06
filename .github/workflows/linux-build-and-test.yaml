@@ -214,14 +214,14 @@ jobs:
       uses: codecov/codecov-action@v5
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
-        file: ./build/codecov/timescaledb-codecov.info
+        files: ./build/coverage/timescaledb-coverage.info
 
     - name: Save LCOV coverage report
       if: matrix.coverage
       uses: actions/upload-artifact@v4
       with:
         name: LCOV coverage report ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
-        path: ./build/codecov/codecov-report
+        path: ./build/coverage/lcov-report
 
     - name: Show regression diffs
       if: always()

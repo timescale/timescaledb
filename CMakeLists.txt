@@ -727,7 +727,7 @@ add_custom_target(licensecheck
 # This needs to be the last subdirectory so that other targets are already
 # defined
 if(CODECOVERAGE)
-  add_subdirectory(codecov)
+  add_subdirectory(coverage)
 endif()
 
 if(IS_DIRECTORY ${PROJECT_SOURCE_DIR}/.git)

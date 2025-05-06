@@ -39,10 +39,10 @@ else()
   execute_process(COMMAND ${GCOV} --version)
 
   # Final tracefile for code coverage
-  set(OUTPUT_FILE "timescaledb-codecov.info")
+  set(OUTPUT_FILE "timescaledb-coverage.info")
 
   # Directory where to generate the HTML report
-  set(REPORT_DIR "codecov-report")
+  set(REPORT_DIR "lcov-report")
 
   # We can't directly use llvm-cov as --gcov-tool, because it has to be called
   # like "llvm-cov gcov <gcov args>" for that. Thankfully, if its $0 is gcov, it
