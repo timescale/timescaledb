@@ -156,6 +156,8 @@ else
     for test_name in ${ALL_TESTS}; do
       if ! matches "${SKIPS}" "${test_name}"; then
         if [[ $test_name == $test_pattern ]]; then
+          echo "test pattern is '${test_pattern}'" > /dev/stderr
+          echo "ignore: ${test_name}" > /dev/stderr
           echo "ignore: ${test_name}" >> ${TEMP_SCHEDULE}
         fi
       fi
