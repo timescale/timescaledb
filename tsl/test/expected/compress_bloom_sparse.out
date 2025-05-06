@@ -497,22 +497,9 @@ create type badint (like = int8, input = badintin, output = badintout);
 create cast (bigint as badint) without function as implicit;
 create cast (badint as bigint) without function as implicit;
 create operator = (procedure = badinteq, leftarg = badint, rightarg = badint);
--- This hash is actually used for dictionary compression, so we have to avoid
--- overflows there.
-create or replace function badint_identity_hash(val badint)
-  returns int language sql immutable strict
-as $$ select (val & ((1::bigint << 31) - 1))::int4; $$;
-create or replace function badint_identity_hash_extended(val badint, seed bigint)
-  returns bigint language sql immutable strict
-as $$ select val; $$;
-create operator class badint_hash_ops
-  default for type badint using hash
-as
-  operator 1 = (badint, badint),
-  function 1 badint_identity_hash(badint),
-  function 2 badint_identity_hash_extended(badint, bigint)
-;
--- btree opfamily
+-- The btree opfamily equality operator must be in sync with the potential hash family.
+-- If we don't create it explicitly, Postgres will choose the int8 family because
+-- it's binary compatible, and the equality operator won't match.
 create function badint_cmp(left badint, right badint) returns integer
   as 'btint8cmp' language internal immutable parallel safe strict;
 create function badint_lt(a badint, b badint) returns boolean as 'int8lt' language internal immutable parallel safe strict;
@@ -551,6 +538,59 @@ insert into badtable select x, 3, (pow(2, 32) * x)::int8 from generate_series(1,
 insert into badtable select x, 4, (16834 * x)::int8 from generate_series(1, 10000) x;
 insert into badtable select x, 5, (4096 * x)::int8 from generate_series(1, 10000) x;
 create index on badtable(b);
+-- First, try compressing w/o the hash function. We shouldn't get a bloom filter
+-- index.
+select count(compress_chunk(x)) from show_chunks('badtable') x;
+ count 
+-------
+     1
+(1 row)
+
+vacuum full analyze badtable;
+select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
+    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
+        where hypertable_id = (select id from _timescaledb_catalog.hypertable
+            where table_name = 'badtable') limit 1)
+\gset
+\d+ :chunk
+                                       Table "_timescaledb_internal.compress_hyper_6_6_chunk"
+      Column       |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
+-------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
+ _ts_meta_count    | integer                               |           |          |         | plain    | 1000         | 
+ s                 | integer                               |           |          |         | plain    | 1000         | 
+ _ts_meta_min_1    | integer                               |           |          |         | plain    | 1000         | 
+ _ts_meta_max_1    | integer                               |           |          |         | plain    | 1000         | 
+ ts                | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
+ _ts_meta_v2_min_b | badint                                |           |          |         | plain    | 1000         | 
+ _ts_meta_v2_max_b | badint                                |           |          |         | plain    | 1000         | 
+ b                 | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
+Indexes:
+    "compress_hyper_6_6_chunk_s__ts_meta_min_1__ts_meta_max_1_idx" btree (s, _ts_meta_min_1, _ts_meta_max_1)
+Options: toast_tuple_target=128
+
+select count(decompress_chunk(x)) from show_chunks('badtable') x;
+ count 
+-------
+     1
+(1 row)
+
+-- Then, create the hash functions.
+-- The simple hash is actually used for dictionary compression, so we have to
+-- avoid overflows there.
+create or replace function badint_identity_hash(val badint)
+  returns int language sql immutable strict
+as $$ select (val & ((1::bigint << 31) - 1))::int4; $$;
+create or replace function badint_identity_hash_extended(val badint, seed bigint)
+  returns bigint language sql immutable strict
+as $$ select val; $$;
+create operator class badint_hash_ops
+  default for type badint using hash
+as
+  operator 1 = (badint, badint),
+  function 1 badint_identity_hash(badint),
+  function 2 badint_identity_hash_extended(badint, bigint)
+;
+-- Recompress after creating the hash functions
 select count(compress_chunk(x)) from show_chunks('badtable') x;
  count 
 -------
@@ -565,7 +605,7 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
             where table_name = 'badtable') limit 1)
 \gset
 \d+ :chunk
-                                        Table "_timescaledb_internal.compress_hyper_6_6_chunk"
+                                        Table "_timescaledb_internal.compress_hyper_6_7_chunk"
         Column        |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
 ----------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
  _ts_meta_count       | integer                               |           |          |         | plain    | 1000         | 
@@ -576,7 +616,7 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
  _ts_meta_v2_bloom1_b | _timescaledb_internal.bloom1          |           |          |         | external | 1000         | 
  b                    | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
 Indexes:
-    "compress_hyper_6_6_chunk_s__ts_meta_min_1__ts_meta_max_1_idx" btree (s, _ts_meta_min_1, _ts_meta_max_1)
+    "compress_hyper_6_7_chunk_s__ts_meta_min_1__ts_meta_max_1_idx" btree (s, _ts_meta_min_1, _ts_meta_max_1)
 Options: toast_tuple_target=128
 
 -- Check index pushdown with one value.
@@ -587,7 +627,7 @@ select * from badtable where b = 1000::int8::badint;
  Custom Scan (DecompressChunk) on _hyper_5_5_chunk (actual rows=1 loops=1)
    Filter: (b = '1000'::badint)
    Rows Removed by Filter: 5999
-   ->  Seq Scan on compress_hyper_6_6_chunk (actual rows=6 loops=1)
+   ->  Seq Scan on compress_hyper_6_7_chunk (actual rows=6 loops=1)
          Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_b, '1000'::badint)
          Rows Removed by Filter: 64
 (6 rows)
@@ -612,7 +652,7 @@ select exists (select * from badtable where b = v_badint.b) from v_badint;
            ->  Custom Scan (DecompressChunk) on _hyper_5_5_chunk (actual rows=1 loops=9)
                  Filter: (b = v_badint.b)
                  Rows Removed by Filter: 3229
-                 ->  Seq Scan on compress_hyper_6_6_chunk (actual rows=4 loops=9)
+                 ->  Seq Scan on compress_hyper_6_7_chunk (actual rows=4 loops=9)
                        Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_b, v_badint.b)
                        Rows Removed by Filter: 23
 (12 rows)
@@ -663,7 +703,7 @@ select * from badtable where b = 1000::int8::badint;
  Custom Scan (DecompressChunk) on _hyper_5_5_chunk (actual rows=1 loops=1)
    Filter: (b = '1000'::badint)
    Rows Removed by Filter: 69999
-   ->  Seq Scan on compress_hyper_6_7_chunk (actual rows=70 loops=1)
+   ->  Seq Scan on compress_hyper_6_8_chunk (actual rows=70 loops=1)
          Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_b, '1000'::badint)
 (5 rows)
 
@@ -683,7 +723,7 @@ select exists (select * from badtable where b = v_badint.b) from v_badint;
            ->  Custom Scan (DecompressChunk) on _hyper_5_5_chunk (actual rows=1 loops=9)
                  Filter: (b = v_badint.b)
                  Rows Removed by Filter: 25784
-                 ->  Seq Scan on compress_hyper_6_7_chunk (actual rows=27 loops=9)
+                 ->  Seq Scan on compress_hyper_6_8_chunk (actual rows=27 loops=9)
                        Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_b, v_badint.b)
 (11 rows)
 
@@ -730,16 +770,16 @@ select count(compress_chunk(x)) from show_chunks('byref') x;
 
 explain (analyze, verbose, costs off, timing off, summary off)
 select * from byref where x = float8tomacaddr8(mix(1));
-                                                                                                                    QUERY PLAN                                                                                                                     
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_7_8_chunk (actual rows=1 loops=1)
-   Output: _hyper_7_8_chunk.ts, _hyper_7_8_chunk.x
-   Filter: (_hyper_7_8_chunk.x = '3f:b6:70:e3:3c:00:00:00'::macaddr8)
+                                                                                                                       QUERY PLAN                                                                                                                        
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_7_9_chunk (actual rows=1 loops=1)
+   Output: _hyper_7_9_chunk.ts, _hyper_7_9_chunk.x
+   Filter: (_hyper_7_9_chunk.x = '3f:b6:70:e3:3c:00:00:00'::macaddr8)
    Rows Removed by Filter: 999
    Bulk Decompression: true
-   ->  Seq Scan on _timescaledb_internal.compress_hyper_8_9_chunk (actual rows=1 loops=1)
-         Output: compress_hyper_8_9_chunk._ts_meta_count, compress_hyper_8_9_chunk._ts_meta_min_1, compress_hyper_8_9_chunk._ts_meta_max_1, compress_hyper_8_9_chunk.ts, compress_hyper_8_9_chunk._ts_meta_v2_bloom1_x, compress_hyper_8_9_chunk.x
-         Filter: _timescaledb_functions.bloom1_contains(compress_hyper_8_9_chunk._ts_meta_v2_bloom1_x, '3f:b6:70:e3:3c:00:00:00'::macaddr8)
+   ->  Seq Scan on _timescaledb_internal.compress_hyper_8_10_chunk (actual rows=1 loops=1)
+         Output: compress_hyper_8_10_chunk._ts_meta_count, compress_hyper_8_10_chunk._ts_meta_min_1, compress_hyper_8_10_chunk._ts_meta_max_1, compress_hyper_8_10_chunk.ts, compress_hyper_8_10_chunk._ts_meta_v2_bloom1_x, compress_hyper_8_10_chunk.x
+         Filter: _timescaledb_functions.bloom1_contains(compress_hyper_8_10_chunk._ts_meta_v2_bloom1_x, '3f:b6:70:e3:3c:00:00:00'::macaddr8)
          Rows Removed by Filter: 9
 (9 rows)
 

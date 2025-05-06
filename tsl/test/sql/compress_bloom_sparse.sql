@@ -219,25 +219,9 @@ create cast (badint as bigint) without function as implicit;
 
 create operator = (procedure = badinteq, leftarg = badint, rightarg = badint);
 
--- This hash is actually used for dictionary compression, so we have to avoid
--- overflows there.
-create or replace function badint_identity_hash(val badint)
-  returns int language sql immutable strict
-as $$ select (val & ((1::bigint << 31) - 1))::int4; $$;
-
-create or replace function badint_identity_hash_extended(val badint, seed bigint)
-  returns bigint language sql immutable strict
-as $$ select val; $$;
-
-create operator class badint_hash_ops
-  default for type badint using hash
-as
-  operator 1 = (badint, badint),
-  function 1 badint_identity_hash(badint),
-  function 2 badint_identity_hash_extended(badint, bigint)
-;
-
--- btree opfamily
+-- The btree opfamily equality operator must be in sync with the potential hash family.
+-- If we don't create it explicitly, Postgres will choose the int8 family because
+-- it's binary compatible, and the equality operator won't match.
 create function badint_cmp(left badint, right badint) returns integer
   as 'btint8cmp' language internal immutable parallel safe strict;
 
@@ -285,10 +269,45 @@ insert into badtable select x, 5, (4096 * x)::int8 from generate_series(1, 10000
 
 create index on badtable(b);
 
+-- First, try compressing w/o the hash function. We shouldn't get a bloom filter
+-- index.
 select count(compress_chunk(x)) from show_chunks('badtable') x;
 
 vacuum full analyze badtable;
 
+select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
+    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
+        where hypertable_id = (select id from _timescaledb_catalog.hypertable
+            where table_name = 'badtable') limit 1)
+\gset
+
+\d+ :chunk
+
+select count(decompress_chunk(x)) from show_chunks('badtable') x;
+
+-- Then, create the hash functions.
+-- The simple hash is actually used for dictionary compression, so we have to
+-- avoid overflows there.
+create or replace function badint_identity_hash(val badint)
+  returns int language sql immutable strict
+as $$ select (val & ((1::bigint << 31) - 1))::int4; $$;
+
+create or replace function badint_identity_hash_extended(val badint, seed bigint)
+  returns bigint language sql immutable strict
+as $$ select val; $$;
+
+create operator class badint_hash_ops
+  default for type badint using hash
+as
+  operator 1 = (badint, badint),
+  function 1 badint_identity_hash(badint),
+  function 2 badint_identity_hash_extended(badint, bigint)
+;
+
+-- Recompress after creating the hash functions
+select count(compress_chunk(x)) from show_chunks('badtable') x;
+
+vacuum full analyze badtable;
 
 -- Verify that we actually got the bloom filter index.
 select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
