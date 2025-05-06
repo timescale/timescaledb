@@ -13,6 +13,7 @@ set(TEST_FILES
     cagg_policy.sql
     cagg_refresh.sql
     cagg_refresh_using_merge.sql
+    cagg_api.sql
     cagg_utils.sql
     cagg_watermark.sql
     chunk_column_stats.sql
@@ -42,6 +43,7 @@ set(TEST_FILES
     compress_sort_transform.sql
     create_table_with.sql
     custom_hashagg.sql
+    decompress_chunk_cost.sql
     decompress_index.sql
     foreign_keys.sql
     hypercore_columnar.sql
@@ -72,6 +74,7 @@ set(TEST_FILES
     reorder.sql
     size_utils_tsl.sql
     skip_scan.sql
+    split_chunk.sql
     transparent_decompression_join_index.sql
     vector_agg_functions.sql
     vector_agg_groupagg.sql
@@ -115,6 +118,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compression_algos.sql
     compression_bgw.sql
     compression_bools.sql
+    compression_bool_vectorized.sql
     compression_ddl.sql
     compression_errors.sql
     compression_hypertable.sql

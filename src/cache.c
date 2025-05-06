@@ -60,8 +60,11 @@ ts_cache_init(Cache *cache)
 }
 
 static void
-cache_destroy(Cache *cache)
+cache_destroy(Cache **cache_ptr)
 {
+	Cache *cache = *cache_ptr;
+	if (cache == NULL)
+		return;
 	if (cache->refcount > 0)
 	{
 		/* will be destroyed later */
@@ -73,15 +76,17 @@ cache_destroy(Cache *cache)
 
 	hash_destroy(cache->htab);
 	MemoryContextDelete(cache->hctl.hcxt);
+	*cache_ptr = NULL;
 }
 
 void
-ts_cache_invalidate(Cache *cache)
+ts_cache_invalidate(Cache **cache_ptr)
 {
+	Cache *cache = *cache_ptr;
 	if (cache == NULL)
 		return;
 	cache->refcount--;
-	cache_destroy(cache);
+	cache_destroy(cache_ptr);
 }
 
 /*
@@ -120,6 +125,8 @@ remove_pin(Cache *cache, SubTransactionId subtxnid)
 
 		if (cp->cache == cache && cp->subtxnid == subtxnid)
 		{
+			// free cache memory and then remove the pin
+			cache_destroy(&cp->cache);
 			pinned_caches = list_delete_cell(pinned_caches, lc);
 			pfree(cp);
 			return;
@@ -131,22 +138,27 @@ remove_pin(Cache *cache, SubTransactionId subtxnid)
 }
 
 static int
-cache_release_subtxn(Cache *cache, SubTransactionId subtxnid)
+cache_release_subtxn(Cache **cache_ptr, SubTransactionId subtxnid)
 {
+	Cache *cache = *cache_ptr;
 	int refcount = cache->refcount - 1;
 
 	Assert(cache->refcount > 0);
 	cache->refcount--;
 
 	if (cache->handle_txn_callbacks)
+	{
 		remove_pin(cache, subtxnid);
-	cache_destroy(cache);
-
+	}
+	else
+	{
+		cache_destroy(cache_ptr);
+	}
 	return refcount;
 }
 
 int
-ts_cache_release(Cache *cache)
+ts_cache_release(Cache **cache)
 {
 	return cache_release_subtxn(cache, GetCurrentSubTransactionId());
 }
@@ -218,7 +230,7 @@ release_all_pinned_caches()
 		CachePin *cp = lfirst(lc);
 
 		cp->cache->refcount--;
-		cache_destroy(cp->cache);
+		cache_destroy(&cp->cache);
 	}
 
 	cache_reset_pinned_caches();
@@ -245,14 +257,14 @@ release_subtxn_pinned_caches(SubTransactionId subtxnid, bool abort)
 	{
 		CachePin *cp = lfirst(lc);
 
-		if (cp->subtxnid == subtxnid)
+		if (cp->subtxnid == subtxnid && cp->cache)
 		{
 			/*
 			 * This assert makes sure that that we don't have a cache leak
 			 * when running with debugging
 			 */
 			Assert(abort);
-			cache_release_subtxn(cp->cache, subtxnid);
+			cache_release_subtxn(&cp->cache, subtxnid);
 		}
 	}
 
@@ -306,7 +318,7 @@ cache_xact_end(XactEvent event, void *arg)
 				 * Assert is turned off. In that case, release.
 				 */
 				if (cp->cache->release_on_commit)
-					ts_cache_release(cp->cache);
+					ts_cache_release(&cp->cache);
 			}
 
 			list_free(pinned_caches_copy);

@@ -10,15 +10,15 @@
 #include <nodes/execnodes.h>
 
 #include "hypertable.h"
-#include "import/ht_hypertable_modify.h"
 
 /* Forward declarations */
 struct ChunkDispatchState;
+struct ModifyTableContext;
 
-typedef struct HypertableModifyPath
+typedef struct ModifyHypertablePath
 {
 	CustomPath cpath;
-} HypertableModifyPath;
+} ModifyHypertablePath;
 
 /*
  * State for the hypertable_modify custom scan node.
@@ -26,7 +26,7 @@ typedef struct HypertableModifyPath
  * This struct definition is also used in ts_stat_statements, so any new fields
  * should only be added at the end of the struct.
  */
-typedef struct HypertableModifyState
+typedef struct ModifyHypertableState
 {
 	CustomScanState cscan_state;
 	ModifyTable *mt;
@@ -36,13 +36,14 @@ typedef struct HypertableModifyState
 	int64 batches_decompressed;
 	int64 batches_filtered;
 	int64 batches_deleted;
-} HypertableModifyState;
+	int64 tuples_deleted;
+} ModifyHypertableState;
 
-extern void ts_hypertable_modify_fixup_tlist(Plan *plan);
-extern Path *ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath *mtpath,
+extern void ts_modify_hypertable_fixup_tlist(Plan *plan);
+extern Path *ts_modify_hypertable_path_create(PlannerInfo *root, ModifyTablePath *mtpath,
 											  Hypertable *ht, RelOptInfo *input_rel);
 extern List *ts_replace_rowid_vars(PlannerInfo *root, List *tlist, int varno);
 
-extern TupleTableSlot *ExecInsert(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
-								  struct ChunkDispatchState *cds, TupleTableSlot *slot,
-								  bool canSetTag);
+TupleTableSlot *ExecModifyTable(CustomScanState *cs_node, PlanState *pstate);
+TupleTableSlot *ExecInsert(struct ModifyTableContext *context, ResultRelInfo *resultRelInfo,
+						   struct ChunkDispatchState *cds, TupleTableSlot *slot, bool canSetTag);

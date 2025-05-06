@@ -24,7 +24,7 @@
 #include "errors.h"
 #include "guc.h"
 #include "hypercube.h"
-#include "nodes/hypertable_modify.h"
+#include "nodes/modify_hypertable.h"
 #include "subspace_store.h"
 
 static Node *chunk_dispatch_state_create(CustomScan *cscan);
@@ -478,7 +478,7 @@ chunk_dispatch_end(CustomScanState *node)
 
 	ExecEndNode(substate);
 	ts_chunk_dispatch_destroy(state->dispatch);
-	ts_cache_release(state->hypertable_cache);
+	ts_cache_release(&state->hypertable_cache);
 }
 
 static void

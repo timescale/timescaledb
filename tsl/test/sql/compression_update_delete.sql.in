@@ -1616,3 +1616,21 @@ BEGIN;
 UPDATE update_trigger_test SET measurement = measurement + 2
 WHERE update_trigger_test.effective_date_time >= '2020-01-01T00:00:00'::timestamp AT TIME ZONE 'UTC';
 ROLLBACK;
+
+-- check reporting of affected rows is correct for direct batch delete
+CREATE TABLE delete_counter(time timestamptz NOT NULL, device text) WITH (tsdb.hypertable,tsdb.time_column='time');
+INSERT INTO delete_counter SELECT '2020-01-01'::timestamptz, 'a' from generate_series(1,123);
+INSERT INTO delete_counter SELECT '2020-01-01'::timestamptz, 'b' from generate_series(1,123);
+INSERT INTO delete_counter SELECT '2020-02-01'::timestamptz, 'c' from generate_series(1,123);
+ALTER TABLE delete_counter SET (timescaledb.compress_segmentby='device');
+SELECT count(compress_chunk(ch)) FROM show_chunks('delete_counter') ch;
+INSERT INTO delete_counter SELECT '2020-02-01'::timestamptz, 'd' from generate_series(1,123);
+INSERT INTO delete_counter SELECT '2020-03-01'::timestamptz, 'e' from generate_series(1,123);
+
+\set QUIET off
+BEGIN; :EXPLAIN DELETE FROM delete_counter; ROLLBACK;
+BEGIN; DELETE FROM delete_counter; ROLLBACK;
+
+BEGIN; :EXPLAIN DELETE FROM delete_counter WHERE random() < 1; ROLLBACK;
+BEGIN; DELETE FROM delete_counter WHERE random() < 1; ROLLBACK;
+

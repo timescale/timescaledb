@@ -71,6 +71,7 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT DISTINCT *, 'q1_9' FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT dev, time, 'q1_10' FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT dev, NULL, 'q1_11' FROM :TABLE ORDER BY dev;
+
 -- distinct on expressions not supported
 :PREFIX SELECT DISTINCT time_bucket(10,time), 'q1_12' FROM :TABLE;
 :PREFIX SELECT DISTINCT length(dev_name), 'q1_13' FROM :TABLE;
@@ -169,6 +170,15 @@ CREATE INDEX ON :TABLE(time,dev,val);
 
 -- test constants in ORDER BY
 :PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = 1 ORDER BY dev, time DESC;
+:PREFIX SELECT DISTINCT dev, time FROM :TABLE WHERE dev = 1 and time = 100 ORDER BY dev, time DESC;
+:PREFIX SELECT DISTINCT dev_name::varchar FROM :TABLE  WHERE dev_name::varchar = 'device_1' ORDER BY 1;
+
+-- test multiple distincts with all but one pinned: #7998
+:PREFIX SELECT DISTINCT dev, dev FROM :TABLE ORDER BY 1;
+:PREFIX SELECT DISTINCT dev, time FROM :TABLE WHERE time = 100 ORDER BY 1;
+:PREFIX SELECT DISTINCT dev, time, val FROM :TABLE WHERE time = 100 and val = 100 ORDER BY 1;
+:PREFIX SELECT DISTINCT ON (dev, time) * FROM :TABLE WHERE time = 100 ORDER BY dev;
+:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev = 1 AND time < 20 ORDER BY dev, time;
 
 -- CTE
 :PREFIX WITH devices AS (

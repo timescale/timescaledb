@@ -1,6 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+set max_parallel_workers_per_gather = 0;
 -- qual pushdown tests for decompresschunk ---
 -- Test qual pushdown with ints
 CREATE TABLE meta (device_id INT PRIMARY KEY);
@@ -73,6 +74,63 @@ WHERE time = 3::bigint;
     3 |         3 |   1
 (1 row)
 
+-- Test some volatile and stable functions
+SET timescaledb.enable_chunk_append TO OFF;
+SET timescaledb.enable_constraint_aware_append TO OFF;
+EXPLAIN (COSTS OFF)
+SELECT * FROM hyper WHERE time = device_id;
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         Filter: ("time" = device_id)
+         ->  Seq Scan on compress_hyper_2_3_chunk
+               Filter: ((_ts_meta_min_1 <= device_id) AND (_ts_meta_max_1 >= device_id))
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: ("time" = device_id)
+(7 rows)
+
+EXPLAIN (COSTS OFF)
+SELECT * FROM hyper WHERE time = random()::int;
+                       QUERY PLAN                        
+---------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         Filter: ("time" = (random())::integer)
+         ->  Seq Scan on compress_hyper_2_3_chunk
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: ("time" = (random())::integer)
+(6 rows)
+
+EXPLAIN (COSTS OFF)
+SELECT * FROM hyper WHERE time
+    = CASE WHEN now() > '1970-01-01' THEN random()::int ELSE device_id END;
+                                                                     QUERY PLAN                                                                      
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         Filter: ("time" = CASE WHEN (now() > 'Thu Jan 01 00:00:00 1970 PST'::timestamp with time zone) THEN (random())::integer ELSE device_id END)
+         ->  Seq Scan on compress_hyper_2_3_chunk
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: ("time" = CASE WHEN (now() > 'Thu Jan 01 00:00:00 1970 PST'::timestamp with time zone) THEN (random())::integer ELSE device_id END)
+(6 rows)
+
+EXPLAIN (COSTS OFF)
+SELECT * FROM hyper WHERE time
+    = CASE WHEN now() > '1970-01-01' THEN 1 ELSE device_id END;
+                                                                                                                                    QUERY PLAN                                                                                                                                     
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Append
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         Filter: ("time" = CASE WHEN (now() > 'Thu Jan 01 00:00:00 1970 PST'::timestamp with time zone) THEN 1 ELSE device_id END)
+         ->  Seq Scan on compress_hyper_2_3_chunk
+               Filter: ((_ts_meta_min_1 <= CASE WHEN (now() > 'Thu Jan 01 00:00:00 1970 PST'::timestamp with time zone) THEN 1 ELSE device_id END) AND (_ts_meta_max_1 >= CASE WHEN (now() > 'Thu Jan 01 00:00:00 1970 PST'::timestamp with time zone) THEN 1 ELSE device_id END))
+   ->  Seq Scan on _hyper_1_2_chunk
+         Filter: ("time" = CASE WHEN (now() > 'Thu Jan 01 00:00:00 1970 PST'::timestamp with time zone) THEN 1 ELSE device_id END)
+(7 rows)
+
+RESET timescaledb.enable_chunk_append;
+RESET timescaledb.enable_constraint_aware_append;
 --- github issue 1855
 --- TESTs for meta column pushdown filters on exprs with casts.
 CREATE TABLE metaseg_tab (
@@ -101,8 +159,6 @@ NOTICE:  adding not-null constraint to column "fmid"
 (1 row)
 
 ALTER TABLE metaseg_tab SET (timescaledb.compress, timescaledb.compress_orderby= 'end_dt');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "metaseg_tab" is set to ""
 INSERT INTO metaseg_tab values (56,0,'2012-12-10 09:45:00','2012-12-10 09:50:00',1,0.1,'2012-12-10');
 SELECT compress_chunk(i) from show_chunks('metaseg_tab') i;
              compress_chunk             
@@ -268,6 +324,7 @@ EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar'::cha
          Filter: ((dev_vc)::bpchar = 'varchar   '::character(10))
 (4 rows)
 
+RESET enable_seqscan;
 -- github issue #5286
 CREATE TABLE deleteme AS
     SELECT generate_series AS timestamp, 1 AS segment, 0 AS data
@@ -292,6 +349,7 @@ SELECT compress_chunk(i) FROM show_chunks('deleteme') i;
  _timescaledb_internal._hyper_7_8_chunk
 (1 row)
 
+VACUUM ANALYZE deleteme;
 EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE segment::text like '%4%';
                        QUERY PLAN                        
 ---------------------------------------------------------
@@ -368,95 +426,96 @@ SELECT compress_chunk(show_chunks('svf_pushdown'));
  _timescaledb_internal._hyper_11_12_chunk
 (1 row)
 
+VACUUM ANALYZE svf_pushdown;
 -- constraints should be pushed down into scan below decompresschunk in all cases
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_date = CURRENT_DATE;
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+                        QUERY PLAN                         
+-----------------------------------------------------------
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
    ->  Custom Scan (DecompressChunk) on _hyper_11_12_chunk
-         ->  Index Scan using compress_hyper_12_13_chunk_c_date_c_time_c_timetz_c_timesta_idx on compress_hyper_12_13_chunk
-               Index Cond: (c_date = CURRENT_DATE)
+         ->  Seq Scan on compress_hyper_12_13_chunk
+               Filter: (c_date = CURRENT_DATE)
 (5 rows)
 
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_timetz = CURRENT_TIME;
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+                        QUERY PLAN                         
+-----------------------------------------------------------
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
    ->  Custom Scan (DecompressChunk) on _hyper_11_12_chunk
-         ->  Index Scan using compress_hyper_12_13_chunk_c_date_c_time_c_timetz_c_timesta_idx on compress_hyper_12_13_chunk
-               Index Cond: (c_timetz = CURRENT_TIME)
+         ->  Seq Scan on compress_hyper_12_13_chunk
+               Filter: (c_timetz = CURRENT_TIME)
 (5 rows)
 
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_timetz = CURRENT_TIME(1);
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+                        QUERY PLAN                         
+-----------------------------------------------------------
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
    ->  Custom Scan (DecompressChunk) on _hyper_11_12_chunk
-         ->  Index Scan using compress_hyper_12_13_chunk_c_date_c_time_c_timetz_c_timesta_idx on compress_hyper_12_13_chunk
-               Index Cond: (c_timetz = CURRENT_TIME(1))
+         ->  Seq Scan on compress_hyper_12_13_chunk
+               Filter: (c_timetz = CURRENT_TIME(1))
 (5 rows)
 
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_timestamp = CURRENT_TIMESTAMP;
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+                        QUERY PLAN                         
+-----------------------------------------------------------
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
    ->  Custom Scan (DecompressChunk) on _hyper_11_12_chunk
-         ->  Index Scan using compress_hyper_12_13_chunk_c_date_c_time_c_timetz_c_timesta_idx on compress_hyper_12_13_chunk
-               Index Cond: (c_timestamp = CURRENT_TIMESTAMP)
+         ->  Seq Scan on compress_hyper_12_13_chunk
+               Filter: (c_timestamp = CURRENT_TIMESTAMP)
 (5 rows)
 
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_timestamp = CURRENT_TIMESTAMP(1);
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+                         QUERY PLAN                         
+------------------------------------------------------------
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
    ->  Custom Scan (DecompressChunk) on _hyper_11_12_chunk
-         ->  Index Scan using compress_hyper_12_13_chunk_c_date_c_time_c_timetz_c_timesta_idx on compress_hyper_12_13_chunk
-               Index Cond: (c_timestamp = CURRENT_TIMESTAMP(1))
+         ->  Seq Scan on compress_hyper_12_13_chunk
+               Filter: (c_timestamp = CURRENT_TIMESTAMP(1))
 (5 rows)
 
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_time = LOCALTIME;
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+                        QUERY PLAN                         
+-----------------------------------------------------------
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
    ->  Custom Scan (DecompressChunk) on _hyper_11_12_chunk
-         ->  Index Scan using compress_hyper_12_13_chunk_c_date_c_time_c_timetz_c_timesta_idx on compress_hyper_12_13_chunk
-               Index Cond: (c_time = LOCALTIME)
+         ->  Seq Scan on compress_hyper_12_13_chunk
+               Filter: (c_time = LOCALTIME)
 (5 rows)
 
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_time = LOCALTIME(1);
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+                        QUERY PLAN                         
+-----------------------------------------------------------
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
    ->  Custom Scan (DecompressChunk) on _hyper_11_12_chunk
-         ->  Index Scan using compress_hyper_12_13_chunk_c_date_c_time_c_timetz_c_timesta_idx on compress_hyper_12_13_chunk
-               Index Cond: (c_time = LOCALTIME(1))
+         ->  Seq Scan on compress_hyper_12_13_chunk
+               Filter: (c_time = LOCALTIME(1))
 (5 rows)
 
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_timestamp = LOCALTIMESTAMP;
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+                        QUERY PLAN                         
+-----------------------------------------------------------
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
    ->  Custom Scan (DecompressChunk) on _hyper_11_12_chunk
-         ->  Index Scan using compress_hyper_12_13_chunk_c_date_c_time_c_timetz_c_timesta_idx on compress_hyper_12_13_chunk
-               Index Cond: (c_timestamp = LOCALTIMESTAMP)
+         ->  Seq Scan on compress_hyper_12_13_chunk
+               Filter: (c_timestamp = LOCALTIMESTAMP)
 (5 rows)
 
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_timestamp = LOCALTIMESTAMP(1);
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+                        QUERY PLAN                         
+-----------------------------------------------------------
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
    ->  Custom Scan (DecompressChunk) on _hyper_11_12_chunk
-         ->  Index Scan using compress_hyper_12_13_chunk_c_date_c_time_c_timetz_c_timesta_idx on compress_hyper_12_13_chunk
-               Index Cond: (c_timestamp = LOCALTIMESTAMP(1))
+         ->  Seq Scan on compress_hyper_12_13_chunk
+               Filter: (c_timestamp = LOCALTIMESTAMP(1))
 (5 rows)
 
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = USER;
@@ -520,35 +579,35 @@ EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_SCHEMA;
 (5 rows)
 
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_bool;
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+                     QUERY PLAN                      
+-----------------------------------------------------
  Custom Scan (DecompressChunk) on _hyper_11_12_chunk
-   ->  Index Scan using compress_hyper_12_13_chunk_c_date_c_time_c_timetz_c_timesta_idx on compress_hyper_12_13_chunk
-         Index Cond: (c_bool = true)
+   ->  Seq Scan on compress_hyper_12_13_chunk
+         Filter: c_bool
 (3 rows)
 
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_bool = true;
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+                     QUERY PLAN                      
+-----------------------------------------------------
  Custom Scan (DecompressChunk) on _hyper_11_12_chunk
-   ->  Index Scan using compress_hyper_12_13_chunk_c_date_c_time_c_timetz_c_timesta_idx on compress_hyper_12_13_chunk
-         Index Cond: (c_bool = true)
+   ->  Seq Scan on compress_hyper_12_13_chunk
+         Filter: c_bool
 (3 rows)
 
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_bool = false;
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+                     QUERY PLAN                      
+-----------------------------------------------------
  Custom Scan (DecompressChunk) on _hyper_11_12_chunk
-   ->  Index Scan using compress_hyper_12_13_chunk_c_date_c_time_c_timetz_c_timesta_idx on compress_hyper_12_13_chunk
-         Index Cond: (c_bool = false)
+   ->  Seq Scan on compress_hyper_12_13_chunk
+         Filter: (NOT c_bool)
 (3 rows)
 
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE NOT c_bool;
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+                     QUERY PLAN                      
+-----------------------------------------------------
  Custom Scan (DecompressChunk) on _hyper_11_12_chunk
-   ->  Index Scan using compress_hyper_12_13_chunk_c_date_c_time_c_timetz_c_timesta_idx on compress_hyper_12_13_chunk
-         Index Cond: (c_bool = false)
+   ->  Seq Scan on compress_hyper_12_13_chunk
+         Filter: (NOT c_bool)
 (3 rows)
 
 -- current_query() is not a sqlvaluefunction and volatile so should not be pushed down
@@ -574,3 +633,4 @@ LATERAL(
 --
 (1 row)
 
+DROP TABLE svf_pushdown;

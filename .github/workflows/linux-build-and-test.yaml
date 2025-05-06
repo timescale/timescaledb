@@ -74,7 +74,7 @@ jobs:
         # If needed, install them before opening the core dump.
         sudo apt-get update
         sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl \
-          libtest-most-perl pkgconf icu-devtools faketime ${{ matrix.extra_packages }}
+          libtest-most-perl pkgconf icu-devtools faketime jq ${{ matrix.extra_packages }}
 
     - name: Install macOS Dependencies
       if: runner.os == 'macOS'

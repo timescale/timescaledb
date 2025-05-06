@@ -358,7 +358,7 @@ policy_retention_read_and_validate_config(Jsonb *config, PolicyRetentionData *po
 											 false);
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	if (policy_data)
 	{
@@ -592,12 +592,12 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 			 "no chunks for hypertable \"%s.%s\" that satisfy recompress chunk policy",
 			 NameStr(policy_data.hypertable->fd.schema_name),
 			 NameStr(policy_data.hypertable->fd.table_name));
-		ts_cache_release(policy_data.hcache);
+		ts_cache_release(&policy_data.hcache);
 		if (!used_portalcxt)
 			MemoryContextDelete(multitxn_cxt);
 		return true;
 	}
-	ts_cache_release(policy_data.hcache);
+	ts_cache_release(&policy_data.hcache);
 	if (ActiveSnapshotSet())
 		PopActiveSnapshot();
 	/* process each chunk in a new transaction */

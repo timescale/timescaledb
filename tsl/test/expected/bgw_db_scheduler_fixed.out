@@ -1424,9 +1424,9 @@ SELECT wait_for_timer_to_run(0);
 SELECT insert_job('another', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s') AS job_id \gset
 -- call alter_job to trigger cache invalidation
 SELECT alter_job(:job_id,scheduled:=true);
-                                             alter_job                                             
----------------------------------------------------------------------------------------------------
- (1024,"@ 0.1 secs","@ 1 min 40 secs",5,"@ 1 sec",t,,-infinity,,t,"Fri Dec 31 16:00:00 1999 PST",)
+                                                 alter_job                                                 
+-----------------------------------------------------------------------------------------------------------
+ (1024,"@ 0.1 secs","@ 1 min 40 secs",5,"@ 1 sec",t,,-infinity,,t,"Fri Dec 31 16:00:00 1999 PST",,another)
 (1 row)
 
 SELECT ts_bgw_params_reset_time(50000, true);
@@ -1526,9 +1526,9 @@ SELECT wait_for_timer_to_run(400000);
 SELECT insert_job('new_job', 'bgw_test_job_1', INTERVAL '10ms', INTERVAL '100s', INTERVAL '1s') AS job_id \gset
 -- call alter_job to trigger cache invalidation
 SELECT alter_job(:job_id,scheduled:=true);
-                                             alter_job                                              
-----------------------------------------------------------------------------------------------------
- (1025,"@ 0.01 secs","@ 1 min 40 secs",5,"@ 1 sec",t,,-infinity,,t,"Fri Dec 31 16:00:00 1999 PST",)
+                                                 alter_job                                                  
+------------------------------------------------------------------------------------------------------------
+ (1025,"@ 0.01 secs","@ 1 min 40 secs",5,"@ 1 sec",t,,-infinity,,t,"Fri Dec 31 16:00:00 1999 PST",,new_job)
 (1 row)
 
 SELECT ts_bgw_params_reset_time(450000, true);
@@ -1660,8 +1660,6 @@ select show_chunks('test_table_scheduler');
 (8 rows)
 
 alter table test_table_scheduler set (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "test_table_scheduler" is set to ""
 select add_retention_policy('test_table_scheduler', interval '2 year', initial_start => :'init'::timestamptz, timezone => 'Europe/Berlin');
  add_retention_policy 
 ----------------------
@@ -1685,7 +1683,7 @@ select * from _timescaledb_config.bgw_job;
   id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |   owner    | scheduled | fixed_schedule |          initial_start           | hypertable_id |                                     config                                     |      check_schema      |                check_name                 |   timezone    
 ------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+------------+-----------+----------------+----------------------------------+---------------+--------------------------------------------------------------------------------+------------------------+-------------------------------------------+---------------
  1026 | Retention Policy [1026]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | super_user | t         | t              | Fri Dec 31 16:00:00 1999 PST     |             1 | {"drop_after": "@ 2 years", "hypertable_id": 1}                                | _timescaledb_functions | policy_retention_check                    | Europe/Berlin
- 1027 | Compression Policy [1027]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | super_user | t         | t              | Fri Dec 31 16:00:00 1999 PST     |             1 | {"hypertable_id": 1, "compress_after": "@ 1 year"}                             | _timescaledb_functions | policy_compression_check                  | Europe/Berlin
+ 1027 | Columnstore Policy [1027]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | super_user | t         | t              | Fri Dec 31 16:00:00 1999 PST     |             1 | {"hypertable_id": 1, "compress_after": "@ 1 year"}                             | _timescaledb_functions | policy_compression_check                  | Europe/Berlin
  1028 | Refresh Continuous Aggregate Policy [1028] | @ 21 days         | @ 0         |          -1 | @ 21 days    | _timescaledb_functions | policy_refresh_continuous_aggregate | super_user | t         | t              | Fri Dec 31 16:00:00.005 1999 PST |             2 | {"end_offset": "@ 2 mons", "start_offset": "@ 1 year", "mat_hypertable_id": 2} | _timescaledb_functions | policy_refresh_continuous_aggregate_check | Europe/Athens
 (3 rows)
 
@@ -1769,7 +1767,7 @@ select * from _timescaledb_config.bgw_job order by id;
   id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |   owner    | scheduled | fixed_schedule |          initial_start           | hypertable_id |                                     config                                     |      check_schema      |                check_name                 |   timezone    
 ------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+------------+-----------+----------------+----------------------------------+---------------+--------------------------------------------------------------------------------+------------------------+-------------------------------------------+---------------
  1026 | Retention Policy [1026]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | super_user | t         | t              | Fri Dec 31 16:00:00 1999 PST     |             1 | {"drop_after": "@ 2 years", "hypertable_id": 1}                                | _timescaledb_functions | policy_retention_check                    | Europe/Berlin
- 1027 | Compression Policy [1027]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | super_user | t         | t              | Fri Dec 31 16:00:00 1999 PST     |             1 | {"hypertable_id": 1, "compress_after": "@ 1 year"}                             | _timescaledb_functions | policy_compression_check                  | Europe/Berlin
+ 1027 | Columnstore Policy [1027]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | super_user | t         | t              | Fri Dec 31 16:00:00 1999 PST     |             1 | {"hypertable_id": 1, "compress_after": "@ 1 year"}                             | _timescaledb_functions | policy_compression_check                  | Europe/Berlin
  1028 | Refresh Continuous Aggregate Policy [1028] | @ 21 days         | @ 0         |          -1 | @ 21 days    | _timescaledb_functions | policy_refresh_continuous_aggregate | super_user | t         | t              | Fri Dec 31 16:00:00.005 1999 PST |             2 | {"end_offset": "@ 2 mons", "start_offset": "@ 1 year", "mat_hypertable_id": 2} | _timescaledb_functions | policy_refresh_continuous_aggregate_check | Europe/Athens
  1029 | User-Defined Action [1029]                 | @ 7 mons          | @ 0         |          -1 | @ 5 mins     | public                 | job_test_fixed                      | super_user | t         | t              | Fri Dec 31 16:00:00.01 1999 PST  |               |                                                                                |                        |                                           | 
  1030 | User-Defined Action [1030]                 | @ 7 mons          | @ 0         |          -1 | @ 5 mins     | public                 | job_test_fixed                      | super_user | t         | t              | Fri Dec 31 16:00:00.01 1999 PST  |               |                                                                                |                        |                                           | Europe/Athens
@@ -1907,8 +1905,8 @@ SELECT * FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :jobid_fixed_2;
 
 -- next start is now updated
 SELECT alter_job(:jobid_fixed_2, fixed_schedule => false);
-                                                  alter_job                                                  
--------------------------------------------------------------------------------------------------------------
- (1035,"@ 30 secs","@ 0",-1,"@ 5 mins",t,,"Sat Jan 01 00:01:03 2000 PST",,f,"Sat Jan 01 00:00:23 2000 PST",)
+                                                                alter_job                                                                 
+------------------------------------------------------------------------------------------------------------------------------------------
+ (1035,"@ 30 secs","@ 0",-1,"@ 5 mins",t,,"Sat Jan 01 00:01:03 2000 PST",,f,"Sat Jan 01 00:00:23 2000 PST",,"User-Defined Action [1035]")
 (1 row)
 

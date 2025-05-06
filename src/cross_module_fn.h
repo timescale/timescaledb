@@ -34,7 +34,7 @@ typedef struct Hypertable Hypertable;
 typedef struct Chunk Chunk;
 typedef struct ChunkInsertState ChunkInsertState;
 typedef struct CopyChunkState CopyChunkState;
-typedef struct HypertableModifyState HypertableModifyState;
+typedef struct ModifyHypertableState ModifyHypertableState;
 
 typedef struct CrossModuleFunctions
 {
@@ -130,7 +130,7 @@ typedef struct CrossModuleFunctions
 	PGFunction compress_chunk;
 	PGFunction decompress_chunk;
 	void (*decompress_batches_for_insert)(const ChunkInsertState *state, TupleTableSlot *slot);
-	bool (*decompress_target_segments)(HypertableModifyState *ht_state);
+	bool (*decompress_target_segments)(ModifyHypertableState *ht_state);
 	int (*hypercore_decompress_update_segment)(Relation relation, const ItemPointer ctid,
 											   TupleTableSlot *slot, Snapshot snapshot,
 											   ItemPointer new_tid);
@@ -167,6 +167,7 @@ typedef struct CrossModuleFunctions
 	PGFunction get_compressed_chunk_index_for_recompression;
 	void (*preprocess_query_tsl)(Query *parse, int *cursor_opts);
 	PGFunction merge_chunks;
+	PGFunction split_chunk;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

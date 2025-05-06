@@ -75,6 +75,7 @@
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
 #include "utils.h"
+#include "with_clause/create_materialized_view_with_clause.h"
 
 static void create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schema,
 									  const char *user_view, const char *partial_schema,
@@ -337,7 +338,7 @@ cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("could not create continuous aggregate trigger")));
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 /*
@@ -477,7 +478,7 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	 */
 	orig_ht = ts_hypertable_cache_get_entry(hcache, bucket_info->htoid, CACHE_FLAG_NONE);
 	continuous_agg_invalidate_mat_ht(orig_ht, mat_ht, TS_TIME_NOBEGIN, TS_TIME_NOEND);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	return mat_htid;
 }
 
@@ -668,14 +669,14 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	RangeVar *part_rel = NULL, *mat_rel = NULL, *dum_rel = NULL;
 	int32 materialize_hypertable_id;
 	bool materialized_only =
-		DatumGetBool(with_clause_options[ContinuousViewOptionMaterializedOnly].parsed);
-	bool finalized = DatumGetBool(with_clause_options[ContinuousViewOptionFinalized].parsed);
+		DatumGetBool(with_clause_options[CreateMaterializedViewFlagMaterializedOnly].parsed);
+	bool finalized = DatumGetBool(with_clause_options[CreateMaterializedViewFlagFinalized].parsed);
 
 	int64 matpartcol_interval = 0;
-	if (!with_clause_options[ContinuousViewOptionChunkTimeInterval].is_default)
+	if (!with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].is_default)
 	{
-		matpartcol_interval = interval_to_usec(
-			DatumGetIntervalP(with_clause_options[ContinuousViewOptionChunkTimeInterval].parsed));
+		matpartcol_interval = interval_to_usec(DatumGetIntervalP(
+			with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].parsed));
 	}
 	else
 	{
@@ -714,7 +715,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	makeMaterializedTableName(relnamebuf, "_materialized_hypertable_%d", materialize_hypertable_id);
 	mat_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
 	is_create_mattbl_index =
-		DatumGetBool(with_clause_options[ContinuousViewOptionCreateGroupIndex].parsed);
+		DatumGetBool(with_clause_options[CreateMaterializedViewFlagCreateGroupIndexes].parsed);
 	mattablecolumninfo_create_materialization_table(&mattblinfo,
 													materialize_hypertable_id,
 													mat_rel,
@@ -843,7 +844,7 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 	const CreateTableAsStmt *stmt = castNode(CreateTableAsStmt, node);
 	CAggTimebucketInfo timebucket_exprinfo;
 	Oid nspid;
-	bool finalized = with_clause_options[ContinuousViewOptionFinalized].parsed;
+	bool finalized = with_clause_options[CreateMaterializedViewFlagFinalized].parsed;
 	ViewStmt viewstmt = {
 		.type = T_ViewStmt,
 		.view = stmt->into->rel,
@@ -881,7 +882,7 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 		}
 	}
 
-	if (!with_clause_options[ContinuousViewOptionCompress].is_default)
+	if (!with_clause_options[CreateMaterializedViewFlagCompress].is_default)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),

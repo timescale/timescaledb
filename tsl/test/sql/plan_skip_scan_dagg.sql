@@ -15,4 +15,10 @@
 \ir include/skip_scan_dagg_query.sql
 \ir include/skip_scan_dagg_query_ht.sql
 
+-- run tests on compressed hypertable with different compression settings
+\set TABLE skip_scan_htc
+\ir include/skip_scan_dagg_comp_query.sql
 
+-- run tests on compressed hypertable with different layouts of compressed chunks
+\set TABLE skip_scan_htcl
+\ir include/skip_scan_dagg_load_comp_query.sql

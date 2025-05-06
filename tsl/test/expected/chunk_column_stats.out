@@ -110,10 +110,9 @@ NOTICE:  already enabled for column "sensor_id", skipping
 -- enable compression
 ALTER TABLE sample_table SET (
 	timescaledb.compress,
-    timescaledb.compress_orderby = 'time'
+    timescaledb.compress_orderby = 'time',
+    timescaledb.compress_segmentby = 'sensor_id'
 );
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: Please make sure sensor_id is not a unique column and appropriate for a segment by
-NOTICE:  default segment by for hypertable "sample_table" is set to "sensor_id"
 --
 -- compress one chunk
 SELECT show_chunks('sample_table') AS "CH_NAME" order by 1 limit 1 \gset
@@ -471,7 +470,7 @@ SET timescaledb.enable_chunk_skipping to ON;
 :PREFIX UPDATE sample_table set sensor_id = 10 WHERE sensor_id > length(substring(version(),1,9));
                                       QUERY PLAN                                      
 --------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Update on sample_table
          Update on _hyper_1_1_chunk sample_table
          Update on _hyper_1_2_chunk sample_table_1
@@ -485,7 +484,7 @@ SET timescaledb.enable_chunk_skipping to ON;
 :PREFIX DELETE FROM sample_table  WHERE sensor_id > length(substring(version(),1,10));
                                    QUERY PLAN                                    
 ---------------------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Delete on sample_table
          Delete on _hyper_1_1_chunk sample_table
          Delete on _hyper_1_2_chunk sample_table_1
@@ -506,13 +505,13 @@ SET timescaledb.enable_chunk_skipping to ON;
 
 -- Scan both chunks
 :PREFIX SELECT * FROM sample_table  WHERE sensor_id > length(substring(version(),1,6));
-                             QUERY PLAN                             
---------------------------------------------------------------------
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on sample_table
    Chunks excluded during startup: 0
    ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-         Filter: (sensor_id > length("substring"(version(), 1, 6)))
-         ->  Seq Scan on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+               Index Cond: (sensor_id > length("substring"(version(), 1, 6)))
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: (sensor_id > length("substring"(version(), 1, 6)))
 (7 rows)
@@ -522,7 +521,7 @@ RESET timescaledb.enable_chunk_skipping;
 :PREFIX UPDATE sample_table set sensor_id = 10 WHERE sensor_id > length(substring(version(),1,9));
                                       QUERY PLAN                                      
 --------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Update on sample_table
          Update on _hyper_1_1_chunk sample_table_1
          Update on _hyper_1_2_chunk sample_table_2
@@ -799,9 +798,7 @@ ALTER TABLE sample_table DROP COLUMN sensor_id;
 INSERT INTO sample_table VALUES
     (now(), 1, 366),
     (now(), 2, 501);
-ALTER TABLE sample_table SET (timescaledb.compress, timescaledb.compress_orderby='time');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: Please make sure temperature is not a unique column and appropriate for a segment by
-NOTICE:  default segment by for hypertable "sample_table" is set to "temperature"
+ALTER TABLE sample_table SET (timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='temperature');
 set timescaledb.enable_chunk_skipping = on;
 SELECT enable_chunk_skipping('sample_table', 'temperature');
  enable_chunk_skipping 

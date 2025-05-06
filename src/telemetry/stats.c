@@ -537,6 +537,6 @@ ts_telemetry_stats_gather(TelemetryStats *stats)
 
 	systable_endscan(scan);
 	table_close(rel, AccessShareLock);
-	ts_cache_release(htcache);
+	ts_cache_release(&htcache);
 	MemoryContextDelete(relmcxt);
 }

@@ -50,3 +50,21 @@ CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INT, ts INT, "of
 	AS '@MODULE_PATHNAME@', 'ts_int32_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
 CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width BIGINT, ts BIGINT, "offset" BIGINT) RETURNS BIGINT
 	AS '@MODULE_PATHNAME@', 'ts_int64_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
+
+-- This will align a range to a bucket size. It is similar to
+-- time_bucket(), but takes a range and produces a range that starts
+-- and ends at bucket boundaries.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.align_to_bucket(width interval, rng anyrange)
+RETURNS anyrange AS
+$body$
+BEGIN
+  RETURN _timescaledb_functions.make_range_from_internal_time(
+         rng,
+         @extschema@.time_bucket(width, lower(rng)),
+         @extschema@.time_bucket(width, upper(rng) - '1 microsecond'::interval) + width
+  );
+END
+$body$
+LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE
+SET search_path TO pg_catalog, pg_temp;
+

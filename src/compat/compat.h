@@ -32,12 +32,9 @@
  * that was reverted in the following release.
  */
 
-#define is_supported_pg_version_15(version)                                                        \
-	((version >= 150000) && (version < 160000) && (version != 150009))
-#define is_supported_pg_version_16(version)                                                        \
-	((version >= 160000) && (version < 170000) && (version != 160005))
-#define is_supported_pg_version_17(version)                                                        \
-	((version >= 170000) && (version < 180000) && (version != 170001))
+#define is_supported_pg_version_15(version) ((version >= 150010) && (version < 160000))
+#define is_supported_pg_version_16(version) ((version >= 160006) && (version < 170000))
+#define is_supported_pg_version_17(version) ((version >= 170002) && (version < 180000))
 
 /*
  * PG16 support is a WIP and not complete yet.
@@ -341,53 +338,44 @@ vacuum_get_cutoffs(Relation rel, const VacuumParams *params, struct VacuumCutoff
 /*
  * PG16 adds TMResult argument to ExecBRUpdateTriggers
  * https://github.com/postgres/postgres/commit/7103ebb7
+ * this was backported to PG15 in
+ * https://github.com/postgres/postgres/commit/7d9a75713ab9
  */
-#if PG16_LT
-#define ExecBRUpdateTriggersCompat(estate,                                                         \
-								   epqstate,                                                       \
-								   resultRelInfo,                                                  \
-								   tupleid,                                                        \
-								   oldtuple,                                                       \
-								   slot,                                                           \
-								   result,                                                         \
-								   tmfdp)                                                          \
-	ExecBRUpdateTriggers(estate, epqstate, resultRelInfo, tupleid, oldtuple, slot, tmfdp)
-#else
-#define ExecBRUpdateTriggersCompat(estate,                                                         \
-								   epqstate,                                                       \
-								   resultRelInfo,                                                  \
-								   tupleid,                                                        \
-								   oldtuple,                                                       \
-								   slot,                                                           \
-								   result,                                                         \
-								   tmfdp)                                                          \
-	ExecBRUpdateTriggers(estate, epqstate, resultRelInfo, tupleid, oldtuple, slot, result, tmfdp)
+#if PG15
+#define ExecBRUpdateTriggers(estate,                                                               \
+							 epqstate,                                                             \
+							 resultRelInfo,                                                        \
+							 tupleid,                                                              \
+							 oldtuple,                                                             \
+							 slot,                                                                 \
+							 result,                                                               \
+							 tmfdp)                                                                \
+	ExecBRUpdateTriggersNew(estate, epqstate, resultRelInfo, tupleid, oldtuple, slot, result, tmfdp)
 #endif
 
 /*
  * PG16 adds TMResult argument to ExecBRDeleteTriggers
  * https://github.com/postgres/postgres/commit/9321c79c
+ * this was backported to PG15 in
+ * https://github.com/postgres/postgres/commit/7d9a75713ab9
  */
-#if PG16_LT
-#define ExecBRDeleteTriggersCompat(estate,                                                         \
-								   epqstate,                                                       \
-								   relinfo,                                                        \
-								   tupleid,                                                        \
-								   fdw_trigtuple,                                                  \
-								   epqslot,                                                        \
-								   tmresult,                                                       \
-								   tmfd)                                                           \
-	ExecBRDeleteTriggers(estate, epqstate, relinfo, tupleid, fdw_trigtuple, epqslot)
-#else
-#define ExecBRDeleteTriggersCompat(estate,                                                         \
-								   epqstate,                                                       \
-								   relinfo,                                                        \
-								   tupleid,                                                        \
-								   fdw_trigtuple,                                                  \
-								   epqslot,                                                        \
-								   tmresult,                                                       \
-								   tmfd)                                                           \
-	ExecBRDeleteTriggers(estate, epqstate, relinfo, tupleid, fdw_trigtuple, epqslot, tmresult, tmfd)
+#if PG15
+#define ExecBRDeleteTriggers(estate,                                                               \
+							 epqstate,                                                             \
+							 relinfo,                                                              \
+							 tupleid,                                                              \
+							 fdw_trigtuple,                                                        \
+							 epqslot,                                                              \
+							 tmresult,                                                             \
+							 tmfd)                                                                 \
+	ExecBRDeleteTriggersNew(estate,                                                                \
+							epqstate,                                                              \
+							relinfo,                                                               \
+							tupleid,                                                               \
+							fdw_trigtuple,                                                         \
+							epqslot,                                                               \
+							tmresult,                                                              \
+							tmfd)
 #endif
 
 #if PG16_GE

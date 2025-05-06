@@ -603,7 +603,7 @@ SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
 -- Can't recompress twice without new non-compressed rows
 CALL recompress_chunk(:'chunk');
 WARNING:  procedure public.recompress_chunk(regclass,boolean) is deprecated and the functionality is now included in public.compress_chunk. this compatibility function will be removed in a future version.
-NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
 \set ON_ERROR_STOP 1
 -- Compressed count after recompression
 SELECT sum(_ts_meta_count) FROM :cchunk;
@@ -644,12 +644,10 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as unique_chunk
  order by unique_chunk asc
  limit 1 \gset
 alter table recompress set (timescaledb.compress_orderby='time');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "recompress" is set to ""
 alter table :unique_chunk set access method hypercore;
 -- Should already be compressed
 select compress_chunk(:'unique_chunk');
-NOTICE:  chunk "_hyper_3_34_chunk" is already compressed
+NOTICE:  chunk "_hyper_3_34_chunk" is already converted to columnstore
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_3_34_chunk
@@ -813,10 +811,6 @@ from generate_series('2022-06-01'::timestamptz, '2022-06-10'::timestamptz, '1h')
 alter table crossmodule_test
       set access method hypercore,
       set (timescaledb.compress_orderby = 'time');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "crossmodule_test" is set to ""
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "crossmodule_test" is set to ""
 \c :TEST_DBNAME :ROLE_SUPERUSER
 select count(*) from crossmodule_test;
  count 

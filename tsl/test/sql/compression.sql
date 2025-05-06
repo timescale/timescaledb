@@ -1146,7 +1146,7 @@ COPY compressed_table (time,a,b,c) FROM stdin;
 2024-02-29 15:02:03.87313+01	20	3	3
 \.
 
-SELECT * FROM compressed_table;
+SELECT * FROM compressed_table ORDER BY time, a;
 SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('compressed_table') i;
 
 -- Check DML decompression limit
@@ -1239,3 +1239,23 @@ where uncompressed.compressed_chunk_id = compressed.id AND uncompressed.id = :'C
 
 SELECT _ts_meta_count FROM :COMPRESSED_CHUNK_NAME ORDER BY device, _ts_meta_min_1 DESC;
 ROLLBACK;
+
+-- Test poor compression rate warning works as expected
+
+-- Turn GUC on
+SET timescaledb.enable_compression_ratio_warnings TO ON;
+
+-- Compressing a table with very few rows virtually guarantees a poor compression rate
+CREATE TABLE badly_compressed_ht (time timestamptz, device_id integer, a integer);
+SELECT create_hypertable('badly_compressed_ht', 'time');
+ALTER TABLE badly_compressed_ht set (timescaledb.compress, timescaledb.compress_segmentby = 'device_id');
+INSERT INTO badly_compressed_ht VALUES
+('2025-04-25 00:00'::timestamp, 1, 1),
+('2025-04-25 01:00'::timestamp, 2, 2),
+('2025-04-25 02:00'::timestamp, 3, 3);
+
+\set VERBOSITY default
+SELECT compress_chunk(show_chunks('badly_compressed_ht'));
+\set VERBOSITY terse
+
+RESET timescaledb.enable_compression_ratio_warnings;

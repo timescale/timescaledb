@@ -904,7 +904,7 @@ NOTICE:  drop cascades to 2 other objects
 -- in the chunks' targetlists on DELETE/UPDATE works (including partially
 -- compressed chunks)
 ALTER table ht_try SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "ht_try" is set to ""
 NOTICE:  default order by for hypertable "ht_try" is set to "timec DESC"
 INSERT INTO ht_try VALUES ('2021-06-05 01:00', 10, 222);
@@ -1699,7 +1699,7 @@ SELECT create_hypertable('test2', 'time');
 
 INSERT INTO test2 VALUES ('2020-01-01'::timestamptz, 1);
 ALTER TABLE test2 SET (timescaledb.compress);
-psql:include/chunk_utils_internal_orderedappend.sql:138: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/chunk_utils_internal_orderedappend.sql:138: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 psql:include/chunk_utils_internal_orderedappend.sql:138: NOTICE:  default segment by for hypertable "test2" is set to ""
 psql:include/chunk_utils_internal_orderedappend.sql:138: NOTICE:  default order by for hypertable "test2" is set to ""time" DESC"
 SELECT compress_chunk(show_chunks('test2'));
@@ -1814,6 +1814,50 @@ SELECT * FROM event ORDER BY ts;
 ----+------
 (0 rows)
 
--- clean up databases created
+-- event triggers on chunk creation
+CREATE TABLE ht_try(timec timestamptz NOT NULL, acq_id bigint, value bigint);
+SELECT create_hypertable('ht_try', 'timec', chunk_time_interval => interval '1 day');
+  create_hypertable   
+----------------------
+ (25,public,ht_try,t)
+(1 row)
+
+-- creating event triggers requires superuser permissions
 \c :TEST_DBNAME :ROLE_SUPERUSER
+-- event trigger on ddl_start
+CREATE OR REPLACE FUNCTION ddl_start_trigger_func() RETURNS EVENT_TRIGGER AS
+$$
+BEGIN
+    RAISE NOTICE 'ddl_start_trigger_func() is invoked';
+END;
+$$ LANGUAGE plpgsql;
+CREATE EVENT TRIGGER ddl_start_trigger
+ON ddl_command_start WHEN TAG IN ('CREATE TABLE') EXECUTE FUNCTION ddl_start_trigger_func();
+-- event trigger on ddl_end
+CREATE OR REPLACE FUNCTION ddl_end_trigger_func() RETURNS EVENT_TRIGGER AS
+$$
+DECLARE
+    cmd RECORD;
+BEGIN
+    RAISE NOTICE 'ddl_end_trigger_func() is invoked';
+    FOR cmd IN SELECT * FROM pg_event_trigger_ddl_commands()
+    LOOP
+        RAISE NOTICE 'tag: %, object: %', cmd.command_tag, cmd.object_identity::regclass;
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+CREATE EVENT TRIGGER ddl_end_trigger
+ON ddl_command_end WHEN TAG IN ('CREATE TABLE') EXECUTE FUNCTION ddl_end_trigger_func();
+-- by default event triggers on chunk creation are disabled
+INSERT INTO ht_try VALUES ('2025-05-01 00:00', 1, 10);
+SET timescaledb.enable_event_triggers = on;
+INSERT INTO ht_try VALUES ('2025-05-02 00:00', 1, 10);
+NOTICE:  ddl_start_trigger_func() is invoked
+NOTICE:  ddl_end_trigger_func() is invoked
+NOTICE:  tag: CREATE TABLE, object: _timescaledb_internal._hyper_25_41_chunk
+RESET timescaledb.enable_event_triggers;
+DROP EVENT TRIGGER ddl_start_trigger;
+DROP EVENT TRIGGER ddl_end_trigger;
+DROP TABLE ht_try;
+-- clean up databases created
 DROP DATABASE postgres_fdw_db WITH (FORCE);

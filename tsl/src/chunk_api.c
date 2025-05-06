@@ -272,7 +272,7 @@ chunk_show(PG_FUNCTION_ARGS)
 	 */
 	tuple = chunk_form_tuple(chunk, ht, tupdesc, false);
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	if (NULL == tuple)
 		ereport(ERROR,
@@ -363,7 +363,7 @@ chunk_create(PG_FUNCTION_ARGS)
 
 	tuple = chunk_form_tuple(chunk, ht, tupdesc, created);
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	if (NULL == tuple)
 		ereport(ERROR,

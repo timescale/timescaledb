@@ -367,7 +367,7 @@ do_return:
 	/* return the id of the main entry for this dimension range */
 	fd.id = ccol_stats_id;
 	retval = chunk_column_stats_enable_datum(fcinfo, fd.id, enabled);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	PG_RETURN_DATUM(retval);
 }
@@ -492,7 +492,7 @@ ts_chunk_column_stats_disable(PG_FUNCTION_ARGS)
 
 do_return:
 	retval = chunk_column_stats_disable_datum(fcinfo, ht->fd.id, &colname, delete_count > 0);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	PG_RETURN_DATUM(retval);
 }

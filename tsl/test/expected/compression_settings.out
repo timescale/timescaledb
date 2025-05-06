@@ -43,7 +43,7 @@ SELECT * FROM settings;
 --Enable compression path info
 SET timescaledb.debug_compression_path_info= 'on';
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
-INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for converting to columnstore
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -162,7 +162,7 @@ SELECT table_name FROM create_hypertable('metrics','time');
 (1 row)
 
 ALTER TABLE metrics SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "metrics" is set to ""
 NOTICE:  default order by for hypertable "metrics" is set to ""time" DESC"
 -- hypertable should have default settings now
@@ -259,7 +259,7 @@ SELECT * FROM chunk_settings;
 -- create another chunk
 INSERT INTO metrics VALUES ('2000-02-01');
 SELECT compress_chunk(show_chunks('metrics'), true);
-NOTICE:  chunk "_hyper_3_6_chunk" is already compressed
+NOTICE:  chunk "_hyper_3_6_chunk" is already converted to columnstore
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_3_6_chunk
@@ -333,8 +333,6 @@ SELECT * FROM ht_settings;
 (2 rows)
 
 ALTER TABLE metrics2 SET (timescaledb.compress_orderby='d1 NULLS FIRST, d2 NULLS LAST, time, value ASC');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "metrics2" is set to ""
 SELECT * FROM ht_settings;
  hypertable | segmentby |            orderby             | compress_interval_length 
 ------------+-----------+--------------------------------+--------------------------
@@ -343,8 +341,6 @@ SELECT * FROM ht_settings;
 (2 rows)
 
 ALTER TABLE metrics2 SET (timescaledb.compress_orderby='d1 DESC NULLS LAST, d2 ASC NULLS FIRST, value DESC, time ASC NULLS FIRST');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "metrics2" is set to ""
 SELECT * FROM ht_settings;
  hypertable | segmentby |                             orderby                             | compress_interval_length 
 ------------+-----------+-----------------------------------------------------------------+--------------------------
