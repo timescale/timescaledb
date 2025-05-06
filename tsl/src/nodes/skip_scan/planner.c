@@ -879,42 +879,9 @@ get_distinct_var(PlannerInfo *root, DistinctPathInfo *dpinfo, Path *child_path,
 	if (!ts_is_hypertable(ht_rte->relid) || !bms_is_member(var->varno, rel->top_parent_relids))
 		return NULL;
 
-	Relation ht_rel = table_open(ht_rte->relid, AccessShareLock);
-	Relation chunk_rel = table_open(chunk_rte->relid, AccessShareLock);
-
-	TupleDesc outdesc = RelationGetDescr(ht_rel);
-	TupleDesc indesc = RelationGetDescr(chunk_rel);
-
-	bool found_wholerow;
-	TupleConversionMap *map = convert_tuples_by_name(indesc, outdesc);
-
-	/* attno mapping necessary */
-	if (map)
-	{
-		var = (Var *) map_variable_attnos((Node *) var,
-										  var->varno,
-										  0,
-										  map->attrMap,
-										  InvalidOid,
-										  &found_wholerow);
-
-		free_conversion_map(map);
-
-		/* If we found whole row here skipscan wouldn't be applicable
-		 * but this should have been caught already in previous checks */
-		Assert(!found_wholerow);
-		if (found_wholerow)
-		{
-			table_close(ht_rel, NoLock);
-			table_close(chunk_rel, NoLock);
-
-			return NULL;
-		}
-	}
-	else
-	{
-		var = copyObject(var);
-	}
+	char *attname = get_attname(ht_rte->relid, var->varattno, false);
+	var = copyObject(var);
+	var->varattno = get_attnum(chunk_rte->relid, attname);
 
 	/* Get attribute number for distinct column on a compressed chunk */
 	if (ts_is_decompress_chunk_path(child_path))
@@ -923,14 +890,8 @@ get_distinct_var(PlannerInfo *root, DistinctPathInfo *dpinfo, Path *child_path,
 		DecompressChunkPath *dcpath = (DecompressChunkPath *) child_path;
 		if (!bms_is_member(var->varattno, dcpath->info->chunk_segmentby_attnos))
 		{
-			table_close(ht_rel, NoLock);
-			table_close(chunk_rel, NoLock);
-
 			return NULL;
 		}
-
-		Form_pg_attribute att = TupleDescAttr(indesc, var->varattno - 1);
-		char *attname = NameStr(att->attname);
 		skip_scan_path->indexed_column_attno = get_attnum(indexed_rte->relid, attname);
 	}
 	/* Get attribute number for distinct column on an uncompressed chunk */
@@ -938,9 +899,6 @@ get_distinct_var(PlannerInfo *root, DistinctPathInfo *dpinfo, Path *child_path,
 	{
 		skip_scan_path->indexed_column_attno = var->varattno;
 	}
-
-	table_close(ht_rel, NoLock);
-	table_close(chunk_rel, NoLock);
 
 	var->varno = rel->relid;
 
