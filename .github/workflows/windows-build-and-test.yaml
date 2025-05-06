@@ -259,6 +259,13 @@ jobs:
           regression.log
           installcheck.log
 
+    - name: Save schedule
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: Schedule ${{ matrix.pg }}
+        path: /mnt/d/a/timescaledb/timescaledb/test/temp_schedule
+
     - name: Save PostgreSQL log
       if: always()
       uses: actions/upload-artifact@v4
