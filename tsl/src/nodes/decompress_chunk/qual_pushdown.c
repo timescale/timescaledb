@@ -403,15 +403,15 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args
 	}
 
 	/*
-	 * We only support equality operators.
+	 * We only support hashable equality operators.
 	 */
-	tce = lookup_type_cache(var_with_segment_meta->vartype, TYPECACHE_BTREE_OPFAMILY);
-	strategy = get_op_opfamily_strategy(op_oid, tce->btree_opf);
-	if (strategy != BTEqualStrategyNumber)
+	tce = lookup_type_cache(var_with_segment_meta->vartype, TYPECACHE_HASH_OPFAMILY);
+	strategy = get_op_opfamily_strategy(op_oid, tce->hash_opf);
+	if (strategy != HTEqualStrategyNumber)
 		return NULL;
 
 	/*
-	 * The btree equality operators ("mergejoinable") are supposed to be strict.
+	 * The hash equality operators are supposed to be strict.
 	 */
 	Assert(op_strict(op_oid));
 

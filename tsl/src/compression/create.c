@@ -72,7 +72,7 @@ is_sparse_index_type(const char *type)
 #endif
 
 static void validate_hypertable_for_compression(Hypertable *ht);
-static List *build_columndefs(CompressionSettings *settings, Oid src_relid);
+static List *build_columndefs(CompressionSettings *settings, Oid src_reloid);
 static ColumnDef *build_columndef_singlecolumn(const char *colname, Oid typid);
 static void compression_settings_update(Hypertable *ht, CompressionSettings *settings,
 										WithClauseResult *with_clause_options);
@@ -166,6 +166,73 @@ compressed_column_metadata_attno(const CompressionSettings *settings, Oid chunk_
 }
 
 /*
+ * The heuristic for whether we should use the bloom1 sparse index.
+ */
+static bool
+should_use_bloom1(Form_pg_attribute attr, TypeCacheEntry *type, Oid src_reloid)
+{
+	/*
+	 * The index must be enabled by the GUC.
+	 */
+	if (!ts_guc_enable_sparse_index_bloom1)
+	{
+		return false;
+	}
+
+	/*
+	 * The type must be hashable. For some types we use our own hash functions
+	 * which have better characteristics.
+	 */
+	FmgrInfo *finfo = NULL;
+	if (bloom1_get_hash_function(attr->atttypid, &finfo) == NULL)
+	{
+		return false;
+	}
+
+	/*
+	 * For time types, we expect:
+	 * 1) range queries, not equality,
+	 * 2) correlation with the orderby columns, e.g. creation time correlates
+	 *    with the update time that is used as orderby.
+	 * This makes minmax indexes more suitable than bloom filters.
+	 */
+	if (attr->atttypid == TIMESTAMPTZOID || attr->atttypid == TIMESTAMPOID ||
+		attr->atttypid == TIMEOID || attr->atttypid == TIMETZOID || attr->atttypid == DATEOID)
+	{
+		return false;
+	}
+
+	/*
+	 * For fractional arithmetic types, equality queries are unlikely.
+	 */
+	if (attr->atttypid == FLOAT4OID || attr->atttypid == FLOAT8OID || attr->atttypid == NUMERICOID)
+	{
+		return false;
+	}
+
+	/*
+	 * Bloom filters for 1k elements with 2% false positive rate require about
+	 * one byte per element, so there's no point in using them for smaller data
+	 * types that typically compress to less than that.
+	 */
+	if (type->typlen > 0 && type->typlen <= 4)
+	{
+		return false;
+	}
+
+	/*
+	 * Bloom filter pushdown is not implemented for TAM at the moment, so keep
+	 * the old behavior with minmax sparse indexes.
+	 */
+	if (ts_is_hypercore_am(ts_get_rel_am(src_reloid)))
+	{
+		return false;
+	}
+
+	return true;
+}
+
+/*
  * return the columndef list for compressed hypertable.
  * we do this by getting the source hypertable's attrs,
  * 1.  validate the segmentby cols and orderby cols exists in this list and
@@ -174,14 +241,14 @@ compressed_column_metadata_attno(const CompressionSettings *settings, Oid chunk_
  *     all other cols have COMPRESSEDDATA_TYPE type
  */
 static List *
-build_columndefs(CompressionSettings *settings, Oid src_relid)
+build_columndefs(CompressionSettings *settings, Oid src_reloid)
 {
 	Oid compresseddata_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
 	ArrayType *segmentby = settings->fd.segmentby;
 	List *compressed_column_defs = NIL;
 	List *segmentby_column_defs = NIL;
 
-	Relation rel = table_open(src_relid, AccessShareLock);
+	Relation rel = table_open(src_reloid, AccessShareLock);
 
 	Bitmapset *index_columns = NULL;
 	if (ts_guc_auto_sparse_indexes)
@@ -301,56 +368,7 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 			 */
 			bool can_use_minmax = OidIsValid(type->lt_opr);
 
-			/*
-			 * For bloom1 indexes we currently use our custom hash functions
-			 * which have better characteristics.
-			 */
-			bool can_use_bloom1 = bloom1_get_hash_function(attr->atttypid) != NULL;
-
-			if (attr->atttypid == TIMESTAMPTZOID || attr->atttypid == TIMESTAMPOID ||
-				attr->atttypid == TIMEOID || attr->atttypid == TIMETZOID ||
-				attr->atttypid == DATEOID)
-			{
-				/*
-				 * For time types, we expect:
-				 * 1) range queries, not equality,
-				 * 2) correlation with the orderby columns, e.g. creation time
-				 *    correlates with the update time that is used as orderby.
-				 * This makes minmax indexes more suitable than bloom filters.
-				 */
-				can_use_bloom1 = false;
-			}
-
-			if (attr->atttypid == FLOAT4OID || attr->atttypid == FLOAT8OID ||
-				attr->atttypid == NUMERICOID)
-			{
-				/*
-				 * For fractional arithmetic types, equality queries are unlikely.
-				 */
-				can_use_bloom1 = false;
-			}
-
-			if (type->typlen > 0 && type->typlen <= 4)
-			{
-				/*
-				 * Bloom filters for 1k elements with 2% false positive rate
-				 * require about one byte per element, so there's no point in
-				 * using them for smaller data types that typically compress to
-				 * less than that.
-				 */
-				can_use_bloom1 = false;
-			}
-
-			if (ts_is_hypercore_am(ts_get_rel_am(src_relid)))
-			{
-				/*
-				 * Bloom filter pushdown is not implemented for TAM at the moment,
-				 * so keep the old behavior with minmax sparse indexes.
-				 */
-				can_use_bloom1 = false;
-			}
-
-			if (ts_guc_enable_sparse_index_bloom1 && can_use_bloom1)
+			if (should_use_bloom1(attr, type, src_reloid))
 			{
 				/*
 				 * Add bloom filter sparse index for this column.

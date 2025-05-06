@@ -197,8 +197,161 @@ select * from corner where c = 'test'
 ;
 
 
+-- Test a bad hash function.
+create type badint;
+
+create or replace function badintin(cstring) returns badint
+  as 'int8in' language internal strict immutable parallel safe;
+create or replace function badintout(badint) returns cstring
+  as 'int8out' language internal strict immutable parallel safe;
+create or replace function badinteq(badint, badint) returns bool
+  as 'int8eq' language internal strict immutable parallel safe;
+
+create type badint (like = int8, input = badintin, output = badintout);
+
+create cast (bigint as badint) without function as implicit;
+create cast (badint as bigint) without function as implicit;
+
+create operator = (procedure = badinteq, leftarg = badint, rightarg = badint);
+
+-- This hash is actually used for dictionary compression, so we have to avoid
+-- overflows there.
+create or replace function badint_identity_hash(val badint)
+  returns int language sql immutable strict
+as $$ select (val & ((1::bigint << 31) - 1))::int4; $$;
+
+create or replace function badint_identity_hash_extended(val badint, seed bigint)
+  returns bigint language sql immutable strict
+as $$ select val; $$;
+
+create operator class badint_hash_ops
+  default for type badint using hash
+as
+  operator 1 = (badint, badint),
+  function 1 badint_identity_hash(badint),
+  function 2 badint_identity_hash_extended(badint, bigint)
+;
+
+-- btree opfamily
+create function badint_cmp(left badint, right badint) returns integer
+  as 'btint8cmp' language internal immutable parallel safe strict;
+
+create function badint_lt(a badint, b badint) returns boolean as 'int8lt' language internal immutable parallel safe strict;
+create function badint_le(a badint, b badint) returns boolean as 'int8le' language internal immutable parallel safe strict;
+create function badint_gt(a badint, b badint) returns boolean as 'int8gt' language internal immutable parallel safe strict;
+create function badint_ge(a badint, b badint) returns boolean as 'int8ge' language internal immutable parallel safe strict;
+
+create operator <  (leftarg = badint, rightarg = badint, procedure = badint_lt );
+create operator <= (leftarg = badint, rightarg = badint, procedure = badint_le );
+create operator >= (leftarg = badint, rightarg = badint, procedure = badint_ge );
+create operator >  (leftarg = badint, rightarg = badint, procedure = badint_gt );
+
+create operator class badint_btree_ops
+  default for type badint using btree
+as
+  operator 1 <,
+  operator 2 <=,
+  operator 3 =,
+  operator 4 >=,
+  operator 5 >,
+  function 1 badint_cmp(badint, badint)
+;
+
+create table badtable(ts int, s int, b badint);
+
+select create_hypertable('badtable', 'ts');
+
+alter table badtable set (timescaledb.compress, timescaledb.compress_segmentby = 's',
+    timescaledb.compress_orderby = 'ts');
+
+insert into badtable select generate_series(1, 10000), 0, 0::int8;
+
+insert into badtable select generate_series(1, 10000), 1, 1::int8;
+
+insert into badtable select generate_series(1, 10000), -1, -1::int8;
+
+insert into badtable select x, 2, x::int8 from generate_series(1, 10000) x;
+
+insert into badtable select x, 3, (pow(2, 32) * x)::int8 from generate_series(1, 10000) x;
+
+insert into badtable select x, 4, (16834 * x)::int8 from generate_series(1, 10000) x;
+
+insert into badtable select x, 5, (4096 * x)::int8 from generate_series(1, 10000) x;
+
+create index on badtable(b);
+
+select count(compress_chunk(x)) from show_chunks('badtable') x;
+
+vacuum full analyze badtable;
+
+
+-- Verify that we actually got the bloom filter index.
+select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
+    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
+        where hypertable_id = (select id from _timescaledb_catalog.hypertable
+            where table_name = 'badtable') limit 1)
+\gset
+
+\d+ :chunk
+
+-- Check index pushdown with one value.
+explain (analyze, costs off, timing off, summary off, verbose)
+select * from badtable where b = 1000::int8::badint;
+
+
+-- Check index pushdown and absence of negatives with multiple value. The query
+-- shape is a little weird to achieve the parameterized compressed scan, for
+-- joins it doesn't work at the moment due to general problem with parameterized
+-- DecompressChunk there.
+explain (analyze, costs off, timing off, summary off, verbose)
+with v_int(b) as (values (0), (1), (-1), (2), (4), (8), (1024),
+    (pow(2, 32) * 2), (pow(2, 32) * 1024)),
+v_badint as materialized (select b::int8::badint from v_int)
+select exists (select * from badtable where b = v_badint.b) from v_badint;
+;
+
+with v_int(b) as (values (0), (1), (-1), (2), (4), (8), (1024),
+    (pow(2, 32) * 2), (pow(2, 32) * 1024)),
+v_badint as materialized (select b::int8::badint from v_int)
+select exists (select * from badtable where b = v_badint.b) from v_badint;
+;
+
+
+-- Now, repeat the entire exercise with an even worse hash of constant zero.
+select count(decompress_chunk(x)) from show_chunks('badtable') x;
+
+create or replace function badint_identity_hash(val badint)
+  returns int language sql immutable strict
+as $$ select 0::int4; $$;
+
+create or replace function badint_identity_hash_extended(val badint, seed bigint)
+  returns bigint language sql immutable strict
+as $$ select 0; $$;
+
+select count(compress_chunk(x)) from show_chunks('badtable') x;
+
+vacuum full analyze badtable;
+
+explain (analyze, costs off, timing off, summary off, verbose)
+select * from badtable where b = 1000::int8::badint;
+
+explain (analyze, costs off, timing off, summary off, verbose)
+with v_int(b) as (values (0), (1), (-1), (2), (4), (8), (1024),
+    (pow(2, 32) * 2), (pow(2, 32) * 1024)),
+v_badint as materialized (select b::int8::badint from v_int)
+select exists (select * from badtable where b = v_badint.b) from v_badint;
+;
+
+with v_int(b) as (values (0), (1), (-1), (2), (4), (8), (1024),
+    (pow(2, 32) * 2), (pow(2, 32) * 1024)),
+v_badint as materialized (select b::int8::badint from v_int)
+select exists (select * from badtable where b = v_badint.b) from v_badint;
+;
+
+
 -- Cleanup
 drop table bloom;
 drop table corner;
+drop table badtable;
 
 

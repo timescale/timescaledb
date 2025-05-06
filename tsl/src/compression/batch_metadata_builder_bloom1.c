@@ -61,6 +61,7 @@ typedef struct Bloom1MetadataBuilder
 	struct varlena *bloom_varlena;
 
 	PGFunction hash_function;
+	FmgrInfo *hash_function_finfo;
 } Bloom1MetadataBuilder;
 
 /*
@@ -128,37 +129,48 @@ bloom1_hash_16(PG_FUNCTION_ARGS)
  * type. Returns NULL if not supported.
  * The signature of the returned function matches the Postgres extended hashing
  * functions like hashtextextended().
+ * It's possible, though impractical, for a hash function to be implemented in a
+ * procedural language, not in C. In this case, we need the proper FmgrInfo to
+ * call it. We fetch it from the type cache. For our custom functions, it is NULL.
  */
 PGFunction
-bloom1_get_hash_function(Oid type)
+bloom1_get_hash_function(Oid type, FmgrInfo **finfo)
 {
-#ifdef TS_USE_UMASH
-	if (type == TEXTOID)
+	/*
+	 * For some types we use our custom hash functions. We only do it for the
+	 * builtin Postgres types to be on the safe side, and also simplify the
+	 * testing by creating bad hash functions from SQL tests. If you change this,
+	 * you might have to change the bad hash testing in compress_bloom_sparse.sql.
+	 */
+	*finfo = NULL;
+	switch (type)
 	{
-		return bloom1_hash_varlena;
-	}
-#endif
-
-	int16 typlen;
-	bool typbyval;
-	get_typlenbyval(type, &typlen, &typbyval);
-
-	switch (typlen)
-	{
-		case 8:
-			return bloom1_hash_8;
 #ifdef TS_USE_UMASH
-		case 16:
-			/* For UUID. */
+		case TEXTOID:
+			return bloom1_hash_varlena;
+		case UUIDOID:
 			return bloom1_hash_16;
 #endif
+		case INT8OID:
+			return bloom1_hash_8;
 	}
 
 	/*
 	 * Fall back to the Postgres extended hashing functions, so that we can use
 	 * bloom filters for any types.
+	 * We request also the opfamily info and the equality operator, because
+	 * otherwise the Postgres type cache code fails obtusely on types with
+	 * improper opclasses. It picks up the btree opclass from a binary compatible
+	 * type (see GetDefaultOpClass), then an equality operator from this opclass,
+	 * and then refuses to return the hash functions because the hash opclass has
+	 * a different equality operator. The problem is that this happens over two
+	 * consecutive calls to lookup_type_cache(), so the first invocation of our
+	 * function says that we have a hash, and the second says that we don't.
 	 */
-	TypeCacheEntry *entry = lookup_type_cache(type, TYPECACHE_HASH_EXTENDED_PROC_FINFO);
+	TypeCacheEntry *entry = lookup_type_cache(type,
+											  TYPECACHE_EQ_OPR | TYPECACHE_BTREE_OPFAMILY |
+												  TYPECACHE_HASH_EXTENDED_PROC_FINFO);
+	*finfo = &entry->hash_extended_proc_finfo;
 	return entry->hash_extended_proc_finfo.fn_addr;
 }
 
@@ -291,7 +303,7 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
  * Call a hash function that uses a postgres "extended hash" signature.
  */
 static inline uint64
-calculate_hash(PGFunction hash_function, Datum needle)
+calculate_hash(PGFunction hash_function, FmgrInfo *finfo, Datum needle)
 {
 	LOCAL_FCINFO(hashfcinfo, 2);
 	*hashfcinfo = (FunctionCallInfoBaseData){ 0 };
@@ -313,6 +325,12 @@ calculate_hash(PGFunction hash_function, Datum needle)
 	const int64 seed = 0;
 	hashfcinfo->args[1].value = Int64GetDatumFast(seed);
 	hashfcinfo->args[1].isnull = false;
+
+	/*
+	 * Needed for hash functions defined in procedural languages, not C. While
+	 * unlikely, we shouldn't segfault. The finfo is cached in the type cache.
+	 */
+	hashfcinfo->flinfo = finfo;
 
 	return DatumGetUInt64(hash_function(hashfcinfo));
 }
@@ -354,7 +372,8 @@ bloom1_update_val(void *builder_, Datum needle)
 	const uint32 word_mask = num_word_bits - 1;
 	Assert((word_mask >> num_word_bits) == 0);
 
-	const uint64 datum_hash_1 = calculate_hash(builder->hash_function, needle);
+	const uint64 datum_hash_1 =
+		calculate_hash(builder->hash_function, builder->hash_function_finfo, needle);
 	const uint32 absolute_mask = num_bits - 1;
 	for (int i = 0; i < BLOOM1_HASHES; i++)
 	{
@@ -392,7 +411,8 @@ bloom1_contains(PG_FUNCTION_ARGS)
 	}
 
 	Oid type_oid = get_fn_expr_argtype(fcinfo->flinfo, 1);
-	PGFunction fn = bloom1_get_hash_function(type_oid);
+	FmgrInfo *finfo = NULL;
+	PGFunction fn = bloom1_get_hash_function(type_oid, &finfo);
 	/*
 	 * Technically this function is callable by user with arbitrary argument
 	 * that might not have an extended hash function, so report this error
@@ -425,7 +445,7 @@ bloom1_contains(PG_FUNCTION_ARGS)
 	Assert((word_mask >> num_word_bits) == 0);
 
 	Datum needle = PG_GETARG_DATUM(1);
-	const uint64 datum_hash_1 = calculate_hash(fn, needle);
+	const uint64 datum_hash_1 = calculate_hash(fn, finfo, needle);
 	const uint32 absolute_mask = num_bits - 1;
 	for (int i = 0; i < BLOOM1_HASHES; i++)
 	{
@@ -477,7 +497,14 @@ batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
 		.allocated_varlena_bytes = varlena_bytes,
 	};
 
-	builder->hash_function = bloom1_get_hash_function(type_oid);
+	builder->hash_function = bloom1_get_hash_function(type_oid, &builder->hash_function_finfo);
+	if (builder->hash_function == NULL)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("the argument type %s lacks an extended hash function",
+						format_type_be(type_oid))));
+	}
 
 	/*
 	 * Initialize the bloom filter.
@@ -592,10 +619,11 @@ Datum
 ts_bloom1_debug_hash(PG_FUNCTION_ARGS)
 {
 	Oid type_oid = get_fn_expr_argtype(fcinfo->flinfo, 0);
-	PGFunction fn = bloom1_get_hash_function(type_oid);
+	FmgrInfo *finfo = NULL;
+	PGFunction fn = bloom1_get_hash_function(type_oid, &finfo);
 	Ensure(fn != NULL, "cannot find our hash function");
 
 	Assert(!PG_ARGISNULL(0));
 	Datum needle = PG_GETARG_DATUM(0);
-	PG_RETURN_UINT64(calculate_hash(fn, needle));
+	PG_RETURN_UINT64(calculate_hash(fn, finfo, needle));
 }
