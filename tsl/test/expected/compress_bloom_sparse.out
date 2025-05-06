@@ -580,51 +580,42 @@ Indexes:
 Options: toast_tuple_target=128
 
 -- Check index pushdown with one value.
-explain (analyze, costs off, timing off, summary off, verbose)
+explain (analyze, costs off, timing off, summary off)
 select * from badtable where b = 1000::int8::badint;
-                                                                                                                                  QUERY PLAN                                                                                                                                   
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_5_5_chunk (actual rows=1 loops=1)
-   Output: _hyper_5_5_chunk.ts, _hyper_5_5_chunk.s, _hyper_5_5_chunk.b
-   Filter: (_hyper_5_5_chunk.b = '1000'::badint)
+                                          QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_5_5_chunk (actual rows=1 loops=1)
+   Filter: (b = '1000'::badint)
    Rows Removed by Filter: 5999
-   Bulk Decompression: true
-   ->  Seq Scan on _timescaledb_internal.compress_hyper_6_6_chunk (actual rows=6 loops=1)
-         Output: compress_hyper_6_6_chunk._ts_meta_count, compress_hyper_6_6_chunk.s, compress_hyper_6_6_chunk._ts_meta_min_1, compress_hyper_6_6_chunk._ts_meta_max_1, compress_hyper_6_6_chunk.ts, compress_hyper_6_6_chunk._ts_meta_v2_bloom1_b, compress_hyper_6_6_chunk.b
-         Filter: _timescaledb_functions.bloom1_contains(compress_hyper_6_6_chunk._ts_meta_v2_bloom1_b, '1000'::badint)
+   ->  Seq Scan on compress_hyper_6_6_chunk (actual rows=6 loops=1)
+         Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_b, '1000'::badint)
          Rows Removed by Filter: 64
-(9 rows)
+(6 rows)
 
 -- Check index pushdown and absence of negatives with multiple value. The query
 -- shape is a little weird to achieve the parameterized compressed scan, for
 -- joins it doesn't work at the moment due to general problem with parameterized
 -- DecompressChunk there.
-explain (analyze, costs off, timing off, summary off, verbose)
+explain (analyze, costs off, timing off, summary off)
 with v_int(b) as (values (0), (1), (-1), (2), (4), (8), (1024),
     (pow(2, 32) * 2), (pow(2, 32) * 1024)),
 v_badint as materialized (select b::int8::badint from v_int)
 select exists (select * from badtable where b = v_badint.b) from v_badint;
-                                                                                                                                         QUERY PLAN                                                                                                                                          
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
  CTE Scan on v_badint (actual rows=9 loops=1)
-   Output: EXISTS(SubPlan 2)
    CTE v_badint
      ->  Values Scan on "*VALUES*" (actual rows=9 loops=1)
-           Output: (("*VALUES*".column1)::bigint)::badint
    SubPlan 2
-     ->  Custom Scan (ChunkAppend) on public.badtable (actual rows=1 loops=9)
-           Startup Exclusion: false
-           Runtime Exclusion: true
+     ->  Custom Scan (ChunkAppend) on badtable (actual rows=1 loops=9)
            Hypertables excluded during runtime: 0
-           ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_5_5_chunk (actual rows=1 loops=9)
-                 Filter: (_hyper_5_5_chunk.b = v_badint.b)
+           ->  Custom Scan (DecompressChunk) on _hyper_5_5_chunk (actual rows=1 loops=9)
+                 Filter: (b = v_badint.b)
                  Rows Removed by Filter: 3229
-                 Bulk Decompression: false
-                 ->  Seq Scan on _timescaledb_internal.compress_hyper_6_6_chunk (actual rows=4 loops=9)
-                       Output: compress_hyper_6_6_chunk._ts_meta_count, compress_hyper_6_6_chunk.s, compress_hyper_6_6_chunk._ts_meta_min_1, compress_hyper_6_6_chunk._ts_meta_max_1, compress_hyper_6_6_chunk.ts, compress_hyper_6_6_chunk._ts_meta_v2_bloom1_b, compress_hyper_6_6_chunk.b
-                       Filter: _timescaledb_functions.bloom1_contains(compress_hyper_6_6_chunk._ts_meta_v2_bloom1_b, v_badint.b)
+                 ->  Seq Scan on compress_hyper_6_6_chunk (actual rows=4 loops=9)
+                       Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_b, v_badint.b)
                        Rows Removed by Filter: 23
-(18 rows)
+(12 rows)
 
 ;
 with v_int(b) as (values (0), (1), (-1), (2), (4), (8), (1024),
@@ -665,45 +656,36 @@ select count(compress_chunk(x)) from show_chunks('badtable') x;
 (1 row)
 
 vacuum full analyze badtable;
-explain (analyze, costs off, timing off, summary off, verbose)
+explain (analyze, costs off, timing off, summary off)
 select * from badtable where b = 1000::int8::badint;
-                                                                                                                                  QUERY PLAN                                                                                                                                   
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_5_5_chunk (actual rows=1 loops=1)
-   Output: _hyper_5_5_chunk.ts, _hyper_5_5_chunk.s, _hyper_5_5_chunk.b
-   Filter: (_hyper_5_5_chunk.b = '1000'::badint)
+                                          QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_5_5_chunk (actual rows=1 loops=1)
+   Filter: (b = '1000'::badint)
    Rows Removed by Filter: 69999
-   Bulk Decompression: true
-   ->  Seq Scan on _timescaledb_internal.compress_hyper_6_7_chunk (actual rows=70 loops=1)
-         Output: compress_hyper_6_7_chunk._ts_meta_count, compress_hyper_6_7_chunk.s, compress_hyper_6_7_chunk._ts_meta_min_1, compress_hyper_6_7_chunk._ts_meta_max_1, compress_hyper_6_7_chunk.ts, compress_hyper_6_7_chunk._ts_meta_v2_bloom1_b, compress_hyper_6_7_chunk.b
-         Filter: _timescaledb_functions.bloom1_contains(compress_hyper_6_7_chunk._ts_meta_v2_bloom1_b, '1000'::badint)
-(8 rows)
+   ->  Seq Scan on compress_hyper_6_7_chunk (actual rows=70 loops=1)
+         Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_b, '1000'::badint)
+(5 rows)
 
-explain (analyze, costs off, timing off, summary off, verbose)
+explain (analyze, costs off, timing off, summary off)
 with v_int(b) as (values (0), (1), (-1), (2), (4), (8), (1024),
     (pow(2, 32) * 2), (pow(2, 32) * 1024)),
 v_badint as materialized (select b::int8::badint from v_int)
 select exists (select * from badtable where b = v_badint.b) from v_badint;
-                                                                                                                                         QUERY PLAN                                                                                                                                          
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
  CTE Scan on v_badint (actual rows=9 loops=1)
-   Output: EXISTS(SubPlan 2)
    CTE v_badint
      ->  Values Scan on "*VALUES*" (actual rows=9 loops=1)
-           Output: (("*VALUES*".column1)::bigint)::badint
    SubPlan 2
-     ->  Custom Scan (ChunkAppend) on public.badtable (actual rows=1 loops=9)
-           Startup Exclusion: false
-           Runtime Exclusion: true
+     ->  Custom Scan (ChunkAppend) on badtable (actual rows=1 loops=9)
            Hypertables excluded during runtime: 0
-           ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_5_5_chunk (actual rows=1 loops=9)
-                 Filter: (_hyper_5_5_chunk.b = v_badint.b)
+           ->  Custom Scan (DecompressChunk) on _hyper_5_5_chunk (actual rows=1 loops=9)
+                 Filter: (b = v_badint.b)
                  Rows Removed by Filter: 25784
-                 Bulk Decompression: false
-                 ->  Seq Scan on _timescaledb_internal.compress_hyper_6_7_chunk (actual rows=27 loops=9)
-                       Output: compress_hyper_6_7_chunk._ts_meta_count, compress_hyper_6_7_chunk.s, compress_hyper_6_7_chunk._ts_meta_min_1, compress_hyper_6_7_chunk._ts_meta_max_1, compress_hyper_6_7_chunk.ts, compress_hyper_6_7_chunk._ts_meta_v2_bloom1_b, compress_hyper_6_7_chunk.b
-                       Filter: _timescaledb_functions.bloom1_contains(compress_hyper_6_7_chunk._ts_meta_v2_bloom1_b, v_badint.b)
-(17 rows)
+                 ->  Seq Scan on compress_hyper_6_7_chunk (actual rows=27 loops=9)
+                       Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_b, v_badint.b)
+(11 rows)
 
 ;
 with v_int(b) as (values (0), (1), (-1), (2), (4), (8), (1024),

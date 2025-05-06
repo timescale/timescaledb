@@ -300,7 +300,7 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
 \d+ :chunk
 
 -- Check index pushdown with one value.
-explain (analyze, costs off, timing off, summary off, verbose)
+explain (analyze, costs off, timing off, summary off)
 select * from badtable where b = 1000::int8::badint;
 
 
@@ -308,7 +308,7 @@ select * from badtable where b = 1000::int8::badint;
 -- shape is a little weird to achieve the parameterized compressed scan, for
 -- joins it doesn't work at the moment due to general problem with parameterized
 -- DecompressChunk there.
-explain (analyze, costs off, timing off, summary off, verbose)
+explain (analyze, costs off, timing off, summary off)
 with v_int(b) as (values (0), (1), (-1), (2), (4), (8), (1024),
     (pow(2, 32) * 2), (pow(2, 32) * 1024)),
 v_badint as materialized (select b::int8::badint from v_int)
@@ -337,10 +337,10 @@ select count(compress_chunk(x)) from show_chunks('badtable') x;
 
 vacuum full analyze badtable;
 
-explain (analyze, costs off, timing off, summary off, verbose)
+explain (analyze, costs off, timing off, summary off)
 select * from badtable where b = 1000::int8::badint;
 
-explain (analyze, costs off, timing off, summary off, verbose)
+explain (analyze, costs off, timing off, summary off)
 with v_int(b) as (values (0), (1), (-1), (2), (4), (8), (1024),
     (pow(2, 32) * 2), (pow(2, 32) * 1024)),
 v_badint as materialized (select b::int8::badint from v_int)
