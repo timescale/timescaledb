@@ -93,11 +93,15 @@ elif [[ -z ${TESTS} && ( -n ${SKIPS} || -n ${IGNORES} ) ]]; then
     for test_pattern in ${IGNORES}; do
       for test_name in ${ALL_TESTS}; do
         if [[ -n ${test_name} ]] && [[ $test_name == $test_pattern ]]; then
-          echo "test name is '${test_name}'"
-          echo "test pattern is '${test_pattern}'"
-          echo "ignore: ${test_name}"
           echo "ignore: ${test_name}" >> ${TEMP_SCHEDULE}
-          echo "ignore: ${test_name}" >> ${TEMP_SCHEDULE}
+        fi
+      done
+      for test_name in ${SKIPS}
+      do
+        if [[ -n ${test_name} && ${test_name} == ${test_pattern} ]]
+        then
+            echo "The ignored pattern '${test_name}' matches the skipped pattern '${test_pattern}'. This is not allowed."
+            exit 1
         fi
       done
     done
