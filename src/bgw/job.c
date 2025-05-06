@@ -786,6 +786,10 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 	bool isnull[Natts_bgw_job] = { 0 };
 	bool doReplace[Natts_bgw_job] = { 0 };
 
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] =
+		NameGetDatum(&updated_job->fd.application_name);
+	doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] = true;
+
 	Datum old_schedule_interval =
 		slot_getattr(ti->slot, Anum_bgw_job_schedule_interval, &isnull[0]);
 	Assert(!isnull[0]);
@@ -1411,6 +1415,7 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 	bool nulls[Natts_bgw_job] = { false };
 	int32 job_id;
 	char app_name[NAMEDATALEN];
+	int name_len;
 
 	rel = table_open(catalog_get_table_id(catalog, BGW_JOB), RowExclusiveLock);
 	desc = RelationGetDescr(rel);
@@ -1470,7 +1475,10 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 
 	job_id = DatumGetInt32(ts_catalog_table_next_seq_id(catalog, BGW_JOB));
-	snprintf(app_name, NAMEDATALEN, "%s [%d]", NameStr(*application_name), job_id);
+	name_len = snprintf(app_name, NAMEDATALEN, "%s [%d]", NameStr(*application_name), job_id);
+
+	if (name_len >= NAMEDATALEN)
+		ereport(ERROR, (errcode(ERRCODE_NAME_TOO_LONG), errmsg("application name too long.")));
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_id)] = Int32GetDatum(job_id);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] = CStringGetDatum(app_name);

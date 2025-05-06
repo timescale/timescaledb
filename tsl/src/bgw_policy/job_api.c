@@ -70,6 +70,7 @@ validate_check_signature(Oid check)
  * 5 check_config REGPROC DEFAULT NULL
  * 6 fixed_schedule BOOL DEFAULT TRUE
  * 7 timezone TEXT DEFAULT NULL
+ * 8 job_name TEXT DEFAULT NULL
  * ) RETURNS INTEGER
  */
 Datum
@@ -99,6 +100,7 @@ job_add(PG_FUNCTION_ARGS)
 	/* verify it's a valid timezone */
 	if (timezone != NULL)
 		valid_timezone = ts_bgw_job_validate_timezone(PG_GETARG_DATUM(7));
+	char *job_name_str = PG_ARGISNULL(8) ? NULL : text_to_cstring(PG_GETARG_TEXT_PP(8));
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
@@ -161,7 +163,10 @@ job_add(PG_FUNCTION_ARGS)
 	ts_bgw_job_validate_job_owner(owner);
 
 	/* Next, insert a new job into jobs table */
-	namestrcpy(&application_name, "User-Defined Action");
+	if (job_name_str)
+		namestrcpy(&application_name, job_name_str);
+	else
+		namestrcpy(&application_name, "User-Defined Action");
 	namestrcpy(&proc_schema, get_namespace_name(get_func_namespace(proc)));
 	namestrcpy(&proc_name, func_name);
 
@@ -283,6 +288,7 @@ job_run(PG_FUNCTION_ARGS)
  * 10   fixed_schedule BOOL = NULL,
  * 11   initial_start TIMESTAMPTZ = NULL
  * 12   timezone TEXT = NULL
+ * 13	job_name TEXT = NULL
  * ) RETURNS TABLE (
  *      job_id INTEGER,
  *      schedule_interval INTERVAL,
@@ -296,6 +302,7 @@ job_run(PG_FUNCTION_ARGS)
  *      fixed_schedule BOOL
  *      initial_start TIMESTAMPTZ
  *      timezone TEXT
+ * 	 	job_name TEXT
  * )
  */
 Datum
@@ -436,6 +443,23 @@ job_alter(PG_FUNCTION_ARGS)
 		job->fd.initial_start = initial_start;
 	}
 
+	if (!PG_ARGISNULL(13))
+	{
+		char app_name[NAMEDATALEN];
+		int name_len;
+
+		name_len = snprintf(app_name,
+							NAMEDATALEN,
+							"%s [%d]",
+							text_to_cstring(PG_GETARG_TEXT_PP(13)),
+							job_id);
+
+		if (name_len >= NAMEDATALEN)
+			ereport(ERROR, (errcode(ERRCODE_NAME_TOO_LONG), errmsg("application name too long.")));
+
+		namestrcpy(&job->fd.application_name, app_name);
+	}
+
 	if (valid_timezone != NULL)
 		job->fd.timezone = cstring_to_text(valid_timezone);
 	else
@@ -524,6 +548,8 @@ job_alter(PG_FUNCTION_ARGS)
 		values[11] = CStringGetTextDatum(valid_timezone);
 	else
 		nulls[11] = true;
+
+	values[12] = NameGetDatum(&job->fd.application_name);
 
 	tuple = heap_form_tuple(tupdesc, values, nulls);
 	return HeapTupleGetDatum(tuple);
