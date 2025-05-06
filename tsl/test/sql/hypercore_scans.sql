@@ -7,7 +7,7 @@ set timescaledb.enable_chunkwise_aggregation to off;
 
 -- Hypercore TAM uses alternative sparse index predicate pushdown code which
 -- lacks the support for the bloom1 sparse index at the moment.
-set timescaledb.enable_sparse_index_bloom1 to off;
+set timescaledb.enable_sparse_index_bloom to off;
 
 create table readings(time timestamptz,
        location text,
@@ -502,4 +502,4 @@ close cur1;
 commit;
 
 reset timescaledb.enable_chunkwise_aggregation;
-reset timescaledb.enable_sparse_index_bloom1;
+reset timescaledb.enable_sparse_index_bloom;
