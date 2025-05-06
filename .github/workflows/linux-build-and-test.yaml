@@ -211,8 +211,9 @@ jobs:
 
     - name: Send coverage report to Codecov.io app
       if: matrix.coverage
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       with:
+        token: ${{ secrets.CODECOV_TOKEN }}
         file: ./build/codecov/timescaledb-codecov.info
 
     - name: Save LCOV coverage report
