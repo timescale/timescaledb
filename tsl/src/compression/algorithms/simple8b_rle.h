@@ -10,6 +10,7 @@
 #include <fmgr.h>
 #include <lib/stringinfo.h>
 #include <libpq/pqformat.h>
+#include <port/pg_bitutils.h>
 
 #include <adts/bit_array.h>
 
@@ -59,6 +60,23 @@
 /* selector value:                        0,  1,  2,  3,  4,  5,  6, 7, 8,  9, 10, 11, 12, 13, 14, RLE */
 #define SIMPLE8B_NUM_ELEMENTS ((uint8[]){ 0, 64, 32, 21, 16, 12, 10, 9, 8,  6,  5,  4,  3,  2,  1, 0  })
 #define SIMPLE8B_BIT_LENGTH   ((uint8[]){ 0,  1,  2,  3,  4,  5,  6, 7, 8, 10, 12, 16, 21, 32, 64, 36 })
+/* convert number of bits to selector value */
+#define SIMPLE8B_BITS_TO_SELECTOR ((uint8[]){ \
+	/* 0 - 9 bits */ \
+	0,  1,  2,  3,  4,  5,  6, 7,  8,  9, \
+	/* 10 - 19 bits */ \
+	9,  10,  10,  11,  11, 11,  11, 12,  12,  12, \
+	/* 20 - 29 bits */ \
+	12,  12,  13,  13,  13,  13,  13, 13,  13,  13, \
+	/* 30 - 39 bits */ \
+	13,  13,  13,  14,  14,  14,  14, 14,  14,  14, \
+	/* 40 - 49 bits */ \
+	14,  14,  14,  14,  14,  14,  14, 14,  14,  14, \
+	/* 50 - 59 bits */ \
+	14,  14,  14,  14,  14,  14,  14, 14,  14,  14, \
+	/* 60 - 64 bits */ \
+	14,  14,  14,  14,  14,  14,  14, 14,  14,  14, \
+})
 /* clang-format on */
 
 /********************
@@ -182,11 +200,6 @@ static void simple8brle_compressor_flush(Simple8bRleCompressor *compressor);
 static void simple8brle_compressor_append_pcd(Simple8bRleCompressor *compressor,
 											  const Simple8bRlePartiallyCompressedData *new_data);
 
-/* pcd */
-static inline uint32 simple8brle_pcd_num_elements(const Simple8bRlePartiallyCompressedData *pcd);
-static inline uint64 simple8brle_pcd_get_element(const Simple8bRlePartiallyCompressedData *pcd,
-												 uint32 element_pos);
-
 /* block */
 static inline Simple8bRleBlock simple8brle_block_create_rle(uint32 rle_count, uint64 rle_val);
 static inline Simple8bRleBlock simple8brle_block_create(uint8 selector, uint64 data);
@@ -199,7 +212,6 @@ static inline uint32 simple8brle_block_append_rle(Simple8bRleBlock *compressed_b
 /* utils */
 static inline bool simple8brle_selector_is_rle(uint8 selector);
 static inline uint64 simple8brle_selector_get_bitmask(uint8 selector);
-static inline uint32 simple8brle_bits_for_value(uint64 v);
 static inline uint32 simple8brle_rledata_repeatcount(uint64 rledata);
 static inline uint64 simple8brle_rledata_value(uint64 rledata);
 static uint32 simple8brle_num_selector_slots_for_num_blocks(uint32 num_blocks);
@@ -540,50 +552,163 @@ simple8brle_compressor_append_pcd(Simple8bRleCompressor *compressor,
 								  const Simple8bRlePartiallyCompressedData *new_data)
 {
 	uint32 idx = 0;
-	uint32 new_data_len = simple8brle_pcd_num_elements(new_data);
-	while (idx < new_data_len)
+	uint32 n_compressed = new_data->block.num_elements_compressed;
+	uint32 new_data_len = n_compressed + new_data->data_size;
+	bool new_data_is_rle = new_data->block.selector == SIMPLE8B_RLE_SELECTOR;
+	uint64 new_data_rle_value = new_data_is_rle ? (new_data->block.data & SIMPLE8B_RLE_MAX_VALUE_MASK) : 0;
+
+	Assert(new_data->data_size <= 64);
+
+	/* Check selector upfront if we'll need to read from the block */
+	if (n_compressed > 0 && new_data->block.selector == 0)
+		elog(ERROR, "end of compressed integer stream");
+
+	/* Pre-allocate space for at least 64 elements */
+	if (compressor->compressed_data.num_elements + 64 > compressor->compressed_data.max_elements)
+	{
+		uint32 new_max = compressor->compressed_data.num_elements + 64;
+		/* We can't really have more than 1024 elements so slow down the growth to be on the safe side */
+		uint32 new_capacity = new_max > 1024 ? new_max + 128 : new_max * 2;
+		uint64 *new_data = palloc(new_capacity * sizeof(uint64));
+		memcpy(new_data, compressor->compressed_data.data, compressor->compressed_data.num_elements * sizeof(uint64));
+		pfree(compressor->compressed_data.data);
+		compressor->compressed_data.data = new_data;
+		compressor->compressed_data.max_elements = new_capacity;
+	}
+
+	/* Pre-allocate space for at least 16 selector buckets */
+	if (compressor->selectors.buckets.num_elements + 16 > compressor->selectors.buckets.max_elements)
+	{
+		/* We can't really have more than 1024 selectors which takes 256 u64's */
+		uint64 num_new_elements = compressor->selectors.buckets.num_elements > 256 ? 16 : 256;
+		uint64 num_elements = compressor->selectors.buckets.num_elements + num_new_elements;
+		if (num_elements >= PG_UINT32_MAX / sizeof(uint64))
+			elog(ERROR, "vector allocation overflow");
+		compressor->selectors.buckets.max_elements = num_elements;
+		uint64 num_bytes = compressor->selectors.buckets.max_elements * sizeof(uint64);
+		if (compressor->selectors.buckets.data == NULL)
+			compressor->selectors.buckets.data = MemoryContextAlloc(compressor->selectors.buckets.ctx, num_bytes);
+		else
+			compressor->selectors.buckets.data = repalloc(compressor->selectors.buckets.data, num_bytes);
+	}
+
+	/* Initialize the first selector bucket */
+	if (compressor->selectors.buckets.num_elements == 0)
+	{
+		compressor->selectors.buckets.data[compressor->selectors.buckets.num_elements] = 0;
+		compressor->selectors.buckets.num_elements++;
+	}
+
+	/* First handle compressed data */
+	while (idx < n_compressed)
 	{
 		Simple8bRleBlock block = {
 			.selector = SIMPLE8B_MINCODE,
 		};
 		uint8 num_packed = 0;
 		uint8 i;
-		uint64 mask = simple8brle_selector_get_bitmask(block.selector);
+		uint8 bitLen = SIMPLE8B_BIT_LENGTH[block.selector];
+		uint64 mask = ((~0ULL) >> (64 - bitLen));
 
-		if (simple8brle_pcd_get_element(new_data, idx) <= SIMPLE8B_RLE_MAX_VALUE_MASK)
+		uint64 first_val;
+		if (new_data_is_rle) {
+			first_val = new_data_rle_value;
+		} else {
+			uint64 compressed_value = new_data->block.data;
+			uint32 bits_per_val = SIMPLE8B_BIT_LENGTH[new_data->block.selector];
+			compressed_value >>= bits_per_val * idx;
+			compressed_value &= ((~0ULL) >> (64 - bits_per_val));
+			first_val = compressed_value;
+		}
+
+		if (first_val <= SIMPLE8B_RLE_MAX_VALUE_MASK)
 		{
 			/* runlength encode, if it would save space */
 			uint64 bits_per_int;
 			uint32 rle_count = 1;
-			uint64 rle_val = simple8brle_pcd_get_element(new_data, idx);
-			while (idx + rle_count < new_data_len &&
-				   simple8brle_pcd_get_element(new_data, idx + rle_count) == rle_val)
+			uint64 rle_val = first_val;
+
+			/* TODO dbeck: optimize this */
+			while (idx + rle_count < new_data_len)
 			{
+				uint64 next_val;
+				if (idx + rle_count < n_compressed) {
+					if (new_data_is_rle) {
+						next_val = new_data_rle_value;
+					} else {
+						uint64 compressed_value = new_data->block.data;
+						uint32 bits_per_val = SIMPLE8B_BIT_LENGTH[new_data->block.selector];
+						compressed_value >>= bits_per_val * (idx + rle_count);
+						compressed_value &= ((~0ULL) >> (64 - bits_per_val));
+						next_val = compressed_value;
+					}
+				} else {
+					next_val = new_data->data[idx + rle_count - n_compressed];
+				}
+				if (next_val != rle_val)
+					break;
 				rle_count += 1;
 				if (rle_count == SIMPLE8B_RLE_MAX_COUNT_MASK)
 					break;
 			}
-			bits_per_int = rle_val == 0 ? 1 : simple8brle_bits_for_value(rle_val);
+			bits_per_int = rle_val == 0 ? 1 : (pg_leftmost_one_pos64(rle_val) + 1);
 			if (bits_per_int * rle_count >= SIMPLE8B_BITSIZE)
 			{
 				/* RLE would save space over slot-based encodings */
-				Simple8bRleBlock block = simple8brle_block_create_rle(rle_count, rle_val);
-				Assert(bits_per_int <= SIMPLE8B_RLE_MAX_VALUE_BITS);
-				Assert(simple8brle_rledata_repeatcount(block.data) == rle_count);
-				Assert(simple8brle_rledata_value(block.data) == rle_val);
-				simple8brle_compressor_push_block(compressor, block);
+				uint64 data = ((uint64) rle_count << SIMPLE8B_RLE_MAX_VALUE_BITS) | rle_val;
+				Simple8bRleBlock block = {
+					.selector = SIMPLE8B_RLE_SELECTOR,
+					.data = data,
+					.num_elements_compressed = rle_count,
+				};
+
+				if (compressor->last_block_set)
+				{
+					uint64 bits = compressor->last_block.selector & 0xFULL;
+					uint32 new_bucket = compressor->selectors.bits_used_in_last_bucket / 64;
+					compressor->selectors.buckets.num_elements += new_bucket;
+					uint64 * restrict bucket = &compressor->selectors.buckets.data[compressor->selectors.buckets.num_elements - 1];
+					compressor->selectors.bits_used_in_last_bucket %= 64;
+					*bucket = (*bucket & ~(-(uint64)new_bucket)) | (bits << compressor->selectors.bits_used_in_last_bucket);
+					compressor->selectors.bits_used_in_last_bucket += SIMPLE8B_BITS_PER_SELECTOR;
+
+					/* We can now safely append without checking capacity since we pre-allocated */
+					compressor->compressed_data.data[compressor->compressed_data.num_elements] = compressor->last_block.data;
+					compressor->compressed_data.num_elements++;
+				}
+				compressor->last_block = block;
+				compressor->last_block_set = true;
 				idx += rle_count;
 				continue;
 			}
 		}
 
+		/* TODO dbeck: optimize this */
 		for (i = 0; idx + i < new_data_len && i < SIMPLE8B_NUM_ELEMENTS[block.selector]; ++i)
 		{
-			uint64 val = simple8brle_pcd_get_element(new_data, idx + i);
+			uint64 val;
+			if (idx + i < n_compressed) {
+				if (new_data_is_rle) {
+					val = new_data_rle_value;
+				} else {
+					uint64 compressed_value = new_data->block.data;
+					uint32 bits_per_val = SIMPLE8B_BIT_LENGTH[new_data->block.selector];
+					compressed_value >>= bits_per_val * (idx + i);
+					compressed_value &= ((~0ULL) >> (64 - bits_per_val));
+					val = compressed_value;
+				}
+			} else {
+				val = new_data->data[idx + i - n_compressed];
+			}
+
+			/* TODO dbeck: optimize this */
+			/* use SIMPLE8B_BITS_TO_SELECTOR to get the selector for the number of bits */
+
 			while (val > mask)
 			{
 				block.selector += 1;
-				mask = simple8brle_selector_get_bitmask(block.selector);
+				bitLen = SIMPLE8B_BIT_LENGTH[block.selector];
+				mask = ((~0ULL) >> (64 - bitLen));
 				/* subtle point: if we no longer have enough spaces left in the block for this
 				 * element, we should stop trying to fit it in. (even in that case, we still must
 				 * use the new selector to prevent gaps) */
@@ -592,19 +717,154 @@ simple8brle_compressor_append_pcd(Simple8bRleCompressor *compressor,
 			}
 		}
 
-		Assert(block.selector < SIMPLE8B_MAXCODE);
-		Assert(mask == simple8brle_selector_get_bitmask(block.selector));
+		while (num_packed < SIMPLE8B_NUM_ELEMENTS[block.selector] &&
+			   idx + num_packed < new_data_len)
+		{
+			uint64 new_val;
+			if (idx + num_packed < n_compressed) {
+				if (new_data_is_rle) {
+					new_val = new_data_rle_value;
+				} else {
+					uint64 compressed_value = new_data->block.data;
+					uint32 bits_per_val = SIMPLE8B_BIT_LENGTH[new_data->block.selector];
+					compressed_value >>= bits_per_val * (idx + num_packed);
+					compressed_value &= ((~0ULL) >> (64 - bits_per_val));
+					new_val = compressed_value;
+				}
+			} else {
+				new_val = new_data->data[idx + num_packed - n_compressed];
+			}
+			block.data = block.data |
+						 new_val << (SIMPLE8B_BIT_LENGTH[block.selector] * block.num_elements_compressed);
+			block.num_elements_compressed += 1;
+			num_packed += 1;
+		}
+
+		if (compressor->last_block_set)
+		{
+			uint64 bits = compressor->last_block.selector & 0xFULL;
+			uint32 new_bucket = compressor->selectors.bits_used_in_last_bucket / 64;
+			compressor->selectors.buckets.num_elements += new_bucket;
+			uint64 * restrict bucket = &compressor->selectors.buckets.data[compressor->selectors.buckets.num_elements - 1];
+			compressor->selectors.bits_used_in_last_bucket %= 64;
+			*bucket = (*bucket & ~(-(uint64)new_bucket)) | (bits << compressor->selectors.bits_used_in_last_bucket);
+			compressor->selectors.bits_used_in_last_bucket += SIMPLE8B_BITS_PER_SELECTOR;
+
+			/* We can now safely append without checking capacity since we pre-allocated */
+			compressor->compressed_data.data[compressor->compressed_data.num_elements] = compressor->last_block.data;
+			compressor->compressed_data.num_elements++;
+		}
+		compressor->last_block = block;
+		compressor->last_block_set = true;
+		idx += num_packed;
+	}
+
+	/* Handle uncompressed data */
+	while (idx < new_data_len)
+	{
+		Simple8bRleBlock block = {
+			.selector = SIMPLE8B_MINCODE,
+		};
+		uint8 num_packed = 0;
+		uint8 i;
+		uint8 bitLen = SIMPLE8B_BIT_LENGTH[block.selector];
+		uint64 mask = ((~0ULL) >> (64 - bitLen));
+		uint64 first_val = new_data->data[idx - n_compressed];
+
+		if (first_val <= SIMPLE8B_RLE_MAX_VALUE_MASK)
+		{
+			/* runlength encode, if it would save space */
+			uint64 bits_per_int;
+			uint32 rle_count = 1;
+			uint64 rle_val = first_val;
+
+			/* TODO dbeck: optimize this */
+			while (idx + rle_count < new_data_len)
+			{
+				uint64 next_val = new_data->data[idx + rle_count - n_compressed];
+				if (next_val != rle_val)
+					break;
+				rle_count += 1;
+				if (rle_count == SIMPLE8B_RLE_MAX_COUNT_MASK)
+					break;
+			}
+			bits_per_int = rle_val == 0 ? 1 : (pg_leftmost_one_pos64(rle_val) + 1);
+			if (bits_per_int * rle_count >= SIMPLE8B_BITSIZE)
+			{
+				/* RLE would save space over slot-based encodings */
+				uint64 data = ((uint64) rle_count << SIMPLE8B_RLE_MAX_VALUE_BITS) | rle_val;
+				Simple8bRleBlock block = {
+					.selector = SIMPLE8B_RLE_SELECTOR,
+					.data = data,
+					.num_elements_compressed = rle_count,
+				};
+
+				if (compressor->last_block_set)
+				{
+					uint64 bits = compressor->last_block.selector & 0xFULL;
+					uint32 new_bucket = compressor->selectors.bits_used_in_last_bucket / 64;
+					compressor->selectors.buckets.num_elements += new_bucket;
+					uint64 * restrict bucket = &compressor->selectors.buckets.data[compressor->selectors.buckets.num_elements - 1];
+					compressor->selectors.bits_used_in_last_bucket %= 64;
+					*bucket = (*bucket & ~(-(uint64)new_bucket)) | (bits << compressor->selectors.bits_used_in_last_bucket);
+					compressor->selectors.bits_used_in_last_bucket += SIMPLE8B_BITS_PER_SELECTOR;
+
+					/* We can now safely append without checking capacity since we pre-allocated */
+					compressor->compressed_data.data[compressor->compressed_data.num_elements] = compressor->last_block.data;
+					compressor->compressed_data.num_elements++;
+				}
+				compressor->last_block = block;
+				compressor->last_block_set = true;
+				idx += rle_count;
+				continue;
+			}
+		}
+
+		/* TODO dbeck: optimize this */
+		for (i = 0; idx + i < new_data_len && i < SIMPLE8B_NUM_ELEMENTS[block.selector]; ++i)
+		{
+			uint64 val = new_data->data[idx + i - n_compressed];
+
+			/* TODO dbeck: optimize this */
+			while (val > mask)
+			{
+				block.selector += 1;
+				bitLen = SIMPLE8B_BIT_LENGTH[block.selector];
+				mask = ((~0ULL) >> (64 - bitLen));
+				/* subtle point: if we no longer have enough spaces left in the block for this
+				 * element, we should stop trying to fit it in. (even in that case, we still must
+				 * use the new selector to prevent gaps) */
+				if (i >= SIMPLE8B_NUM_ELEMENTS[block.selector])
+					break;
+			}
+		}
 
 		while (num_packed < SIMPLE8B_NUM_ELEMENTS[block.selector] &&
 			   idx + num_packed < new_data_len)
 		{
-			uint64 new_val = simple8brle_pcd_get_element(new_data, idx + num_packed);
-
-			Assert(new_val <= mask);
-			simple8brle_block_append_element(&block, new_val);
+			uint64 new_val = new_data->data[idx + num_packed - n_compressed];
+			block.data = block.data |
+						 new_val << (SIMPLE8B_BIT_LENGTH[block.selector] * block.num_elements_compressed);
+			block.num_elements_compressed += 1;
 			num_packed += 1;
 		}
-		simple8brle_compressor_push_block(compressor, block);
+
+		if (compressor->last_block_set)
+		{
+			uint64 bits = compressor->last_block.selector & 0xFULL;
+			uint32 new_bucket = compressor->selectors.bits_used_in_last_bucket / 64;
+			compressor->selectors.buckets.num_elements += new_bucket;
+			uint64 * restrict bucket = &compressor->selectors.buckets.data[compressor->selectors.buckets.num_elements - 1];
+			compressor->selectors.bits_used_in_last_bucket %= 64;
+			*bucket = (*bucket & ~(-(uint64)new_bucket)) | (bits << compressor->selectors.bits_used_in_last_bucket);
+			compressor->selectors.bits_used_in_last_bucket += SIMPLE8B_BITS_PER_SELECTOR;
+
+			/* We can now safely append without checking capacity since we pre-allocated */
+			compressor->compressed_data.data[compressor->compressed_data.num_elements] = compressor->last_block.data;
+			compressor->compressed_data.num_elements++;
+		}
+		compressor->last_block = block;
+		compressor->last_block_set = true;
 		idx += num_packed;
 	}
 }
@@ -762,27 +1022,6 @@ simple8brle_decompression_iterator_try_next_reverse(Simple8bRleDecompressionIter
 	};
 }
 
-/********************************************
- ***  Simple8bRlePartiallyCompressedData  ***
- ********************************************/
-
-static inline uint32
-simple8brle_pcd_num_elements(const Simple8bRlePartiallyCompressedData *pcd)
-{
-	Assert(pcd->block.num_elements_compressed <= SIMPLE8B_NUM_ELEMENTS[pcd->block.selector]);
-	return pcd->block.num_elements_compressed + pcd->data_size;
-}
-
-static inline uint64
-simple8brle_pcd_get_element(const Simple8bRlePartiallyCompressedData *pcd, uint32 element_pos)
-{
-	Assert(element_pos < simple8brle_pcd_num_elements(pcd));
-	Assert(pcd->block.num_elements_compressed <= SIMPLE8B_NUM_ELEMENTS[pcd->block.selector]);
-	return element_pos < pcd->block.num_elements_compressed ?
-			   simple8brle_block_get_element(pcd->block, element_pos) :
-			   pcd->data[element_pos - pcd->block.num_elements_compressed];
-}
-
 /**************************
  ***  Simple8bRleBlock  ***
  **************************/
@@ -917,42 +1156,4 @@ simple8brle_num_selector_slots_for_num_blocks(uint32 num_blocks)
 {
 	return (num_blocks / SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT) +
 		   (num_blocks % SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT != 0 ? 1 : 0);
-}
-
-/* Replacing this with count leading ones as in float.c would increase performance */
-static inline uint32
-simple8brle_bits_for_value(uint64 v)
-{
-	uint32 r = 0;
-	if (v >= (1U << 31))
-	{
-		v >>= 32;
-		r += 32;
-	}
-	if (v >= (1U << 15))
-	{
-		v >>= 16;
-		r += 16;
-	}
-	if (v >= (1U << 7))
-	{
-		v >>= 8;
-		r += 8;
-	}
-	if (v >= (1U << 3))
-	{
-		v >>= 4;
-		r += 4;
-	}
-	if (v >= (1U << 1))
-	{
-		v >>= 2;
-		r += 2;
-	}
-	if (v >= (1U << 0))
-	{
-		v >>= 1;
-		r += 1;
-	}
-	return r;
 }
