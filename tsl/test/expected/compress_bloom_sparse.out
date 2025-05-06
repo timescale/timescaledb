@@ -51,8 +51,8 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
  value                    | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
  _ts_meta_v2_bloom1_u     | _timescaledb_internal.bloom1          |           |          |         | external | 1000         | 
  u                        | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
- _ts_meta_v2_min_ts       | timestamp without time zone           |           |          |         | main     | 1000         | 
- _ts_meta_v2_max_ts       | timestamp without time zone           |           |          |         | main     | 1000         | 
+ _ts_meta_v2_min_ts       | timestamp without time zone           |           |          |         | plain    | 1000         | 
+ _ts_meta_v2_max_ts       | timestamp without time zone           |           |          |         | plain    | 1000         | 
  ts                       | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
 Indexes:
     "compress_hyper_2_2_chunk__ts_meta_min_1__ts_meta_max_1_idx" btree (_ts_meta_min_1, _ts_meta_max_1)
