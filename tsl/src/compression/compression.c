@@ -273,8 +273,6 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	HeapTuple in_table_tp = NULL, index_tp = NULL;
 	Form_pg_attribute in_table_attr_tp, index_attr_tp;
 	CompressionStats cstat;
-	/* Might be merging into an existing chunk, so get compression settings
-	 * from that chunk */
 	CompressionSettings *settings = ts_compression_settings_get_by_compress_relid(out_table);
 
 	int64 report_reltuples;
