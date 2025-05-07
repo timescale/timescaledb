@@ -43,14 +43,7 @@ jobs:
                 gh pr view $PR_NUMBER --json reviews --jq '
                     [
                         .reviews.[]
-                        | select(
-                            (
-                                .authorAssociation == "NONE"
-                                or .authorAssociation == "MEMBER"
-                                or .authorAssociation == "CONTRIBUTOR"
-                            )
-                            and .state == "APPROVED"
-                          )
+                        | select(.authorAssociation == "MEMBER" and .state == "APPROVED")
                     ] | length
                   '
             )
