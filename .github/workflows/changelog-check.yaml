@@ -22,10 +22,10 @@ jobs:
     name: Check for file with CHANGELOG entry
     runs-on: timescaledb-runner-arm64
     steps:
-      - name: Install Linux Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install pip
+      - name: Cache Python Dependencies
+      - uses: actions/setup-python@v5
+        with:
+          cache: 'pip'
 
       - name: Install Python Dependencies
         run: |
