@@ -19,7 +19,7 @@
 #include "bgw_policy/job.h"
 #include "bgw_policy/job_api.h"
 #include "bgw_policy/policies_v2.h"
-#include "compression/api.h"
+#include "bgw_policy/policy_config.h"
 #include "errors.h"
 #include "guc.h"
 #include "hypertable.h"
@@ -51,21 +51,6 @@ policy_compression_get_maxchunks_per_job(const Jsonb *config)
 	int32 maxchunks =
 		ts_jsonb_get_int32_field(config, POL_COMPRESSION_CONF_KEY_MAXCHUNKS_TO_COMPRESS, &found);
 	return (found && maxchunks > 0) ? maxchunks : 0;
-}
-
-int32
-policy_compression_get_hypertable_id(const Jsonb *config)
-{
-	bool found;
-	int32 hypertable_id =
-		ts_jsonb_get_int32_field(config, POL_COMPRESSION_CONF_KEY_HYPERTABLE_ID, &found);
-
-	if (!found)
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not find hypertable_id in config for job")));
-
-	return hypertable_id;
 }
 
 int64
@@ -296,7 +281,7 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 	JsonbParseState *parse_state = NULL;
 
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-	ts_jsonb_add_int32(parse_state, POL_COMPRESSION_CONF_KEY_HYPERTABLE_ID, hypertable->fd.id);
+	ts_jsonb_add_int32(parse_state, POLICY_CONFIG_KEY_HYPERTABLE_ID, hypertable->fd.id);
 	validate_compress_after_type(dim, partitioning_type, compress_after_type);
 
 	if (use_access_method != USE_AM_NULL)
