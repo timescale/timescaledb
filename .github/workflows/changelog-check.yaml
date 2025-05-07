@@ -44,7 +44,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          set -xeuo pipefail
+          set -euo pipefail
 
           folder=".unreleased"
 
