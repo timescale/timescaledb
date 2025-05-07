@@ -44,7 +44,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          set -xeu
+          set -xeuo pipefail
 
           folder=".unreleased"
 
@@ -52,14 +52,14 @@ jobs:
           # don't require a changelog.
           modified_files=$(gh pr view $PR_NUMBER --json files --jq '[.files.[].path | select(startswith(".github") | not)] | length')
 
-          # Get the changelog files.
-          changelog_files=$(gh pr view $PR_NUMBER --json files --jq '[.files.[].path | select(startswith("'"${folder}"'"))]')
+          # Get the changelog files as a bash array
+          mapfile -t changelog_files < <(gh pr view $PR_NUMBER --json files --jq "[.files.[].path | select(startswith('${folder}'))] | .[]")
 
           if echo "$BODY" | egrep -qsi "Disable-check:[[:space:]]*force-changelog-file"
           then
             # skip changelog checks if forced
             :
-          elif [[ $modified_files -gt 0 && -z "$changelog_files" ]]
+          elif (( $modified_files > 0 && ${#changelog_files[@]} == 0 ))
           then
             # if no changelog files found, and the PR does not have the force disable check option
             echo "PR does not add a change log file in .unreleased/ folder"
@@ -75,12 +75,12 @@ jobs:
             exit 1
           else
             # check the format of the files in .unreleased folder
-            for file in $changelog_files; do
-              if echo "${file}" | grep -Eq "^(${folder})/.+$"; then
-                if ! python scripts/check_changelog_format.py "$file"; then
-                  echo "Not valid CHANGELOG entries in $file."
-                  exit 1
-                fi
+            for file in "${changelog_files[@]}"
+            do
+              if ! scripts/check_changelog_format.py "${file}"
+              then
+                echo "Invalid CHANGELOG entries in ${file}."
+                exit 1
               fi
             done
           fi
