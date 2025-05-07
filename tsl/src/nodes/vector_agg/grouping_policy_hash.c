@@ -18,6 +18,7 @@
 
 #include "grouping_policy.h"
 
+#include "guc.h"
 #include "nodes/vector_agg/exec.h"
 #include "nodes/vector_agg/vector_slot.h"
 

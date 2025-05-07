@@ -55,6 +55,8 @@ typedef struct DecompressChunkPath
 	bool needs_sequence_num;
 	bool reverse;
 	bool batch_sorted_merge;
+
+	bool enable_bulk_decompression;
 } DecompressChunkPath;
 
 void ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *rel, const Hypertable *ht,
