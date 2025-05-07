@@ -29,7 +29,7 @@ jobs:
           PR_NUMBER: ${{ github.event.number }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -xeu
+          set -eu
           echo "PR number is $PR_NUMBER"
           if ! echo "$BODY" | egrep -qsi '^disable-check:.*\<approval-count\>'
           then
