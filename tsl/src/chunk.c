@@ -4,7 +4,6 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-#include "compression/create.h"
 #include <access/htup.h>
 #include <access/htup_details.h>
 #include <access/multixact.h>
@@ -14,6 +13,7 @@
 #include <access/transam.h>
 #include <access/tupconvert.h>
 #include <access/xact.h>
+#include <c.h>
 #include <catalog/catalog.h>
 #include <catalog/dependency.h>
 #include <catalog/heap.h>
@@ -62,13 +62,17 @@
 #include "annotations.h"
 #include "cache.h"
 #include "chunk.h"
+#include "compression/create.h"
 #include "debug_point.h"
 #include "extension.h"
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
+#include "trigger.h"
+#include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_chunk_size.h"
+#include "ts_catalog/compression_settings.h"
 #include "utils.h"
 
 /* Data in a frozen chunk cannot be modified. So any operation
@@ -1401,7 +1405,7 @@ route_compressed_tuple_for_split(TupleTableSlot *slot, const struct SplitPointIn
 
 	int64 min_point = ts_time_value_to_internal(min_value, spi->type);
 	int64 max_point = ts_time_value_to_internal(max_value, spi->type);
-	
+
 	if (spi->point >= min_point && spi->point < max_point)
 		return -1;
 	else if (spi->point < min_point)
@@ -1520,7 +1524,13 @@ copy_tuples_for_split(Relation srcrel, RelationSplitInfo *splitinfos[2],
 		LockBuffer(buf, BUFFER_LOCK_UNLOCK);
 
 		int routing_index = splitpoint->route_tuple(srcslot, splitpoint);
-		Assert(routing_index == 0 || routing_index == 1);
+		// Assert(routing_index == 0 || routing_index == 1);
+
+		if (routing_index == -1)
+		{
+			elog(NOTICE, "skipping split segment");
+			continue;
+		}
 		rsi = splitinfos[routing_index];
 
 		if (isdead)
@@ -1558,15 +1568,12 @@ copy_tuples_for_split(Relation srcrel, RelationSplitInfo *splitinfos[2],
 }
 
 static Oid
-do_split(Relation srcrel, Oid new_chunk_relid, const SplitPointInfo *splitpoint)
+do_split(Relation srcrel, Oid new_chunk_relid, struct VacuumCutoffs *cutoffs,
+		 const SplitPointInfo *splitpoint)
 {
-
 	int ti_options = TABLE_INSERT_SKIP_FSM;
 	RelationSplitInfo *splitinfos[2];
-	struct VacuumCutoffs cutoffs;
 	char relpersistence = srcrel->rd_rel->relpersistence;
-
-	compute_rel_vacuum_cutoffs(srcrel, &cutoffs);
 
 	Oid new_heap_relid = make_new_heap(RelationGetRelid(srcrel),
 									   srcrel->rd_rel->reltablespace,
@@ -1582,16 +1589,13 @@ do_split(Relation srcrel, Oid new_chunk_relid, const SplitPointInfo *splitpoint)
 	Relation target2_rel = table_open(new_chunk_relid, AccessExclusiveLock);
 
 	/* Setup the state we need for each new chunk partition */
-	splitinfos[0] = relation_split_info_create(srcrel, target1_rel, &cutoffs);
-	splitinfos[1] = relation_split_info_create(srcrel, target2_rel, &cutoffs);
+	splitinfos[0] = relation_split_info_create(srcrel, target1_rel, cutoffs);
+	splitinfos[1] = relation_split_info_create(srcrel, target2_rel, cutoffs);
 
 	DEBUG_WAITPOINT("split_chunk_before_tuple_routing");
 
-	copy_tuples_for_split(srcrel,
-						  splitinfos,
-						  splitpoint,
-						  &cutoffs);
-	
+	copy_tuples_for_split(srcrel, splitinfos, splitpoint, cutoffs);
+
 	table_close(srcrel, NoLock);
 
 	/* Cleanup split rel infos and reindex new chunks */
@@ -1672,12 +1676,6 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 
 	const Chunk *chunk = ts_chunk_get_by_relid(relid, true);
 
-	if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("splitting a compressed chunk is not supported"),
-				 errhint("Decompress the chunk before splitting it.")));
-
 	if (chunk->fd.osm_chunk)
 		ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("cannot split OSM chunks")));
 
@@ -1700,6 +1698,9 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot split chunk in multi-dimensional hypertable")));
+
+	NameData splitdim_name;
+	namestrcpy(&splitdim_name, NameStr(dim->fd.column_name));
 
 	AttrNumber splitdim_attnum = get_attnum(relid, NameStr(dim->fd.column_name));
 	Oid splitdim_type = get_atttype(relid, splitdim_attnum);
@@ -1832,17 +1833,28 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 															NULL,
 															InvalidOid,
 															&created);
-
-	create_compress_chunk();
-	ts_cache_release(&hcache);
-
 	Ensure(created, "could not create chunk for split");
 	Assert(new_chunk);
 
-//	int ti_options = TABLE_INSERT_SKIP_FSM;
-//	RelationSplitInfo *splitinfos[2];
+	Chunk *new_compressed_chunk = NULL;
+	const CompressionSettings *compress_settings = ts_compression_settings_get(relid);
+
+	if (compress_settings != NULL)
+	{
+		Hypertable *ht_compressed = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
+		new_compressed_chunk = create_compress_chunk(ht_compressed, new_chunk, InvalidOid);
+		ts_chunk_constraints_create(ht_compressed, new_compressed_chunk);
+		ts_trigger_create_all_on_chunk(new_compressed_chunk);
+		elog(NOTICE, "created new compressed chunk");
+	}
+
+	ts_cache_release(&hcache);
+
+	//	int ti_options = TABLE_INSERT_SKIP_FSM;
+	//	RelationSplitInfo *splitinfos[2];
 	// RelationSplitInfo *csplitinfos[2];
 	struct VacuumCutoffs cutoffs;
+	struct VacuumCutoffs ccutoffs;
 	char relpersistence = srcrel->rd_rel->relpersistence;
 
 	compute_rel_vacuum_cutoffs(srcrel, &cutoffs);
@@ -1856,8 +1868,34 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 		.route_tuple = route_non_compressed_tuple_for_split,
 	};
 
-	Oid new_heap_relid = do_split(srcrel, new_chunk->table_id, &spi);
-	
+	Oid new_heap_relid = do_split(srcrel, new_chunk->table_id, &cutoffs, &spi);
+	Oid new_compressed_heap_relid = InvalidOid;
+
+	if (new_compressed_chunk)
+	{
+		int orderby_pos = ts_array_position(compress_settings->fd.orderby, NameStr(splitdim_name));
+		elog(NOTICE, "primary dim %s order by pos %d", NameStr(splitdim_name), orderby_pos);
+		const char *min_attname = column_segment_min_name(orderby_pos);
+		const char *max_attname = column_segment_max_name(orderby_pos);
+		CompressedSplitPointInfo cspi = {
+			.base = {
+				.point = split_point,
+				.attnum = splitdim_attnum,
+				.type = splitdim_type,
+				.route_tuple = route_compressed_tuple_for_split,
+			},
+			.attnum_min = get_attnum(compress_settings->fd.compress_relid, min_attname),
+			.attnum_max = get_attnum(compress_settings->fd.compress_relid, max_attname),
+		};
+
+		Relation compressed_srcrel =
+			table_open(compress_settings->fd.compress_relid, AccessExclusiveLock);
+		elog(NOTICE, "opened compressed rel");
+		compute_rel_vacuum_cutoffs(compressed_srcrel, &ccutoffs);
+		new_compressed_heap_relid =
+			do_split(compressed_srcrel, new_compressed_chunk->table_id, &ccutoffs, &cspi.base);
+	}
+
 	/* Finally, swap the heap of the chunk that we split so that it only
 	 * contains the tuples for its new partition boundaries. AccessExclusive
 	 * lock is held during the swap. */
@@ -1870,6 +1908,22 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 					 cutoffs.FreezeLimit,
 					 cutoffs.MultiXactCutoff,
 					 relpersistence);
+
+	if (new_compressed_chunk)
+	{
+		/* Finally, swap the heap of the chunk that we split so that it only
+		 * contains the tuples for its new partition boundaries. AccessExclusive
+		 * lock is held during the swap. */
+		finish_heap_swap(compress_settings->fd.compress_relid,
+						 new_compressed_heap_relid,
+						 false, /* system catalog */
+						 false /* swap toast by content */,
+						 true, /* check constraints */
+						 true, /* internal? */
+						 ccutoffs.FreezeLimit,
+						 cutoffs.MultiXactCutoff,
+						 relpersistence);
+	}
 
 	DEBUG_WAITPOINT("split_chunk_at_end");
 

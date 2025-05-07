@@ -80,6 +80,7 @@ select _timescaledb_functions.unfreeze_chunk('_timescaledb_internal._hyper_1_1_c
 
 -- Split a compressed/columnstore chunk is not supported
 begin;
+select * from _timescaledb_catalog.compression_settings;
 call convert_to_columnstore('_timescaledb_internal._hyper_1_1_chunk');
 call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
 rollback;
