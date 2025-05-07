@@ -28,6 +28,8 @@ jobs:
           echo "PR number is $PR_NUMBER"
           if ! echo "$BODY" | egrep -qsi '^disable-check:.*\<approval-count\>'
           then
+            echo "Event: "
+            echo "${{ github.event }}"
             # Get the list of modified files in this pull request
             echo "Modified files: "
             gh pr view $PR_NUMBER --json files
