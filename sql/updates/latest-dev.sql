@@ -1,9 +1,9 @@
 -- Type for bloom filters used by the sparse indexes on compressed hypertables.
 CREATE TYPE _timescaledb_internal.bloom1;
 
-CREATE FUNCTION _timescaledb_functions.bloom1in(cstring) RETURNS _timescaledb_internal.bloom1 AS 'byteain' LANGUAGE INTERNAL IMMUTABLE PARALLEL SAFE;
+CREATE FUNCTION _timescaledb_functions.bloom1in(cstring) RETURNS _timescaledb_internal.bloom1 AS 'byteain' LANGUAGE INTERNAL STRICT IMMUTABLE PARALLEL SAFE;
 
-CREATE FUNCTION _timescaledb_functions.bloom1out(_timescaledb_internal.bloom1) RETURNS cstring AS 'byteaout' LANGUAGE INTERNAL IMMUTABLE PARALLEL SAFE;
+CREATE FUNCTION _timescaledb_functions.bloom1out(_timescaledb_internal.bloom1) RETURNS cstring AS 'byteaout' LANGUAGE INTERNAL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE TYPE _timescaledb_internal.bloom1 (
     INPUT = _timescaledb_functions.bloom1in,
