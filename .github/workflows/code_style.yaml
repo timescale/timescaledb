@@ -96,7 +96,8 @@ jobs:
 
     - name: FIXME annotations left in code (use TODO for long-term notes)
       if: always()
-      run: ! grep fixme -niR ./*
+      run: |
+        ! grep fixme -niR ./*
 
   python_checks:
     name: Check Python code in tree
