@@ -377,15 +377,13 @@ NOTICE:  adding not-null constraint to column "ts"
 
 alter table corner set (timescaledb.compress, timescaledb.compress_segmentby = 's',
     timescaledb.compress_orderby = 'ts');
--- This is to test detoasting the second argument of "bloom filter contains"
--- function.
+-- Detoasting the second argument of "bloom filter contains" function.
 insert into corner values (1, repeat('long', 100), 'short');
--- This is to test the null bloom filter.
+-- Null bloom filter.
 insert into corner values(2, 'normal', null);
--- This is to test the match and also the short varlena header in the bloom
--- filter.
+-- A match and a short varlena header in the bloom filter.
 insert into corner values(3, 'match', 'match');
--- This is to test the long varlena header in the bloom filter.
+-- Long varlena header in the bloom filter.
 insert into corner select 4, 'longheader', generate_series(1, 1000)::text;
 create index on corner(c);
 select count(compress_chunk(x)) from show_chunks('corner') x;
@@ -480,6 +478,16 @@ select * from corner where c = 'test'
          ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=4 loops=1)
                Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.s, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk.ts, compress_hyper_4_4_chunk._ts_meta_v2_bloom1_c, compress_hyper_4_4_chunk.c
 (12 rows)
+
+-- Unsupported operator
+explain (costs off)
+select * from corner where c > s;
+                    QUERY PLAN                     
+---------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_3_3_chunk
+   Filter: (c > s)
+   ->  Seq Scan on compress_hyper_4_4_chunk
+(3 rows)
 
 -- Test a bad hash function.
 create type badint;

@@ -160,18 +160,16 @@ select create_hypertable('corner', 'ts');
 alter table corner set (timescaledb.compress, timescaledb.compress_segmentby = 's',
     timescaledb.compress_orderby = 'ts');
 
--- This is to test detoasting the second argument of "bloom filter contains"
--- function.
+-- Detoasting the second argument of "bloom filter contains" function.
 insert into corner values (1, repeat('long', 100), 'short');
 
--- This is to test the null bloom filter.
+-- Null bloom filter.
 insert into corner values(2, 'normal', null);
 
--- This is to test the match and also the short varlena header in the bloom
--- filter.
+-- A match and a short varlena header in the bloom filter.
 insert into corner values(3, 'match', 'match');
 
--- This is to test the long varlena header in the bloom filter.
+-- Long varlena header in the bloom filter.
 insert into corner select 4, 'longheader', generate_series(1, 1000)::text;
 
 create index on corner(c);
@@ -200,6 +198,10 @@ explain (analyze, verbose, costs off, timing off, summary off)
 select * from corner where c = 'test'
     or c = case when now() > '1970-01-01' then 'test2' else random()::text end
 ;
+
+-- Unsupported operator
+explain (costs off)
+select * from corner where c > s;
 
 
 -- Test a bad hash function.

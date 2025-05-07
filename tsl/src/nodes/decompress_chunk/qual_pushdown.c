@@ -408,7 +408,9 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args
 	tce = lookup_type_cache(var_with_segment_meta->vartype, TYPECACHE_HASH_OPFAMILY);
 	strategy = get_op_opfamily_strategy(op_oid, tce->hash_opf);
 	if (strategy != HTEqualStrategyNumber)
+	{
 		return NULL;
+	}
 
 	/*
 	 * The hash equality operators are supposed to be strict.

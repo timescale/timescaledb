@@ -222,7 +222,10 @@ should_create_bloom_sparse_index(Form_pg_attribute attr, TypeCacheEntry *type, O
 
 	/*
 	 * Bloom filter pushdown is not implemented for TAM at the moment, so keep
-	 * the old behavior with minmax sparse indexes.
+	 * the old behavior with minmax sparse indexes. This check is actually not
+	 * enough, because the compressed chunk table is created when the
+	 * uncompressed chunk table is converted to TAM, and at this time it still
+	 * has the normal heap access method.
 	 */
 	if (ts_is_hypercore_am(ts_get_rel_am(src_reloid)))
 	{
