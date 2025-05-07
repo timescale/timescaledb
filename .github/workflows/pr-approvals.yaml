@@ -27,6 +27,7 @@ jobs:
         env:
           BODY: ${{ github.event.pull_request.body }}
           PR_NUMBER: ${{ github.event.number }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -xeu
           echo "PR number is $PR_NUMBER"
