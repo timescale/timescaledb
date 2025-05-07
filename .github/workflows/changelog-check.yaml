@@ -58,6 +58,7 @@ jobs:
           if echo "$BODY" | egrep -qsi "Disable-check:[[:space:]]*force-changelog-file"
           then
             # skip changelog checks if forced
+            :
           elif [[ $modified_files -gt 0 && -z "$changelog_files" ]]
           then
             # if no changelog files found, and the PR does not have the force disable check option
