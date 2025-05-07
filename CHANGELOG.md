@@ -15,7 +15,7 @@ This release contains performance improvements and bug fixes since the 2.19.3 re
 * Bool vectorization
 * experimental support for window and immutable functions available in Continous Aggregations
 
-**PostgreSQL 13 support removal announcement**
+**PostgreSQL 14 support removal announcement**
 
 Following the deprecation announcement for PostgreSQL 14 in TimescaleDB v2.19.0, PostgreSQL 14 is no longer supported in TimescaleDB v2.20.0. The Currently supported PostgreSQL major versions are 15, 16 and 17.
 
