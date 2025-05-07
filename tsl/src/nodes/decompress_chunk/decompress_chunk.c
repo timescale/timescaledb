@@ -2049,6 +2049,8 @@ decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode, Query *parse)
 		rte->eref->colnames = lappend(rte->eref->colnames, makeString(pstrdup(attrname)));
 	}
 
+	/* FIXME */
+
 	/*
 	 * Drop the rel refcount, but keep the access lock till end of transaction
 	 * so that the table can't be deleted or have its schema modified

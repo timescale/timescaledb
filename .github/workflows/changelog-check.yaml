@@ -75,7 +75,7 @@ jobs:
             exit 1
           else
             # check the format of the files in .unreleased folder
-            for file in $files; do
+            for file in $changelog_files; do
               if echo "${file}" | grep -Eq "^(${folder})/.+$"; then
                 if ! python scripts/check_changelog_format.py "$file"; then
                   echo "Not valid CHANGELOG entries in $file."
