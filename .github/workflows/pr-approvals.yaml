@@ -9,6 +9,10 @@ name: PR Approval Check
     branches: [main]
   pull_request_review:
 
+permissions:
+  pull-requests: read
+  contents: read
+
 jobs:
 
   check_approvals:
@@ -22,9 +26,9 @@ jobs:
         shell: bash --norc --noprofile {0}
         env:
           BODY: ${{ github.event.pull_request.body }}
-          GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.number }}
         run: |
+          set -xeu
           echo "PR number is $PR_NUMBER"
           echo "$BODY" | egrep -qsi '^disable-check:.*\<approval-count\>'
           if [[ $? -ne 0 ]]; then
