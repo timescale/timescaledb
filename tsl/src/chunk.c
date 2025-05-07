@@ -1351,9 +1351,50 @@ reform_and_rewrite_tuple(HeapTuple tuple, Relation srcrel, const RelationSplitIn
 	heap_freetuple(tupcopy);
 }
 
+typedef struct SplitPointInfo
+{
+	AttrNumber attnum; /* Attnum of dimension/column we split along */
+	Oid type;		   /* Type of split dimension */
+	int64 point;	   /* Point at which we split */
+	int (*route_tuple)(TupleTableSlot *slot, const struct SplitPointInfo *splitpoint);
+} SplitPointInfo;
+
+static int
+route_non_compressed_tuple_for_split(TupleTableSlot *slot, const struct SplitPointInfo *splitpoint)
+{
+	bool isnull = false;
+	Datum value = slot_getattr(slot, splitpoint->attnum, &isnull);
+	Assert(!isnull);
+	int64 point = ts_time_value_to_internal(value, splitpoint->type);
+
+	/*
+	 * Route to partition based on new boundaries. Only 2-way split is
+	 * supported now, so routing is easy. An N-way split requires, e.g.,
+	 * binary search.
+	 */
+	if (point < splitpoint->point)
+		return 0;
+
+	return 1;
+}
+
+#if 0
+static int
+route_compressed_tuple_for_split(TupleTableSlot *slot, const struct SplitPointInfo *splitpoint)
+{
+	bool isnull;
+	/* Find the partition/chunk to insert the tuple into */
+	Datum value = slot_getattr(slot, splitpoint->attnum, &isnull);
+	Assert(!isnull);
+	Assert(value);
+	
+	return 1;
+}
+#endif
+
 static void
-copy_tuples_for_split(Relation srcrel, RelationSplitInfo *splitinfos[2], AttrNumber splitdim_attnum,
-					  Oid splitdim_type, int64 split_point, struct VacuumCutoffs *cutoffs)
+copy_tuples_for_split(Relation srcrel, RelationSplitInfo *splitinfos[2],
+					  const SplitPointInfo *splitpoint, struct VacuumCutoffs *cutoffs)
 {
 	TupleTableSlot *srcslot;
 	TableScanDesc scan;
@@ -1397,7 +1438,6 @@ copy_tuples_for_split(Relation srcrel, RelationSplitInfo *splitinfos[2], AttrNum
 	while (table_scan_getnextslot(scan, ForwardScanDirection, srcslot))
 	{
 		const RelationSplitInfo *rsi = NULL;
-		bool isnull = true;
 		HeapTuple tuple;
 		Buffer buf;
 		bool isdead;
@@ -1459,20 +1499,9 @@ copy_tuples_for_split(Relation srcrel, RelationSplitInfo *splitinfos[2], AttrNum
 
 		LockBuffer(buf, BUFFER_LOCK_UNLOCK);
 
-		/* Find the partition/chunk to insert the tuple into */
-		Datum value = slot_getattr(srcslot, splitdim_attnum, &isnull);
-		Assert(!isnull);
-		int64 point = ts_time_value_to_internal(value, splitdim_type);
-
-		/*
-		 * Route to partition based on new boundaries. Only 2-way split is
-		 * supported now, so routing is easy. An N-way split requires, e.g.,
-		 * binary search.
-		 */
-		if (point < split_point)
-			rsi = splitinfos[0];
-		else
-			rsi = splitinfos[1];
+		int routing_index = splitpoint->route_tuple(srcslot, splitpoint);
+		Assert(routing_index == 0 || routing_index == 1);
+		rsi = splitinfos[routing_index];
 
 		if (isdead)
 		{
@@ -1507,6 +1536,63 @@ copy_tuples_for_split(Relation srcrel, RelationSplitInfo *splitinfos[2], AttrNum
 	ExecDropSingleTupleTableSlot(srcslot);
 	FreeExecutorState(estate);
 }
+#if 0
+static void
+do_split(Relation srcrel, Oid new_chunk_relid, const SplitPointInfo *splitpoint)
+{
+
+	int ti_options = TABLE_INSERT_SKIP_FSM;
+	RelationSplitInfo *splitinfos[2];
+	struct VacuumCutoffs cutoffs;
+	char relpersistence = srcrel->rd_rel->relpersistence;
+
+	compute_rel_vacuum_cutoffs(srcrel, &cutoffs);
+
+	Oid new_heap_relid = make_new_heap(RelationGetRelid(srcrel),
+									   srcrel->rd_rel->reltablespace,
+									   srcrel->rd_rel->relam,
+									   relpersistence,
+									   AccessExclusiveLock);
+
+	/*
+	 * Open the new relations that will receive tuples during split. These are
+	 * closed by relation_split_info_free().
+	 */
+	Relation target1_rel = table_open(new_heap_relid, AccessExclusiveLock);
+	Relation target2_rel = table_open(new_chunk_relid, AccessExclusiveLock);
+
+	/* Setup the state we need for each new chunk partition */
+	splitinfos[0] = relation_split_info_create(srcrel, target1_rel, &cutoffs);
+	splitinfos[1] = relation_split_info_create(srcrel, target2_rel, &cutoffs);
+
+	DEBUG_WAITPOINT("split_chunk_before_tuple_routing");
+
+	copy_tuples_for_split(srcrel,
+						  splitinfos,
+						  splitpoint,
+						  &cutoffs);
+	
+	table_close(srcrel, NoLock);
+
+	/* Cleanup split rel infos and reindex new chunks */
+	for (int i = 0; i < 2; i++)
+	{
+		ReindexParams reindex_params = { 0 };
+		int reindex_flags = REINDEX_REL_SUPPRESS_INDEX_USE;
+		Oid chunkrelid = splitinfos[i]->targetrel->rd_id;
+
+		Ensure(relpersistence == RELPERSISTENCE_PERMANENT, "only permanent chunks can be split");
+		reindex_flags |= REINDEX_REL_FORCE_INDEXES_PERMANENT;
+
+		relation_split_info_free(splitinfos[i], ti_options);
+
+		/* Only reindex new chunks. Existing chunk will be reindexed during
+		 * the heap swap below. */
+		if (i > 0)
+			reindex_relation_compat(NULL, chunkrelid, reindex_flags, &reindex_params);
+	}
+}
+#endif
 
 /*
  * Split a chunk along a given dimension and split point.
@@ -1732,6 +1818,7 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 
 	int ti_options = TABLE_INSERT_SKIP_FSM;
 	RelationSplitInfo *splitinfos[2];
+	// RelationSplitInfo *csplitinfos[2];
 	struct VacuumCutoffs cutoffs;
 	char relpersistence = srcrel->rd_rel->relpersistence;
 
@@ -1756,13 +1843,15 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 
 	DEBUG_WAITPOINT("split_chunk_before_tuple_routing");
 
-	copy_tuples_for_split(srcrel,
-						  splitinfos,
-						  splitdim_attnum,
-						  splitdim_type,
-						  split_point,
-						  &cutoffs);
-	
+	SplitPointInfo spi = {
+		.point = split_point,
+		.attnum = splitdim_attnum,
+		.type = splitdim_type,
+		.route_tuple = route_non_compressed_tuple_for_split,
+	};
+
+	copy_tuples_for_split(srcrel, splitinfos, &spi, &cutoffs);
+
 	table_close(srcrel, NoLock);
 
 	/* Cleanup split rel infos and reindex new chunks */
