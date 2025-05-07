@@ -524,6 +524,8 @@ batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
 	return &builder->functions;
 }
 
+#ifndef NDEBUG
+
 static int
 bloom1_estimate_ndistinct(struct varlena *bloom)
 {
@@ -547,8 +549,6 @@ TS_FUNCTION_INFO_V1(ts_bloom1_debug_info);
  * A function to output various debugging info about a bloom filter.
  *
  * Usage hints in the tests.
- *
- * FIXME put under NDEBUG
  */
 Datum
 ts_bloom1_debug_info(PG_FUNCTION_ARGS)
@@ -636,3 +636,5 @@ ts_bloom1_debug_hash(PG_FUNCTION_ARGS)
 	Datum needle = PG_GETARG_DATUM(0);
 	PG_RETURN_UINT64(calculate_hash(fn, finfo, needle));
 }
+
+#endif // #ifndef NDEBUG
