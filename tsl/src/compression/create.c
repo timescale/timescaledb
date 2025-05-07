@@ -40,6 +40,7 @@
 #include "chunk_index.h"
 #include "compression.h"
 #include "compression/compression_storage.h"
+#include "compression/sparse_index_bloom1.h"
 #include "create.h"
 #include "custom_type_cache.h"
 #include "guc.h"
@@ -52,7 +53,7 @@
 #include "utils.h"
 #include "with_clause/alter_table_with_clause.h"
 
-static const char *sparse_index_types[] = { "min", "max" };
+static const char *sparse_index_types[] = { "min", "max", "bloom1" };
 
 #ifdef USE_ASSERT_CHECKING
 static bool
@@ -71,7 +72,7 @@ is_sparse_index_type(const char *type)
 #endif
 
 static void validate_hypertable_for_compression(Hypertable *ht);
-static List *build_columndefs(CompressionSettings *settings, Oid src_relid);
+static List *build_columndefs(CompressionSettings *settings, Oid src_reloid);
 static ColumnDef *build_columndef_singlecolumn(const char *colname, Oid typid);
 static void compression_settings_update(Hypertable *ht, CompressionSettings *settings,
 										WithClauseResult *with_clause_options);
@@ -153,7 +154,8 @@ compressed_column_metadata_attno(const CompressionSettings *settings, Oid chunk_
 	char *attname = get_attname(chunk_reloid, chunk_attno, /* missing_ok = */ false);
 	int16 orderby_pos = ts_array_position(settings->fd.orderby, attname);
 
-	if (orderby_pos != 0)
+	if (orderby_pos != 0 &&
+		(strcmp(metadata_type, "min") == 0 || strcmp(metadata_type, "max") == 0))
 	{
 		char *metadata_name = compression_column_segment_metadata_name(metadata_type, orderby_pos);
 		return get_attnum(compressed_reloid, metadata_name);
@@ -161,6 +163,76 @@ compressed_column_metadata_attno(const CompressionSettings *settings, Oid chunk_
 
 	char *metadata_name = compressed_column_metadata_name_v2(metadata_type, attname);
 	return get_attnum(compressed_reloid, metadata_name);
+}
+
+/*
+ * The heuristic for whether we should use the bloom filter sparse index.
+ */
+static bool
+should_create_bloom_sparse_index(Form_pg_attribute attr, TypeCacheEntry *type, Oid src_reloid)
+{
+	/*
+	 * The index must be enabled by the GUC.
+	 */
+	if (!ts_guc_enable_sparse_index_bloom)
+	{
+		return false;
+	}
+
+	/*
+	 * The type must be hashable. For some types we use our own hash functions
+	 * which have better characteristics.
+	 */
+	FmgrInfo *finfo = NULL;
+	if (bloom1_get_hash_function(attr->atttypid, &finfo) == NULL)
+	{
+		return false;
+	}
+
+	/*
+	 * For time types, we expect:
+	 * 1) range queries, not equality,
+	 * 2) correlation with the orderby columns, e.g. creation time correlates
+	 *    with the update time that is used as orderby.
+	 * This makes minmax indexes more suitable than bloom filters.
+	 */
+	if (attr->atttypid == TIMESTAMPTZOID || attr->atttypid == TIMESTAMPOID ||
+		attr->atttypid == TIMEOID || attr->atttypid == TIMETZOID || attr->atttypid == DATEOID)
+	{
+		return false;
+	}
+
+	/*
+	 * For fractional arithmetic types, equality queries are unlikely.
+	 */
+	if (attr->atttypid == FLOAT4OID || attr->atttypid == FLOAT8OID || attr->atttypid == NUMERICOID)
+	{
+		return false;
+	}
+
+	/*
+	 * Bloom filters for 1k elements with 2% false positive rate require about
+	 * one byte per element, so there's no point in using them for smaller data
+	 * types that typically compress to less than that.
+	 */
+	if (type->typlen > 0 && type->typlen < 4)
+	{
+		return false;
+	}
+
+	/*
+	 * Bloom filter pushdown is not implemented for TAM at the moment, so keep
+	 * the old behavior with minmax sparse indexes. This check is actually not
+	 * enough, because the compressed chunk table is created when the
+	 * uncompressed chunk table is converted to TAM, and at this time it still
+	 * has the normal heap access method.
+	 */
+	if (ts_is_hypercore_am(ts_get_rel_am(src_reloid)))
+	{
+		return false;
+	}
+
+	return true;
 }
 
 /*
@@ -172,16 +244,16 @@ compressed_column_metadata_attno(const CompressionSettings *settings, Oid chunk_
  *     all other cols have COMPRESSEDDATA_TYPE type
  */
 static List *
-build_columndefs(CompressionSettings *settings, Oid src_relid)
+build_columndefs(CompressionSettings *settings, Oid src_reloid)
 {
 	Oid compresseddata_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
 	ArrayType *segmentby = settings->fd.segmentby;
 	List *compressed_column_defs = NIL;
 	List *segmentby_column_defs = NIL;
 
-	Relation rel = table_open(src_relid, AccessShareLock);
+	Relation rel = table_open(src_reloid, AccessShareLock);
 
-	Bitmapset *btree_columns = NULL;
+	Bitmapset *index_columns = NULL;
 	if (ts_guc_auto_sparse_indexes)
 	{
 		/*
@@ -202,23 +274,27 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 			 * kinds of queries as the uncompressed index. The simplest case is btree
 			 * which can satisfy equality and comparison tests, same as sparse minmax.
 			 *
-			 * We can be smarter here, e.g. for 'BRIN', sparse minmax can be similar
-			 * to 'BRIN' with range opclass, but not for bloom filter opclass. For GIN,
-			 * sparse minmax is useless because it doesn't help satisfy text search
-			 * queries, and so on. Currently we check only the simplest btree case.
+			 * If an uncompressed column has an index, we want to create a
+			 * sparse index for it as well. A sparse index can't satisfy ordering
+			 * queries, but at least we can use a bloom index to satisfy equality
+			 * queries. Create it when we have uncompressed index types that can
+			 * also satisfy equality.
 			 */
-			if (index_info->ii_Am != BTREE_AM_OID)
+			if (index_info->ii_Am != BTREE_AM_OID && index_info->ii_Am != HASH_AM_OID &&
+				index_info->ii_Am != BRIN_AM_OID)
 			{
 				continue;
 			}
 
 			for (int i = 0; i < index_info->ii_NumIndexKeyAttrs; i++)
 			{
-				AttrNumber attno = index_info->ii_IndexAttrNumbers[i];
-				if (attno != InvalidAttrNumber)
+				const AttrNumber attno = index_info->ii_IndexAttrNumbers[i];
+				if (attno == InvalidAttrNumber)
 				{
-					btree_columns = bms_add_member(btree_columns, attno);
+					continue;
 				}
+
+				index_columns = bms_add_member(index_columns, attno);
 			}
 		}
 	}
@@ -254,7 +330,7 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 		 * respective compressed column, because they are accessed before
 		 * decompression.
 		 */
-		bool is_orderby = ts_array_is_member(settings->fd.orderby, NameStr(attr->attname));
+		const bool is_orderby = ts_array_is_member(settings->fd.orderby, NameStr(attr->attname));
 		if (is_orderby)
 		{
 			int index = ts_array_position(settings->fd.orderby, NameStr(attr->attname));
@@ -284,35 +360,64 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 			def->storage = TYPSTORAGE_PLAIN;
 			compressed_column_defs = lappend(compressed_column_defs, def);
 		}
-		else if (bms_is_member(attr->attnum, btree_columns))
+		else if (bms_is_member(attr->attnum, index_columns))
 		{
-			TypeCacheEntry *type = lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR);
+			TypeCacheEntry *type =
+				lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR | TYPECACHE_HASH_EXTENDED_PROC);
 
-			if (OidIsValid(type->lt_opr))
+			/*
+			 * We can have various unusual user-defined types which do not
+			 * support comparison or hashing. The sparse indexes for the
+			 * non-orderby columns are not required for correctness, so just
+			 * don't create the sparse index if we lack the suitable operators.
+			 */
+			bool can_use_minmax = OidIsValid(type->lt_opr);
+
+			if (should_create_bloom_sparse_index(attr, type, src_reloid))
 			{
 				/*
-				 * Here we create minmax metadata for the columns for which
-				 * we have btree indexes. Not sure it is technically possible
-				 * to have a btree index for a column and at the same time
-				 * not have a "less" operator for it. Still, we can have
-				 * various unusual user-defined types, and the minmax metadata
-				 * for the rest of the columns are not required for correctness,
-				 * so play it safe and just don't create the metadata if we don't
-				 * have an operator.
+				 * Add bloom filter sparse index for this column.
+				 */
+				ColumnDef *bloom_column_def =
+					makeColumnDef(compressed_column_metadata_name_v2("bloom1",
+																	 NameStr(attr->attname)),
+								  ts_custom_type_cache_get(CUSTOM_TYPE_BLOOM1)->type_oid,
+								  /* typmod = */ -1,
+								  /* collation = */ 0);
+
+				/*
+				 * We have our custom compression for bloom filters, and the
+				 * result is almost incompressible with lz4 (~2%), so disable it.
+				 */
+				bloom_column_def->storage = TYPSTORAGE_EXTERNAL;
+
+				compressed_column_defs = lappend(compressed_column_defs, bloom_column_def);
+			}
+			else if (can_use_minmax)
+			{
+				/*
+				 * Add minmax sparse index for this column.
 				 */
 				ColumnDef *def =
 					makeColumnDef(compressed_column_metadata_name_v2("min", NameStr(attr->attname)),
 								  attr->atttypid,
 								  attr->atttypmod,
 								  attr->attcollation);
+				if (attr->attstorage != TYPSTORAGE_PLAIN)
+				{
+					def->storage = TYPSTORAGE_MAIN;
+				}
 				compressed_column_defs = lappend(compressed_column_defs, def);
-				def->storage = TYPSTORAGE_MAIN;
+
 				def =
 					makeColumnDef(compressed_column_metadata_name_v2("max", NameStr(attr->attname)),
 								  attr->atttypid,
 								  attr->atttypmod,
 								  attr->attcollation);
-				def->storage = TYPSTORAGE_MAIN;
+				if (attr->attstorage != TYPSTORAGE_PLAIN)
+				{
+					def->storage = TYPSTORAGE_MAIN;
+				}
 				compressed_column_defs = lappend(compressed_column_defs, def);
 			}
 		}

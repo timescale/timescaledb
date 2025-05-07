@@ -19,6 +19,7 @@ set(TEST_FILES
     chunk_column_stats.sql
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
+    compress_bloom_sparse.sql
     compress_default.sql
     compress_dml_copy.sql
     compressed_collation.sql
@@ -115,6 +116,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     chunk_merge.sql
     chunk_utils_compression.sql
     chunk_utils_internal.sql
+    compress_bloom_sparse_debug.sql
     compression_algos.sql
     compression_bgw.sql
     compression_bools.sql
