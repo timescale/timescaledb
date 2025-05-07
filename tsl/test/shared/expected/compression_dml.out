@@ -10,7 +10,7 @@ SELECT table_name FROM create_hypertable('i3719', 'time');
 (1 row)
 
 ALTER TABLE i3719 SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "i3719" is set to ""
 NOTICE:  default order by for hypertable "i3719" is set to ""time" DESC"
 INSERT INTO i3719 VALUES('2021-01-01 00:00:00', 'chunk 1');
@@ -178,7 +178,7 @@ SELECT table_name FROM create_hypertable('row_locks', 'time');
 (1 row)
 
 ALTER TABLE row_locks SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "row_locks" is set to ""
 NOTICE:  default order by for hypertable "row_locks" is set to ""time" DESC"
 INSERT INTO row_locks VALUES('2021-01-01 00:00:00');

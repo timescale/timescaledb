@@ -74,7 +74,7 @@ jobs:
         # If needed, install them before opening the core dump.
         sudo apt-get update
         sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl \
-          libtest-most-perl pkgconf icu-devtools faketime ${{ matrix.extra_packages }}
+          libtest-most-perl pkgconf icu-devtools faketime jq ${{ matrix.extra_packages }}
 
     - name: Install macOS Dependencies
       if: runner.os == 'macOS'
@@ -211,16 +211,17 @@ jobs:
 
     - name: Send coverage report to Codecov.io app
       if: matrix.coverage
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       with:
-        file: ./build/codecov/timescaledb-codecov.info
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: ./build/coverage/timescaledb-coverage.info
 
     - name: Save LCOV coverage report
       if: matrix.coverage
       uses: actions/upload-artifact@v4
       with:
         name: LCOV coverage report ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
-        path: ./build/codecov/codecov-report
+        path: ./build/coverage/lcov-report
 
     - name: Show regression diffs
       if: always()

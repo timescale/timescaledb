@@ -12,6 +12,7 @@
 #include <libpq/pqformat.h>
 #include <storage/predicate.h>
 #include <utils/datum.h>
+#include <utils/elog.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
@@ -38,6 +39,15 @@
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/compression_settings.h"
+#include <nodes/decompress_chunk/vector_quals.h>
+
+/*
+ * Timing parameters for truncate locking heuristics.
+ * These are the same as used by Postgres for truncate locking during lazy vacuum.
+ * https://github.com/postgres/postgres/blob/4a0650d359c5981270039eeb634c3b7427aa0af5/src/backend/access/heap/vacuumlazy.c#L82
+ */
+#define COMPRESS_TRUNCATE_LOCK_WAIT_INTERVAL 50 /* ms */
+#define COMPRESS_TRUNCATE_LOCK_TIMEOUT 5000		/* ms */
 
 StaticAssertDecl(GLOBAL_MAX_ROWS_PER_COMPRESSION >= TARGET_COMPRESSED_BATCH_SIZE,
 				 "max row numbers must be harmonized");
@@ -97,7 +107,7 @@ tsl_get_decompress_all_function(CompressionAlgorithm algorithm, Oid type)
 	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
 
-	if (type != TEXTOID &&
+	if (type != TEXTOID && type != BOOLOID &&
 		(algorithm == COMPRESSION_ALGORITHM_DICTIONARY || algorithm == COMPRESSION_ALGORITHM_ARRAY))
 	{
 		/* Bulk decompression of array and dictionary is only supported for text. */
@@ -263,8 +273,6 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	HeapTuple in_table_tp = NULL, index_tp = NULL;
 	Form_pg_attribute in_table_attr_tp, index_attr_tp;
 	CompressionStats cstat;
-	/* Might be merging into an existing chunk, so get compression settings
-	 * from that chunk */
 	CompressionSettings *settings = ts_compression_settings_get_by_compress_relid(out_table);
 
 	int64 report_reltuples;
@@ -464,7 +472,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 
 		Assert(!REL_IS_HYPERCORE(in_rel));
 		elog(ts_guc_debug_compression_path_info ? INFO : DEBUG1,
-			 "using index \"%s\" to scan rows for compression",
+			 "using index \"%s\" to scan rows for converting to columnstore",
 			 get_rel_name(matched_index_rel->rd_id));
 
 		index_scan = index_beginscan(in_rel, matched_index_rel, GetTransactionSnapshot(), 0, 0);
@@ -476,7 +484,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 			row_compressor_process_ordered_slot(&row_compressor, slot, mycid);
 			if ((++nrows_processed % report_reltuples) == 0)
 				elog(DEBUG2,
-					 "compressed " INT64_FORMAT " rows from \"%s\"",
+					 "converted " INT64_FORMAT " rows to columnstore from \"%s\"",
 					 nrows_processed,
 					 RelationGetRelationName(in_rel));
 		}
@@ -485,7 +493,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 			row_compressor_flush(&row_compressor, mycid, true);
 
 		elog(DEBUG1,
-			 "finished compressing " INT64_FORMAT " rows from \"%s\"",
+			 "finished converting " INT64_FORMAT " rows to columnstore from \"%s\"",
 			 nrows_processed,
 			 RelationGetRelationName(in_rel));
 
@@ -496,7 +504,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	else
 	{
 		elog(ts_guc_debug_compression_path_info ? INFO : DEBUG1,
-			 "using tuplesort to scan rows from \"%s\" for compression",
+			 "using tuplesort to scan rows from \"%s\" for converting to columnstore",
 			 RelationGetRelationName(in_rel));
 
 		Tuplesortstate *sorted_rel = compress_chunk_sort_relation(settings, in_rel);
@@ -505,16 +513,67 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	}
 
 	row_compressor_close(&row_compressor);
-	if (!ts_guc_enable_delete_after_compression)
+
+	if (ts_guc_enable_delete_after_compression)
 	{
-		DEBUG_WAITPOINT("compression_done_before_truncate_uncompressed");
-		truncate_relation(in_table);
-		DEBUG_WAITPOINT("compression_done_after_truncate_uncompressed");
+		ereport(NOTICE,
+				(errcode(ERRCODE_WARNING_DEPRECATED_FEATURE),
+				 errmsg("timescaledb.enable_delete_after_compression is deprecated and will be "
+						"removed in a future version. Please use "
+						"timescaledb.compress_truncate_behaviour instead.")));
+		delete_relation_rows(in_table);
+		DEBUG_WAITPOINT("compression_done_after_delete_uncompressed");
 	}
 	else
 	{
-		delete_relation_rows(in_table);
-		DEBUG_WAITPOINT("compression_done_after_delete_uncompressed");
+		int lock_retry = 0;
+		switch (ts_guc_compress_truncate_behaviour)
+		{
+			case COMPRESS_TRUNCATE_ONLY:
+				DEBUG_WAITPOINT("compression_done_before_truncate_uncompressed");
+				truncate_relation(in_table);
+				DEBUG_WAITPOINT("compression_done_after_truncate_uncompressed");
+				break;
+			case COMPRESS_TRUNCATE_OR_DELETE:
+				DEBUG_WAITPOINT("compression_done_before_truncate_or_delete_uncompressed");
+				while (true)
+				{
+					if (ConditionalLockRelation(in_rel, AccessExclusiveLock))
+					{
+						truncate_relation(in_table);
+						break;
+					}
+
+					/*
+					 * Check for interrupts while trying to (re-)acquire the exclusive
+					 * lock.
+					 */
+					CHECK_FOR_INTERRUPTS();
+
+					if (++lock_retry >
+						(COMPRESS_TRUNCATE_LOCK_TIMEOUT / COMPRESS_TRUNCATE_LOCK_WAIT_INTERVAL))
+					{
+						/*
+						 * We failed to establish the lock in the specified number of
+						 * retries. This means we give up truncating and fallback to delete
+						 */
+						delete_relation_rows(in_table);
+						break;
+					}
+
+					(void) WaitLatch(MyLatch,
+									 WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
+									 COMPRESS_TRUNCATE_LOCK_WAIT_INTERVAL,
+									 WAIT_EVENT_VACUUM_TRUNCATE);
+					ResetLatch(MyLatch);
+				}
+				DEBUG_WAITPOINT("compression_done_after_truncate_or_delete_uncompressed");
+				break;
+			case COMPRESS_TRUNCATE_DISABLED:
+				delete_relation_rows(in_table);
+				DEBUG_WAITPOINT("compression_done_after_delete_uncompressed");
+				break;
+		}
 	}
 
 	table_close(out_rel, NoLock);
@@ -807,7 +866,7 @@ row_compressor_init(const CompressionSettings *settings, RowCompressor *row_comp
 		get_attnum(compressed_table->rd_id, NameStr(*count_metadata_name));
 	if (count_metadata_column_num == InvalidAttrNumber)
 		elog(ERROR,
-			 "missing metadata column '%s' in compressed table",
+			 "missing metadata column '%s' in columnstore table",
 			 COMPRESSION_COLUMN_METADATA_COUNT_NAME);
 
 	*row_compressor = (RowCompressor){
@@ -1632,6 +1691,61 @@ decompress_batch_next_row(RowDecompressor *decompressor, AttrNumber *attnos, int
 	MemoryContextSwitchTo(old_ctx);
 
 	return true;
+}
+
+/* Decompress single column using vectorized decompression */
+ArrowArray *
+decompress_single_column(RowDecompressor *decompressor, AttrNumber attno, bool *default_value)
+{
+	int16 target_col = -1;
+	PerCompressedColumn *column_info = NULL;
+
+	for (int16 col = 0; col < decompressor->num_compressed_columns; col++)
+	{
+		column_info = &decompressor->per_compressed_cols[col];
+		if (!column_info->is_compressed)
+			continue;
+
+		if (column_info->decompressed_column_offset == AttrNumberGetAttrOffset(attno))
+		{
+			target_col = col;
+			break;
+		}
+	}
+	Assert(column_info && target_col > -1);
+
+	if (decompressor->compressed_is_nulls[target_col])
+	{
+		/* Compressed column has a default value, handle it by generating
+		 * a single-value ArrowArray based on the default value. This will have to
+		 * be handled specially because of the assumption that the whole row has
+		 * this default value.
+		 */
+		*default_value = true;
+		bool isnull;
+		Datum default_datum = getmissingattr(decompressor->out_desc, attno, &isnull);
+
+		return make_single_value_arrow(column_info->decompressed_type, default_datum, isnull);
+	}
+
+	*default_value = false;
+
+	Datum compressed_datum = PointerGetDatum(
+		detoaster_detoast_attr_copy((struct varlena *) DatumGetPointer(
+										decompressor->compressed_datums[target_col]),
+									&decompressor->detoaster,
+									CurrentMemoryContext));
+	CompressedDataHeader *header = get_compressed_data_header(compressed_datum);
+
+	DecompressAllFunction decompress_all =
+		tsl_get_decompress_all_function(header->compression_algorithm,
+										column_info->decompressed_type);
+
+	Assert(decompress_all);
+
+	return decompress_all(compressed_datum,
+						  column_info->decompressed_type,
+						  decompressor->per_compressed_row_ctx);
 }
 
 int

@@ -63,5 +63,6 @@ void ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *rel, cons
 										const Chunk *chunk);
 
 extern bool ts_is_decompress_chunk_path(Path *path);
+extern bool ts_is_decompress_chunk_plan(Plan *plan);
 
 DecompressChunkPath *copy_decompress_chunk_path(DecompressChunkPath *src);

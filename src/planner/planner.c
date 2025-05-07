@@ -52,7 +52,7 @@
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/chunk_dispatch/chunk_dispatch.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
-#include "nodes/hypertable_modify.h"
+#include "nodes/modify_hypertable.h"
 #include "partitioning.h"
 #include "planner/partialize.h"
 #include "planner/planner.h"
@@ -227,7 +227,7 @@ planner_hcache_pop(bool release)
 
 	if (release)
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		/* If we pop a stack and discover a new hypertable cache, the basrel
 		 * cache can contain invalid entries, so we reset it. */
 		if (planner_hcaches != NIL && hcache != linitial(planner_hcaches))

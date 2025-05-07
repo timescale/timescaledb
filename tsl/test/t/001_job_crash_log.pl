@@ -38,7 +38,7 @@ my $ret = $node->safe_psql('postgres', "$query");
 my $query_add =
   q[select add_job('custom_proc_sleep60', '5 minutes', initial_start => now())];
 my $jobid = $node->safe_psql('postgres', "$query_add");
-is($jobid, '1000', 'job was added');
+is($jobid, 1000, 'job was added');
 
 my $query_pid_exists = <<"END_OF_QUERY";
 select count(*) from pg_stat_activity

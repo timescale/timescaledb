@@ -175,7 +175,7 @@ where ch1.compressed_chunk_id = ch2.id;
 \set ON_ERROR_STOP 0
 --cannot compress the chunk the second time around
 select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk', false);
-ERROR:  chunk "_hyper_1_2_chunk" is already compressed
+ERROR:  chunk "_hyper_1_2_chunk" is already converted to columnstore
 --TEST2a try DML on a compressed chunk
 BEGIN;
 insert into foo values( 11 , 10 , 20, 120);
@@ -466,22 +466,26 @@ pg_size_pretty | 112 kB
 select * from timescaledb_information.hypertables
 where hypertable_name like 'foo' or hypertable_name like 'conditions'
 order by hypertable_name;
--[ RECORD 1 ]-------+------------------
-hypertable_schema   | public
-hypertable_name     | conditions
-owner               | default_perm_user
-num_dimensions      | 1
-num_chunks          | 2
-compression_enabled | t
-tablespaces         | 
--[ RECORD 2 ]-------+------------------
-hypertable_schema   | public
-hypertable_name     | foo
-owner               | default_perm_user
-num_dimensions      | 1
-num_chunks          | 4
-compression_enabled | t
-tablespaces         | 
+-[ RECORD 1 ]----------+-------------------------
+hypertable_schema      | public
+hypertable_name        | conditions
+owner                  | default_perm_user
+num_dimensions         | 1
+num_chunks             | 2
+compression_enabled    | t
+tablespaces            | 
+primary_dimension      | time
+primary_dimension_type | timestamp with time zone
+-[ RECORD 2 ]----------+-------------------------
+hypertable_schema      | public
+hypertable_name        | foo
+owner                  | default_perm_user
+num_dimensions         | 1
+num_chunks             | 4
+compression_enabled    | t
+tablespaces            | 
+primary_dimension      | a
+primary_dimension_type | integer
 
 \x
 SELECT count(decompress_chunk(ch)) FROM show_chunks('conditions') ch;
@@ -532,8 +536,6 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 ALTER TABLE plan_inval SET (timescaledb.compress,timescaledb.compress_orderby='time desc');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "plan_inval" is set to ""
 -- create 2 chunks
 INSERT INTO plan_inval SELECT * FROM (VALUES ('2000-01-01'::timestamptz,1), ('2000-01-07'::timestamptz,1)) v(time,device_id);
 SET max_parallel_workers_per_gather to 0;
@@ -901,7 +903,7 @@ WARNING:  column type "timestamp without time zone" used for "timestamp_column" 
 (1 row)
 
 ALTER TABLE datatype_test SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "datatype_test" is set to ""
 NOTICE:  default order by for hypertable "datatype_test" is set to ""time" DESC"
 INSERT INTO datatype_test VALUES ('2000-01-01',2,4,8,4.0,8.0,'2000-01-01','2001-01-01 12:00','2001-01-01 6:00','1 week', 3.41, 4.2, 'text', 'x');
@@ -960,7 +962,7 @@ SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
 (5 rows)
 
 ALTER TABLE metrics set(timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "metrics" is set to ""
 NOTICE:  default order by for hypertable "metrics" is set to ""time" DESC"
 -- test rescan in compress chunk dml blocker
@@ -1111,7 +1113,7 @@ INSERT INTO ht5 SELECT '2000-01-01'::TIMESTAMPTZ;
 INSERT INTO ht5 SELECT '2001-01-01'::TIMESTAMPTZ;
 -- compressed chunk stats should not show dropped chunks
 ALTER TABLE ht5 SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "ht5" is set to ""
 NOTICE:  default order by for hypertable "ht5" is set to ""time" DESC"
 SELECT compress_chunk(i) FROM show_chunks('ht5') i;
@@ -1203,7 +1205,7 @@ SELECT table_name FROM create_hypertable ('compressed_ht', 'time');
 (1 row)
 
 ALTER TABLE compressed_ht SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "compressed_ht" is set to ""
 NOTICE:  default order by for hypertable "compressed_ht" is set to ""time" DESC"
 INSERT INTO compressed_ht
@@ -1266,7 +1268,7 @@ FROM pg_stats WHERE tablename = :statchunk;
 (0 rows)
 
 ALTER TABLE stattest SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "stattest" is set to ""
 NOTICE:  default order by for hypertable "stattest" is set to ""time" DESC"
 -- check that approximate_row_count works with all normal chunks
@@ -1859,10 +1861,6 @@ SELECT sum(cpu) FROM f_sensor_data;
          Output: (PARTIAL sum(_hyper_37_73_chunk.cpu))
          Workers Planned: 4
          ->  Parallel Append
-               ->  Partial Aggregate
-                     Output: PARTIAL sum(_hyper_37_73_chunk.cpu)
-                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_37_73_chunk
-                           Output: _hyper_37_73_chunk.cpu
                ->  Custom Scan (VectorAgg)
                      Output: (PARTIAL sum(_hyper_37_73_chunk.cpu))
                      Grouping Policy: all compressed batches
@@ -1870,6 +1868,10 @@ SELECT sum(cpu) FROM f_sensor_data;
                            Output: _hyper_37_73_chunk.cpu
                            ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_38_74_chunk
                                  Output: compress_hyper_38_74_chunk._ts_meta_count, compress_hyper_38_74_chunk.sensor_id, compress_hyper_38_74_chunk._ts_meta_min_1, compress_hyper_38_74_chunk._ts_meta_max_1, compress_hyper_38_74_chunk."time", compress_hyper_38_74_chunk.cpu, compress_hyper_38_74_chunk.temperature
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_37_73_chunk.cpu)
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_37_73_chunk
+                           Output: _hyper_37_73_chunk.cpu
 (17 rows)
 
 :explain
@@ -1880,15 +1882,15 @@ SELECT * FROM f_sensor_data WHERE sensor_id > 100;
    Output: _hyper_37_73_chunk."time", _hyper_37_73_chunk.sensor_id, _hyper_37_73_chunk.cpu, _hyper_37_73_chunk.temperature
    Workers Planned: 3
    ->  Parallel Append
-         ->  Parallel Index Scan using _hyper_37_73_chunk_f_sensor_data_time_sensor_id_idx on _timescaledb_internal._hyper_37_73_chunk
-               Output: _hyper_37_73_chunk."time", _hyper_37_73_chunk.sensor_id, _hyper_37_73_chunk.cpu, _hyper_37_73_chunk.temperature
-               Index Cond: (_hyper_37_73_chunk.sensor_id > 100)
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_73_chunk
                Output: _hyper_37_73_chunk."time", _hyper_37_73_chunk.sensor_id, _hyper_37_73_chunk.cpu, _hyper_37_73_chunk.temperature
                Filter: (_hyper_37_73_chunk.sensor_id > 100)
                ->  Parallel Index Scan using compress_hyper_38_74_chunk_sensor_id__ts_meta_min_1__ts_met_idx on _timescaledb_internal.compress_hyper_38_74_chunk
                      Output: compress_hyper_38_74_chunk._ts_meta_count, compress_hyper_38_74_chunk.sensor_id, compress_hyper_38_74_chunk._ts_meta_min_1, compress_hyper_38_74_chunk._ts_meta_max_1, compress_hyper_38_74_chunk."time", compress_hyper_38_74_chunk.cpu, compress_hyper_38_74_chunk.temperature
                      Index Cond: (compress_hyper_38_74_chunk.sensor_id > 100)
+         ->  Parallel Index Scan using _hyper_37_73_chunk_f_sensor_data_time_sensor_id_idx on _timescaledb_internal._hyper_37_73_chunk
+               Output: _hyper_37_73_chunk."time", _hyper_37_73_chunk.sensor_id, _hyper_37_73_chunk.cpu, _hyper_37_73_chunk.temperature
+               Index Cond: (_hyper_37_73_chunk.sensor_id > 100)
 (13 rows)
 
 -- Test non-partial paths below append are not executed multiple times
@@ -2294,9 +2296,9 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
 RESET timescaledb.enable_decompression_sorted_merge;
 -- Compress the remaining chunks
 SELECT compress_chunk(ch, if_not_compressed => true) FROM show_chunks('sensor_data_compressed') ch;
-NOTICE:  chunk "_hyper_45_87_chunk" is already compressed
-NOTICE:  chunk "_hyper_45_88_chunk" is already compressed
-NOTICE:  chunk "_hyper_45_89_chunk" is already compressed
+NOTICE:  chunk "_hyper_45_87_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_45_88_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_45_89_chunk" is already converted to columnstore
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_45_87_chunk
@@ -2676,7 +2678,7 @@ SELECT create_hypertable('compress_chunk_test', 'time');
 
 INSERT INTO compress_chunk_test SELECT '2020-01-01', 'r2d2', 3.14;
 ALTER TABLE compress_chunk_test SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "compress_chunk_test" is set to ""
 NOTICE:  default order by for hypertable "compress_chunk_test" is set to ""time" DESC"
 SELECT show_chunks('compress_chunk_test') AS "CHUNK" \gset
@@ -2689,7 +2691,7 @@ SELECT compress_chunk(:'CHUNK');
 
 -- subsequent calls will be noop
 SELECT compress_chunk(:'CHUNK');
-NOTICE:  chunk "_hyper_47_102_chunk" is already compressed
+NOTICE:  chunk "_hyper_47_102_chunk" is already converted to columnstore
               compress_chunk               
 -------------------------------------------
  _timescaledb_internal._hyper_47_102_chunk
@@ -2698,7 +2700,7 @@ NOTICE:  chunk "_hyper_47_102_chunk" is already compressed
 -- unless if_not_compressed is set to false
 \set ON_ERROR_STOP 0
 SELECT compress_chunk(:'CHUNK', false);
-ERROR:  chunk "_hyper_47_102_chunk" is already compressed
+ERROR:  chunk "_hyper_47_102_chunk" is already converted to columnstore
 \set ON_ERROR_STOP 1
 ALTER TABLE compress_chunk_test SET (timescaledb.compress_segmentby='device');
 SELECT compressed_chunk_id from _timescaledb_catalog.chunk ch INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name='compress_chunk_test';
@@ -2709,7 +2711,7 @@ SELECT compressed_chunk_id from _timescaledb_catalog.chunk ch INNER JOIN _timesc
 
 -- changing compression settings will not recompress the chunk by default
 SELECT compress_chunk(:'CHUNK');
-NOTICE:  chunk "_hyper_47_102_chunk" is already compressed
+NOTICE:  chunk "_hyper_47_102_chunk" is already converted to columnstore
               compress_chunk               
 -------------------------------------------
  _timescaledb_internal._hyper_47_102_chunk
@@ -2879,6 +2881,7 @@ ALTER TABLE hyper_delete SET (timescaledb.compress, timescaledb.compress_segment
 NOTICE:  default order by for hypertable "hyper_delete" is set to ""time" DESC"
 SET timescaledb.enable_delete_after_compression TO true;
 SELECT FROM compress_chunk(:'CHUNK');
+NOTICE:  timescaledb.enable_delete_after_compression is deprecated and will be removed in a future version. Please use timescaledb.compress_truncate_behaviour instead.
 --
 (1 row)
 
@@ -2976,3 +2979,33 @@ SELECT _ts_meta_count FROM :COMPRESSED_CHUNK_NAME ORDER BY device, _ts_meta_min_
 (9 rows)
 
 ROLLBACK;
+-- Test poor compression rate warning works as expected
+-- Turn GUC on
+SET timescaledb.enable_compression_ratio_warnings TO ON;
+-- Compressing a table with very few rows virtually guarantees a poor compression rate
+CREATE TABLE badly_compressed_ht (time timestamptz, device_id integer, a integer);
+SELECT create_hypertable('badly_compressed_ht', 'time');
+NOTICE:  adding not-null constraint to column "time"
+         create_hypertable         
+-----------------------------------
+ (57,public,badly_compressed_ht,t)
+(1 row)
+
+ALTER TABLE badly_compressed_ht set (timescaledb.compress, timescaledb.compress_segmentby = 'device_id');
+NOTICE:  default order by for hypertable "badly_compressed_ht" is set to ""time" DESC"
+INSERT INTO badly_compressed_ht VALUES
+('2025-04-25 00:00'::timestamp, 1, 1),
+('2025-04-25 01:00'::timestamp, 2, 2),
+('2025-04-25 02:00'::timestamp, 3, 3);
+\set VERBOSITY default
+SELECT compress_chunk(show_chunks('badly_compressed_ht'));
+WARNING:  poor compression rate detected for chunk "_hyper_57_116_chunk"'
+DETAIL:  Chunk "_hyper_57_116_chunk" has a poor compression ratio: 0.60. Size before compression: 24576 bytes. Size after compression: 40960 bytes
+HINT:  Changing compression settings for "badly_compressed_ht" can improve compression rate
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_57_116_chunk
+(1 row)
+
+\set VERBOSITY terse
+RESET timescaledb.enable_compression_ratio_warnings;

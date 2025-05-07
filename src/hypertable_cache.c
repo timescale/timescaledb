@@ -152,7 +152,7 @@ hypertable_cache_missing_error(const Cache *cache, const CacheQuery *query)
 void
 ts_hypertable_cache_invalidate_callback(void)
 {
-	ts_cache_invalidate(hypertable_cache_current);
+	ts_cache_invalidate(&hypertable_cache_current);
 	hypertable_cache_current = hypertable_cache_create();
 }
 
@@ -230,5 +230,5 @@ _hypertable_cache_init(void)
 void
 _hypertable_cache_fini(void)
 {
-	ts_cache_invalidate(hypertable_cache_current);
+	ts_cache_invalidate(&hypertable_cache_current);
 }

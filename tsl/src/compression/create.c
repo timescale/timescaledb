@@ -271,16 +271,18 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 						 errdetail("Could not identify a less-than operator for the type.")));
 
 			/* segment_meta min and max columns */
-			compressed_column_defs = lappend(compressed_column_defs,
-											 makeColumnDef(column_segment_min_name(index),
-														   attr->atttypid,
-														   attr->atttypmod,
-														   attr->attcollation));
-			compressed_column_defs = lappend(compressed_column_defs,
-											 makeColumnDef(column_segment_max_name(index),
-														   attr->atttypid,
-														   attr->atttypmod,
-														   attr->attcollation));
+			ColumnDef *def = makeColumnDef(column_segment_min_name(index),
+										   attr->atttypid,
+										   attr->atttypmod,
+										   attr->attcollation);
+			def->storage = TYPSTORAGE_PLAIN;
+			compressed_column_defs = lappend(compressed_column_defs, def);
+			def = makeColumnDef(column_segment_max_name(index),
+								attr->atttypid,
+								attr->atttypmod,
+								attr->attcollation);
+			def->storage = TYPSTORAGE_PLAIN;
+			compressed_column_defs = lappend(compressed_column_defs, def);
 		}
 		else if (bms_is_member(attr->attnum, btree_columns))
 		{
@@ -298,22 +300,20 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 				 * so play it safe and just don't create the metadata if we don't
 				 * have an operator.
 				 */
-				compressed_column_defs =
-					lappend(compressed_column_defs,
-							makeColumnDef(compressed_column_metadata_name_v2("min",
-																			 NameStr(
-																				 attr->attname)),
-										  attr->atttypid,
-										  attr->atttypmod,
-										  attr->attcollation));
-				compressed_column_defs =
-					lappend(compressed_column_defs,
-							makeColumnDef(compressed_column_metadata_name_v2("max",
-																			 NameStr(
-																				 attr->attname)),
-										  attr->atttypid,
-										  attr->atttypmod,
-										  attr->attcollation));
+				ColumnDef *def =
+					makeColumnDef(compressed_column_metadata_name_v2("min", NameStr(attr->attname)),
+								  attr->atttypid,
+								  attr->atttypmod,
+								  attr->attcollation);
+				compressed_column_defs = lappend(compressed_column_defs, def);
+				def->storage = TYPSTORAGE_MAIN;
+				def =
+					makeColumnDef(compressed_column_metadata_name_v2("max", NameStr(attr->attname)),
+								  attr->atttypid,
+								  attr->atttypmod,
+								  attr->attcollation);
+				def->storage = TYPSTORAGE_MAIN;
+				compressed_column_defs = lappend(compressed_column_defs, def);
 			}
 		}
 
@@ -472,7 +472,7 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 	}
 
 	if (!OidIsValid(compress_chunk->table_id))
-		elog(ERROR, "could not create compressed chunk table");
+		elog(ERROR, "could not create columnstore chunk table");
 
 	/* Materialize current compression settings for this chunk */
 	ts_compression_settings_materialize(settings, src_chunk->table_id, compress_chunk->table_id);
@@ -566,10 +566,10 @@ validate_existing_constraints(Hypertable *ht, CompressionSettings *settings)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("constraint %s is not supported for compression",
+					 errmsg("constraint %s is not supported for converting to columnstore",
 							NameStr(form->conname)),
 					 errhint("Exclusion constraints are not supported on hypertables that are "
-							 "compressed.")));
+							 "converted to columnstore.")));
 		}
 		else
 		{
@@ -672,15 +672,15 @@ drop_existing_compression_table(Hypertable *ht)
 	if (ts_chunk_exists_with_compression(ht->fd.id))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot drop compression hypertable with compressed chunks")));
+				 errmsg("cannot drop columnstore-enabled hypertable with columnstore chunks")));
 
 	Hypertable *compressed = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 	if (compressed == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("compressed hypertable not found"),
-				 errdetail("compression was enabled on \"%s\", but its internal"
-						   " compressed hypertable could not be found.",
+				 errmsg("columnstore-enabled hypertable not found"),
+				 errdetail("columnstore was enabled on \"%s\", but its internal"
+						   " columnstore hypertable could not be found.",
 						   NameStr(ht->fd.table_name))));
 
 	/* need to drop the old compressed hypertable in case the segment by columns changed (and
@@ -699,7 +699,7 @@ disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 	if (ts_chunk_exists_with_compression(ht->fd.id))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot disable compression on hypertable with compressed chunks")));
+				 errmsg("cannot disable columnstore on hypertable with columnstore chunks")));
 
 	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 		drop_existing_compression_table(ht);
@@ -868,14 +868,14 @@ validate_hypertable_for_compression(Hypertable *ht)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot compress internal compression hypertable")));
+				 errmsg("cannot compress internal columnstore hypertable")));
 	}
 
 	/*check row security settings for the table */
 	if (ts_has_row_security(ht->main_table_relid))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("compression cannot be used on table with row security")));
+				 errmsg("columnstore cannot be used on table with row security")));
 
 	Relation rel = table_open(ht->main_table_relid, AccessShareLock);
 	TupleDesc tupdesc = RelationGetDescr(rel);
@@ -902,7 +902,7 @@ validate_hypertable_for_compression(Hypertable *ht)
 					COMPRESSION_COLUMN_METADATA_PREFIX,
 					strlen(COMPRESSION_COLUMN_METADATA_PREFIX)) == 0)
 			elog(ERROR,
-				 "cannot compress tables with reserved column prefix '%s'",
+				 "cannot convert tables with reserved column prefix '%s' to columnstore",
 				 COMPRESSION_COLUMN_METADATA_PREFIX);
 	}
 
@@ -910,8 +910,10 @@ validate_hypertable_for_compression(Hypertable *ht)
 	{
 		ereport(WARNING,
 				(errmsg("compressed row size might exceed maximum row size"),
-				 errdetail("Estimated row size of compressed hypertable is %zu. This exceeds the "
-						   "maximum size of %zu and can cause compression of chunks to fail.",
+				 errdetail("Estimated row size of columnstore-enabled hypertable is %zu. This "
+						   "exceeds the "
+						   "maximum size of %zu and can cause conversion of chunks to columnstore "
+						   "to fail.",
 						   row_size,
 						   MaxHeapTupleSize)));
 	}
@@ -1201,7 +1203,8 @@ compression_settings_update(Hypertable *ht, CompressionSettings *settings,
 	{
 		settings->fd.segmentby = ts_compress_hypertable_parse_segment_by(with_clause_options, ht);
 	}
-	else if (!settings->fd.segmentby)
+	else if (!settings->fd.segmentby && !settings->fd.orderby &&
+			 with_clause_options[AlterTableFlagCompressOrderBy].is_default)
 	{
 		settings->fd.segmentby = compression_setting_segmentby_get_default(ht);
 	}
@@ -1276,7 +1279,7 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot drop orderby or segmentby column from a hypertable with "
-						"compression enabled")));
+						"columnstore enabled")));
 
 	List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
 	ListCell *lc;
@@ -1290,7 +1293,7 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("cannot drop orderby or segmentby column from a chunk with "
-							"compression enabled")));
+							"columnstore enabled")));
 	}
 
 	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
@@ -1320,7 +1323,7 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 				COMPRESSION_COLUMN_METADATA_PREFIX,
 				strlen(COMPRESSION_COLUMN_METADATA_PREFIX)) == 0)
 		elog(ERROR,
-			 "cannot compress tables with reserved column prefix '%s'",
+			 "cannot convert tables with reserved column prefix '%s' to columnstore",
 			 COMPRESSION_COLUMN_METADATA_PREFIX);
 
 	if (!TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))

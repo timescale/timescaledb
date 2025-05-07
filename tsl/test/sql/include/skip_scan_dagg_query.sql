@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 -- canary for result diff
-SELECT current_setting('timescaledb.enable_skipscan_for_distinct_aggregates') AS enable_skipscan;
+SELECT current_setting('timescaledb.enable_skipscan_for_distinct_aggregates') AS enable_dagg_skipscan;
 
 -- test different index configurations
 -- no index so we cant do SkipScan
