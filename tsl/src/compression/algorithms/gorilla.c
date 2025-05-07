@@ -262,6 +262,8 @@ gorilla_compressor_alloc(void)
 	GorillaCompressor *compressor = palloc(sizeof(*compressor));
 	simple8brle_compressor_init(&compressor->tag0s);
 	simple8brle_compressor_init(&compressor->tag1s);
+	simple8brle_compressor_init_bit_limit(&compressor->tag0s, 1);
+	simple8brle_compressor_init_bit_limit(&compressor->tag1s, 1);
 	/*
 	 * The number of leading zeros takes about 5 bits to encode, and changes
 	 * maybe every 100 rows, so use this as a conservative estimate.

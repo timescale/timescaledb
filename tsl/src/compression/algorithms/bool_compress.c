@@ -70,6 +70,7 @@ bool_compressor_alloc(void)
 {
 	BoolCompressor *compressor = palloc0(sizeof(*compressor));
 	simple8brle_compressor_init(&compressor->values);
+	simple8brle_compressor_init_bit_limit(&compressor->values, 1);
 	simple8brle_compressor_init_zero(&compressor->validity_bitmap);
 	return compressor;
 }
