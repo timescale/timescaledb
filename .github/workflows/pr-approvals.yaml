@@ -9,12 +9,7 @@ name: PR Approval Check
     branches: [main]
   pull_request_review:
 
-permissions:
-  pull-requests: read
-  contents: read
-
 jobs:
-
   check_approvals:
     name: Check for sufficient approvals
     runs-on: timescaledb-runner-arm64
@@ -26,8 +21,8 @@ jobs:
         shell: bash --norc --noprofile {0}
         env:
           BODY: ${{ github.event.pull_request.body }}
-          PR_NUMBER: ${{ github.event.number }}
           GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.number }}
         run: |
           set -eu
           echo "PR number is $PR_NUMBER"
@@ -53,7 +48,7 @@ jobs:
                   '
             )
             echo "approvals: $approvals, files: $files"
-            if [[ $approvals -lt 2 ]] && [[ $files -gt 0 ]] ; then
+            if [[ $approvals -lt 2 && $files -gt 0 ]] ; then
               echo "This pull request requires 2 approvals before merging."
               echo
               echo "For trivial changes, you may disable this check by adding this trailer to the pull request message:"
