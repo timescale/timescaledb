@@ -53,7 +53,7 @@ jobs:
           modified_files=$(gh pr view $PR_NUMBER --json files --jq '[.files.[].path | select(startswith(".github") | not)] | length')
 
           # Get the changelog files as a bash array
-          mapfile -t changelog_files < <(gh pr view $PR_NUMBER --json files --jq "[.files.[].path | select(startswith('${folder}'))] | .[]")
+          mapfile -t changelog_files < <(gh pr view $PR_NUMBER --json files --jq "[.files.[].path | select(startswith(\"${folder}\"))] | .[]")
 
           if echo "$BODY" | egrep -qsi "Disable-check:[[:space:]]*force-changelog-file"
           then
