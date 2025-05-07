@@ -23,7 +23,7 @@ jobs:
     runs-on: timescaledb-runner-arm64
     steps:
       - name: Cache Python Dependencies
-      - uses: actions/setup-python@v5
+        uses: actions/setup-python@v5
         with:
           cache: 'pip'
 
