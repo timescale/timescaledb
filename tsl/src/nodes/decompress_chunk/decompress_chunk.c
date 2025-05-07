@@ -442,6 +442,16 @@ build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chun
 static void
 cost_decompress_chunk(PlannerInfo *root, Path *path, Path *compressed_path)
 {
+	/* Set the row number estimate. */
+	if (path->param_info != NULL)
+	{
+		path->rows = path->param_info->ppi_rows;
+	}
+	else
+	{
+		path->rows = path->parent->rows;
+	}
+
 	/* startup_cost is cost before fetching first tuple */
 	const double compressed_rows = Max(1, compressed_path->rows);
 	path->startup_cost =
@@ -449,7 +459,6 @@ cost_decompress_chunk(PlannerInfo *root, Path *path, Path *compressed_path)
 		(compressed_path->total_cost - compressed_path->startup_cost) / compressed_rows;
 
 	/* total_cost is cost for fetching all tuples */
-	path->rows = compressed_path->rows * TARGET_COMPRESSED_BATCH_SIZE;
 	path->total_cost = compressed_path->total_cost + path->rows * cpu_tuple_cost;
 }
 
