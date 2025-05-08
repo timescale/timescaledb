@@ -295,7 +295,8 @@ ts_feature_flag_check(FeatureFlagType type)
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 			 errmsg("You are using a PostgreSQL service. This feature is only available on "
-					"Time-series and analytics services. https://docs.timescale.com/use-timescale/latest/services/")));
+					"Time-series and analytics services. "
+					"https://docs.timescale.com/use-timescale/latest/services/")));
 }
 
 /*
