@@ -19,6 +19,8 @@ static const WithClauseDefinition create_table_with_clauses_def[] = {
 	[CreateTableFlagCreateDefaultIndexes] = {.arg_names = {"create_default_indexes", NULL}, .type_id = BOOLOID, .default_val = (Datum) true,},
 	[CreateTableFlagAssociatedSchema] = {.arg_names = {"associated_schema", NULL}, .type_id = TEXTOID,},
 	[CreateTableFlagAssociatedTablePrefix] = {.arg_names = {"associated_table_prefix", NULL}, .type_id = TEXTOID,},
+	[CreateTableFlagSegmentBy] = { .arg_names = {"segmentby", "segment_by", "compress_segmentby", NULL}, .type_id = TEXTOID,},
+	[CreateTableFlagOrderBy] = { .arg_names = {"orderby", "order_by", "compress_orderby", NULL}, .type_id = TEXTOID,},
 };
 
 WithClauseResult *
