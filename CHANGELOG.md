@@ -68,11 +68,11 @@ Following the deprecation announcement for PostgreSQL 14 in TimescaleDB v2.19.0,
 * [#8061](https://github.com/timescale/timescaledb/pull/8061) Ensure settings for a compressed relation are found
 
 **GUCs**
-* `timescaledb.enable_sparse_index_bloom`: Enable creation of the bloom1 sparse index on compressed chunks.
-* `timescaledb.compress_truncate_behaviour`: Defines how truncate behaves at the end of compression.
-* `timescaledb.enable_compression_ratio_warnings`: Enable warnings for poor compression ratio.
-* `timescaledb.enable_event_triggers`: Enable event triggers for chunks creation.
-* `timescaledb.enable_cagg_window_functions`: Enable window functions in continuous aggregates.
+* `timescaledb.enable_sparse_index_bloom`: Enable creation of the bloom1 sparse index on compressed chunks; Default: `ON`
+* `timescaledb.compress_truncate_behaviour`: Defines how truncate behaves at the end of compression; Default: `truncate_only`
+* `timescaledb.enable_compression_ratio_warnings`: Enable warnings for poor compression ratio; Default: `ON`
+* `timescaledb.enable_event_triggers`: Enable event triggers for chunks creation; Default: `OFF`
+* `timescaledb.enable_cagg_window_functions`: Enable window functions in continuous aggregates; Default: `OFF`
 
 **Thanks**
 * @arajkumar for reporting that implicitly published tables were still able to create hypertables
