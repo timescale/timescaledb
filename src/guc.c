@@ -294,8 +294,8 @@ ts_feature_flag_check(FeatureFlagType type)
 		return;
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("You are using a Dynamic PostgreSQL service. This feature is only available on "
-					"Time-series services. https://tsdb.co/dynamic-postgresql")));
+			 errmsg("You are using a PostgreSQL service. This feature is only available on "
+					"Time-series and analytics services. https://docs.timescale.com/use-timescale/latest/services/")));
 }
 
 /*
