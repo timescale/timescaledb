@@ -9,11 +9,14 @@ accidentally triggering the load of a previous DB version.**
 This release contains performance improvements and bug fixes since the 2.19.3 release. We recommend that you upgrade at the next available opportunity.
 
 **Highlighted features in TimescaleDB v2.20.0**
-* Faster point queries with bloom filters
-* Backfill improvements into compressed chunks
-* SkipScan
-* Bool vectorization
-* experimental support for window and immutable functions available in Continous Aggregations
+* The columnstore now leverages *bloom filters* to significantly accelerate queries targeting rare values. This is particularly impactful for point queries on text-heavy columns like UUIDs, delivering up to a 6x performance boost.
+* Major *improvements to the backfill process in the columnstore* enable for 10x faster `UPSERTS` with strict constraints in place.
+* *SkipScan is now supported in the columnstore*, including for DISTINCT queries. This enhancement leads to dramatic query performance improvements of 2000x to 2500x, especially for selective queries.
+* Vectorization for the bool data type in the columnstore is now enabled by default. This change results in a 30–45% increase in performance for analytical queries with bool clauses.
+* *Continuous Aggregations*  now include experimental support for *window functions and immutable functions*, extending analytical capabilities directly within CAggs.
+* Several quality-of-life improvements have been introduced with job names for Continuous Aggregates are now more descriptive, users can assign custom names to user-defined actions and it is now possible to add unique constraints along with ADD COLUMN operations in the columnstore.
+* Ability to manually *split large uncompressed chunks* at a specified point in time using the `split_chunk` function, providing finer control over chunk management.
+* Enhancements to the default behavior of the columnstore now provide better *automatic assessments* of `segment by` and `order by` columns, reducing the need for manual configuration and simplifying initial setup.
 
 **PostgreSQL 14 support removal announcement**
 
@@ -48,7 +51,7 @@ Following the deprecation announcement for PostgreSQL 14 in TimescaleDB v2.19.0,
 * [#8000](https://github.com/timescale/timescaledb/pull/8000) Add primary dimension info to information schema
 * [#8005](https://github.com/timescale/timescaledb/pull/8005) Support `ALTER TABLE SET (timescaledb.chunk_time_interval='1 day')`
 * [#8012](https://github.com/timescale/timescaledb/pull/8012) Add event triggers support on chunk creation
-* [#8014](https://github.com/timescale/timescaledb/pull/8014) enable bool compression by default by setting `timescaledb.enable_bool_compression=true`. Note: for downgrading to `2.18` or earlier version one needs to use the provided downgrade script in 'timescaledb-extras'.
+* [#8014](https://github.com/timescale/timescaledb/pull/8014) enable bool compression by default by setting `timescaledb.enable_bool_compression=true`. Note: for downgrading to `2.18` or earlier version one needs to use the provided [this downgrade script](https://github.com/timescale/timescaledb-extras/blob/master/utils/2.19.0-downgrade_new_compression_algorithms.sql).
 * [#8018](https://github.com/timescale/timescaledb/pull/8018) Add spin-lock during recompression on unique constraints
 * [#8026](https://github.com/timescale/timescaledb/pull/8026) Allow `WHERE` conditions that use nonvolatile functions to be pushed down to the compressed scan level. For example, conditions like `time > now()`, where `time` is a columnstore orderby column, will evaluate `now()` and use the sparse index on `time` to filter out the entire compressed batches that cannot contain matching rows.
 * [#8027](https://github.com/timescale/timescaledb/pull/8027) Add materialization invalidations API
@@ -65,8 +68,11 @@ Following the deprecation announcement for PostgreSQL 14 in TimescaleDB v2.19.0,
 * [#8061](https://github.com/timescale/timescaledb/pull/8061) Ensure settings for a compressed relation are found
 
 **GUCs**
-* `timescaledb.enable_bool_compression`
-* `timescaledb.enable_sparse_index_bloom`
+* `timescaledb.enable_sparse_index_bloom`: Enable creation of the bloom1 sparse index on compressed chunks.
+* `timescaledb.compress_truncate_behaviour`: Defines how truncate behaves at the end of compression.
+* `timescaledb.enable_compression_ratio_warnings`: Enable warnings for poor compression ratio.
+* `timescaledb.enable_event_triggers`: Enable event triggers for chunks creation.
+* `timescaledb.enable_cagg_window_functions`: Enable window functions in continuous aggregates.
 
 **Thanks**
 * @arajkumar for reporting that implicitly published tables were still able to create hypertables
